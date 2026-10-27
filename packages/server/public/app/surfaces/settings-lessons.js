@@ -27,13 +27,42 @@ export function lessonsHtml(list) {
   if (!list.length) return emptyHtml('lessons');
   const pinned = list.filter((l) => l.pinned).length;
   const countKey = list.length === 1 ? 'set.lessons.countOne' : 'set.lessons.count';
-  return '<p class="set-note les-count"' + defAttrs('set.lessons.count') + '>' + esc(t(countKey).replace('{n}', list.length).replace('{p}', pinned)) + '</p>'
-    + '<ul class="les-list">' + list.map((l, i) => '<li class="les-row" data-i="' + i + '">'
-      + '<label class="set-flag"><input type="checkbox" data-write ' + (l.pinned ? 'checked ' : '') + 'onchange="lessonPin(' + i + ',this.checked)"/>'
-      + '<span' + defAttrs('set.lessons.pin') + '>' + esc(t('set.lessons.pin')) + '</span></label>'
-      + '<span class="les-text">' + esc(l.text) + '</span>'
-      + (l.date ? '<span class="set-note les-date">' + esc(l.date) + '</span>' : '')
-      + '<button class="x" data-write onclick="lessonRemove(' + i + ')" aria-label="' + esc(t('set.lessons.remove')) + '">✕</button></li>').join('') + '</ul>';
+  return (
+    '<p class="set-note les-count"' +
+    defAttrs('set.lessons.count') +
+    '>' +
+    esc(t(countKey).replace('{n}', list.length).replace('{p}', pinned)) +
+    '</p>' +
+    '<ul class="les-list">' +
+    list
+      .map(
+        (l, i) =>
+          '<li class="les-row" data-i="' +
+          i +
+          '">' +
+          '<label class="set-flag"><input type="checkbox" data-write ' +
+          (l.pinned ? 'checked ' : '') +
+          'onchange="lessonPin(' +
+          i +
+          ',this.checked)"/>' +
+          '<span' +
+          defAttrs('set.lessons.pin') +
+          '>' +
+          esc(t('set.lessons.pin')) +
+          '</span></label>' +
+          '<span class="les-text">' +
+          esc(l.text) +
+          '</span>' +
+          (l.date ? '<span class="set-note les-date">' + esc(l.date) + '</span>' : '') +
+          '<button class="x" data-write onclick="lessonRemove(' +
+          i +
+          ')" aria-label="' +
+          esc(t('set.lessons.remove')) +
+          '">✕</button></li>',
+      )
+      .join('') +
+    '</ul>'
+  );
 }
 
 /** Draw the section (called by renderSettings). */
@@ -42,10 +71,17 @@ export function renderLessons() {
   if (!title) return;
   title.textContent = t('set.lessons.title');
   title.setAttribute('data-tip-key', 'set.lessons.title');
-  const sub = document.getElementById('set-lessons-sub'); if (sub) sub.textContent = t('set.lessons.sub');
-  const input = document.getElementById('lesson-text'); if (input) { input.placeholder = t('set.lessons.placeholder'); input.maxLength = MAX; }
-  const add = document.getElementById('lesson-add'); if (add) add.textContent = t('set.lessons.add');
-  const rows = document.getElementById('lessonrows'); if (rows) rows.innerHTML = lessonsHtml(lessons());
+  const sub = document.getElementById('set-lessons-sub');
+  if (sub) sub.textContent = t('set.lessons.sub');
+  const input = document.getElementById('lesson-text');
+  if (input) {
+    input.placeholder = t('set.lessons.placeholder');
+    input.maxLength = MAX;
+  }
+  const add = document.getElementById('lesson-add');
+  if (add) add.textContent = t('set.lessons.add');
+  const rows = document.getElementById('lessonrows');
+  if (rows) rows.innerHTML = lessonsHtml(lessons());
   applyReadOnly(document.getElementById('set-lessons') || document);
 }
 
@@ -55,13 +91,31 @@ function lessonAdd() {
   const note = document.getElementById('lesson-note');
   const text = ((input && input.value) || '').trim().slice(0, MAX);
   if (!text) return;
-  if (SECRET.test(text)) { if (note) { note.hidden = false; note.textContent = t('set.lessons.secret'); } return; }
-  if (note) { note.hidden = true; note.textContent = ''; }
+  if (SECRET.test(text)) {
+    if (note) {
+      note.hidden = false;
+      note.textContent = t('set.lessons.secret');
+    }
+    return;
+  }
+  if (note) {
+    note.hidden = true;
+    note.textContent = '';
+  }
   lessons().push({ text, pinned: true, date: new Date().toISOString().slice(0, 10) });
   input.value = '';
   renderLessons();
 }
-function lessonPin(i, on) { if (readOnlyWhy()) return; const l = lessons()[i]; if (l) l.pinned = !!on; renderLessons(); }
-function lessonRemove(i) { if (readOnlyWhy()) return; lessons().splice(i, 1); renderLessons(); }
+function lessonPin(i, on) {
+  if (readOnlyWhy()) return;
+  const l = lessons()[i];
+  if (l) l.pinned = !!on;
+  renderLessons();
+}
+function lessonRemove(i) {
+  if (readOnlyWhy()) return;
+  lessons().splice(i, 1);
+  renderLessons();
+}
 
 expose({ lessonAdd, lessonPin, lessonRemove });

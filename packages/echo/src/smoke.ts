@@ -28,8 +28,8 @@ async function isolatedProfile(ctx: EchoContext): Promise<EchoContext['profile']
     const base = randomInt(12000, 19000);
     profile.backend.url = `http://127.0.0.1:${base}`;
     const ports = managedPorts({ ...ctx, profile });
-    const bothBlocks = [...ports, ...ports.map(port => port + 10)];
-    if (bothBlocks.some(port => excluded.has(port))) continue;
+    const bothBlocks = [...ports, ...ports.map((port) => port + 10)];
+    if (bothBlocks.some((port) => excluded.has(port))) continue;
     const reservations: Server[] = [];
     try {
       for (const port of bothBlocks) {
@@ -44,7 +44,7 @@ async function isolatedProfile(ctx: EchoContext): Promise<EchoContext['profile']
     } catch {
       // Another local process owns this block; try another without disturbing it.
     } finally {
-      await Promise.all(reservations.map(server => new Promise<void>(resolve => server.close(() => resolve()))));
+      await Promise.all(reservations.map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
     }
   }
   throw new Error(word('smokePorts'));
@@ -64,13 +64,20 @@ export async function smoke(ctx: EchoContext, withModel = false): Promise<CheckR
   let passed = false;
   try {
     connection = await startBackend(probe);
-    const saved = await backendRequest(connection, '/agentmemory/remember', { content, type: 'fact', concepts: ['echo-smoke'], ...scope });
+    const saved = await backendRequest(connection, '/agentmemory/remember', {
+      content,
+      type: 'fact',
+      concepts: ['echo-smoke'],
+      ...scope,
+    });
     if (!(saved as { success?: boolean })?.success) throw new Error(word('smokeSave'));
-    const recall = async () => backendRequest(connection!, '/agentmemory/search', { query: marker, limit: 5, format: 'full', ...scope });
+    const recall = async () =>
+      backendRequest(connection!, '/agentmemory/search', { query: marker, limit: 5, format: 'full', ...scope });
     const first = JSON.stringify(await recall());
     if (!first.includes(marker)) throw new Error(word('smokeRecall'));
     checks.push({ name: 'remember-recall', ok: true, detail: word('smokeRoundtrip') });
-    await connection.close(); connection = undefined;
+    await connection.close();
+    connection = undefined;
     // A saved connection change must also take effect, despite iii's cached worker definitions.
     const changedProfile = structuredClone(probe.profile);
     const changedUrl = new URL(changedProfile.backend.url);
@@ -81,7 +88,8 @@ export async function smoke(ctx: EchoContext, withModel = false): Promise<CheckR
     connection = await startBackend(probe);
     if (!JSON.stringify(await recall()).includes(marker)) throw new Error(word('smokeRecall'));
     checks.push({ name: 'restart-persistence', ok: true, detail: word('smokePersistence') });
-    await connection.close(); connection = undefined;
+    await connection.close();
+    connection = undefined;
     connection = await startBackend({ ...probe, dataDirectory: join(directory, 'other-profile') });
     if (JSON.stringify(await recall()).includes(marker)) throw new Error(word('smokeIsolation'));
     checks.push({ name: 'store-isolation', ok: true, detail: word('smokeSeparate') });
@@ -93,7 +101,9 @@ export async function smoke(ctx: EchoContext, withModel = false): Promise<CheckR
     passed = true;
     return checks;
   } catch (error) {
-    throw new Error(`${error instanceof Error ? error.message : word('failed')} ${word('smokeDiagnostics', { directory })}`);
+    throw new Error(
+      `${error instanceof Error ? error.message : word('failed')} ${word('smokeDiagnostics', { directory })}`,
+    );
   } finally {
     await connection?.close();
     if (passed) rmSync(directory, { recursive: true, force: true });

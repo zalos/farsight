@@ -13,7 +13,26 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { GraphStore, stitchHttp, buildIndex, countedProblems, tourOf, tourLines, ask, askLines, askShapeOf, askExample, suggestQuestions, pathBetween, ASK_SHAPES, COUNT_SCOPES, STRINGS, type GraphIndex, type GraphMeta, type TourClause } from '@farsight/core';
+import {
+  GraphStore,
+  stitchHttp,
+  buildIndex,
+  countedProblems,
+  tourOf,
+  tourLines,
+  ask,
+  askLines,
+  askShapeOf,
+  askExample,
+  suggestQuestions,
+  pathBetween,
+  ASK_SHAPES,
+  COUNT_SCOPES,
+  STRINGS,
+  type GraphIndex,
+  type GraphMeta,
+  type TourClause,
+} from '@farsight/core';
 import { ingestRepo } from '@farsight/parsers';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
@@ -55,7 +74,9 @@ async function waitReady(): Promise<void> {
       await r.arrayBuffer();
       if (r.ok) return;
       last = `HTTP ${r.status}`;
-    } catch (err) { last = (err as Error).message; }
+    } catch (err) {
+      last = (err as Error).message;
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error(`the server never answered on port ${port} (${last}):\n${childLog}`);
@@ -74,8 +95,9 @@ before(async () => {
   index = buildIndex(nodes, edges);
   meta = store.meta;
   port = await freePort();
-  const boot = `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n`
-    + `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
+  const boot =
+    `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n` +
+    `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
   child = spawn(process.execPath, ['--input-type=module', '-e', boot], {
     cwd: work,
     env: { ...process.env, MODELHUB_DIR: join(work, 'modelhub'), FIGMA_TOKEN: '' },
@@ -83,8 +105,12 @@ before(async () => {
   }) as ChildProcessWithoutNullStreams;
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (d: string) => { childLog += d; });
-  child.stderr.on('data', (d: string) => { childLog += d; });
+  child.stdout.on('data', (d: string) => {
+    childLog += d;
+  });
+  child.stderr.on('data', (d: string) => {
+    childLog += d;
+  });
   await waitReady();
 });
 
@@ -95,7 +121,11 @@ after(async () => {
     await Promise.race([gone, new Promise((r) => setTimeout(r, 2000))]);
     if (child.exitCode == null) child.kill('SIGKILL');
   }
-  try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ }
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
 });
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -105,7 +135,8 @@ async function get(path: string): Promise<{ status: number; body: any }> {
 }
 
 /** Identifier-shaped tokens — the e2e identifier walk's list (journey-numbers.pw.spec.ts). */
-const IDENTIFIER = /\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b|\b[a-z0-9]+_[a-z0-9_]+\b|\b[A-Z0-9]+_[A-Z0-9_]+\b|(?:^|[\s(])\/[\w.:{}-]+|\b(?:GET|POST|PUT|PATCH|DELETE)\b|\b[\w-]+\.(?:spec|test|pw)\b|\.(?:tsx?|jsx?|mjs|json)\b/;
+const IDENTIFIER =
+  /\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b|\b[a-z0-9]+_[a-z0-9_]+\b|\b[A-Z0-9]+_[A-Z0-9_]+\b|(?:^|[\s(])\/[\w.:{}-]+|\b(?:GET|POST|PUT|PATCH|DELETE)\b|\b[\w-]+\.(?:spec|test|pw)\b|\.(?:tsx?|jsx?|mjs|json)\b/;
 
 /** What every clause owes its reader: real citations, its number's Counted, its evidence word's verdict. */
 function clauseProblems(c: TourClause, where: string, opts: { cites?: boolean } = {}): string[] {
@@ -134,11 +165,26 @@ test('tourOf walks the storyline: a stop per screen (each once) and per hand-off
   assert.ok(tour, 'the fixture declares the invoice storyline');
   assert.equal(tour.derived, true);
   // the customer's bank paying the sent invoice is a step the design says is done outside the code: a stop of its own after the move
-  assert.deepEqual(tour.stops.map((s) => `${s.kind}:${s.kind === 'screen' ? s.screen.name : s.kind === 'handoff' ? s.move!.status : s.offPlatform!.by}`),
-    ['screen:New invoice', 'handoff:draft', 'screen:Invoice list', 'handoff:open', 'offPlatform:partner', 'screen:Discard draft']);
+  assert.deepEqual(
+    tour.stops.map(
+      (s) =>
+        `${s.kind}:${s.kind === 'screen' ? s.screen.name : s.kind === 'handoff' ? s.move!.status : s.offPlatform!.by}`,
+    ),
+    [
+      'screen:New invoice',
+      'handoff:draft',
+      'screen:Invoice list',
+      'handoff:open',
+      'offPlatform:partner',
+      'screen:Discard draft',
+    ],
+  );
   const off = tour.stops[4]!;
   assert.equal(off.offPlatform!.party!.name, 'Customer bank');
-  assert.ok(off.clauses.some((c) => c.key === 'tour.off.noTest'), 'no verdict, and why');
+  assert.ok(
+    off.clauses.some((c) => c.key === 'tour.off.noTest'),
+    'no verdict, and why',
+  );
   assert.ok(!off.clauses.some((c) => c.evidence), 'never an evidence word');
   assert.deepEqual(countedProblems(tour.counted.stops, 'stops'), []);
   assert.equal(tour.counted.stops.n, tour.stops.length);
@@ -150,15 +196,24 @@ test('tourOf walks the storyline: a stop per screen (each once) and per hand-off
     s.clauses.forEach((c, i) => bad.push(...clauseProblems(c, `stop ${s.n} clause ${i} (${c.key})`)));
     for (const id of s.referenced) assert.ok(tour.nodes[id], `stop ${s.n}: ${id} is named in nodes`);
     // the business register names no code
-    for (const c of s.clauses) { const m = IDENTIFIER.exec(c.biz); if (m) bad.push(`stop ${s.n} (${c.key}): business prints "${m[0]}" — ${c.biz}`); }
-    for (const w of [s.title.biz, s.sub.biz]) { const m = IDENTIFIER.exec(w); if (m) bad.push(`stop ${s.n} heading: business prints "${m[0]}"`); }
+    for (const c of s.clauses) {
+      const m = IDENTIFIER.exec(c.biz);
+      if (m) bad.push(`stop ${s.n} (${c.key}): business prints "${m[0]}" — ${c.biz}`);
+    }
+    for (const w of [s.title.biz, s.sub.biz]) {
+      const m = IDENTIFIER.exec(w);
+      if (m) bad.push(`stop ${s.n} heading: business prints "${m[0]}"`);
+    }
   }
   assert.deepEqual(bad, []);
   // the move to open checks nothing, and says so; a clause that refers back names the stop
   const open = tour.stops[3]!;
   assert.ok(open.clauses.some((c) => c.warn && c.key === 'tour.handoff.unchecked'));
   assert.equal(open.move!.checked, false);
-  assert.ok(open.clauses.some((c) => c.role === 'need' && c.evidence), 'each precondition carries the gate card\'s verdict');
+  assert.ok(
+    open.clauses.some((c) => c.role === 'need' && c.evidence),
+    "each precondition carries the gate card's verdict",
+  );
   const after = tour.stops[5]!.clauses.find((c) => c.key === 'tour.ref.after')!;
   assert.equal(after.refers, 4);
   assert.match(after.text, /\(stop 4\)/);
@@ -187,8 +242,16 @@ test('pathBetween: the shortest chain the graph knows, hop by hop, or none', () 
   assert.equal(p.hops.at(-1)!.kind, 'reads');
   for (const id of p.nodes) assert.ok(index.byId.has(id));
   // each hop is an edge of the graph
-  for (const h of p.hops) assert.ok((index.out.get(h.from) ?? []).some((e) => e.to === h.to && e.kind === h.kind), `${h.from} ${h.kind} ${h.to}`);
-  assert.equal(pathBetween(index, 'invoice-app::table::invoices', 'invoice-app::page::/invoices'), null, 'a record reaches no page');
+  for (const h of p.hops)
+    assert.ok(
+      (index.out.get(h.from) ?? []).some((e) => e.to === h.to && e.kind === h.kind),
+      `${h.from} ${h.kind} ${h.to}`,
+    );
+  assert.equal(
+    pathBetween(index, 'invoice-app::table::invoices', 'invoice-app::page::/invoices'),
+    null,
+    'a record reaches no page',
+  );
   assert.equal(pathBetween(index, 'invoice-app::page::/invoices', 'nope'), null);
   assert.ok(COUNT_SCOPES.includes('count.scope.path'));
 });
@@ -204,7 +267,10 @@ test('ask: the four shapes, from the graph, every line cited — and the shapes 
   assert.match(set.lead[0]!.text, /^open is written by finalizeInvoice at src\/server\/invoiceService\.ts:\d+\.$/);
   assert.match(set.lead[1]!.text, /Finalize invoice.*Invoice list/);
   const must = set.sections.find((s) => s.key === 'ask.sec.must')!.rows;
-  assert.ok(must.some((c) => c.warn), 'the move checks nothing, and the answer says so');
+  assert.ok(
+    must.some((c) => c.warn),
+    'the move checks nothing, and the answer says so',
+  );
   assert.ok(must.filter((c) => c.role === 'need').length >= 2, 'the scope and the line-item rule');
   const proven = set.sections.find((s) => s.key === 'ask.sec.proven')!.rows;
   assert.equal(proven[0]!.evidence!.skipped, 1, 'the one case was skipped, and the answer does not flatter it');
@@ -230,18 +296,27 @@ test('ask: the four shapes, from the graph, every line cited — and the shapes 
 
   const bad: string[] = [];
   all.forEach(([shape, c], i) => bad.push(...clauseProblems(c, `${shape} line ${i} (${c.key})`)));
-  for (const [shape, c] of all) { const m = IDENTIFIER.exec(c.biz); if (m) bad.push(`${shape} (${c.key}): business prints "${m[0]}" — ${c.biz}`); }
+  for (const [shape, c] of all) {
+    const m = IDENTIFIER.exec(c.biz);
+    if (m) bad.push(`${shape} (${c.key}): business prints "${m[0]}" — ${c.biz}`);
+  }
   assert.deepEqual(bad, []);
   for (const a of [set, guards, path, proves]) for (const id of Object.keys(a.nodes)) assert.ok(index.byId.has(id));
 
   const other = ask(index, 'tell me a joke', { metas: meta.journeys });
   assert.equal(other.shape, 'unknown');
-  assert.deepEqual(other.shapes, ASK_SHAPES.map((s) => `ask.shape.${s}`));
+  assert.deepEqual(
+    other.shapes,
+    ASK_SHAPES.map((s) => `ask.shape.${s}`),
+  );
   assert.match(askLines(other).join('\n'), /how does <A> reach <B>/);
   assert.equal(askShapeOf('what proves the billing:admin scope')!.shape, 'proves');
 
   // the one extension point for a model: beside the cited lines, labelled, never instead of them
-  const phrased = ask(index, 'what guards Finalize invoice', { metas: meta.journeys, phrase: (a) => `${a.lead.length} lines` });
+  const phrased = ask(index, 'what guards Finalize invoice', {
+    metas: meta.journeys,
+    phrase: (a) => `${a.lead.length} lines`,
+  });
   assert.deepEqual(phrased.phrased, { text: '1 lines', by: 'model' });
   assert.deepEqual(phrased.lead, guards.lead);
   assert.match(askLines(phrased).join('\n'), /phrased by a model/);
@@ -284,7 +359,9 @@ test('GET /api/tour and GET /api/ask serve the same folds', async () => {
   assert.equal((await get('/api/tour?flow=invoice-app::flow::new-invoice')).body.tour.target.kind, 'flow');
   assert.equal((await get('/api/tour?storyline=nope')).status, 404);
   assert.equal((await get('/api/tour')).status, 400);
-  const a = await get('/api/ask?q=' + encodeURIComponent('where is an invoice set to open, and what must be true first?'));
+  const a = await get(
+    '/api/ask?q=' + encodeURIComponent('where is an invoice set to open, and what must be true first?'),
+  );
   assert.equal(a.status, 200);
   assert.equal(a.body.answer.shape, 'set');
   assert.equal(a.body.answer.derived, true);

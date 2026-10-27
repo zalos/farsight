@@ -1,2 +1,20 @@
 // Compatibility exports; implementation is in the independently installable library.
-export { STATUS_KEY, fieldKey, EnumDecl, FieldUse, StatusWrite, StatusCompare, collectEnums, sqlStatusFacts, STATUS_SETTER, collectStatusFacts, LifecycleFacts, linkLifecycles, ConstTable, constTables, ConstList, constLists, priorStatusesIn } from '@farsight/code-parser/support';
+export {
+  STATUS_KEY,
+  fieldKey,
+  EnumDecl,
+  FieldUse,
+  StatusWrite,
+  StatusCompare,
+  collectEnums,
+  sqlStatusFacts,
+  STATUS_SETTER,
+  collectStatusFacts,
+  LifecycleFacts,
+  linkLifecycles,
+  ConstTable,
+  constTables,
+  ConstList,
+  constLists,
+  priorStatusesIn,
+} from '@farsight/code-parser/support';

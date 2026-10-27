@@ -48,7 +48,9 @@ test('the overlay really does leave that chrome uncovered', () => {
 
 test('every covered layer names an element the page has', () => {
   for (const sel of BEHIND) {
-    const found = sel.startsWith('#') ? html.includes('id="' + sel.slice(1) + '"') : new RegExp('class="[^"]*\\b' + sel.slice(1) + '\\b').test(html);
+    const found = sel.startsWith('#')
+      ? html.includes('id="' + sel.slice(1) + '"')
+      : new RegExp('class="[^"]*\\b' + sel.slice(1) + '\\b').test(html);
     assert.ok(found, sel + ' matches nothing in viewer.html');
   }
 });

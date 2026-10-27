@@ -57,7 +57,9 @@ test.describe('work surface', () => {
     await expect(erp.locator('.wk-state')).toContainText('Active');
     // the freshness sentence, never a bare timestamp
     await expect(page.locator('.wk-card[data-source="invoice-jira"]')).toContainText('synced 3 minutes ago');
-    await expect(page.locator('.wk-card[data-source="invoice-azdo"]')).toContainText(/source unreachable since .* showing the cache/);
+    await expect(page.locator('.wk-card[data-source="invoice-azdo"]')).toContainText(
+      /source unreachable since .* showing the cache/,
+    );
     await expect(page.locator('.wk-card[data-source="invoice-azdo"] .wk-mode')).toHaveText(/read-only/i);
   });
 
@@ -66,7 +68,10 @@ test.describe('work surface', () => {
     for (const lens of ['business', 'hybrid', 'code']) {
       await page.goto('/#/work?lens=' + lens);
       for (const src of ['invoice-jira', 'invoice-azdo']) {
-        await expect(page.locator('.wk-card[data-source="' + src + '"] .host').first(), lens + ' · ' + src).toContainText('as Ada Okafor');
+        await expect(
+          page.locator('.wk-card[data-source="' + src + '"] .host').first(),
+          lens + ' · ' + src,
+        ).toContainText('as Ada Okafor');
       }
     }
   });
@@ -119,8 +124,13 @@ test.describe('work surface', () => {
 
   /** @covers packages/server/public/app/surfaces/work.js::mountWork */
   test('the business register prints titles and tracker words — no key, id, sha or identifier', async ({ page }) => {
-    for (const hash of ['#/work?lens=business', '#/work?view=board&lens=business', '#/work?view=sources&lens=business',
-      '#/work/' + encodeURIComponent('work::invoice-jira::INV-2') + '?lens=business', '#/work/' + encodeURIComponent('work::invoice-jira::INV-6') + '?lens=business']) {
+    for (const hash of [
+      '#/work?lens=business',
+      '#/work?view=board&lens=business',
+      '#/work?view=sources&lens=business',
+      '#/work/' + encodeURIComponent('work::invoice-jira::INV-2') + '?lens=business',
+      '#/work/' + encodeURIComponent('work::invoice-jira::INV-6') + '?lens=business',
+    ]) {
       await page.goto('/' + hash);
       await expect(page.locator('.wk-table, .wk-board, .wk-pane, .wk-sec').first()).toBeVisible();
       await page.waitForTimeout(150);
@@ -154,8 +164,14 @@ test.describe('work surface', () => {
   test('⌘K sends a work item to its pane', async ({ page }) => {
     await page.goto('/#/work');
     await expect(page.locator('.wk-table')).toBeVisible();
-    const hash = await page.evaluate(() => (window as unknown as { travelTarget: (n: object) => { hash: string } })
-      .travelTarget({ kind: 'work', id: 'work::invoice-jira::INV-2', name: 'Start a new invoice' }).hash);
+    const hash = await page.evaluate(
+      () =>
+        (window as unknown as { travelTarget: (n: object) => { hash: string } }).travelTarget({
+          kind: 'work',
+          id: 'work::invoice-jira::INV-2',
+          name: 'Start a new invoice',
+        }).hash,
+    );
     expect(hash).toBe('#/work/' + encodeURIComponent('work::invoice-jira::INV-2'));
   });
 });
@@ -171,7 +187,13 @@ test.describe('a failing /api/work', () => {
     await routeWorkSettings(page);
     await routeWork(page);
     const fail = /\/api\/work$/;
-    await page.route(fail, (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'injected by e2e' }) }));
+    await page.route(fail, (route) =>
+      route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'injected by e2e' }),
+      }),
+    );
     await page.goto('/#/work');
     const err = page.locator('.wk-err');
     await expect(err).toContainText('Could not load the work items.');

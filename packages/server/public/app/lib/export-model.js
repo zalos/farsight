@@ -15,8 +15,13 @@
  * @returns {string}
  */
 export function slug(s) {
-  return String(s == null ? '' : s).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+  return String(s == null ? '' : s)
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
 }
 
 /**
@@ -47,7 +52,7 @@ export function exportFilename(o) {
   if (src) parts.push(src);
   const sub = slug(o.subject);
   if (sub) parts.push(sub);
-  if (o.sync != null && Number.isFinite(+o.sync)) parts.push('sync' + (+o.sync));
+  if (o.sync != null && Number.isFinite(+o.sync)) parts.push('sync' + +o.sync);
   if (o.date && /^\d{4}-\d{2}-\d{2}$/.test(o.date)) parts.push(o.date);
   return parts.join('-') + '.' + String(o.ext || 'png').replace(/^\./, '');
 }
@@ -90,15 +95,22 @@ export function footerFacts(o) {
  * @returns {string}
  */
 export function fill(template, values) {
-  return String(template || '').split(' · ').map((seg) => {
-    let missing = false;
-    const out = seg.replace(/\{(\w+)\}/g, (_, k) => {
-      const v = values[k];
-      if (v == null || v === '') { missing = true; return ''; }
-      return String(v);
-    });
-    return missing ? '' : out.trim();
-  }).filter(Boolean).join(' · ');
+  return String(template || '')
+    .split(' · ')
+    .map((seg) => {
+      let missing = false;
+      const out = seg.replace(/\{(\w+)\}/g, (_, k) => {
+        const v = values[k];
+        if (v == null || v === '') {
+          missing = true;
+          return '';
+        }
+        return String(v);
+      });
+      return missing ? '' : out.trim();
+    })
+    .filter(Boolean)
+    .join(' · ');
 }
 
 /**
@@ -149,7 +161,11 @@ export function toCsv(header, rows) {
  * @returns {string}
  */
 export function cellWords(text) {
-  return String(text == null ? '' : text).split(/\s*\n\s*/).map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' · ');
+  return String(text == null ? '' : text)
+    .split(/\s*\n\s*/)
+    .map((s) => s.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(' · ');
 }
 
 /**
@@ -178,7 +194,10 @@ export function pngSize(b) {
  */
 export function pictureScale(w, h, o = {}) {
   const dpr = Math.max(1, o.dpr || 1);
-  const target = o.target || 3200, max = o.max || 4, maxSide = o.maxSide || 16000, maxArea = o.maxArea || 120e6;
+  const target = o.target || 3200,
+    max = o.max || 4,
+    maxSide = o.maxSide || 16000,
+    maxArea = o.maxArea || 120e6;
   if (!(w > 0) || !(h > 0)) return 1;
   let r = Math.max(2, dpr, target / Math.max(w, h));
   r = Math.min(r, max, maxSide / w, maxSide / h, Math.sqrt(maxArea / (w * h)));
@@ -211,7 +230,8 @@ export function pictureSelector(sel) {
  * @returns {number}
  */
 export function keptRows(px, width, height, ground, margin) {
-  const near = (i) => Math.abs(px[i] - ground[0]) + Math.abs(px[i + 1] - ground[1]) + Math.abs(px[i + 2] - ground[2]) <= 6;
+  const near = (i) =>
+    Math.abs(px[i] - ground[0]) + Math.abs(px[i + 1] - ground[1]) + Math.abs(px[i + 2] - ground[2]) <= 6;
   for (let y = height - 1; y >= 0; y--) {
     const row = y * width * 4;
     for (let x = 0; x < width; x++) if (!near(row + x * 4)) return Math.min(height, y + 1 + margin);
@@ -232,9 +252,11 @@ export function keptRows(px, width, height, ground, margin) {
  */
 export function pdfPage(cssW, cssH, o = {}) {
   const maxPt = o.maxPt || 1191;
-  let w = cssW * 0.75, h = cssH * 0.75;
+  let w = cssW * 0.75,
+    h = cssH * 0.75;
   const k = Math.min(1, maxPt / Math.max(w, h));
-  w *= k; h *= k;
+  w *= k;
+  h *= k;
   return { w: Math.max(1, Math.round(w * 100) / 100), h: Math.max(1, Math.round(h * 100) / 100) };
 }
 
@@ -246,10 +268,16 @@ export function pdfPage(cssW, cssH, o = {}) {
  * @returns {{page:{w:number,h:number}, place:{x:number,y:number,w:number,h:number}}}
  */
 export function pdfA4(cssW, cssH) {
-  const W = 595.28, H = 841.89, M = 28;
+  const W = 595.28,
+    H = 841.89,
+    M = 28;
   const k = Math.min((W - 2 * M) / cssW, (H - 2 * M) / cssH);
-  const w = Math.round(cssW * k * 100) / 100, h = Math.round(cssH * k * 100) / 100;
-  return { page: { w: W, h: H }, place: { x: Math.round((W - w) / 2 * 100) / 100, y: Math.round((H - M - h) * 100) / 100, w, h } };
+  const w = Math.round(cssW * k * 100) / 100,
+    h = Math.round(cssH * k * 100) / 100;
+  return {
+    page: { w: W, h: H },
+    place: { x: Math.round(((W - w) / 2) * 100) / 100, y: Math.round((H - M - h) * 100) / 100, w, h },
+  };
 }
 
 /** The bytes of a Latin-1 string (the PDF's own syntax is ASCII). */
@@ -261,7 +289,13 @@ function ascii(s) {
 
 /** A PDF text string: printable ASCII kept, `(`, `)` and `\` escaped, everything else a `?`. */
 function pdfText(s) {
-  return '(' + String(s || '').replace(/[^\x20-\x7e]/g, '?').replace(/([()\\])/g, '\\$1') + ')';
+  return (
+    '(' +
+    String(s || '')
+      .replace(/[^\x20-\x7e]/g, '?')
+      .replace(/([()\\])/g, '\\$1') +
+    ')'
+  );
 }
 
 /**
@@ -277,32 +311,86 @@ function pdfText(s) {
  * @returns {Uint8Array}
  */
 export function pdfFromJpeg(jpeg, pxW, pxH, o) {
-  const pw = o.page.w, ph = o.page.h;
+  const pw = o.page.w,
+    ph = o.page.h;
   const num = (n) => String(Math.round(n * 100) / 100);
   const pl = o.place || { x: 0, y: 0, w: pw, h: ph };
-  const content = (o.place ? '1 1 1 rg 0 0 ' + num(pw) + ' ' + num(ph) + ' re f ' : '') + 'q ' + num(pl.w) + ' 0 0 ' + num(pl.h) + ' ' + num(pl.x) + ' ' + num(pl.y) + ' cm /Im0 Do Q';
+  const content =
+    (o.place ? '1 1 1 rg 0 0 ' + num(pw) + ' ' + num(ph) + ' re f ' : '') +
+    'q ' +
+    num(pl.w) +
+    ' 0 0 ' +
+    num(pl.h) +
+    ' ' +
+    num(pl.x) +
+    ' ' +
+    num(pl.y) +
+    ' cm /Im0 Do Q';
   const d = o.created || new Date();
   const p2 = (n) => String(n).padStart(2, '0');
-  const when = 'D:' + d.getUTCFullYear() + p2(d.getUTCMonth() + 1) + p2(d.getUTCDate()) + p2(d.getUTCHours()) + p2(d.getUTCMinutes()) + p2(d.getUTCSeconds()) + 'Z';
+  const when =
+    'D:' +
+    d.getUTCFullYear() +
+    p2(d.getUTCMonth() + 1) +
+    p2(d.getUTCDate()) +
+    p2(d.getUTCHours()) +
+    p2(d.getUTCMinutes()) +
+    p2(d.getUTCSeconds()) +
+    'Z';
   const chunks = [];
   const offsets = [];
   let size = 0;
-  const push = (part) => { const b = typeof part === 'string' ? ascii(part) : part; chunks.push(b); size += b.length; };
+  const push = (part) => {
+    const b = typeof part === 'string' ? ascii(part) : part;
+    chunks.push(b);
+    size += b.length;
+  };
   push('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n');
-  const obj = (n, body) => { offsets[n] = size; push(n + ' 0 obj\n'); for (const b of body) push(b); push('\nendobj\n'); };
+  const obj = (n, body) => {
+    offsets[n] = size;
+    push(n + ' 0 obj\n');
+    for (const b of body) push(b);
+    push('\nendobj\n');
+  };
   obj(1, ['<< /Type /Catalog /Pages 2 0 R >>']);
   obj(2, ['<< /Type /Pages /Kids [3 0 R] /Count 1 >>']);
-  obj(3, ['<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + num(pw) + ' ' + num(ph) + '] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>']);
-  obj(4, ['<< /Type /XObject /Subtype /Image /Width ' + pxW + ' /Height ' + pxH + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpeg.length + ' >>\nstream\n', jpeg, '\nendstream']);
+  obj(3, [
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' +
+      num(pw) +
+      ' ' +
+      num(ph) +
+      '] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>',
+  ]);
+  obj(4, [
+    '<< /Type /XObject /Subtype /Image /Width ' +
+      pxW +
+      ' /Height ' +
+      pxH +
+      ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' +
+      jpeg.length +
+      ' >>\nstream\n',
+    jpeg,
+    '\nendstream',
+  ]);
   obj(5, ['<< /Length ' + content.length + ' >>\nstream\n' + content + '\nendstream']);
-  obj(6, ['<< /Title ' + pdfText(o.title) + (o.subject ? ' /Subject ' + pdfText(o.subject) : '') + ' /Producer (Farsight) /CreationDate (' + when + ') >>']);
+  obj(6, [
+    '<< /Title ' +
+      pdfText(o.title) +
+      (o.subject ? ' /Subject ' + pdfText(o.subject) : '') +
+      ' /Producer (Farsight) /CreationDate (' +
+      when +
+      ') >>',
+  ]);
   const xref = size;
   let x = 'xref\n0 7\n0000000000 65535 f \n';
   for (let n = 1; n <= 6; n++) x += String(offsets[n]).padStart(10, '0') + ' 00000 n \n';
   push(x + 'trailer\n<< /Size 7 /Root 1 0 R /Info 6 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
   const out = new Uint8Array(size);
   let at = 0;
-  for (const c of chunks) { out.set(c, at); at += c.length; }
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
   return out;
 }
 
@@ -326,7 +414,7 @@ export function pinnedHash(hash, sync, day) {
   let base = qi >= 0 ? h.slice(0, qi) : h;
   const query = qi >= 0 ? h.slice(qi + 1) : '';
   base = base.replace(/@sync:\d+$/, '');
-  if (sync != null && Number.isFinite(+sync)) base += '@sync:' + (+sync);
+  if (sync != null && Number.isFinite(+sync)) base += '@sync:' + +sync;
   const pairs = query.split('&').filter((p) => p && !/^asof=/.test(p));
   if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) pairs.push('asof=' + day);
   return base + (pairs.length ? '?' + pairs.join('&') : '');

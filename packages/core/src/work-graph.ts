@@ -30,23 +30,23 @@ import { t, type Register } from './strings.js';
 
 /** How a work item reaches a node. Closed: a surface switches on these four. */
 export const WORK_LINK_VIAS = ['declared', 'commit', 'branch', 'url'] as const;
-export type WorkLinkVia = typeof WORK_LINK_VIAS[number];
+export type WorkLinkVia = (typeof WORK_LINK_VIAS)[number];
 
 /** How a commit names a work item. Closed. */
 export const COMMIT_KEY_VIAS = ['subject', 'branch', 'merge-subject', 'url'] as const;
-export type CommitKeyVia = typeof COMMIT_KEY_VIAS[number];
+export type CommitKeyVia = (typeof COMMIT_KEY_VIAS)[number];
 
 /** State categories, in the order a surface lists them (farsight-work v1 STATE_CATEGORIES). */
 export const WORK_STATE_ORDER = ['todo', 'in-progress', 'done', 'removed'] as const;
-export type WorkStateCategory = typeof WORK_STATE_ORDER[number];
+export type WorkStateCategory = (typeof WORK_STATE_ORDER)[number];
 
 /** Type categories (farsight-work v1 WORK_TYPES). */
 export const WORK_TYPE_ORDER = ['epic', 'feature', 'story', 'task', 'bug', 'other'] as const;
-export type WorkTypeCategory = typeof WORK_TYPE_ORDER[number];
+export type WorkTypeCategory = (typeof WORK_TYPE_ORDER)[number];
 
 /** The finding kinds §9 names — where the tracker and the code disagree. Closed. */
 export const WORK_FINDING_KINDS = ['done-not-built', 'todo-but-committed'] as const;
-export type WorkFindingKind = typeof WORK_FINDING_KINDS[number];
+export type WorkFindingKind = (typeof WORK_FINDING_KINDS)[number];
 
 // ── the record, structurally ───────────────────────────────────────────────
 
@@ -144,7 +144,12 @@ export function strongestLinks(links: readonly WorkLinkFact[]): WorkLinkFact[] {
   for (const l of links) {
     const k = `${l.work}|${l.node}`;
     const cur = best.get(k);
-    if (!cur || TIER_RANK[l.tier] > TIER_RANK[cur.tier] || (TIER_RANK[l.tier] === TIER_RANK[cur.tier] && VIA_RANK[l.via] > VIA_RANK[cur.via])) best.set(k, l);
+    if (
+      !cur ||
+      TIER_RANK[l.tier] > TIER_RANK[cur.tier] ||
+      (TIER_RANK[l.tier] === TIER_RANK[cur.tier] && VIA_RANK[l.via] > VIA_RANK[cur.via])
+    )
+      best.set(k, l);
   }
   return [...best.values()];
 }
@@ -177,7 +182,10 @@ export function applyWorkToFragment(
   let edges = 0;
   let dropped = 0;
   for (const l of strongestLinks(links)) {
-    if (!workIds.has(l.work) || !known(l.node)) { dropped++; continue; }
+    if (!workIds.has(l.work) || !known(l.node)) {
+      dropped++;
+      continue;
+    }
     const e = tracksEdgeOf(l);
     const key = `${e.kind}|${e.from}|${e.to}`;
     if (edgeKeys.has(key)) continue;
@@ -221,9 +229,34 @@ export interface DetectedKey {
 export type KeyDetector = (text: string, where: 'subject' | 'body' | 'branch', opts: KeyDetectOptions) => DetectedKey[];
 
 /** Upper-case words shaped like a Jira key that are never one: SHA-256, UTF-8, ISO-8601, RFC-9110 … */
-const FALSE_FRIENDS = new Set(['SHA', 'UTF', 'ISO', 'RFC', 'HTTP', 'TLS', 'SSL', 'AES', 'RSA', 'MD', 'UTC', 'GMT', 'CVE', 'ES', 'EC', 'IPV', 'X', 'WCAG', 'PEP', 'ECMA', 'NODE', 'V', 'H']);
+const FALSE_FRIENDS = new Set([
+  'SHA',
+  'UTF',
+  'ISO',
+  'RFC',
+  'HTTP',
+  'TLS',
+  'SSL',
+  'AES',
+  'RSA',
+  'MD',
+  'UTC',
+  'GMT',
+  'CVE',
+  'ES',
+  'EC',
+  'IPV',
+  'X',
+  'WCAG',
+  'PEP',
+  'ECMA',
+  'NODE',
+  'V',
+  'H',
+]);
 const JIRA_URL = /https?:\/\/[^\s/]+\/browse\/([A-Z][A-Z0-9_]+-\d+)/gi;
-const ADO_URL = /https?:\/\/(?:dev\.azure\.com\/[^\s/]+|[^\s/.]+\.visualstudio\.com)(?:\/[^\s/]+)*?\/_workitems\/edit\/(\d+)/gi;
+const ADO_URL =
+  /https?:\/\/(?:dev\.azure\.com\/[^\s/]+|[^\s/.]+\.visualstudio\.com)(?:\/[^\s/]+)*?\/_workitems\/edit\/(\d+)/gi;
 
 export const detectWorkKeysFallback: KeyDetector = (text, where, opts) => {
   const out: DetectedKey[] = [];
@@ -243,7 +276,9 @@ export const detectWorkKeysFallback: KeyDetector = (text, where, opts) => {
   const projects = new Set((opts.projects ?? []).map((p) => p.toUpperCase()));
   // a branch name is usually lower case (feature/kan-3-login); the project must be configured anyway
   const caseless = where === 'branch';
-  const re = caseless ? /(?<![A-Za-z0-9])([A-Za-z][A-Za-z0-9_]{0,9})-(\d+)(?![0-9])/g : /(?<![A-Za-z0-9])([A-Z][A-Z0-9_]{0,9})-(\d+)(?![0-9])/g;
+  const re = caseless
+    ? /(?<![A-Za-z0-9])([A-Za-z][A-Za-z0-9_]{0,9})-(\d+)(?![0-9])/g
+    : /(?<![A-Za-z0-9])([A-Z][A-Z0-9_]{0,9})-(\d+)(?![0-9])/g;
   for (const m of rest.matchAll(re)) {
     const project = m[1]!.toUpperCase();
     // only a configured source's project is a key: a design screen named INV-01 or a
@@ -352,7 +387,18 @@ export function hunksOfPatch(patch: string): FileHunks[] {
   return out;
 }
 
-const CODE_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>(['function', 'class', 'component', 'page', 'route', 'table', 'queue', 'rule', 'guard', 'flag']);
+const CODE_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>([
+  'function',
+  'class',
+  'component',
+  'page',
+  'route',
+  'table',
+  'queue',
+  'rule',
+  'guard',
+  'flag',
+]);
 
 /**
  * The nodes one commit's hunks changed in one file. The graph records where a
@@ -362,13 +408,15 @@ const CODE_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>(['function', 'class'
  * ranges (a binary file, a hunk-less read) every code node of the file is
  * named, and `fileOnly` says the answer is file-granular.
  */
-export function nodesTouched(
-  nodes: readonly GraphNode[],
-  hunks: FileHunks,
-): { nodes: GraphNode[]; fileOnly: boolean } {
+export function nodesTouched(nodes: readonly GraphNode[], hunks: FileHunks): { nodes: GraphNode[]; fileOnly: boolean } {
   const path = hunks.path.replace(/^\.\//, '');
   const inFile = nodes
-    .filter((n) => n.loc && CODE_KINDS.has(n.kind) && (n.loc.path === path || n.loc.path.endsWith(`/${path}`) || path.endsWith(`/${n.loc.path}`)))
+    .filter(
+      (n) =>
+        n.loc &&
+        CODE_KINDS.has(n.kind) &&
+        (n.loc.path === path || n.loc.path.endsWith(`/${path}`) || path.endsWith(`/${n.loc.path}`)),
+    )
     .sort((a, b) => a.loc!.line - b.loc!.line);
   if (!inFile.length) return { nodes: [], fileOnly: false };
   if (!hunks.ranges.length) return { nodes: inFile, fileOnly: true };
@@ -396,7 +444,13 @@ export interface WorkSourceFacts {
   org?: string;
   scope: { projects: string[]; areas?: string[] };
   capabilities?: unknown;
-  freshness: { state: 'synced' | 'unreachable' | 'credential-expired' | 'never'; since?: string; ago?: number; syncNo?: number; error?: string };
+  freshness: {
+    state: 'synced' | 'unreachable' | 'credential-expired' | 'never';
+    since?: string;
+    ago?: number;
+    syncNo?: number;
+    error?: string;
+  };
   user?: { id: string; name: string };
 }
 
@@ -415,14 +469,26 @@ const STATE_PART: Record<string, string> = {
   removed: 'count.part.workRemoved',
 };
 const TYPE_PART: Record<string, string> = {
-  epic: 'work.count.type.epic', feature: 'work.count.type.feature', story: 'work.count.type.story',
-  task: 'work.count.type.task', bug: 'work.count.type.bug', other: 'work.count.type.other',
+  epic: 'work.count.type.epic',
+  feature: 'work.count.type.feature',
+  story: 'work.count.type.story',
+  task: 'work.count.type.task',
+  bug: 'work.count.type.bug',
+  other: 'work.count.type.other',
 };
 const VIA_PART: Record<WorkLinkVia, string> = {
-  declared: 'work.count.via.declared', commit: 'work.count.via.commit', branch: 'work.count.via.branch', url: 'work.count.via.url',
+  declared: 'work.count.via.declared',
+  commit: 'work.count.via.commit',
+  branch: 'work.count.via.branch',
+  url: 'work.count.via.url',
 };
 
-function partition<T>(list: readonly T[], keyOf: (x: T) => string, parts: Record<string, string>, order: readonly string[]): CountPart[] {
+function partition<T>(
+  list: readonly T[],
+  keyOf: (x: T) => string,
+  parts: Record<string, string>,
+  order: readonly string[],
+): CountPart[] {
   const n = new Map<string, number>();
   for (const x of list) n.set(keyOf(x), (n.get(keyOf(x)) ?? 0) + 1);
   const out: CountPart[] = [];
@@ -431,7 +497,8 @@ function partition<T>(list: readonly T[], keyOf: (x: T) => string, parts: Record
   const stray = [...n].filter(([k]) => !order.includes(k)).reduce((a, [, v]) => a + v, 0);
   if (stray) {
     const other = out.find((p) => p.key === parts.other);
-    if (other) other.n += stray; else out.push({ key: parts.other ?? parts[order[order.length - 1]!]!, n: stray });
+    if (other) other.n += stray;
+    else out.push({ key: parts.other ?? parts[order[order.length - 1]!]!, n: stray });
   }
   return out;
 }
@@ -475,15 +542,35 @@ export interface WorkItemSummary {
 export function itemSummaryOf(item: WorkItemFacts, join: WorkItemJoin): WorkItemSummary {
   const links = strongestLinks(join.links.filter((l) => l.work === item.id));
   return {
-    id: item.id, key: item.key, url: item.url, source: item.source, provider: item.provider,
-    type: item.type, title: item.title, state: item.state,
+    id: item.id,
+    key: item.key,
+    url: item.url,
+    source: item.source,
+    provider: item.provider,
+    type: item.type,
+    title: item.title,
+    state: item.state,
     ...(item.assignee ? { assignee: { id: item.assignee.id, name: item.assignee.name } } : {}),
-    labels: item.labels, ...(item.parent ? { parent: item.parent } : {}), updated: item.updated,
-    links: counted(links.length, 'count.unit.workLinks', 'count.scope.workItem', 'core work-graph.ts itemSummaryOf · links', {
-      bizUnit: 'count.unit.workLinks',
-      breakdown: partition(links, (l) => l.via, VIA_PART as Record<string, string>, WORK_LINK_VIAS),
-    }),
-    commits: counted(join.commits, 'work.count.commits', 'count.scope.workItem', 'core work-graph.ts itemSummaryOf · commit_key', { bizUnit: 'work.count.commits' }),
+    labels: item.labels,
+    ...(item.parent ? { parent: item.parent } : {}),
+    updated: item.updated,
+    links: counted(
+      links.length,
+      'count.unit.workLinks',
+      'count.scope.workItem',
+      'core work-graph.ts itemSummaryOf · links',
+      {
+        bizUnit: 'count.unit.workLinks',
+        breakdown: partition(links, (l) => l.via, VIA_PART as Record<string, string>, WORK_LINK_VIAS),
+      },
+    ),
+    commits: counted(
+      join.commits,
+      'work.count.commits',
+      'count.scope.workItem',
+      'core work-graph.ts itemSummaryOf · commit_key',
+      { bizUnit: 'work.count.commits' },
+    ),
   };
 }
 
@@ -495,11 +582,19 @@ export function touchedCount(index: GraphIndex | null, nodeIds: Iterable<string>
     const kind = index?.byId.get(id)?.kind ?? 'unknown';
     byKind.set(kind, (byKind.get(kind) ?? 0) + 1);
   }
-  const breakdown: CountPart[] = [...byKind].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  const breakdown: CountPart[] = [...byKind]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([kind, n]) => ({ key: 'work.count.touchedKind', n, label: kind }));
-  return counted(ids.length, 'work.count.touched', 'count.scope.workItem', 'core work-graph.ts touchedCount · commit_node', {
-    bizUnit: 'work.count.touched', ...(breakdown.length ? { breakdown } : {}),
-  });
+  return counted(
+    ids.length,
+    'work.count.touched',
+    'count.scope.workItem',
+    'core work-graph.ts touchedCount · commit_node',
+    {
+      bizUnit: 'work.count.touched',
+      ...(breakdown.length ? { breakdown } : {}),
+    },
+  );
 }
 
 export interface WorkFinding {
@@ -522,7 +617,12 @@ function fill(key: string, vars: Record<string, string | number>, register: Regi
  * provenances: *done, but its screen is not built* · *to do, but N commits
  * name it*.
  */
-export function workFindings(item: WorkItemFacts, index: GraphIndex | null, join: WorkItemJoin, register: Register = 'professional'): WorkFinding[] {
+export function workFindings(
+  item: WorkItemFacts,
+  index: GraphIndex | null,
+  join: WorkItemJoin,
+  register: Register = 'professional',
+): WorkFinding[] {
   const out: WorkFinding[] = [];
   const tracker = { source: 'tracker' as const, what: `${item.key} · ${item.state.name} (${item.state.category})` };
   if (item.state.category === 'done' && index) {
@@ -533,8 +633,14 @@ export function workFindings(item: WorkItemFacts, index: GraphIndex | null, join
       const screen = n.facets?.business?.label ?? n.name;
       const vars = { key: item.key, screen };
       out.push({
-        kind: 'done-not-built', key: 'work.finding.doneNotBuilt', vars, text: fill('work.finding.doneNotBuilt', vars, register),
-        provenances: [tracker, { source: 'code', what: `${screen} · ${n.design.id ?? n.name}: designed, no code found (${l.via})` }],
+        kind: 'done-not-built',
+        key: 'work.finding.doneNotBuilt',
+        vars,
+        text: fill('work.finding.doneNotBuilt', vars, register),
+        provenances: [
+          tracker,
+          { source: 'code', what: `${screen} · ${n.design.id ?? n.name}: designed, no code found (${l.via})` },
+        ],
       });
     }
   }
@@ -542,8 +648,17 @@ export function workFindings(item: WorkItemFacts, index: GraphIndex | null, join
     const vars = { key: item.key, n: join.commits };
     const key = join.commits === 1 ? 'work.finding.todoButCommittedOne' : 'work.finding.todoButCommitted';
     out.push({
-      kind: 'todo-but-committed', key, vars, text: fill(key, vars, register),
-      provenances: [tracker, { source: 'code', what: `${join.commits} commit${join.commits === 1 ? ' on the history spine names' : 's on the history spine name'} ${item.key}` }],
+      kind: 'todo-but-committed',
+      key,
+      vars,
+      text: fill(key, vars, register),
+      provenances: [
+        tracker,
+        {
+          source: 'code',
+          what: `${join.commits} commit${join.commits === 1 ? ' on the history spine names' : 's on the history spine name'} ${item.key}`,
+        },
+      ],
     });
   }
   return out;
@@ -562,7 +677,12 @@ export interface WorkFilter {
 }
 
 /** Filter items. `flow`/`node`/`repo` read the links; `q` matches key, title and labels, case-insensitively. */
-export function filterWorkItems<T extends WorkItemFacts>(items: readonly T[], links: readonly WorkLinkFact[], f: WorkFilter, index: GraphIndex | null): T[] {
+export function filterWorkItems<T extends WorkItemFacts>(
+  items: readonly T[],
+  links: readonly WorkLinkFact[],
+  f: WorkFilter,
+  index: GraphIndex | null,
+): T[] {
   const byWork = new Map<string, WorkLinkFact[]>();
   for (const l of links) byWork.set(l.work, [...(byWork.get(l.work) ?? []), l]);
   const flowNodes = f.flow && index ? flowNodeSet(index, f.flow) : null;
@@ -570,12 +690,18 @@ export function filterWorkItems<T extends WorkItemFacts>(items: readonly T[], li
   return items.filter((i) => {
     if (f.source && i.source !== f.source) return false;
     if (f.state && i.state.category !== f.state) return false;
-    if (f.assignee && i.assignee?.id !== f.assignee && !i.assignee?.name.toLowerCase().includes(f.assignee.toLowerCase())) return false;
+    if (
+      f.assignee &&
+      i.assignee?.id !== f.assignee &&
+      !i.assignee?.name.toLowerCase().includes(f.assignee.toLowerCase())
+    )
+      return false;
     if (q && !`${i.key} ${i.title} ${i.labels.join(' ')}`.toLowerCase().includes(q)) return false;
     const ls = byWork.get(i.id) ?? [];
     if (f.node && !ls.some((l) => l.node === f.node)) return false;
     if (flowNodes && !ls.some((l) => flowNodes.has(l.node))) return false;
-    if (f.repo && !ls.some((l) => (index?.byId.get(l.node)?.loc?.repo ?? l.node.split('::')[0]) === f.repo)) return false;
+    if (f.repo && !ls.some((l) => (index?.byId.get(l.node)?.loc?.repo ?? l.node.split('::')[0]) === f.repo))
+      return false;
     return true;
   });
 }

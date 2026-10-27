@@ -13,12 +13,16 @@ async function mapOn(page: Page) {
   await gotoReady(page, '#/portfolio');
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
 }
 async function openLanes(page: Page) {
   await mapOn(page);
-  await page.evaluate((h) => { location.hash = h; }, LANES);
+  await page.evaluate((h) => {
+    location.hash = h;
+  }, LANES);
   // every journey of the storyline read: the footer stops saying how many are left
   await expect(page.locator('.map-lanes .ln-stage:not(.off)')).toHaveCount(5);
   await expect(page.locator('.map-lanes .ln-foot .rd')).toHaveCount(0);
@@ -29,7 +33,9 @@ async function openLanes(page: Page) {
  * @covers packages/server/public/app/surfaces/map-lanes.js::lanesHtml
  * @covers packages/server/public/app/surfaces/map.js::drawLanes
  */
-test('the invoice storyline as lanes: two persona lanes and one store lane, the record\'s moves in lifecycle order, true counts', async ({ page }) => {
+test("the invoice storyline as lanes: two persona lanes and one store lane, the record's moves in lifecycle order, true counts", async ({
+  page,
+}) => {
   await openLanes(page);
   await expect(page.locator('.map-world')).toHaveClass(/lanes-on/);
   // the layout control says lanes, and the link carries it
@@ -52,23 +58,47 @@ test('the invoice storyline as lanes: two persona lanes and one store lane, the 
   await expect(off).toContainText('no test can reach it');
   await expect(page.locator('.map-lanes .ln-foot')).toContainText('1 done outside the code');
   await expect(page.locator('.map-lanes .ln-stage.branch')).toHaveCount(2);
-  expect(await page.locator('.map-lanes .ln-stage:not(.branch):not(.off)').evaluateAll((els) => els.map((e) => [e.getAttribute('data-name'), e.getAttribute('data-lane'), e.getAttribute('data-persona-from')])))
-    .toEqual([['New invoice', 'billing', 'routes'], ['Invoice list', 'billing', 'journey'], ['Discard draft', 'ops', 'screen']]);
-  const sum = await page.evaluate(async () => (await (await fetch('/api/journey?entry=invoice-app::flow::billing-cycle&steps=0')).json()).summary.user);
-  expect(sum.map((u: any) => [u.designId, u.persona, u.personaFrom])).toEqual([['INV-02', 'billing', 'routes'], ['INV-01', 'billing', 'journey'], ['INV-03', 'ops', 'screen']]);
+  expect(
+    await page
+      .locator('.map-lanes .ln-stage:not(.branch):not(.off)')
+      .evaluateAll((els) =>
+        els.map((e) => [e.getAttribute('data-name'), e.getAttribute('data-lane'), e.getAttribute('data-persona-from')]),
+      ),
+  ).toEqual([
+    ['New invoice', 'billing', 'routes'],
+    ['Invoice list', 'billing', 'journey'],
+    ['Discard draft', 'ops', 'screen'],
+  ]);
+  const sum = await page.evaluate(
+    async () =>
+      (await (await fetch('/api/journey?entry=invoice-app::flow::billing-cycle&steps=0')).json()).summary.user,
+  );
+  expect(sum.map((u: any) => [u.designId, u.persona, u.personaFrom])).toEqual([
+    ['INV-02', 'billing', 'routes'],
+    ['INV-01', 'billing', 'journey'],
+    ['INV-03', 'ops', 'screen'],
+  ]);
   await expect(page.locator('.map-lanes .ln-stage.planned')).toHaveCount(2);
   // the record lane reads in the lifecycle's order: created (draft), then status → open
   const inv = page.locator('.map-lanes .ln-pill[data-record="invoice-app::table::invoices"]');
   await expect(inv).toHaveCount(2);
-  expect(await inv.evaluateAll((els) => els.map((e) => [e.getAttribute('data-status'), Math.round(e.getBoundingClientRect().left)])
-    .sort((a, b) => (a[1] as number) - (b[1] as number)).map((x) => x[0]))).toEqual(['draft', 'open']);
+  expect(
+    await inv.evaluateAll((els) =>
+      els
+        .map((e) => [e.getAttribute('data-status'), Math.round(e.getBoundingClientRect().left)])
+        .sort((a, b) => (a[1] as number) - (b[1] as number))
+        .map((x) => x[0]),
+    ),
+  ).toEqual(['draft', 'open']);
   // the footer: 3 journeys · 3 screens · 2 of 3 built · 1 branch — as the journey tree and the design say
   const foot = page.locator('.map-lanes .ln-foot');
   await expect(foot).toContainText('3 journeys');
   await expect(foot).toContainText('3 screens');
   await expect(foot).toContainText('2 of 3 built');
   await expect(foot).toContainText('1 branch');
-  const tree = await page.evaluate(async () => (await (await fetch('/api/journeys')).json()).tree.storylines.find((s: any) => s.id === 'invoice'));
+  const tree = await page.evaluate(async () =>
+    (await (await fetch('/api/journeys')).json()).tree.storylines.find((s: any) => s.id === 'invoice'),
+  );
   expect(tree.counts.journeys.n).toBe(3);
   expect(tree.branches.length).toBe(1);
   // each move carries what its action needs; finalize never checks the status it leaves, and says so
@@ -84,13 +114,17 @@ test('the invoice storyline as lanes: two persona lanes and one store lane, the 
  * @covers packages/server/public/app/surfaces/map.js::enterStage
  * @covers packages/server/public/app/surfaces/map.js::laneStops
  */
-test('a screen on the lanes enters its journey\'s street at that screen; zooming in on one by + does too; Esc comes back to the lanes', async ({ page }) => {
+test("a screen on the lanes enters its journey's street at that screen; zooming in on one by + does too; Esc comes back to the lanes", async ({
+  page,
+}) => {
   await openLanes(page);
   // click: Invoice list (billing-cycle's second screen) — the street of Billing cycle, that screen framed
   await page.locator('.map-lanes .ln-stage[data-key="s:INV-01"]').click();
   await expect(page.locator('.map-world')).not.toHaveClass(/lanes-on/);
   await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
-  await expect.poll(() => page.evaluate(() => location.hash)).toContain(encodeURIComponent('invoice-app::flow::billing-cycle'));
+  await expect
+    .poll(() => page.evaluate(() => location.hash))
+    .toContain(encodeURIComponent('invoice-app::flow::billing-cycle'));
   await expect(page.locator('.map-scr[data-flow="invoice-app::flow::billing-cycle"][data-index="1"]')).toBeFocused();
   // Esc from the street is the board: the lanes again, fitted
   await page.keyboard.press('Escape');
@@ -121,13 +155,19 @@ test('the layout control and w switch between the chain and the lanes; the chain
   await expect(page.locator('.map-world')).toHaveClass(/lanes-on/);
   // with All journeys the lanes are still a choice (cleanup pass 2026-10-11): every storyline as its own band of lanes,
   // stacked, each with its header
-  await page.evaluate(() => { location.hash = '#/map'; });
+  await page.evaluate(() => {
+    location.hash = '#/map';
+  });
   await page.locator('.map-layout .map-seg[data-layout="lanes"]').click();
-  const ids = await page.evaluate(async () => (await (await fetch('/api/journeys')).json()).tree.storylines.map((x: any) => x.id));
+  const ids = await page.evaluate(async () =>
+    (await (await fetch('/api/journeys')).json()).tree.storylines.map((x: any) => x.id),
+  );
   expect(ids.length).toBeGreaterThan(0);
   await expect(page.locator('.map-world')).toHaveClass(/lanes-on/);
   await expect(page.locator('.map-lanes')).toHaveCount(ids.length);
-  expect(await page.locator('.map-lanes').evaluateAll((els) => els.map((e) => e.getAttribute('data-storyline')))).toEqual(ids);
+  expect(
+    await page.locator('.map-lanes').evaluateAll((els) => els.map((e) => e.getAttribute('data-storyline'))),
+  ).toEqual(ids);
   await expect(page.locator('.map-lanes .ln-top .nm')).toHaveCount(ids.length);
   expect(await page.evaluate(() => location.hash)).toContain('layout=lanes');
 });
@@ -146,7 +186,9 @@ test('Save draws the lanes board whole, as a PNG with the provenance footer', as
   expect(h).toBeGreaterThan(300);
 });
 
-test('the business register prints words on the lanes: no status constants or table names on a pill', async ({ page }) => {
+test('the business register prints words on the lanes: no status constants or table names on a pill', async ({
+  page,
+}) => {
   await openLanes(page);
   await page.locator('#lb-business').click();
   await expect(page.locator('body')).toHaveClass(/lens-business/);

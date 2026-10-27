@@ -18,7 +18,11 @@ const rank = (s: TestRun['status']) => STATUS_RANK.indexOf(s);
 
 export function foldRuns(runs: TestRun[]): TestRun | undefined {
   if (!runs.length) return undefined;
-  if (runs.length === 1) { const one = { ...runs[0]! }; delete one.projects; return one; }
+  if (runs.length === 1) {
+    const one = { ...runs[0]! };
+    delete one.projects;
+    return one;
+  }
   const deciding = runs.filter((r) => DECIDING.includes(r.status));
   const passed = runs.filter((r) => r.status === 'passed');
   const pool = deciding.length ? deciding : passed.length ? passed : runs;
@@ -30,7 +34,11 @@ export function foldRuns(runs: TestRun[]): TestRun | undefined {
   delete fold.projects;
   const named = runs.filter((r) => r.project);
   if (new Set(named.map((r) => r.project)).size > 1) {
-    fold.projects = named.map((r): TestRunProject => ({ project: r.project!, status: r.status, ...(r.reason ? { reason: r.reason } : {}) }));
+    fold.projects = named.map((r): TestRunProject => ({
+      project: r.project!,
+      status: r.status,
+      ...(r.reason ? { reason: r.reason } : {}),
+    }));
   }
   return fold;
 }

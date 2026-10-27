@@ -4,8 +4,19 @@
 //   state.category  ← workitemtypes/{type}.states[].category (Proposed · InProgress · Resolved · Completed · Removed)
 //   type.category   ← the type's name per process (the one row §3 says names decide)
 import type {
-  WorkItem, WorkType, StateCategory, Person, Link, LinkKind, Comment, Change, Body, EstimateUnit,
-  SchemaType, SchemaField, SchemaLinkType,
+  WorkItem,
+  WorkType,
+  StateCategory,
+  Person,
+  Link,
+  LinkKind,
+  Comment,
+  Change,
+  Body,
+  EstimateUnit,
+  SchemaType,
+  SchemaField,
+  SchemaLinkType,
 } from '@farsight/work';
 import { workItemId } from '@farsight/work';
 import { htmlToText } from './html.js';
@@ -40,9 +51,9 @@ export const LINK_KIND_MAP: Record<string, LinkKind> = {
   'System.LinkTypes.Hierarchy-Reverse': 'parent',
   'System.LinkTypes.Hierarchy-Forward': 'child',
   'System.LinkTypes.Related': 'relates',
-  'System.LinkTypes.Dependency-Forward': 'blocks',     // the target is this item's successor
+  'System.LinkTypes.Dependency-Forward': 'blocks', // the target is this item's successor
   'System.LinkTypes.Dependency-Reverse': 'blocked-by', // the target is this item's predecessor
-  'System.LinkTypes.Duplicate-Reverse': 'duplicates',  // this item is a duplicate of the target
+  'System.LinkTypes.Duplicate-Reverse': 'duplicates', // this item is a duplicate of the target
 };
 
 /** The relation a link kind is written as. `other` has none: the native name must be given. */
@@ -56,7 +67,9 @@ export const LINK_REL_FOR: Partial<Record<LinkKind, string>> = {
 };
 
 export function linkKind(rel: string): LinkKind {
-  return LINK_KIND_MAP[rel] ?? (/^system\.linktypes\./i.test(rel) ? LINK_KIND_MAP[canonRel(rel)] ?? 'other' : 'other');
+  return (
+    LINK_KIND_MAP[rel] ?? (/^system\.linktypes\./i.test(rel) ? (LINK_KIND_MAP[canonRel(rel)] ?? 'other') : 'other')
+  );
 }
 // the feed and older payloads spell `Dependency-forward` in lower case
 function canonRel(rel: string): string {
@@ -65,7 +78,14 @@ function canonRel(rel: string): string {
 
 /** Canonical field names (§4.3) and the ADO reference names that can carry them, in preference order. */
 export const CANONICAL_FIELDS: Record<string, { refs: string[]; unit?: EstimateUnit }> = {
-  estimate: { refs: ['Microsoft.VSTS.Scheduling.StoryPoints', 'Microsoft.VSTS.Scheduling.Effort', 'Microsoft.VSTS.Scheduling.Size'], unit: 'points' },
+  estimate: {
+    refs: [
+      'Microsoft.VSTS.Scheduling.StoryPoints',
+      'Microsoft.VSTS.Scheduling.Effort',
+      'Microsoft.VSTS.Scheduling.Size',
+    ],
+    unit: 'points',
+  },
   remaining: { refs: ['Microsoft.VSTS.Scheduling.RemainingWork'], unit: 'hours' },
   originalEstimate: { refs: ['Microsoft.VSTS.Scheduling.OriginalEstimate'], unit: 'hours' },
   completed: { refs: ['Microsoft.VSTS.Scheduling.CompletedWork'], unit: 'hours' },
@@ -85,19 +105,33 @@ export const CANONICAL_FIELDS: Record<string, { refs: string[]; unit?: EstimateU
 };
 
 /** Canonical names that go into WorkItem.fields (the rest have their own WorkItem slot). */
-const FIELDS_BAG = ['estimate', 'remaining', 'originalEstimate', 'completed', 'severity', 'valueArea', 'acceptanceCriteria', 'reproSteps'];
+const FIELDS_BAG = [
+  'estimate',
+  'remaining',
+  'originalEstimate',
+  'completed',
+  'severity',
+  'valueArea',
+  'acceptanceCriteria',
+  'reproSteps',
+];
 
 /**
  * The canonical → reference map for one project: what the project has (`found`),
  * overridden by the settings pin (`declared`).
  */
-export function fieldMap(projectFields: { referenceName: string; name: string }[], pinned: Record<string, string> = {}): SchemaField[] {
+export function fieldMap(
+  projectFields: { referenceName: string; name: string }[],
+  pinned: Record<string, string> = {},
+): SchemaField[] {
   const have = new Map(projectFields.map((f) => [f.referenceName, f.name]));
   const out: SchemaField[] = [];
   for (const [canonical, def] of Object.entries(CANONICAL_FIELDS)) {
     if (pinned[canonical]) continue;
     for (const ref of def.refs) {
-      if (have.has(ref)) { out.push({ id: ref, name: have.get(ref)!, canonical, origin: 'found' }); }
+      if (have.has(ref)) {
+        out.push({ id: ref, name: have.get(ref)!, canonical, origin: 'found' });
+      }
     }
   }
   for (const [canonical, ref] of Object.entries(pinned)) {
@@ -125,7 +159,10 @@ export function person(v: unknown): Person | undefined {
 
 export function splitTags(v: unknown): string[] {
   if (typeof v !== 'string') return [];
-  return v.split(';').map((s) => s.trim()).filter(Boolean);
+  return v
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 export function joinTags(tags: string[]): string {
@@ -146,7 +183,11 @@ export interface TypeInfo {
   transitions: Record<string, string[]>;
 }
 
-export function typeInfo(t: { name: string; states?: { name: string; category: string }[]; transitions?: Record<string, { to: string }[]> }): TypeInfo {
+export function typeInfo(t: {
+  name: string;
+  states?: { name: string; category: string }[];
+  transitions?: Record<string, { to: string }[]>;
+}): TypeInfo {
   const transitions: Record<string, string[]> = {};
   for (const [from, tos] of Object.entries(t.transitions ?? {})) transitions[from] = (tos ?? []).map((x) => x.to);
   return {
@@ -166,7 +207,9 @@ export function schemaType(ti: TypeInfo): SchemaType {
   };
 }
 
-export function schemaLinkTypes(relTypes: { referenceName: string; attributes?: { usage?: string } }[]): SchemaLinkType[] {
+export function schemaLinkTypes(
+  relTypes: { referenceName: string; attributes?: { usage?: string } }[],
+): SchemaLinkType[] {
   return relTypes.map((r) => ({ native: r.referenceName, kind: linkKind(r.referenceName) }));
 }
 
@@ -194,7 +237,7 @@ export function mapWorkItem(raw: any, ctx: MapContext): WorkItem {
   // a state its type does not define (left behind by a process change): ADO
   // refuses every change until it is fixed. The category is not guessed from
   // the name — it is marked, and `todo` stands in until the contract has a word.
-  const stateCategory: StateCategory = adoCat ? STATE_CATEGORY_MAP[adoCat] ?? 'todo' : 'todo';
+  const stateCategory: StateCategory = adoCat ? (STATE_CATEGORY_MAP[adoCat] ?? 'todo') : 'todo';
   const fields: Record<string, unknown> = {};
   if (!adoCat) fields.stateUndefinedByType = true;
 
@@ -219,7 +262,8 @@ export function mapWorkItem(raw: any, ctx: MapContext): WorkItem {
     links.push({ kind, target, native: r.rel });
     if (kind === 'parent' && !parent) parent = target;
   }
-  if (!parent && f['System.Parent'] !== undefined && f['System.Parent'] !== null) parent = workItemId(ctx.sourceId, String(f['System.Parent']));
+  if (!parent && f['System.Parent'] !== undefined && f['System.Parent'] !== null)
+    parent = workItemId(ctx.sourceId, String(f['System.Parent']));
 
   const est = pick('estimate');
   let estimate: WorkItem['estimate'];
@@ -242,9 +286,10 @@ export function mapWorkItem(raw: any, ctx: MapContext): WorkItem {
   let body: Body | undefined;
   if (typeof f['System.Description'] === 'string' && f['System.Description']) {
     const d = f['System.Description'] as string;
-    body = descFormat === 'markdown'
-      ? { format: 'markdown', raw: d, text: d }
-      : { format: 'html', raw: d, text: htmlToText(d) };
+    body =
+      descFormat === 'markdown'
+        ? { format: 'markdown', raw: d, text: d }
+        : { format: 'html', raw: d, text: htmlToText(d) };
   }
 
   const prio = f['Microsoft.VSTS.Common.Priority'];
@@ -270,7 +315,8 @@ export function mapWorkItem(raw: any, ctx: MapContext): WorkItem {
   if (body) item.body = body;
   const since = f['Microsoft.VSTS.Common.StateChangeDate'];
   if (since) item.state.since = iso(since);
-  if (prio !== undefined && prio !== null) item.priority = { name: String(prio), rank: typeof prio === 'number' ? prio : undefined };
+  if (prio !== undefined && prio !== null)
+    item.priority = { name: String(prio), rank: typeof prio === 'number' ? prio : undefined };
   const assignee = person(f['System.AssignedTo']);
   if (assignee) item.assignee = assignee;
   const reporter = person(f['System.CreatedBy']);
@@ -294,9 +340,10 @@ function iso(v: unknown): string {
 export function mapComment(c: any): Comment {
   const fmt = String(c.format ?? 'html').toLowerCase();
   const text = String(c.text ?? '');
-  const body: Body = fmt === 'markdown'
-    ? { format: 'markdown', raw: text, text }
-    : { format: 'html', raw: text, text: htmlToText(text) };
+  const body: Body =
+    fmt === 'markdown'
+      ? { format: 'markdown', raw: text, text }
+      : { format: 'html', raw: text, text: htmlToText(text) };
   const out: Comment = {
     id: String(c.id),
     author: person(c.createdBy) ?? { id: 'unknown', name: 'unknown' },
@@ -309,11 +356,26 @@ export function mapComment(c: any): Comment {
 
 /** Bookkeeping fields every revision moves; they are not changes a person made. */
 const NOISE = new Set([
-  'System.Rev', 'System.AuthorizedDate', 'System.RevisedDate', 'System.ChangedDate', 'System.Watermark',
-  'System.AuthorizedAs', 'System.PersonId', 'System.ChangedBy', 'System.CommentCount',
-  'System.AreaId', 'System.IterationId', 'System.NodeName', 'System.IsDeleted',
+  'System.Rev',
+  'System.AuthorizedDate',
+  'System.RevisedDate',
+  'System.ChangedDate',
+  'System.Watermark',
+  'System.AuthorizedAs',
+  'System.PersonId',
+  'System.ChangedBy',
+  'System.CommentCount',
+  'System.AreaId',
+  'System.IterationId',
+  'System.NodeName',
+  'System.IsDeleted',
 ]);
-const HTML_FIELDS = new Set(['System.Description', 'System.History', 'Microsoft.VSTS.Common.AcceptanceCriteria', 'Microsoft.VSTS.TCM.ReproSteps']);
+const HTML_FIELDS = new Set([
+  'System.Description',
+  'System.History',
+  'Microsoft.VSTS.Common.AcceptanceCriteria',
+  'Microsoft.VSTS.TCM.ReproSteps',
+]);
 
 function show(ref: string, v: unknown): string | undefined {
   if (v === undefined || v === null) return undefined;
@@ -328,7 +390,9 @@ export function mapUpdates(updates: any[]): Change[] {
   for (const u of [...updates].sort((a, b) => (a.rev ?? 0) - (b.rev ?? 0))) {
     const at = iso(u.fields?.['System.ChangedDate']?.newValue ?? u.revisedDate);
     const by = person(u.revisedBy);
-    for (const [ref, d] of Object.entries((u.fields ?? {}) as Record<string, { oldValue?: unknown; newValue?: unknown }>)) {
+    for (const [ref, d] of Object.entries(
+      (u.fields ?? {}) as Record<string, { oldValue?: unknown; newValue?: unknown }>,
+    )) {
       if (NOISE.has(ref) || /^WEF_/.test(ref)) continue;
       const c: Change = { at, field: ref };
       if (by) c.by = by;
@@ -339,12 +403,16 @@ export function mapUpdates(updates: any[]): Change[] {
       out.push(c);
     }
     const rel = u.relations as { added?: any[]; removed?: any[]; updated?: any[] } | undefined;
-    for (const [verb, list] of [['added', rel?.added], ['removed', rel?.removed]] as const) {
+    for (const [verb, list] of [
+      ['added', rel?.added],
+      ['removed', rel?.removed],
+    ] as const) {
       for (const r of list ?? []) {
         const c: Change = { at, field: 'relations' };
         if (by) c.by = by;
         const label = `${r.rel} ${idFromUrl(r.url) ?? r.attributes?.name ?? r.url}`;
-        if (verb === 'added') c.to = label; else c.from = label;
+        if (verb === 'added') c.to = label;
+        else c.from = label;
         out.push(c);
       }
     }

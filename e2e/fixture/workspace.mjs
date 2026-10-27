@@ -29,17 +29,36 @@ export function makeWorkspace(label = 'ws', { fixed = false } = {}) {
   // `fixed` reuses one path per label, wiped first: Playwright stops the webServer
   // with a signal the wrapper may never see, so a random dir per run would pile up
   const dir = fixed ? join(tmpdir(), `farsight-e2e-${label}`) : mkdtempSync(join(tmpdir(), `farsight-e2e-${label}-`));
-  if (fixed) { rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true }); }
+  if (fixed) {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+  }
   cpSync(FIXTURE_SRC, join(dir, FIXTURE_REPO), { recursive: true });
   mkdirSync(join(dir, '.farsight'), { recursive: true });
-  writeFileSync(join(dir, '.farsight', 'settings.json'), JSON.stringify({
-    theme: 'dark',
-    defaultLens: 'hybrid',
-    // the fixture's Storybook is a fake the stories spec starts on this port (never a real one);
-    // a lane that moves its ports moves this one too
-    sources: [{ id: FIXTURE_REPO, name: FIXTURE_REPO, type: 'local', path: FIXTURE_REPO, enabled: true, storybook: { url: `http://127.0.0.1:${STORYBOOK_PORT}` } }],
-    collections: [],
-  }, null, 2));
+  writeFileSync(
+    join(dir, '.farsight', 'settings.json'),
+    JSON.stringify(
+      {
+        theme: 'dark',
+        defaultLens: 'hybrid',
+        // the fixture's Storybook is a fake the stories spec starts on this port (never a real one);
+        // a lane that moves its ports moves this one too
+        sources: [
+          {
+            id: FIXTURE_REPO,
+            name: FIXTURE_REPO,
+            type: 'local',
+            path: FIXTURE_REPO,
+            enabled: true,
+            storybook: { url: `http://127.0.0.1:${STORYBOOK_PORT}` },
+          },
+        ],
+        collections: [],
+      },
+      null,
+      2,
+    ),
+  );
   const graph = join(dir, 'graph.json');
   ingest(dir, graph);
   return { dir, graph, repoDir: join(dir, FIXTURE_REPO), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
@@ -48,7 +67,8 @@ export function makeWorkspace(label = 'ws', { fixed = false } = {}) {
 /** The real CLI ingest, from the workspace cwd, with an explicit --out. */
 export function ingest(dir, graph) {
   execFileSync(process.execPath, [CLI, 'ingest', FIXTURE_REPO, '--repo', FIXTURE_REPO, '--out', graph], {
-    cwd: dir, stdio: ['ignore', 'ignore', 'pipe'],
+    cwd: dir,
+    stdio: ['ignore', 'ignore', 'pipe'],
   });
 }
 
@@ -63,13 +83,25 @@ export function makeProjectsWorkspace(label = 'projects') {
   const names = [FIXTURE_REPO, 'nx-workspace'];
   for (const n of names) cpSync(join(REPO_ROOT, 'examples', n), join(dir, n), { recursive: true });
   mkdirSync(join(dir, '.farsight'), { recursive: true });
-  writeFileSync(join(dir, '.farsight', 'settings.json'), JSON.stringify({
-    theme: 'dark', defaultLens: 'hybrid', flags: { map: true },
-    sources: names.map((n) => ({ id: n, name: n, type: 'local', path: n, enabled: true })),
-    collections: [],
-  }, null, 2));
+  writeFileSync(
+    join(dir, '.farsight', 'settings.json'),
+    JSON.stringify(
+      {
+        theme: 'dark',
+        defaultLens: 'hybrid',
+        flags: { map: true },
+        sources: names.map((n) => ({ id: n, name: n, type: 'local', path: n, enabled: true })),
+        collections: [],
+      },
+      null,
+      2,
+    ),
+  );
   const graph = join(dir, 'graph.json');
-  execFileSync(process.execPath, [CLI, 'ingest', ...names, '--out', graph], { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
+  execFileSync(process.execPath, [CLI, 'ingest', ...names, '--out', graph], {
+    cwd: dir,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
   return { dir, graph, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
@@ -84,11 +116,20 @@ export async function makeCompareWorkspace(label = 'compare') {
   const dir = mkdtempSync(join(tmpdir(), `farsight-e2e-${label}-`));
   cpSync(FIXTURE_SRC, join(dir, FIXTURE_REPO), { recursive: true });
   mkdirSync(join(dir, '.farsight'), { recursive: true });
-  writeFileSync(join(dir, '.farsight', 'settings.json'), JSON.stringify({
-    theme: 'dark', defaultLens: 'hybrid', flags: { map: true },
-    sources: [{ id: FIXTURE_REPO, name: FIXTURE_REPO, type: 'local', path: FIXTURE_REPO, enabled: true }],
-    collections: [],
-  }, null, 2));
+  writeFileSync(
+    join(dir, '.farsight', 'settings.json'),
+    JSON.stringify(
+      {
+        theme: 'dark',
+        defaultLens: 'hybrid',
+        flags: { map: true },
+        sources: [{ id: FIXTURE_REPO, name: FIXTURE_REPO, type: 'local', path: FIXTURE_REPO, enabled: true }],
+        collections: [],
+      },
+      null,
+      2,
+    ),
+  );
   const graph = join(dir, 'graph.json');
   ingest(dir, graph);
   applySecondSync(join(dir, FIXTURE_REPO));

@@ -8,9 +8,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  COUNT_SCOPES, SCOPE_WORDS, scopeWord, STRINGS, evidenceFacts, caseWord, coverageFor,
-  buildIndex, journey, journeySummary, screensFor, journeyCoverage, cellCoverage, segmentNotBuilt,
-  testsSurface, testsMatrixRows, testsMatrixCsv, TESTS_MATRIX_COLUMNS, EVIDENCE_WORDS,
+  COUNT_SCOPES,
+  SCOPE_WORDS,
+  scopeWord,
+  STRINGS,
+  evidenceFacts,
+  caseWord,
+  coverageFor,
+  buildIndex,
+  journey,
+  journeySummary,
+  screensFor,
+  journeyCoverage,
+  cellCoverage,
+  segmentNotBuilt,
+  testsSurface,
+  testsMatrixRows,
+  testsMatrixCsv,
+  TESTS_MATRIX_COLUMNS,
+  EVIDENCE_WORDS,
 } from '../dist/index.js';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -23,17 +39,34 @@ test('every scope a test number can count over has chip words in the catalog, wi
     assert.ok(STRINGS[k], `${scope} → ${k} is not in the catalog`);
     assert.ok(STRINGS[k]!.define, `${k} has no define`);
   }
-  for (const k of Object.values(SCOPE_WORDS)) assert.match(STRINGS[k!]!.professional, /^over /, `${k} reads as a scope`);
+  for (const k of Object.values(SCOPE_WORDS))
+    assert.match(STRINGS[k!]!.professional, /^over /, `${k} reads as a scope`);
   // the test scopes the swarm met side by side each have their own words
-  const words = ['journey.scopeAll', 'journey.scopeHere', 'count.scope.action', 'count.scope.node', 'count.scope.gate', 'count.scope.affected'].map((s) => scopeWord(s));
+  const words = [
+    'journey.scopeAll',
+    'journey.scopeHere',
+    'count.scope.action',
+    'count.scope.node',
+    'count.scope.gate',
+    'count.scope.affected',
+  ].map((s) => scopeWord(s));
   assert.equal(new Set(words).size, words.length);
 });
 
 let seq = 0;
-function ref(evidence: CoverageTestRef['evidence'], status: string | null, extra: Partial<CoverageTestRef> = {}): CoverageTestRef {
+function ref(
+  evidence: CoverageTestRef['evidence'],
+  status: string | null,
+  extra: Partial<CoverageTestRef> = {},
+): CoverageTestRef {
   seq++;
   return {
-    id: `r::test::t${seq}`, name: `case ${seq}`, level: 'e2e', runner: 'playwright', evidence, runLevel: false,
+    id: `r::test::t${seq}`,
+    name: `case ${seq}`,
+    level: 'e2e',
+    runner: 'playwright',
+    evidence,
+    runLevel: false,
     reaches: { nodeId: 'r::page::/x', name: '/x', kind: 'page' },
     ...(status ? { status, at: '2026-10-04T10:00:00.000Z', freshness: 'unchanged', stale: false } : {}),
     ...extra,
@@ -42,8 +75,13 @@ function ref(evidence: CoverageTestRef['evidence'], status: string | null, extra
 
 test('the verdict carries its scope words and lifts failed · skipped · flaky out of the runs', () => {
   const refs = [
-    ref('observed', 'passed', { observedVia: 'declaration' }), ref('observed', 'passed', { observedVia: 'declaration' }),
-    ref('static', 'skipped'), ref('static', 'skipped'), ref('static', 'failed'), ref('declared', 'flaky'), ref('declared', null),
+    ref('observed', 'passed', { observedVia: 'declaration' }),
+    ref('observed', 'passed', { observedVia: 'declaration' }),
+    ref('static', 'skipped'),
+    ref('static', 'skipped'),
+    ref('static', 'failed'),
+    ref('declared', 'flaky'),
+    ref('declared', null),
   ];
   const v = evidenceFacts(refs, 'journey.scopeHere', 'test').verdict;
   assert.equal(v.scopeWord, 'count.over.screen');
@@ -51,30 +89,74 @@ test('the verdict carries its scope words and lifts failed · skipped · flaky o
   assert.equal(v.status, 'passed', 'the word keeps its run');
   assert.deepEqual({ failed: v.failed, skipped: v.skipped, flaky: v.flaky }, { failed: 1, skipped: 2, flaky: 1 });
   const part = (k: string) => v.runs.breakdown!.find((p) => p.key === `count.part.${k}`)!.n;
-  assert.deepEqual([part('failed'), part('skipped'), part('flaky')], [v.failed, v.skipped, v.flaky], 'the same numbers as the runs breakdown');
+  assert.deepEqual(
+    [part('failed'), part('skipped'), part('flaky')],
+    [v.failed, v.skipped, v.flaky],
+    'the same numbers as the runs breakdown',
+  );
   assert.equal(evidenceFacts(refs, 'count.scope.action', 'test').verdict.scopeWord, 'count.over.action');
   assert.equal(evidenceFacts(refs, 'count.scope.gate', 'test').verdict.scopeWord, 'count.over.gate');
 });
 
 // ── a designed, not-built screen ───────────────────────────────────────────
 const R = 'app';
-const edge = (kind: GraphEdge['kind'], from: string, to: string, meta?: GraphEdge['meta']): GraphEdge => ({ id: `${kind}|${from}|${to}`, kind, from, to, ...(meta ? { meta } : {}) });
-const FLOW = `${R}::flow::f`, BUILT = `${R}::page::/a`, PLANNED = `${R}::page::/done`, ROUTE = `${R}::route::POST /api/x`;
-const E2E = `${R}::test::e.spec.ts::submits`, UNIT = `${R}::test::r.test.ts::answers`;
+const edge = (kind: GraphEdge['kind'], from: string, to: string, meta?: GraphEdge['meta']): GraphEdge => ({
+  id: `${kind}|${from}|${to}`,
+  kind,
+  from,
+  to,
+  ...(meta ? { meta } : {}),
+});
+const FLOW = `${R}::flow::f`,
+  BUILT = `${R}::page::/a`,
+  PLANNED = `${R}::page::/done`,
+  ROUTE = `${R}::route::POST /api/x`;
+const E2E = `${R}::test::e.spec.ts::submits`,
+  UNIT = `${R}::test::r.test.ts::answers`;
 function app() {
-  const run = (status: 'passed' | 'skipped') => ({ id: 'r', at: '2026-10-01T00:00:00.000Z', status, freshness: 'unknown' as const, stale: false });
+  const run = (status: 'passed' | 'skipped') => ({
+    id: 'r',
+    at: '2026-10-01T00:00:00.000Z',
+    status,
+    freshness: 'unknown' as const,
+    stale: false,
+  });
   const nodes = [
     { id: FLOW, kind: 'flow', name: 'F', tags: [] },
-    { id: BUILT, kind: 'page', name: '/a', tags: [], loc: { repo: R, path: 'a.tsx', line: 1 }, design: { id: 'S-01', status: 'both' } },
+    {
+      id: BUILT,
+      kind: 'page',
+      name: '/a',
+      tags: [],
+      loc: { repo: R, path: 'a.tsx', line: 1 },
+      design: { id: 'S-01', status: 'both' },
+    },
     { id: PLANNED, kind: 'page', name: '/done', tags: [], design: { id: 'S-02', status: 'design-only' } },
     { id: ROUTE, kind: 'route', name: 'POST /api/x', tags: [], loc: { repo: R, path: 'r.ts', line: 2 } },
-    { id: E2E, kind: 'test', name: 'submits', tags: ['test'], loc: { repo: R, path: 'e.spec.ts', line: 1 }, test: { level: 'e2e', runner: 'playwright', suite: [], file: 'e.spec.ts', run: run('passed') } },
-    { id: UNIT, kind: 'test', name: 'answers', tags: ['test'], loc: { repo: R, path: 'r.test.ts', line: 1 }, test: { level: 'unit', runner: 'vitest', suite: [], file: 'r.test.ts', run: run('skipped') } },
+    {
+      id: E2E,
+      kind: 'test',
+      name: 'submits',
+      tags: ['test'],
+      loc: { repo: R, path: 'e.spec.ts', line: 1 },
+      test: { level: 'e2e', runner: 'playwright', suite: [], file: 'e.spec.ts', run: run('passed') },
+    },
+    {
+      id: UNIT,
+      kind: 'test',
+      name: 'answers',
+      tags: ['test'],
+      loc: { repo: R, path: 'r.test.ts', line: 1 },
+      test: { level: 'unit', runner: 'vitest', suite: [], file: 'r.test.ts', run: run('skipped') },
+    },
   ] as GraphNode[];
   const edges = [
-    edge('renders', FLOW, BUILT), edge('renders', FLOW, PLANNED),
-    edge('http', BUILT, ROUTE, { line: 3 }), edge('http', PLANNED, ROUTE, { line: 3 }),
-    edge('covers', E2E, ROUTE, { evidence: 'declared' }), edge('covers', UNIT, ROUTE, { evidence: 'static' }),
+    edge('renders', FLOW, BUILT),
+    edge('renders', FLOW, PLANNED),
+    edge('http', BUILT, ROUTE, { line: 3 }),
+    edge('http', PLANNED, ROUTE, { line: 3 }),
+    edge('covers', E2E, ROUTE, { evidence: 'declared' }),
+    edge('covers', UNIT, ROUTE, { evidence: 'static' }),
   ];
   return buildIndex(nodes, edges);
 }
@@ -104,7 +186,10 @@ test('a designed, not-built screen never carries passed: no word, no status, the
   assert.equal(nb.verdict.scopeWord, 'count.over.route');
   assert.equal(nb.verdict.skipped, 1, 'the skips stay counted');
   // its actions follow it, and the Tests page's door reads the same cell
-  for (const m of cov.moments![at]!) { assert.equal(m.verdict.status, undefined); assert.equal(m.evidenceWord.key, 'journey.absent.notBuilt'); }
+  for (const m of cov.moments![at]!) {
+    assert.equal(m.verdict.status, undefined);
+    assert.equal(m.evidenceWord.key, 'journey.absent.notBuilt');
+  }
   const cell = cellCoverage(index, j, summary, at)!;
   assert.equal(cell.facts.notBuilt, true);
   assert.equal(cell.facts.verdict.word.key, nb.verdict.word.key);
@@ -124,7 +209,8 @@ test('every covering ref carries its own word, equal to caseWord', () => {
 
 // ── the matrix: the screen's words, additively; the level filter filters the rows ──
 const here = dirname(fileURLToPath(import.meta.url));
-const SCHEMA = () => JSON.parse(readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-tests-matrix-v1.schema.json'), 'utf8'));
+const SCHEMA = () =>
+  JSON.parse(readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-tests-matrix-v1.schema.json'), 'utf8'));
 
 test('farsight-tests-matrix v1: evidence_word and verdict are appended, pinned, and equal the screen’s words', () => {
   // the contract is additive-only: the two columns come last, after every v1 column
@@ -133,12 +219,21 @@ test('farsight-tests-matrix v1: evidence_word and verdict are appended, pinned, 
   const props = SCHEMA().$defs?.row?.properties ?? SCHEMA().definitions?.row?.properties;
   assert.deepEqual(props.evidence_word.enum, [...EVIDENCE_WORDS]);
   assert.deepEqual(props.evidence_word.enum, [
-    'declared only', 'reached by tests', 'verified by a run', 'verified · stale',
-    'passed, by its own declaration', 'passed, by its own declaration · stale',
-    'seen by a coverage run', 'seen by a coverage run · stale',
+    'declared only',
+    'reached by tests',
+    'verified by a run',
+    'verified · stale',
+    'passed, by its own declaration',
+    'passed, by its own declaration · stale',
+    'seen by a coverage run',
+    'seen by a coverage run · stale',
   ]);
   assert.deepEqual(props.verdict.enum, ['passed', 'failed', 'skipped', 'flaky', 'unknown', '']);
-  for (const k of EVIDENCE_WORDS) assert.ok(Object.values(STRINGS).some((e) => e.professional === k), `${k} is a catalog word`);
+  for (const k of EVIDENCE_WORDS)
+    assert.ok(
+      Object.values(STRINGS).some((e) => e.professional === k),
+      `${k} is a catalog word`,
+    );
   const index = app();
   const rows = testsMatrixRows(index, testsSurface(index, null));
   const e2e = rows.find((r) => r.test_id === E2E)!;

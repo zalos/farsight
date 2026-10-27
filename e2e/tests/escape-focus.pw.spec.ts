@@ -33,7 +33,9 @@ test.describe('escape and focus', () => {
   test('Esc goes up one stop at a time: the code, the action, the screen, the journey', async ({ page }) => {
     await openJourneyAt(page, 'screens');
     const flow = encodeURIComponent('invoice-app::flow::billing-cycle');
-    await page.evaluate((f) => { location.hash = '#/map/' + f + '?screen=2&action=1&dock=bottom'; }, flow);
+    await page.evaluate((f) => {
+      location.hash = '#/map/' + f + '?screen=2&action=1&dock=bottom';
+    }, flow);
     await expect(page.locator('.map-act.code')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.locator('.map-act')).toBeVisible();

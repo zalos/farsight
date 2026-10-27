@@ -6,7 +6,22 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { ingestRepo, isTestFile, runnerOf, levelOf, classifyCall, readReport, findReports, repoContentDigest, eachTitleToRegExp, eachTitleMatches, foldRuns, importReports, changedByOf, DEFAULT_TEST_GLOBS } from '../dist/index.js';
+import {
+  ingestRepo,
+  isTestFile,
+  runnerOf,
+  levelOf,
+  classifyCall,
+  readReport,
+  findReports,
+  repoContentDigest,
+  eachTitleToRegExp,
+  eachTitleMatches,
+  foldRuns,
+  importReports,
+  changedByOf,
+  DEFAULT_TEST_GLOBS,
+} from '../dist/index.js';
 import type { GraphNode, GraphEdge } from '@farsight/core';
 
 const invoiceApp = resolve(import.meta.dirname, '../../../examples/invoice-app');
@@ -55,7 +70,10 @@ test('invoice-app ingest: test nodes with suite paths, and no function nodes fro
 
   // Pass 1 acceptance: claimed spec files stop producing function nodes
   const strays = f.nodes.filter((n: GraphNode) => n.kind !== 'test' && /^(test|e2e)\//.test(n.loc?.path ?? ''));
-  assert.deepEqual(strays.map((n: GraphNode) => n.id), []);
+  assert.deepEqual(
+    strays.map((n: GraphNode) => n.id),
+    [],
+  );
 
   const e2e = tests.find((n: GraphNode) => n.name.startsWith('the invoice list'))!;
   assert.equal(e2e.test!.level, 'e2e');
@@ -79,11 +97,17 @@ test('declared edges resolve to flow / design screen / route ids, and an unmatch
   }
   // the deliberately unresolvable claim is kept verbatim, not dropped
   assert.deepEqual(e2e.test!.unresolved, ['CON-99']);
-  assert.ok(f.meta!.tests!.blindSpots.some((s: string) => s.includes('CON-99') && s.includes('nothing in the graph matches')));
+  assert.ok(
+    f.meta!.tests!.blindSpots.some((s: string) => s.includes('CON-99') && s.includes('nothing in the graph matches')),
+  );
 
   // a unit test declaring a flow id
   const unit = tests.find((n: GraphNode) => n.name.startsWith('createInvoice computes'))!;
-  assert.ok(coversOf(f.edges, unit.id).some((e) => e.to === 'invoice-app::flow::new-invoice' && e.meta!.evidence === 'declared'));
+  assert.ok(
+    coversOf(f.edges, unit.id).some(
+      (e) => e.to === 'invoice-app::flow::new-invoice' && e.meta!.evidence === 'declared',
+    ),
+  );
 });
 
 test('static edges: imports the case calls are HIGH; a request literal is a MEDIUM route-literal', async () => {
@@ -91,7 +115,10 @@ test('static edges: imports the case calls are HIGH; a request literal is a MEDI
   const tests = f.nodes.filter((n: GraphNode) => n.kind === 'test');
   const unit = tests.find((n: GraphNode) => n.name.startsWith('updateInvoice refuses'))!;
   const statics = coversOf(f.edges, unit.id).filter((e) => e.meta!.evidence === 'static');
-  assert.deepEqual(statics.map((e) => e.to), ['invoice-app::src/server/invoiceService.ts::updateInvoice']);
+  assert.deepEqual(
+    statics.map((e) => e.to),
+    ['invoice-app::src/server/invoiceService.ts::updateInvoice'],
+  );
   assert.equal(statics[0]!.resolution!.technique, 'import-resolution');
   assert.equal(statics[0]!.resolution!.confidence, 'HIGH');
 
@@ -113,9 +140,16 @@ test('observed edges hang off a run-level node, never off a case; every covers e
   const runNode = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.test!.runLevel)!;
   // attribution honesty: istanbul coverage is run-level, never spread across the cases
   for (const e of observed) assert.equal(e.from, runNode.id);
-  assert.ok(observed.some((e) => e.to === 'invoice-app::src/server/invoiceService.ts::listInvoices' && Number(e.meta!.lines) > 0));
+  assert.ok(
+    observed.some(
+      (e) => e.to === 'invoice-app::src/server/invoiceService.ts::listInvoices' && Number(e.meta!.lines) > 0,
+    ),
+  );
   // a function the report shows with zero calls produces no edge
-  assert.equal(observed.some((e) => e.to.endsWith('::finalizeInvoice')), false);
+  assert.equal(
+    observed.some((e) => e.to.endsWith('::finalizeInvoice')),
+    false,
+  );
   for (const e of observed) assert.equal(e.resolution!.technique, 'coverage-report');
 });
 
@@ -154,54 +188,85 @@ test('a results report joins status + duration onto the case, and the stamped re
   // a configured report that is not on disk is a stated blind spot, not a failure
   assert.ok(meta.blindSpots.some((s: string) => s.includes('e2e/coverage/coverage-final.json')));
   // and nothing that was read is a blind spot any more
-  assert.equal(meta.blindSpots.some((s: string) => s.includes('records no source digest')), false);
+  assert.equal(
+    meta.blindSpots.some((s: string) => s.includes('records no source digest')),
+    false,
+  );
 });
 
 test('the e2e report joins one run per Playwright project: a flaky verdict keeps its retries, and a project that skipped by its own condition is said beside the pass', async () => {
   const f = await ingestRepo(invoiceApp, { repoName: 'invoice-app' });
   const list = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name.startsWith('the invoice list'))!;
-  assert.deepEqual(list.test!.runs!.map((r) => [r.project, r.status]), [['desktop-1440', 'passed'], ['mobile-390', 'flaky']]);
+  assert.deepEqual(
+    list.test!.runs!.map((r) => [r.project, r.status]),
+    [
+      ['desktop-1440', 'passed'],
+      ['mobile-390', 'flaky'],
+    ],
+  );
   // the fold is the weakest project, and it drops the project name because more than one ran it
   assert.equal(list.test!.run!.status, 'flaky');
   assert.equal(list.test!.run!.retries, 1);
   assert.equal(list.test!.run!.project, undefined);
 
   const created = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name.startsWith('a new invoice is created'))!;
-  assert.deepEqual(created.test!.runs!.map((r) => [r.project, r.status]), [['desktop-1440', 'passed'], ['mobile-390', 'skipped']]);
+  assert.deepEqual(
+    created.test!.runs!.map((r) => [r.project, r.status]),
+    [
+      ['desktop-1440', 'passed'],
+      ['mobile-390', 'skipped'],
+    ],
+  );
   // passed where it ran; the mobile project skipped it by its own written condition, kept beside the fold (F3)
   assert.equal(created.test!.run!.status, 'passed');
   assert.deepEqual(created.test!.run!.projects, [
     { project: 'desktop-1440', status: 'passed' },
-    { project: 'mobile-390', status: 'skipped', reason: 'Creating an invoice from the list is a desktop task; the mobile layout only reads the list.' },
+    {
+      project: 'mobile-390',
+      status: 'skipped',
+      reason: 'Creating an invoice from the list is a desktop task; the mobile layout only reads the list.',
+    },
   ]);
 });
 
-test('the fixture\'s parametrised case joins its expanded rows, and .skip / .todo are inactive', async () => {
+test("the fixture's parametrised case joins its expanded rows, and .skip / .todo are inactive", async () => {
   const f = await ingestRepo(invoiceApp, { repoName: 'invoice-app' });
-  const each = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.test!.file === 'test/rates.spec.ts' && n.tags.includes('test:each'))!;
+  const each = f.nodes.find(
+    (n: GraphNode) => n.kind === 'test' && n.test!.file === 'test/rates.spec.ts' && n.tags.includes('test:each'),
+  )!;
   assert.equal(each.name, 'the %s rate is %d');
   assert.equal(each.test!.run!.join, 'each-template');
   assert.equal(each.test!.run!.rows, 3);
   assert.equal(each.test!.inactive, undefined);
   // the template's own body is what it reaches — the rows are one run, not three edges
-  assert.deepEqual(coversOf(f.edges, each.id).map((e) => e.to), ['invoice-app::src/server/taxEngine.ts::taxRateFor']);
+  assert.deepEqual(
+    coversOf(f.edges, each.id).map((e) => e.to),
+    ['invoice-app::src/server/taxEngine.ts::taxRateFor'],
+  );
 
   const skip = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.tags.includes('test:skip'))!;
   assert.equal(skip.test!.inactive, true);
-  assert.deepEqual(coversOf(f.edges, skip.id).map((e) => [e.to, e.meta!.inactive]), [['invoice-app::src/server/taxEngine.ts::taxTreatment', true]]);
+  assert.deepEqual(
+    coversOf(f.edges, skip.id).map((e) => [e.to, e.meta!.inactive]),
+    [['invoice-app::src/server/taxEngine.ts::taxTreatment', true]],
+  );
 
   const todo = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.tags.includes('test:todo'))!;
   assert.equal(todo.test!.inactive, true);
   assert.deepEqual(coversOf(f.edges, todo.id), []);
   // the vitest header counts three cases as pending/todo and three joined, so nothing is a gap
-  assert.equal(f.meta!.tests!.gaps!.some((g) => g.text.includes('skipped case(s) in its header')), false);
+  assert.equal(
+    f.meta!.tests!.gaps!.some((g) => g.text.includes('skipped case(s) in its header')),
+    false,
+  );
 });
 
-test('the fixture\'s coverage report is current: its stamp is the digest of the tree it was generated from', async () => {
+test("the fixture's coverage report is current: its stamp is the digest of the tree it was generated from", async () => {
   const f = await ingestRepo(invoiceApp, { repoName: 'invoice-app' });
   const report = readReport(invoiceApp, resolve(invoiceApp, 'coverage/coverage-final.json'))!;
   assert.equal(
-    report.sourceDigest, f.meta!.sourceDigest,
+    report.sourceDigest,
+    f.meta!.sourceDigest,
     'examples/invoice-app changed since its reports were generated — run `node examples/invoice-app/scripts/make-coverage.mjs`',
   );
   // the declaration lines are generated from the same parse the graph uses, so a hit
@@ -219,10 +284,22 @@ test('a reporter-recorded digest is what proves freshness — the content digest
     'test/ping.test.ts': `import { ping } from '../src/ping';\n${spec}`,
     'farsight.config.json': JSON.stringify({ tests: { unit: { runner: 'vitest', results: 'coverage/results.json' } } }),
   });
-  const write = (digest: string) => writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({
-    sourceDigest: digest, startTime: 1757462400000,
-    testResults: [{ name: join(dir, 'test/ping.test.ts'), assertionResults: [{ ancestorTitles: [], title: 'ping answers', fullName: 'ping answers', status: 'passed', duration: 1 }] }],
-  }));
+  const write = (digest: string) =>
+    writeFileSync(
+      join(dir, 'coverage/results.json'),
+      JSON.stringify({
+        sourceDigest: digest,
+        startTime: 1757462400000,
+        testResults: [
+          {
+            name: join(dir, 'test/ping.test.ts'),
+            assertionResults: [
+              { ancestorTitles: [], title: 'ping answers', fullName: 'ping answers', status: 'passed', duration: 1 },
+            ],
+          },
+        ],
+      }),
+    );
   mkdirSync(join(dir, 'coverage'), { recursive: true });
 
   const runOf = (f: { nodes: GraphNode[] }) => f.nodes.find((n: GraphNode) => n.kind === 'test')!.test!.run!;
@@ -293,7 +370,7 @@ test('the file header block can never swallow the rest of the file, and @covers 
       "const HEADERS = { 'content-type': 'application/json' };",
       '',
       '/** A helper with its own doc block. */',
-      'async function signIn(request) { return request.post(\'/session\', { headers: HEADERS }); }',
+      "async function signIn(request) { return request.post('/session', { headers: HEADERS }); }",
       '',
       "test.describe('orders', () => {",
       "  test('places an order', async ({ request }) => { await signIn(request); placeOrder(); });",
@@ -306,11 +383,19 @@ test('the file header block can never swallow the rest of the file, and @covers 
   // and nothing after the closing `*/` leaked in
   assert.deepEqual(t.test!.declares, ['POST /orders', 'ORD-01']);
   // nothing after the closing `*/` leaked in — no code, no helper, no `const HEADERS`
-  assert.equal((t.test!.declares ?? []).some((d: string) => /HEADERS|[(){};=]/.test(d)), false);
+  assert.equal(
+    (t.test!.declares ?? []).some((d: string) => /HEADERS|[(){};=]/.test(d)),
+    false,
+  );
   // and every unresolved value is one the author actually wrote
   assert.ok((t.test!.unresolved ?? []).every((u: string) => t.test!.declares!.includes(u)));
   // the static side still works from the same file: the imported function it calls
-  assert.ok(f.edges.some((e: GraphEdge) => e.kind === 'covers' && e.to === 'shop::src/orders.ts::placeOrder' && e.meta!.evidence === 'static'));
+  assert.ok(
+    f.edges.some(
+      (e: GraphEdge) =>
+        e.kind === 'covers' && e.to === 'shop::src/orders.ts::placeOrder' && e.meta!.evidence === 'static',
+    ),
+  );
 });
 
 test('a @covers naming one numbered step of a screen resolves to that screen and keeps which step it was about', async () => {
@@ -319,10 +404,17 @@ test('a @covers naming one numbered step of a screen resolves to that screen and
     'src/app/orders/page.tsx': 'export default function OrdersPage() { return null; }',
     'docs/design/screens.json': JSON.stringify({
       name: 'Shop',
-      screens: [{
-        id: 'ORD-01', name: 'Orders', route: '/orders',
-        steps: [{ id: 'ORD-01.1', name: 'Pick a customer' }, { id: 'ORD-01.2', name: 'Confirm the order' }],
-      }],
+      screens: [
+        {
+          id: 'ORD-01',
+          name: 'Orders',
+          route: '/orders',
+          steps: [
+            { id: 'ORD-01.1', name: 'Pick a customer' },
+            { id: 'ORD-01.2', name: 'Confirm the order' },
+          ],
+        },
+      ],
     }),
     'e2e/orders.pw.spec.ts': [
       '/**',
@@ -348,9 +440,25 @@ test('report readers: playwright json, junit xml and istanbul are sniffed from c
     'reports/pw.json': JSON.stringify({
       config: { version: '1.62' },
       stats: { startTime: '2026-09-08T20:00:00.000Z' },
-      suites: [{ title: 'a.pw.spec.ts', file: 'a.pw.spec.ts', specs: [{ title: 'signs in', file: 'a.pw.spec.ts', tests: [{ projectName: 'desktop-1440', status: 'expected', results: [{ status: 'passed', duration: 900 }] }] }], suites: [] }],
+      suites: [
+        {
+          title: 'a.pw.spec.ts',
+          file: 'a.pw.spec.ts',
+          specs: [
+            {
+              title: 'signs in',
+              file: 'a.pw.spec.ts',
+              tests: [
+                { projectName: 'desktop-1440', status: 'expected', results: [{ status: 'passed', duration: 900 }] },
+              ],
+            },
+          ],
+          suites: [],
+        },
+      ],
     }),
-    'reports/junit.xml': '<testsuites><testsuite name="s" timestamp="2026-09-08T20:00:00"><testcase classname="pack.Cls" name="does a thing" time="0.25"/><testcase classname="pack.Cls" name="fails" time="0.1"><failure/></testcase></testsuite></testsuites>',
+    'reports/junit.xml':
+      '<testsuites><testsuite name="s" timestamp="2026-09-08T20:00:00"><testcase classname="pack.Cls" name="does a thing" time="0.25"/><testcase classname="pack.Cls" name="fails" time="0.1"><failure/></testcase></testsuite></testsuites>',
     'reports/nonsense.json': '{"hello":"world"}',
   });
   const pw = readReport(dir, join(dir, 'reports/pw.json'))!;
@@ -363,13 +471,22 @@ test('report readers: playwright json, junit xml and istanbul are sniffed from c
   const junit = readReport(dir, join(dir, 'reports/junit.xml'))!;
   assert.equal(junit.cases.length, 2);
   // the case's own name, not the one inside `classname="…"`
-  assert.deepEqual(junit.cases.map((c) => c.title), ['does a thing', 'fails']);
+  assert.deepEqual(
+    junit.cases.map((c) => c.title),
+    ['does a thing', 'fails'],
+  );
   assert.deepEqual(junit.cases[0]!.suite, ['pack', 'Cls']);
-  assert.deepEqual(junit.cases.map((c) => c.status), ['passed', 'failed']);
+  assert.deepEqual(
+    junit.cases.map((c) => c.status),
+    ['passed', 'failed'],
+  );
   assert.equal(junit.cases[0]!.durationMs, 250);
 
   assert.equal(readReport(dir, join(dir, 'reports/nonsense.json')), null);
-  assert.deepEqual(findReports(dir, 'reports/*.json').map((p) => p.split('/').pop()), ['nonsense.json', 'pw.json']);
+  assert.deepEqual(
+    findReports(dir, 'reports/*.json').map((p) => p.split('/').pop()),
+    ['nonsense.json', 'pw.json'],
+  );
 });
 
 test('a test that imports the emitted dist barrel is evidence for the src file that defines the symbol', async () => {
@@ -386,8 +503,15 @@ test('a test that imports the emitted dist barrel is evidence for the src file t
     ].join('\n'),
   });
   const f = await ingestRepo(dir, { repoName: 'self' });
-  const covers = f.edges.filter((e: GraphEdge) => e.kind === 'covers').map((e: GraphEdge) => e.to).sort();
-  assert.deepEqual(covers, ['self::packages/core/src/fmt.ts::fmt', 'self::packages/core/src/query.ts::journey'], 'dist → src twin, then the barrel followed to the defining file');
+  const covers = f.edges
+    .filter((e: GraphEdge) => e.kind === 'covers')
+    .map((e: GraphEdge) => e.to)
+    .sort();
+  assert.deepEqual(
+    covers,
+    ['self::packages/core/src/fmt.ts::fmt', 'self::packages/core/src/query.ts::journey'],
+    'dist → src twin, then the barrel followed to the defining file',
+  );
 });
 
 test('report readers: a playwright case under two projects is two rows; flaky keeps its retries and a skipped row is kept', () => {
@@ -397,29 +521,59 @@ test('report readers: a playwright case under two projects is two rows; flaky ke
     'reports/pw.json': JSON.stringify({
       config: { version: '1.62' },
       stats: { startTime: '2026-09-20T09:00:00.000Z' },
-      suites: [{
-        title: 'checkout.pw.spec.ts', file: 'checkout.pw.spec.ts', specs: [], suites: [{
-          title: 'checkout', file: 'checkout.pw.spec.ts',
-          specs: [
+      suites: [
+        {
+          title: 'checkout.pw.spec.ts',
+          file: 'checkout.pw.spec.ts',
+          specs: [],
+          suites: [
             {
-              title: 'pays', file: 'checkout.pw.spec.ts', tests: [
-                { projectName: 'desktop-1440', status: 'expected', results: [{ status: 'passed', duration: 900 }] },
-                { projectId: 'mobile-390', status: 'flaky', results: [{ status: 'failed', duration: 800 }, { status: 'passed', duration: 700 }] },
+              title: 'checkout',
+              file: 'checkout.pw.spec.ts',
+              specs: [
+                {
+                  title: 'pays',
+                  file: 'checkout.pw.spec.ts',
+                  tests: [
+                    { projectName: 'desktop-1440', status: 'expected', results: [{ status: 'passed', duration: 900 }] },
+                    {
+                      projectId: 'mobile-390',
+                      status: 'flaky',
+                      results: [
+                        { status: 'failed', duration: 800 },
+                        { status: 'passed', duration: 700 },
+                      ],
+                    },
+                  ],
+                },
+                {
+                  title: 'refunds',
+                  file: 'checkout.pw.spec.ts',
+                  tests: [{ projectName: 'desktop-1440', status: 'skipped', results: [{ status: 'skipped' }] }],
+                },
               ],
+              suites: [],
             },
-            { title: 'refunds', file: 'checkout.pw.spec.ts', tests: [{ projectName: 'desktop-1440', status: 'skipped', results: [{ status: 'skipped' }] }] },
           ],
-          suites: [],
-        }],
-      }],
+        },
+      ],
     }),
   });
   const pw = readReport(dir, join(dir, 'reports/pw.json'))!;
   assert.equal(pw.cases.length, 3);
-  assert.deepEqual(pw.cases.map((c) => c.project), ['desktop-1440', 'mobile-390', 'desktop-1440']);
-  assert.deepEqual(pw.cases.map((c) => c.fullName), ['checkout pays', 'checkout pays', 'checkout refunds']);
+  assert.deepEqual(
+    pw.cases.map((c) => c.project),
+    ['desktop-1440', 'mobile-390', 'desktop-1440'],
+  );
+  assert.deepEqual(
+    pw.cases.map((c) => c.fullName),
+    ['checkout pays', 'checkout pays', 'checkout refunds'],
+  );
   // a retried case that ended green is `flaky`, never `passed`
-  assert.deepEqual(pw.cases.map((c) => c.status), ['passed', 'flaky', 'skipped']);
+  assert.deepEqual(
+    pw.cases.map((c) => c.status),
+    ['passed', 'flaky', 'skipped'],
+  );
   assert.equal(pw.cases[1]!.retries, 1);
   assert.equal(pw.cases[0]!.retries, undefined);
   // and the skipped row survives the read — a case that ran nowhere is a fact, not a silence
@@ -429,30 +583,51 @@ test('report readers: a playwright case under two projects is two rows; flaky ke
 test('report readers: vitest keeps skipped rows, names a project when the reporter does, and carries the header pending count', () => {
   const dir = tempRepo({ 'src/rates.spec.ts': '' });
   mkdirSync(join(dir, 'reports'), { recursive: true });
-  writeFileSync(join(dir, 'reports/vitest.json'), JSON.stringify({
-    startTime: 1757462400000,
-    numPendingTests: 1,
-    numTodoTests: 1,
-    testResults: [{
-      name: join(dir, 'src/rates.spec.ts'), projectName: 'web',
-      assertionResults: [
-        { ancestorTitles: ['rates'], title: 'adds tax', fullName: 'rates adds tax', status: 'passed', duration: 3 },
-        { ancestorTitles: ['rates'], title: 'rounds', fullName: 'rates rounds', status: 'pending' },
+  writeFileSync(
+    join(dir, 'reports/vitest.json'),
+    JSON.stringify({
+      startTime: 1757462400000,
+      numPendingTests: 1,
+      numTodoTests: 1,
+      testResults: [
+        {
+          name: join(dir, 'src/rates.spec.ts'),
+          projectName: 'web',
+          assertionResults: [
+            { ancestorTitles: ['rates'], title: 'adds tax', fullName: 'rates adds tax', status: 'passed', duration: 3 },
+            { ancestorTitles: ['rates'], title: 'rounds', fullName: 'rates rounds', status: 'pending' },
+          ],
+        },
       ],
-    }],
-  }));
+    }),
+  );
   const report = readReport(dir, join(dir, 'reports/vitest.json'))!;
   assert.equal(report.cases.length, 2);
-  assert.deepEqual(report.cases.map((c) => c.file), ['src/rates.spec.ts', 'src/rates.spec.ts']);
-  assert.deepEqual(report.cases.map((c) => c.status), ['passed', 'skipped']);
-  assert.deepEqual(report.cases.map((c) => c.project), ['web', 'web']);
+  assert.deepEqual(
+    report.cases.map((c) => c.file),
+    ['src/rates.spec.ts', 'src/rates.spec.ts'],
+  );
+  assert.deepEqual(
+    report.cases.map((c) => c.status),
+    ['passed', 'skipped'],
+  );
+  assert.deepEqual(
+    report.cases.map((c) => c.project),
+    ['web', 'web'],
+  );
   // the header's own count of what did not run — the join compares it with the rows it attached
   assert.equal(report.reportedSkipped, 2);
 });
 
 test('the .each title template becomes an anchored pattern: printf, ${…} and $name rows join, an unrelated title does not', () => {
   const re = eachTitleToRegExp('rate %s applies %d');
-  const rows = ['rate standard applies 20', 'rate reduced applies 5', 'rate zero applies 0', 'rate flat applies 12', 'rate eu applies 21'];
+  const rows = [
+    'rate standard applies 20',
+    'rate reduced applies 5',
+    'rate zero applies 0',
+    'rate flat applies 12',
+    'rate eu applies 21',
+  ];
   for (const row of rows) assert.ok(re.test(row), row);
   // anchored at both ends, so an unrelated title in the same file is never joined
   assert.equal(re.test('the rate standard applies 20'), false);
@@ -525,26 +700,48 @@ test('a case run under two projects joins one run per project, and `run` is the 
     'e2e/results.json': JSON.stringify({
       config: { version: '1.62' },
       stats: { startTime: '2026-09-20T09:00:00.000Z' },
-      suites: [{
-        title: 'e2e/checkout.pw.spec.ts', file: 'e2e/checkout.pw.spec.ts', specs: [], suites: [{
-          title: 'checkout', file: 'e2e/checkout.pw.spec.ts',
-          specs: [{
-            title: 'pays', file: 'e2e/checkout.pw.spec.ts', tests: [
-              { projectName: 'desktop-1440', status: 'expected', results: [{ status: 'passed', duration: 900 }] },
-              { projectName: 'mobile-390', status: 'unexpected', results: [{ status: 'failed', duration: 1200 }] },
-            ],
-          }],
-          suites: [],
-        }],
-      }],
+      suites: [
+        {
+          title: 'e2e/checkout.pw.spec.ts',
+          file: 'e2e/checkout.pw.spec.ts',
+          specs: [],
+          suites: [
+            {
+              title: 'checkout',
+              file: 'e2e/checkout.pw.spec.ts',
+              specs: [
+                {
+                  title: 'pays',
+                  file: 'e2e/checkout.pw.spec.ts',
+                  tests: [
+                    { projectName: 'desktop-1440', status: 'expected', results: [{ status: 'passed', duration: 900 }] },
+                    {
+                      projectName: 'mobile-390',
+                      status: 'unexpected',
+                      results: [{ status: 'failed', duration: 1200 }],
+                    },
+                  ],
+                },
+              ],
+              suites: [],
+            },
+          ],
+        },
+      ],
     }),
   });
   const f = await ingestRepo(dir, { repoName: 'shop' });
   const node = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name === 'pays')!;
   const runs = node.test!.runs!;
   assert.equal(runs.length, 2);
-  assert.deepEqual(runs.map((r) => r.project), ['desktop-1440', 'mobile-390']);
-  assert.deepEqual(runs.map((r) => r.status), ['passed', 'failed']);
+  assert.deepEqual(
+    runs.map((r) => r.project),
+    ['desktop-1440', 'mobile-390'],
+  );
+  assert.deepEqual(
+    runs.map((r) => r.status),
+    ['passed', 'failed'],
+  );
   for (const r of runs) assert.equal(r.join, 'exact');
   // the fold a consumer reading `run` alone gets: never greener than the worst project,
   // and with no project, because more than one ran it
@@ -577,39 +774,89 @@ test('a case passed on one project and skipped there by its own written conditio
     'e2e/results.json': JSON.stringify({
       config: { version: '1.62' },
       stats: { startTime: '2026-10-08T22:35:00.000Z' },
-      suites: [{
-        title: 'e2e/checkout.pw.spec.ts', file: 'e2e/checkout.pw.spec.ts', specs: [], suites: [{
-          title: 'checkout', file: 'e2e/checkout.pw.spec.ts',
-          specs: [
+      suites: [
+        {
+          title: 'e2e/checkout.pw.spec.ts',
+          file: 'e2e/checkout.pw.spec.ts',
+          specs: [],
+          suites: [
             {
-              title: 'pays', file: 'e2e/checkout.pw.spec.ts', tests: [
-                { projectName: 'desktop-1440', status: 'expected', annotations: [], results: [{ status: 'passed', duration: 900 }] },
-                { projectName: 'mobile-390', status: 'skipped', annotations: [{ type: 'skip', description: reason }], results: [{ status: 'skipped', annotations: [{ type: 'skip', description: reason }] }] },
+              title: 'checkout',
+              file: 'e2e/checkout.pw.spec.ts',
+              specs: [
+                {
+                  title: 'pays',
+                  file: 'e2e/checkout.pw.spec.ts',
+                  tests: [
+                    {
+                      projectName: 'desktop-1440',
+                      status: 'expected',
+                      annotations: [],
+                      results: [{ status: 'passed', duration: 900 }],
+                    },
+                    {
+                      projectName: 'mobile-390',
+                      status: 'skipped',
+                      annotations: [{ type: 'skip', description: reason }],
+                      results: [{ status: 'skipped', annotations: [{ type: 'skip', description: reason }] }],
+                    },
+                  ],
+                },
+                {
+                  // skipped on every project: stays skipped, each reason kept (newer reporters put it on the result only)
+                  title: 'refunds',
+                  file: 'e2e/checkout.pw.spec.ts',
+                  tests: [
+                    {
+                      projectName: 'desktop-1440',
+                      status: 'skipped',
+                      results: [{ status: 'skipped', annotations: [{ type: 'skip', description: 'live only' }] }],
+                    },
+                    {
+                      projectName: 'mobile-390',
+                      status: 'skipped',
+                      annotations: [{ type: 'skip', description: reason }],
+                      results: [{ status: 'skipped' }],
+                    },
+                  ],
+                },
               ],
-            },
-            {
-              // skipped on every project: stays skipped, each reason kept (newer reporters put it on the result only)
-              title: 'refunds', file: 'e2e/checkout.pw.spec.ts', tests: [
-                { projectName: 'desktop-1440', status: 'skipped', results: [{ status: 'skipped', annotations: [{ type: 'skip', description: 'live only' }] }] },
-                { projectName: 'mobile-390', status: 'skipped', annotations: [{ type: 'skip', description: reason }], results: [{ status: 'skipped' }] },
-              ],
+              suites: [],
             },
           ],
-          suites: [],
-        }],
-      }],
+        },
+      ],
     }),
   });
   const pw = readReport(dir, join(dir, 'e2e/results.json'))!;
-  assert.deepEqual(pw.cases.map((c) => c.reason ?? null), [null, reason, 'live only', reason]);
+  assert.deepEqual(
+    pw.cases.map((c) => c.reason ?? null),
+    [null, reason, 'live only', reason],
+  );
   const f = await ingestRepo(dir, { repoName: 'shop' });
   const pays = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name === 'pays')!;
-  assert.deepEqual(pays.test!.runs!.map((r) => [r.project, r.status, r.reason ?? null]), [['desktop-1440', 'passed', null], ['mobile-390', 'skipped', reason]]);
-  assert.equal(pays.test!.run!.status, 'passed', 'passed on a project, skipped elsewhere by its own condition: the case passed');
-  assert.deepEqual(pays.test!.run!.projects, [{ project: 'desktop-1440', status: 'passed' }, { project: 'mobile-390', status: 'skipped', reason }]);
+  assert.deepEqual(
+    pays.test!.runs!.map((r) => [r.project, r.status, r.reason ?? null]),
+    [
+      ['desktop-1440', 'passed', null],
+      ['mobile-390', 'skipped', reason],
+    ],
+  );
+  assert.equal(
+    pays.test!.run!.status,
+    'passed',
+    'passed on a project, skipped elsewhere by its own condition: the case passed',
+  );
+  assert.deepEqual(pays.test!.run!.projects, [
+    { project: 'desktop-1440', status: 'passed' },
+    { project: 'mobile-390', status: 'skipped', reason },
+  ]);
   const refunds = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name === 'refunds')!;
   assert.equal(refunds.test!.run!.status, 'skipped');
-  assert.deepEqual(refunds.test!.run!.projects!.map((p) => p.reason), ['live only', reason]);
+  assert.deepEqual(
+    refunds.test!.run!.projects!.map((p) => p.reason),
+    ['live only', reason],
+  );
 });
 
 test('foldRuns: the weakest status wins, the latest timestamp is kept, and one project stays named', () => {
@@ -643,23 +890,32 @@ test('.each: five expanded rows join the one template node as a single run, and 
   });
   mkdirSync(join(dir, 'coverage'), { recursive: true });
   const row = (title: string, status: string, duration: number) => ({
-    ancestorTitles: ['rates'], title, fullName: `rates ${title}`, status, duration,
+    ancestorTitles: ['rates'],
+    title,
+    fullName: `rates ${title}`,
+    status,
+    duration,
   });
-  writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({
-    startTime: 1757462400000,
-    testResults: [{
-      name: join(dir, 'test/rates.spec.ts'),
-      assertionResults: [
-        row('rate standard applies 20', 'passed', 1),
-        row('rate reduced applies 5', 'passed', 2),
-        row('rate zero applies 0', 'failed', 3),
-        row('rate flat applies 12', 'passed', 4),
-        row('rate eu applies 21', 'passed', 5),
-        // a row from a case this file no longer has: joined to nothing, never guessed onto the template
-        row('totals add up', 'passed', 6),
+  writeFileSync(
+    join(dir, 'coverage/results.json'),
+    JSON.stringify({
+      startTime: 1757462400000,
+      testResults: [
+        {
+          name: join(dir, 'test/rates.spec.ts'),
+          assertionResults: [
+            row('rate standard applies 20', 'passed', 1),
+            row('rate reduced applies 5', 'passed', 2),
+            row('rate zero applies 0', 'failed', 3),
+            row('rate flat applies 12', 'passed', 4),
+            row('rate eu applies 21', 'passed', 5),
+            // a row from a case this file no longer has: joined to nothing, never guessed onto the template
+            row('totals add up', 'passed', 6),
+          ],
+        },
       ],
-    }],
-  }));
+    }),
+  );
 
   const f = await ingestRepo(dir, { repoName: 'rates' });
   const each = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name === 'rate %s applies %d')!;
@@ -682,31 +938,43 @@ test('.each: five expanded rows join the one template node as a single run, and 
 
 // ── A2.4: named report gaps, the per-project join, inactive edges, idempotent import ──
 
-const istanbulReport = (file: string, fns: { name: string; line: number; endLine?: number }[], digest?: string) => JSON.stringify({
-  ...(digest ? { sourceDigest: digest } : {}),
-  [file]: {
-    path: file,
-    fnMap: Object.fromEntries(fns.map((fn, i) => [String(i), {
-      name: fn.name,
-      decl: { start: { line: fn.line }, end: { line: fn.line } },
-      loc: { start: { line: fn.line }, end: { line: fn.endLine ?? fn.line } },
-    }])),
-    f: Object.fromEntries(fns.map((_, i) => [String(i), 2])),
-    statementMap: Object.fromEntries(fns.map((fn, i) => [String(i), { start: { line: fn.line } }])),
-    s: Object.fromEntries(fns.map((_, i) => [String(i), 2])),
-  },
-});
+const istanbulReport = (file: string, fns: { name: string; line: number; endLine?: number }[], digest?: string) =>
+  JSON.stringify({
+    ...(digest ? { sourceDigest: digest } : {}),
+    [file]: {
+      path: file,
+      fnMap: Object.fromEntries(
+        fns.map((fn, i) => [
+          String(i),
+          {
+            name: fn.name,
+            decl: { start: { line: fn.line }, end: { line: fn.line } },
+            loc: { start: { line: fn.line }, end: { line: fn.endLine ?? fn.line } },
+          },
+        ]),
+      ),
+      f: Object.fromEntries(fns.map((_, i) => [String(i), 2])),
+      statementMap: Object.fromEntries(fns.map((fn, i) => [String(i), { start: { line: fn.line } }])),
+      s: Object.fromEntries(fns.map((_, i) => [String(i), 2])),
+    },
+  });
 
-const vitestReport = (file: string, rows: { title: string; status: string; duration?: number; suite?: string[] }[]) => JSON.stringify({
-  startTime: 1757462400000,
-  testResults: [{
-    name: file,
-    assertionResults: rows.map((r) => ({
-      ancestorTitles: r.suite ?? [], title: r.title, fullName: [...(r.suite ?? []), r.title].join(' '),
-      status: r.status, ...(r.duration != null ? { duration: r.duration } : {}),
-    })),
-  }],
-});
+const vitestReport = (file: string, rows: { title: string; status: string; duration?: number; suite?: string[] }[]) =>
+  JSON.stringify({
+    startTime: 1757462400000,
+    testResults: [
+      {
+        name: file,
+        assertionResults: rows.map((r) => ({
+          ancestorTitles: r.suite ?? [],
+          title: r.title,
+          fullName: [...(r.suite ?? []), r.title].join(' '),
+          status: r.status,
+          ...(r.duration != null ? { duration: r.duration } : {}),
+        })),
+      },
+    ],
+  });
 
 test('a configured glob that matched nothing is its own report entry and the first named gap', async () => {
   // the invoice-app fixture configures an e2e *coverage* report that is deliberately absent
@@ -724,8 +992,14 @@ test('a configured glob that matched nothing is its own report entry and the fir
   const gaps = meta.gaps!;
   assert.equal(gaps[0]!.kind, 'missing-artefact');
   assert.equal(gaps[0]!.glob, 'e2e/coverage/coverage-final.json');
-  assert.equal(gaps[0]!.text, '`e2e/coverage/coverage-final.json` matched 0 files under invoice-app — no e2e coverage report; declared and static evidence only');
-  assert.deepEqual(gaps.map((g) => g.kind), ['missing-artefact', 'unresolved-claim']);
+  assert.equal(
+    gaps[0]!.text,
+    '`e2e/coverage/coverage-final.json` matched 0 files under invoice-app — no e2e coverage report; declared and static evidence only',
+  );
+  assert.deepEqual(
+    gaps.map((g) => g.kind),
+    ['missing-artefact', 'unresolved-claim'],
+  );
   // every sentence in blindSpots comes from a gap — nothing is written twice
   assert.ok(meta.blindSpots.includes(gaps[0]!.text));
 });
@@ -742,7 +1016,12 @@ test('blind spots fold: three reports of the same kind and level become one sent
   });
   mkdirSync(join(dir, 'reports'), { recursive: true });
   for (const name of ['a', 'b', 'c']) {
-    writeFileSync(join(dir, `reports/${name}.json`), vitestReport(join(dir, 'test/rates.spec.ts'), [{ title: 'adds tax', status: 'passed', duration: 1, suite: ['rates'] }]));
+    writeFileSync(
+      join(dir, `reports/${name}.json`),
+      vitestReport(join(dir, 'test/rates.spec.ts'), [
+        { title: 'adds tax', status: 'passed', duration: 1, suite: ['rates'] },
+      ]),
+    );
   }
   const f = await ingestRepo(dir, { repoName: 'rates' });
   const meta = f.meta!.tests!;
@@ -757,8 +1036,8 @@ test('blind spots fold: three reports of the same kind and level become one sent
 
 test('a jsdom component test reaches the component it renders, and the JSX tag is what names it', async () => {
   const dir = tempRepo({
-    'src/ui/InvoiceRow.tsx': "export function InvoiceRow({ id }: { id: string }) { return <tr>{id}</tr>; }\n",
-    'src/ui/Total.tsx': "export function Total({ n }: { n: number }) { return <b>{n}</b>; }\n",
+    'src/ui/InvoiceRow.tsx': 'export function InvoiceRow({ id }: { id: string }) { return <tr>{id}</tr>; }\n',
+    'src/ui/Total.tsx': 'export function Total({ n }: { n: number }) { return <b>{n}</b>; }\n',
     'test/InvoiceRow.test.tsx': [
       "import { describe, it, expect } from 'vitest';",
       "import { render, screen } from '@testing-library/react';",
@@ -779,18 +1058,22 @@ test('a jsdom component test reaches the component it renders, and the JSX tag i
   const f = await ingestRepo(dir, { repoName: 'ui' });
   const test = f.nodes.find((n: GraphNode) => n.kind === 'test')!;
   const rendered = coversOf(f.edges, test.id).filter((e) => e.meta!.signal === 'render');
-  assert.deepEqual(rendered.map((e) => e.to), ['ui::src/ui/InvoiceRow.tsx::InvoiceRow']);
+  assert.deepEqual(
+    rendered.map((e) => e.to),
+    ['ui::src/ui/InvoiceRow.tsx::InvoiceRow'],
+  );
   assert.equal(rendered[0]!.resolution!.technique, 'import-resolution');
   assert.equal(rendered[0]!.resolution!.confidence, 'HIGH');
   assert.equal(rendered[0]!.resolution!.note, 'rendered by the test');
 });
 
 test('a JUnit row that names no file joins only a unique full name; an ambiguous one is a named gap', async () => {
-  const spec = (title: string) => [
-    "import { describe, it } from 'vitest';",
-    "import { addItem } from '../src/cart';",
-    `describe('cart', () => { it('${title}', () => { addItem(); }); });`,
-  ].join('\n');
+  const spec = (title: string) =>
+    [
+      "import { describe, it } from 'vitest';",
+      "import { addItem } from '../src/cart';",
+      `describe('cart', () => { it('${title}', () => { addItem(); }); });`,
+    ].join('\n');
   const dir = tempRepo({
     'src/cart.ts': 'export function addItem() { return 1; }\n',
     // the same full name in two spec files — the row has no file to choose with
@@ -867,19 +1150,25 @@ test('observed edges record how they matched: name+line, name, or line ±1 — a
       "import { alpha } from '../src/math';",
       "describe('math', () => { it('adds', () => { alpha(); }); });",
     ].join('\n'),
-    'farsight.config.json': JSON.stringify({ tests: { unit: { runner: 'vitest', coverage: 'coverage/coverage-final.json' } } }),
+    'farsight.config.json': JSON.stringify({
+      tests: { unit: { runner: 'vitest', coverage: 'coverage/coverage-final.json' } },
+    }),
   });
   const hits = [
-    { name: 'alpha', line: 1 },              // name and line agree
-    { name: 'beta', line: 402 },             // the name is there, the line moved
-    { name: 'renamedGamma', line: 10 },      // neither name matches; gamma sits at 9
+    { name: 'alpha', line: 1 }, // name and line agree
+    { name: 'beta', line: 402 }, // the name is there, the line moved
+    { name: 'renamedGamma', line: 10 }, // neither name matches; gamma sits at 9
   ];
-  const write = (digest?: string) => writeFileSync(join(dir, 'coverage/coverage-final.json'), istanbulReport(join(dir, 'src/math.ts'), hits, digest));
+  const write = (digest?: string) =>
+    writeFileSync(join(dir, 'coverage/coverage-final.json'), istanbulReport(join(dir, 'src/math.ts'), hits, digest));
   mkdirSync(join(dir, 'coverage'), { recursive: true });
 
   write();
   const unknown = await ingestRepo(dir, { repoName: 'math' });
-  const edgeTo = (f: { edges: GraphEdge[] }, name: string) => f.edges.find((e: GraphEdge) => e.kind === 'covers' && e.meta!.evidence === 'observed' && e.to.endsWith(`::${name}`))!;
+  const edgeTo = (f: { edges: GraphEdge[] }, name: string) =>
+    f.edges.find(
+      (e: GraphEdge) => e.kind === 'covers' && e.meta!.evidence === 'observed' && e.to.endsWith(`::${name}`),
+    )!;
   // without a digest even a perfect match is MEDIUM — the code may have moved since
   assert.equal(edgeTo(unknown, 'alpha').meta!.match, 'name+line');
   assert.equal(edgeTo(unknown, 'alpha').resolution!.confidence, 'MEDIUM');
@@ -889,7 +1178,11 @@ test('observed edges record how they matched: name+line, name, or line ±1 — a
   assert.equal(fresh.nodes.find((n: GraphNode) => n.id === 'math::src/math.ts::gamma')!.loc!.line, 9);
   assert.equal(edgeTo(fresh, 'alpha').resolution!.confidence, 'HIGH');
   assert.equal(edgeTo(fresh, 'beta').meta!.match, 'name');
-  assert.equal(edgeTo(fresh, 'beta').resolution!.confidence, 'MEDIUM', 'a drifted line is never HIGH, however fresh the run');
+  assert.equal(
+    edgeTo(fresh, 'beta').resolution!.confidence,
+    'MEDIUM',
+    'a drifted line is never HIGH, however fresh the run',
+  );
   const byLine = edgeTo(fresh, 'gamma');
   assert.equal(byLine.meta!.match, 'line±1');
   assert.equal(byLine.resolution!.confidence, 'LOW');
@@ -897,7 +1190,9 @@ test('observed edges record how they matched: name+line, name, or line ±1 — a
 });
 
 test('importing the same reports twice is idempotent: identical nodes, edges and counts', async () => {
-  const testsConfig = { unit: { runner: 'vitest', results: 'coverage/results.json', coverage: 'coverage/coverage-final.json' } };
+  const testsConfig = {
+    unit: { runner: 'vitest', results: 'coverage/results.json', coverage: 'coverage/coverage-final.json' },
+  };
   const dir = tempRepo({
     'src/rates.ts': 'export function rate(kind: string) { return kind.length; }\n',
     'test/rates.spec.ts': [
@@ -908,8 +1203,16 @@ test('importing the same reports twice is idempotent: identical nodes, edges and
     'farsight.config.json': JSON.stringify({ tests: testsConfig }),
   });
   mkdirSync(join(dir, 'coverage'), { recursive: true });
-  writeFileSync(join(dir, 'coverage/results.json'), vitestReport(join(dir, 'test/rates.spec.ts'), [{ title: 'adds tax', status: 'passed', duration: 7, suite: ['rates'] }]));
-  writeFileSync(join(dir, 'coverage/coverage-final.json'), istanbulReport(join(dir, 'src/rates.ts'), [{ name: 'rate', line: 1 }]));
+  writeFileSync(
+    join(dir, 'coverage/results.json'),
+    vitestReport(join(dir, 'test/rates.spec.ts'), [
+      { title: 'adds tax', status: 'passed', duration: 7, suite: ['rates'] },
+    ]),
+  );
+  writeFileSync(
+    join(dir, 'coverage/coverage-final.json'),
+    istanbulReport(join(dir, 'src/rates.ts'), [{ name: 'rate', line: 1 }]),
+  );
 
   const f = await ingestRepo(dir, { repoName: 'rates' });
   const shape = () => ({
@@ -917,7 +1220,9 @@ test('importing the same reports twice is idempotent: identical nodes, edges and
     edges: f.edges.length,
     observed: f.edges.filter((e: GraphEdge) => e.kind === 'covers' && e.meta!.evidence === 'observed').length,
     runNodes: f.nodes.filter((n: GraphNode) => n.kind === 'test' && n.test!.runLevel).length,
-    runs: f.nodes.filter((n: GraphNode) => n.kind === 'test' && n.test!.runs?.length).flatMap((n: GraphNode) => n.test!.runs!).length,
+    runs: f.nodes
+      .filter((n: GraphNode) => n.kind === 'test' && n.test!.runs?.length)
+      .flatMap((n: GraphNode) => n.test!.runs!).length,
   });
   const ingested = shape();
   assert.ok(ingested.observed > 0 && ingested.runNodes === 1 && ingested.runs === 1);
@@ -943,13 +1248,17 @@ test('an istanbul report records every file it looked at, hit or not — that is
   const dir = tempRepo({
     'coverage/coverage-final.json': JSON.stringify({
       'src/a.ts': {
-        statementMap: { '0': { start: { line: 2 } } }, s: { '0': 3 },
-        fnMap: { '0': { name: 'alpha', decl: { start: { line: 1 } }, loc: { start: { line: 1 }, end: { line: 4 } } } }, f: { '0': 1 },
+        statementMap: { '0': { start: { line: 2 } } },
+        s: { '0': 3 },
+        fnMap: { '0': { name: 'alpha', decl: { start: { line: 1 } }, loc: { start: { line: 1 }, end: { line: 4 } } } },
+        f: { '0': 1 },
       },
       // measured and never entered: it still proves the report looked
       'src/b.ts': {
-        statementMap: { '0': { start: { line: 1 } } }, s: { '0': 0 },
-        fnMap: { '0': { name: 'beta', decl: { start: { line: 1 } }, loc: { start: { line: 1 }, end: { line: 2 } } } }, f: { '0': 0 },
+        statementMap: { '0': { start: { line: 1 } } },
+        s: { '0': 0 },
+        fnMap: { '0': { name: 'beta', decl: { start: { line: 1 } }, loc: { start: { line: 1 }, end: { line: 2 } } } },
+        f: { '0': 0 },
       },
       // the stamp block is not a file
       farsight: { sourceDigest: 'deadbeef', stampedAt: '2026-09-21T00:00:00.000Z' },
@@ -958,7 +1267,11 @@ test('an istanbul report records every file it looked at, hit or not — that is
   const report = readReport(dir, join(dir, 'coverage/coverage-final.json'))!;
   assert.equal(report.kind, 'coverage');
   assert.deepEqual(report.files, ['src/a.ts', 'src/b.ts'], 'both files, and never the farsight stamp block');
-  assert.deepEqual(report.hits.map((h) => h.name), ['alpha'], 'only what actually ran is a hit');
+  assert.deepEqual(
+    report.hits.map((h) => h.name),
+    ['alpha'],
+    'only what actually ran is a hit',
+  );
   assert.equal(report.sourceDigest, 'deadbeef');
 });
 
@@ -966,7 +1279,10 @@ test('the run-level node carries the report’s file set', async () => {
   const f = await ingestRepo(invoiceApp, { repoName: 'invoice-app' });
   const runNode = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.test!.runLevel)!;
   assert.ok(runNode.test!.files!.length > 0, 'the run says which files it measured');
-  assert.ok(runNode.test!.files!.every((p: string) => !p.startsWith('/') && !p.startsWith('..')), 'repo-relative');
+  assert.ok(
+    runNode.test!.files!.every((p: string) => !p.startsWith('/') && !p.startsWith('..')),
+    'repo-relative',
+  );
   assert.ok(runNode.test!.files!.includes('src/server/invoiceService.ts'));
 });
 
@@ -987,21 +1303,32 @@ test('a results report records the rows it carried and the rows that reached no 
     'farsight.config.json': JSON.stringify({ tests: { unit: { runner: 'vitest', results: 'coverage/results.json' } } }),
   });
   mkdirSync(join(dir, 'coverage'), { recursive: true });
-  const row = (title: string) => ({ ancestorTitles: ['total'], title, fullName: `total ${title}`, status: 'passed', duration: 1 });
-  writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({
-    startTime: 1757462400000,
-    testResults: [{
-      name: join(dir, 'test/total.spec.ts'),
-      assertionResults: [
-        row('doubles'),
-        row('handles zero'),
-        // the run saw a case this checkout no longer has: it joins nothing, and the
-        // count says so — `rows - joined` could not, because one row may join several
-        // nodes and the rows of an `.each` template fold into a single run
-        row('rounds up'),
+  const row = (title: string) => ({
+    ancestorTitles: ['total'],
+    title,
+    fullName: `total ${title}`,
+    status: 'passed',
+    duration: 1,
+  });
+  writeFileSync(
+    join(dir, 'coverage/results.json'),
+    JSON.stringify({
+      startTime: 1757462400000,
+      testResults: [
+        {
+          name: join(dir, 'test/total.spec.ts'),
+          assertionResults: [
+            row('doubles'),
+            row('handles zero'),
+            // the run saw a case this checkout no longer has: it joins nothing, and the
+            // count says so — `rows - joined` could not, because one row may join several
+            // nodes and the rows of an `.each` template fold into a single run
+            row('rounds up'),
+          ],
+        },
       ],
-    }],
-  }));
+    }),
+  );
 
   const f = await ingestRepo(dir, { repoName: 'total' });
   const entry = f.meta!.tests!.reports.find((r) => r.kind === 'results')!;
@@ -1012,7 +1339,7 @@ test('a results report records the rows it carried and the rows that reached no 
   assert.equal(f.nodes.filter((n: GraphNode) => n.kind === 'test' && n.test!.run).length, 2);
 });
 
-test('a changed report: the stamp\'s commit, or HEAD\'s commit time, says whether a commit moved or only the working tree', () => {
+test("a changed report: the stamp's commit, or HEAD's commit time, says whether a commit moved or only the working tree", () => {
   const dir = tempRepo({
     'reports/pw.json': JSON.stringify({
       config: { version: '1.62' },
@@ -1043,13 +1370,26 @@ test('a reused results file replaces only incoming projects; replace explicitly 
   });
   const f = await ingestRepo(dir, { repoName: 'sample' });
   const config = { unit: { results: 'coverage/results.json', coverage: 'coverage/coverage-final.json' } };
-  const write = (project: string, status = 'passed') => writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({
-    testResults: [{ name: join(dir, 'test/service.spec.ts'), projectName: project,
-      assertionResults: [{ title: 'works', fullName: 'works', ancestorTitles: [], status }] }],
-  }));
+  const write = (project: string, status = 'passed') =>
+    writeFileSync(
+      join(dir, 'coverage/results.json'),
+      JSON.stringify({
+        testResults: [
+          {
+            name: join(dir, 'test/service.spec.ts'),
+            projectName: project,
+            assertionResults: [{ title: 'works', fullName: 'works', ancestorTitles: [], status }],
+          },
+        ],
+      }),
+    );
   write('browser');
   const first = importReports(f, dir, config);
-  assert.equal(first.gaps.some((g) => g.kind === 'empty'), false, 'empty coverage is recorded without a warning');
+  assert.equal(
+    first.gaps.some((g) => g.kind === 'empty'),
+    false,
+    'empty coverage is recorded without a warning',
+  );
   write('identity');
   importReports(f, dir, config);
   const node = f.nodes.find((n: GraphNode) => n.name === 'works')!;
@@ -1059,23 +1399,36 @@ test('a reused results file replaces only incoming projects; replace explicitly 
   assert.equal(node.test!.runs!.length, 2);
   assert.equal(node.test!.run!.status, 'failed');
   importReports(f, dir, config, undefined, { replace: true });
-  assert.deepEqual(node.test!.runs!.map((r) => r.project), ['identity']);
+  assert.deepEqual(
+    node.test!.runs!.map((r) => r.project),
+    ['identity'],
+  );
 });
 
 test('reporter location joins only a unique parameter template; mismatched files never claim exact names', async () => {
   const dir = tempRepo({
-    'test/service.spec.ts': "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit('works', () => {});\n",
+    'test/service.spec.ts':
+      "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit('works', () => {});\n",
     'coverage/results.json': '{}',
   });
   const f = await ingestRepo(dir, { repoName: 'sample' });
-  writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({ testResults: [
-    { name: join(dir, 'test/service.spec.ts'), assertionResults: [
-      { title: 'runner formatted value', ancestorTitles: [], status: 'passed', location: { line: 2 } },
-    ] },
-    { name: join(dir, 'test/other.spec.ts'), assertionResults: [
-      { title: 'works', ancestorTitles: [], status: 'passed' },
-    ] },
-  ] }));
+  writeFileSync(
+    join(dir, 'coverage/results.json'),
+    JSON.stringify({
+      testResults: [
+        {
+          name: join(dir, 'test/service.spec.ts'),
+          assertionResults: [
+            { title: 'runner formatted value', ancestorTitles: [], status: 'passed', location: { line: 2 } },
+          ],
+        },
+        {
+          name: join(dir, 'test/other.spec.ts'),
+          assertionResults: [{ title: 'works', ancestorTitles: [], status: 'passed' }],
+        },
+      ],
+    }),
+  );
   const imported = importReports(f, dir, { unit: { results: 'coverage/results.json' } });
   assert.equal(imported.runs, 1);
   assert.equal(imported.reports[0]!.unjoined, 1);
@@ -1086,12 +1439,21 @@ test('reporter location joins only a unique parameter template; mismatched files
 test('passing route case and Istanbul coverage retain distinct case and run evidence', async () => {
   const dir = tempRepo({
     'app/api/health/route.ts': "export function GET() { return new Response('ok'); }\n",
-    'test/health.spec.ts': "import { it } from 'vitest';\nimport { GET } from '../app/api/health/route';\nit('health responds', () => { GET(); });\n",
+    'test/health.spec.ts':
+      "import { it } from 'vitest';\nimport { GET } from '../app/api/health/route';\nit('health responds', () => { GET(); });\n",
     'coverage/results.json': '{}',
-    'farsight.config.json': JSON.stringify({ tests: { unit: { results: 'coverage/results.json', coverage: 'coverage/coverage-final.json' } } }),
+    'farsight.config.json': JSON.stringify({
+      tests: { unit: { results: 'coverage/results.json', coverage: 'coverage/coverage-final.json' } },
+    }),
   });
-  writeFileSync(join(dir, 'coverage/results.json'), vitestReport(join(dir, 'test/health.spec.ts'), [{ title: 'health responds', status: 'passed' }]));
-  writeFileSync(join(dir, 'coverage/coverage-final.json'), istanbulReport(join(dir, 'app/api/health/route.ts'), [{ name: 'GET', line: 1 }]));
+  writeFileSync(
+    join(dir, 'coverage/results.json'),
+    vitestReport(join(dir, 'test/health.spec.ts'), [{ title: 'health responds', status: 'passed' }]),
+  );
+  writeFileSync(
+    join(dir, 'coverage/coverage-final.json'),
+    istanbulReport(join(dir, 'app/api/health/route.ts'), [{ name: 'GET', line: 1 }]),
+  );
   const f = await ingestRepo(dir, { repoName: 'sample' });
   const testCase = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name === 'health responds')!;
   assert.equal(testCase.test!.run!.status, 'passed');
@@ -1101,30 +1463,43 @@ test('passing route case and Istanbul coverage retain distinct case and run evid
   assert.ok(observed.length > 0);
   assert.ok(observed.every((e: GraphEdge) => e.from === run.id));
   assert.ok(coversOf(f.edges, testCase.id).some((e: GraphEdge) => e.meta?.evidence === 'static'));
-  assert.equal(observed.some((e: GraphEdge) => e.from === testCase.id), false);
+  assert.equal(
+    observed.some((e: GraphEdge) => e.from === testCase.id),
+    false,
+  );
 });
 
 test('ambiguous parameter templates in one file join nothing without a unique location', async () => {
   const dir = tempRepo({
-    'test/service.spec.ts': "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit.each([2])('value %d', () => {});\n",
+    'test/service.spec.ts':
+      "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit.each([2])('value %d', () => {});\n",
     'coverage/results.json': '{}',
   });
   const f = await ingestRepo(dir, { repoName: 'sample' });
-  writeFileSync(join(dir, 'coverage/results.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'value 1', status: 'passed' }]));
+  writeFileSync(
+    join(dir, 'coverage/results.json'),
+    vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'value 1', status: 'passed' }]),
+  );
   const imported = importReports(f, dir, { unit: { results: 'coverage/results.json' } });
   assert.equal(imported.runs, 0);
   assert.equal(imported.reports[0]!.unjoined, 1);
 });
 
 test('a results import cannot attach to or clear another repository with matching file and case names', async () => {
-  const dir = tempRepo({ 'test/service.spec.ts': "import { it } from 'vitest';\nit('works', () => {});\n", 'coverage/results.json': '{}' });
+  const dir = tempRepo({
+    'test/service.spec.ts': "import { it } from 'vitest';\nit('works', () => {});\n",
+    'coverage/results.json': '{}',
+  });
   const f = await ingestRepo(dir, { repoName: 'sample' });
   const original = f.nodes.find((n: GraphNode) => n.kind === 'test')!;
   const foreign: GraphNode = JSON.parse(JSON.stringify(original));
   foreign.id = foreign.id.replace('sample::', 'other::');
   foreign.loc!.repo = 'other';
   f.nodes.push(foreign);
-  writeFileSync(join(dir, 'coverage/results.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'works', status: 'passed' }]));
+  writeFileSync(
+    join(dir, 'coverage/results.json'),
+    vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'works', status: 'passed' }]),
+  );
   importReports(f, dir, { unit: { results: 'coverage/results.json' } });
   assert.equal(original.test!.run!.status, 'passed');
   assert.equal(foreign.test!.run, undefined);
@@ -1132,21 +1507,36 @@ test('a results import cannot attach to or clear another repository with matchin
 
 test('another results file preserves known parameter rows without inventing an unjoined-template gap', async () => {
   const dir = tempRepo({
-    'test/service.spec.ts': "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit('other case', () => {});\n",
-    'coverage/one.json': '{}', 'coverage/two.json': '{}',
+    'test/service.spec.ts':
+      "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit('other case', () => {});\n",
+    'coverage/one.json': '{}',
+    'coverage/two.json': '{}',
   });
   const f = await ingestRepo(dir, { repoName: 'sample' });
-  writeFileSync(join(dir, 'coverage/one.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'value 1', status: 'passed' }]));
+  writeFileSync(
+    join(dir, 'coverage/one.json'),
+    vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'value 1', status: 'passed' }]),
+  );
   importReports(f, dir, { unit: { results: 'coverage/one.json' } });
-  writeFileSync(join(dir, 'coverage/two.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'other case', status: 'passed' }]));
+  writeFileSync(
+    join(dir, 'coverage/two.json'),
+    vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'other case', status: 'passed' }]),
+  );
   const second = importReports(f, dir, { unit: { results: 'coverage/two.json' } });
-  assert.equal(second.gaps.some((g) => g.kind === 'unjoined-each'), false);
+  assert.equal(
+    second.gaps.some((g) => g.kind === 'unjoined-each'),
+    false,
+  );
 });
 
 test('relative reporter files join a nested source project without resolving against the process cwd', async () => {
   const dir = tempRepo({
     'web/test/service.spec.ts': "import { it } from 'vitest';\nit('works', () => {});\n",
-    'web/coverage/results.json': JSON.stringify({ testResults: [{ name: 'test/service.spec.ts', assertionResults: [{ title: 'works', ancestorTitles: [], status: 'passed' }] }] }),
+    'web/coverage/results.json': JSON.stringify({
+      testResults: [
+        { name: 'test/service.spec.ts', assertionResults: [{ title: 'works', ancestorTitles: [], status: 'passed' }] },
+      ],
+    }),
   });
   const f = await ingestRepo(dir, { repoName: 'sample' });
   const imported = importReports(f, dir, { unit: { results: 'web/coverage/results.json' } });
@@ -1157,13 +1547,31 @@ test('relative reporter files join a nested source project without resolving aga
 
 test('a dynamic suite joins by unique reporter file, exact declaration line and literal leaf title only', async () => {
   const dir = tempRepo({
-    'e2e/a/shared.pw.spec.ts': "import { test } from '@playwright/test';\nconst mode = 'mock';\ntest.describe(`pipeline (${mode})`, () => {\n  test('uploads a file', () => {});\n});\n",
-    'e2e/b/shared.pw.spec.ts': "import { test } from '@playwright/test';\nconst mode = 'mock';\ntest.describe(`pipeline (${mode})`, () => {\n  test('uploads a file', () => {});\n});\n",
-    'e2e/duplicate.pw.spec.ts': "import { test } from '@playwright/test'; const mode = 'mock'; test.describe(`pipeline (${mode})`, () => { test('uploads a file', () => {}); test('uploads a file', () => {}); });\n",
+    'e2e/a/shared.pw.spec.ts':
+      "import { test } from '@playwright/test';\nconst mode = 'mock';\ntest.describe(`pipeline (${mode})`, () => {\n  test('uploads a file', () => {});\n});\n",
+    'e2e/b/shared.pw.spec.ts':
+      "import { test } from '@playwright/test';\nconst mode = 'mock';\ntest.describe(`pipeline (${mode})`, () => {\n  test('uploads a file', () => {});\n});\n",
+    'e2e/duplicate.pw.spec.ts':
+      "import { test } from '@playwright/test'; const mode = 'mock'; test.describe(`pipeline (${mode})`, () => { test('uploads a file', () => {}); test('uploads a file', () => {}); });\n",
     'coverage/results.json': '{}',
   });
   const f = await ingestRepo(dir, { repoName: 'sample' });
-  const write = (file: string, line?: number, title = 'uploads a file') => writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({ config: {}, suites: [{ title: 'pipeline (mock)', file, specs: [{ title, ...(line != null ? { line } : {}), tests: [{ projectName: 'pipeline', status: 'expected' }] }] }] }));
+  const write = (file: string, line?: number, title = 'uploads a file') =>
+    writeFileSync(
+      join(dir, 'coverage/results.json'),
+      JSON.stringify({
+        config: {},
+        suites: [
+          {
+            title: 'pipeline (mock)',
+            file,
+            specs: [
+              { title, ...(line != null ? { line } : {}), tests: [{ projectName: 'pipeline', status: 'expected' }] },
+            ],
+          },
+        ],
+      }),
+    );
   const importOne = () => importReports(f, dir, { e2e: { results: 'coverage/results.json' } });
   write('e2e/a/shared.pw.spec.ts', 4);
   assert.equal(importOne().runs, 1);
@@ -1190,24 +1598,50 @@ test('a broad unit report preserves matched case levels and replaces projects ac
   });
   const f = await ingestRepo(dir, { repoName: 'sample' });
   const config = { unit: { results: 'coverage/results.json' } };
-  const write = (project: string, all = true, status = 'passed') => writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({ testResults: [
-    { name: 'test/service.spec.ts', projectName: project, assertionResults: [{ title: 'unit case', ancestorTitles: [], status }] },
-    ...(all ? [
-      { name: 'integration/service.spec.ts', projectName: project, assertionResults: [{ title: 'integration 1', ancestorTitles: [], status }] },
-      { name: 'e2e/service.spec.ts', projectName: project, assertionResults: [{ title: 'e2e case', ancestorTitles: [], status }] },
-    ] : []),
-  ] }));
+  const write = (project: string, all = true, status = 'passed') =>
+    writeFileSync(
+      join(dir, 'coverage/results.json'),
+      JSON.stringify({
+        testResults: [
+          {
+            name: 'test/service.spec.ts',
+            projectName: project,
+            assertionResults: [{ title: 'unit case', ancestorTitles: [], status }],
+          },
+          ...(all
+            ? [
+                {
+                  name: 'integration/service.spec.ts',
+                  projectName: project,
+                  assertionResults: [{ title: 'integration 1', ancestorTitles: [], status }],
+                },
+                {
+                  name: 'e2e/service.spec.ts',
+                  projectName: project,
+                  assertionResults: [{ title: 'e2e case', ancestorTitles: [], status }],
+                },
+              ]
+            : []),
+        ],
+      }),
+    );
   const cases = f.nodes.filter((n: GraphNode) => n.kind === 'test');
   const foreign: GraphNode = JSON.parse(JSON.stringify(cases.find((n: GraphNode) => n.test!.level === 'integration')));
-  foreign.id = foreign.id.replace('sample::', 'foreign::'); foreign.loc!.repo = 'foreign';
+  foreign.id = foreign.id.replace('sample::', 'foreign::');
+  foreign.loc!.repo = 'foreign';
   f.nodes.push(foreign);
-  write('one'); assert.equal(importReports(f, dir, config).runs, 3);
-  write('two'); assert.equal(importReports(f, dir, config).runs, 3);
+  write('one');
+  assert.equal(importReports(f, dir, config).runs, 3);
+  write('two');
+  assert.equal(importReports(f, dir, config).runs, 3);
   assert.deepEqual(cases.map((n: GraphNode) => n.test!.level).sort(), ['e2e', 'integration', 'unit']);
   assert.ok(cases.every((n: GraphNode) => n.test!.runs!.length === 2));
   write('one', false, 'failed');
   importReports(f, dir, config);
-  assert.deepEqual(cases.filter((n: GraphNode) => n.test!.level !== 'unit').map((n: GraphNode) => n.test!.runs!.map((r) => r.project)), [['two'], ['two']]);
+  assert.deepEqual(
+    cases.filter((n: GraphNode) => n.test!.level !== 'unit').map((n: GraphNode) => n.test!.runs!.map((r) => r.project)),
+    [['two'], ['two']],
+  );
   const snapshot = JSON.stringify(cases.map((n: GraphNode) => n.test));
   importReports(f, dir, config);
   assert.equal(JSON.stringify(cases.map((n: GraphNode) => n.test)), snapshot, 'reimport is idempotent');

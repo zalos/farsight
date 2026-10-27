@@ -25,7 +25,8 @@ import { loadDecisions, decisionChipsHtml } from './decisions.js';
 
 const API = '/api/tour';
 const biz = () => currentLens() === 'business';
-const fill = (key, vars) => Object.entries(vars || {}).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), t(key));
+const fill = (key, vars) =>
+  Object.entries(vars || {}).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), t(key));
 
 /** The walk on screen. */
 export const TOUR = {
@@ -47,8 +48,20 @@ export const TOUR = {
 
 /** The toolbar's WALK control. */
 export function walkToolHtml() {
-  return '<button type="button" class="map-tb map-tb-walk' + (TOUR.open ? ' on' : '') + '" data-act="walk" aria-pressed="' + TOUR.open + '" aria-label="' + esc(t('tour.title')) + '"'
-    + tipAttrs({ key: 'tour.tool', noFocus: true }) + '>' + sym('human') + esc(t('tour.tool')) + '</button>';
+  return (
+    '<button type="button" class="map-tb map-tb-walk' +
+    (TOUR.open ? ' on' : '') +
+    '" data-act="walk" aria-pressed="' +
+    TOUR.open +
+    '" aria-label="' +
+    esc(t('tour.title')) +
+    '"' +
+    tipAttrs({ key: 'tour.tool', noFocus: true }) +
+    '>' +
+    sym('human') +
+    esc(t('tour.tool')) +
+    '</button>'
+  );
 }
 
 /** Bind the panel to the Map: its host, and how the board moves. */
@@ -60,7 +73,9 @@ export function bindWalk(host, api) {
   host.addEventListener('keydown', onKey);
 }
 
-export function walkOpen() { return TOUR.open; }
+export function walkOpen() {
+  return TOUR.open;
+}
 
 /**
  * Open the walk: on `target` (`{ storyline, repo }` or `{ flow }`), else what the Map names now. The Map's tree may
@@ -71,11 +86,24 @@ export function openWalk(target, o = {}) {
   TOUR.lanes = !!o.lanes;
   draw();
   const want = target || (TOUR.api && TOUR.api.target && TOUR.api.target());
-  if (!want && (o.tries || 0) < 50) { setTimeout(() => { if (TOUR.open && !TOUR.target) openWalk(null, { ...o, tries: (o.tries || 0) + 1 }); }, 200); return; }
-  if (!want) { TOUR.target = null; TOUR.data = null; draw(); return; }
+  if (!want && (o.tries || 0) < 50) {
+    setTimeout(() => {
+      if (TOUR.open && !TOUR.target) openWalk(null, { ...o, tries: (o.tries || 0) + 1 });
+    }, 200);
+    return;
+  }
+  if (!want) {
+    TOUR.target = null;
+    TOUR.data = null;
+    draw();
+    return;
+  }
   const same = TOUR.target && TOUR.data && JSON.stringify(TOUR.target) === JSON.stringify(want);
   TOUR.target = want;
-  if (same) { draw(); return; }
+  if (same) {
+    draw();
+    return;
+  }
   load(o.stop || 0);
 }
 
@@ -92,7 +120,10 @@ export function closeWalk(o = {}) {
 /** WALK pressed, or the key. */
 export function toggleWalk(o = {}) {
   if (TOUR.open) closeWalk();
-  else { TOUR.target = null; openWalk(null, o); }
+  else {
+    TOUR.target = null;
+    openWalk(null, o);
+  }
 }
 
 function load(at) {
@@ -103,26 +134,50 @@ function load(at) {
   draw();
   const tg = TOUR.target;
   const q = tg.storyline ? 'storyline=' + encodeURIComponent(tg.storyline) : 'flow=' + encodeURIComponent(tg.flow);
-  fetch(API + '?' + q + (tg.repo ? '&repo=' + encodeURIComponent(tg.repo) : '') + (tg.persona ? '&persona=' + encodeURIComponent(tg.persona) : ''))
+  fetch(
+    API +
+      '?' +
+      q +
+      (tg.repo ? '&repo=' + encodeURIComponent(tg.repo) : '') +
+      (tg.persona ? '&persona=' + encodeURIComponent(tg.persona) : ''),
+  )
     .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
     .then(({ ok, body }) => {
       if (gen !== TOUR.gen) return;
       TOUR.loading = false;
-      if (!ok || !body || !body.tour) { TOUR.error = (body && body.error) || '?'; draw(); return; }
+      if (!ok || !body || !body.tour) {
+        TOUR.error = (body && body.error) || '?';
+        draw();
+        return;
+      }
       TOUR.data = body.tour;
       // opened at a screen (an action, a table, a screen up close): the walk starts at that screen's stop, so the
       // Map stays where the reader is
       const here = !at && TOUR.api && TOUR.api.at ? TOUR.api.at() : null;
-      const hi = here && here.screen ? body.tour.stops.findIndex((x) => x.kind !== 'handoff' && x.place && x.place.flowId === here.flowId && x.place.screen === here.screen) : -1;
+      const hi =
+        here && here.screen
+          ? body.tour.stops.findIndex(
+              (x) =>
+                x.kind !== 'handoff' && x.place && x.place.flowId === here.flowId && x.place.screen === here.screen,
+            )
+          : -1;
       go(hi >= 0 ? hi : Math.min(at, Math.max(0, body.tour.stops.length - 1)));
     })
-    .catch((err) => { if (gen !== TOUR.gen) return; TOUR.loading = false; TOUR.error = String(err && err.message || err); draw(); });
+    .catch((err) => {
+      if (gen !== TOUR.gen) return;
+      TOUR.loading = false;
+      TOUR.error = String((err && err.message) || err);
+      draw();
+    });
 }
 
 /** Go to stop `i` (0-based): the panel shows it and the Map moves with it. */
 export function go(i) {
   const d = TOUR.data;
-  if (!d || !d.stops.length) { draw(); return; }
+  if (!d || !d.stops.length) {
+    draw();
+    return;
+  }
   TOUR.at = Math.max(0, Math.min(d.stops.length - 1, i));
   draw();
   // a new stop reads from its top
@@ -134,64 +189,199 @@ export function go(i) {
 
 /** The place a stop's chips frame their parts at. */
 function placeOf(stop, d) {
-  return { flowId: stop.place.flowId, screen: stop.place.screen, ...(d.target.kind === 'storyline' ? { storyline: d.target.id } : {}) };
+  return {
+    flowId: stop.place.flowId,
+    screen: stop.place.screen,
+    ...(d.target.kind === 'storyline' ? { storyline: d.target.id } : {}),
+  };
 }
 
 /** Redraw the panel (the lens or the register moved). */
-export function drawWalk() { if (TOUR.open) draw(); }
+export function drawWalk() {
+  if (TOUR.open) draw();
+}
 
 function draw() {
   const host = TOUR.host;
   if (!host) return;
   if (TOUR.api && TOUR.api.shown) TOUR.api.shown(TOUR.open);
   if (!TOUR.open) return;
-  const head = '<div class="tw-head"><span class="hud-label tw-title"' + defAttrs('tour.title') + '>' + sym('human') + esc(t('tour.title')) + '</span>'
-    + '<span class="tw-of"></span><button type="button" class="tw-x" data-tw="close" aria-label="' + esc(t('tour.close')) + '"' + tipAttrs({ key: 'tour.close', noFocus: true }) + '>✕</button></div>';
-  const ask = '<div class="tw-ask">' + askBoxHtml({ id: 'walk', repo: (TOUR.data && TOUR.data.target.repo) || (TOUR.target && TOUR.target.repo) || '' }) + '</div>';
-  if (TOUR.loading || (!TOUR.data && !TOUR.error && TOUR.target)) { host.innerHTML = head + '<p class="tw-wait">' + esc(t('tour.loading')) + '</p>' + ask; redrawAsk(host); return; }
-  if (TOUR.error) { host.innerHTML = head + '<p class="tw-err">' + esc(fill('tour.failed', { error: TOUR.error })) + '</p>' + ask; redrawAsk(host); return; }
+  const head =
+    '<div class="tw-head"><span class="hud-label tw-title"' +
+    defAttrs('tour.title') +
+    '>' +
+    sym('human') +
+    esc(t('tour.title')) +
+    '</span>' +
+    '<span class="tw-of"></span><button type="button" class="tw-x" data-tw="close" aria-label="' +
+    esc(t('tour.close')) +
+    '"' +
+    tipAttrs({ key: 'tour.close', noFocus: true }) +
+    '>✕</button></div>';
+  const ask =
+    '<div class="tw-ask">' +
+    askBoxHtml({ id: 'walk', repo: (TOUR.data && TOUR.data.target.repo) || (TOUR.target && TOUR.target.repo) || '' }) +
+    '</div>';
+  if (TOUR.loading || (!TOUR.data && !TOUR.error && TOUR.target)) {
+    host.innerHTML = head + '<p class="tw-wait">' + esc(t('tour.loading')) + '</p>' + ask;
+    redrawAsk(host);
+    return;
+  }
+  if (TOUR.error) {
+    host.innerHTML = head + '<p class="tw-err">' + esc(fill('tour.failed', { error: TOUR.error })) + '</p>' + ask;
+    redrawAsk(host);
+    return;
+  }
   const d = TOUR.data;
-  if (!d || !d.stops.length) { host.innerHTML = head + '<p class="tw-empty"' + defAttrs('tour.empty') + '>' + esc(t('tour.empty')) + '</p>' + ask; redrawAsk(host); return; }
+  if (!d || !d.stops.length) {
+    host.innerHTML = head + '<p class="tw-empty"' + defAttrs('tour.empty') + '>' + esc(t('tour.empty')) + '</p>' + ask;
+    redrawAsk(host);
+    return;
+  }
   const stop = d.stops[TOUR.at];
   const b = biz();
   const place = placeOf(stop, d);
   // stop n of m: m is the walk's stops, a Counted with its tip (screens · hand-offs)
-  const of = '<span class="tw-n"' + countedAttrs(d.counted.stops, API) + '>'
-    + esc(fill('tour.stopOf', { n: stop.n, m: d.stops.length })) + '</span>';
-  const kind = '<span class="tw-kind k-' + esc(stop.kind) + '"' + defAttrs('tour.kind.' + stop.kind) + '>' + esc(t('tour.kind.' + stop.kind)) + '</span>';
-  const branch = stop.journey.branch ? '<p class="tw-branch"' + defAttrs('tour.branch') + '>' + esc(fill('tour.branch', { name: stop.journey.branch.ofName, when: stop.journey.branch.when })) + '</p>' : '';
-  const clauses = stop.clauses.map((c) => '<p class="tw-cl r-' + esc(c.role) + (c.warn ? ' warn' : '') + (c.tier ? ' t-' + esc(c.tier) : '') + '" data-role="' + esc(c.role) + '">'
-    + (c.warn ? sym('warning') : c.role === 'need' ? sym('gate') : c.role === 'decision' ? sym('decision') : '')
-    + (c.role === 'words' ? wordsHtml(c, { nodes: d.nodes, place, api: API }) : clauseHtml(c, { nodes: d.nodes, place, api: API })) + '</p>').join('');
+  const of =
+    '<span class="tw-n"' +
+    countedAttrs(d.counted.stops, API) +
+    '>' +
+    esc(fill('tour.stopOf', { n: stop.n, m: d.stops.length })) +
+    '</span>';
+  const kind =
+    '<span class="tw-kind k-' +
+    esc(stop.kind) +
+    '"' +
+    defAttrs('tour.kind.' + stop.kind) +
+    '>' +
+    esc(t('tour.kind.' + stop.kind)) +
+    '</span>';
+  const branch = stop.journey.branch
+    ? '<p class="tw-branch"' +
+      defAttrs('tour.branch') +
+      '>' +
+      esc(fill('tour.branch', { name: stop.journey.branch.ofName, when: stop.journey.branch.when })) +
+      '</p>'
+    : '';
+  const clauses = stop.clauses
+    .map(
+      (c) =>
+        '<p class="tw-cl r-' +
+        esc(c.role) +
+        (c.warn ? ' warn' : '') +
+        (c.tier ? ' t-' + esc(c.tier) : '') +
+        '" data-role="' +
+        esc(c.role) +
+        '">' +
+        (c.warn ? sym('warning') : c.role === 'need' ? sym('gate') : c.role === 'decision' ? sym('decision') : '') +
+        (c.role === 'words'
+          ? wordsHtml(c, { nodes: d.nodes, place, api: API })
+          : clauseHtml(c, { nodes: d.nodes, place, api: API })) +
+        '</p>',
+    )
+    .join('');
   const needsAt = stop.clauses.findIndex((c) => c.role === 'need');
-  const body = needsAt >= 0
-    ? clauses.replace('<p class="tw-cl r-need', '<p class="tw-needs hud-label"' + defAttrs('tour.handoff.needsHead') + '>' + esc(t('tour.handoff.needsHead')) + '</p><p class="tw-cl r-need')
-    : clauses;
+  const body =
+    needsAt >= 0
+      ? clauses.replace(
+          '<p class="tw-cl r-need',
+          '<p class="tw-needs hud-label"' +
+            defAttrs('tour.handoff.needsHead') +
+            '>' +
+            esc(t('tour.handoff.needsHead')) +
+            '</p><p class="tw-cl r-need',
+        )
+      : clauses;
   const refs = stop.referenced.filter((id) => (d.nodes[id] || {}).kind !== 'test');
   // a decision the team made or left open on what this stop cites (lib/decisions.js); drawn again once they are read
   const decIds = [stop.screen.id, ...stop.referenced, ...(stop.move ? [stop.move.by] : [])];
   const decs = decisionChipsHtml(decIds, { cls: 'tw-decs' });
-  if (!decs) loadDecisions().then(() => { if (decisionChipsHtml(decIds) && TOUR.open && TOUR.data === d && d.stops[TOUR.at] === stop) draw(); });
-  const referenced = refs.length ? '<div class="tw-refs"><span class="hud-label"' + defAttrs('tour.referenced') + '>' + esc(t('tour.referenced')) + '</span>'
-    + refs.slice(0, 12).map((id) => citeChipHtml(id, d.nodes[id], place)).join('') + (refs.length > 12 ? '<span class="tw-more">+' + (refs.length - 12) + '</span>' : '') + '</div>' : '';
-  const dots = '<div class="tw-dots" role="group" aria-label="' + esc(t('tour.dots')) + '"' + tipAttrs({ key: 'tour.dots', noFocus: true }) + '>'
-    + d.stops.map((s, i) => '<button type="button" class="tw-dot k-' + esc(s.kind) + (i === TOUR.at ? ' on' : '') + '" data-tw="stop" data-i="' + i + '" aria-label="' + esc(fill('tour.stopOf', { n: s.n, m: d.stops.length }) + ' · ' + (b ? s.title.biz : s.title.text)) + '"' + (i === TOUR.at ? ' aria-current="step"' : '') + '></button>').join('') + '</div>';
-  const nav = '<div class="tw-nav">'
-    + '<button type="button" class="map-tb tw-prev" data-tw="prev"' + (TOUR.at <= 0 ? ' disabled' : '') + tipAttrs({ key: 'tour.prev', noFocus: true }) + '>' + esc(t('tour.prev')) + '</button>'
-    + dots
-    + '<button type="button" class="map-tb tw-next" data-tw="next"' + (TOUR.at >= d.stops.length - 1 ? ' disabled' : '') + tipAttrs({ key: 'tour.next', noFocus: true }) + '>' + esc(t('tour.next')) + '</button></div>';
-  const copy = copyDoorsHtml('tour', { id: d.target.id, ...(d.target.kind === 'storyline' ? { storyline: true } : {}), repo: d.target.repo }, { compact: true });
+  if (!decs)
+    loadDecisions().then(() => {
+      if (decisionChipsHtml(decIds) && TOUR.open && TOUR.data === d && d.stops[TOUR.at] === stop) draw();
+    });
+  const referenced = refs.length
+    ? '<div class="tw-refs"><span class="hud-label"' +
+      defAttrs('tour.referenced') +
+      '>' +
+      esc(t('tour.referenced')) +
+      '</span>' +
+      refs
+        .slice(0, 12)
+        .map((id) => citeChipHtml(id, d.nodes[id], place))
+        .join('') +
+      (refs.length > 12 ? '<span class="tw-more">+' + (refs.length - 12) + '</span>' : '') +
+      '</div>'
+    : '';
+  const dots =
+    '<div class="tw-dots" role="group" aria-label="' +
+    esc(t('tour.dots')) +
+    '"' +
+    tipAttrs({ key: 'tour.dots', noFocus: true }) +
+    '>' +
+    d.stops
+      .map(
+        (s, i) =>
+          '<button type="button" class="tw-dot k-' +
+          esc(s.kind) +
+          (i === TOUR.at ? ' on' : '') +
+          '" data-tw="stop" data-i="' +
+          i +
+          '" aria-label="' +
+          esc(fill('tour.stopOf', { n: s.n, m: d.stops.length }) + ' · ' + (b ? s.title.biz : s.title.text)) +
+          '"' +
+          (i === TOUR.at ? ' aria-current="step"' : '') +
+          '></button>',
+      )
+      .join('') +
+    '</div>';
+  const nav =
+    '<div class="tw-nav">' +
+    '<button type="button" class="map-tb tw-prev" data-tw="prev"' +
+    (TOUR.at <= 0 ? ' disabled' : '') +
+    tipAttrs({ key: 'tour.prev', noFocus: true }) +
+    '>' +
+    esc(t('tour.prev')) +
+    '</button>' +
+    dots +
+    '<button type="button" class="map-tb tw-next" data-tw="next"' +
+    (TOUR.at >= d.stops.length - 1 ? ' disabled' : '') +
+    tipAttrs({ key: 'tour.next', noFocus: true }) +
+    '>' +
+    esc(t('tour.next')) +
+    '</button></div>';
+  const copy = copyDoorsHtml(
+    'tour',
+    { id: d.target.id, ...(d.target.kind === 'storyline' ? { storyline: true } : {}), repo: d.target.repo },
+    { compact: true },
+  );
   // pinned: the stop line and its ‹ PREV · NEXT ›; scrolling: the stop's sentences; pinned at the foot: ASK
-  host.innerHTML = '<div class="tw-pin">' + head.replace('<span class="tw-of"></span>', '<span class="tw-of">' + of + kind + '</span>') + nav + '</div>'
-    + '<div class="tw-body" tabindex="-1">'
-    + '<h3 class="tw-stop-title">' + esc(b ? stop.title.biz : stop.title.text) + '</h3>'
-    + '<p class="tw-sub">' + esc(b ? stop.sub.biz : stop.sub.text) + '</p>' + branch
-    + (decs ? '<div class="tw-dec">' + decs + '</div>' : '')
-    + '<div class="tw-text">' + body + '</div>'
-    + referenced
-    + '<p class="tw-derived"' + defAttrs('tour.derived') + '>' + esc(t('tour.derived')) + '</p>'
-    + (copy ? '<div class="tw-copy">' + copy + '</div>' : '') + '</div>'
-    + ask;
+  host.innerHTML =
+    '<div class="tw-pin">' +
+    head.replace('<span class="tw-of"></span>', '<span class="tw-of">' + of + kind + '</span>') +
+    nav +
+    '</div>' +
+    '<div class="tw-body" tabindex="-1">' +
+    '<h3 class="tw-stop-title">' +
+    esc(b ? stop.title.biz : stop.title.text) +
+    '</h3>' +
+    '<p class="tw-sub">' +
+    esc(b ? stop.sub.biz : stop.sub.text) +
+    '</p>' +
+    branch +
+    (decs ? '<div class="tw-dec">' + decs + '</div>' : '') +
+    '<div class="tw-text">' +
+    body +
+    '</div>' +
+    referenced +
+    '<p class="tw-derived"' +
+    defAttrs('tour.derived') +
+    '>' +
+    esc(t('tour.derived')) +
+    '</p>' +
+    (copy ? '<div class="tw-copy">' + copy + '</div>' : '') +
+    '</div>' +
+    ask;
   redrawAsk(host);
   foldWalkChips(host);
 }
@@ -212,8 +402,12 @@ function sentencesOf(text) {
   const out = [];
   const src = String(text || '');
   const re = /[.!?]+\s+(?=[A-Z0-9(])/g;
-  let from = 0, m;
-  while ((m = re.exec(src))) { out.push(src.slice(from, m.index + m[0].length)); from = m.index + m[0].length; }
+  let from = 0,
+    m;
+  while ((m = re.exec(src))) {
+    out.push(src.slice(from, m.index + m[0].length));
+    from = m.index + m[0].length;
+  }
   if (from < src.length) out.push(src.slice(from));
   return out;
 }
@@ -228,9 +422,27 @@ function wordsHtml(c, o) {
   const parts = sentencesOf(all);
   if (parts.length <= 2) return clauseHtml(c, o);
   const short = parts.slice(0, 2).join('').trim();
-  const cut = { ...c, vars: { ...(c.vars || {}), words: short }, bizVars: c.bizVars ? { ...c.bizVars, words: short } : c.bizVars };
-  return '<span class="tw-words short">' + clauseHtml(cut, o) + ' <button type="button" class="tw-more-btn" data-tw="more"' + tipAttrs({ key: 'tour.more', noFocus: true }) + '>' + esc(t('tour.more')) + '</button></span>'
-    + '<span class="tw-words long" hidden>' + clauseHtml(c, o) + ' <button type="button" class="tw-more-btn" data-tw="less"' + tipAttrs({ key: 'tour.less', noFocus: true }) + '>' + esc(t('tour.less')) + '</button></span>';
+  const cut = {
+    ...c,
+    vars: { ...(c.vars || {}), words: short },
+    bizVars: c.bizVars ? { ...c.bizVars, words: short } : c.bizVars,
+  };
+  return (
+    '<span class="tw-words short">' +
+    clauseHtml(cut, o) +
+    ' <button type="button" class="tw-more-btn" data-tw="more"' +
+    tipAttrs({ key: 'tour.more', noFocus: true }) +
+    '>' +
+    esc(t('tour.more')) +
+    '</button></span>' +
+    '<span class="tw-words long" hidden>' +
+    clauseHtml(c, o) +
+    ' <button type="button" class="tw-more-btn" data-tw="less"' +
+    tipAttrs({ key: 'tour.less', noFocus: true }) +
+    '>' +
+    esc(t('tour.less')) +
+    '</button></span>'
+  );
 }
 
 function onClick(e) {
@@ -244,21 +456,47 @@ function onClick(e) {
   else if (act === 'stop') go(+b.dataset.i);
   else if (act === 'more' || act === 'less') {
     const p = b.closest('.tw-cl');
-    if (p) { p.querySelector('.tw-words.short').hidden = act === 'more'; p.querySelector('.tw-words.long').hidden = act === 'less'; }
+    if (p) {
+      p.querySelector('.tw-words.short').hidden = act === 'more';
+      p.querySelector('.tw-words.long').hidden = act === 'less';
+    }
   }
 }
 
 /** Inside the panel: ← → walk the stops, Esc closes the walk. The box's own typing is its own. */
 function onKey(e) {
-  const tag = (e.target && e.target.tagName || '').toLowerCase();
-  if (tag === 'input' || tag === 'textarea') { if (e.key === 'Escape') e.target.blur(); return; }
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); go(TOUR.at + (e.key === 'ArrowRight' ? 1 : -1)); }
-  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeWalk(); }
+  const tag = ((e.target && e.target.tagName) || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea') {
+    if (e.key === 'Escape') e.target.blur();
+    return;
+  }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    e.stopPropagation();
+    go(TOUR.at + (e.key === 'ArrowRight' ? 1 : -1));
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeWalk();
+  }
 }
 
 /** A door that opens the walk on the Map: a storyline's (`{ storyline }`) or a journey's (`{ flow }`). */
 export function walkDoorHtml(o, cls) {
-  const href = o.storyline ? '#/map?storyline=' + encodeURIComponent(o.storyline) + '&walk=1' : '#/map/' + encodeURIComponent(o.flow) + '?walk=1';
-  return '<a class="rel ' + esc(cls || '') + '" href="' + esc(href) + '"' + defAttrs('tour.open') + '>' + sym('human') + ' ' + esc(t('tour.open')) + '</a>';
+  const href = o.storyline
+    ? '#/map?storyline=' + encodeURIComponent(o.storyline) + '&walk=1'
+    : '#/map/' + encodeURIComponent(o.flow) + '?walk=1';
+  return (
+    '<a class="rel ' +
+    esc(cls || '') +
+    '" href="' +
+    esc(href) +
+    '"' +
+    defAttrs('tour.open') +
+    '>' +
+    sym('human') +
+    ' ' +
+    esc(t('tour.open')) +
+    '</a>'
+  );
 }
-

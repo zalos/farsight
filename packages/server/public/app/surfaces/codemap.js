@@ -20,15 +20,25 @@ export function mountCodemap(route, el) {
   S.pendingFocus = null;
   if (route.view === 'supply') {
     document.body.classList.remove('surface-graph');
-    el.innerHTML = '<div class="set-wrap"><h1>' + esc(t('nav.codemap')) + '</h1>'
-      + '<div class="set-sec ph-sec"><h2>' + esc(t('ph.supply.title')) + '</h2>'
-      + '<p class="ph-body">' + esc(t('ph.supply.body')) + '</p></div></div>';
+    el.innerHTML =
+      '<div class="set-wrap"><h1>' +
+      esc(t('nav.codemap')) +
+      '</h1>' +
+      '<div class="set-sec ph-sec"><h2>' +
+      esc(t('ph.supply.title')) +
+      '</h2>' +
+      '<p class="ph-body">' +
+      esc(t('ph.supply.body')) +
+      '</p></div></div>';
     return;
   }
   // interim: the existing graph frame is the surface (stage + inspector)
   document.body.classList.add('surface-graph');
   const note = document.getElementById('codemap-note');
-  if (note) { note.textContent = t('ph.codemap.note'); note.style.display = ''; }
+  if (note) {
+    note.textContent = t('ph.codemap.note');
+    note.style.display = '';
+  }
   // the group, the filters and the view this link names (surfaces/codemap-projects.js)
   cmapFromRoute(route);
   if (window.buildScope) window.buildScope();

@@ -35,13 +35,27 @@ import { tipAttrs } from '../lib/tooltip.js';
 import { emptyHtml } from '../lib/empty-state.js';
 
 /** The business lens reads the sentences the core wrote with their code said in words. */
-function said(text) { return currentLens() === 'business' ? unCode(text) : String(text || ''); }
+function said(text) {
+  return currentLens() === 'business' ? unCode(text) : String(text || '');
+}
 
 /**
  * What this surface has fetched and resolved, so a register flip redraws from it
  * instead of asking the server the same three questions again.
  */
-let ST = { repo: null, route: null, history: null, changes: null, narrative: null, resolved: null, unreadable: false, error: null, allRows: false, allChanges: false, openRuns: new Set() };
+let ST = {
+  repo: null,
+  route: null,
+  history: null,
+  changes: null,
+  narrative: null,
+  resolved: null,
+  unreadable: false,
+  error: null,
+  allRows: false,
+  allChanges: false,
+  openRuns: new Set(),
+};
 
 /** The kinds the business register leaves out — facts about the reading, not about the software. */
 const HIDDEN_IN_BUSINESS = ['edge_confidence_changed', 'node_renamed'];
@@ -69,16 +83,35 @@ function term(key) {
 export function mountChanges(route, el) {
   const repos = knownRepos();
   const repo = (route.repo && repos.includes(route.repo) ? route.repo : null) || remembered(repos) || repos[0] || null;
-  ST = { repo, route, history: null, changes: null, narrative: null, resolved: null, unreadable: false, error: null, allRows: false, allChanges: false, openRuns: new Set() };
-  el.innerHTML = '<div class="set-wrap ch-wrap" id="ch-wrap">' + headHtml()
-    + '<div id="ch-body"><p class="set-note">' + esc(t('portfolio.loading')) + '</p></div></div>';
+  ST = {
+    repo,
+    route,
+    history: null,
+    changes: null,
+    narrative: null,
+    resolved: null,
+    unreadable: false,
+    error: null,
+    allRows: false,
+    allChanges: false,
+    openRuns: new Set(),
+  };
+  el.innerHTML =
+    '<div class="set-wrap ch-wrap" id="ch-wrap">' +
+    headHtml() +
+    '<div id="ch-body"><p class="set-note">' +
+    esc(t('portfolio.loading')) +
+    '</p></div></div>';
   if (!repo) {
     // no local source and no checkout recorded: syncs may exist, but this surface
     // is per repository (H3b) and there is none here to name one
     ST.error = { text: t('sys.noGraph') };
     return draw();
   }
-  load().catch((err) => { ST.error = { text: String((err && err.message) || err) }; draw(); });
+  load().catch((err) => {
+    ST.error = { text: String((err && err.message) || err) };
+    draw();
+  });
 }
 
 /**
@@ -102,7 +135,10 @@ export function mountChanges(route, el) {
 export function changesRefresh(reason) {
   if (reason === 'scope') return;
   // a sync adds a row to the spine and a new head to compare against: re-ask
-  if (reason === 'sync') { chRetry(); return; }
+  if (reason === 'sync') {
+    chRetry();
+    return;
+  }
   if (document.getElementById('ch-body')) draw();
 }
 
@@ -119,7 +155,9 @@ function remembered(repos) {
   try {
     const r = localStorage.getItem('fs-changes-repo');
     return r && repos.includes(r) ? r : null;
-  } catch (err) { return null; }
+  } catch (err) {
+    return null;
+  }
 }
 
 // ── fetching ────────────────────────────────────────────────────────────────
@@ -139,7 +177,10 @@ async function load() {
   }
   ST.history = spine;
   // the storylines, for their rows into the Map's comparison (a failure leaves the page as it was)
-  ST.storylines = await fetch('/api/journeys?scope=all').then((x) => (x.ok ? x.json() : null)).then((j) => (j && j.tree && j.tree.storylines) || []).catch(() => []);
+  ST.storylines = await fetch('/api/journeys?scope=all')
+    .then((x) => (x.ok ? x.json() : null))
+    .then((j) => (j && j.tree && j.tree.storylines) || [])
+    .catch(() => []);
   // a param that is not a range resolves to **nothing**, never to the default:
   // drawing the latest two syncs under a link that named something else is the
   // silent substitution the 2026-09-23 swarm found and this surface must not do
@@ -149,8 +190,12 @@ async function load() {
   if (!ST.resolved || !ST.resolved.baseSync) return;
   const q = 'from=sync:' + ST.resolved.baseSync + '&to=sync:' + ST.resolved.headSync;
   const [changes, narrative] = await Promise.all([
-    fetch('/api/changes?' + q).then((x) => x.json()).catch(() => null),
-    fetch('/api/history?repo=' + encodeURIComponent(ST.repo) + '&' + q).then((x) => x.json()).catch(() => null),
+    fetch('/api/changes?' + q)
+      .then((x) => x.json())
+      .catch(() => null),
+    fetch('/api/history?repo=' + encodeURIComponent(ST.repo) + '&' + q)
+      .then((x) => x.json())
+      .catch(() => null),
   ]);
   ST.changes = changes;
   ST.narrative = narrative && narrative.range ? narrative.range : null;
@@ -186,7 +231,8 @@ function resolveRange(range, spine) {
   if (!range) {
     const head = rows[0].sync;
     const older = rows.find((x) => x.sync < head);
-    if (!older) return { kind: 'sync', text: words('changes.range.syncs', head, head), why: [t('changes.partialRange')] };
+    if (!older)
+      return { kind: 'sync', text: words('changes.range.syncs', head, head), why: [t('changes.partialRange')] };
     return { kind: 'sync', baseSync: older.sync, headSync: head, text: words('changes.range.syncs', older.sync, head) };
   }
   if (range.kind === 'sync') {
@@ -202,8 +248,15 @@ function resolveRange(range, spine) {
     const h = syncOf(range.head);
     // a commit no sync recorded cannot carry a measured difference — that is the
     // honest limit of a commit range, and the absence word for it already exists
-    if (b == null || h == null) return { kind: 'commit', text, why: [t('changes.partialRange'), t('journey.absent.notIndexed')] };
-    return { kind: 'commit', baseSync: Math.min(b, h), headSync: Math.max(b, h), text, via: words('changes.range.syncs', Math.min(b, h), Math.max(b, h)) };
+    if (b == null || h == null)
+      return { kind: 'commit', text, why: [t('changes.partialRange'), t('journey.absent.notIndexed')] };
+    return {
+      kind: 'commit',
+      baseSync: Math.min(b, h),
+      headSync: Math.max(b, h),
+      text,
+      via: words('changes.range.syncs', Math.min(b, h), Math.max(b, h)),
+    };
   }
   // rel: — declared in .farsight/settings.json, never discovered from tags (§3)
   const declared = (S.SETTINGS && S.SETTINGS.releases) || [];
@@ -215,7 +268,13 @@ function resolveRange(range, spine) {
   const bs = b && b.commit ? syncOf(b.commit) : null;
   const hs = h && h.commit ? syncOf(h.commit) : null;
   if (bs == null || hs == null) return { kind: 'rel', text, why: [t('changes.partialRange')] };
-  return { kind: 'rel', baseSync: Math.min(bs, hs), headSync: Math.max(bs, hs), text, via: words('changes.range.syncs', Math.min(bs, hs), Math.max(bs, hs)) };
+  return {
+    kind: 'rel',
+    baseSync: Math.min(bs, hs),
+    headSync: Math.max(bs, hs),
+    text,
+    via: words('changes.range.syncs', Math.min(bs, hs), Math.max(bs, hs)),
+  };
 }
 
 // ── chrome ──────────────────────────────────────────────────────────────────
@@ -226,40 +285,76 @@ function headHtml() {
   const none = t('journey.absent.notIndexed');
   const ident = t('chrome.identity')
     .replace('{commit}', meta.commit ? String(meta.commit).slice(0, 7) : none)
-    .replace('{build}', (S.VERSION && S.VERSION.farsight && S.VERSION.farsight.commit) || (meta.farsight && meta.farsight.commit) || none)
+    .replace(
+      '{build}',
+      (S.VERSION && S.VERSION.farsight && S.VERSION.farsight.commit) || (meta.farsight && meta.farsight.commit) || none,
+    )
     .replace('{n}', meta.sync != null ? String(meta.sync) : none);
   const repos = knownRepos();
-  const picker = repos.length > 1
-    ? '<div class="ch-repos"><span class="hud-label">' + term('changes.repo') + '</span>'
-      + repos.map((r) => '<button class="ch-repo' + (r === ST.repo ? ' on' : '') + '" onclick="chSetRepo(' + jsArg(r) + ')">' + esc(r) + '</button>').join('')
-      + '</div>'
-    : '<p class="set-note">' + term('changes.repo') + ': <b>' + esc(ST.repo || none) + '</b></p>';
+  const picker =
+    repos.length > 1
+      ? '<div class="ch-repos"><span class="hud-label">' +
+        term('changes.repo') +
+        '</span>' +
+        repos
+          .map(
+            (r) =>
+              '<button class="ch-repo' +
+              (r === ST.repo ? ' on' : '') +
+              '" onclick="chSetRepo(' +
+              jsArg(r) +
+              ')">' +
+              esc(r) +
+              '</button>',
+          )
+          .join('') +
+        '</div>'
+      : '<p class="set-note">' + term('changes.repo') + ': <b>' + esc(ST.repo || none) + '</b></p>';
   // the business lens reads which sync; the commit and the build are a developer's
-  const idLine = currentLens() === 'business' ? t('tip.sync').replace('{n}', meta.sync != null ? String(meta.sync) : none) : ident;
-  return '<h1>' + esc(t('nav.changes')) + '</h1>'
-    + '<p class="sub">' + esc(t('changes.sub')) + '</p>'
-    + '<p class="ch-id mono">' + esc(idLine) + '</p>'
-    + picker;
+  const idLine =
+    currentLens() === 'business' ? t('tip.sync').replace('{n}', meta.sync != null ? String(meta.sync) : none) : ident;
+  return (
+    '<h1>' +
+    esc(t('nav.changes')) +
+    '</h1>' +
+    '<p class="sub">' +
+    esc(t('changes.sub')) +
+    '</p>' +
+    '<p class="ch-id mono">' +
+    esc(idLine) +
+    '</p>' +
+    picker
+  );
 }
 
 /** Switch repository: the spine and the narrative are per repository (H3b).
  * @group Changes surface */
 function chSetRepo(repo) {
-  try { localStorage.setItem('fs-changes-repo', repo); } catch (err) {}
+  try {
+    localStorage.setItem('fs-changes-repo', repo);
+  } catch (err) {}
   mountChanges({ ...(ST.route || {}), repo }, document.getElementById('surface'));
 }
 
 /** Draw every spine row rather than the newest page of them.
  * @group Changes surface */
-function chAllRows() { ST.allRows = true; draw(); }
+function chAllRows() {
+  ST.allRows = true;
+  draw();
+}
 
 /** Draw every measured change rather than a page of each severity.
  * @group Changes surface */
-function chAllChanges() { ST.allChanges = true; draw(); }
+function chAllChanges() {
+  ST.allChanges = true;
+  draw();
+}
 
 /** Re-run the fetches after a failure — the error state's own button.
  * @group Changes surface */
-function chRetry() { mountChanges(ST.route || { param: null, range: null, repo: ST.repo }, document.getElementById('surface')); }
+function chRetry() {
+  mountChanges(ST.route || { param: null, range: null, repo: ST.repo }, document.getElementById('surface'));
+}
 
 // ── render ──────────────────────────────────────────────────────────────────
 
@@ -271,19 +366,35 @@ function draw() {
   const body = document.getElementById('ch-body');
   if (!body) return;
   if (ST.error) {
-    body.innerHTML = '<p class="set-note warn">' + esc(t('sys.historyFailed'))
-      + (ST.error.text ? ' ' + esc(ST.error.text) : '')
-      + (ST.error.status ? ' · ' + esc(t('sys.httpStatus').replace('{status}', ST.error.status)) : '') + '</p>'
-      + '<button class="rel" onclick="chRetry()">' + esc(t('journey.retry')) + '</button>';
+    body.innerHTML =
+      '<p class="set-note warn">' +
+      esc(t('sys.historyFailed')) +
+      (ST.error.text ? ' ' + esc(ST.error.text) : '') +
+      (ST.error.status ? ' · ' + esc(t('sys.httpStatus').replace('{status}', ST.error.status)) : '') +
+      '</p>' +
+      '<button class="rel" onclick="chRetry()">' +
+      esc(t('journey.retry')) +
+      '</button>';
     return;
   }
-  if (!ST.history) { body.innerHTML = '<p class="set-note">' + esc(t('portfolio.loading')) + '</p>'; return; }
+  if (!ST.history) {
+    body.innerHTML = '<p class="set-note">' + esc(t('portfolio.loading')) + '</p>';
+    return;
+  }
   // no sync on this source's spine: say what the page is for, why it is empty and what fills it (proposal 9).
   // The answer's rows are `spine` — reading a field it never has drew the empty sentence above a full history
   // (swarm round 3, 8 of 8 roles)
-  const empty = !((ST.history.spine || []).length) ? emptyHtml('changes') : '';
-  body.innerHTML = empty + rangeHtml() + storylineRowsHtml() + spineHtml() + measuredHtml() + narrativeHtml()
-    + '<p class="set-note"><a href="#/grammar">' + esc(t('journeys.startGrammar')) + '</a></p>';
+  const empty = !(ST.history.spine || []).length ? emptyHtml('changes') : '';
+  body.innerHTML =
+    empty +
+    rangeHtml() +
+    storylineRowsHtml() +
+    spineHtml() +
+    measuredHtml() +
+    narrativeHtml() +
+    '<p class="set-note"><a href="#/grammar">' +
+    esc(t('journeys.startGrammar')) +
+    '</a></p>';
 }
 
 /**
@@ -296,14 +407,22 @@ function rangeHtml() {
   const r = ST.resolved;
   const param = ST.route && ST.route.param;
   if (ST.unreadable) {
-    return '<p class="set-note warn ch-range">' + esc(t('changes.rangeUnreadable'))
-      + ' <span class="mono">' + esc(param) + '</span></p>';
+    return (
+      '<p class="set-note warn ch-range">' +
+      esc(t('changes.rangeUnreadable')) +
+      ' <span class="mono">' +
+      esc(param) +
+      '</span></p>'
+    );
   }
   if (!r) return '';
-  return '<p class="ch-range">' + esc(r.text)
-    + (r.via ? ' <span class="ch-via">' + esc(r.via) + '</span>' : '')
-    + (r.why || []).map((w) => '<span class="ch-why warn">' + esc(w) + '</span>').join('')
-    + '</p>';
+  return (
+    '<p class="ch-range">' +
+    esc(r.text) +
+    (r.via ? ' <span class="ch-via">' + esc(r.via) + '</span>' : '') +
+    (r.why || []).map((w) => '<span class="ch-why warn">' + esc(w) + '</span>').join('') +
+    '</p>'
+  );
 }
 
 /**
@@ -315,10 +434,30 @@ function storylineRowsHtml() {
   const r = ST.resolved;
   const list = ST.storylines || [];
   if (!r || !r.baseSync || !r.headSync || !list.length) return '';
-  return '<div class="ch-stories"><span class="hud-label"' + tipAttrs({ key: 'changes.storylines.title', noFocus: true }) + '>' + esc(t('changes.storylines.title')) + '</span> '
-    + list.map((s) => '<a class="rel" href="#/map?storyline=' + encodeURIComponent(s.id) + '&compare=' + r.baseSync + '..' + r.headSync + '"'
-      + tipAttrs({ key: 'changes.storylines.open', noFocus: true }) + '>' + esc(t('changes.storylines.open').replace('{name}', s.name)) + '</a>').join(' · ')
-    + '</div>';
+  return (
+    '<div class="ch-stories"><span class="hud-label"' +
+    tipAttrs({ key: 'changes.storylines.title', noFocus: true }) +
+    '>' +
+    esc(t('changes.storylines.title')) +
+    '</span> ' +
+    list
+      .map(
+        (s) =>
+          '<a class="rel" href="#/map?storyline=' +
+          encodeURIComponent(s.id) +
+          '&compare=' +
+          r.baseSync +
+          '..' +
+          r.headSync +
+          '"' +
+          tipAttrs({ key: 'changes.storylines.open', noFocus: true }) +
+          '>' +
+          esc(t('changes.storylines.open').replace('{name}', s.name)) +
+          '</a>',
+      )
+      .join(' · ') +
+    '</div>'
+  );
 }
 
 /**
@@ -345,7 +484,9 @@ function whyNot(r) {
  */
 function spineHtml() {
   const h = ST.history;
-  const notes = (h.notes || []).map((n) => (NOTE_OPEN[n.level] || NOTE_OPEN.note) + esc(said(n.text)) + '</p>').join('');
+  const notes = (h.notes || [])
+    .map((n) => (NOTE_OPEN[n.level] || NOTE_OPEN.note) + esc(said(n.text)) + '</p>')
+    .join('');
   const bound = h.bound === 'exact' ? 'changes.bound.exact' : 'changes.bound.floor';
   const rows = h.spine || [];
   // runs of re-indexed syncs fold first, then the page is cut: a folded run is
@@ -354,18 +495,42 @@ function spineHtml() {
   const visible = ST.allRows ? items : items.slice(0, SPINE_ROWS);
   const shownN = visible.reduce((a, x) => a + (x.fold ? x.rows.length : 1), 0);
   const more = rows.length - shownN;
-  return '<div class="set-sec"><h2>' + esc(t('changes.spine')) + '</h2>'
-    + notes
-    + '<p class="set-note">' + term(bound) + ' · ' + term('changes.notASum') + '</p>'
-    + '<table class="src-table ch-table"><thead><tr>'
-    + '<th>' + esc(t('chrome.sync')) + '</th><th>' + esc(t('changes.col.when')) + '</th>'
-    + '<th>' + esc(t('changes.commit')) + '</th><th>' + esc(t('changes.col.note')) + '</th>'
-    + '</tr></thead><tbody>' + visible.map((r) => (r.fold ? runRowHtml(r) : spineRowHtml(r.row))).join('') + '</tbody></table>'
-    + (more > 0
-      ? '<button class="rel ch-more" onclick="chAllRows()"' + plainTip(shownN, 'chrome.shownOf', 'surf.scope.spine', '/api/history', null, null, { t: rows.length, hidden: more }) + '>'
-        + esc(t('chrome.shownOf').replace('{n}', shownN).replace('{t}', rows.length).replace('{hidden}', more)) + '</button>'
-      : '')
-    + '</div>';
+  return (
+    '<div class="set-sec"><h2>' +
+    esc(t('changes.spine')) +
+    '</h2>' +
+    notes +
+    '<p class="set-note">' +
+    term(bound) +
+    ' · ' +
+    term('changes.notASum') +
+    '</p>' +
+    '<table class="src-table ch-table"><thead><tr>' +
+    '<th>' +
+    esc(t('chrome.sync')) +
+    '</th><th>' +
+    esc(t('changes.col.when')) +
+    '</th>' +
+    '<th>' +
+    esc(t('changes.commit')) +
+    '</th><th>' +
+    esc(t('changes.col.note')) +
+    '</th>' +
+    '</tr></thead><tbody>' +
+    visible.map((r) => (r.fold ? runRowHtml(r) : spineRowHtml(r.row))).join('') +
+    '</tbody></table>' +
+    (more > 0
+      ? '<button class="rel ch-more" onclick="chAllRows()"' +
+        plainTip(shownN, 'chrome.shownOf', 'surf.scope.spine', '/api/history', null, null, {
+          t: rows.length,
+          hidden: more,
+        }) +
+        '>' +
+        esc(t('chrome.shownOf').replace('{n}', shownN).replace('{t}', rows.length).replace('{hidden}', more)) +
+        '</button>'
+      : '') +
+    '</div>'
+  );
 }
 
 /**
@@ -399,12 +564,21 @@ function foldRuns(rows) {
 function runRowHtml(f) {
   const first = f.rows[f.rows.length - 1].sync;
   const last = f.rows[0].sync;
-  return '<tr class="ch-run"><td colspan="4"><button class="rel ch-more" onclick="chOpenRun(' + jsArg(f.key) + ')"'
-    + plainTip(f.rows.length, 'surf.changes.reindexRun', 'surf.scope.spine', '/api/history', null, 'changes.reindexed') + '>'
-    + esc(t('surf.changes.reindexRun').replace('{n}', f.rows.length).replace('{a}', first).replace('{b}', last)) + '</button></td></tr>';
+  return (
+    '<tr class="ch-run"><td colspan="4"><button class="rel ch-more" onclick="chOpenRun(' +
+    jsArg(f.key) +
+    ')"' +
+    plainTip(f.rows.length, 'surf.changes.reindexRun', 'surf.scope.spine', '/api/history', null, 'changes.reindexed') +
+    '>' +
+    esc(t('surf.changes.reindexRun').replace('{n}', f.rows.length).replace('{a}', first).replace('{b}', last)) +
+    '</button></td></tr>'
+  );
 }
 /** Open one folded run of re-indexed syncs. @group Changes surface */
-function chOpenRun(key) { ST.openRuns.add(String(key)); draw(); }
+function chOpenRun(key) {
+  ST.openRuns.add(String(key));
+  draw();
+}
 
 /** One word per commit state — the field the core says to switch on. */
 const STATE_WORD = {
@@ -433,46 +607,100 @@ function spineRowHtml(row) {
   const served = (S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) === row.sync;
   const prev = ((ST.history && ST.history.spine) || []).find((x) => x.sync < row.sync);
   const link = prev
-    ? '<a href="#/changes/' + prev.sync + '...' + row.sync + '?repo=' + encodeURIComponent(ST.repo) + '">' + row.sync + '</a>'
+    ? '<a href="#/changes/' +
+      prev.sync +
+      '...' +
+      row.sync +
+      '?repo=' +
+      encodeURIComponent(ST.repo) +
+      '">' +
+      row.sync +
+      '</a>'
     : String(row.sync);
   const stateKey = STATE_WORD[row.commitState] || 'changes.state.noCommit';
   // a commit hash is a developer's handle on the fact; the business lens reads the fact
-  const commitCell = row.commit && business
-    ? '<span' + defAttrs(stateKey) + '>' + esc(t(stateKey)) + '</span>'
-    : row.commit
-    ? '<span class="mono"' + tipAttrs({ text: row.commit }) + '>' + esc(row.commit.slice(0, 7)) + '</span>'
-      + '<span class="pf-sub">' + term(row.commitFrom === 'workspace' ? 'changes.from.workspace' : 'changes.from.source') + '</span>'
-    : row.commitUnverified
-      ? '<span class="mono"' + tipAttrs({ text: row.commitUnverified }) + '>' + esc(business ? '' : row.commitUnverified.slice(0, 7)) + '</span>'
-        + '<span class="pf-sub warn">' + term('changes.unverified') + '</span>'
-      : '<span class="dim">' + symWord('absent', stateKey) + '</span>';
+  const commitCell =
+    row.commit && business
+      ? '<span' + defAttrs(stateKey) + '>' + esc(t(stateKey)) + '</span>'
+      : row.commit
+        ? '<span class="mono"' +
+          tipAttrs({ text: row.commit }) +
+          '>' +
+          esc(row.commit.slice(0, 7)) +
+          '</span>' +
+          '<span class="pf-sub">' +
+          term(row.commitFrom === 'workspace' ? 'changes.from.workspace' : 'changes.from.source') +
+          '</span>'
+        : row.commitUnverified
+          ? '<span class="mono"' +
+            tipAttrs({ text: row.commitUnverified }) +
+            '>' +
+            esc(business ? '' : row.commitUnverified.slice(0, 7)) +
+            '</span>' +
+            '<span class="pf-sub warn">' +
+            term('changes.unverified') +
+            '</span>'
+          : '<span class="dim">' + symWord('absent', stateKey) + '</span>';
   // the register's word where the catalog has one, the core's sentence otherwise.
   // An unread history is the one case where the sentence is **not** repeated per
   // row: it carries the remedy, the section states it once above the table, and
   // fifty-three copies of it would bury every other row's note.
   // same commit, files differ: say the working tree moved — never *no new commits* alone,
   // which let a test run read "the code changed after this run" beside a still spine
-  const note = row.note === 'tree-changed' ? '<span' + defAttrs('changes.treeChanged') + '>' + esc(t('changes.treeChanged')) + '</span>'
-    : row.note === 'reindexed' ? esc(t('changes.reindexed'))
-    : row.note === 'history-unread' ? term('changes.state.historyUnread')
-      : esc(said(row.noteText || ''));
-  const sweptLine = row.swept != null
-    ? '<span class="pf-sub">' + term('changes.swept') + ': <span' + plainTip(row.swept, 'changes.swept', 'surf.scope.sync', '/api/history') + '>' + row.swept + '</span>'
-      + (row.unindexed ? ' · <span' + plainTip(row.unindexed, 'journey.absent.notIndexed', 'surf.scope.sync', '/api/history') + '>' + row.unindexed + '</span> ' + term('journey.absent.notIndexed') : '') + '</span>'
-    : '';
+  const note =
+    row.note === 'tree-changed'
+      ? '<span' + defAttrs('changes.treeChanged') + '>' + esc(t('changes.treeChanged')) + '</span>'
+      : row.note === 'reindexed'
+        ? esc(t('changes.reindexed'))
+        : row.note === 'history-unread'
+          ? term('changes.state.historyUnread')
+          : esc(said(row.noteText || ''));
+  const sweptLine =
+    row.swept != null
+      ? '<span class="pf-sub">' +
+        term('changes.swept') +
+        ': <span' +
+        plainTip(row.swept, 'changes.swept', 'surf.scope.sync', '/api/history') +
+        '>' +
+        row.swept +
+        '</span>' +
+        (row.unindexed
+          ? ' · <span' +
+            plainTip(row.unindexed, 'journey.absent.notIndexed', 'surf.scope.sync', '/api/history') +
+            '>' +
+            row.unindexed +
+            '</span> ' +
+            term('journey.absent.notIndexed')
+          : '') +
+        '</span>'
+      : '';
   // `--as-of sync:N` is how an older snapshot is actually served today. The hash
   // grammar carries a sync but nothing re-renders from it (shell.js parseRoute),
   // so the command is offered to the register that can run it and a link that
   // would silently show the current graph is not drawn at all.
   const asOf = code
-    // str:ok — a CLI flag printed as data; its label is t('changes.asOf') on hover
-    ? '<span class="pf-sub mono"' + defAttrs('changes.asOf') + '>--as-of sync:' + row.sync + '</span>'
+    ? // str:ok — a CLI flag printed as data; its label is t('changes.asOf') on hover
+      '<span class="pf-sub mono"' + defAttrs('changes.asOf') + '>--as-of sync:' + row.sync + '</span>'
     : '';
-  return '<tr' + (served ? ' class="pinned"' : '') + '><td>' + link
-    + (served ? '<span class="pf-pin">' + term('changes.servedHere') + '</span>' : '') + asOf + '</td>'
-    + '<td class="mono when">' + esc(String(row.at).replace('T', ' ').slice(0, 16)) + '</td>'
-    + '<td>' + commitCell + '</td>'
-    + '<td class="note">' + note + sweptLine + '</td></tr>';
+  return (
+    '<tr' +
+    (served ? ' class="pinned"' : '') +
+    '><td>' +
+    link +
+    (served ? '<span class="pf-pin">' + term('changes.servedHere') + '</span>' : '') +
+    asOf +
+    '</td>' +
+    '<td class="mono when">' +
+    esc(String(row.at).replace('T', ' ').slice(0, 16)) +
+    '</td>' +
+    '<td>' +
+    commitCell +
+    '</td>' +
+    '<td class="note">' +
+    note +
+    sweptLine +
+    '</td></tr>'
+  );
 }
 
 // ── B · what changed ────────────────────────────────────────────────────────
@@ -490,8 +718,13 @@ function spineRowHtml(row) {
  */
 function measuredHtml() {
   const r = ST.resolved;
-  const head = '<div class="set-sec"><h2>' + esc(t('changes.measured')) + '</h2>'
-    + '<p class="set-note">' + term('changes.sideBySide') + '</p>';
+  const head =
+    '<div class="set-sec"><h2>' +
+    esc(t('changes.measured')) +
+    '</h2>' +
+    '<p class="set-note">' +
+    term('changes.sideBySide') +
+    '</p>';
   if (ST.unreadable) return head + '<p class="set-note warn">' + esc(t('changes.rangeUnreadable')) + '</p></div>';
   if (!r || !r.baseSync) return head + '<p class="set-note warn">' + esc(whyNot(r)) + '</p></div>';
   if (!ST.changes) return head + '<p class="set-note">' + esc(t('portfolio.loading')) + '</p></div>';
@@ -505,34 +738,84 @@ function measuredHtml() {
   // the count per kind is the contract's own vocabulary — `journey_changed`,
   // `record_added` — so it belongs to the registers that read contracts (§4-B).
   // The business register gets the sentences and the severity they sit under.
-  const countsLine = lens === 'business'
-    ? (doc.changes || []).length ? '' : '<p class="set-note">' + term('changes.nothingMeasured') + '</p>'
-    : kinds.length
-      ? '<p class="ch-counts">' + kinds.map((k) => '<span class="ch-kind"' + plainTip(counts[k], 'surf.changes.kindCount', 'surf.scope.range', '/api/changes', null, 'changes.measured', { kind: k }) + '><span class="mono">' + esc(k) + '</span> ' + counts[k] + '</span>').join('') + '</p>'
-      : '<p class="set-note">' + term('changes.nothingMeasured') + '</p>';
+  const countsLine =
+    lens === 'business'
+      ? (doc.changes || []).length
+        ? ''
+        : '<p class="set-note">' + term('changes.nothingMeasured') + '</p>'
+      : kinds.length
+        ? '<p class="ch-counts">' +
+          kinds
+            .map(
+              (k) =>
+                '<span class="ch-kind"' +
+                plainTip(
+                  counts[k],
+                  'surf.changes.kindCount',
+                  'surf.scope.range',
+                  '/api/changes',
+                  null,
+                  'changes.measured',
+                  { kind: k },
+                ) +
+                '><span class="mono">' +
+                esc(k) +
+                '</span> ' +
+                counts[k] +
+                '</span>',
+            )
+            .join('') +
+          '</p>'
+        : '<p class="set-note">' + term('changes.nothingMeasured') + '</p>';
   const cut = doc.truncated ? '<p class="set-note warn">' + term('changes.listCut') + '</p>' : '';
-  const left = hide.some((k) => counts[k] > 0) ? '<p class="set-note">' + term('changes.hiddenInBusiness') + '</p>' : '';
-  const groups = ['breaking', 'notable', 'info'].map((sev) => {
-    const list = changes.filter((c) => c.severity === sev);
-    if (!list.length) return '';
-    // a page of each severity, the rest behind their own count: sixty lines of one
-    // kind buries the two breaking ones, and the counts above are already complete
-    const shown = ST.allChanges ? list : list.slice(0, CHANGE_ROWS);
-    const more = list.length - shown.length;
-    return '<h3 class="gb-group hud-label">' + term('changes.sev.' + sev) + '</h3>'
-      + '<ul class="ch-list">' + shown.map(changeHtml).join('') + '</ul>'
-      + (more > 0
-        ? '<button class="rel ch-more" onclick="chAllChanges()"' + plainTip(shown.length, 'chrome.shownOf', 'surf.scope.range', '/api/changes', null, null, { t: list.length, hidden: more }) + '>'
-          + esc(t('chrome.shownOf').replace('{n}', shown.length).replace('{t}', list.length).replace('{hidden}', more)) + '</button>'
-        : '');
-  }).join('');
+  const left = hide.some((k) => counts[k] > 0)
+    ? '<p class="set-note">' + term('changes.hiddenInBusiness') + '</p>'
+    : '';
+  const groups = ['breaking', 'notable', 'info']
+    .map((sev) => {
+      const list = changes.filter((c) => c.severity === sev);
+      if (!list.length) return '';
+      // a page of each severity, the rest behind their own count: sixty lines of one
+      // kind buries the two breaking ones, and the counts above are already complete
+      const shown = ST.allChanges ? list : list.slice(0, CHANGE_ROWS);
+      const more = list.length - shown.length;
+      return (
+        '<h3 class="gb-group hud-label">' +
+        term('changes.sev.' + sev) +
+        '</h3>' +
+        '<ul class="ch-list">' +
+        shown.map(changeHtml).join('') +
+        '</ul>' +
+        (more > 0
+          ? '<button class="rel ch-more" onclick="chAllChanges()"' +
+            plainTip(shown.length, 'chrome.shownOf', 'surf.scope.range', '/api/changes', null, null, {
+              t: list.length,
+              hidden: more,
+            }) +
+            '>' +
+            esc(
+              t('chrome.shownOf').replace('{n}', shown.length).replace('{t}', list.length).replace('{hidden}', more),
+            ) +
+            '</button>'
+          : '')
+      );
+    })
+    .join('');
   return head + countsLine + cut + left + groups + (lens === 'code' ? attributionNotesHtml() : '') + '</div>';
 }
 
 /** Subject kind → the one glyph the grammar licenses for it. */
 const GLYPH_OF = {
-  route: 'start', page: 'screen', component: 'screen', table: 'record', queue: 'message',
-  guard: 'gate', rule: 'shield', flow: 'start', test: 'automation', external: 'external',
+  route: 'start',
+  page: 'screen',
+  component: 'screen',
+  table: 'record',
+  queue: 'message',
+  guard: 'gate',
+  rule: 'shield',
+  flow: 'start',
+  test: 'automation',
+  external: 'external',
 };
 
 /**
@@ -549,22 +832,41 @@ const GLYPH_OF = {
 function changeHtml(c) {
   const lens = currentLens();
   const sentence = (ST.changes.sentences || {})[c.id] || c.kind;
-  let html = '<li class="ch-change sev-' + esc(c.severity) + '">'
-    + sym(GLYPH_OF[c.subject && c.subject.kind] || 'step') + ' ' + esc(said(sentence));
+  let html =
+    '<li class="ch-change sev-' +
+    esc(c.severity) +
+    '">' +
+    sym(GLYPH_OF[c.subject && c.subject.kind] || 'step') +
+    ' ' +
+    esc(said(sentence));
   if (lens !== 'business') {
-    html += '<span class="ch-meta mono">' + esc(c.confidence) + (c.technique ? ' · ' + esc(c.technique) : '') + '</span>';
+    html +=
+      '<span class="ch-meta mono">' + esc(c.confidence) + (c.technique ? ' · ' + esc(c.technique) : '') + '</span>';
   }
   if (lens === 'code' && c.loc) {
-    html += '<span class="pf-sub mono">' + esc(c.loc.path) + ':' + c.loc.line + ' ' + vsl(c.loc.repo, c.loc.path, c.loc.line) + '</span>';
+    html +=
+      '<span class="pf-sub mono">' +
+      esc(c.loc.path) +
+      ':' +
+      c.loc.line +
+      ' ' +
+      vsl(c.loc.repo, c.loc.path, c.loc.line) +
+      '</span>';
   }
   if (lens === 'code' && c.attribution) {
     const shas = c.attribution.commits || [];
-    html += '<span class="pf-sub">' + term('changes.attribution') + ' · ' + term('changes.fileLevel')
-      + (shas.length
-        ? ' <span class="mono">' + shas.map((s) => esc(s.slice(0, 7))).join(' ') + '</span>'
-          + (c.attribution.unindexed ? ' · ' + c.attribution.unindexed + ' ' + esc(t('journey.absent.notIndexed')) : '')
-        : ' · ' + esc(t('journey.absent.noneIndexed')))
-      + '</span>';
+    html +=
+      '<span class="pf-sub">' +
+      term('changes.attribution') +
+      ' · ' +
+      term('changes.fileLevel') +
+      (shas.length
+        ? ' <span class="mono">' +
+          shas.map((s) => esc(s.slice(0, 7))).join(' ') +
+          '</span>' +
+          (c.attribution.unindexed ? ' · ' + c.attribution.unindexed + ' ' + esc(t('journey.absent.notIndexed')) : '')
+        : ' · ' + esc(t('journey.absent.noneIndexed'))) +
+      '</span>';
   }
   return html + '</li>';
 }
@@ -579,8 +881,12 @@ function changeHtml(c) {
 function attributionNotesHtml() {
   const a = ST.changes.attribution;
   if (!a) return '';
-  return '<p class="set-note">' + esc(said(a.header)) + '</p>'
-    + (a.notes || []).map((n) => (NOTE_OPEN[n.level] || NOTE_OPEN.note) + esc(n.text) + '</p>').join('');
+  return (
+    '<p class="set-note">' +
+    esc(said(a.header)) +
+    '</p>' +
+    (a.notes || []).map((n) => (NOTE_OPEN[n.level] || NOTE_OPEN.note) + esc(n.text) + '</p>').join('')
+  );
 }
 
 // ── C · who and when ────────────────────────────────────────────────────────
@@ -602,7 +908,9 @@ function narrativeHtml() {
   if (!ST.narrative) return head + '<p class="set-note">' + esc(t('portfolio.loading')) + '</p></div>';
   const n = ST.narrative;
   const commits = n.commits || [];
-  const notes = (n.notes || []).map((x) => (NOTE_OPEN[x.level] || NOTE_OPEN.note) + esc(said(x.text)) + '</p>').join('');
+  const notes = (n.notes || [])
+    .map((x) => (NOTE_OPEN[x.level] || NOTE_OPEN.note) + esc(said(x.text)) + '</p>')
+    .join('');
   if (!commits.length) {
     // why there is nothing here is the range's own fact: a re-index swept
     // nothing, an unread history cannot say what it swept. Both arrive as
@@ -611,16 +919,40 @@ function narrativeHtml() {
   }
   const people = new Set(commits.map((c) => c.email || c.author).filter(Boolean));
   const since = String(commits[commits.length - 1].at).slice(0, 10);
-  const who = '<p class="ch-who"' + plainTip(commits.length, 'changes.byWhom', 'surf.scope.range', '/api/history', null, null, { commits: commits.length, people: people.size, date: since }) + '>' + esc(t('changes.byWhom')
-    .replace('{commits}', commits.length).replace('{people}', people.size).replace('{date}', since)) + '</p>';
+  const who =
+    '<p class="ch-who"' +
+    plainTip(commits.length, 'changes.byWhom', 'surf.scope.range', '/api/history', null, null, {
+      commits: commits.length,
+      people: people.size,
+      date: since,
+    }) +
+    '>' +
+    esc(
+      t('changes.byWhom')
+        .replace('{commits}', commits.length)
+        .replace('{people}', people.size)
+        .replace('{date}', since),
+    ) +
+    '</p>';
   const notIndexed = n.unindexed
-    ? '<p class="set-note warn"><span' + plainTip(n.unindexed, 'journey.absent.notIndexed', 'surf.scope.range', '/api/history') + '>' + n.unindexed + '</span> ' + term('journey.absent.notIndexed') + '</p>' : '';
+    ? '<p class="set-note warn"><span' +
+      plainTip(n.unindexed, 'journey.absent.notIndexed', 'surf.scope.range', '/api/history') +
+      '>' +
+      n.unindexed +
+      '</span> ' +
+      term('journey.absent.notIndexed') +
+      '</p>'
+    : '';
   const f = n.files;
   const files = f
-    ? '<p class="set-note"><span' + plainTip(f.touched, 'changes.filesTouched', 'surf.scope.range', '/api/history') + '>' + esc(t('changes.filesTouched').replace('{n}', f.touched)) + '</span>'
-      + (f.renamed ? ' · ' + term('changes.rename').replace('{n}', f.renamed) : '')
-      + (f.identical ? ' · ' + esc(t('changes.renameIdentical').replace('{n}', f.identical)) : '')
-      + '</p>'
+    ? '<p class="set-note"><span' +
+      plainTip(f.touched, 'changes.filesTouched', 'surf.scope.range', '/api/history') +
+      '>' +
+      esc(t('changes.filesTouched').replace('{n}', f.touched)) +
+      '</span>' +
+      (f.renamed ? ' · ' + term('changes.rename').replace('{n}', f.renamed) : '') +
+      (f.identical ? ' · ' + esc(t('changes.renameIdentical').replace('{n}', f.identical)) : '') +
+      '</p>'
     : '';
   return head + notes + who + notIndexed + files + touchedHtml(commits) + commitListHtml(commits) + '</div>';
 }
@@ -642,22 +974,50 @@ function touchedHtml(commits) {
   }
   if (!anyField) return ''; // no history read for any repository — the notes say so
   const n = commits.filter((c) => attributed.has(c.sha)).length;
-  return '<p class="set-note"><span' + plainTip(n, 'changes.touchedFiles', 'surf.scope.range', '/api/history') + '>' + esc(t('changes.touchedFiles').replace('{n}', n)) + '</span> · ' + term('changes.fileLevel') + '</p>';
+  return (
+    '<p class="set-note"><span' +
+    plainTip(n, 'changes.touchedFiles', 'surf.scope.range', '/api/history') +
+    '>' +
+    esc(t('changes.touchedFiles').replace('{n}', n)) +
+    '</span> · ' +
+    term('changes.fileLevel') +
+    '</p>'
+  );
 }
 
 /** The commits themselves — the sha only in the register that has a use for it.
  * @group Changes surface */
 function commitListHtml(commits) {
   const code = currentLens() === 'code';
-  return '<table class="src-table ch-table"><tbody>' + commits.map((c) => '<tr>'
-    + (code ? '<td class="mono"' + tipAttrs({ text: c.sha }) + '>' + esc(c.sha.slice(0, 7)) + '</td>' : '')
-    + '<td class="mono when">' + esc(String(c.at).replace('T', ' ').slice(0, 16)) + '</td>'
-    + '<td>' + esc(c.author || '') + '</td>'
-    + '<td class="note">' + esc(currentLens() === 'business' ? commitWords(c.subject) : String(c.subject || ''))
-    + (c.indexed ? '' : '<span class="pf-sub dim">' + symWord('absent', 'journey.absent.notIndexed') + '</span>')
-    // a co-author trailer named an AI assistant (round 2026-10-10, proposal 9) — never a session link
-    + (c.agent ? ' <span class="ch-agent"' + defAttrs('history.agentMade') + '>' + esc(t('history.agentMade').replace('{name}', c.agent)) + '</span>' : '')
-    + '</td></tr>').join('') + '</tbody></table>';
+  return (
+    '<table class="src-table ch-table"><tbody>' +
+    commits
+      .map(
+        (c) =>
+          '<tr>' +
+          (code ? '<td class="mono"' + tipAttrs({ text: c.sha }) + '>' + esc(c.sha.slice(0, 7)) + '</td>' : '') +
+          '<td class="mono when">' +
+          esc(String(c.at).replace('T', ' ').slice(0, 16)) +
+          '</td>' +
+          '<td>' +
+          esc(c.author || '') +
+          '</td>' +
+          '<td class="note">' +
+          esc(currentLens() === 'business' ? commitWords(c.subject) : String(c.subject || '')) +
+          (c.indexed ? '' : '<span class="pf-sub dim">' + symWord('absent', 'journey.absent.notIndexed') + '</span>') +
+          // a co-author trailer named an AI assistant (round 2026-10-10, proposal 9) — never a session link
+          (c.agent
+            ? ' <span class="ch-agent"' +
+              defAttrs('history.agentMade') +
+              '>' +
+              esc(t('history.agentMade').replace('{name}', c.agent)) +
+              '</span>'
+            : '') +
+          '</td></tr>',
+      )
+      .join('') +
+    '</tbody></table>'
+  );
 }
 
 expose({ mountChanges, chSetRepo, chAllRows, chAllChanges, chRetry, chOpenRun });

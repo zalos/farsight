@@ -17,7 +17,11 @@ async function freePort(): Promise<number> {
   return new Promise((res, rej) => {
     const s = createServer();
     s.once('error', rej);
-    s.listen(0, '127.0.0.1', () => { const a = s.address(); const p = typeof a === 'object' && a ? a.port : 0; s.close(() => res(p)); });
+    s.listen(0, '127.0.0.1', () => {
+      const a = s.address();
+      const p = typeof a === 'object' && a ? a.port : 0;
+      s.close(() => res(p));
+    });
   });
 }
 
@@ -29,7 +33,11 @@ test.beforeAll(async () => {
   server = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(port)], { cwd: ws.dir, stdio: 'ignore' });
   base = `http://localhost:${port}/`;
   for (let i = 0; i < 100; i++) {
-    try { if ((await fetch(base + 'api/version')).ok) return; } catch { /* not yet */ }
+    try {
+      if ((await fetch(base + 'api/version')).ok) return;
+    } catch {
+      /* not yet */
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error('the projects workspace server never answered');
@@ -47,7 +55,9 @@ const go = async (page: Page, hash: string) => {
 const bar = (page: Page) => page.locator('[data-mp="cm-pick-proj-bar"]');
 const titles = (page: Page) => page.locator('.cm-box .gname').allTextContents();
 
-test('the Projects chip opens a picker; typing narrows; two picks filter the map and write ?project=', async ({ page }) => {
+test('the Projects chip opens a picker; typing narrows; two picks filter the map and write ?project=', async ({
+  page,
+}) => {
   await go(page, '#/codemap?group=project&lens=hybrid');
   const btn = page.locator('#cm-projbtn');
   await expect(btn).toHaveText(/^Projects/);
@@ -115,10 +125,21 @@ test('Focus on an application draws it and the projects it depends on', async ({
   await expect(page.locator('#cm-projmenu')).not.toHaveClass(/open/);
   await expect(page.locator('#cm-viewchip')).toContainText('billing-web');
   const boxes = (await titles(page)).filter((x) => x !== 'third-party packages').sort();
-  expect(boxes).toEqual(['@nxw/shared-ui', 'billing-data-access', 'billing-feature-invoices', 'billing-ui', 'billing-web', 'shared-util']);
+  expect(boxes).toEqual([
+    '@nxw/shared-ui',
+    'billing-data-access',
+    'billing-feature-invoices',
+    'billing-ui',
+    'billing-web',
+    'shared-util',
+  ]);
   await expect(page.locator('.cm-elabel').first()).toBeVisible();
   // the application's column is the first: its box stands left of every other project's
-  const xs = await page.locator('.cm-box.cm-project').evaluateAll((els) => els.map((e) => ({ name: e.querySelector('.gname')?.textContent, x: (e as HTMLElement).offsetLeft })));
+  const xs = await page
+    .locator('.cm-box.cm-project')
+    .evaluateAll((els) =>
+      els.map((e) => ({ name: e.querySelector('.gname')?.textContent, x: (e as HTMLElement).offsetLeft })),
+    );
   const root = xs.find((b) => b.name === 'billing-web')!;
   for (const b of xs) if (b.name !== 'billing-web') expect(b.x).toBeGreaterThan(root.x);
 });

@@ -91,16 +91,26 @@ function keyOf(el) {
 /** Find the element a key names again, after the surface it lived on was redrawn. */
 function findByKey(k) {
   if (!k) return null;
-  if (k.id) { const byId = document.getElementById(k.id); if (byId) return byId; }
+  if (k.id) {
+    const byId = document.getElementById(k.id);
+    if (byId) return byId;
+  }
   const all = [...document.querySelectorAll(k.tag.toLowerCase())];
-  const visible = (n) => { const r = n.getBoundingClientRect(); return (r.width > 0 || r.height > 0) && !n.closest('[inert]'); };
-  if (k.click) { const hit = all.find((n) => n.getAttribute('onclick') === k.click && visible(n)); if (hit) return hit; }
+  const visible = (n) => {
+    const r = n.getBoundingClientRect();
+    return (r.width > 0 || r.height > 0) && !n.closest('[inert]');
+  };
+  if (k.click) {
+    const hit = all.find((n) => n.getAttribute('onclick') === k.click && visible(n));
+    if (hit) return hit;
+  }
   return all.find((n) => (n.textContent || '').trim().slice(0, 80) === k.text && visible(n)) || null;
 }
 
 /** Everything inside `el` a Tab could land on, in document order. */
 function focusables(el) {
-  const sel = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  const sel =
+    'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
   return [...el.querySelectorAll(sel)].filter((n) => {
     if (n.closest('[inert]')) return false;
     const r = n.getBoundingClientRect();
@@ -115,10 +125,14 @@ function focusables(el) {
  * reader pressed is already gone and `document.activeElement` is the body. The
  * caller that still holds it records it here.
  */
-export function rememberOpener(el) { pendingKey = keyOf(el); }
+export function rememberOpener(el) {
+  pendingKey = keyOf(el);
+}
 
 /** True while `el` (or any dialog, with no argument) holds the focus. */
-export function isTrapped(el) { return el ? trapped === el : !!trapped; }
+export function isTrapped(el) {
+  return el ? trapped === el : !!trapped;
+}
 
 /**
  * Contain focus in `el`: make the layers it covers inert (never the chrome
@@ -142,19 +156,38 @@ export function trapFocus(el) {
     });
   }
   if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
-  try { el.focus({ preventScroll: true }); } catch (err) { /* older engines: the inert layer is the part that matters */ }
+  try {
+    el.focus({ preventScroll: true });
+  } catch (err) {
+    /* older engines: the inert layer is the part that matters */
+  }
 }
 
 /** Give the page back: drop `inert`, and put focus where it was before. */
 export function releaseFocus() {
   if (!trapped) return;
-  const dialog = trapped, back = opener, key = openerKey;
-  trapped = null; opener = null; openerKey = null;
-  document.querySelectorAll('[data-fs-inert]').forEach((n) => { n.removeAttribute('inert'); delete n.dataset.fsInert; });
-  const put = (n) => { try { n.focus({ preventScroll: true }); return true; } catch (err) { return false; } };
+  const dialog = trapped,
+    back = opener,
+    key = openerKey;
+  trapped = null;
+  opener = null;
+  openerKey = null;
+  document.querySelectorAll('[data-fs-inert]').forEach((n) => {
+    n.removeAttribute('inert');
+    delete n.dataset.fsInert;
+  });
+  const put = (n) => {
+    try {
+      n.focus({ preventScroll: true });
+      return true;
+    } catch (err) {
+      return false;
+    }
+  };
   // focus still sitting on the dialog we just released is *not* the reader
   // moving on — at the moment Escape is handled that is exactly where it is
-  const movedOn = (a) => !!a && a !== document.body && document.contains(a) && !(dialog && (a === dialog || dialog.contains(a)));
+  const movedOn = (a) =>
+    !!a && a !== document.body && document.contains(a) && !(dialog && (a === dialog || dialog.contains(a)));
   // the chrome is live while a dialog is open, so the release can be caused by
   // a control there — a nav tab, a palette result. The reader has put the focus
   // where they want it; handing it back to the opener would snatch it away.
@@ -163,8 +196,17 @@ export function releaseFocus() {
   // engine's next fixup, so a screen reader (and a test) would find it on a control that
   // is no longer on screen — let go of it now, the re-find below puts it back on the page
   const held = document.activeElement;
-  if (held && held !== document.body && dialog && (held === dialog || dialog.contains(held))) { try { held.blur(); } catch (err) { /* nothing to let go of */ } }
-  if (back && document.contains(back) && !back.closest('[inert]')) { put(back); return; }
+  if (held && held !== document.body && dialog && (held === dialog || dialog.contains(held))) {
+    try {
+      held.blur();
+    } catch (err) {
+      /* nothing to let go of */
+    }
+  }
+  if (back && document.contains(back) && !back.closest('[inert]')) {
+    put(back);
+    return;
+  }
   if (!key) return;
   // The control that opened the dialog is usually gone: closing navigates, and
   // the router empties `#surface` and re-mounts it — asynchronously, filling its
@@ -176,11 +218,20 @@ export function releaseFocus() {
   const host = document.getElementById('surface') || document.body;
   let obs = null;
   let timer = 0;
-  const done = () => { if (obs) { obs.disconnect(); obs = null; } clearTimeout(timer); };
+  const done = () => {
+    if (obs) {
+      obs.disconnect();
+      obs = null;
+    }
+    clearTimeout(timer);
+  };
   const attempt = () => {
     const a = document.activeElement;
     const again = findByKey(key);
-    if (movedOn(a) && a !== again) { done(); return; }
+    if (movedOn(a) && a !== again) {
+      done();
+      return;
+    }
     if (again && a !== again) put(again);
   };
   timer = setTimeout(done, 2500);
@@ -201,14 +252,20 @@ export function releaseFocus() {
 export function trapTab(e) {
   if (!trapped || e.key !== 'Tab') return false;
   const active = document.activeElement;
-  const where = trapped.contains(active) ? 'dialog'
-    : (!active || active === document.body || active === document.documentElement || !document.contains(active)) ? 'dropped'
+  const where = trapped.contains(active)
+    ? 'dialog'
+    : !active || active === document.body || active === document.documentElement || !document.contains(active)
+      ? 'dropped'
       : 'outside';
   const list = where === 'dropped' ? focusables(trapped) : [];
   const act = tabAction(where, e.shiftKey, list.length > 0);
   if (!act) return false;
   e.preventDefault();
   const target = act === 'first' ? list[0] : act === 'last' ? list[list.length - 1] : trapped;
-  try { target.focus({ preventScroll: true }); } catch (err) { /* nothing focusable: the key is still spent */ }
+  try {
+    target.focus({ preventScroll: true });
+  } catch (err) {
+    /* nothing focusable: the key is still spent */
+  }
   return true;
 }

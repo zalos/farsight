@@ -13,7 +13,11 @@ const enc = encodeURIComponent;
 async function openGate(page: Page, lens: string) {
   // a journey's gates are read on the Map's table (the journey page retired into it)
   await gotoReady(page, '#/map/' + enc(FLOW) + '?layout=table&lens=' + lens);
-  await page.locator('.map-table .jrn-gl-row[data-gate-card="' + GATE + '"]').first().locator('.jrn-gl-w').click();
+  await page
+    .locator('.map-table .jrn-gl-row[data-gate-card="' + GATE + '"]')
+    .first()
+    .locator('.jrn-gl-w')
+    .click();
   const c = page.locator('.fs-tip .gc[data-gc="' + GATE + '"]');
   await expect(c).toBeVisible();
   return c;
@@ -24,7 +28,10 @@ async function openGate(page: Page, lens: string) {
  * @covers packages/server/public/app/lib/detail-doors.js::copyDoorsHtml
  * @covers packages/server/public/app/lib/gate-card.js::gateCardHtml
  */
-test('the gate card copies the MCP call, the curl and the CLI line with the full id, and says copied for two seconds', async ({ page, context }) => {
+test('the gate card copies the MCP call, the curl and the CLI line with the full id, and says copied for two seconds', async ({
+  page,
+  context,
+}) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const c = await openGate(page, 'hybrid');
   const row = c.locator('.gc-copy .dd-copy');
@@ -34,13 +41,18 @@ test('the gate card copies the MCP call, the curl and the CLI line with the full
   await expect(chip).toBeVisible();
   await expect(chip).toHaveText(`copied gate {"node_id":"${GATE}"}`);
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`gate {"node_id":"${GATE}"}`);
-  await expect(row.locator('button[data-via="curl"]')).toHaveAttribute('data-copy', new RegExp(`/api/gate\\?node=${enc(GATE).replace(/[()]/g, '\\$&')}'$`));
+  await expect(row.locator('button[data-via="curl"]')).toHaveAttribute(
+    'data-copy',
+    new RegExp(`/api/gate\\?node=${enc(GATE).replace(/[()]/g, '\\$&')}'$`),
+  );
   await expect(row.locator('button[data-via="cli"]')).toHaveAttribute('data-copy', `farsight impact '${GATE}' --tests`);
   await expect(chip).toBeHidden({ timeout: 4000 });
 });
 
 /** @covers packages/server/public/app/lib/detail-doors.js::copyDoorsHtml */
-test('the business register draws no copy doors: MCP, curl and CLI are a developer\'s (swarm round 3)', async ({ page }) => {
+test("the business register draws no copy doors: MCP, curl and CLI are a developer's (swarm round 3)", async ({
+  page,
+}) => {
   const c = await openGate(page, 'business');
   await expect(c.locator('.gc-head, .gc-h, h3, .gc').first()).toBeVisible();
   await expect(c.locator('button.dd-door.copy')).toHaveCount(0);
@@ -54,7 +66,7 @@ test('the code map inspector carries the copy doors of the selected part', async
 });
 
 /** @covers packages/server/public/app/lib/state-of-play.js::stateOfPlayHtml */
-test('the front door\'s numbers copy their re-check as an MCP call, a curl and a CLI line', async ({ page }) => {
+test("the front door's numbers copy their re-check as an MCP call, a curl and a CLI line", async ({ page }) => {
   await gotoReady(page, '#/journeys?lens=hybrid');
   const first = page.locator('#sop-card .sop-col li .dd-copy.compact').first();
   await expect(first.locator('button')).toHaveText(['MCP', 'curl', 'CLI']);
@@ -72,7 +84,10 @@ async function openSettings(page: Page): Promise<void> {
  * @covers packages/server/public/app/surfaces/settings-lessons.js::lessonsHtml
  * @covers packages/server/src/index.ts::lessonsProblem
  */
-test('Settings: lessons for agents — the empty state, a lesson added and pinned, a credential refused (here and by the server)', async ({ page, request }) => {
+test('Settings: lessons for agents — the empty state, a lesson added and pinned, a credential refused (here and by the server)', async ({
+  page,
+  request,
+}) => {
   await gotoReady(page, '#/journeys?lens=hybrid');
   await openSettings(page);
   const sec = page.locator('#set-lessons');
@@ -92,7 +107,9 @@ test('Settings: lessons for agents — the empty state, a lesson added and pinne
   await expect(sec.locator('.les-row')).toHaveCount(0);
   // the server refuses the same shape without echoing it — nothing is written
   const current = await (await request.get('/api/settings')).json();
-  const bad = await request.put('/api/settings', { data: { ...current, lessons: [{ text: 'token ghp_abcdefghijklmnopqrstuvwxyz0123456789' }] } });
+  const bad = await request.put('/api/settings', {
+    data: { ...current, lessons: [{ text: 'token ghp_abcdefghijklmnopqrstuvwxyz0123456789' }] },
+  });
   expect(bad.status()).toBe(400);
   expect(await bad.text()).not.toContain('ghp_');
 });

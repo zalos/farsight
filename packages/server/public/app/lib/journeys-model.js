@@ -38,7 +38,11 @@ function counted(n, unit, scope, source, of) {
 }
 
 /** A name compared the way the proposal matches: trimmed, case-insensitive. */
-function norm(s) { return String(s == null ? '' : s).trim().toLowerCase(); }
+function norm(s) {
+  return String(s == null ? '' : s)
+    .trim()
+    .toLowerCase();
+}
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 
 /** A journey is built when the code builds every screen it names. */
@@ -49,14 +53,24 @@ export function isBuilt(f) {
 
 /** The catalog key of a journey's one status word (core `flowStatusWord`). */
 function statusKeyOf(built, total) {
-  return total > 0 && built >= total ? 'journey.status.built' : built > 0 ? 'journey.status.partly' : 'journey.status.designedNotBuilt';
+  return total > 0 && built >= total
+    ? 'journey.status.built'
+    : built > 0
+      ? 'journey.status.partly'
+      : 'journey.status.designedNotBuilt';
 }
 
 function groupCounts(rows, scope, where) {
   const built = rows.filter(isBuilt).length;
   return {
     journeys: counted(rows.length, 'count.unit.journeys', scope, SRC + ' → ' + where + '.journeys'),
-    built: counted(built, 'count.unit.journeysBuilt', scope, SRC + ' → ' + where + '.journeys where every screen is built', rows.length),
+    built: counted(
+      built,
+      'count.unit.journeysBuilt',
+      scope,
+      SRC + ' → ' + where + '.journeys where every screen is built',
+      rows.length,
+    ),
   };
 }
 
@@ -82,13 +96,32 @@ export function treeFrom(designs, metas, opts = {}) {
   const inScope = repos.map((r) => [r, M[r]]).filter(([, m]) => !!m);
 
   // the declarations across the sources in scope (a design source may carry its own too)
-  const pDecl = [], gDecl = [];
-  const pById = new Map(), gById = new Map();
-  const addP = (p) => { if (p && str(p.id) && !pById.has(norm(p.id))) { pById.set(norm(p.id), p); pDecl.push(p); } };
-  const addG = (g) => { if (g && str(g.id) && !gById.has(norm(g.id))) { gById.set(norm(g.id), g); gDecl.push(g); } };
-  for (const [, m] of inScope) { (m.personas || []).forEach(addP); (m.groups || []).forEach(addG); }
-  for (const d of sources) { ((d && d.personas) || []).forEach(addP); ((d && d.groups) || []).forEach(addG); }
-  const pByName = new Map(), gByName = new Map();
+  const pDecl = [],
+    gDecl = [];
+  const pById = new Map(),
+    gById = new Map();
+  const addP = (p) => {
+    if (p && str(p.id) && !pById.has(norm(p.id))) {
+      pById.set(norm(p.id), p);
+      pDecl.push(p);
+    }
+  };
+  const addG = (g) => {
+    if (g && str(g.id) && !gById.has(norm(g.id))) {
+      gById.set(norm(g.id), g);
+      gDecl.push(g);
+    }
+  };
+  for (const [, m] of inScope) {
+    (m.personas || []).forEach(addP);
+    (m.groups || []).forEach(addG);
+  }
+  for (const d of sources) {
+    ((d && d.personas) || []).forEach(addP);
+    ((d && d.groups) || []).forEach(addG);
+  }
+  const pByName = new Map(),
+    gByName = new Map();
   for (const p of pDecl) if (!pByName.has(norm(p.name || p.id))) pByName.set(norm(p.name || p.id), p);
   for (const g of gDecl) if (!gByName.has(norm(g.name || g.id))) gByName.set(norm(g.name || g.id), g);
   const pIndex = new Map(pDecl.map((p, i) => [p.id, i]));
@@ -99,11 +132,14 @@ export function treeFrom(designs, metas, opts = {}) {
   const seen = new Set();
   let seq = 0;
   for (const d of sources) {
-    const flows = ((d && d.flows) || []).map((f, i) => {
-      const row = withNode(f, nodeOf);
-      const ord = row.position != null ? row.position : ordinal(row.nodeId);
-      return { row, i, ord: typeof ord === 'number' ? ord : Infinity };
-    }).sort((a, b) => a.ord - b.ord || a.i - b.i).map((x) => x.row);
+    const flows = ((d && d.flows) || [])
+      .map((f, i) => {
+        const row = withNode(f, nodeOf);
+        const ord = row.position != null ? row.position : ordinal(row.nodeId);
+        return { row, i, ord: typeof ord === 'number' ? ord : Infinity };
+      })
+      .sort((a, b) => a.ord - b.ord || a.i - b.i)
+      .map((x) => x.row);
     for (const row0 of flows) {
       if (!row0 || !row0.nodeId || seen.has(row0.nodeId)) continue;
       seen.add(row0.nodeId);
@@ -111,8 +147,12 @@ export function treeFrom(designs, metas, opts = {}) {
       const ov = (M[row.repo] && M[row.repo].flows && M[row.repo].flows[row.id]) || null;
       const pick = (k) => (ov && ov[k] !== undefined ? ov[k] : row[k]);
       placed.push({
-        row, designId: d.id || '', seq: seq++,
-        persona: pick('persona'), group: pick('group'), order: pick('order'),
+        row,
+        designId: d.id || '',
+        seq: seq++,
+        persona: pick('persona'),
+        group: pick('group'),
+        order: pick('order'),
         cfgIndex: ov && typeof ov.index === 'number' ? ov.index : undefined,
         placedBy: ov ? ov.from : undefined,
       });
@@ -132,14 +172,35 @@ export function treeFrom(designs, metas, opts = {}) {
     for (const v of values) if (str(v)) targets.push(resolvePersona(v));
     if (!targets.length) {
       const prefixes = [...new Set((p.row.screens || []).map((x) => String(x).split('-')[0]).filter(Boolean))];
-      if (prefixes.length === 1) targets.push({ k: 'u:' + norm(prefixes[0]), id: prefixes[0], name: prefixes[0], declared: false, derived: true });
+      if (prefixes.length === 1)
+        targets.push({
+          k: 'u:' + norm(prefixes[0]),
+          id: prefixes[0],
+          name: prefixes[0],
+          declared: false,
+          derived: true,
+        });
       else targets.push({ k: 'none', id: JOURNEY_NO_PERSONA, name: '', declared: false, none: true });
     }
     const unique = [...new Map(targets.map((x) => [x.k, x])).values()];
     for (const tg of unique) {
       let pb = pBuckets.get(tg.k);
-      if (!pb) { pb = { id: tg.id, name: tg.name, description: tg.description, declared: tg.declared, derived: false, none: !!tg.none, groups: new Map() }; pBuckets.set(tg.k, pb); }
-      if (tg.derived) { pb.derived = true; derivedAny = true; }
+      if (!pb) {
+        pb = {
+          id: tg.id,
+          name: tg.name,
+          description: tg.description,
+          declared: tg.declared,
+          derived: false,
+          none: !!tg.none,
+          groups: new Map(),
+        };
+        pBuckets.set(tg.k, pb);
+      }
+      if (tg.derived) {
+        pb.derived = true;
+        derivedAny = true;
+      }
       let gk = 'none';
       let gb = { id: JOURNEY_NO_GROUP, name: '', declared: false, none: true };
       const gv = str(p.group);
@@ -147,16 +208,26 @@ export function treeFrom(designs, metas, opts = {}) {
         const d = gById.get(norm(gv)) || gByName.get(norm(gv));
         if (d) {
           const owner = d.persona ? resolvePersona(d.persona).k : null;
-          if (!owner || owner === tg.k) { gk = 'd:' + norm(d.id); gb = { id: d.id, name: d.name || d.id, description: d.description, declared: true, none: false }; }
-        } else { gk = 'u:' + norm(gv); gb = { id: gv, name: gv, declared: false, none: false }; }
+          if (!owner || owner === tg.k) {
+            gk = 'd:' + norm(d.id);
+            gb = { id: d.id, name: d.name || d.id, description: d.description, declared: true, none: false };
+          }
+        } else {
+          gk = 'u:' + norm(gv);
+          gb = { id: gv, name: gv, declared: false, none: false };
+        }
       }
       let g = pb.groups.get(gk);
-      if (!g) { g = { ...gb, rows: [] }; pb.groups.set(gk, g); }
+      if (!g) {
+        g = { ...gb, rows: [] };
+        pb.groups.set(gk, g);
+      }
       g.rows.push(p);
     }
   }
 
-  const alpha = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.name.localeCompare(b.name);
+  const alpha = (a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.name.localeCompare(b.name);
   const rank = (list, at) => [
     ...list.filter((x) => x.declared).sort((a, b) => (at.get(a.id) || 0) - (at.get(b.id) || 0)),
     ...list.filter((x) => !x.declared && !x.none).sort(alpha),
@@ -164,43 +235,77 @@ export function treeFrom(designs, metas, opts = {}) {
   ];
   const num = (v, d) => (typeof v === 'number' ? v : d);
   const journeyOrder = (a, b) => {
-    const ao = a.order != null ? 0 : 1, bo = b.order != null ? 0 : 1;
-    return ao - bo || num(a.order, 0) - num(b.order, 0) || num(a.cfgIndex, Infinity) - num(b.cfgIndex, Infinity) || a.seq - b.seq;
+    const ao = a.order != null ? 0 : 1,
+      bo = b.order != null ? 0 : 1;
+    return (
+      ao - bo ||
+      num(a.order, 0) - num(b.order, 0) ||
+      num(a.cfgIndex, Infinity) - num(b.cfgIndex, Infinity) ||
+      a.seq - b.seq
+    );
   };
   const under = new Map();
   const personas = rank([...pBuckets.values()], pIndex).map((pb) => {
     const groups = rank([...pb.groups.values()], gIndex).map((gb) => {
-      const journeys = gb.rows.slice().sort(journeyOrder).map((p) => {
-        const r = {
-          ...p.row, designId: p.designId, personaIds: [], personaNames: [], groupId: gb.id, pinned: false,
-          statusKey: statusKeyOf(p.row.built || 0, p.row.total != null ? p.row.total : (p.row.screens || []).length),
-          storylines: [],
-          ...(p.placedBy ? { placedBy: p.placedBy } : {}),
-        };
-        if (p.persona !== undefined) r.persona = p.persona; else delete r.persona;
-        if (p.group !== undefined) r.group = p.group; else delete r.group;
-        if (p.order !== undefined) r.order = p.order; else delete r.order;
-        const u = under.get(r.nodeId) || { ids: [], names: [] };
-        if (!u.ids.includes(pb.id)) { u.ids.push(pb.id); u.names.push(pb.name); }
-        under.set(r.nodeId, u);
-        r.personaIds = u.ids;
-        r.personaNames = u.names;
-        return r;
-      });
+      const journeys = gb.rows
+        .slice()
+        .sort(journeyOrder)
+        .map((p) => {
+          const r = {
+            ...p.row,
+            designId: p.designId,
+            personaIds: [],
+            personaNames: [],
+            groupId: gb.id,
+            pinned: false,
+            statusKey: statusKeyOf(p.row.built || 0, p.row.total != null ? p.row.total : (p.row.screens || []).length),
+            storylines: [],
+            ...(p.placedBy ? { placedBy: p.placedBy } : {}),
+          };
+          if (p.persona !== undefined) r.persona = p.persona;
+          else delete r.persona;
+          if (p.group !== undefined) r.group = p.group;
+          else delete r.group;
+          if (p.order !== undefined) r.order = p.order;
+          else delete r.order;
+          const u = under.get(r.nodeId) || { ids: [], names: [] };
+          if (!u.ids.includes(pb.id)) {
+            u.ids.push(pb.id);
+            u.names.push(pb.name);
+          }
+          under.set(r.nodeId, u);
+          r.personaIds = u.ids;
+          r.personaNames = u.names;
+          return r;
+        });
       return {
-        id: gb.id, name: gb.name, ...(gb.description ? { description: gb.description } : {}), declared: gb.declared,
+        id: gb.id,
+        name: gb.name,
+        ...(gb.description ? { description: gb.description } : {}),
+        declared: gb.declared,
         ...(gb.none ? { key: 'journeys.noGroup' } : {}),
-        journeys, counts: groupCounts(journeys, 'count.scope.group', pb.id + '/' + gb.id),
+        journeys,
+        counts: groupCounts(journeys, 'count.scope.group', pb.id + '/' + gb.id),
       };
     });
     const all = groups.flatMap((g) => g.journeys);
     const entries = all.filter((j) => !(j.requires || []).length);
-    const pin = entries.filter((j) => (j.built || 0) > 0).reduce((best, j) => (!best || (j.total || 0) > (best.total || 0) ? j : best), undefined) || entries[0] || all[0];
+    const pin =
+      entries
+        .filter((j) => (j.built || 0) > 0)
+        .reduce((best, j) => (!best || (j.total || 0) > (best.total || 0) ? j : best), undefined) ||
+      entries[0] ||
+      all[0];
     if (pin) pin.pinned = true;
     return {
-      id: pb.id, name: pb.name, ...(pb.description ? { description: pb.description } : {}), declared: pb.declared,
-      ...(pb.derived ? { derived: true } : {}), ...(pb.none ? { key: 'portfolio.noPersona' } : {}),
-      groups, counts: groupCounts(all, 'count.scope.persona', pb.id),
+      id: pb.id,
+      name: pb.name,
+      ...(pb.description ? { description: pb.description } : {}),
+      declared: pb.declared,
+      ...(pb.derived ? { derived: true } : {}),
+      ...(pb.none ? { key: 'portfolio.noPersona' } : {}),
+      groups,
+      counts: groupCounts(all, 'count.scope.persona', pb.id),
     };
   });
   const uniq = new Set(personas.flatMap((p) => p.groups.flatMap((g) => g.journeys.map((j) => j.nodeId))));
@@ -215,7 +320,12 @@ export function treeFrom(designs, metas, opts = {}) {
       storylines: counted(storylines.length, 'count.unit.storylines', 'count.scope.workspace', SRC + ' → storylines'),
       journeys: counted(uniq.size, 'count.unit.journeys', 'count.scope.workspace', SRC + ' → distinct flow node ids'),
       personas: counted(personas.length, 'count.unit.personas', 'count.scope.workspace', SRC + ' → personas'),
-      groups: counted(sections, 'count.unit.groups', 'count.scope.workspace', SRC + ' → personas[].groups (one per persona it is shown under)'),
+      groups: counted(
+        sections,
+        'count.unit.groups',
+        'count.scope.workspace',
+        SRC + ' → personas[].groups (one per persona it is shown under)',
+      ),
     },
     derived: derivedAny,
     notes,
@@ -231,24 +341,42 @@ export function treeFrom(designs, metas, opts = {}) {
 function storylinesFold(personas, inScope, notes) {
   const firstRow = new Map();
   const rowsOf = new Map();
-  for (const p of personas) for (const g of p.groups) for (const j of g.journeys) {
-    if (!firstRow.has(j.nodeId)) firstRow.set(j.nodeId, j);
-    if (!rowsOf.has(j.nodeId)) rowsOf.set(j.nodeId, []);
-    rowsOf.get(j.nodeId).push(j);
-  }
+  for (const p of personas)
+    for (const g of p.groups)
+      for (const j of g.journeys) {
+        if (!firstRow.has(j.nodeId)) firstRow.set(j.nodeId, j);
+        if (!rowsOf.has(j.nodeId)) rowsOf.set(j.nodeId, []);
+        rowsOf.get(j.nodeId).push(j);
+      }
   const declared = [];
   const seen = new Map();
   for (const [repo, m] of inScope) {
     for (const s of (m && m.storylines) || []) {
       if (!s || !str(s.id)) continue;
       const k = norm(s.id);
-      if (seen.has(k)) { notes.push('storyline "' + s.id + '" is declared by ' + seen.get(k) + ' and ' + repo + '; the one in ' + seen.get(k) + ' is kept'); continue; }
+      if (seen.has(k)) {
+        notes.push(
+          'storyline "' +
+            s.id +
+            '" is declared by ' +
+            seen.get(k) +
+            ' and ' +
+            repo +
+            '; the one in ' +
+            seen.get(k) +
+            ' is kept',
+        );
+        continue;
+      }
       seen.set(k, repo);
       const own = [...(s.notes || [])];
       const nodeIds = [];
       for (const fid of s.journeys || []) {
         const nodeId = repo + '::flow::' + fid;
-        if (!firstRow.has(nodeId)) { own.push('journey "' + fid + '" is not drawn in this scope — it is not a step here'); continue; }
+        if (!firstRow.has(nodeId)) {
+          own.push('journey "' + fid + '" is not drawn in this scope — it is not a step here');
+          continue;
+        }
         if (!nodeIds.includes(nodeId)) nodeIds.push(nodeId);
       }
       // a branch draws when its journey and the step it leaves from are both in scope (core: the same rule)
@@ -256,8 +384,20 @@ function storylinesFold(personas, inScope, notes) {
       for (const b of s.branches || []) {
         if (!b || !str(b.id) || !str(b.branchOf) || !str(b.when)) continue;
         const nodeId = repo + '::flow::' + b.id;
-        if (!firstRow.has(nodeId)) { own.push('branch "' + b.id + '" is not drawn in this scope — it is not a branch here'); continue; }
-        if (!nodeIds.includes(repo + '::flow::' + b.branchOf)) { own.push('branch "' + b.id + '" leaves from "' + b.branchOf + '", which is not drawn in this scope — it is not a branch here'); continue; }
+        if (!firstRow.has(nodeId)) {
+          own.push('branch "' + b.id + '" is not drawn in this scope — it is not a branch here');
+          continue;
+        }
+        if (!nodeIds.includes(repo + '::flow::' + b.branchOf)) {
+          own.push(
+            'branch "' +
+              b.id +
+              '" leaves from "' +
+              b.branchOf +
+              '", which is not drawn in this scope — it is not a branch here',
+          );
+          continue;
+        }
         if (nodeIds.includes(nodeId) || branchIds.some((x) => x.nodeId === nodeId)) continue;
         branchIds.push({ nodeId, b });
       }
@@ -265,11 +405,12 @@ function storylinesFold(personas, inScope, notes) {
     }
   }
   const memberOf = new Map();
-  for (const d of declared) for (const nodeId of [...d.nodeIds, ...d.branchIds.map((x) => x.nodeId)]) {
-    if (!memberOf.has(nodeId)) memberOf.set(nodeId, []);
-    const list = memberOf.get(nodeId);
-    if (!list.includes(d.s.id)) list.push(d.s.id);
-  }
+  for (const d of declared)
+    for (const nodeId of [...d.nodeIds, ...d.branchIds.map((x) => x.nodeId)]) {
+      if (!memberOf.has(nodeId)) memberOf.set(nodeId, []);
+      const list = memberOf.get(nodeId);
+      if (!list.includes(d.s.id)) list.push(d.s.id);
+    }
   for (const [nodeId, list] of memberOf) for (const r of rowsOf.get(nodeId) || []) r.storylines = list;
   return declared.map(({ repo, s, nodeIds, branchIds, own }) => {
     const journeys = nodeIds.map((nodeId, i) => ({ ...firstRow.get(nodeId), stepIndex: i }));
@@ -278,21 +419,45 @@ function storylinesFold(personas, inScope, notes) {
       const parent = repo + '::flow::' + b.branchOf;
       const back = b.rejoins ? repo + '::flow::' + b.rejoins : null;
       const rejoins = back && nodeIds.includes(back) ? back : null;
-      return { ...firstRow.get(nodeId), branchOf: parent, branchOfName: nameOf(parent), when: b.when, ...(rejoins ? { rejoins, rejoinsName: nameOf(rejoins) } : {}) };
+      return {
+        ...firstRow.get(nodeId),
+        branchOf: parent,
+        branchOfName: nameOf(parent),
+        when: b.when,
+        ...(rejoins ? { rejoins, rejoinsName: nameOf(rejoins) } : {}),
+      };
     });
     const all = journeys.concat(branches);
     const built = all.filter(isBuilt).length;
     const where = branches.length ? '.journeys + .branches' : '.journeys';
-    const total = counted(all.length, 'count.unit.journeys', 'count.scope.storyline', SRC + ' → storylines[' + s.id + ']' + where);
-    if (branches.length) total.breakdown = [{ key: 'count.part.storylineSteps', n: journeys.length }, { key: 'count.part.storylineBranches', n: branches.length }];
+    const total = counted(
+      all.length,
+      'count.unit.journeys',
+      'count.scope.storyline',
+      SRC + ' → storylines[' + s.id + ']' + where,
+    );
+    if (branches.length)
+      total.breakdown = [
+        { key: 'count.part.storylineSteps', n: journeys.length },
+        { key: 'count.part.storylineBranches', n: branches.length },
+      ];
     return {
-      id: s.id, name: s.name || s.id, ...(s.description ? { description: s.description } : {}),
-      repo, from: s.from || '',
+      id: s.id,
+      name: s.name || s.id,
+      ...(s.description ? { description: s.description } : {}),
+      repo,
+      from: s.from || '',
       journeys,
       branches,
       counts: {
         journeys: total,
-        built: counted(built, 'count.unit.journeysBuilt', 'count.scope.storyline', SRC + ' → storylines[' + s.id + ']' + where + ' where every screen is built', all.length),
+        built: counted(
+          built,
+          'count.unit.journeysBuilt',
+          'count.scope.storyline',
+          SRC + ' → storylines[' + s.id + ']' + where + ' where every screen is built',
+          all.length,
+        ),
       },
       notes: own,
     };
@@ -318,10 +483,23 @@ export function storylineOf(tree, flowId) {
       if (!b) continue;
       const at = s.journeys.findIndex((j) => j.nodeId === b.branchOf);
       const back = b.rejoins ? s.journeys.find((j) => j.nodeId === b.rejoins) || null : null;
-      out.push({ storyline: s, step: at + 1, of: s.journeys.length, prev: at >= 0 ? s.journeys[at] : null, next: back, branch: b });
+      out.push({
+        storyline: s,
+        step: at + 1,
+        of: s.journeys.length,
+        prev: at >= 0 ? s.journeys[at] : null,
+        next: back,
+        branch: b,
+      });
       continue;
     }
-    out.push({ storyline: s, step: i + 1, of: s.journeys.length, prev: i > 0 ? s.journeys[i - 1] : null, next: i < s.journeys.length - 1 ? s.journeys[i + 1] : null });
+    out.push({
+      storyline: s,
+      step: i + 1,
+      of: s.journeys.length,
+      prev: i > 0 ? s.journeys[i - 1] : null,
+      next: i < s.journeys.length - 1 ? s.journeys[i + 1] : null,
+    });
   }
   return out;
 }
@@ -333,7 +511,9 @@ export function storylineOf(tree, flowId) {
 export function findStoryline(tree, id) {
   if (id == null || id === '') return null;
   const list = (tree && tree.storylines) || [];
-  return list.find((s) => s.id === id) || list.find((s) => norm(s.id) === norm(id) || norm(s.name) === norm(id)) || null;
+  return (
+    list.find((s) => s.id === id) || list.find((s) => norm(s.id) === norm(id) || norm(s.name) === norm(id)) || null
+  );
 }
 
 /** A design row with what its graph node carries and the row does not. */
@@ -389,12 +569,18 @@ export function placesOf(tree, nodeId) {
  */
 export function screenPersonaOthers(tree, nodeId, leadId) {
   let row = null;
-  for (const p of (tree && tree.personas) || []) for (const g of p.groups || []) for (const j of g.journeys || []) if (!row && j.nodeId === nodeId) row = j;
+  for (const p of (tree && tree.personas) || [])
+    for (const g of p.groups || []) for (const j of g.journeys || []) if (!row && j.nodeId === nodeId) row = j;
   const list = (row && row.screenPersonas) || [];
   const out = new Map();
   for (const x of list) {
     if (!x || x.persona === leadId) continue;
-    const have = out.get(x.persona) || { id: x.persona, name: x.personaName || x.persona, screens: 0, from: x.personaFrom };
+    const have = out.get(x.persona) || {
+      id: x.persona,
+      name: x.personaName || x.persona,
+      screens: 0,
+      from: x.personaFrom,
+    };
     have.screens++;
     out.set(x.persona, have);
   }
@@ -433,7 +619,9 @@ export function firstScreenOf(designs, flowNodeId) {
     const first = (f.screens || [])[0];
     if (!first) return null;
     const scr = ((d && d.screens) || []).find((x) => x && x.designId === first);
-    return scr ? { nodeId: scr.nodeId || null, designId: first, name: scr.name || first, hasImage: !!scr.hasImage } : { nodeId: null, designId: first, name: first, hasImage: false };
+    return scr
+      ? { nodeId: scr.nodeId || null, designId: first, name: scr.name || first, hasImage: !!scr.hasImage }
+      : { nodeId: null, designId: first, name: first, hasImage: false };
   }
   return null;
 }

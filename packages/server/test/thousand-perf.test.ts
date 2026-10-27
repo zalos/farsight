@@ -8,7 +8,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { buildIndex, journeyTree, designSurface, projectGraph, testsSurface, journey, journeySummary, screensFor } from '@farsight/core';
+import {
+  buildIndex,
+  journeyTree,
+  designSurface,
+  projectGraph,
+  testsSurface,
+  journey,
+  journeySummary,
+  screensFor,
+} from '@farsight/core';
 import { folded, scopeKey, leanJourneyRow, leanMetric } from '../dist/folds.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -44,16 +53,27 @@ test('the synthetic workspace has the shape the round asks for, scaled down', ()
 });
 
 test('the server folds answer within budget, and a second ask is the kept answer', () => {
-  const tree = within('journeyTree', 500, () => folded(index, 'journeys', 'all', () => journeyTree(index, meta.journeys, null)));
+  const tree = within('journeyTree', 500, () =>
+    folded(index, 'journeys', 'all', () => journeyTree(index, meta.journeys, null)),
+  );
   assert.equal(tree.counts.journeys.n, 40);
-  assert.equal(folded(index, 'journeys', 'all', () => { throw new Error('folded again'); }), tree);
+  assert.equal(
+    folded(index, 'journeys', 'all', () => {
+      throw new Error('folded again');
+    }),
+    tree,
+  );
   within('designSurface', 500, () => designSurface(index, null));
   within('projectGraph', 1000, () => projectGraph(index, meta.projects));
-  const tests = within('testsSurface', 3000, () => folded(index, 'tests', scopeKey(null) + '|all', () => testsSurface(index, null, meta.tests)));
+  const tests = within('testsSurface', 3000, () =>
+    folded(index, 'tests', scopeKey(null) + '|all', () => testsSurface(index, null, meta.tests)),
+  );
   assert.equal(tests.journeys.length, 40);
   within('testsSurface (unit)', 3000, () => testsSurface(index, null, meta.tests, { level: 'unit' }));
   const flows = nodes.filter((n) => n.kind === 'flow').slice(0, 10);
-  within('ten journey summaries', 3000, () => flows.forEach((f) => journeySummary(index, journey(index, f.id), screensFor(index, f.id))));
+  within('ten journey summaries', 3000, () =>
+    flows.forEach((f) => journeySummary(index, journey(index, f.id), screensFor(index, f.id))),
+  );
 });
 
 test('the lean tests answer is the full answer’s numbers without its lists', () => {
@@ -63,7 +83,8 @@ test('the lean tests answer is the full answer’s numbers without its lists', (
     assert.equal(lean.declaredCount, (row.declared || []).length);
     assert.equal(lean.inferredCount, (row.inferred || []).length);
     assert.equal(lean.coverage.testsCount, (row.coverage.tests || []).length);
-    for (const k of ['numerator', 'denominator', 'value', 'bound']) assert.deepEqual(lean.coverage.metric[k], row.coverage.metric[k], k);
+    for (const k of ['numerator', 'denominator', 'value', 'bound'])
+      assert.deepEqual(lean.coverage.metric[k], row.coverage.metric[k], k);
     assert.deepEqual(lean.coverage.counts, row.coverage.counts);
     assert.equal(lean.coverage.chip, row.coverage.chip);
   }
@@ -82,9 +103,14 @@ test('the code map index, its choices, a filter and the grouped fold, and the �
   const kept = within('passFor', 300, () => CM.passFor(cm, { projects: new Set(some) }));
   assert.ok(kept && kept.size > 0);
   within('foldGroups by project', 1000, () => CM.foldGroups(nodes, 'project', cm));
-  const names = { bizName: (n: AnyRec) => String(n.name), bizLabel: (n: AnyRec) => String(n.name), repoOf: (n: AnyRec) => String(n.id).split('::')[0] };
+  const names = {
+    bizName: (n: AnyRec) => String(n.name),
+    bizLabel: (n: AnyRec) => String(n.name),
+    repoOf: (n: AnyRec) => String(n.id).split('::')[0],
+  };
   const si = within('buildSearchIndex', 1500, () => SM.buildSearchIndex(nodes, names));
-  for (const q of ['i', 'in', 'inv', 'invo', 'invoi', 'invoic', 'invoice']) within(`search "${q}"`, 50, () => SM.searchIndex(si, q, null));
+  for (const q of ['i', 'in', 'inv', 'invo', 'invoi', 'invoic', 'invoice'])
+    within(`search "${q}"`, 50, () => SM.searchIndex(si, q, null));
 });
 
 test('the detail doors (lib/detail-links.js) are lookups: every detail of the workspace within budget', async () => {
@@ -92,7 +118,26 @@ test('the detail doors (lib/detail-links.js) are lookups: every detail of the wo
   const byId: AnyRec = {};
   for (const n of nodes) byId[n.id] = n;
   const edgesOf = new Map<string, AnyRec[]>();
-  for (const e of edges) for (const id of [e.from, e.to]) { const l = edgesOf.get(id); if (l) l.push(e); else edgesOf.set(id, [e]); }
-  const kinds: AnyRec = { guard: 'gate', rule: 'rule', route: 'route', table: 'record', test: 'test', page: 'screen', component: 'component', function: 'call', package: 'package', external: 'external', work: 'work' };
-  within('detailLinks over every detail', 500, () => { for (const n of nodes) if (kinds[n.kind]) D.detailLinks(kinds[n.kind], n, { byId, edgesOf, roots: {} }); });
+  for (const e of edges)
+    for (const id of [e.from, e.to]) {
+      const l = edgesOf.get(id);
+      if (l) l.push(e);
+      else edgesOf.set(id, [e]);
+    }
+  const kinds: AnyRec = {
+    guard: 'gate',
+    rule: 'rule',
+    route: 'route',
+    table: 'record',
+    test: 'test',
+    page: 'screen',
+    component: 'component',
+    function: 'call',
+    package: 'package',
+    external: 'external',
+    work: 'work',
+  };
+  within('detailLinks over every detail', 500, () => {
+    for (const n of nodes) if (kinds[n.kind]) D.detailLinks(kinds[n.kind], n, { byId, edgesOf, roots: {} });
+  });
 });

@@ -51,16 +51,22 @@ export function gateFacts(id, ctx = {}, hint = {}) {
     if (e.from !== id || (e.kind !== 'guards' && e.kind !== 'validates') || seen.has(e.to)) continue;
     seen.add(e.to);
     const t = ctx.byId[e.to];
-    sitsOn.push(t ? { id: t.id, kind: t.kind, name: t.name, loc: t.loc || null } : { id: e.to, kind: 'unknown', name: e.to.split('::').pop(), loc: null });
+    sitsOn.push(
+      t
+        ? { id: t.id, kind: t.kind, name: t.name, loc: t.loc || null }
+        : { id: e.to, kind: 'unknown', name: e.to.split('::').pop(), loc: null },
+    );
   }
   const tags = n.tags || [];
   const business = String((n.facets && n.facets.business && n.facets.business.description) || '').trim();
   return {
-    id, node: n,
+    id,
+    node: n,
     gateKind: n.kind === 'rule' ? 'rule' : 'guard',
     configCheck: !!(hint.config || tags.includes('config-check')),
     declared: tags.includes('declared'),
-    ident, phrase,
+    ident,
+    phrase,
     business,
     docs: firstSentence(n.docs),
     loc: n.loc || null,
@@ -89,16 +95,27 @@ export function gateSentence(f, inWords, lens, plain) {
   const bizWords = f.business && biz && plain ? plain(f.business) : f.business;
   let says;
   if (bizWords) says = { key: '', words: bizWords, source: 'business' };
-  else if (inWords) says = { key: f.gateKind === 'rule' ? 'gate.says.rulePhrase' : 'gate.says.phrase', words: inWords, source: 'phrase' };
+  else if (inWords)
+    says = {
+      key: f.gateKind === 'rule' ? 'gate.says.rulePhrase' : 'gate.says.phrase',
+      words: inWords,
+      source: 'phrase',
+    };
   else says = { key: 'gate.says.none', words: '', source: 'none' };
   let who = null;
   if (says.source === 'none') {
     who = biz
-      ? (f.project ? { key: 'gate.who.biz', vars: { project: f.project } } : { key: 'gate.who.bizNoProject', vars: {} })
-      : { key: 'gate.who.code', vars: { ident: f.ident || f.node.name, path: f.loc ? f.loc.path + ':' + f.loc.line : f.id } };
+      ? f.project
+        ? { key: 'gate.who.biz', vars: { project: f.project } }
+        : { key: 'gate.who.bizNoProject', vars: {} }
+      : {
+          key: 'gate.who.code',
+          vars: { ident: f.ident || f.node.name, path: f.loc ? f.loc.path + ':' + f.loc.line : f.id },
+        };
   }
   return {
-    says, who,
+    says,
+    who,
     // the doc comment's first sentence, where it is not the sentence already said; never in business (it is the developer's)
     docs: !biz && f.docs && f.docs !== f.business ? f.docs : '',
     config: f.configCheck ? 'gate.config.sentence' : '',
@@ -118,13 +135,22 @@ export function gateCardModel(id, ctx = {}, opts = {}) {
   const lens = opts.lens || ctx.lens || 'hybrid';
   const kind = f.configCheck ? 'config' : f.gateKind;
   const out = {
-    id, kind, gateKind: f.gateKind, declared: f.declared,
+    id,
+    kind,
+    gateKind: f.gateKind,
+    declared: f.declared,
     facts: f,
     sentence: gateSentence(f, opts.inWords || '', lens, opts.plain),
     sitsOn: f.sitsOn,
     pending: answer == null,
     failed: answer === false,
-    calls: null, pages: null, tests: null, counted: null, evidence: null, truncated: false, roles: null,
+    calls: null,
+    pages: null,
+    tests: null,
+    counted: null,
+    evidence: null,
+    truncated: false,
+    roles: null,
     // a rule the parser read out of a refusing comparison (gates lane 2026-10-10)
     precondition: (f.node && f.node.precondition) || null,
     // who it matters to, from the service's fold (core gate-class.ts) — null until it answers
@@ -136,13 +162,23 @@ export function gateCardModel(id, ctx = {}, opts = {}) {
     const calls = answer.calls || [];
     const tests = answer.tests || [];
     out.calls = { rows: calls.slice(0, cap), more: Math.max(0, calls.length - cap), total: calls.length };
-    out.pages = { rows: (answer.pages || []).slice(0, cap), more: Math.max(0, (answer.pages || []).length - cap), total: (answer.pages || []).length };
+    out.pages = {
+      rows: (answer.pages || []).slice(0, cap),
+      more: Math.max(0, (answer.pages || []).length - cap),
+      total: (answer.pages || []).length,
+    };
     out.tests = {
       rows: tests.slice(0, cap).map((t) => ({ ...t, onGate: t.reaches && t.reaches.nodeId === id })),
-      more: Math.max(0, tests.length - cap), total: tests.length, onGate: answer.testsOnGate || 0,
+      more: Math.max(0, tests.length - cap),
+      total: tests.length,
+      onGate: answer.testsOnGate || 0,
     };
     out.counted = answer.counted || null;
-    out.evidence = { chip: answer.chip, evidenceWord: answer.evidenceWord, ...(answer.verdict ? { verdict: answer.verdict } : {}) };
+    out.evidence = {
+      chip: answer.chip,
+      evidenceWord: answer.evidenceWord,
+      ...(answer.verdict ? { verdict: answer.verdict } : {}),
+    };
     out.truncated = !!answer.truncated;
     out.roles = gateRolesModel(answer, opts.here || [], cap);
   }
@@ -162,7 +198,15 @@ export function gateRolesModel(answer, here, cap = GATE_CARD_CAP) {
   const isHere = (r) => ids.has(r.action.id) || (!!r.action.handler && ids.has(r.action.handler));
   const h = t.rows.filter(isHere);
   const others = t.rows.filter((r) => !isHere(r));
-  return { here: h, others: others.slice(0, cap), more: Math.max(0, others.length - cap), alsoN: others.length, total: t.rows.length, counted: t.counted || null, roles: t.roles || [] };
+  return {
+    here: h,
+    others: others.slice(0, cap),
+    more: Math.max(0, others.length - cap),
+    alsoN: others.length,
+    total: t.rows.length,
+    counted: t.counted || null,
+    roles: t.roles || [],
+  };
 }
 
 /** `contact_vendor_links.status not in {PENDING, REJECTED}`: a precondition's code form, as the code register prints it. */
@@ -182,7 +226,9 @@ export function preconditionCode(p) {
  */
 export function tierLine(g, lens) {
   return {
-    tier: g.tier, tierKey: 'gate.tier.' + g.tier, classKey: 'gate.class.' + g.class,
+    tier: g.tier,
+    tierKey: 'gate.tier.' + g.tier,
+    classKey: 'gate.class.' + g.class,
     fromKey: 'gate.tierFrom.' + (g.tierFrom || 'class'),
     code: lens !== 'business' && g.precondition ? preconditionCode(g.precondition) : '',
     elseText: g.precondition ? g.precondition.else : '',

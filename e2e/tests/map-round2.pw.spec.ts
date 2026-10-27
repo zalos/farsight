@@ -14,13 +14,23 @@ import { test, expect, gotoReady } from './support';
 
 const BASE_FLOW = 'invoice-app::flow::billing-cycle';
 const ZOD = 'invoice-app::package::zod';
-const N = 12, WIDE = 14;
+const N = 12,
+  WIDE = 14;
 const SYN = (i: number) => 'invoice-app::flow::syn-' + i;
 // sorted by name, the wide one comes first and the board's next row sits right under it
 const NAMES = [
-  'A long journey across fourteen screens', 'Pay', 'Approve a correction request', 'Close the month', 'Export the ledger',
-  'Invite a colleague', 'Archive old drafts', 'Credit a customer', 'Merge two customers', 'Split an invoice',
-  'Review the weekly consolidation', 'Sign in',
+  'A long journey across fourteen screens',
+  'Pay',
+  'Approve a correction request',
+  'Close the month',
+  'Export the ledger',
+  'Invite a colleague',
+  'Archive old drafts',
+  'Credit a customer',
+  'Merge two customers',
+  'Split an invoice',
+  'Review the weekly consolidation',
+  'Sign in',
 ];
 const WIDE_ID = SYN(0);
 
@@ -28,16 +38,24 @@ async function mapOn(page: Page) {
   await gotoReady(page, '#/portfolio');
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
 }
 async function go(page: Page, hash: string) {
-  await page.evaluate((h) => { location.hash = h; }, hash);
+  await page.evaluate((h) => {
+    location.hash = h;
+  }, hash);
 }
 async function stubBoard(page: Page) {
   await page.route(/\/api\/design\?/, async (r) => {
     let d: any;
-    try { d = await (await r.fetch()).json(); } catch { return; }
+    try {
+      d = await (await r.fetch()).json();
+    } catch {
+      return;
+    }
     const src = d.designs[0];
     const base = src.flows.find((f: any) => f.id === 'billing-cycle');
     src.flows = NAMES.map((name, i) => ({ ...base, nodeId: SYN(i), id: 'syn-' + i, name }));
@@ -48,7 +66,18 @@ async function stubBoard(page: Page) {
     if (!m) return r.continue();
     const i = Number(m[1]);
     let d: any;
-    try { d = await (await r.fetch({ url: r.request().url().replace(/entry=[^&]*/, 'entry=' + encodeURIComponent(BASE_FLOW)) })).json(); } catch { return; }
+    try {
+      d = await (
+        await r.fetch({
+          url: r
+            .request()
+            .url()
+            .replace(/entry=[^&]*/, 'entry=' + encodeURIComponent(BASE_FLOW)),
+        })
+      ).json();
+    } catch {
+      return;
+    }
     d.summary.links = { requires: [], leadsTo: i < N - 1 ? [{ id: SYN(i + 1), name: NAMES[i + 1] }] : [], partOf: [] };
     if (i === 0) {
       const segs = d.summary.segments as any[];
@@ -56,7 +85,11 @@ async function stubBoard(page: Page) {
       const out = segs.slice();
       for (let k = withScreen.length; k < WIDE; k++) {
         const src = withScreen[k % withScreen.length];
-        out.push({ ...src, index: out.length, screen: { ...src.screen, id: src.screen.id + '#' + k, name: 'Step ' + (k + 1) } });
+        out.push({
+          ...src,
+          index: out.length,
+          screen: { ...src.screen, id: src.screen.id + '#' + k, name: 'Step ' + (k + 1) },
+        });
       }
       d.summary.segments = out;
     }
@@ -103,7 +136,11 @@ async function pAndJ(page: Page) {
   // the street's head is on the stage, not an empty band above it
   const headTop = await page.evaluate((flow) => {
     const b = (document.querySelector('.map-board') as HTMLElement).getBoundingClientRect();
-    return (document.querySelector(`.map-district[data-flow="${flow}"] .map-dhead .nm`) as HTMLElement).getBoundingClientRect().top - b.top;
+    return (
+      (
+        document.querySelector(`.map-district[data-flow="${flow}"] .map-dhead .nm`) as HTMLElement
+      ).getBoundingClientRect().top - b.top
+    );
   }, WIDE_ID);
   expect(headTop).toBeGreaterThanOrEqual(-4);
   expect(headTop).toBeLessThan(120);
@@ -115,7 +152,9 @@ test.describe('map round 2 — the journey the reader opened', () => {
    * @covers packages/server/public/app/surfaces/map.js::onCanvasChange
    * @covers packages/server/public/app/surfaces/map.js::enterJourney
    */
-  test('the widest journey opened by a click keeps the crumb, the ring and the link; p and j act on it', async ({ page }) => {
+  test('the widest journey opened by a click keeps the crumb, the ring and the link; p and j act on it', async ({
+    page,
+  }) => {
     await stubBoard(page);
     await mapOn(page);
     await go(page, '#/map');
@@ -164,7 +203,9 @@ test.describe('map round 2 — keys', () => {
    * @covers packages/server/public/app/surfaces/map.js::enterCover
    * @covers packages/server/public/app/lib/tooltip.js::tipKeydown
    */
-  test('j j Enter on the board opens the second journey; g toggles the legend with a cover focused, never its tip', async ({ page }) => {
+  test('j j Enter on the board opens the second journey; g toggles the legend with a cover focused, never its tip', async ({
+    page,
+  }) => {
     await stubBoard(page);
     await mapOn(page);
     await go(page, '#/map');
@@ -177,7 +218,14 @@ test.describe('map round 2 — keys', () => {
     expect(second).toBeTruthy();
     await page.keyboard.press('Enter');
     await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
-    await expect(page).toHaveURL(new RegExp('#/map/' + encodeURIComponent(second!).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '|#/map/' + second!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    await expect(page).toHaveURL(
+      new RegExp(
+        '#/map/' +
+          encodeURIComponent(second!).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
+          '|#/map/' +
+          second!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+      ),
+    );
     await page.keyboard.press('Escape');
     await expect(page.locator('.map-world')).toHaveClass(/lvl-nb/);
     // a cover has the focus (Esc lands on it): g is the legend's, both ways (? is the keymap's, everywhere)
@@ -195,7 +243,9 @@ test.describe('map round 2 — keys', () => {
     /**
      * @covers packages/server/public/app/surfaces/map.js::focusBoardOnOpen
      */
-    test('no legend opens by itself, and the board holds the focus so the first Tab lands on the board, not the header', async ({ page }) => {
+    test('no legend opens by itself, and the board holds the focus so the first Tab lands on the board, not the header', async ({
+      page,
+    }) => {
       await stubBoard(page);
       await mapOn(page);
       await go(page, '#/map');
@@ -205,7 +255,9 @@ test.describe('map round 2 — keys', () => {
       await expect.poll(() => page.evaluate(() => document.activeElement?.classList.contains('map-board'))).toBe(true);
       // the first Tab lands on a journey's cover (a stop a redraw keeps), not on the header or a count a walk redraws
       await page.keyboard.press('Tab');
-      await expect.poll(() => page.evaluate(() => !!document.activeElement?.matches('.map-board .map-dcover'))).toBe(true);
+      await expect
+        .poll(() => page.evaluate(() => !!document.activeElement?.matches('.map-board .map-dcover')))
+        .toBe(true);
       await expect(page.locator('.map-dcover:focus')).toHaveCount(1);
     });
   });
@@ -216,18 +268,26 @@ test.describe('map round 2 — zoom', () => {
    * @covers packages/server/public/app/lib/tooltip.js::quietHoverTips
    * @covers packages/server/public/app/surfaces/map.js::settleJourney
    */
-  test('a ⌘-wheel notch over a cover opens no tip, and the point under the pointer stays under it', async ({ page }) => {
+  test('a ⌘-wheel notch over a cover opens no tip, and the point under the pointer stays under it', async ({
+    page,
+  }) => {
     await stubBoard(page);
     await mapOn(page);
     await go(page, '#/map');
     await boardReady(page);
     const cov = (await page.locator(`.map-dcover[data-enter="${WIDE_ID}"]`).boundingBox())!;
     const at = { x: Math.min(cov.x + 400, 1300), y: cov.y + 50 };
-    const worldAt = () => page.evaluate(([x, y]) => {
-      const m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([-\d.]+)\)/.exec((document.querySelector('.map-world') as HTMLElement).style.transform)!;
-      const b = (document.querySelector('.map-board') as HTMLElement).getBoundingClientRect();
-      return { x: (x - b.left - +m[1]) / +m[3], y: (y - b.top - +m[2]) / +m[3], s: +m[3] };
-    }, [at.x, at.y]);
+    const worldAt = () =>
+      page.evaluate(
+        ([x, y]) => {
+          const m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([-\d.]+)\)/.exec(
+            (document.querySelector('.map-world') as HTMLElement).style.transform,
+          )!;
+          const b = (document.querySelector('.map-board') as HTMLElement).getBoundingClientRect();
+          return { x: (x - b.left - +m[1]) / +m[3], y: (y - b.top - +m[2]) / +m[3], s: +m[3] };
+        },
+        [at.x, at.y],
+      );
     const before = await worldAt();
     await page.mouse.move(at.x, at.y);
     await page.keyboard.down('Control');
@@ -271,7 +331,10 @@ test.describe('map round 2 — the Affected mode at board altitude', () => {
    * @covers packages/server/public/app/surfaces/map-affected.js::affectedExport
    * @covers packages/server/public/app/surfaces/map-affected.js::paintDistrict
    */
-  test('Fit frames what reaches the seed; lit covers carry a corner badge; the list writes it out and copies it', async ({ page, context }) => {
+  test('Fit frames what reaches the seed; lit covers carry a corner badge; the list writes it out and copies it', async ({
+    page,
+    context,
+  }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await mapOn(page);
     await go(page, '#/map?affected=' + encodeURIComponent('package:' + ZOD));

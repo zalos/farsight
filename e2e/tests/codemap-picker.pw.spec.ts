@@ -16,7 +16,11 @@ async function freePort(): Promise<number> {
   return new Promise((res, rej) => {
     const s = createServer();
     s.once('error', rej);
-    s.listen(0, '127.0.0.1', () => { const a = s.address(); const p = typeof a === 'object' && a ? a.port : 0; s.close(() => res(p)); });
+    s.listen(0, '127.0.0.1', () => {
+      const a = s.address();
+      const p = typeof a === 'object' && a ? a.port : 0;
+      s.close(() => res(p));
+    });
   });
 }
 
@@ -28,7 +32,11 @@ test.beforeAll(async () => {
   server = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(port)], { cwd: ws.dir, stdio: 'ignore' });
   base = `http://localhost:${port}/`;
   for (let i = 0; i < 100; i++) {
-    try { if ((await fetch(base + 'api/version')).ok) return; } catch { /* not yet */ }
+    try {
+      if ((await fetch(base + 'api/version')).ok) return;
+    } catch {
+      /* not yet */
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error('the projects workspace server never answered');
@@ -56,7 +64,13 @@ test('typing narrows the list, applications above libraries, the match count in 
   await p.locator('.mpk-q').fill('bill');
   await expect(p.locator('.mpk-count')).toHaveText('5 of 9 projects');
   await expect(p.locator('.mpk-gh')).toHaveText(['Applications', 'Libraries', 'End-to-end tests']);
-  await expect(p.locator('.mpk-opt .mpk-word')).toHaveText(['billing-web', 'billing-data-access', 'billing-feature-invoices', 'billing-ui', 'billing-web-e2e']);
+  await expect(p.locator('.mpk-opt .mpk-word')).toHaveText([
+    'billing-web',
+    'billing-data-access',
+    'billing-feature-invoices',
+    'billing-ui',
+    'billing-web-e2e',
+  ]);
   // a tag word finds what the name does not: Operations is ops-admin's domain
   await p.locator('.mpk-q').fill('operations');
   await expect(p.locator('.mpk-opt .mpk-word')).toHaveText(['ops-admin']);
@@ -121,7 +135,10 @@ test('keyboard only: find, arrow, Space, Enter, Command A; chips fold past six',
   await page.keyboard.press('Space');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
-  await expect(p.locator('.mpk-opt[aria-selected="true"] .mpk-word')).toHaveText(['billing-web', 'billing-data-access']);
+  await expect(p.locator('.mpk-opt[aria-selected="true"] .mpk-word')).toHaveText([
+    'billing-web',
+    'billing-data-access',
+  ]);
   await expect(p.locator('.mpk-q')).toBeFocused();
   // Command A picks every option shown; past six the chips fold into +n
   await page.keyboard.press('Escape');

@@ -60,7 +60,9 @@ test.describe('fast travel', () => {
    * @covers packages/server/public/app/shell.js::travelTarget
    * @covers packages/server/public/app/surfaces/codemap.js::mountCodemap
    */
-  test('from Journeys, a function arrives on the code map — selected and in view, not behind the page', async ({ page }) => {
+  test('from Journeys, a function arrives on the code map — selected and in view, not behind the page', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/journeys');
     await expect(page.locator('body')).toHaveClass(/surface-journeys/);
     await travel(page, 'computeTax', 'Compute tax');
@@ -73,7 +75,9 @@ test.describe('fast travel', () => {
    * @covers packages/server/public/app/shell.js::travelTarget
    * @covers packages/server/public/app/shell.js::renderPalette
    */
-  test('in the business register a flow arrives as its journey, and the palette names things without code', async ({ page }) => {
+  test('in the business register a flow arrives as its journey, and the palette names things without code', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/journeys?lens=business');
     await expect(page.locator('body')).toHaveClass(/lens-business/);
     await page.keyboard.press('ControlOrMeta+k');
@@ -99,7 +103,9 @@ test.describe('fast travel', () => {
    * @covers packages/server/public/app/shell.js::pick
    * @covers packages/server/public/app/shell.js::arriveAt
    */
-  test('in the business register a function arrives on the map by its name, its identifier and file kept out', async ({ page }) => {
+  test('in the business register a function arrives on the map by its name, its identifier and file kept out', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/journeys?lens=business');
     await travel(page, 'compute tax', 'Compute tax');
     await expectOnMap(page, TAX, 'Compute tax');
@@ -145,14 +151,18 @@ test.describe('fast travel', () => {
     for (let i = 0; i < ids.indexOf(target); i++) await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(new RegExp('#/codemap\\?node=' + reEsc(encodeURIComponent(target)) + '$'));
-    await expect(page.locator('#inspector .path')).toContainText(target === SERVICE ? 'src/server/invoiceService.ts' : 'src/api/client.ts');
+    await expect(page.locator('#inspector .path')).toContainText(
+      target === SERVICE ? 'src/server/invoiceService.ts' : 'src/api/client.ts',
+    );
     // and a click takes the other one, by its id
     const other = target === SERVICE ? CLIENT : SERVICE;
     await page.keyboard.press('ControlOrMeta+k');
     await page.keyboard.type('finalizeInvoice');
     await palette.locator(`.presult[data-id="${other}"]`).click();
     await expect(page).toHaveURL(new RegExp('#/codemap\\?node=' + reEsc(encodeURIComponent(other)) + '$'));
-    await expect(page.locator('#inspector .path')).toContainText(other === SERVICE ? 'src/server/invoiceService.ts' : 'src/api/client.ts');
+    await expect(page.locator('#inspector .path')).toContainText(
+      other === SERVICE ? 'src/server/invoiceService.ts' : 'src/api/client.ts',
+    );
   });
 
   /**

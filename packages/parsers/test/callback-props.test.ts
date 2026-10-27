@@ -29,7 +29,7 @@ const FILES: Record<string, string> = {
   'src/api.ts': [
     "export function markPaid(id: string, body: { paidOn: string }) { return fetch(`/api/payouts/${id}/mark-paid`, { method: 'POST', body: JSON.stringify(body) }); }",
     "export function recordIntent(id: string) { return fetch(`/api/payouts/${id}/intent`, { method: 'POST' }); }",
-    "export function loadPayout(id: string) { return fetch(`/api/payouts/${id}`); }",
+    'export function loadPayout(id: string) { return fetch(`/api/payouts/${id}`); }',
   ].join('\n'),
   'src/model.ts': [
     'export function markPaidState(status: string, roles: string[]) {',
@@ -60,7 +60,7 @@ const FILES: Record<string, string> = {
     'export function WeeklyCycle({ id, roles }: { id: string; roles: string[] }) {',
     '  const [busy, setBusy] = useState(false);',
     '  const act = async (fn: () => Promise<unknown>) => { setBusy(true); await fn(); setBusy(false); };',
-    '  const paid = markPaidState(\'SCHEDULED\', roles);',
+    "  const paid = markPaidState('SCHEDULED', roles);",
     '  const amount = formatAmount(200);',
     '  const payout = loadPayout(id);',
     '  return (',
@@ -116,7 +116,13 @@ const FILES: Record<string, string> = {
 
 let cached: GraphFragment | undefined;
 async function graph(): Promise<GraphFragment> {
-  cached ??= await ingestRepo(tempRepo(FILES), { repoName: 'cb', openapi: false, tests: false, stories: false, projects: false });
+  cached ??= await ingestRepo(tempRepo(FILES), {
+    repoName: 'cb',
+    openapi: false,
+    tests: false,
+    stories: false,
+    projects: false,
+  });
   return cached;
 }
 const id = (name: string) => `cb::src/WeeklyCycle.tsx::${name}`;
@@ -124,7 +130,9 @@ const cbEdges = (g: GraphFragment) => g.edges.filter((e) => e.resolution?.techni
 
 test('the form that runs onConfirm carries the call its grandparent wrote, through a pass-through parent', async () => {
   const g = await graph();
-  const e = g.edges.find((x) => x.kind === 'calls' && x.from === id('MarkPaidForm') && x.to === 'cb::src/api.ts::markPaid');
+  const e = g.edges.find(
+    (x) => x.kind === 'calls' && x.from === id('MarkPaidForm') && x.to === 'cb::src/api.ts::markPaid',
+  );
   assert.ok(e, 'MarkPaidForm → markPaid');
   assert.equal(e!.resolution?.technique, 'callback-prop');
   assert.equal(e!.resolution?.confidence, 'MEDIUM');
@@ -132,14 +140,25 @@ test('the form that runs onConfirm carries the call its grandparent wrote, throu
   assert.equal(e!.meta?.prop, 'onConfirm');
   assert.equal(e!.meta?.handedBy, id('WeeklyCycle'));
   // the line is where the child runs it — the submit handler — so the walk orders it among the child's own steps
-  assert.equal(e!.meta?.line, FILES['src/WeeklyCycle.tsx']!.split('\n').findIndex((l) => l.includes('void onConfirm(paidOn)')) + 1);
+  assert.equal(
+    e!.meta?.line,
+    FILES['src/WeeklyCycle.tsx']!.split('\n').findIndex((l) => l.includes('void onConfirm(paidOn)')) + 1,
+  );
   // the parent keeps its own edge: the arrow is written in its body
-  assert.ok(g.edges.some((x) => x.kind === 'calls' && x.from === id('WeeklyCycle') && x.to === 'cb::src/api.ts::markPaid' && !x.resolution?.technique.startsWith('callback')));
+  assert.ok(
+    g.edges.some(
+      (x) =>
+        x.kind === 'calls' &&
+        x.from === id('WeeklyCycle') &&
+        x.to === 'cb::src/api.ts::markPaid' &&
+        !x.resolution?.technique.startsWith('callback'),
+    ),
+  );
   // the pass-through parent only hands it on: it runs nothing
   assert.ok(!g.edges.some((x) => x.from === id('Payout') && x.to === 'cb::src/api.ts::markPaid'));
 });
 
-test('a shared component rendered from many places is never credited with one caller\'s function', async () => {
+test("a shared component rendered from many places is never credited with one caller's function", async () => {
   const g = await graph();
   assert.ok(!g.edges.some((x) => x.from === 'cb::src/Button.tsx::Button' && x.to === 'cb::src/api.ts::recordIntent'));
   assert.ok(!cbEdges(g).some((x) => x.from === 'cb::src/Button.tsx::Button'));
@@ -148,13 +167,19 @@ test('a shared component rendered from many places is never credited with one ca
 test('a value the parent computed is credited only where the child decides on it, and never a data load', async () => {
   const g = await graph();
   const v = g.edges.find((x) => x.from === id('Payout') && x.to === 'cb::src/model.ts::markPaidState');
-  assert.ok(v, 'Payout decides on paid.enabled → shows markPaidState\'s answer');
+  assert.ok(v, "Payout decides on paid.enabled → shows markPaidState's answer");
   assert.equal(v!.meta?.via, 'prop-value');
   // shown, not decided on: no edge
   assert.ok(!g.edges.some((x) => x.from === id('Payout') && x.to === 'cb::src/model.ts::formatAmount'));
   // a fetch is the parent's load, not an answer the child shows
   assert.ok(!g.edges.some((x) => x.from === id('Payout') && x.to === 'cb::src/api.ts::loadPayout'));
-  assert.equal(cbEdges(g).length, 2, cbEdges(g).map((x) => `${x.from} → ${x.to}`).join('\n'));
+  assert.equal(
+    cbEdges(g).length,
+    2,
+    cbEdges(g)
+      .map((x) => `${x.from} → ${x.to}`)
+      .join('\n'),
+  );
 });
 
 test('the journey walks the state screen into its call, the route and on — the same walk every surface reads', async () => {
@@ -169,5 +194,8 @@ test('the journey walks the state screen into its call, the route and on — the
   // fixture the page's later siblings follow it in the same segment; on a real page they do not)
   assert.ok(seg!.counts.calls >= 1);
   assert.equal(seg!.markers[0]!.name, 'markPaid');
-  assert.ok(seg!.markers.some((m) => m.kind === 'call' && m.name.includes('/mark-paid')), seg!.markers.map((m) => m.name).join(', '));
+  assert.ok(
+    seg!.markers.some((m) => m.kind === 'call' && m.name.includes('/mark-paid')),
+    seg!.markers.map((m) => m.name).join(', '),
+  );
 });

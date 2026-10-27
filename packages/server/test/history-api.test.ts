@@ -34,8 +34,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
-  GraphStore, SnapshotDb, diffGraphs, changeSentence, spineSentences, spineRowNote, attributeChanges,
-  type CommitSpine, type SpineRow,
+  GraphStore,
+  SnapshotDb,
+  diffGraphs,
+  changeSentence,
+  spineSentences,
+  spineRowNote,
+  attributeChanges,
+  type CommitSpine,
+  type SpineRow,
 } from '@farsight/core';
 import { gitLog, gitHeadRef, gitShallow, GIT_ABSENT_WORD, headTitle, shallowFloorSentence } from '@farsight/parsers';
 import type { FileStatus } from '@farsight/core';
@@ -66,7 +73,15 @@ function git(dir: string, args: string[], env: Record<string, string> = {}) {
  * the CLI. The fixture writes real statuses so a rename is stored as one.
  */
 const STATUS_WORD: Record<string, FileStatus> = {
-  A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'copied', T: 'typechange', U: 'unmerged', B: 'modified', X: 'unknown',
+  A: 'added',
+  M: 'modified',
+  D: 'deleted',
+  R: 'renamed',
+  C: 'copied',
+  T: 'typechange',
+  U: 'unmerged',
+  B: 'modified',
+  X: 'unknown',
 };
 
 function initRepo(dir: string) {
@@ -90,10 +105,19 @@ function sync(db: SnapshotDb, nodes: string[]): void {
     repo: 'app',
     // routes, because `farsight-diff v1` reports route_added and not function_added:
     // the fixture has to produce changes for the contract to be tested on
-    nodes: nodes.map((n) => ({ id: `app::src/${n}.ts::GET /${n}`, kind: 'route' as const, name: `GET /${n}`, tags: [], loc: { repo: 'app', path: `src/${n}.ts`, line: 1 } })),
+    nodes: nodes.map((n) => ({
+      id: `app::src/${n}.ts::GET /${n}`,
+      kind: 'route' as const,
+      name: `GET /${n}`,
+      tags: [],
+      loc: { repo: 'app', path: `src/${n}.ts`, line: 1 },
+    })),
     edges: [],
   });
-  db.write(store, { commit: git(app, ['rev-parse', 'HEAD']), sources: [{ name: 'app', commit: git(app, ['rev-parse', 'HEAD']), files: 1 }] });
+  db.write(store, {
+    commit: git(app, ['rev-parse', 'HEAD']),
+    sources: [{ name: 'app', commit: git(app, ['rev-parse', 'HEAD']), files: 1 }],
+  });
 }
 
 async function freePort(): Promise<number> {
@@ -122,7 +146,9 @@ async function waitReady(): Promise<void> {
       await r.arrayBuffer();
       if (r.ok) return;
       last = `HTTP ${r.status}`;
-    } catch (err) { last = (err as Error).message; }
+    } catch (err) {
+      last = (err as Error).message;
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error(`the server never answered on port ${port} (${last}):\n${childLog}`);
@@ -155,10 +181,19 @@ before(async () => {
 
   // a workspace whose one local source is `app`, so the endpoints can find its checkout
   mkdirSync(join(work, '.farsight'), { recursive: true });
-  writeFileSync(join(work, '.farsight', 'settings.json'), JSON.stringify({
-    theme: 'dark', defaultLens: 'hybrid', collections: [],
-    sources: [{ id: 'app', name: 'app', type: 'local', path: 'app', enabled: true }],
-  }, null, 2) + '\n');
+  writeFileSync(
+    join(work, '.farsight', 'settings.json'),
+    JSON.stringify(
+      {
+        theme: 'dark',
+        defaultLens: 'hybrid',
+        collections: [],
+        sources: [{ id: 'app', name: 'app', type: 'local', path: 'app', enabled: true }],
+      },
+      null,
+      2,
+    ) + '\n',
+  );
 
   const db = new SnapshotDb(join(work, '.farsight', 'farsight.db'));
   git(app, ['checkout', '-q', sha.c2!]);
@@ -170,30 +205,51 @@ before(async () => {
   // the history the endpoints read — written by the reader, exactly as `farsight history` does
   const log = gitLog(app, {});
   assert.ok(log.available, 'the fixture repository must have a readable log');
-  db.writeCommits('app', log.commits.map((c) => ({
-    sha: c.sha, at: new Date(c.at * 1000).toISOString(), author: c.author, email: c.email,
-    subject: c.subject, parents: c.parents, merge: c.merge,
-    // git's own letters through the same map `commitInputs` uses (cli.ts:272) — so a
-    // rename in this repository arrives as a rename and not as a modification
-    files: c.files.map((f) => ({
-      path: f.path,
-      status: STATUS_WORD[f.status] ?? ('unknown' as const),
-      ...(f.oldPath ? { oldPath: f.oldPath } : {}),
-      ...(f.similarity === undefined ? {} : { similarity: f.similarity }),
+  db.writeCommits(
+    'app',
+    log.commits.map((c) => ({
+      sha: c.sha,
+      at: new Date(c.at * 1000).toISOString(),
+      author: c.author,
+      email: c.email,
+      subject: c.subject,
+      parents: c.parents,
+      merge: c.merge,
+      // git's own letters through the same map `commitInputs` uses (cli.ts:272) — so a
+      // rename in this repository arrives as a rename and not as a modification
+      files: c.files.map((f) => ({
+        path: f.path,
+        status: STATUS_WORD[f.status] ?? ('unknown' as const),
+        ...(f.oldPath ? { oldPath: f.oldPath } : {}),
+        ...(f.similarity === undefined ? {} : { similarity: f.similarity }),
+      })),
     })),
-  })));
+  );
   db.close();
 
   // a graph on disk, so /graph answers and roots[app] names the checkout
   const store = new GraphStore();
   store.roots.app = app;
   // one part, so the Map's /api/history/touching has something to find commits for
-  store.addFragment({ repo: 'app', nodes: [{ id: 'app::src/two.ts::GET /two', kind: 'route', name: 'GET /two', tags: [], loc: { repo: 'app', path: 'src/two.ts', line: 1 } }], edges: [] });
+  store.addFragment({
+    repo: 'app',
+    nodes: [
+      {
+        id: 'app::src/two.ts::GET /two',
+        kind: 'route',
+        name: 'GET /two',
+        tags: [],
+        loc: { repo: 'app', path: 'src/two.ts', line: 1 },
+      },
+    ],
+    edges: [],
+  });
   store.save(join(work, 'graph.json'));
 
   port = await freePort();
-  const boot = `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n`
-    + `serveGraph(${JSON.stringify(join(work, 'graph.json'))}, ${port}, ${JSON.stringify(work)});\n`;
+  const boot =
+    `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n` +
+    `serveGraph(${JSON.stringify(join(work, 'graph.json'))}, ${port}, ${JSON.stringify(work)});\n`;
   child = spawn(process.execPath, ['--input-type=module', '-e', boot], {
     cwd: work,
     env: { ...process.env, MODELHUB_DIR: join(work, 'modelhub'), FIGMA_TOKEN: '' },
@@ -201,8 +257,12 @@ before(async () => {
   }) as ChildProcessWithoutNullStreams;
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (d: string) => { childLog += d; });
-  child.stderr.on('data', (d: string) => { childLog += d; });
+  child.stdout.on('data', (d: string) => {
+    childLog += d;
+  });
+  child.stderr.on('data', (d: string) => {
+    childLog += d;
+  });
   await waitReady();
 });
 
@@ -213,7 +273,11 @@ after(async () => {
     await Promise.race([gone, new Promise((r) => setTimeout(r, 2000))]);
     if (child.exitCode == null) child.kill('SIGKILL');
   }
-  try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ }
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
 });
 
 // ── helpers ───────────────────────────────────────────────────────────────
@@ -231,20 +295,27 @@ async function api(path: string): Promise<any> {
 
 /** One named fact. The message says which number disagreed and what both sides say. */
 function same(label: string, got: unknown, want: unknown): void {
-  assert.deepStrictEqual(got, want,
-    `${label}: the endpoint says ${JSON.stringify(got)}, the core fold computes ${JSON.stringify(want)}`);
+  assert.deepStrictEqual(
+    got,
+    want,
+    `${label}: the endpoint says ${JSON.stringify(got)}, the core fold computes ${JSON.stringify(want)}`,
+  );
 }
 
 /** The spine as the core folds it, read in this process from the same database. */
 function fold<T>(f: (db: SnapshotDb) => T): T {
   const db = new SnapshotDb(join(work, '.farsight', 'farsight.db'));
-  try { return f(db); } finally { db.close(); }
+  try {
+    return f(db);
+  } finally {
+    db.close();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
 
 describe('/api/history is commitSpine() + spineSentences()', () => {
-  test('every whole-spine number is the fold\'s', async () => {
+  test("every whole-spine number is the fold's", async () => {
     const body = await api('/api/history?repo=app');
     const spine: CommitSpine = fold((db) => db.commitSpine('app'));
     same('repo', body.repo, 'app');
@@ -264,13 +335,17 @@ describe('/api/history is commitSpine() + spineSentences()', () => {
     same('three of them no sync ever ingested', body.unindexed, 3);
     same('three syncs, two distinct commits', [body.syncs, body.distinct], [3, 2]);
     same('one of them re-indexed the same commit', body.reindexed, 1);
-    same('c1 lies before the oldest sync\'s commit', body.before, 1);
+    same("c1 lies before the oldest sync's commit", body.before, 1);
   });
 
-  test('every row is the fold\'s row, and its note is the shared sentence', async () => {
+  test("every row is the fold's row, and its note is the shared sentence", async () => {
     const body = await api('/api/history?repo=app');
     const rows: SpineRow[] = fold((db) => db.commitSpine('app').rows);
-    same('the syncs, newest first', body.spine.map((r: any) => r.sync), rows.map((r) => r.sync));
+    same(
+      'the syncs, newest first',
+      body.spine.map((r: any) => r.sync),
+      rows.map((r) => r.sync),
+    );
     for (const [i, row] of rows.entries()) {
       const got = body.spine[i];
       const note = spineRowNote(row);
@@ -281,7 +356,11 @@ describe('/api/history is commitSpine() + spineSentences()', () => {
       same(`sync:${row.sync}.reindexed`, got.reindexed, row.reindexed);
       same(`sync:${row.sync}.note`, got.note, note.kind);
       same(`sync:${row.sync}.noteText`, got.noteText, note.text);
-      same(`sync:${row.sync}.commits`, got.commits, row.commits.map((c) => c.sha));
+      same(
+        `sync:${row.sync}.commits`,
+        got.commits,
+        row.commits.map((c) => c.sha),
+      );
       // a derived number with no commit behind it is null, never 0
       same(`sync:${row.sync}.swept`, got.swept, row.commitKnown ? row.commits.length : null);
       same(`sync:${row.sync}.unindexed`, got.unindexed, row.commitKnown ? row.unindexed : null);
@@ -291,16 +370,31 @@ describe('/api/history is commitSpine() + spineSentences()', () => {
     same('and swept nothing new', bySync.get(3).swept, 0);
     same('sync 2 swept c3, c4 and c5', new Set(bySync.get(2).commits), new Set([sha.c3, sha.c4, sha.c5]));
     same('two of those three no sync ingested', bySync.get(2).unindexed, 2);
-    same('every row stamped this source\'s own commit', body.spine.map((r: any) => r.commitFrom), ['source', 'source', 'source']);
-    same('and every sync walked it', body.spine.map((r: any) => r.inSync), [true, true, true]);
+    same(
+      "every row stamped this source's own commit",
+      body.spine.map((r: any) => r.commitFrom),
+      ['source', 'source', 'source'],
+    );
+    same(
+      'and every sync walked it',
+      body.spine.map((r: any) => r.inSync),
+      [true, true, true],
+    );
   });
 
   test('the notes are the shared sentences, unindexed first', async () => {
     const body = await api('/api/history?repo=app');
     const said = spineSentences(fold((db) => db.commitSpine('app')));
     const texts = body.notes.map((n: any) => n.text);
-    assert.equal(texts[0], said.unindexed!.text, 'the unindexed count is stated before any row can be read as complete');
-    assert.match(texts[0], /5 commits read into history · 2 ingested by a sync · 3 not yet — the 3 not yet ingested are not indexed/);
+    assert.equal(
+      texts[0],
+      said.unindexed!.text,
+      'the unindexed count is stated before any row can be read as complete',
+    );
+    assert.match(
+      texts[0],
+      /5 commits read into history · 2 ingested by a sync · 3 not yet — the 3 not yet ingested are not indexed/,
+    );
     for (const key of ['syncs', 'outsideReach'] as const) {
       assert.ok(texts.includes(said[key]!.text), `the ${key} sentence must be the fold's: ${said[key]!.text}`);
     }
@@ -329,7 +423,11 @@ describe('/api/history is commitSpine() + spineSentences()', () => {
     same('range.head', body.range.head, 2);
     same('range.baseCommit', body.range.baseCommit, sha.c2);
     same('range.headCommit', body.range.headCommit, sha.c5);
-    same('range.commits', body.range.commits.map((c: any) => c.sha), range.commits.map((c) => c.sha));
+    same(
+      'range.commits',
+      body.range.commits.map((c: any) => c.sha),
+      range.commits.map((c) => c.sha),
+    );
     same('range.unindexed', body.range.unindexed, range.unindexed);
     same('c3 and c4 are in the range and were never ingested', body.range.unindexed, 2);
     same('nothing about this range is unknowable', body.range.incomplete, []);
@@ -349,7 +447,11 @@ describe('/api/history is commitSpine() + spineSentences()', () => {
       const { files } = db.historyRows('app', { shas });
       const paths = new Set(files.map((f) => f.path));
       const renamed = files.filter((f) => f.status === 'renamed');
-      return { touched: paths.size, renamed: renamed.length, identical: renamed.filter((f) => f.similarity === 100).length };
+      return {
+        touched: paths.size,
+        renamed: renamed.length,
+        identical: renamed.filter((f) => f.similarity === 100).length,
+      };
     });
     same('range.files', body.range.files, want);
     // the fixture moved src/three.ts to src/trois.ts inside c5 without editing it:
@@ -357,7 +459,10 @@ describe('/api/history is commitSpine() + spineSentences()', () => {
     // addition, and this is the number that says nothing was deleted
     same('the move is reported as a rename', body.range.files.renamed, 1);
     same('and as one git scored byte-identical', body.range.files.identical, 1);
-    assert.ok(body.range.files.touched >= 3, `three commits touched at least three files, got ${body.range.files.touched}`);
+    assert.ok(
+      body.range.files.touched >= 3,
+      `three commits touched at least three files, got ${body.range.files.touched}`,
+    );
   });
 
   test('to= alone defaults from to the sync before it, the way farsight diff does', async () => {
@@ -399,8 +504,16 @@ describe('/api/history is commitSpine() + spineSentences()', () => {
     same('syncs', body.syncs, 3);
     same('withoutCommit', body.withoutCommit, 3);
     same('notInSync', body.notInSync, 3);
-    same('every row says it was not in the sync', body.spine.map((r: any) => r.note), ['not-in-sync', 'not-in-sync', 'not-in-sync']);
-    same('and every derived number is absent, not zero', body.spine.map((r: any) => r.swept), [null, null, null]);
+    same(
+      'every row says it was not in the sync',
+      body.spine.map((r: any) => r.note),
+      ['not-in-sync', 'not-in-sync', 'not-in-sync'],
+    );
+    same(
+      'and every derived number is absent, not zero',
+      body.spine.map((r: any) => r.swept),
+      [null, null, null],
+    );
   });
 });
 
@@ -417,9 +530,15 @@ describe('/api/history — which absence it is (§8)', () => {
     same('reason', body.head.reason, 'not-a-repo');
     same('the word is the one every surface prints', body.head.word, GIT_ABSENT_WORD['not-a-repo']);
     same('title', body.title, null);
-    assert.ok(body.notes.some((n: any) => n.text.startsWith(GIT_ABSENT_WORD['not-a-repo'])),
-      `the not-a-repo word must be printed: ${JSON.stringify(body.notes)}`);
-    assert.ok(body.notes.some((n: any) => /the snapshot spine below is unchanged; every commit it cannot name reads "not indexed"/.test(n.text)));
+    assert.ok(
+      body.notes.some((n: any) => n.text.startsWith(GIT_ABSENT_WORD['not-a-repo'])),
+      `the not-a-repo word must be printed: ${JSON.stringify(body.notes)}`,
+    );
+    assert.ok(
+      body.notes.some((n: any) =>
+        /the snapshot spine below is unchanged; every commit it cannot name reads "not indexed"/.test(n.text),
+      ),
+    );
     same('the spine is still three syncs long', body.syncs, 3);
   });
 
@@ -461,19 +580,31 @@ describe('/api/history — which absence it is (§8)', () => {
     const db = new SnapshotDb(join(work, '.farsight', 'farsight.db'));
     const store = new GraphStore();
     store.addFragment({ repo: 'rewritten', nodes: [], edges: [] });
-    db.write(store, { commit: 'deadbee'.padEnd(40, '0'), sources: [{ name: 'rewritten', commit: 'deadbee'.padEnd(40, '0'), files: 1 }] });
-    db.writeCommits('rewritten', [{ sha: 'cafe'.padEnd(40, '1'), at: '2026-04-01T00:00:00Z', subject: 'the history that survived', parents: [] }]);
+    db.write(store, {
+      commit: 'deadbee'.padEnd(40, '0'),
+      sources: [{ name: 'rewritten', commit: 'deadbee'.padEnd(40, '0'), files: 1 }],
+    });
+    db.writeCommits('rewritten', [
+      { sha: 'cafe'.padEnd(40, '1'), at: '2026-04-01T00:00:00Z', subject: 'the history that survived', parents: [] },
+    ]);
     db.close();
     const body = await api('/api/history?repo=rewritten');
     const row = body.spine[0];
     same('the row keeps the sha it recorded', row.commit, 'deadbee'.padEnd(40, '0'));
     same('commitKnown', row.commitKnown, false);
     same('note', row.note, 'commit-unknown');
-    assert.match(row.noteText, /commit not in this repository's history — rewritten, pruned, or a history not read this far back/);
+    assert.match(
+      row.noteText,
+      /commit not in this repository's history — rewritten, pruned, or a history not read this far back/,
+    );
     // and nothing derived from an unplaceable commit is invented
     same('swept', row.swept, null);
     same('unindexed', row.unindexed, null);
-    assert.ok(body.notes.some((n: any) => /no sync on this spine names a commit this repository's history contains/.test(n.text)));
+    assert.ok(
+      body.notes.some((n: any) =>
+        /no sync on this spine names a commit this repository's history contains/.test(n.text),
+      ),
+    );
   });
 });
 
@@ -481,7 +612,8 @@ describe('/api/diff is the frozen farsight-diff v1', () => {
   test('the document is diffGraphs() and the schema accepts it', async () => {
     const body = await api('/api/diff?from=sync:1&to=sync:2');
     const want = fold((db) => {
-      const base = db.read(1); const head = db.read(2);
+      const base = db.read(1);
+      const head = db.read(2);
       return diffGraphs(base.store, head.store, { changes: db.changedBetween(1, 2) });
     });
     same('the whole document', body, JSON.parse(JSON.stringify(want)));
@@ -496,8 +628,11 @@ describe('/api/diff is the frozen farsight-diff v1', () => {
     for (const c of body.changes) {
       assert.ok(!('attribution' in c), `change ${c.id} carries an attribution field nobody asked for`);
     }
-    assert.equal((await get('/api/diff?from=sync:1&to=sync:2')).headers.get('x-farsight-attribution'), null,
-      'the caveat header rides only with the field it is about');
+    assert.equal(
+      (await get('/api/diff?from=sync:1&to=sync:2')).headers.get('x-farsight-attribution'),
+      null,
+      'the caveat header rides only with the field it is about',
+    );
   });
 
   test('attribute=1 adds the optional field, file-level, and still validates', async () => {
@@ -505,7 +640,8 @@ describe('/api/diff is the frozen farsight-diff v1', () => {
     const body = JSON.parse(await r.text());
     assert.deepEqual(validate(body, diffSchema), [], 'the frozen schema permits the optional field');
     const want = fold((db) => {
-      const base = db.read(1); const head = db.read(2);
+      const base = db.read(1);
+      const head = db.read(2);
       const diff = diffGraphs(base.store, head.store, { changes: db.changedBetween(1, 2) });
       const rows = db.historyRows('app', { shas: db.commitsBetween('app', 1, 2).commits.map((c) => c.sha) });
       return attributeChanges(diff, { commits: rows.commits, files: rows.files }, { prefix: {} });
@@ -521,7 +657,10 @@ describe('/api/diff is the frozen farsight-diff v1', () => {
     // the caveats cannot ride inside a frozen additionalProperties:false document,
     // so they ride as headers pointing at the surface whose job is the narrative
     assert.match(r.headers.get('x-farsight-attribution') ?? '', /level=file; .*not proof of cause/);
-    assert.match(r.headers.get('x-farsight-attribution-words') ?? '', /^\/api\/history\?repo=<name>&from=sync:1&to=sync:2$/);
+    assert.match(
+      r.headers.get('x-farsight-attribution-words') ?? '',
+      /^\/api\/history\?repo=<name>&from=sync:1&to=sync:2$/,
+    );
   });
 
   test('a change with no file gets no attribution, even with the flag', async () => {
@@ -531,7 +670,7 @@ describe('/api/diff is the frozen farsight-diff v1', () => {
     }
   });
 
-  test('the defaults are farsight diff\'s: to=latest, from=the sync before it', async () => {
+  test("the defaults are farsight diff's: to=latest, from=the sync before it", async () => {
     // computed, not assumed: a suite above this one records a snapshot of its own,
     // so "latest" is whatever the store says when the request is made
     const [latest, previous] = fold((db) => {
@@ -572,7 +711,7 @@ describe('/api/changes — the frozen document nested, with the words beside it'
     same('headSync', body.headSync, 2);
   });
 
-  test('every sentence is the core\'s changeSentence, one per change', async () => {
+  test("every sentence is the core's changeSentence, one per change", async () => {
     const body = await api('/api/changes?from=sync:1&to=sync:2');
     const want = fold((db) => {
       const diff = diffGraphs(db.read(1).store, db.read(2).store, { changes: db.changedBetween(1, 2) });
@@ -581,7 +720,10 @@ describe('/api/changes — the frozen document nested, with the words beside it'
     same('the sentences', body.sentences, want);
     same('one per change', Object.keys(body.sentences).length, body.diff.changes.length);
     for (const c of body.diff.changes) {
-      assert.ok(body.sentences[c.id], `change ${c.id} (${c.kind}) has no sentence, so a register with no kind words could not draw it`);
+      assert.ok(
+        body.sentences[c.id],
+        `change ${c.id} (${c.kind}) has no sentence, so a register with no kind words could not draw it`,
+      );
     }
   });
 
@@ -590,12 +732,17 @@ describe('/api/changes — the frozen document nested, with the words beside it'
     same('level', body.attribution.level, 'file');
     assert.match(body.attribution.header, /file-level/);
     assert.match(body.attribution.header, /not proof that any of those commits changed/);
-    assert.ok(body.attribution.notes.length > 0, 'a repository with a history must say how much of the range was never ingested');
-    assert.ok(body.attribution.notes.some((n: any) => /no sync ever ingested/.test(n.text)),
-      'the fixture range holds two commits no sync read; the notes must say so');
+    assert.ok(
+      body.attribution.notes.length > 0,
+      'a repository with a history must say how much of the range was never ingested',
+    );
+    assert.ok(
+      body.attribution.notes.some((n: any) => /no sync ever ingested/.test(n.text)),
+      'the fixture range holds two commits no sync read; the notes must say so',
+    );
   });
 
-  test('the defaults are farsight diff\'s, and a bad end is a usage error', async () => {
+  test("the defaults are farsight diff's, and a bad end is a usage error", async () => {
     const [latest, previous] = fold((db) => {
       const rows = db.list(5);
       return [rows[0]!.sync, db.previous(rows[0]!.sync)!];
@@ -671,28 +818,58 @@ describe('/api/history — a history nobody has read (absent is not empty)', () 
     same('bound', body.bound, 'floor');
     same('commits', body.commits, 0);
     const mine = body.spine.filter((r: any) => syncs.includes(r.sync));
-    same('the three syncs, newest first', mine.map((r: any) => r.sync), syncs);
+    same(
+      'the three syncs, newest first',
+      mine.map((r: any) => r.sync),
+      syncs,
+    );
     // the two words the defect used, now impossible on an unread history
-    same('every one of them says the history is unread', mine.map((r: any) => r.note),
-      ['history-unread', 'history-unread', 'history-unread']);
-    assert.ok(!body.spine.some((r: any) => r.note === 'commit-unknown'),
-      'nothing can be missing from a history nobody has read');
+    same(
+      'every one of them says the history is unread',
+      mine.map((r: any) => r.note),
+      ['history-unread', 'history-unread', 'history-unread'],
+    );
+    assert.ok(
+      !body.spine.some((r: any) => r.note === 'commit-unknown'),
+      'nothing can be missing from a history nobody has read',
+    );
     same('none of them claims the sync recorded no commit', mine.filter((r: any) => r.note === 'no-commit').length, 0);
     // null, not false: the question could not be asked
-    same('commitKnown', mine.map((r: any) => r.commitKnown), [null, null, null]);
-    same('swept', mine.map((r: any) => r.swept), [null, null, null]);
-    same('unindexed', mine.map((r: any) => r.unindexed), [null, null, null]);
+    same(
+      'commitKnown',
+      mine.map((r: any) => r.commitKnown),
+      [null, null, null],
+    );
+    same(
+      'swept',
+      mine.map((r: any) => r.swept),
+      [null, null, null],
+    );
+    same(
+      'unindexed',
+      mine.map((r: any) => r.unindexed),
+      [null, null, null],
+    );
     // the unverifiable workspace sha is carried as itself, neither folded nor denied
-    same('two rows carry only the workspace root\'s sha', mine.filter((r: any) => r.commitUnverified).length, 2);
-    same('and none of them pretends it is this repository\'s commit', mine.filter((r: any) => r.commit).length, 1);
+    same("two rows carry only the workspace root's sha", mine.filter((r: any) => r.commitUnverified).length, 2);
+    same("and none of them pretends it is this repository's commit", mine.filter((r: any) => r.commit).length, 1);
     // the unread case has its own number, so H7 cannot draw it as a missing stamp.
     // withoutCommit counts only absences that are facts about a sync — here, the
     // earlier syncs that never walked this source at all.
-    same('withoutCommit is exactly the rows whose absence a sync caused',
-      body.withoutCommit, body.spine.filter((r: any) => r.note === 'no-commit' || r.note === 'not-in-sync').length);
-    assert.ok(body.notInSync > 0, 'the fixture must contain syncs that did not walk this source, or the count is trivial');
-    same('and not one of the three unplaceable rows is in it',
-      mine.filter((r: any) => r.note === 'no-commit' || r.note === 'not-in-sync').length, 0);
+    same(
+      'withoutCommit is exactly the rows whose absence a sync caused',
+      body.withoutCommit,
+      body.spine.filter((r: any) => r.note === 'no-commit' || r.note === 'not-in-sync').length,
+    );
+    assert.ok(
+      body.notInSync > 0,
+      'the fixture must contain syncs that did not walk this source, or the count is trivial',
+    );
+    same(
+      'and not one of the three unplaceable rows is in it',
+      mine.filter((r: any) => r.note === 'no-commit' || r.note === 'not-in-sync').length,
+      0,
+    );
     same('withoutHistory', body.withoutHistory, 3);
     same('unverified', body.unverified, 2);
     // and it is said, first, before any number
@@ -716,10 +893,18 @@ describe('/api/history — a history nobody has read (absent is not empty)', () 
     const db = new SnapshotDb(join(work, '.farsight', 'farsight.db'));
     const log = gitLog(app, {});
     assert.ok(log.available);
-    db.writeCommits(repo, log.commits.map((c) => ({
-      sha: c.sha, at: new Date(c.at * 1000).toISOString(), author: c.author, email: c.email,
-      subject: c.subject, parents: c.parents, merge: c.merge,
-    })));
+    db.writeCommits(
+      repo,
+      log.commits.map((c) => ({
+        sha: c.sha,
+        at: new Date(c.at * 1000).toISOString(),
+        author: c.author,
+        email: c.email,
+        subject: c.subject,
+        parents: c.parents,
+        merge: c.merge,
+      })),
+    );
     db.close();
 
     const body = await api(`/api/history?repo=${repo}`);
@@ -727,29 +912,59 @@ describe('/api/history — a history nobody has read (absent is not empty)', () 
     same('bound', body.bound, 'exact');
     same('commits', body.commits, 5);
     const mine = body.spine.filter((r: any) => syncs.includes(r.sync));
-    same('not one row still says the history is unread', mine.filter((r: any) => r.note === 'history-unread').length, 0);
-    same('the notes they resolve to', mine.map((r: any) => r.note), ['reindexed', 'reindexed', 'subject']);
-    same('commitKnown', mine.map((r: any) => r.commitKnown), [true, true, true]);
+    same(
+      'not one row still says the history is unread',
+      mine.filter((r: any) => r.note === 'history-unread').length,
+      0,
+    );
+    same(
+      'the notes they resolve to',
+      mine.map((r: any) => r.note),
+      ['reindexed', 'reindexed', 'subject'],
+    );
+    same(
+      'commitKnown',
+      mine.map((r: any) => r.commitKnown),
+      [true, true, true],
+    );
     same('withoutHistory', body.withoutHistory, 0);
     same('unverified', body.unverified, 0);
     // the workspace shas are now this repository's commits by identity, and said to be
-    same('provenance', mine.map((r: any) => r.commitFrom), ['workspace', 'workspace', 'source']);
-    assert.ok(!body.notes.some((n: any) => /no history has been read/.test(n.text)),
-      'the unread warning must go away once a history is there');
+    same(
+      'provenance',
+      mine.map((r: any) => r.commitFrom),
+      ['workspace', 'workspace', 'source'],
+    );
+    assert.ok(
+      !body.notes.some((n: any) => /no history has been read/.test(n.text)),
+      'the unread warning must go away once a history is there',
+    );
     // the unindexed count is now sayable, and says a real number
     assert.ok(body.notes.some((n: any) => / not yet — the \d+ not yet ingested are not indexed/.test(n.text)));
   });
 });
 
-describe('/api/history/touching — the Map\'s Changes tab', () => {
+describe("/api/history/touching — the Map's Changes tab", () => {
   test('the commits that changed a part, newest first, with a typed count and how each was matched', async () => {
     const body = await api('/api/history/touching?repo=app&nodes=' + encodeURIComponent('app::src/two.ts::GET /two'));
     same('commits read for the repository', body.read, 5);
-    same('the one commit that touched src/two.ts', body.commits.map((c: { sha: string }) => c.sha), [sha.c2]);
+    same(
+      'the one commit that touched src/two.ts',
+      body.commits.map((c: { sha: string }) => c.sha),
+      [sha.c2],
+    );
     same('its subject', body.commits[0].subject, 'two');
     same('matched by its file', body.commits[0].parts, [{ node: 'app::src/two.ts::GET /two', how: 'file' }]);
-    same('the typed count', [body.counted.commits.n, body.counted.commits.unit, body.counted.commits.scope], [1, 'map.prop.changes.countCommits', 'journey.scopeHere']);
-    same('its split adds up', body.counted.commits.breakdown.map((p: { n: number }) => p.n), [0, 1]);
+    same(
+      'the typed count',
+      [body.counted.commits.n, body.counted.commits.unit, body.counted.commits.scope],
+      [1, 'map.prop.changes.countCommits', 'journey.scopeHere'],
+    );
+    same(
+      'its split adds up',
+      body.counted.commits.breakdown.map((p: { n: number }) => p.n),
+      [0, 1],
+    );
   });
   test('a part no commit touched is none touched, not never read; without the query it is a 400', async () => {
     const none = await api('/api/history/touching?repo=app&nodes=app::nowhere');
@@ -759,7 +974,7 @@ describe('/api/history/touching — the Map\'s Changes tab', () => {
   });
 });
 
-describe('/api/history/commit — a commit and the parts it touched (the Map\'s Affected mode)', () => {
+describe("/api/history/commit — a commit and the parts it touched (the Map's Affected mode)", () => {
   test('a short sha finds the commit; its parts are the graph parts in the files it changed', async () => {
     const body = await api('/api/history/commit?sha=' + sha.c2!.slice(0, 7));
     same('the full sha', body.sha, sha.c2);

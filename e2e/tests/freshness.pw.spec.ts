@@ -38,9 +38,16 @@ test.describe('freshness', () => {
         j.chip = 'observed-stale';
         j.evidenceWord = { cls: 'stale', key: 'journey.evidence.stale', biz: 'journey.biz.testsRun.stale' };
         j.freshness = {
-          state: 'stale', ranAt: '2026-10-04T15:17:53.461Z', ranOn: { commit: RAN }, codeAt: { commit: NOW, sync: 106 },
-          changedBy: 'commit', runs: { current: 0, stale: 3, noDigest: 0 },
-          word: 'fresh.state.stale', key: 'fresh.sentence.staleCommit', biz: 'journey.biz.fresh.stale', recipe: 'fresh.recipe.rerun',
+          state: 'stale',
+          ranAt: '2026-10-04T15:17:53.461Z',
+          ranOn: { commit: RAN },
+          codeAt: { commit: NOW, sync: 106 },
+          changedBy: 'commit',
+          runs: { current: 0, stale: 3, noDigest: 0 },
+          word: 'fresh.state.stale',
+          key: 'fresh.sentence.staleCommit',
+          biz: 'journey.biz.fresh.stale',
+          recipe: 'fresh.recipe.rerun',
         };
       }
       await route.fulfill({ response: res, json: body });
@@ -50,7 +57,10 @@ test.describe('freshness', () => {
     await expect(page.locator(HEAD + ' .jrn-fresh').first()).toHaveText(sentence);
     // the chip's tip carries the same sentence beside the run behind the word
     // on the Map a tip opens on hover
-    await page.locator(HEAD + ' .jrn-e2e').first().hover();
+    await page
+      .locator(HEAD + ' .jrn-e2e')
+      .first()
+      .hover();
     const tip = page.locator('#fs-tip');
     await expect(tip).toContainText(sentence);
   });

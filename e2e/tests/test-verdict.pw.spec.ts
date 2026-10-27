@@ -18,7 +18,10 @@ test.describe('one test verdict per cell', () => {
    * @covers GET /api/journey
    * @covers GET /api/tests
    */
-  test('the journey\'s chip, its tip and the Tests matrix row say one verdict, and no run status sits beside it', async ({ page, request }) => {
+  test("the journey's chip, its tip and the Tests matrix row say one verdict, and no run status sits beside it", async ({
+    page,
+    request,
+  }) => {
     const j = await (await request.get('/api/journey?entry=' + encodeURIComponent(FLOW))).json();
     const verdict = j.summary.coverage.journey.verdict;
     expect(verdict.word.key).toBe('tests.evidence.declaredPassed');
@@ -58,9 +61,13 @@ test.describe('one test verdict per cell', () => {
 
     // the Tests matrix prints the same word for this journey, and no weakest-run chip beside it
     await page.goto('/#/tests');
-    const mrow = page.locator('#tst-body table tbody tr').filter({ has: page.locator(`a[href="#/map/${encodeURIComponent(FLOW)}"]`) });
+    const mrow = page
+      .locator('#tst-body table tbody tr')
+      .filter({ has: page.locator(`a[href="#/map/${encodeURIComponent(FLOW)}"]`) });
     await expect(mrow).toHaveCount(1);
-    await expect(mrow.locator('td').nth(2).locator('.ev').first()).toHaveText(new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+    await expect(mrow.locator('td').nth(2).locator('.ev').first()).toHaveText(
+      new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+    );
     await expect(mrow.locator('td').nth(2).locator('.st')).toHaveCount(0);
   });
 
@@ -70,9 +77,15 @@ test.describe('one test verdict per cell', () => {
    * @covers packages/server/public/app/surfaces/tests.js::scopedHtml
    * @covers GET /api/tests
    */
-  test('a cell\'s *open the list* keeps its scope: the Tests page opens on that cell\'s cases, with the cell\'s word', async ({ page, request }) => {
+  test("a cell's *open the list* keeps its scope: the Tests page opens on that cell's cases, with the cell's word", async ({
+    page,
+    request,
+  }) => {
     await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=table&lens=hybrid');
-    const foot = page.locator('.jrn-scell .jrn-tfoot').filter({ has: page.locator('.jrn-cases a') }).first();
+    const foot = page
+      .locator('.jrn-scell .jrn-tfoot')
+      .filter({ has: page.locator('.jrn-cases a') })
+      .first();
     await foot.scrollIntoViewIfNeeded();
     const cellWord = (await foot.locator('.ev').first().textContent())!.trim();
     const href = (await foot.locator('.jrn-cases a').getAttribute('href'))!;
@@ -91,8 +104,19 @@ test.describe('one test verdict per cell', () => {
     // the way back is the same action on the Map: the Tests page's `seg` + `action` are the address's `screen` + `action`
     const [, seg, act] = /&seg=(\d+)&action=(\d+)$/.exec(href)!;
     const back = scoped.locator('a', { hasText: /journey/i }).first();
-    await expect(back).toHaveAttribute('href', '#/map/' + encodeURIComponent(FLOW) + '?screen=' + (+seg! + 1) + '&action=' + (+act! + 1));
-    const crumbOf = await page.evaluate(([s0, a0]) => fetch('/api/tests?flow=' + encodeURIComponent('invoice-app::flow::billing-cycle') + '&seg=' + s0 + '&action=' + a0).then((r) => r.json()).then((j) => j.label), [seg, act]);
+    await expect(back).toHaveAttribute(
+      'href',
+      '#/map/' + encodeURIComponent(FLOW) + '?screen=' + (+seg! + 1) + '&action=' + (+act! + 1),
+    );
+    const crumbOf = await page.evaluate(
+      ([s0, a0]) =>
+        fetch(
+          '/api/tests?flow=' + encodeURIComponent('invoice-app::flow::billing-cycle') + '&seg=' + s0 + '&action=' + a0,
+        )
+          .then((r) => r.json())
+          .then((j) => j.label),
+      [seg, act],
+    );
     await back.click();
     await expect(page.locator('.map-act')).toBeVisible();
     await expect(page.locator('.map-crumbs')).toContainText(String(crumbOf).split(' · ').pop()!);

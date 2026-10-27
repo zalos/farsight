@@ -19,16 +19,33 @@ import { copyDoors } from './copy-doors.js';
 /** The doors of one detail, with the viewer's own graph, roots, edge index and lens. */
 export function doorsFor(kind, node, extra = {}) {
   return detailLinks(kind, node, {
-    byId: S.BYID || {}, roots: S.ROOTS || {}, edgesOf: S.EDGES_OF, lens: currentLens(), ...extra,
+    byId: S.BYID || {},
+    roots: S.ROOTS || {},
+    edgesOf: S.EDGES_OF,
+    lens: currentLens(),
+    ...extra,
   });
 }
 
 /** One door as a link: catalog words with their define as the tip; a web address opens in a new tab. */
 function doorHtml(d) {
   const ext = d.external ? ' target="_blank" rel="noopener noreferrer"' : '';
-  return '<a class="dd-door' + (d.editor ? ' editor' : '') + (d.external ? ' ext' : '') + '" href="' + esc(d.href) + '"' + ext
-    + (d.editor ? ' data-door-editor="1"' : '') + tipAttrs({ key: d.word, noFocus: true }) + ' onclick="event.stopPropagation()">'
-    + (d.editor ? sym('open') : '') + esc(t(d.word)) + (d.external ? ' ↗' : '') + '</a>';
+  return (
+    '<a class="dd-door' +
+    (d.editor ? ' editor' : '') +
+    (d.external ? ' ext' : '') +
+    '" href="' +
+    esc(d.href) +
+    '"' +
+    ext +
+    (d.editor ? ' data-door-editor="1"' : '') +
+    tipAttrs({ key: d.word, noFocus: true }) +
+    ' onclick="event.stopPropagation()">' +
+    (d.editor ? sym('open') : '') +
+    esc(t(d.word)) +
+    (d.external ? ' ↗' : '') +
+    '</a>'
+  );
 }
 
 /**
@@ -40,13 +57,23 @@ function doorHtml(d) {
 export function doorsHtml(doors, lead) {
   const list = (doors || []).map(doorHtml).join('');
   if (!list && !lead) return '';
-  return '<span class="dd-doors" role="group" aria-label="' + esc(t('door.group')) + '">' + (lead || '') + list + '</span>';
+  return (
+    '<span class="dd-doors" role="group" aria-label="' + esc(t('door.group')) + '">' + (lead || '') + list + '</span>'
+  );
 }
 
 /** The door to the journey (or the Map) a surface draws before the table's doors. */
 export function leadDoorHtml(word, href) {
   if (!href) return '';
-  return '<a class="dd-door lead" href="' + esc(href) + '"' + tipAttrs({ key: word, noFocus: true }) + ' onclick="event.stopPropagation()">' + esc(t(word)) + '</a>';
+  return (
+    '<a class="dd-door lead" href="' +
+    esc(href) +
+    '"' +
+    tipAttrs({ key: word, noFocus: true }) +
+    ' onclick="event.stopPropagation()">' +
+    esc(t(word)) +
+    '</a>'
+  );
 }
 
 /**
@@ -58,25 +85,55 @@ export function storylineLineHtml(tree, flowId) {
   if (!at.length) return '';
   const a = at[0];
   const stepKey = currentLens() === 'business' ? 'journeys.storyline.bizStepOf' : 'journeys.storyline.stepOf';
-  const others = at.slice(1).map((x) => x.storyline.name + ' · ' + t(stepKey).replace('{n}', x.step).replace('{m}', x.of));
+  const others = at
+    .slice(1)
+    .map((x) => x.storyline.name + ' · ' + t(stepKey).replace('{n}', x.step).replace('{m}', x.of));
   // a branch is not a step: *branch of <journey> · when …* in place of *step n of m*
   const at0 = a.branch
-    ? '<span' + defAttrs('journeys.storyline.branchOf') + '>' + esc(t('journeys.storyline.branchOf').replace('{name}', a.branch.branchOfName || '') + ' · ' + t('journeys.storyline.when').replace('{when}', a.branch.when)) + '</span>'
+    ? '<span' +
+      defAttrs('journeys.storyline.branchOf') +
+      '>' +
+      esc(
+        t('journeys.storyline.branchOf').replace('{name}', a.branch.branchOfName || '') +
+          ' · ' +
+          t('journeys.storyline.when').replace('{when}', a.branch.when),
+      ) +
+      '</span>'
     : '<span' + defAttrs(stepKey) + '>' + esc(t(stepKey).replace('{n}', a.step).replace('{m}', a.of)) + '</span>';
-  return '<span class="dd-story" data-storyline="' + esc(a.storyline.id) + '">'
-    + '<span' + tipAttrs({ text: t('journeys.storyline.in').replace('{name}', a.storyline.name) + (others.length ? ' · ' + others.join(' · ') : ''), noFocus: true }) + '>'
-    + esc(t('journeys.storyline.in').replace('{name}', a.storyline.name)) + '</span> · ' + at0 + '</span>';
+  return (
+    '<span class="dd-story" data-storyline="' +
+    esc(a.storyline.id) +
+    '">' +
+    '<span' +
+    tipAttrs({
+      text:
+        t('journeys.storyline.in').replace('{name}', a.storyline.name) +
+        (others.length ? ' · ' + others.join(' · ') : ''),
+      noFocus: true,
+    }) +
+    '>' +
+    esc(t('journeys.storyline.in').replace('{name}', a.storyline.name)) +
+    '</span> · ' +
+    at0 +
+    '</span>'
+  );
 }
 
 // ── a gate's own lines ──────────────────────────────────────────────────────
 const SOURCE = new Map();
-function syncKey() { return String((S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || ''); }
+function syncKey() {
+  return String((S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || '');
+}
 /** One `/api/source` answer per node per sync. */
 export function fetchSource(id) {
   const k = id + '@' + syncKey();
   if (!SOURCE.has(k)) {
-    SOURCE.set(k, fetch('/api/source?node=' + encodeURIComponent(id))
-      .then((r) => (r.ok ? r.json() : null)).catch(() => null));
+    SOURCE.set(
+      k,
+      fetch('/api/source?node=' + encodeURIComponent(id))
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    );
   }
   return SOURCE.get(k);
 }
@@ -86,23 +143,36 @@ export function fetchSource(id) {
  */
 export function codeSlotHtml(id) {
   if (!id || currentLens() === 'business') return '';
-  return '<div class="dd-code" data-src="' + esc(id) + '"><span class="dd-load">' + esc(t('door.codeLoading')) + '</span></div>';
+  return (
+    '<div class="dd-code" data-src="' +
+    esc(id) +
+    '"><span class="dd-load">' +
+    esc(t('door.codeLoading')) +
+    '</span></div>'
+  );
 }
 /** The lines themselves: numbered from the node's own line, at most `cap` of them, the rest said. */
 export function codeLinesHtml(src, cap = 24) {
-  if (!src || src.code == null || src.code === '') return '<span class="dd-load">' + esc(t('door.codeNone')) + '</span>';
+  if (!src || src.code == null || src.code === '')
+    return '<span class="dd-load">' + esc(t('door.codeNone')) + '</span>';
   const lines = String(src.code).split('\n');
   const shown = lines.slice(0, cap);
   const start = src.line || 1;
-  return '<pre class="dd-pre">' + shown.map((l, i) => '<span class="ln">' + (start + i) + '</span>' + esc(l)).join('\n') + '</pre>'
-    + (lines.length > cap || src.codeTruncated ? '<span class="dd-load">' + esc(t('door.codeMore')) + '</span>' : '');
+  return (
+    '<pre class="dd-pre">' +
+    shown.map((l, i) => '<span class="ln">' + (start + i) + '</span>' + esc(l)).join('\n') +
+    '</pre>' +
+    (lines.length > cap || src.codeTruncated ? '<span class="dd-load">' + esc(t('door.codeMore')) + '</span>' : '')
+  );
 }
 /** Fill every code slot under `root` that has not been filled. */
 export function fillCode(root) {
   if (!root) return;
   root.querySelectorAll('.dd-code[data-src]:not([data-done])').forEach((el) => {
     el.dataset.done = '1';
-    fetchSource(el.dataset.src).then((src) => { if (el.isConnected) el.innerHTML = codeLinesHtml(src); });
+    fetchSource(el.dataset.src).then((src) => {
+      if (el.isConnected) el.innerHTML = codeLinesHtml(src);
+    });
   });
 }
 
@@ -148,12 +218,28 @@ export function copyDoorsHtml(kind, node, opts = {}) {
   if (currentLens() === 'business') return '';
   const doors = copyDoors(kind, node, { origin: (typeof location !== 'undefined' && location.origin) || '' });
   if (!doors.length) return '';
-  const btn = (d) => '<button type="button" class="dd-door copy" data-copy="' + esc(d.text) + '" data-via="' + d.via + '"'
-    + tipAttrs({ text: t(d.word + 'Tip') + ' · ' + d.text, noFocus: true }) + ' onclick="event.stopPropagation();fsCopyDoor(this)">'
-    + esc(t(opts.compact ? d.word + 'Short' : d.word)) + '</button>';
-  return '<span class="dd-copy' + (opts.compact ? ' compact' : '') + '" role="group" aria-label="' + esc(t('door.copy.group')) + '">'
-    + (opts.compact ? '' : '<span class="dd-copy-l"' + defAttrs('door.copy.group') + '>' + esc(t('door.copy.group')) + '</span>')
-    + doors.map(btn).join('') + '<span class="dd-copied" role="status" aria-live="polite" hidden></span></span>';
+  const btn = (d) =>
+    '<button type="button" class="dd-door copy" data-copy="' +
+    esc(d.text) +
+    '" data-via="' +
+    d.via +
+    '"' +
+    tipAttrs({ text: t(d.word + 'Tip') + ' · ' + d.text, noFocus: true }) +
+    ' onclick="event.stopPropagation();fsCopyDoor(this)">' +
+    esc(t(opts.compact ? d.word + 'Short' : d.word)) +
+    '</button>';
+  return (
+    '<span class="dd-copy' +
+    (opts.compact ? ' compact' : '') +
+    '" role="group" aria-label="' +
+    esc(t('door.copy.group')) +
+    '">' +
+    (opts.compact
+      ? ''
+      : '<span class="dd-copy-l"' + defAttrs('door.copy.group') + '>' + esc(t('door.copy.group')) + '</span>') +
+    doors.map(btn).join('') +
+    '<span class="dd-copied" role="status" aria-live="polite" hidden></span></span>'
+  );
 }
 
 /** A press on a copy door: the text to the clipboard, then the chip for two seconds (said even when the clipboard refused). */
@@ -167,11 +253,20 @@ function fsCopyDoor(el) {
     chip.hidden = false;
     chip.textContent = t(ok ? 'door.copied' : 'door.copyFailed') + ' ' + text;
     clearTimeout(chip._t);
-    chip._t = setTimeout(() => { chip.hidden = true; chip.textContent = ''; }, 2000);
+    chip._t = setTimeout(() => {
+      chip.hidden = true;
+      chip.textContent = '';
+    }, 2000);
   };
   try {
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => show(true), () => show(false));
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(text).then(
+        () => show(true),
+        () => show(false),
+      );
     else show(false);
-  } catch (e) { show(false); }
+  } catch (e) {
+    show(false);
+  }
 }
 if (typeof window !== 'undefined') window.fsCopyDoor = fsCopyDoor;

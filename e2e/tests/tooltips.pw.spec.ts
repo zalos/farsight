@@ -47,7 +47,7 @@ test.describe('tips', () => {
   });
 
   /** @covers packages/server/public/app/shell.js::syncChipTip */
-  test('a click opens the sync chip\'s table at once, pinned, and Esc closes it', async ({ page }) => {
+  test("a click opens the sync chip's table at once, pinned, and Esc closes it", async ({ page }) => {
     await gotoReady(page, '#/portfolio');
     await page.locator('.syncchip').click();
     const dialog = page.getByRole('dialog', { name: 'This graph' });
@@ -66,7 +66,7 @@ test.describe('tips', () => {
    * @covers packages/server/public/app/lib/tooltip.js::numberTip
    * @covers packages/server/public/app/shell.js::parseRoute
    */
-  test('a rich tip\'s Grammar Book link navigates to the entry', async ({ page }) => {
+  test("a rich tip's Grammar Book link navigates to the entry", async ({ page }) => {
     await gotoReady(page, '#/portfolio');
     await page.locator('#stats').click();
     await expect(tip(page)).toBeVisible();
@@ -99,7 +99,9 @@ test.describe('tips', () => {
    * @covers packages/server/public/app/lib/journey-draw.js::jrnScreensTip
    * @covers packages/server/public/app/keymap.js::onKeydown
    */
-  test('on a journey\'s table: the screens tip lists the screens, and Esc closes the tip before the table', async ({ page }) => {
+  test("on a journey's table: the screens tip lists the screens, and Esc closes the tip before the table", async ({
+    page,
+  }) => {
     // the head's line 1 folds the numbers past the status and the tests into +n (lane S): a window wide enough for all
     await page.setViewportSize({ width: 2400, height: 900 });
     await openJourneyAt(page, 'table', 'hybrid');
@@ -137,7 +139,9 @@ test.describe('tips', () => {
    * @covers packages/server/public/app/lib/journey-draw.js::jrnUntrListTip
    * @covers packages/server/public/app/lib/journey-draw.js::jrnCountedTip
    */
-  test('the conditions not in plain language are listed behind their number, in every lens, in words', async ({ page }) => {
+  test('the conditions not in plain language are listed behind their number, in every lens, in words', async ({
+    page,
+  }) => {
     for (const lens of ['business', 'hybrid', 'code']) {
       await openJourneyAt(page, 'table', lens);
       // folded into the head's +n (lane S)? Its click opens the whole row in the dock's about tab
@@ -163,7 +167,7 @@ test.describe('tips', () => {
         await expect(table.locator('tbody tr')).toHaveCount(count);
       }
       // a define is read by people: no backticks, no markdown, no catalog key
-      const text = (await tip(page).innerText());
+      const text = await tip(page).innerText();
       expect(text).not.toMatch(/`/);
       expect(text).not.toMatch(/\*\S[^*]*\*/);
       expect(text).not.toMatch(/\b(journey|count|tests|surf|tip)\.[a-zA-Z.]+/);
@@ -221,7 +225,9 @@ test.describe('tips', () => {
     const palette = page.getByRole('dialog', { name: 'Search' });
     await expect(palette).toBeVisible();
     // the imperative form, for what a declarative trigger cannot express
-    await page.evaluate(() => (window as any).showTip(document.getElementById('pinput'), '<div class="tip-h">x</div>', { pinned: true }));
+    await page.evaluate(() =>
+      (window as any).showTip(document.getElementById('pinput'), '<div class="tip-h">x</div>', { pinned: true }),
+    );
     await expect(tip(page)).toBeVisible();
     const onTop = await page.evaluate(() => {
       const r = document.getElementById('fs-tip')!.getBoundingClientRect();

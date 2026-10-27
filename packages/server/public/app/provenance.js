@@ -13,7 +13,8 @@ import { esc } from './store.js';
  * @group Provenance
  */
 export function metricChip(metricValue) {
-  if (!metricValue) return '<span class="metric-chip metric-pending" title="provenance popovers ship in pass P3">—</span>';
+  if (!metricValue)
+    return '<span class="metric-chip metric-pending" title="provenance popovers ship in pass P3">—</span>';
   // P3: value + scope chip + popover with numerator/denominator/evidence
   return '<span class="metric-chip">' + esc(String(metricValue.value)) + '</span>';
 }

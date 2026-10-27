@@ -7,8 +7,18 @@ import { execFileSync } from 'node:child_process';
 import { codeHostPolicy, openGitHub, type CodeHostSource, type PullRequest, type GitHubHost } from './code-host.js';
 import type { Verdict } from './contract.js';
 
-export interface ChangeFile { path: string; status?: string; ranges: [number, number][]; repo?: string }
-export interface ChangeCommit { sha: string; subject: string; at: string; author?: string }
+export interface ChangeFile {
+  path: string;
+  status?: string;
+  ranges: [number, number][];
+  repo?: string;
+}
+export interface ChangeCommit {
+  sha: string;
+  subject: string;
+  at: string;
+  author?: string;
+}
 export type ChangeRange =
   | { kind: 'commits'; from: string; to: string }
   | { kind: 'pr'; number: number; title?: string; url?: string; base?: string; head?: string; host?: string };
@@ -24,7 +34,12 @@ export interface ReadChange {
 }
 
 function git(root: string, args: string[]): string {
-  return execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  return execFileSync('git', args, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 }
 
 /** `owner/name` from a git remote URL (https or ssh). */
@@ -34,7 +49,11 @@ export function hostRepoOf(url: string): string | undefined {
 
 /** The GitHub repository a checkout pushes to (`origin`), when it is on GitHub. */
 export function originRepo(root: string): string | undefined {
-  try { return hostRepoOf(git(root, ['remote', 'get-url', 'origin'])); } catch { return undefined; }
+  try {
+    return hostRepoOf(git(root, ['remote', 'get-url', 'origin']));
+  } catch {
+    return undefined;
+  }
 }
 
 /** `@@` headers of a unified diff → changed new-side ranges per file (the same rule as core hunksOfPatch). */
@@ -43,14 +62,30 @@ function hunks(patch: string): ChangeFile[] {
   let cur: ChangeFile | undefined;
   for (const line of patch.split('\n')) {
     const f = /^\+\+\+ (?:b\/)?(.*)$/.exec(line);
-    if (f) { cur = f[1] === '/dev/null' ? undefined : { path: f[1]!.replace(/\t.*$/, ''), ranges: [] }; if (cur) out.push(cur); continue; }
+    if (f) {
+      cur = f[1] === '/dev/null' ? undefined : { path: f[1]!.replace(/\t.*$/, ''), ranges: [] };
+      if (cur) out.push(cur);
+      continue;
+    }
     const h = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
-    if (h && cur) { const from = Number(h[1]); const len = h[2] == null ? 1 : Number(h[2]); cur.ranges.push(len === 0 ? [Math.max(1, from), Math.max(1, from)] : [from, from + len - 1]); }
+    if (h && cur) {
+      const from = Number(h[1]);
+      const len = h[2] == null ? 1 : Number(h[2]);
+      cur.ranges.push(len === 0 ? [Math.max(1, from), Math.max(1, from)] : [from, from + len - 1]);
+    }
   }
   return out;
 }
 
-const logRows = (out: string) => out.trim().split('\n').filter(Boolean).map((l) => { const [sha, at] = l.split('\t'); return { sha: sha!, at: at! }; });
+const logRows = (out: string) =>
+  out
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => {
+      const [sha, at] = l.split('\t');
+      return { sha: sha!, at: at! };
+    });
 
 /**
  * Read a change. Throws an Error with a sentence when git or the host cannot answer, or the policy of the
@@ -70,7 +105,13 @@ export async function readChange(o: {
    */
   sources?: { name: string; rel: string }[];
 }): Promise<ReadChange> {
-  const prefix = (() => { try { return git(o.root, ['rev-parse', '--show-prefix']).trim(); } catch { return ''; } })();
+  const prefix = (() => {
+    try {
+      return git(o.root, ['rev-parse', '--show-prefix']).trim();
+    } catch {
+      return '';
+    }
+  })();
   const homes = (o.sources?.length ? o.sources : [{ name: '', rel: '' }])
     .map((x) => ({ name: x.name, at: prefix + (x.rel ? x.rel.replace(/\/+$/, '') + '/' : '') }))
     .sort((a, b) => b.at.length - a.at.length);
@@ -83,8 +124,12 @@ export async function readChange(o: {
   if ('pr' in o.ask) {
     const n = o.ask.pr;
     const repo = o.hostRepo ?? o.host?.repo ?? originRepo(o.root);
-    if (!repo) throw new Error('no host repository: add a code-host source to .farsight/settings.json, pass the owner/name, or run inside a checkout whose origin is on GitHub');
-    if (o.host && o.host.host !== 'github') throw new Error(`reading pull requests from ${o.host.host} is not built yet (GitHub only)`);
+    if (!repo)
+      throw new Error(
+        'no host repository: add a code-host source to .farsight/settings.json, pass the owner/name, or run inside a checkout whose origin is on GitHub',
+      );
+    if (o.host && o.host.host !== 'github')
+      throw new Error(`reading pull requests from ${o.host.host} is not built yet (GitHub only)`);
     if (o.host || o.who === 'agent') {
       const d = codeHostPolicy(o.host, 'read', o.who ?? 'human');
       if (!d.verdict.allowed) throw new Error(`reading is not allowed: ${d.verdict.reason}`);
@@ -96,22 +141,53 @@ export async function readChange(o: {
       commits = await opened.host.commits(n);
       files = (await opened.host.files(n)).map(place).filter((f) => f !== null) as ChangeFile[];
     } catch (err) {
-      throw new Error(`could not read pull request #${n} of ${repo}: ${(err as Error).message}${o.viaGh ? '' : ' (a private repository needs a credential: auth.secret on the code-host source, or --via gh)'}`);
+      throw new Error(
+        `could not read pull request #${n} of ${repo}: ${(err as Error).message}${o.viaGh ? '' : ' (a private repository needs a credential: auth.secret on the code-host source, or --via gh)'}`,
+      );
     }
     let history: { sha: string; at: string }[];
-    try { history = logRows(git(o.root, ['log', '-n', '500', '--format=%H%x09%cI', pr.headSha])); } catch { history = commits.map((c) => ({ sha: c.sha, at: c.at })).reverse(); }
-    return { range: { kind: 'pr', number: n, title: pr.title, url: pr.url, base: pr.base, head: pr.head, host: 'github' }, commits, files, history, pr, opened };
+    try {
+      history = logRows(git(o.root, ['log', '-n', '500', '--format=%H%x09%cI', pr.headSha]));
+    } catch {
+      history = commits.map((c) => ({ sha: c.sha, at: c.at })).reverse();
+    }
+    return {
+      range: { kind: 'pr', number: n, title: pr.title, url: pr.url, base: pr.base, head: pr.head, host: 'github' },
+      commits,
+      files,
+      history,
+      pr,
+      opened,
+    };
   }
   const { from, to } = o.ask;
   try {
-    const commits = git(o.root, ['log', '--reverse', '--format=%H%x09%cI%x09%an%x09%s', `${from}..${to}`]).trim().split('\n').filter(Boolean)
-      .map((l) => { const [sha, at, author, ...s] = l.split('\t'); return { sha: sha!, at: at!, author: author!, subject: s.join('\t') }; });
-    const status = new Map(git(o.root, ['diff', '--name-status', '-M', from, to]).trim().split('\n').filter(Boolean)
-      .map((l) => { const p = l.split('\t'); return [p[p.length - 1]!, p[0]!.charAt(0)] as const; }));
+    const commits = git(o.root, ['log', '--reverse', '--format=%H%x09%cI%x09%an%x09%s', `${from}..${to}`])
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => {
+        const [sha, at, author, ...s] = l.split('\t');
+        return { sha: sha!, at: at!, author: author!, subject: s.join('\t') };
+      });
+    const status = new Map(
+      git(o.root, ['diff', '--name-status', '-M', from, to])
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => {
+          const p = l.split('\t');
+          return [p[p.length - 1]!, p[0]!.charAt(0)] as const;
+        }),
+    );
     const hs = hunks(git(o.root, ['diff', '--unified=0', '--no-color', '--no-ext-diff', '-M', from, to]));
     const seen = new Set(hs.map((h) => h.path));
     for (const p of status.keys()) if (!seen.has(p)) hs.push({ path: p, ranges: [] });
-    const files = hs.map((h) => place({ path: h.path, ranges: h.ranges, ...(status.get(h.path) ? { status: status.get(h.path)! } : {}) })).filter((f): f is ChangeFile => !!f);
+    const files = hs
+      .map((h) =>
+        place({ path: h.path, ranges: h.ranges, ...(status.get(h.path) ? { status: status.get(h.path)! } : {}) }),
+      )
+      .filter((f): f is ChangeFile => !!f);
     const history = logRows(git(o.root, ['log', '-n', '500', '--format=%H%x09%cI', to]));
     return { range: { kind: 'commits', from, to }, commits, files, history };
   } catch (err) {

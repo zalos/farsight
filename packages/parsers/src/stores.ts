@@ -53,7 +53,9 @@ const JDBC_PREFIXES: Record<string, Store> = {
 const STORE_FILES = new Set(['schema.prisma', 'application.properties', 'application.yml', 'application.yaml']);
 
 /** The one store a set of findings names, or the distinct names when there are several (a note, not a pick). */
-function single(found: { store: Store; ref: string }[]): { store: Store; ref: string } | { names: string[] } | undefined {
+function single(
+  found: { store: Store; ref: string }[],
+): { store: Store; ref: string } | { names: string[] } | undefined {
   if (!found.length) return undefined;
   const names = [...new Set(found.map((f) => f.store.name))].sort();
   if (names.length > 1) return { names };
@@ -113,8 +115,13 @@ export function applyStores(
   const isJava = (n: GraphNode) => n.lang === 'java';
 
   // sdk — the driver imports
-  const bySdk = single(drivers.filter((d) => SQL_DRIVERS[d.spec]).map((d) => ({ store: SQL_DRIVERS[d.spec]!, ref: d.spec })));
-  if (bySdk && 'names' in bySdk) notes.push(`The code imports SQL drivers for more than one store (${bySdk.names.join(', ')}), so the driver names no store for its tables.`);
+  const bySdk = single(
+    drivers.filter((d) => SQL_DRIVERS[d.spec]).map((d) => ({ store: SQL_DRIVERS[d.spec]!, ref: d.spec })),
+  );
+  if (bySdk && 'names' in bySdk)
+    notes.push(
+      `The code imports SQL drivers for more than one store (${bySdk.names.join(', ')}), so the driver names no store for its tables.`,
+    );
   else if (bySdk) for (const n of tables) if (!isJava(n)) give(n, bySdk.store, 'sdk', bySdk.ref);
 
   // datasource + jpa — the few files that declare a connection, read only when a table is still unnamed
@@ -125,12 +132,19 @@ export function applyStores(
     for (const abs of files) {
       const rel = relative(repoRoot, abs);
       let text: string;
-      try { text = readFileSync(abs, 'utf8'); } catch { continue; }
+      try {
+        text = readFileSync(abs, 'utf8');
+      } catch {
+        continue;
+      }
       if (rel.endsWith('schema.prisma')) {
         for (const p of prismaProviders(text)) {
           const store = p.provider ? PRISMA_PROVIDERS[p.provider.toLowerCase()] : undefined;
           if (store) prisma.push({ store, ref: rel });
-          else notes.push(`${rel} names its datasource provider as ${p.raw}, which is not a provider this pass knows, so it names no store.`);
+          else
+            notes.push(
+              `${rel} names its datasource provider as ${p.raw}, which is not a provider this pass knows, so it names no store.`,
+            );
         }
       } else {
         const sub = springDatasourceJdbc(text, !rel.endsWith('.properties'));
@@ -141,22 +155,31 @@ export function applyStores(
       }
     }
     const byPrisma = single(prisma);
-    if (byPrisma && 'names' in byPrisma) notes.push(`The schema.prisma files name more than one datasource (${byPrisma.names.join(', ')}), so they name no store.`);
+    if (byPrisma && 'names' in byPrisma)
+      notes.push(
+        `The schema.prisma files name more than one datasource (${byPrisma.names.join(', ')}), so they name no store.`,
+      );
     else if (byPrisma) for (const n of tables) if (!isJava(n)) give(n, byPrisma.store, 'datasource', byPrisma.ref);
     const byJpa = single(jpa);
-    if (byJpa && 'names' in byJpa) notes.push(`The Spring settings name more than one datasource (${byJpa.names.join(', ')}), so they name no store.`);
+    if (byJpa && 'names' in byJpa)
+      notes.push(
+        `The Spring settings name more than one datasource (${byJpa.names.join(', ')}), so they name no store.`,
+      );
     else if (byJpa) for (const n of tables) if (isJava(n)) give(n, byJpa.store, 'jpa', byJpa.ref);
   }
 
   // config — for each table still unnamed: a declaration that lists it beats a catch-all, then the
   // nearer file (deeper folder) wins; a nested file reaches only the tables under its folder
   const decls = (stores ?? []).map((d, order) => ({
-    d, order, dir: 'dir' in d ? d.dir : '.', from: 'from' in d ? d.from : 'farsight.config.json',
+    d,
+    order,
+    dir: 'dir' in d ? d.dir : '.',
+    from: 'from' in d ? d.from : 'farsight.config.json',
   }));
   if (decls.length) {
     const folders = tableFolders(fragment);
-    const under = (n: GraphNode, dir: string) => dir === '.' || (folders.get(n.id) ?? []).length > 0
-      && folders.get(n.id)!.every((p) => p.startsWith(`${dir}/`));
+    const under = (n: GraphNode, dir: string) =>
+      dir === '.' || ((folders.get(n.id) ?? []).length > 0 && folders.get(n.id)!.every((p) => p.startsWith(`${dir}/`)));
     const nearest = <T extends { dir: string; order: number }>(xs: T[]) =>
       [...xs].sort((a, b) => depthOf(b.dir) - depthOf(a.dir) || a.order - b.order)[0];
     const refOf = (x: { d: StoreDecl; from: string; dir: string }) =>
@@ -166,13 +189,21 @@ export function applyStores(
       const listing = decls.filter((x) => x.d.tables?.includes(n.name) && under(n, x.dir));
       const pick = listing.length
         ? nearest(listing)
-        // each file's first catch-all is its catch-all, as for the root before nested files
-        : nearest(decls.filter((x) => !x.d.tables && under(n, x.dir) && decls.find((y) => y.from === x.from && !y.d.tables) === x));
+        : // each file's first catch-all is its catch-all, as for the root before nested files
+          nearest(
+            decls.filter(
+              (x) => !x.d.tables && under(n, x.dir) && decls.find((y) => y.from === x.from && !y.d.tables) === x,
+            ),
+          );
       if (!pick) continue;
       give(n, storeOfDecl(pick.d), 'config', refOf(pick));
       const others = listing.filter((x) => x.from !== pick.from && x.d.name !== pick.d.name);
       if (others.length && onConflict) {
-        onConflict(n.loc?.path ? `${n.name} (${n.loc.path})` : n.name, [...new Set([pick.from, ...others.map((x) => x.from)])], pick.from);
+        onConflict(
+          n.loc?.path ? `${n.name} (${n.loc.path})` : n.name,
+          [...new Set([pick.from, ...others.map((x) => x.from)])],
+          pick.from,
+        );
       }
     }
     // a nested file that lists a table outside its folder: said, not applied
@@ -181,7 +212,9 @@ export function applyStores(
       for (const name of x.d.tables) {
         const named = tables.filter((n) => n.name === name);
         if (named.length && !named.some((n) => under(n, x.dir))) {
-          notes.push(`${x.from} lists the table ${name} under the store ${x.d.name}, but that table is not under ${x.dir}/, so this file does not name its store.`);
+          notes.push(
+            `${x.from} lists the table ${name} under the store ${x.d.name}, but that table is not under ${x.dir}/, so this file does not name its store.`,
+          );
         }
       }
     }

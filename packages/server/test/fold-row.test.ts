@@ -23,7 +23,12 @@ test('the last chips fold first, and the +n is counted where it stands', () => {
 });
 
 test('the kept chip is never folded — the others go before it, whatever their order', () => {
-  const p = foldPlan([chip(80), chip(80), chip(200, true, 2), chip(70)], { rowW: 200, gap: 4, maxRows: 3, moreW: () => 24 });
+  const p = foldPlan([chip(80), chip(80), chip(200, true, 2), chip(70)], {
+    rowW: 200,
+    gap: 4,
+    maxRows: 3,
+    moreW: () => 24,
+  });
   assert.ok(!p.hide.includes(2), 'the verdict stays');
   assert.deepEqual(p.hide, [1, 3]);
   assert.equal(p.rows, 3);
@@ -39,5 +44,8 @@ test('midPath keeps the first segment and the last two, and leaves a short path 
   assert.equal(midPath('apps/web/src/lib/api/ops-invoices.ts:18', 30), 'apps/…/api/ops-invoices.ts:18');
   assert.equal(midPath('src/a.ts:3', 30), 'src/a.ts:3');
   // too long even with two: one kept segment
-  assert.equal(midPath('apps/x/y/z/a-very-long-folder-name/and-a-long-file-name.tsx:9', 30), 'apps/…/and-a-long-file-name.tsx:9');
+  assert.equal(
+    midPath('apps/x/y/z/a-very-long-folder-name/and-a-long-file-name.tsx:9', 30),
+    'apps/…/and-a-long-file-name.tsx:9',
+  );
 });

@@ -14,16 +14,36 @@ import { rebasePath, type WorkspaceConfig } from './config-files.js';
  * metadata and ingest-warning channel, so CLI, MCP and server sync all retain the same evidence.
  * External classes need not have a fetch call (or a graph node) to be valid declarations.
  */
-export function declaredPathWarnings(fragment: GraphFragment, root: string, options: IngestOptions, ws: WorkspaceConfig, manifests: ParsedManifest[] = []): string[] {
+export function declaredPathWarnings(
+  fragment: GraphFragment,
+  root: string,
+  options: IngestOptions,
+  ws: WorkspaceConfig,
+  manifests: ParsedManifest[] = [],
+): string[] {
   const warnings: string[] = [];
-  const list = <T,>(value: T[] | undefined): T[] => Array.isArray(value) ? value : [];
-  const strings = (value: string[] | undefined) => list(value).filter(v => typeof v === 'string');
-  const affectsWarnings = (fragment.meta?.decisions?.notes ?? []).filter(note => note.includes(' affects "') && note.includes('names no node'));
-  if (!ws.files.some(f => list(f.config.externals).some(e => e && typeof e.import === 'string' && e.import.includes('::'))
-    || strings(f.config.plumbing).length || strings(f.config.setup).length || Object.keys(f.config.glossary ?? {}).length
-    || Object.keys(f.config.gateTiers ?? {}).length) && !manifests.length) return affectsWarnings;
-  const files = new Set(collectFiles(root, ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts', '.java'], options)
-    .map(path => relative(root, path).replaceAll('\\', '/')));
+  const list = <T>(value: T[] | undefined): T[] => (Array.isArray(value) ? value : []);
+  const strings = (value: string[] | undefined) => list(value).filter((v) => typeof v === 'string');
+  const affectsWarnings = (fragment.meta?.decisions?.notes ?? []).filter(
+    (note) => note.includes(' affects "') && note.includes('names no node'),
+  );
+  if (
+    !ws.files.some(
+      (f) =>
+        list(f.config.externals).some((e) => e && typeof e.import === 'string' && e.import.includes('::')) ||
+        strings(f.config.plumbing).length ||
+        strings(f.config.setup).length ||
+        Object.keys(f.config.glossary ?? {}).length ||
+        Object.keys(f.config.gateTiers ?? {}).length,
+    ) &&
+    !manifests.length
+  )
+    return affectsWarnings;
+  const files = new Set(
+    collectFiles(root, ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts', '.java'], options).map((path) =>
+      relative(root, path).replaceAll('\\', '/'),
+    ),
+  );
   const classes = new Map<string, Set<string>>();
   const classNames = (path: string): Set<string> => {
     if (!classes.has(path)) {
@@ -37,7 +57,9 @@ export function declaredPathWarnings(fragment: GraphFragment, root: string, opti
             const declaration = stmt.declaration ?? stmt;
             if (declaration.type === 'ClassDeclaration' && declaration.id?.name) names.add(declaration.id.name);
           }
-        } catch { /* The warning says no indexed symbol, never that malformed code defines none. */ }
+        } catch {
+          /* The warning says no indexed symbol, never that malformed code defines none. */
+        }
       }
       classes.set(path, names);
     }
@@ -51,18 +73,25 @@ export function declaredPathWarnings(fragment: GraphFragment, root: string, opti
   };
   for (const file of ws.files) {
     let text = '';
-    try { text = readFileSync(join(root, file.path), 'utf8'); } catch { /* Already reported by config loading. */ }
-    const scoped = fragment.nodes.filter(n => file.root || n.loc?.path.startsWith(`${file.dir}/`));
+    try {
+      text = readFileSync(join(root, file.path), 'utf8');
+    } catch {
+      /* Already reported by config loading. */
+    }
+    const scoped = fragment.nodes.filter((n) => file.root || n.loc?.path.startsWith(`${file.dir}/`));
     for (const [key, entry] of Object.entries(file.config.glossary ?? {})) {
-      const found = scoped.some(n => {
+      const found = scoped.some((n) => {
         const colon = n.kind === 'guard' ? n.name.indexOf(': ') : -1;
         return !!glossaryEntryFor(colon > 0 ? n.name.slice(0, colon) : n.name, { [key]: entry });
       });
       if (!found) warn(`${file.path}:${lineOf(text, key)} → glossary`, key, 'matches no indexed symbol name.');
     }
     for (const key of Object.keys(file.config.gateTiers ?? {})) {
-      const found = scoped.some(n => (n.kind === 'guard' || n.kind === 'rule') &&
-        (n.id === key || `${n.loc?.path ?? ''} ${n.name}`.toLowerCase().includes(key.toLowerCase())));
+      const found = scoped.some(
+        (n) =>
+          (n.kind === 'guard' || n.kind === 'rule') &&
+          (n.id === key || `${n.loc?.path ?? ''} ${n.name}`.toLowerCase().includes(key.toLowerCase())),
+      );
       if (!found) warn(`${file.path}:${lineOf(text, key)} → gateTiers`, key, 'matches no indexed gate.');
     }
     for (const declaration of list(file.config.externals)) {
@@ -74,22 +103,33 @@ export function declaredPathWarnings(fragment: GraphFragment, root: string, opti
       const where = `${file.path} → externals.import`;
       if (!path || !files.has(path.replace(/^\.\//, ''))) {
         warn(where, ref, 'names no indexed source file (missing, ignored, excluded or unsupported).');
-      } else if (!symbol || !classNames(path.replace(/^\.\//, '')).has(symbol) && !fragment.nodes.some(n =>
-        n.kind === 'class' && n.loc?.path === path && n.name === symbol)) {
+      } else if (
+        !symbol ||
+        (!classNames(path.replace(/^\.\//, '')).has(symbol) &&
+          !fragment.nodes.some((n) => n.kind === 'class' && n.loc?.path === path && n.name === symbol))
+      ) {
         warn(where, ref, 'names no indexed class in that file.');
       }
     }
     for (const value of strings(file.config.plumbing)) {
       const path = rebasePath(file.dir, value, `${file.path} → plumbing`, []);
       const pattern = path ? globToRegExp(path) : undefined;
-      if (!pattern || ![...files].some(p => pattern.test(p))) {
-        warn(`${file.path} → plumbing`, value, 'matches no indexed source file (missing, ignored, excluded or unsupported).');
+      if (!pattern || ![...files].some((p) => pattern.test(p))) {
+        warn(
+          `${file.path} → plumbing`,
+          value,
+          'matches no indexed source file (missing, ignored, excluded or unsupported).',
+        );
       }
     }
     for (const value of strings(file.config.setup)) {
-      const found = fragment.nodes.some(node =>
-        (file.root || node.loc?.path.startsWith(`${file.dir}/`)) &&
-        (node.id === value || node.kind === 'function' && `${node.loc?.path ?? ''} ${node.name}`.toLowerCase().includes(value.toLowerCase())));
+      const found = fragment.nodes.some(
+        (node) =>
+          (file.root || node.loc?.path.startsWith(`${file.dir}/`)) &&
+          (node.id === value ||
+            (node.kind === 'function' &&
+              `${node.loc?.path ?? ''} ${node.name}`.toLowerCase().includes(value.toLowerCase()))),
+      );
       if (!found) warn(`${file.path} → setup`, value, 'matches no indexed symbol.');
     }
   }
@@ -98,8 +138,12 @@ export function declaredPathWarnings(fragment: GraphFragment, root: string, opti
       for (const ref of new Set(flow.docs ?? [])) {
         if (/^https?:\/\//i.test(ref)) continue;
         const path = ref.split('#')[0]!;
-        if (!readDocQuote(root, path)) warn(`${manifest.path}:${lineOf(manifest.text, ref)} → flows.${flow.id}.docs`, ref,
-          'names no readable source document.');
+        if (!readDocQuote(root, path))
+          warn(
+            `${manifest.path}:${lineOf(manifest.text, ref)} → flows.${flow.id}.docs`,
+            ref,
+            'names no readable source document.',
+          );
       }
     }
   }

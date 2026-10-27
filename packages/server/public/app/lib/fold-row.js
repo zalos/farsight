@@ -25,15 +25,29 @@ export function pathHtml(path, opts = {}) {
   const p = String(path || '');
   const short = midPath(p, opts.max || 40, opts.keep || 2);
   const body = esc(short).split('/').join('/<wbr>');
-  return '<span class="fold-path' + (opts.cls ? ' ' + esc(opts.cls) : '') + '"' + (short !== p ? tipAttrs({ text: p, noFocus: true }) : '') + '>' + body + '</span>';
+  return (
+    '<span class="fold-path' +
+    (opts.cls ? ' ' + esc(opts.cls) : '') +
+    '"' +
+    (short !== p ? tipAttrs({ text: p, noFocus: true }) : '') +
+    '>' +
+    body +
+    '</span>'
+  );
 }
 
 /** The `+n` chip of a folded row: its tip lists what it folds, each by its own words. */
 function moreChipHtml(n, hidden, o) {
   const rows = hidden.map((h) => [h.textContent.replace(/\s+/g, ' ').trim(), 1]).filter((r) => r[0]);
-  return '<span class="fold-more ' + esc(o.moreCls || '') + '" data-fold-more="1"'
-    + plainTip(n, o.of || 'fold.moreOf', o.scope || 'fold.scopeCard', '/api/journey', rows).replace(' tabindex="0"', '') + '>'
-    + esc(t(o.moreKey || 'fold.more').replace('{n}', String(n))) + '</span>';
+  return (
+    '<span class="fold-more ' +
+    esc(o.moreCls || '') +
+    '" data-fold-more="1"' +
+    plainTip(n, o.of || 'fold.moreOf', o.scope || 'fold.scopeCard', '/api/journey', rows).replace(' tabindex="0"', '') +
+    '>' +
+    esc(t(o.moreKey || 'fold.more').replace('{n}', String(n))) +
+    '</span>'
+  );
 }
 
 /**
@@ -48,7 +62,12 @@ export function foldRow(row, opts = {}) {
   if (!row) return;
   row.querySelectorAll(':scope > [data-fold-more]').forEach((x) => x.remove());
   const kids = [...row.children];
-  kids.forEach((k) => { if (k.dataset.folded) { k.hidden = false; delete k.dataset.folded; } });
+  kids.forEach((k) => {
+    if (k.dataset.folded) {
+      k.hidden = false;
+      delete k.dataset.folded;
+    }
+  });
   const rowW = row.clientWidth;
   if (!rowW || !kids.length) return;
   const cs = getComputedStyle(row);
@@ -56,26 +75,36 @@ export function foldRow(row, opts = {}) {
   const vis = kids.filter((k) => !k.hidden && k.offsetWidth > 0);
   if (!vis.length) return;
   const lineH = Math.min(...vis.map((k) => k.offsetHeight).filter((h) => h > 0)) || 16;
-  const maxRows = Math.max(1, typeof opts.maxRows === 'function' ? opts.maxRows(lineH) : (opts.maxRows || 2));
+  const maxRows = Math.max(1, typeof opts.maxRows === 'function' ? opts.maxRows(lineH) : opts.maxRows || 2);
   // the `+n` chip's width, measured once with the widest count it could print
   row.insertAdjacentHTML('beforeend', moreChipHtml(vis.length, [], opts));
   const probe = row.lastElementChild;
   const moreW = probe.offsetWidth;
   probe.remove();
-  const items = vis.map((k) => ({ w: k.offsetWidth, rows: Math.max(1, Math.round(k.offsetHeight / lineH)), keep: !!(opts.keep && k.matches(opts.keep)) }));
+  const items = vis.map((k) => ({
+    w: k.offsetWidth,
+    rows: Math.max(1, Math.round(k.offsetHeight / lineH)),
+    keep: !!(opts.keep && k.matches(opts.keep)),
+  }));
   const plan = foldPlan(items, { rowW, gap, maxRows, moreW: () => moreW });
   if (!plan.hide.length && (!opts.fits || opts.fits(row))) return;
   const hidden = plan.hide.map((i) => vis[i]);
   const apply = () => {
     row.querySelectorAll(':scope > [data-fold-more]').forEach((x) => x.remove());
-    hidden.forEach((h) => { h.hidden = true; h.dataset.folded = '1'; });
+    hidden.forEach((h) => {
+      h.hidden = true;
+      h.dataset.folded = '1';
+    });
     if (hidden.length) hidden[0].insertAdjacentHTML('beforebegin', moreChipHtml(hidden.length, hidden, opts));
   };
   apply();
   // the plan is a measurement of widths; the page has the last word — a row that still does not fit (an item that
   // wrapped inside itself taller than its estimate) folds one more, never a kept one
   if (opts.fits) {
-    const rest = items.map((it, i) => i).filter((i) => !items[i].keep && !plan.hide.includes(i)).reverse();
+    const rest = items
+      .map((it, i) => i)
+      .filter((i) => !items[i].keep && !plan.hide.includes(i))
+      .reverse();
     for (const i of rest) {
       if (opts.fits(row)) break;
       hidden.push(vis[i]);
@@ -89,7 +118,11 @@ export function foldRow(row, opts = {}) {
       back.hidden = false;
       delete back.dataset.folded;
       apply();
-      if (!opts.fits(row)) { hidden.unshift(back); apply(); break; }
+      if (!opts.fits(row)) {
+        hidden.unshift(back);
+        apply();
+        break;
+      }
     }
   }
 }

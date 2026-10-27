@@ -71,7 +71,10 @@ const short = (sha?: string): string => (sha ? sha.slice(0, 7) : '');
  * (see {@link codeAtFor}); without it the sentence says the code moved without
  * naming the commit, never a commit it does not know.
  */
-export function freshnessFact(runs: readonly FreshnessRun[], code?: CodeAt | ((repo?: string) => CodeAt | undefined)): FreshnessFact {
+export function freshnessFact(
+  runs: readonly FreshnessRun[],
+  code?: CodeAt | ((repo?: string) => CodeAt | undefined),
+): FreshnessFact {
   const current = runs.filter((r) => r.freshness === 'unchanged');
   const stale = runs.filter((r) => r.freshness === 'changed');
   const noDigest = runs.filter((r) => r.freshness !== 'unchanged' && r.freshness !== 'changed');
@@ -81,16 +84,25 @@ export function freshnessFact(runs: readonly FreshnessRun[], code?: CodeAt | ((r
   const codeOf = (r?: FreshnessRun): CodeAt | undefined => (typeof code === 'function' ? code(r?.repo) : code);
 
   if (!runs.length) {
-    return { state: 'none', runs: counts, word: 'fresh.state.none', key: 'fresh.sentence.none', biz: 'journey.biz.fresh.none' };
+    return {
+      state: 'none',
+      runs: counts,
+      word: 'fresh.state.none',
+      key: 'fresh.sentence.none',
+      biz: 'journey.biz.fresh.none',
+    };
   }
   if (current.length) {
     const r = newest(current)!;
     const c = codeOf(r);
     return {
-      state: 'current', runs: counts,
+      state: 'current',
+      runs: counts,
       ...(r.at ? { ranAt: r.at } : {}),
       ...(r.commit ? { ranOn: { commit: r.commit } } : {}),
-      ...(c ? { codeAt: { ...(c.commit ? { commit: c.commit } : {}), ...(c.sync != null ? { sync: c.sync } : {}) } } : {}),
+      ...(c
+        ? { codeAt: { ...(c.commit ? { commit: c.commit } : {}), ...(c.sync != null ? { sync: c.sync } : {}) } }
+        : {}),
       word: 'fresh.state.current',
       key: c?.sync != null ? 'fresh.sentence.current' : 'fresh.sentence.currentNoSync',
       biz: 'journey.biz.fresh.current',
@@ -99,7 +111,8 @@ export function freshnessFact(runs: readonly FreshnessRun[], code?: CodeAt | ((r
   if (noDigest.length) {
     const r = newest(noDigest)!;
     return {
-      state: 'no-digest', runs: counts,
+      state: 'no-digest',
+      runs: counts,
       ...(r.at ? { ranAt: r.at } : {}),
       word: 'fresh.state.noDigest',
       key: stale.length ? 'fresh.sentence.noDigestSome' : 'fresh.sentence.noDigest',
@@ -111,18 +124,29 @@ export function freshnessFact(runs: readonly FreshnessRun[], code?: CodeAt | ((r
   const r = newest(stale)!;
   const c = codeOf(r);
   // the fold's own rule (coverage.ts changedByOfRefs): one run on another commit makes it a commit change
-  const changedBy: TestRun['changedBy'] = stale.some((x) => x.changedBy === 'commit') ? 'commit'
-    : stale.every((x) => x.changedBy === 'working-tree') ? 'working-tree' : undefined;
+  const changedBy: TestRun['changedBy'] = stale.some((x) => x.changedBy === 'commit')
+    ? 'commit'
+    : stale.every((x) => x.changedBy === 'working-tree')
+      ? 'working-tree'
+      : undefined;
   const tree = changedBy === 'working-tree';
-  const key = tree ? 'fresh.sentence.staleTree'
-    : r.commit && c?.commit && r.commit !== c.commit ? 'fresh.sentence.staleCommit'
-      : c?.commit ? 'fresh.sentence.staleCode'
+  const key = tree
+    ? 'fresh.sentence.staleTree'
+    : r.commit && c?.commit && r.commit !== c.commit
+      ? 'fresh.sentence.staleCommit'
+      : c?.commit
+        ? 'fresh.sentence.staleCode'
         : 'fresh.sentence.staleBare';
   return {
-    state: 'stale', runs: counts,
+    state: 'stale',
+    runs: counts,
     ...(r.at ? { ranAt: r.at } : {}),
     ...(r.commit ? { ranOn: { commit: r.commit } } : {}),
-    codeAt: { ...(c?.commit ? { commit: c.commit } : {}), ...(c?.sync != null ? { sync: c.sync } : {}), ...(tree ? { workingTree: true } : {}) },
+    codeAt: {
+      ...(c?.commit ? { commit: c.commit } : {}),
+      ...(c?.sync != null ? { sync: c.sync } : {}),
+      ...(tree ? { workingTree: true } : {}),
+    },
     ...(changedBy ? { changedBy } : {}),
     word: 'fresh.state.stale',
     key,

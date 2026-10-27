@@ -11,7 +11,16 @@ import type { GraphNode, TestsMeta, TestRef } from './graph.js';
 import type { GraphMeta } from './store.js';
 import type { GraphIndex } from './query.js';
 import { journey, flowScreenIds, repoOf } from './query.js';
-import { coverageFor, caseWord, journeyScope, testNodes, toCoverageRef, twinOf, type CoverageFacts, type CoverageTestRef } from './coverage.js';
+import {
+  coverageFor,
+  caseWord,
+  journeyScope,
+  testNodes,
+  toCoverageRef,
+  twinOf,
+  type CoverageFacts,
+  type CoverageTestRef,
+} from './coverage.js';
 import { t as word } from './strings.js';
 import { computeMetric, testsCovering, type MetricValue } from './metrics.js';
 import { buildLine } from './version.js';
@@ -40,10 +49,25 @@ export interface TestSuiteRow {
   level: TestRef['level'];
   runner: TestRef['runner'];
   project?: string;
-  cases: { id: string; name: string; suite: string[]; line: number; status?: string; declares?: string[]; unresolved?: string[]; covers: number }[];
+  cases: {
+    id: string;
+    name: string;
+    suite: string[];
+    line: number;
+    status?: string;
+    declares?: string[];
+    unresolved?: string[];
+    covers: number;
+  }[];
   /** `flaky` is its own bucket — the reporter retried and it then passed; it is never counted as passed */
   counts: { cases: number; passed: number; failed: number; skipped: number; flaky: number; unknown: number };
-  lastRun?: { at: string; freshness: NonNullable<TestRef['run']>['freshness']; stale: boolean; changedBy?: NonNullable<TestRef['run']>['changedBy']; report?: string };
+  lastRun?: {
+    at: string;
+    freshness: NonNullable<TestRef['run']>['freshness'];
+    stale: boolean;
+    changedBy?: NonNullable<TestRef['run']>['changedBy'];
+    report?: string;
+  };
 }
 
 /** One source × level card — *example-app · unit · vitest · 68 files · 412 cases · run 2026-09-08*. */
@@ -53,7 +77,12 @@ export interface TestSourceCard {
   runner: TestRef['runner'];
   files: number;
   cases: number;
-  lastRun?: { at: string; freshness: NonNullable<TestRef['run']>['freshness']; stale: boolean; changedBy?: NonNullable<TestRef['run']>['changedBy'] };
+  lastRun?: {
+    at: string;
+    freshness: NonNullable<TestRef['run']>['freshness'];
+    stale: boolean;
+    changedBy?: NonNullable<TestRef['run']>['changedBy'];
+  };
   /** the honest sentence beside the counts */
   freshness: string;
   /**
@@ -116,7 +145,17 @@ export interface TestsSurface {
    * end-to-end case passed — every surface reading a scope counts them as
    * observed, *passed, by its own declaration* (docs/COUNTS.md §2 #13).
    */
-  counts: { sources: number; files: number; cases: number; covers: number; declared: number; static: number; observed: number; orphans: number; declaredPassed?: number };
+  counts: {
+    sources: number;
+    files: number;
+    cases: number;
+    covers: number;
+    declared: number;
+    static: number;
+    observed: number;
+    orphans: number;
+    declaredPassed?: number;
+  };
   /** the same counts before the level filter — present only when one was applied, so nothing is lost by filtering */
   countsAll?: TestsSurface['counts'];
   /** the level the counts, sources and suites were filtered to */
@@ -145,7 +184,8 @@ const FRESHNESS_SENTENCE: Record<NonNullable<TestRef['run']>['freshness'], strin
   unknown: 'no source digest was recorded, so whether the code changed since the run is unknown',
 };
 /** `changed`, on the same commit: never implies a commit the Changes spine will not show */
-const FRESHNESS_TREE = 'the files changed after this run without a new commit — the working tree differs from HEAD — so the result is evidence of the past, not of now';
+const FRESHNESS_TREE =
+  'the files changed after this run without a new commit — the working tree differs from HEAD — so the result is evidence of the past, not of now';
 
 /**
  * The freshness sentence for a run, one wording for every printer (the Tests
@@ -154,17 +194,28 @@ const FRESHNESS_TREE = 'the files changed after this run without a new commit �
  * say *the code changed after this run* while Changes showed the source at one
  * commit for 27 syncs (story swarm 2026-09-25, three reviewers).
  */
-export function freshnessSentence(freshness: NonNullable<TestRef['run']>['freshness'], changedBy?: NonNullable<TestRef['run']>['changedBy']): string {
+export function freshnessSentence(
+  freshness: NonNullable<TestRef['run']>['freshness'],
+  changedBy?: NonNullable<TestRef['run']>['changedBy'],
+): string {
   return freshness === 'changed' && changedBy === 'working-tree' ? FRESHNESS_TREE : FRESHNESS_SENTENCE[freshness];
 }
 
 /** The catalog key of a run's freshness word — `tests.freshness.changedTree` for a working-tree change. */
-export function freshnessKey(freshness: NonNullable<TestRef['run']>['freshness'], changedBy?: NonNullable<TestRef['run']>['changedBy']): string {
-  return freshness === 'changed' && changedBy === 'working-tree' ? 'tests.freshness.changedTree' : `tests.freshness.${freshness}`;
+export function freshnessKey(
+  freshness: NonNullable<TestRef['run']>['freshness'],
+  changedBy?: NonNullable<TestRef['run']>['changedBy'],
+): string {
+  return freshness === 'changed' && changedBy === 'working-tree'
+    ? 'tests.freshness.changedTree'
+    : `tests.freshness.${freshness}`;
 }
 
 /** Every `covers` edge's evidence class, counted — from the tests in scope only, so a scoped catalogue never carries the whole graph's numbers. */
-function edgeCounts(index: GraphIndex, tests: GraphNode[]): { covers: number; declared: number; static: number; observed: number; declaredPassed: number } {
+function edgeCounts(
+  index: GraphIndex,
+  tests: GraphNode[],
+): { covers: number; declared: number; static: number; observed: number; declaredPassed: number } {
   const out = { covers: 0, declared: 0, static: 0, observed: 0, declaredPassed: 0 };
   for (const t of tests) {
     const passed = t.test?.level === 'e2e' && !t.test.runLevel && !t.test.inactive && t.test.run?.status === 'passed';
@@ -186,7 +237,12 @@ function edgeCounts(index: GraphIndex, tests: GraphNode[]): { covers: number; de
  * the ingest recorded (blind spots, reports read) — optional, because a graph
  * written before this pass has none.
  */
-export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta?: Record<string, TestsMeta>, opts: { level?: TestRef['level'] | null } = {}): TestsSurface {
+export function testsSurface(
+  index: GraphIndex,
+  scope?: Set<string> | null,
+  meta?: Record<string, TestsMeta>,
+  opts: { level?: TestRef['level'] | null } = {},
+): TestsSurface {
   const inScope = testNodes(index, scope);
   const level = opts.level ?? undefined;
   // the level filter applies to every count, card and suite — never to the rows alone
@@ -204,33 +260,66 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
     if (!byFile.has(key)) byFile.set(key, { repo, file, nodes: [] });
     byFile.get(key)!.nodes.push(t);
   }
-  const suites: TestSuiteRow[] = [...byFile.values()].map(({ repo, file, nodes: group }) => {
-    const head = group[0]!.test!;
-    const counts = { cases: group.length, passed: 0, failed: 0, skipped: 0, flaky: 0, unknown: 0 };
-    let lastRun: TestSuiteRow['lastRun'];
-    for (const t of group) {
-      const run = t.test!.run;
-      const status = run?.status ?? 'unknown';
-      counts[status === 'passed' ? 'passed' : status === 'failed' ? 'failed' : status === 'skipped' ? 'skipped' : status === 'flaky' ? 'flaky' : 'unknown']++;
-      if (run && (!lastRun || run.at > lastRun.at)) lastRun = { at: run.at, freshness: run.freshness, stale: run.stale, ...(run.changedBy ? { changedBy: run.changedBy } : {}), ...(run.report ? { report: run.report } : {}) };
-    }
-    return {
-      repo, file, level: head.level, runner: head.runner,
-      ...(head.project ? { project: head.project } : {}),
-      cases: group.map((t) => ({
-        id: t.id, name: t.name, suite: t.test!.suite, line: t.loc?.line ?? 0,
-        ...(t.test!.run ? { status: t.test!.run.status } : {}),
-        ...(t.test!.declares?.length ? { declares: t.test!.declares } : {}),
-        ...(t.test!.unresolved?.length ? { unresolved: t.test!.unresolved } : {}),
-        covers: (index.out.get(t.id) ?? []).filter((e) => e.kind === 'covers').length,
-      })),
-      counts,
-      ...(lastRun ? { lastRun } : {}),
-    };
-  }).sort((a, b) => a.repo.localeCompare(b.repo) || a.file.localeCompare(b.file));
+  const suites: TestSuiteRow[] = [...byFile.values()]
+    .map(({ repo, file, nodes: group }) => {
+      const head = group[0]!.test!;
+      const counts = { cases: group.length, passed: 0, failed: 0, skipped: 0, flaky: 0, unknown: 0 };
+      let lastRun: TestSuiteRow['lastRun'];
+      for (const t of group) {
+        const run = t.test!.run;
+        const status = run?.status ?? 'unknown';
+        counts[
+          status === 'passed'
+            ? 'passed'
+            : status === 'failed'
+              ? 'failed'
+              : status === 'skipped'
+                ? 'skipped'
+                : status === 'flaky'
+                  ? 'flaky'
+                  : 'unknown'
+        ]++;
+        if (run && (!lastRun || run.at > lastRun.at))
+          lastRun = {
+            at: run.at,
+            freshness: run.freshness,
+            stale: run.stale,
+            ...(run.changedBy ? { changedBy: run.changedBy } : {}),
+            ...(run.report ? { report: run.report } : {}),
+          };
+      }
+      return {
+        repo,
+        file,
+        level: head.level,
+        runner: head.runner,
+        ...(head.project ? { project: head.project } : {}),
+        cases: group.map((t) => ({
+          id: t.id,
+          name: t.name,
+          suite: t.test!.suite,
+          line: t.loc?.line ?? 0,
+          ...(t.test!.run ? { status: t.test!.run.status } : {}),
+          ...(t.test!.declares?.length ? { declares: t.test!.declares } : {}),
+          ...(t.test!.unresolved?.length ? { unresolved: t.test!.unresolved } : {}),
+          covers: (index.out.get(t.id) ?? []).filter((e) => e.kind === 'covers').length,
+        })),
+        counts,
+        ...(lastRun ? { lastRun } : {}),
+      };
+    })
+    .sort((a, b) => a.repo.localeCompare(b.repo) || a.file.localeCompare(b.file));
 
   // ── source cards: one per repo × level ──
-  const cards = new Map<string, TestSourceCard & { files: Set<string>; declares?: { known: number; unmatched: number; nothing: number }; freshRuns: FreshnessRun[]; reportSet: Set<string> }>();
+  const cards = new Map<
+    string,
+    TestSourceCard & {
+      files: Set<string>;
+      declares?: { known: number; unmatched: number; nothing: number };
+      freshRuns: FreshnessRun[];
+      reportSet: Set<string>;
+    }
+  >();
   // spec cases first, run-level report nodes after: a report joins the card of its runner, or its level's
   // biggest card — a coverage report is not a runner of its own and never opens a card with no cases
   for (const t of [...tests.filter((x) => !x.test!.runLevel), ...tests.filter((x) => x.test!.runLevel)]) {
@@ -239,73 +328,127 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
     // Playwright suite was badged with whichever runner came first (VITEST over Playwright files)
     let key = `${repo} ${t.test!.level} ${t.test!.runner}`;
     if (t.test!.runLevel && !cards.has(key)) {
-      const sameLevel = [...cards.entries()].filter(([k]) => k.startsWith(`${repo} ${t.test!.level} `)).sort((a, b) => b[1].cases - a[1].cases)[0];
+      const sameLevel = [...cards.entries()]
+        .filter(([k]) => k.startsWith(`${repo} ${t.test!.level} `))
+        .sort((a, b) => b[1].cases - a[1].cases)[0];
       if (sameLevel) key = sameLevel[0];
     }
     let card = cards.get(key);
     if (!card) {
-      card = { repo, level: t.test!.level, runner: t.test!.runner, files: new Set<string>(), cases: 0, freshness: '', freshRuns: [], reportSet: new Set<string>() } as unknown as TestSourceCard & { files: Set<string>; declares?: { known: number; unmatched: number; nothing: number }; freshRuns: FreshnessRun[]; reportSet: Set<string> };
+      card = {
+        repo,
+        level: t.test!.level,
+        runner: t.test!.runner,
+        files: new Set<string>(),
+        cases: 0,
+        freshness: '',
+        freshRuns: [],
+        reportSet: new Set<string>(),
+      } as unknown as TestSourceCard & {
+        files: Set<string>;
+        declares?: { known: number; unmatched: number; nothing: number };
+        freshRuns: FreshnessRun[];
+        reportSet: Set<string>;
+      };
       cards.set(key, card);
     }
     const run = t.test!.run;
     if (!t.test!.runLevel) {
-      card.files.add(t.test!.file); card.cases++;
+      card.files.add(t.test!.file);
+      card.cases++;
       const runs = (card.runs ??= { passed: 0, failed: 0, skipped: 0, flaky: 0, unknown: 0, noRun: 0 });
       runs[run ? run.status : 'noRun']++;
     }
-    if (run && (!card.lastRun || run.at > card.lastRun.at)) card.lastRun = { at: run.at, freshness: run.freshness, stale: run.stale, ...(run.changedBy ? { changedBy: run.changedBy } : {}) };
+    if (run && (!card.lastRun || run.at > card.lastRun.at))
+      card.lastRun = {
+        at: run.at,
+        freshness: run.freshness,
+        stale: run.stale,
+        ...(run.changedBy ? { changedBy: run.changedBy } : {}),
+      };
     if (run && !t.test!.inactive) {
-      card.freshRuns.push({ freshness: run.freshness, ...(run.changedBy ? { changedBy: run.changedBy } : {}), at: run.at, ...(run.commit ? { commit: run.commit } : {}), repo });
+      card.freshRuns.push({
+        freshness: run.freshness,
+        ...(run.changedBy ? { changedBy: run.changedBy } : {}),
+        at: run.at,
+        ...(run.commit ? { commit: run.commit } : {}),
+        repo,
+      });
       if (run.report) card.reportSet.add(run.report);
     }
     // a passed end-to-end case: what does it declare? (the passed-by-declaration split)
     if (!t.test!.runLevel && t.test!.level === 'e2e' && run?.status === 'passed') {
       const decl = (card.declares ??= { known: 0, unmatched: 0, nothing: 0 });
-      const known = (index.out.get(t.id) ?? []).some((e) => e.kind === 'covers' && (e.meta?.evidence ?? 'declared') === 'declared');
+      const known = (index.out.get(t.id) ?? []).some(
+        (e) => e.kind === 'covers' && (e.meta?.evidence ?? 'declared') === 'declared',
+      );
       if (known) decl.known++;
       else if (t.test!.declares?.length) decl.unmatched++;
       else decl.nothing++;
     }
   }
   const codeAt = codeAtOfIndex(index);
-  const sources: TestSourceCard[] = [...cards.values()].map((c) => {
-    const runs = c.runs ?? { passed: 0, failed: 0, skipped: 0, flaky: 0, unknown: 0, noRun: 0 };
-    const fresh = c.freshRuns.length ? freshnessFact(c.freshRuns, codeAt) : undefined;
-    return {
-      repo: c.repo, level: c.level, runner: c.runner, files: c.files.size, cases: c.cases,
-      ...(c.lastRun ? { lastRun: c.lastRun } : {}),
-      ...(fresh ? { fresh } : {}),
-      ...(c.reportSet.size ? { reports: [...c.reportSet].sort() } : {}),
-      // the sentence reads the card's one freshness fact, so it cannot say what the fact does not
-      freshness: fresh && fresh.ranAt
-        ? `last run ${fresh.ranAt.slice(0, 10)} — ${freshnessSentence(fresh.state === 'current' ? 'unchanged' : fresh.state === 'stale' ? 'changed' : 'unknown', fresh.changedBy)}`
-        : c.lastRun
-        ? `last run ${c.lastRun.at.slice(0, 10)} — ${freshnessSentence(c.lastRun.freshness, c.lastRun.changedBy)}`
-        : 'no run has been observed; declared and inferred evidence only',
-      runs,
-      counted: {
-        cases: counted(c.cases, 'count.unit.cases', 'count.scope.source', 'testsSurface().sources[].cases', {
-          bizUnit: 'journey.biz.countTests',
-          breakdown: [
-            { key: 'count.part.passed', n: runs.passed }, { key: 'count.part.failed', n: runs.failed },
-            { key: 'count.part.skipped', n: runs.skipped }, { key: 'count.part.flaky', n: runs.flaky },
-            // a verdict nobody recorded and no run at all read as one absence here: nothing says it passed
-            { key: 'count.part.noRun', n: runs.unknown + runs.noRun },
-          ],
-        }),
-        files: counted(c.files.size, 'count.unit.specFiles', 'count.scope.source', 'testsSurface().sources[].files'),
-        ...(c.declares ? {
-          passedByDeclaration: counted(runs.passed, 'count.unit.passedInReport', 'count.scope.source', 'testsSurface().sources[].runs.passed', {
+  const sources: TestSourceCard[] = [...cards.values()]
+    .map((c) => {
+      const runs = c.runs ?? { passed: 0, failed: 0, skipped: 0, flaky: 0, unknown: 0, noRun: 0 };
+      const fresh = c.freshRuns.length ? freshnessFact(c.freshRuns, codeAt) : undefined;
+      return {
+        repo: c.repo,
+        level: c.level,
+        runner: c.runner,
+        files: c.files.size,
+        cases: c.cases,
+        ...(c.lastRun ? { lastRun: c.lastRun } : {}),
+        ...(fresh ? { fresh } : {}),
+        ...(c.reportSet.size ? { reports: [...c.reportSet].sort() } : {}),
+        // the sentence reads the card's one freshness fact, so it cannot say what the fact does not
+        freshness:
+          fresh && fresh.ranAt
+            ? `last run ${fresh.ranAt.slice(0, 10)} — ${freshnessSentence(fresh.state === 'current' ? 'unchanged' : fresh.state === 'stale' ? 'changed' : 'unknown', fresh.changedBy)}`
+            : c.lastRun
+              ? `last run ${c.lastRun.at.slice(0, 10)} — ${freshnessSentence(c.lastRun.freshness, c.lastRun.changedBy)}`
+              : 'no run has been observed; declared and inferred evidence only',
+        runs,
+        counted: {
+          cases: counted(c.cases, 'count.unit.cases', 'count.scope.source', 'testsSurface().sources[].cases', {
+            bizUnit: 'journey.biz.countTests',
             breakdown: [
-              { key: 'count.part.declaresKnown', n: c.declares.known },
-              { key: 'count.part.declaresUnmatched', n: c.declares.unmatched },
-              { key: 'count.part.declaresNothing', n: c.declares.nothing },
+              { key: 'count.part.passed', n: runs.passed },
+              { key: 'count.part.failed', n: runs.failed },
+              { key: 'count.part.skipped', n: runs.skipped },
+              { key: 'count.part.flaky', n: runs.flaky },
+              // a verdict nobody recorded and no run at all read as one absence here: nothing says it passed
+              { key: 'count.part.noRun', n: runs.unknown + runs.noRun },
             ],
           }),
-        } : {}),
-      },
-    };
-  }).sort((a, b) => a.repo.localeCompare(b.repo) || a.level.localeCompare(b.level) || b.cases - a.cases || a.runner.localeCompare(b.runner));
+          files: counted(c.files.size, 'count.unit.specFiles', 'count.scope.source', 'testsSurface().sources[].files'),
+          ...(c.declares
+            ? {
+                passedByDeclaration: counted(
+                  runs.passed,
+                  'count.unit.passedInReport',
+                  'count.scope.source',
+                  'testsSurface().sources[].runs.passed',
+                  {
+                    breakdown: [
+                      { key: 'count.part.declaresKnown', n: c.declares.known },
+                      { key: 'count.part.declaresUnmatched', n: c.declares.unmatched },
+                      { key: 'count.part.declaresNothing', n: c.declares.nothing },
+                    ],
+                  },
+                ),
+              }
+            : {}),
+        },
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.repo.localeCompare(b.repo) ||
+        a.level.localeCompare(b.level) ||
+        b.cases - a.cases ||
+        a.runner.localeCompare(b.runner),
+    );
 
   // ── the journeys × tests matrix ──
   const journeys: TestMatrixRow[] = [];
@@ -318,8 +461,17 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
     // the one journey scope — byte-identical to the journey fold's (R9)
     const ids = journeyScope(index, walk, screenIds);
     // under a level filter the row reads that level's cases only, and a journey no case of that level reaches is left out
-    const coverage = coverageFor(index, ids, { kind: 'flow', label: n.name, flowId: n.id }, undefined, level ? { level } : {});
-    if (level && !coverage.tests.length) { levelLeftOut++; continue; }
+    const coverage = coverageFor(
+      index,
+      ids,
+      { kind: 'flow', label: n.name, flowId: n.id },
+      undefined,
+      level ? { level } : {},
+    );
+    if (level && !coverage.tests.length) {
+      levelLeftOut++;
+      continue;
+    }
     const declared = coverage.tests.filter((t) => t.evidence === 'declared');
     const inferred = coverage.tests.filter((t) => t.evidence === 'static');
     const observed = coverage.tests.filter((t) => t.evidence === 'observed');
@@ -338,10 +490,15 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
             ? `${uncovered} step${uncovered === 1 ? '' : 's'} on this journey no test reaches.`
             : 'Every step on this journey is covered.';
     journeys.push({
-      flowId: n.id, name: n.name,
+      flowId: n.id,
+      name: n.name,
       ...(n.design?.id ? { designId: n.design.id } : {}),
-      screens: screenIds.length, built,
-      coverage, declared, inferred, observed,
+      screens: screenIds.length,
+      built,
+      coverage,
+      declared,
+      inferred,
+      observed,
       e2e: coverage.e2e,
       verifiedEndToEnd: coverage.verifiedEndToEnd,
       gap,
@@ -353,7 +510,10 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
   const orphans = orphansOf(index, tests);
 
   const blindSpots = [...new Set(repos.flatMap((r) => meta?.[r]?.blindSpots ?? []))];
-  if (!inScope.length) blindSpots.unshift('No tests are indexed in this graph — either the sources have none, or they were excluded from ingest.');
+  if (!inScope.length)
+    blindSpots.unshift(
+      'No tests are indexed in this graph — either the sources have none, or they were excluded from ingest.',
+    );
   const countsOf = (list: GraphNode[], nSources: number, nOrphans: number): TestsSurface['counts'] => ({
     sources: nSources,
     files: new Set(list.filter((t) => !t.test!.runLevel).map((t) => `${repoOf(t)}/${t.test!.file}`)).size,
@@ -362,15 +522,25 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
     orphans: nOrphans,
   });
   const counts = countsOf(tests, sources.length, orphans.length);
-  const metric = computeMetric(index, 'test-coverage', scope ? { kind: 'source', repos: [...scope], label: [...scope].join(', ') } : { kind: 'workspace' });
-  const selection = level || scope ? 'count.scope.selection' as const : 'count.scope.workspace' as const;
+  const metric = computeMetric(
+    index,
+    'test-coverage',
+    scope ? { kind: 'source', repos: [...scope], label: [...scope].join(', ') } : { kind: 'workspace' },
+  );
+  const selection = level || scope ? ('count.scope.selection' as const) : ('count.scope.workspace' as const);
   const byLevel = (l: TestRef['level']) => tests.filter((t) => !t.test!.runLevel && t.test!.level === l).length;
   // under a level filter the reach is that level's part of the same metric: the share of the
   // coverable nodes in scope a test **of that level** reaches — one computation, not a second one
   const part = level ? metric.parts?.[level] : undefined;
   return {
     counts,
-    ...(level ? { level, countsAll: countsOf(inScope, cardCount(inScope), orphansOf(index, inScope).length), journeysLeftOut: levelLeftOut } : {}),
+    ...(level
+      ? {
+          level,
+          countsAll: countsOf(inScope, cardCount(inScope), orphansOf(index, inScope).length),
+          journeysLeftOut: levelLeftOut,
+        }
+      : {}),
     counted: {
       cases: counted(counts.cases, 'count.unit.cases', selection, 'testsSurface().counts.cases', {
         bizUnit: 'journey.biz.countTests',
@@ -381,12 +551,26 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
         ],
       }),
       files: counted(counts.files, 'count.unit.specFiles', selection, 'testsSurface().counts.files'),
-      sources: counted(new Set(sources.map((c) => c.repo)).size, 'count.unit.sources', selection, 'testsSurface().sources — distinct repos'),
-      reached: counted(part ? part.numerator : metric.numerator, 'count.unit.reached', selection,
-        part ? `testsSurface().metric.parts.${level}` : 'testsSurface().metric', { of: part ? part.denominator : metric.denominator }),
+      sources: counted(
+        new Set(sources.map((c) => c.repo)).size,
+        'count.unit.sources',
+        selection,
+        'testsSurface().sources — distinct repos',
+      ),
+      reached: counted(
+        part ? part.numerator : metric.numerator,
+        'count.unit.reached',
+        selection,
+        part ? `testsSurface().metric.parts.${level}` : 'testsSurface().metric',
+        { of: part ? part.denominator : metric.denominator },
+      ),
     },
     metric,
-    sources, suites, journeys, orphans, blindSpots,
+    sources,
+    suites,
+    journeys,
+    orphans,
+    blindSpots,
   };
 }
 
@@ -459,33 +643,41 @@ export function testDetail(index: GraphIndex, testId: string): TestDetail | unde
   const t = index.byId.get(testId);
   if (!t || t.kind !== 'test' || !t.test) return undefined;
   const ref = t.test;
-  const covers: TestDetailCover[] = (index.out.get(t.id) ?? []).filter((e) => e.kind === 'covers').map((e) => {
-    const to = index.byId.get(e.to);
-    // the twin is the graph's, not the edge's: the same `method-name` note the
-    // journey foot prints, so "one of these" reads the same in both places
-    const twin = twinOf(index, e.to);
-    return {
-      nodeId: e.to, name: to?.name ?? e.to, kind: (to?.kind ?? 'unknown') as GraphNode['kind'],
-      evidence: String(e.meta?.evidence ?? 'declared'),
-      ...(e.resolution
-        ? {
-            technique: e.resolution.technique, confidence: e.resolution.confidence,
-            ...(e.resolution.note ? { note: e.resolution.note } : {}),
-            ...(e.resolution.alternatives?.length ? { alternatives: e.resolution.alternatives } : {}),
-          }
-        : {}),
-      ...(twin ? { twin } : {}),
-      // .skip/.todo: the edge exists and lifts nothing. The flag rides on the
-      // edge or on the case — either one makes this row inactive
-      ...(e.meta?.inactive || ref.inactive ? { inactive: true } : {}),
-      ...(e.meta?.match ? { match: String(e.meta.match) } : {}),
-      ...(to?.loc ? { loc: to.loc } : {}),
-      ...(e.meta?.line != null ? { line: Number(e.meta.line) } : {}),
-    };
-  });
+  const covers: TestDetailCover[] = (index.out.get(t.id) ?? [])
+    .filter((e) => e.kind === 'covers')
+    .map((e) => {
+      const to = index.byId.get(e.to);
+      // the twin is the graph's, not the edge's: the same `method-name` note the
+      // journey foot prints, so "one of these" reads the same in both places
+      const twin = twinOf(index, e.to);
+      return {
+        nodeId: e.to,
+        name: to?.name ?? e.to,
+        kind: (to?.kind ?? 'unknown') as GraphNode['kind'],
+        evidence: String(e.meta?.evidence ?? 'declared'),
+        ...(e.resolution
+          ? {
+              technique: e.resolution.technique,
+              confidence: e.resolution.confidence,
+              ...(e.resolution.note ? { note: e.resolution.note } : {}),
+              ...(e.resolution.alternatives?.length ? { alternatives: e.resolution.alternatives } : {}),
+            }
+          : {}),
+        ...(twin ? { twin } : {}),
+        // .skip/.todo: the edge exists and lifts nothing. The flag rides on the
+        // edge or on the case — either one makes this row inactive
+        ...(e.meta?.inactive || ref.inactive ? { inactive: true } : {}),
+        ...(e.meta?.match ? { match: String(e.meta.match) } : {}),
+        ...(to?.loc ? { loc: to.loc } : {}),
+        ...(e.meta?.line != null ? { line: Number(e.meta.line) } : {}),
+      };
+    });
   // who else saw these nodes run — a coverage report names no case, so its
   // observations sit on a run-level node and are counted there, never here
-  const alsoBy = new Map<string, { id: string; name: string; level: TestRef['level']; runLevel: boolean; nodes: number }>();
+  const alsoBy = new Map<
+    string,
+    { id: string; name: string; level: TestRef['level']; runLevel: boolean; nodes: number }
+  >();
   for (const c of covers) {
     for (const e of index.in.get(c.nodeId) ?? []) {
       if (e.kind !== 'covers' || e.from === t.id || e.meta?.evidence !== 'observed') continue;
@@ -493,7 +685,14 @@ export function testDetail(index: GraphIndex, testId: string): TestDetail | unde
       if (!other?.test) continue;
       const seen = alsoBy.get(e.from);
       if (seen) seen.nodes++;
-      else alsoBy.set(e.from, { id: e.from, name: other.name, level: other.test.level, runLevel: !!other.test.runLevel, nodes: 1 });
+      else
+        alsoBy.set(e.from, {
+          id: e.from,
+          name: other.name,
+          level: other.test.level,
+          runLevel: !!other.test.runLevel,
+          nodes: 1,
+        });
     }
   }
   const journeys: { id: string; name: string }[] = [];
@@ -504,14 +703,22 @@ export function testDetail(index: GraphIndex, testId: string): TestDetail | unde
   }
   const orphan: TestDetail['orphan'] = ref.unresolved?.length
     ? { reason: 'unresolved-claim', declares: ref.unresolved }
-    : covers.length ? undefined : { reason: 'covers-nothing' };
+    : covers.length
+      ? undefined
+      : { reason: 'covers-nothing' };
   return {
-    id: t.id, name: t.name, repo: repoOf(t), test: ref,
+    id: t.id,
+    name: t.name,
+    repo: repoOf(t),
+    test: ref,
     ...(t.docs ? { docs: t.docs } : {}),
     ...(t.loc ? { loc: t.loc } : {}),
-    covers, journeys,
+    covers,
+    journeys,
     ...(orphan ? { orphan } : {}),
-    ...(alsoBy.size ? { alsoObserved: [...alsoBy.values()].sort((a, b) => b.nodes - a.nodes || a.name.localeCompare(b.name)) } : {}),
+    ...(alsoBy.size
+      ? { alsoObserved: [...alsoBy.values()].sort((a, b) => b.nodes - a.nodes || a.name.localeCompare(b.name)) }
+      : {}),
   };
 }
 
@@ -587,9 +794,14 @@ export interface TestMatrixCell {
 
 /** Every value `evidence_word` takes — the catalog's words for the case words, pinned by a test against the schema. */
 export const EVIDENCE_WORDS = [
-  'declared only', 'reached by tests', 'verified by a run', 'verified · stale',
-  'passed, by its own declaration', 'passed, by its own declaration · stale',
-  'seen by a coverage run', 'seen by a coverage run · stale',
+  'declared only',
+  'reached by tests',
+  'verified by a run',
+  'verified · stale',
+  'passed, by its own declaration',
+  'passed, by its own declaration · stale',
+  'seen by a coverage run',
+  'seen by a coverage run · stale',
 ] as const;
 
 /** What the document was computed from — the same identity every row repeats, so a CSV row stands alone. */
@@ -617,13 +829,40 @@ export interface TestsMatrixV1 {
  * byte-identical output (03 §3.6).
  */
 export const TESTS_MATRIX_COLUMNS: (keyof TestMatrixCell)[] = [
-  'flow_id', 'flow_name', 'screen_id', 'node_id', 'node_kind', 'node_name',
-  'test_id', 'file', 'line', 'suite', 'title', 'level', 'runner', 'project',
-  'run_level', 'inactive', 'evidence_class', 'technique', 'confidence', 'resolution_note', 'match',
-  'run_id', 'run_at', 'status', 'retries', 'duration_ms', 'freshness', 'stale',
-  'source_digest', 'sync', 'source_commit',
+  'flow_id',
+  'flow_name',
+  'screen_id',
+  'node_id',
+  'node_kind',
+  'node_name',
+  'test_id',
+  'file',
+  'line',
+  'suite',
+  'title',
+  'level',
+  'runner',
+  'project',
+  'run_level',
+  'inactive',
+  'evidence_class',
+  'technique',
+  'confidence',
+  'resolution_note',
+  'match',
+  'run_id',
+  'run_at',
+  'status',
+  'retries',
+  'duration_ms',
+  'freshness',
+  'stale',
+  'source_digest',
+  'sync',
+  'source_commit',
   // appended 2026-10-10 (additive): the screen's word and verdict for the case on this node
-  'evidence_word', 'verdict',
+  'evidence_word',
+  'verdict',
 ];
 
 /** Column by column, in order: absence first, numbers numerically, strings by code unit (never locale). */
@@ -646,7 +885,11 @@ function compareCells(a: TestMatrixCell, b: TestMatrixCell): number {
  * over **the one journey scope** (`journeyScope`), so the rows and the
  * denominator on the same journey can never disagree (R9).
  */
-export function testsMatrixRows(index: GraphIndex, surface: TestsSurface, identity?: Partial<TestsMatrixIdentity>): TestMatrixCell[] {
+export function testsMatrixRows(
+  index: GraphIndex,
+  surface: TestsSurface,
+  identity?: Partial<TestsMatrixIdentity>,
+): TestMatrixCell[] {
   const sync = identity?.sync ?? null;
   const commit = identity?.source_commit ?? '';
   const digests = identity?.source_digest ?? {};
@@ -665,10 +908,22 @@ export function testsMatrixRows(index: GraphIndex, surface: TestsSurface, identi
         const cls = String(e.meta?.evidence ?? 'declared');
         // the case's word on this node, by the screen's rule: a declared e2e case whose run passed is observed by its declaration (metrics.ts `testsCovering`)
         const inactive = t.test.inactive === true || e.meta?.inactive === true;
-        const byDeclaration = cls === 'declared' && t.test.level === 'e2e' && !t.test.runLevel && !inactive && run?.status === 'passed';
-        const ev = byDeclaration ? 'observed' : cls === 'static' ? 'static' : cls === 'observed' ? 'observed' : 'declared';
+        const byDeclaration =
+          cls === 'declared' && t.test.level === 'e2e' && !t.test.runLevel && !inactive && run?.status === 'passed';
+        const ev = byDeclaration
+          ? 'observed'
+          : cls === 'static'
+            ? 'static'
+            : cls === 'observed'
+              ? 'observed'
+              : 'declared';
         const cw = caseWord({
-          id: t.id, name: t.name, level: t.test.level, runner: t.test.runner, evidence: ev, runLevel: t.test.runLevel === true,
+          id: t.id,
+          name: t.name,
+          level: t.test.level,
+          runner: t.test.runner,
+          evidence: ev,
+          runLevel: t.test.runLevel === true,
           ...(byDeclaration ? { observedVia: 'declaration' as const } : {}),
           ...(run ? { status: run.status, at: run.at, freshness: run.freshness } : {}),
           reaches: { nodeId, name: node.name, kind: node.kind },
@@ -677,8 +932,10 @@ export function testsMatrixRows(index: GraphIndex, surface: TestsSurface, identi
         rows.push({
           flow_id: row.flowId,
           flow_name: row.name,
-          screen_id: screens.has(nodeId) ? node.design?.id ?? nodeId : '',
-          node_id: nodeId, node_kind: node.kind, node_name: node.name,
+          screen_id: screens.has(nodeId) ? (node.design?.id ?? nodeId) : '',
+          node_id: nodeId,
+          node_kind: node.kind,
+          node_name: node.name,
           test_id: t.id,
           file: t.test.file,
           line: t.loc?.line ?? null,
@@ -719,7 +976,11 @@ export function testsMatrixRows(index: GraphIndex, surface: TestsSurface, identi
  * the CLI passes the store's `sync`/`commit`/per-repo digests; anything missing
  * falls back to this build and now.
  */
-export function testsMatrixV1(index: GraphIndex, surface: TestsSurface, identity: Partial<TestsMatrixIdentity> = {}): TestsMatrixV1 {
+export function testsMatrixV1(
+  index: GraphIndex,
+  surface: TestsSurface,
+  identity: Partial<TestsMatrixIdentity> = {},
+): TestsMatrixV1 {
   const id: TestsMatrixIdentity = {
     ...(identity.sync != null ? { sync: identity.sync } : {}),
     ...(identity.source_commit ? { source_commit: identity.source_commit } : {}),
@@ -752,7 +1013,10 @@ export function testsMatrixV1(index: GraphIndex, surface: TestsSurface, identity
  * `farsight` is the build *producing the document* (this process), not the build
  * that wrote the graph — `/api/version` and the sync chip answer that one.
  */
-export function testsIdentity(meta: Pick<GraphMeta, 'sync' | 'commit' | 'repos'>, farsight?: string): TestsMatrixIdentity {
+export function testsIdentity(
+  meta: Pick<GraphMeta, 'sync' | 'commit' | 'repos'>,
+  farsight?: string,
+): TestsMatrixIdentity {
   const source_digest: Record<string, string> = {};
   for (const [repo, m] of Object.entries(meta.repos ?? {})) {
     if (m?.sourceDigest) source_digest[repo] = m.sourceDigest;
@@ -804,10 +1068,17 @@ export function verifiedThrough(index: GraphIndex, tableId: string): CoverageTes
       const key = `${t.id}|${accessor.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ via: accessor.id, viaName: accessor.name, ref: { ...toCoverageRef(index, t, table), via: accessor.id } });
+      out.push({
+        via: accessor.id,
+        viaName: accessor.name,
+        ref: { ...toCoverageRef(index, t, table), via: accessor.id },
+      });
     }
   }
   return out
-    .sort((a, b) => a.viaName.localeCompare(b.viaName) || a.via.localeCompare(b.via) || a.ref.name.localeCompare(b.ref.name))
+    .sort(
+      (a, b) =>
+        a.viaName.localeCompare(b.viaName) || a.via.localeCompare(b.via) || a.ref.name.localeCompare(b.ref.name),
+    )
     .map((x) => x.ref);
 }

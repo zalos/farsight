@@ -216,7 +216,10 @@ function run(root: string, args: string[], timeout: number, maxBuffer = 1024 * 1
 
 /** git's complaint as one line, for the `detail` a surface can quote. */
 function firstLine(stderr: string): string | undefined {
-  const line = stderr.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
+  const line = stderr
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
   return line || undefined;
 }
 
@@ -258,7 +261,11 @@ function repoCheck(root: string): GitAbsent | undefined {
  * quoting), so this only guards against a caller's own spelling.
  */
 export function normalizeRepoPath(p: string): string {
-  return p.trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/{2,}/g, '/');
+  return p
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/\/{2,}/g, '/');
 }
 
 /** `1.2.3` vs `v1.2.3` vs everything else — one real repository carries the first two at once. */
@@ -296,7 +303,8 @@ export function gitLog(root: string, options: GitLogOptions = {}): GitFact<GitLo
   if (bad) return bad;
   const max = Math.max(1, Math.floor(options.max ?? DEFAULT_MAX_COMMITS));
   const args = [
-    '-c', 'log.showSignature=false',
+    '-c',
+    'log.showSignature=false',
     'log',
     '-z',
     '--raw',
@@ -353,7 +361,12 @@ function defaultBranches(root: string): string[] {
  * deleted leaves no trace here — git keeps none — which is why the key in the
  * subject is the stronger signal.
  */
-function attributeBranches(root: string, commits: GitCommit[], keep: (name: string) => boolean, max: number): { ref: string } | { none: string } {
+function attributeBranches(
+  root: string,
+  commits: GitCommit[],
+  keep: (name: string) => boolean,
+  max: number,
+): { ref: string } | { none: string } {
   const bySha = new Map(commits.map((c) => [c.sha, c]));
   const tag = (sha: string, ref: string, via: 'branch' | 'merge') => {
     const c = bySha.get(sha);
@@ -363,7 +376,12 @@ function attributeBranches(root: string, commits: GitCommit[], keep: (name: stri
   };
   const revs = (...range: string[]): string[] => {
     const r = run(root, ['rev-list', `--max-count=${max}`, ...range], REV_TIMEOUT_MS, LOG_MAX_BUFFER);
-    return r.ok ? r.stdout.split('\n').map((l) => l.trim()).filter((l) => SHA.test(l)) : [];
+    return r.ok
+      ? r.stdout
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => SHA.test(l))
+      : [];
   };
   for (const c of commits) {
     if (!c.merge || c.parents.length < 2) continue;
@@ -383,7 +401,11 @@ function attributeBranches(root: string, commits: GitCommit[], keep: (name: stri
 function keyBearingRefs(root: string, keep: (name: string) => boolean): string[] {
   const refs = run(root, ['for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes'], REV_TIMEOUT_MS);
   if (!refs.ok) return [];
-  return refs.stdout.split('\n').map((l) => l.trim()).filter((n) => n && !n.endsWith('/HEAD') && n !== 'origin' && keep(n)).slice(0, MAX_KEY_REFS);
+  return refs.stdout
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((n) => n && !n.endsWith('/HEAD') && n !== 'origin' && keep(n))
+    .slice(0, MAX_KEY_REFS);
 }
 
 /**
@@ -391,11 +413,26 @@ function keyBearingRefs(root: string, keep: (name: string) => boolean): string[]
  * work diff route serves and what hunks → nodes reads. `paths` confines it to
  * those repo-relative files. Bounded like the log.
  */
-export function gitShowPatch(root: string, sha: string, opts: { paths?: string[]; context?: number } = {}): GitFact<{ patch: string }> {
-  if (!SHA.test(sha) && !/^[0-9a-f]{7,64}$/.test(sha)) return { available: false, reason: 'git-failed', detail: `not a commit id: ${sha}` };
+export function gitShowPatch(
+  root: string,
+  sha: string,
+  opts: { paths?: string[]; context?: number } = {},
+): GitFact<{ patch: string }> {
+  if (!SHA.test(sha) && !/^[0-9a-f]{7,64}$/.test(sha))
+    return { available: false, reason: 'git-failed', detail: `not a commit id: ${sha}` };
   const bad = repoCheck(root);
   if (bad) return bad;
-  const args = ['-c', 'log.showSignature=false', 'show', '--no-color', '--format=', '-M', `--unified=${opts.context ?? 0}`, '--first-parent', sha];
+  const args = [
+    '-c',
+    'log.showSignature=false',
+    'show',
+    '--no-color',
+    '--format=',
+    '-M',
+    `--unified=${opts.context ?? 0}`,
+    '--first-parent',
+    sha,
+  ];
   if (opts.paths?.length) args.push('--', ...opts.paths);
   const r = run(root, args, LOG_TIMEOUT_MS, LOG_MAX_BUFFER);
   if (!r.ok) return absent(r);
@@ -419,7 +456,13 @@ export function gitUnreachable(root: string, shas: readonly string[]): GitFact<{
   if (!asked.length) return { available: true, gone: [] };
   const bad = repoCheck(root);
   if (bad) return bad;
-  const check = run(root, ['cat-file', '--batch-check=%(objectname) %(objecttype)'], REV_TIMEOUT_MS, LOG_MAX_BUFFER, asked.join('\n') + '\n');
+  const check = run(
+    root,
+    ['cat-file', '--batch-check=%(objectname) %(objecttype)'],
+    REV_TIMEOUT_MS,
+    LOG_MAX_BUFFER,
+    asked.join('\n') + '\n',
+  );
   if (!check.ok) return absent(check);
   const present = new Set<string>();
   for (const line of check.stdout.split('\n')) {
@@ -432,7 +475,12 @@ export function gitUnreachable(root: string, shas: readonly string[]): GitFact<{
   for (let i = 0; i < known.length; i += 500) {
     const r = run(root, ['rev-list', ...known.slice(i, i + 500), '--not', '--all'], LOG_TIMEOUT_MS, LOG_MAX_BUFFER);
     if (!r.ok) return absent(r);
-    const unreached = new Set(r.stdout.split('\n').map((l) => l.trim()).filter(Boolean));
+    const unreached = new Set(
+      r.stdout
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean),
+    );
     for (const s of known.slice(i, i + 500)) if (unreached.has(s)) gone.push(s);
   }
   return { available: true, gone };
@@ -453,7 +501,10 @@ function parseLog(out: string): GitCommit[] {
   const commits: GitCommit[] = [];
   let i = 0;
   while (i < tokens.length) {
-    if (!isMarker(tokens[i]!)) { i++; continue; }
+    if (!isMarker(tokens[i]!)) {
+      i++;
+      continue;
+    }
     const sha = tokens[i]!.slice(1);
     const parents = (tokens[i + 1] ?? '').trim().split(/\s+/).filter(Boolean);
     const at = Number.parseInt((tokens[i + 2] ?? '').trim(), 10);
@@ -463,7 +514,10 @@ function parseLog(out: string): GitCommit[] {
     const body = (tokens[i + 6] ?? '').trim();
     i += 7;
     const diff: string[] = [];
-    while (i < tokens.length && !isMarker(tokens[i]!)) { diff.push(tokens[i]!); i++; }
+    while (i < tokens.length && !isMarker(tokens[i]!)) {
+      diff.push(tokens[i]!);
+      i++;
+    }
     commits.push({
       sha,
       parents,
@@ -493,13 +547,19 @@ function parseDiff(tokens: string[]): GitFileChange[] {
   const at = (path: string): GitFileChange => {
     const key = normalizeRepoPath(path);
     let row = byPath.get(key);
-    if (!row) { row = { path: key, status: 'X', binary: false }; byPath.set(key, row); }
+    if (!row) {
+      row = { path: key, status: 'X', binary: false };
+      byPath.set(key, row);
+    }
     return row;
   };
   let i = 0;
   while (i < toks.length) {
     const tok = toks[i]!;
-    if (!tok) { i++; continue; }
+    if (!tok) {
+      i++;
+      continue;
+    }
     if (tok.startsWith(':')) {
       // `:<srcmode> <dstmode> <srcsha> <dstsha> <STATUS>` then 1 path, or 2 for R/C.
       const field = tok.trim().split(/\s+/).pop() ?? '';
@@ -559,8 +619,12 @@ export function gitTags(root: string): GitFact<{ tags: GitTag[] }> {
   const bad = repoCheck(root);
   if (bad) return bad;
   const fmt = [
-    '%(refname:short)', '%(objecttype)', '%(objectname)',
-    '%(*objectname)', '%(committerdate:unix)', '%(*committerdate:unix)',
+    '%(refname:short)',
+    '%(objecttype)',
+    '%(objectname)',
+    '%(*objectname)',
+    '%(committerdate:unix)',
+    '%(*committerdate:unix)',
   ].join('%00');
   const r = run(root, ['for-each-ref', `--format=${fmt}%01`, 'refs/tags'], REV_TIMEOUT_MS);
   if (!r.ok) return absent(r);
@@ -690,8 +754,15 @@ export function shallowFloorSentence(oldestSha?: string): string {
 
 /** git's `--raw` letters as the history tables spell them (the same map `farsight history` applies). */
 export const GIT_STATUS_WORD: Record<GitFileStatus, FileStatus> = {
-  A: 'added', C: 'copied', D: 'deleted', M: 'modified',
-  R: 'renamed', T: 'typechange', U: 'unmerged', B: 'unknown', X: 'unknown',
+  A: 'added',
+  C: 'copied',
+  D: 'deleted',
+  M: 'modified',
+  R: 'renamed',
+  T: 'typechange',
+  U: 'unmerged',
+  B: 'unknown',
+  X: 'unknown',
 };
 
 /**
@@ -700,33 +771,36 @@ export const GIT_STATUS_WORD: Record<GitFileStatus, FileStatus> = {
  * key-bearing branches that carry it; without, `keys`/`branches` stay absent
  * so a plain history read never erases what a keyed read recorded.
  */
-export function commitInputsOf(commits: readonly GitCommit[], keys?: { opts: KeyDetectOptions; detect?: KeyDetector }): CommitInput[] {
+export function commitInputsOf(
+  commits: readonly GitCommit[],
+  keys?: { opts: KeyDetectOptions; detect?: KeyDetector },
+): CommitInput[] {
   return commits.map((c) => {
     // the assistant a co-author trailer names (round 2026-10-10, proposal 9) — never a session link
     const agent = agentOfMessage(c.body);
     return {
-    sha: c.sha,
-    at: new Date(c.at * 1000).toISOString(),
-    author: c.author,
-    email: c.email,
-    subject: c.subject,
-    parents: c.parents,
-    merge: c.merge,
-    files: c.files.map((f) => ({
-      path: f.path,
-      status: GIT_STATUS_WORD[f.status] ?? 'unknown',
-      ...(f.oldPath ? { oldPath: f.oldPath } : {}),
-      ...(f.added === undefined ? {} : { added: f.added }),
-      ...(f.deleted === undefined ? {} : { deleted: f.deleted }),
-      ...(f.similarity === undefined ? {} : { similarity: f.similarity }),
-    })),
-    ...(keys
-      ? {
-        keys: commitKeysOf(c, c.branches ?? [], keys.opts, keys.detect),
-        branches: [...new Set((c.branches ?? []).map((b) => b.ref))],
-      }
-      : {}),
-    ...(agent ? { agent } : {}),
-  };
+      sha: c.sha,
+      at: new Date(c.at * 1000).toISOString(),
+      author: c.author,
+      email: c.email,
+      subject: c.subject,
+      parents: c.parents,
+      merge: c.merge,
+      files: c.files.map((f) => ({
+        path: f.path,
+        status: GIT_STATUS_WORD[f.status] ?? 'unknown',
+        ...(f.oldPath ? { oldPath: f.oldPath } : {}),
+        ...(f.added === undefined ? {} : { added: f.added }),
+        ...(f.deleted === undefined ? {} : { deleted: f.deleted }),
+        ...(f.similarity === undefined ? {} : { similarity: f.similarity }),
+      })),
+      ...(keys
+        ? {
+            keys: commitKeysOf(c, c.branches ?? [], keys.opts, keys.detect),
+            branches: [...new Set((c.branches ?? []).map((b) => b.ref))],
+          }
+        : {}),
+      ...(agent ? { agent } : {}),
+    };
   });
 }

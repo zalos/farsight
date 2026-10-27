@@ -25,7 +25,17 @@ let base: string;
 let head: string;
 
 const git = (args: string[]) => {
-  const r = spawnSync('git', args, { cwd: repo, encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_NAME: 'dev', GIT_AUTHOR_EMAIL: 'dev@example.com', GIT_COMMITTER_NAME: 'dev', GIT_COMMITTER_EMAIL: 'dev@example.com' } });
+  const r = spawnSync('git', args, {
+    cwd: repo,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 'dev',
+      GIT_AUTHOR_EMAIL: 'dev@example.com',
+      GIT_COMMITTER_NAME: 'dev',
+      GIT_COMMITTER_EMAIL: 'dev@example.com',
+    },
+  });
   assert.equal(r.status, 0, r.stderr);
   return r.stdout.trim();
 };
@@ -44,14 +54,29 @@ before(() => {
   git(['commit', '-q', '-m', 'base', '--no-verify']);
   base = git(['rev-parse', 'HEAD']);
   const f = join(repo, 'src/server/invoiceService.ts');
-  writeFileSync(f, readFileSync(f, 'utf8').replace('  const invoice = await db.invoices.findOne({ id });\n  /* @business An invoice must', '  const invoice = await db.invoices.findOne({ id });\n  // a changed line inside finalizeInvoice\n  /* @business An invoice must'));
+  writeFileSync(
+    f,
+    readFileSync(f, 'utf8').replace(
+      '  const invoice = await db.invoices.findOne({ id });\n  /* @business An invoice must',
+      '  const invoice = await db.invoices.findOne({ id });\n  // a changed line inside finalizeInvoice\n  /* @business An invoice must',
+    ),
+  );
   git(['commit', '-q', '-am', 'fix: finalize', '--no-verify']);
   head = git(['rev-parse', 'HEAD']);
-  const ingest = spawnSync(process.execPath, [cli, 'ingest', repo, '--repo', 'invoice-app', '--out', graph], { cwd: work, encoding: 'utf8' });
+  const ingest = spawnSync(process.execPath, [cli, 'ingest', repo, '--repo', 'invoice-app', '--out', graph], {
+    cwd: work,
+    encoding: 'utf8',
+  });
   assert.equal(ingest.status, 0, ingest.stderr);
 });
 
-after(() => { try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ } });
+after(() => {
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
+});
 
 test('a commit range prints farsight-affected v1, valid against its schema, landing on finalizeInvoice', () => {
   const r = run(['affected', '--from', base, '--to', head, '--json']);

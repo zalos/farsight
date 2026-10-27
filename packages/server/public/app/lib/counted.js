@@ -20,13 +20,17 @@ export function countKey(key, n) {
 
 /** `{n}`/`{m}` filled into a key's words in the register on screen. */
 export function countWords(key, n, m) {
-  return t(countKey(key, n)).split('{n}').join(String(n)).split('{m}').join(String(m != null ? m : ''));
+  return t(countKey(key, n))
+    .split('{n}')
+    .join(String(n))
+    .split('{m}')
+    .join(String(m != null ? m : ''));
 }
 
 /** The unit key the lens prints: `bizUnit` in business (absent → not printed there), `unit` elsewhere. */
 export function countedUnit(c, lens) {
   if (!c) return '';
-  return (lens || currentLens()) === 'business' ? (c.bizUnit || '') : c.unit;
+  return (lens || currentLens()) === 'business' ? c.bizUnit || '' : c.unit;
 }
 
 /** The count in words for the lens on screen — `''` where the business lens does not print it. */
@@ -42,7 +46,10 @@ export function countedText(c, lens) {
  */
 export function partRows(parts) {
   return (parts || []).map((p) => {
-    const w = countWords(p.key, p.n).replace(String(p.n), '').replace(/\s{2,}/g, ' ').trim();
+    const w = countWords(p.key, p.n)
+      .replace(String(p.n), '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
     return [p.label ? p.label + (w ? ' · ' + w : '') : w, p.n];
   });
 }
@@ -73,7 +80,15 @@ export function countedHtml(c, api, opts = {}) {
   if (!c) return '';
   const words = opts.words != null ? opts.words : countedText(c);
   if (!words && words !== 0) return '';
-  return '<span class="' + esc(opts.cls || 'cnt-n') + '"' + countedAttrs(c, api, opts.tipKey) + '>' + esc(String(words)) + '</span>';
+  return (
+    '<span class="' +
+    esc(opts.cls || 'cnt-n') +
+    '"' +
+    countedAttrs(c, api, opts.tipKey) +
+    '>' +
+    esc(String(words)) +
+    '</span>'
+  );
 }
 
 /**

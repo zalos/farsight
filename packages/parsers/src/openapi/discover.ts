@@ -23,9 +23,17 @@ export interface DiscoveredSpec extends ParsedSpec {
   origin: 'file' | 'config';
 }
 
-export interface OpenApiDeclaration { path?: string; url?: string; name?: string }
+export interface OpenApiDeclaration {
+  path?: string;
+  url?: string;
+  name?: string;
+}
 
-export async function discoverSpecs(repoRoot: string, options: IngestOptions, declared: OpenApiDeclaration[] = []): Promise<{ specs: DiscoveredSpec[]; errors: string[] }> {
+export async function discoverSpecs(
+  repoRoot: string,
+  options: IngestOptions,
+  declared: OpenApiDeclaration[] = [],
+): Promise<{ specs: DiscoveredSpec[]; errors: string[] }> {
   const specs: DiscoveredSpec[] = [];
   const errors: string[] = [];
   const seen = new Set<string>();
@@ -36,18 +44,25 @@ export async function discoverSpecs(repoRoot: string, options: IngestOptions, de
     if (!ref) continue;
     try {
       const parsed = await readSpecSource(ref, repoRoot);
-      const key = isSpecUrl(ref) ? ref : relative(repoRoot, ref.startsWith('/') ? ref : `${repoRoot}/${ref}`).replace(/^\.\//, '');
+      const key = isSpecUrl(ref)
+        ? ref
+        : relative(repoRoot, ref.startsWith('/') ? ref : `${repoRoot}/${ref}`).replace(/^\.\//, '');
       seen.add(key);
       specs.push({ ...parsed, path: key, origin: 'config', ...(d.name ? { name: d.name } : {}) });
     } catch (err) {
       // a declaration that names no file says so in words, without the absolute path the error carries
       const missing = (err as NodeJS.ErrnoException).code === 'ENOENT';
-      errors.push(`openapi ${ref}: ${missing ? 'declared in farsight.config.json, but there is no file at that path' : (err as Error).message.split('\n')[0]}`);
+      errors.push(
+        `openapi ${ref}: ${missing ? 'declared in farsight.config.json, but there is no file at that path' : (err as Error).message.split('\n')[0]}`,
+      );
     }
   }
 
-  const candidates = collectFiles(repoRoot, ['.yaml', '.yml', '.json'], options, (base) => !NAME_RE.test(base))
-    .concat(collectFiles(repoRoot, ['.yaml', '.yml', '.json'], options).filter((abs) => /(^|\/)openapi\//.test(relative(repoRoot, abs))));
+  const candidates = collectFiles(repoRoot, ['.yaml', '.yml', '.json'], options, (base) => !NAME_RE.test(base)).concat(
+    collectFiles(repoRoot, ['.yaml', '.yml', '.json'], options).filter((abs) =>
+      /(^|\/)openapi\//.test(relative(repoRoot, abs)),
+    ),
+  );
   for (const abs of [...new Set(candidates)].sort()) {
     const rel = relative(repoRoot, abs);
     if (seen.has(rel)) continue;

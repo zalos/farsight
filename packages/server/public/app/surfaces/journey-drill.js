@@ -24,14 +24,67 @@ import { vsl, designThumbHtml } from '../lib/graph-render.js';
 import { doorsFor, doorsHtml } from '../lib/detail-doors.js';
 import { gateAttrs } from '../lib/gate-card.js';
 import {
-  jrnCellFoldsHtml, jrnSeamCardHtml, jrnMarkerHtml, jrnMarkerText, jrnMarkerTitle, jrnSegDecisions, jrnGateLabel, jrnGatesShown, jrnBizTab, jrnBizTabsHtml, jrnExpBodyHtml, jrnContractHtml, jrnForkEntryHtml, jrnReqChips, jrnRefAnchors, jrnLabel, jrnChoiceHtml, jrnSchemaChipHtml, jrnFirstSentence, jrnSheetModel, jrnMarkerAt, jrnSelect, jrnScrollTo, jrnTxLineHtml, jrnTestsFootHtml, jrnStepTestFacts, jrnCountedHtml, jrnMoLabel, jrnUntranslatedHtml, jrnActionUntrList, jrnWords, jrnCallWords, jrnAbsentWord, jrnAbsentKindWord, jrnAbsentText, jrnAbsentHtml, jrnStepActionFacts, jrnStopText, jrnRowLabel as jrnRowLabelOf, jrnHelperTest as jrnHelperOf, jrnScreenNode, jrnDesignIdHtml,
+  jrnCellFoldsHtml,
+  jrnSeamCardHtml,
+  jrnMarkerHtml,
+  jrnMarkerText,
+  jrnMarkerTitle,
+  jrnSegDecisions,
+  jrnGateLabel,
+  jrnGatesShown,
+  jrnBizTab,
+  jrnBizTabsHtml,
+  jrnExpBodyHtml,
+  jrnContractHtml,
+  jrnForkEntryHtml,
+  jrnReqChips,
+  jrnRefAnchors,
+  jrnLabel,
+  jrnChoiceHtml,
+  jrnSchemaChipHtml,
+  jrnFirstSentence,
+  jrnSheetModel,
+  jrnMarkerAt,
+  jrnSelect,
+  jrnScrollTo,
+  jrnTxLineHtml,
+  jrnTestsFootHtml,
+  jrnStepTestFacts,
+  jrnCountedHtml,
+  jrnMoLabel,
+  jrnUntranslatedHtml,
+  jrnActionUntrList,
+  jrnWords,
+  jrnCallWords,
+  jrnAbsentWord,
+  jrnAbsentKindWord,
+  jrnAbsentText,
+  jrnAbsentHtml,
+  jrnStepActionFacts,
+  jrnStopText,
+  jrnRowLabel as jrnRowLabelOf,
+  jrnHelperTest as jrnHelperOf,
+  jrnScreenNode,
+  jrnDesignIdHtml,
 } from '../lib/journey-draw.js';
 import { tipAttrs, tipSource } from '../lib/tooltip.js';
 import { foldRow, pathHtml } from '../lib/fold-row.js';
 import { drillLayers, drillLayerOf, drillBeats, jrnGatesIn } from '../lib/journey-model.js';
-import { impactBodyHtml, impactCached, impactFetch, impactHasHops, impactOpts, impactRings, impactHash } from '../impact.js';
+import {
+  impactBodyHtml,
+  impactCached,
+  impactFetch,
+  impactHasHops,
+  impactOpts,
+  impactRings,
+  impactHash,
+} from '../impact.js';
 
-const JRN_DRILL_LANE = 172, JRN_DRILL_COL = 212, JRN_DRILL_SEAM_COL = 320, JRN_DRILL_STOP = 150, JRN_INSP_TESTS = 12;
+const JRN_DRILL_LANE = 172,
+  JRN_DRILL_COL = 212,
+  JRN_DRILL_SEAM_COL = 320,
+  JRN_DRILL_STOP = 150,
+  JRN_INSP_TESTS = 12;
 
 // ── the flag ─────────────────────────────────────────────────────
 
@@ -62,7 +115,9 @@ function jrnBeatWord(layer) {
 }
 /** Which row a marker draws in: the user row for a component or page, else its system's row.
  * @group Journey drill */
-function jrnDrillLayerOf(m, byKey) { return drillLayerOf(m, byKey, S.JOURNEY.steps); }
+function jrnDrillLayerOf(m, byKey) {
+  return drillLayerOf(m, byKey, S.JOURNEY.steps);
+}
 /**
  * The beats of one action, in causal order: the screen (when it stayed open
  * from an earlier action), then every marker of the drill tree at tier 0–1 in
@@ -91,23 +146,44 @@ function jrnDrillBeats(col, layers) {
   const all = jrnSegDecisions(sg).filter((d) => d.order >= mo.from && d.order <= mo.to);
   const shown = business ? all.filter((d) => d.cls !== 'guard') : all;
   const model = drillBeats(col, layers, {
-    steps: S.JOURNEY.steps, parent: S.JRN_TREE ? S.JRN_TREE.parent : null, helper: jrnHelperOf(),
-    gates, decs: tab === 'gates' ? [] : shown,
+    steps: S.JOURNEY.steps,
+    parent: S.JRN_TREE ? S.JRN_TREE.parent : null,
+    helper: jrnHelperOf(),
+    gates,
+    decs: tab === 'gates' ? [] : shown,
   });
   const tree = model.tree;
   const cells = {};
   Object.keys(model.cells).forEach((k) => {
-    cells[k] = model.cells[k].map((b) => (b.type === 'data' ? jrnDrillBoxHtml(b.m, layers[b.layer], tree)
-      : b.type === 'part' ? jrnDrillBoxHtml(b.m, layers[b.layer], tree, b.also)
-      : b.type === 'screen' ? jrnDrillScreenBoxHtml(b.comp, b.sg)
-      : b.type === 'answer' ? jrnDrillAnswerBoxHtml(b.answer)
-      : b.type === 'gate' ? jrnDrillGateBoxHtml(b.g, b.bi, b.k)
-      : jrnDrillDecBoxHtml(b.d, b.bi, b.k)));
+    cells[k] = model.cells[k].map((b) =>
+      b.type === 'data'
+        ? jrnDrillBoxHtml(b.m, layers[b.layer], tree)
+        : b.type === 'part'
+          ? jrnDrillBoxHtml(b.m, layers[b.layer], tree, b.also)
+          : b.type === 'screen'
+            ? jrnDrillScreenBoxHtml(b.comp, b.sg)
+            : b.type === 'answer'
+              ? jrnDrillAnswerBoxHtml(b.answer)
+              : b.type === 'gate'
+                ? jrnDrillGateBoxHtml(b.g, b.bi, b.k)
+                : jrnDrillDecBoxHtml(b.d, b.bi, b.k),
+    );
   });
   // one number in every lens: the technical conditions plus the gate conditions nobody labelled
-  const untranslated = (mo.index === 0 ? (sg.untranslated || 0) : 0) + all.filter((d) => d.cls === 'guard').length;
+  const untranslated = (mo.index === 0 ? sg.untranslated || 0 : 0) + all.filter((d) => d.cls === 'guard').length;
   const notInWords = tab === 'decisions' ? 0 : gs.mute;
-  return { beats: model.beats, colOf: model.colOf, cells, wires: model.wires, untranslated, notInWords, technical, call: model.call, txCols: model.txCols, untrList: jrnActionUntrList(sg, mo) };
+  return {
+    beats: model.beats,
+    colOf: model.colOf,
+    cells,
+    wires: model.wires,
+    untranslated,
+    notInWords,
+    technical,
+    call: model.call,
+    txCols: model.txCols,
+    untrList: jrnActionUntrList(sg, mo),
+  };
 }
 
 /** The words for a side of the transaction boundary, in the register the lens asks for.
@@ -159,18 +235,39 @@ function jrnDrillTxRailHtml(model, cols) {
   const biz = currentLens() === 'business';
   // the lane's own words carry the define on hover rather than under the label: the rail is
   // one line of state, and a sentence here would make a tall band of mostly nothing
-  let html = '<div class="jrn-dlh tx" title="' + esc(def(biz ? 'journey.biz.tx.lane' : 'journey.tx.lane')) + '">'
-    + '<span class="hud-label">' + esc(t(biz ? 'journey.biz.tx.lane' : 'journey.tx.lane')) + '</span></div>';
+  let html =
+    '<div class="jrn-dlh tx" title="' +
+    esc(def(biz ? 'journey.biz.tx.lane' : 'journey.tx.lane')) +
+    '">' +
+    '<span class="hud-label">' +
+    esc(t(biz ? 'journey.biz.tx.lane' : 'journey.tx.lane')) +
+    '</span></div>';
   if (rail.unknown) {
-    return html + '<div class="jrn-tx unknown" style="grid-column:span ' + cols + '">'
-      + sym('absent') + esc(t(biz ? 'journey.biz.txFallback' : 'journey.drill.txFallback')) + '</div>';
+    return (
+      html +
+      '<div class="jrn-tx unknown" style="grid-column:span ' +
+      cols +
+      '">' +
+      sym('absent') +
+      esc(t(biz ? 'journey.biz.txFallback' : 'journey.drill.txFallback')) +
+      '</div>'
+    );
   }
   let prev = null;
   rail.cells.forEach((side, bi) => {
     const turn = !!side && (side !== prev || side === 'straddles');
     const tip = side ? esc(def(jrnTxKey(side, biz))) : '';
-    html += '<div class="jrn-tx ' + (side || 'na') + (turn ? ' turn' : '') + '" data-beat="' + bi + '" title="' + tip + '">'
-      + (turn ? '<span class="w">' + esc(jrnTxWord(side)) + '</span>' : '') + '</div>';
+    html +=
+      '<div class="jrn-tx ' +
+      (side || 'na') +
+      (turn ? ' turn' : '') +
+      '" data-beat="' +
+      bi +
+      '" title="' +
+      tip +
+      '">' +
+      (turn ? '<span class="w">' + esc(jrnTxWord(side)) + '</span>' : '') +
+      '</div>';
     prev = side;
   });
   return html;
@@ -180,12 +277,22 @@ function jrnDrillTxRailHtml(model, cols) {
 /** The verb a step's incoming edge reads as, for a box's kind line.
  * @group Journey drill */
 function jrnDrillVia(s) {
-  const map = { calls: 'journey.via.calls', renders: 'journey.via.renders', publishes: 'journey.via.publishes', consumes: 'journey.via.consumes', reads: 'journey.via.reads', writes: 'journey.via.writes', planned: 'journey.planned' };
+  const map = {
+    calls: 'journey.via.calls',
+    renders: 'journey.via.renders',
+    publishes: 'journey.via.publishes',
+    consumes: 'journey.via.consumes',
+    reads: 'journey.via.reads',
+    writes: 'journey.via.writes',
+    planned: 'journey.planned',
+  };
   return map[s.via] ? t(map[s.via]) : '';
 }
 /** Colour class of a box by the row it sits in.
  * @group Journey drill */
-function jrnDrillCls(layer) { return (layer && layer.cls) || 'srv'; }
+function jrnDrillCls(layer) {
+  return (layer && layer.cls) || 'srv';
+}
 /**
  * One box on a lane — a graph node with its ⧉ line: the kind line (kind · how
  * it was reached), the name (lens-aware, the same text the chips use), the
@@ -196,64 +303,172 @@ function jrnDrillCls(layer) { return (layer && layer.cls) || 'srv'; }
  * @business One thing the system did in this beat, named the way the reader's lens asks for it.
  */
 function jrnDrillBoxHtml(m, layer, tree, also) {
-  const s = S.JOURNEY.steps[m.stepOrder] || {}, n = s.node || {};
+  const s = S.JOURNEY.steps[m.stepOrder] || {},
+    n = s.node || {};
   const lens = currentLens();
   const fold = jrnCellFoldsHtml(m, tree, null);
-  const alsoHtml = also && also.length
-    ? '<span class="also"><i>' + esc(t('journey.drill.also')) + '</i>' + also.map((x) => jrnMarkerHtml(x) + jrnCellFoldsHtml(x, tree, null)).join('') + '</span>' : '';
+  const alsoHtml =
+    also && also.length
+      ? '<span class="also"><i>' +
+        esc(t('journey.drill.also')) +
+        '</i>' +
+        also.map((x) => jrnMarkerHtml(x) + jrnCellFoldsHtml(x, tree, null)).join('') +
+        '</span>'
+      : '';
   if (m.kind === 'call') {
     const c = n.contract || {};
-    const outs = (c.responses || []).map((r) => {
-      const cls = /^2/.test(String(r.status)) ? ' ok' : /^4/.test(String(r.status)) ? ' warn' : '';
-      return '<span class="api-chip st' + cls + '" title="' + esc(t('journey.fromSpec') + ' · ' + (r.description || '')) + '">' + esc(String(r.status)) + '</span>';
-    }).join('');
+    const outs = (c.responses || [])
+      .map((r) => {
+        const cls = /^2/.test(String(r.status)) ? ' ok' : /^4/.test(String(r.status)) ? ' warn' : '';
+        return (
+          '<span class="api-chip st' +
+          cls +
+          '" title="' +
+          esc(t('journey.fromSpec') + ' · ' + (r.description || '')) +
+          '">' +
+          esc(String(r.status)) +
+          '</span>'
+        );
+      })
+      .join('');
     // the schema's identifiers and the status codes are the contract's code; the
     // business lens reads the call's words and what it answers, one beat later
     const outsHtml = lens === 'business' ? '' : jrnSchemaChipHtml(m) + outs;
-    return '<div class="jrn-bx api" id="jrn-bx-' + m.stepOrder + '">' + jrnSeamCardHtml(m)
-      + (outsHtml ? '<span class="outs">' + outsHtml + '</span>' : '') + alsoHtml + fold + '</div>';
+    return (
+      '<div class="jrn-bx api" id="jrn-bx-' +
+      m.stepOrder +
+      '">' +
+      jrnSeamCardHtml(m) +
+      (outsHtml ? '<span class="outs">' + outsHtml + '</span>' : '') +
+      alsoHtml +
+      fold +
+      '</div>'
+    );
   }
   const cls = jrnDrillCls(layer);
-  const glyph = m.choice ? 'oneof'
-    : m.kind === 'record' ? 'record' : m.kind === 'message' ? 'message' : m.kind === 'external' ? 'external'
-    : (n.kind === 'component' || n.kind === 'page') ? 'screen' : 'step';
+  const glyph = m.choice
+    ? 'oneof'
+    : m.kind === 'record'
+      ? 'record'
+      : m.kind === 'message'
+        ? 'message'
+        : m.kind === 'external'
+          ? 'external'
+          : n.kind === 'component' || n.kind === 'page'
+            ? 'screen'
+            : 'step';
   // the kind line: the graph's kind and how the walk reached it — a developer's
   // reading (*component · rendered*, *function · called*). The business lens
   // says where the part is: on the screen, or a part of the system.
-  const kindWord = m.kind === 'record' ? t('journey.kind.record') + (m.op ? ' · ' + t('journey.op.' + m.op) : '')
-    : m.kind === 'message' ? t('journey.kind.message') : m.kind === 'external' ? t('journey.kind.external')
-    : lens === 'business' ? t((n.kind === 'component' || n.kind === 'page') ? 'journey.biz.kind.onScreen' : 'journey.biz.kind.part')
-    : (n.kind || t('journey.kind.step')) + (jrnDrillVia(s) ? ' · ' + jrnDrillVia(s) : '');
+  const kindWord =
+    m.kind === 'record'
+      ? t('journey.kind.record') + (m.op ? ' · ' + t('journey.op.' + m.op) : '')
+      : m.kind === 'message'
+        ? t('journey.kind.message')
+        : m.kind === 'external'
+          ? t('journey.kind.external')
+          : lens === 'business'
+            ? t(n.kind === 'component' || n.kind === 'page' ? 'journey.biz.kind.onScreen' : 'journey.biz.kind.part')
+            : (n.kind || t('journey.kind.step')) + (jrnDrillVia(s) ? ' · ' + jrnDrillVia(s) : '');
   const name = jrnMarkerText(m);
   // a run-time choice is the call, not one implementation: it borrows no candidate's
   // words and points at the line the call is written on (blocker 3)
-  const label = (!m.choice && n.bizLabel && n.bizLabel !== n.name && lens !== 'business' && name.indexOf(n.bizLabel) < 0) ? n.bizLabel : '';
+  const label =
+    !m.choice && n.bizLabel && n.bizLabel !== n.name && lens !== 'business' && name.indexOf(n.bizLabel) < 0
+      ? n.bizLabel
+      : '';
   // outside the code register the name IS the authored sentence, so the box does
   // not print it twice — the sentence stays where it is the only words there are
-  const said = jrnWords(m.choice ? (m.title || '') : (jrnMarkerTitle(m) || m.business || jrnFirstSentence(n.bizDescription || n.docs || '')));
+  const said = jrnWords(
+    m.choice ? m.title || '' : jrnMarkerTitle(m) || m.business || jrnFirstSentence(n.bizDescription || n.docs || ''),
+  );
   const biz = said && said !== name ? said : '';
-  const loc = m.choice ? (m.choice.at ? { path: m.choice.at.path, line: m.choice.at.line, repo: (m.choice.at.nodeId || '').split('::')[0] } : null)
-    : (n.loc ? { path: n.loc.path, line: n.loc.line, repo: n.repo } : null);
-  const title = [m.name || '', said && said !== m.name ? said : ''].filter(Boolean).join(' · ')
-    + (m.planned ? ' · ' + t('journey.plannedNote') : '') + (m.repeat ? ' · ' + t('journey.repeated') : '');
-  return '<div class="jrn-bx ' + cls + (m.planned ? ' planned' : '') + (m.repeat ? ' rep' : '') + '" id="jrn-bx-' + m.stepOrder + '" data-order="' + m.stepOrder + '" tabindex="0"'
-    + ' onclick="jrnSelect(' + m.stepOrder + ')" title="' + esc(title) + '">'
-    + '<span class="k">' + sym(glyph) + esc(kindWord) + (m.repeat ? '<span class="rep">↺</span>' : '') + '</span>'
-    + '<span class="n">' + esc(name) + (loc ? '<span class="loc">' + pathHtml(loc.path + ':' + loc.line, { max: 30 }) + vsl(loc.repo, loc.path, loc.line) + '</span>' : '') + '</span>'
-    + (label ? '<span class="b">' + esc(label) + '</span>' : '')
-    + (biz && biz !== label ? '<span class="b">' + esc(biz) + '</span>' : '')
-    + (m.cut ? '<span class="b cut" title="' + esc(def('journey.cutPoints')) + '">▸ ' + esc(t('journey.notFollowed').replace('{n}', m.cut)) + '</span>' : '')
-    + alsoHtml + fold + '</div>';
+  const loc = m.choice
+    ? m.choice.at
+      ? { path: m.choice.at.path, line: m.choice.at.line, repo: (m.choice.at.nodeId || '').split('::')[0] }
+      : null
+    : n.loc
+      ? { path: n.loc.path, line: n.loc.line, repo: n.repo }
+      : null;
+  const title =
+    [m.name || '', said && said !== m.name ? said : ''].filter(Boolean).join(' · ') +
+    (m.planned ? ' · ' + t('journey.plannedNote') : '') +
+    (m.repeat ? ' · ' + t('journey.repeated') : '');
+  return (
+    '<div class="jrn-bx ' +
+    cls +
+    (m.planned ? ' planned' : '') +
+    (m.repeat ? ' rep' : '') +
+    '" id="jrn-bx-' +
+    m.stepOrder +
+    '" data-order="' +
+    m.stepOrder +
+    '" tabindex="0"' +
+    ' onclick="jrnSelect(' +
+    m.stepOrder +
+    ')" title="' +
+    esc(title) +
+    '">' +
+    '<span class="k">' +
+    sym(glyph) +
+    esc(kindWord) +
+    (m.repeat ? '<span class="rep">↺</span>' : '') +
+    '</span>' +
+    '<span class="n">' +
+    esc(name) +
+    (loc
+      ? '<span class="loc">' +
+        pathHtml(loc.path + ':' + loc.line, { max: 30 }) +
+        vsl(loc.repo, loc.path, loc.line) +
+        '</span>'
+      : '') +
+    '</span>' +
+    (label ? '<span class="b">' + esc(label) + '</span>' : '') +
+    (biz && biz !== label ? '<span class="b">' + esc(biz) + '</span>' : '') +
+    (m.cut
+      ? '<span class="b cut" title="' +
+        esc(def('journey.cutPoints')) +
+        '">▸ ' +
+        esc(t('journey.notFollowed').replace('{n}', m.cut)) +
+        '</span>'
+      : '') +
+    alsoHtml +
+    fold +
+    '</div>'
+  );
 }
 /** The screen that stayed open from an earlier action — its component, marked *still open*; clicking jumps to where it was drawn.
  * @group Journey drill */
 function jrnDrillScreenBoxHtml(comp, sg) {
   const n = S.BYID[comp.id] || {};
-  return '<div class="jrn-bx ui dim" id="jrn-bx-' + comp.stepOrder + '" tabindex="0" onclick="jrnScrollTo(' + comp.stepOrder + ')" title="' + esc(comp.name) + '">'
-    + '<span class="k">' + sym('screen') + esc(currentLens() === 'business' ? t('journey.biz.kind.onScreen') : (n.kind || t('journey.kind.screen'))) + ' · ' + esc(t('journey.stillOpen')) + '</span>'
-    + '<span class="n">' + esc(currentLens() === 'business' ? comp.label : comp.name) + (n.loc ? '<span class="loc">' + pathHtml(n.loc.path + ':' + n.loc.line, { max: 30 }) + vsl(n.repo, n.loc.path, n.loc.line) + '</span>' : '') + '</span>'
-    + (comp.label && comp.label !== comp.name && currentLens() !== 'business' ? '<span class="b">' + esc(comp.label) + '</span>' : '')
-    + '</div>';
+  return (
+    '<div class="jrn-bx ui dim" id="jrn-bx-' +
+    comp.stepOrder +
+    '" tabindex="0" onclick="jrnScrollTo(' +
+    comp.stepOrder +
+    ')" title="' +
+    esc(comp.name) +
+    '">' +
+    '<span class="k">' +
+    sym('screen') +
+    esc(currentLens() === 'business' ? t('journey.biz.kind.onScreen') : n.kind || t('journey.kind.screen')) +
+    ' · ' +
+    esc(t('journey.stillOpen')) +
+    '</span>' +
+    '<span class="n">' +
+    esc(currentLens() === 'business' ? comp.label : comp.name) +
+    (n.loc
+      ? '<span class="loc">' +
+        pathHtml(n.loc.path + ':' + n.loc.line, { max: 30 }) +
+        vsl(n.repo, n.loc.path, n.loc.line) +
+        '</span>'
+      : '') +
+    '</span>' +
+    (comp.label && comp.label !== comp.name && currentLens() !== 'business'
+      ? '<span class="b">' + esc(comp.label) + '</span>'
+      : '') +
+    '</div>'
+  );
 }
 /**
  * The answer beat: what the contract says comes back — the 2xx schema as the
@@ -266,32 +481,102 @@ function jrnDrillAnswerBoxHtml(a) {
   const c = a.contract;
   const biz = currentLens() === 'business';
   const ok = (c.responses || []).find((r) => /^2/.test(String(r.status)));
-  const outs = (c.responses || []).map((r) => {
-    const cls = /^2/.test(String(r.status)) ? ' ok' : /^4/.test(String(r.status)) ? ' warn' : '';
-    return '<span class="api-chip st' + cls + '" title="' + esc(r.description || '') + '">' + esc(String(r.status)) + '</span>';
-  }).join('');
-  return '<div class="jrn-bx api ans" id="jrn-ans" tabindex="0" onclick="jrnDrillInspTab(\'req\',' + a.call.stepOrder + ')" title="' + esc(t('journey.drill.answerSub')) + '">'
-    + '<span class="k">' + sym('api') + esc(t('journey.beat.answer')) + (biz ? '' : ' · ' + esc(t('journey.fromSpec'))) + '</span>'
+  const outs = (c.responses || [])
+    .map((r) => {
+      const cls = /^2/.test(String(r.status)) ? ' ok' : /^4/.test(String(r.status)) ? ' warn' : '';
+      return (
+        '<span class="api-chip st' +
+        cls +
+        '" title="' +
+        esc(r.description || '') +
+        '">' +
+        esc(String(r.status)) +
+        '</span>'
+      );
+    })
+    .join('');
+  return (
+    '<div class="jrn-bx api ans" id="jrn-ans" tabindex="0" onclick="jrnDrillInspTab(\'req\',' +
+    a.call.stepOrder +
+    ')" title="' +
+    esc(t('journey.drill.answerSub')) +
+    '">' +
+    '<span class="k">' +
+    sym('api') +
+    esc(t('journey.beat.answer')) +
+    (biz ? '' : ' · ' + esc(t('journey.fromSpec'))) +
+    '</span>' +
     // business: what comes back in the contract's words — never the schema's identifier or the status code
-    + '<span class="n">' + (ok ? (biz ? esc(plainWords(ok.description) || t('journey.biz.drill.answer')) : '<b>' + esc(String(ok.status)) + '</b> ' + esc(ok.schema || ok.description || '')) : esc(t('journey.absent.notBuilt'))) + '</span>'
-    + (biz ? '' : '<span class="outs">' + outs + '</span>' + '<span class="b">' + esc(t('journey.drill.answerSub')) + '</span>') + '</div>';
+    '<span class="n">' +
+    (ok
+      ? biz
+        ? esc(plainWords(ok.description) || t('journey.biz.drill.answer'))
+        : '<b>' + esc(String(ok.status)) + '</b> ' + esc(ok.schema || ok.description || '')
+      : esc(t('journey.absent.notBuilt'))) +
+    '</span>' +
+    (biz
+      ? ''
+      : '<span class="outs">' + outs + '</span>' + '<span class="b">' + esc(t('journey.drill.answerSub')) + '</span>') +
+    '</div>'
+  );
 }
 /** A gate on the gates row: the checkpoint in words, how often this action met it, ⧉ into its code.
  * @group Journey drill */
 function jrnDrillGateBoxHtml(g, bi, k) {
   const gn = S.BYID[g.id];
   // a click (or Enter) opens the gate card (swarm-fixes 2026-10-05, finding 4); a planned gate is not in the graph, so it walks to its step
-  return '<div class="jrn-bx gate' + (g.planned ? ' planned' : '') + '" id="jrn-bg-' + bi + '-' + k + '"'
-    + (gn ? gateAttrs(g.id, { step: g.stepOrder, config: g.config }) : ' tabindex="0" onclick="jrnScrollTo(' + g.stepOrder + ')"') + ' title="' + esc(g.name || '') + '">'
-    + '<span class="k">' + sym(g.kind === 'rule' ? 'shield' : 'lock') + esc(g.kind === 'rule' ? t('journey.kind.rule') : t('journey.kind.gate')) + (g.count > 1 ? ' ×' + g.count : '') + '</span>'
-    + '<span class="n">' + esc(jrnGateLabel(g)) + (gn && gn.loc ? '<span class="loc">' + pathHtml(gn.loc.path + ':' + gn.loc.line, { max: 30 }) + vsl(gn.repo, gn.loc.path, gn.loc.line) + '</span>' : '') + '</span>'
-    + (g.planned ? '<span class="b">' + esc(t('journey.plannedGate')) + '</span>' : '') + '</div>';
+  return (
+    '<div class="jrn-bx gate' +
+    (g.planned ? ' planned' : '') +
+    '" id="jrn-bg-' +
+    bi +
+    '-' +
+    k +
+    '"' +
+    (gn
+      ? gateAttrs(g.id, { step: g.stepOrder, config: g.config })
+      : ' tabindex="0" onclick="jrnScrollTo(' + g.stepOrder + ')"') +
+    ' title="' +
+    esc(g.name || '') +
+    '">' +
+    '<span class="k">' +
+    sym(g.kind === 'rule' ? 'shield' : 'lock') +
+    esc(g.kind === 'rule' ? t('journey.kind.rule') : t('journey.kind.gate')) +
+    (g.count > 1 ? ' ×' + g.count : '') +
+    '</span>' +
+    '<span class="n">' +
+    esc(jrnGateLabel(g)) +
+    (gn && gn.loc
+      ? '<span class="loc">' +
+        pathHtml(gn.loc.path + ':' + gn.loc.line, { max: 30 }) +
+        vsl(gn.repo, gn.loc.path, gn.loc.line) +
+        '</span>'
+      : '') +
+    '</span>' +
+    (g.planned ? '<span class="b">' + esc(t('journey.plannedGate')) + '</span>' : '') +
+    '</div>'
+  );
 }
 /** A translated decision on the gates row: the fork the flow can take here.
  * @group Journey drill */
 function jrnDrillDecBoxHtml(d, bi, k) {
-  return '<div class="jrn-bx gate dec" id="jrn-bd-' + bi + '-' + k + '" tabindex="0" onclick="jrnScrollTo(' + d.order + ')" title="' + esc(t('journey.decisionChip')) + '">'
-    + '<span class="k">' + sym('fork') + esc(t('journey.kind.decision')) + '</span><span class="n">' + esc(d.label) + '</span></div>';
+  return (
+    '<div class="jrn-bx gate dec" id="jrn-bd-' +
+    bi +
+    '-' +
+    k +
+    '" tabindex="0" onclick="jrnScrollTo(' +
+    d.order +
+    ')" title="' +
+    esc(t('journey.decisionChip')) +
+    '">' +
+    '<span class="k">' +
+    sym('fork') +
+    esc(t('journey.kind.decision')) +
+    '</span><span class="n">' +
+    esc(d.label) +
+    '</span></div>'
+  );
 }
 
 // ── the rail ─────────────────────────────────────────────────────
@@ -306,25 +591,66 @@ function jrnDrillDecBoxHtml(d, bi, k) {
  */
 export function jrnDrillRailHtml(sum, cols, active) {
   // one column per stop at the stop's width: a long action name ellipsizes in its stop (its whole name is the tip)
-  let html = '<div class="jrn-rail-wrap map-rail" role="group" aria-label="' + esc(t('map.rail')) + '"><div class="jrn-rail" style="grid-template-columns:repeat(' + cols.length + ',' + JRN_DRILL_STOP + 'px)">';
+  let html =
+    '<div class="jrn-rail-wrap map-rail" role="group" aria-label="' +
+    esc(t('map.rail')) +
+    '"><div class="jrn-rail" style="grid-template-columns:repeat(' +
+    cols.length +
+    ',' +
+    JRN_DRILL_STOP +
+    'px)">';
   let at = 0;
   (sum.segments || []).forEach((sg) => {
     const span = cols.filter((c) => c.sg.index === sg.index).length;
     if (!span) return;
     const n = jrnScreenNode(sg);
     const name = (sg.screen && sg.screen.name) || (n && n.name) || t('journey.beforeFirstScreen');
-    html += '<button type="button" class="jrn-rscr' + (sg.screen ? '' : ' entry') + '" data-seg="' + sg.index + '" style="grid-column:' + (at + 1) + ' / span ' + span + '"'
-      + tipAttrs({ text: name, noFocus: true }) + '>'
-      + (n && currentLens() !== 'code' ? designThumbHtml(n, 'sheet') : '') + '<span class="t">' + jrnDesignIdHtml(sg) + esc(name) + '</span></button>';
+    html +=
+      '<button type="button" class="jrn-rscr' +
+      (sg.screen ? '' : ' entry') +
+      '" data-seg="' +
+      sg.index +
+      '" style="grid-column:' +
+      (at + 1) +
+      ' / span ' +
+      span +
+      '"' +
+      tipAttrs({ text: name, noFocus: true }) +
+      '>' +
+      (n && currentLens() !== 'code' ? designThumbHtml(n, 'sheet') : '') +
+      '<span class="t">' +
+      jrnDesignIdHtml(sg) +
+      esc(name) +
+      '</span></button>';
     at += span;
   });
-  html += cols.map((col) => {
-    const mo = col.mo;
-    const on = col.index === active;
-    return '<button type="button" class="jrn-stop' + (on ? ' on' : '') + (mo.component ? '' : ' auto') + (mo.repeat ? ' rep' : '') + '" data-col="' + col.index + '"'
-      + (on ? ' aria-current="step"' : '') + tipAttrs({ text: (col.index + 1) + ' · ' + (mo.business || mo.label || jrnMoLabel(mo)), noFocus: true }) + '><span class="dot"></span>'
-      + '<span class="t"><span class="ord">' + (col.index + 1) + '</span>' + sym(mo.component ? 'human' : 'automation') + '<span class="n">' + esc(jrnMoLabel(mo)) + '</span>' + (mo.repeat ? '<span class="rep">↺</span>' : '') + '</span></button>';
-  }).join('');
+  html += cols
+    .map((col) => {
+      const mo = col.mo;
+      const on = col.index === active;
+      return (
+        '<button type="button" class="jrn-stop' +
+        (on ? ' on' : '') +
+        (mo.component ? '' : ' auto') +
+        (mo.repeat ? ' rep' : '') +
+        '" data-col="' +
+        col.index +
+        '"' +
+        (on ? ' aria-current="step"' : '') +
+        tipAttrs({ text: col.index + 1 + ' · ' + (mo.business || mo.label || jrnMoLabel(mo)), noFocus: true }) +
+        '><span class="dot"></span>' +
+        '<span class="t"><span class="ord">' +
+        (col.index + 1) +
+        '</span>' +
+        sym(mo.component ? 'human' : 'automation') +
+        '<span class="n">' +
+        esc(jrnMoLabel(mo)) +
+        '</span>' +
+        (mo.repeat ? '<span class="rep">↺</span>' : '') +
+        '</span></button>'
+      );
+    })
+    .join('');
   return html + '</div></div>';
 }
 /**
@@ -335,7 +661,11 @@ export function jrnDrillRailHtml(sum, cols, active) {
  * @group Journey drill
  */
 function jrnWireSwatch(cls) {
-  return '<svg class="lgsw" viewBox="0 0 30 7" aria-hidden="true"><line class="' + esc(cls) + '" x1="0.5" y1="3.5" x2="29.5" y2="3.5"/></svg>';
+  return (
+    '<svg class="lgsw" viewBox="0 0 30 7" aria-hidden="true"><line class="' +
+    esc(cls) +
+    '" x1="0.5" y1="3.5" x2="29.5" y2="3.5"/></svg>'
+  );
 }
 /** The caption under the rail: which action is open, its beats, and the legend of the wires.
  *
@@ -346,10 +676,17 @@ function jrnWireSwatch(cls) {
 function jrnDrillCaptionHtml(cols, model) {
   const col = cols[S.jrnAction];
   const row = (cls, key) => '<span>' + jrnWireSwatch(cls) + esc(t(key)) + '</span>';
-  const legend = '<span class="legend">' + row('', 'journey.drill.legend.call') + row('dash', 'journey.drill.legend.cond')
-    + row('gate', 'journey.drill.legend.gates') + row('violet', 'journey.drill.legend.records')
-    + row('q', 'journey.drill.legend.messages') + row('grey', 'journey.drill.legend.third')
-    + '<span class="lgnote">' + esc(t('journey.drill.legend.shapes')) + '</span></span>';
+  const legend =
+    '<span class="legend">' +
+    row('', 'journey.drill.legend.call') +
+    row('dash', 'journey.drill.legend.cond') +
+    row('gate', 'journey.drill.legend.gates') +
+    row('violet', 'journey.drill.legend.records') +
+    row('q', 'journey.drill.legend.messages') +
+    row('grey', 'journey.drill.legend.third') +
+    '<span class="lgnote">' +
+    esc(t('journey.drill.legend.shapes')) +
+    '</span></span>';
   const biz = currentLens() === 'business';
   // `stop n of t on this journey`: t is the rail's stops — every moment, a second
   // visit a second stop — typed by the core as `counted.actionStops` (31 on the POC,
@@ -358,16 +695,43 @@ function jrnDrillCaptionHtml(cols, model) {
   // one unit per panel (swarm round 3): under the Map's screen strip the caption counts the screen's actions, as the
   // breadcrumb does; under the journey's rail it counts the rail's stops
   const onScreen = typeof S.jrnActionOnScreen === 'function' ? S.jrnActionOnScreen(S.jrnAction) : null;
-  const of = onScreen ? esc(t('map.act.onScreen').replace('{n}', onScreen.k).replace('{m}', onScreen.m))
-    : esc(t('journey.drill.actionOf').replace('{n}', S.jrnAction + 1)).replace('{t}', () => (stops && stops.n === cols.length
-      ? jrnCountedHtml(stops, { num: true, noFocus: true }) : String(cols.length)));
+  const of = onScreen
+    ? esc(t('map.act.onScreen').replace('{n}', onScreen.k).replace('{m}', onScreen.m))
+    : esc(t('journey.drill.actionOf').replace('{n}', S.jrnAction + 1)).replace('{t}', () =>
+        stops && stops.n === cols.length ? jrnCountedHtml(stops, { num: true, noFocus: true }) : String(cols.length),
+      );
   // the beats of the open action — a developer's unit, said as *things happen* in the business lens
   const beatKey = biz ? 'journey.biz.countSteps' : 'journey.drill.countBeats';
-  const beats = '<span class="jrn-num"' + tipAttrs({ number: { count: model.beats.length, of: beatKey, scope: 'count.scope.action', source: tipSource('/api/journey') }, noFocus: true }) + '>'
-    + esc(t(beatKey).replace('{n}', model.beats.length)) + '</span>';
-  return '<div class="jrn-dcap"><span>' + of + ' · ' + esc(jrnMoLabel(col.mo)) + ' · ' + esc(t(biz ? 'journey.biz.drill.order' : 'journey.drill.beats'))
-    + '</span><span class="cnt">' + beats
-    + (model.untranslated ? ' · ' + jrnUntranslatedHtml(model.untranslated, 'count.scope.action', null, model.untrList) : '') + '</span>' + legend + '</div>';
+  const beats =
+    '<span class="jrn-num"' +
+    tipAttrs({
+      number: {
+        count: model.beats.length,
+        of: beatKey,
+        scope: 'count.scope.action',
+        source: tipSource('/api/journey'),
+      },
+      noFocus: true,
+    }) +
+    '>' +
+    esc(t(beatKey).replace('{n}', model.beats.length)) +
+    '</span>';
+  return (
+    '<div class="jrn-dcap"><span>' +
+    of +
+    ' · ' +
+    esc(jrnMoLabel(col.mo)) +
+    ' · ' +
+    esc(t(biz ? 'journey.biz.drill.order' : 'journey.drill.beats')) +
+    '</span><span class="cnt">' +
+    beats +
+    (model.untranslated
+      ? ' · ' + jrnUntranslatedHtml(model.untranslated, 'count.scope.action', null, model.untrList)
+      : '') +
+    '</span>' +
+    legend +
+    '</div>'
+  );
 }
 
 // ── the lanes ────────────────────────────────────────────────────
@@ -382,35 +746,96 @@ function jrnDrillCaptionHtml(cols, model) {
  */
 function jrnDrillLanesHtml(cols, layers, model, col) {
   const beats = model.beats;
-  const widths = beats.length ? beats.map((b) => (b.kind === 'seam' ? JRN_DRILL_SEAM_COL : JRN_DRILL_COL)) : [JRN_DRILL_COL];
-  const style = 'grid-template-columns:' + JRN_DRILL_LANE + 'px ' + widths.map((w) => 'minmax(' + w + 'px,1fr)').join(' ') + ';min-width:' + (JRN_DRILL_LANE + widths.reduce((a, b) => a + b, 0)) + 'px';
+  const widths = beats.length
+    ? beats.map((b) => (b.kind === 'seam' ? JRN_DRILL_SEAM_COL : JRN_DRILL_COL))
+    : [JRN_DRILL_COL];
+  const style =
+    'grid-template-columns:' +
+    JRN_DRILL_LANE +
+    'px ' +
+    widths.map((w) => 'minmax(' + w + 'px,1fr)').join(' ') +
+    ';min-width:' +
+    (JRN_DRILL_LANE + widths.reduce((a, b) => a + b, 0)) +
+    'px';
   let html = '<div class="jrn-lanes" id="jrn-lanes" style="' + style + '"><div class="jrn-dbh corner"></div>';
-  html += beats.map((b, bi) => {
-    const word = b.kind === 'answer' ? t('journey.beat.answer') : jrnBeatWord(layers[b.layer]);
-    const sub = b.kind === 'answer' ? (b.answer.contract.spec && b.answer.contract.spec.operationId) || '' : b.kind === 'screen' ? b.comp.name : jrnMarkerText(b.m);
-    const at = b.kind === 'answer' ? b.answer.call.stepOrder : b.kind === 'screen' ? b.order : b.m.stepOrder;
-    return '<div class="jrn-dbh" data-beat="' + bi + '" onclick="' + (b.kind === 'answer' ? 'jrnDrillInspTab(\'req\',' + at + ')' : 'jrnScrollTo(' + at + ')') + '">'
-      + '<b><span class="ord">' + (bi + 1) + '</span>' + esc(word) + '</b><span class="s">' + esc(sub) + '</span></div>';
-  }).join('');
+  html += beats
+    .map((b, bi) => {
+      const word = b.kind === 'answer' ? t('journey.beat.answer') : jrnBeatWord(layers[b.layer]);
+      const sub =
+        b.kind === 'answer'
+          ? (b.answer.contract.spec && b.answer.contract.spec.operationId) || ''
+          : b.kind === 'screen'
+            ? b.comp.name
+            : jrnMarkerText(b.m);
+      const at = b.kind === 'answer' ? b.answer.call.stepOrder : b.kind === 'screen' ? b.order : b.m.stepOrder;
+      return (
+        '<div class="jrn-dbh" data-beat="' +
+        bi +
+        '" onclick="' +
+        (b.kind === 'answer' ? "jrnDrillInspTab('req'," + at + ')' : 'jrnScrollTo(' + at + ')') +
+        '">' +
+        '<b><span class="ord">' +
+        (bi + 1) +
+        '</span>' +
+        esc(word) +
+        '</b><span class="s">' +
+        esc(sub) +
+        '</span></div>'
+      );
+    })
+    .join('');
   if (!beats.length) html += '<div class="jrn-dbh"><b>' + esc(t('journey.absent.noneIndexed')) + '</b></div>';
   html += jrnDrillTxRailHtml(model, Math.max(1, beats.length));
   layers.forEach((layer, li) => {
     // the checks lane carries the same control the timeline's lane and the
     // sheet's lane carry, in the same state, plus what this register could not word
-    const ctl = layer.kind === 'gates'
-      ? jrnBizTabsHtml(S.JOURNEY.summary)
-        + (model.notInWords ? '<span class="jrn-gl-mute">' + sym('warning') + esc(t('journey.biz.notInWords').replace('{n}', model.notInWords)) + '</span>' : '')
-        + (model.technical ? '<span class="jrn-gl-tech-n"' + tipAttrs({ key: 'gate.group.technical' }) + '>' + esc(model.technical === 1 ? t('gate.group.technicalOne') : t('gate.group.technical').replace('{n}', model.technical)) + '</span>' : '')
-      : '';
+    const ctl =
+      layer.kind === 'gates'
+        ? jrnBizTabsHtml(S.JOURNEY.summary) +
+          (model.notInWords
+            ? '<span class="jrn-gl-mute">' +
+              sym('warning') +
+              esc(t('journey.biz.notInWords').replace('{n}', model.notInWords)) +
+              '</span>'
+            : '') +
+          (model.technical
+            ? '<span class="jrn-gl-tech-n"' +
+              tipAttrs({ key: 'gate.group.technical' }) +
+              '>' +
+              esc(
+                model.technical === 1
+                  ? t('gate.group.technicalOne')
+                  : t('gate.group.technical').replace('{n}', model.technical),
+              ) +
+              '</span>'
+            : '')
+        : '';
     // a lane this action leaves empty says so in the core's word for the cell — the
     // word the rows, the sheet and the storyboard print for the same (action, layer)
-    const empty = col && layer.kind !== 'gates' && !layer.absent
-      && !Object.keys(model.cells).some((k) => k.split(':')[0] === String(li) && (model.cells[k] || []).length);
-    const word = !empty ? ''
-      : layer.kind === 'user' ? ((col.sg.absent && col.sg.absent.moments[col.mo.index]) || {}).user || ''
-      : layer.row ? jrnAbsentWord(col.sg, col.mo, layer.key) : jrnAbsentKindWord(col.sg, col.mo, layer.kind);
-    html += '<div class="jrn-dlh ' + esc(layer.cls || '') + '"' + (layer.absent ? ' data-absent="' + esc(layer.word) + '"' : '') + '><span class="hud-label">' + esc(layer.label) + '</span>' + (layer.sub ? '<span class="sub">' + esc(layer.sub) + '</span>' : '')
-      + (word ? '<span class="sub" data-sys="' + esc(layer.key) + '">' + jrnAbsentHtml(word) + '</span>' : '') + ctl + '</div>';
+    const empty =
+      col &&
+      layer.kind !== 'gates' &&
+      !layer.absent &&
+      !Object.keys(model.cells).some((k) => k.split(':')[0] === String(li) && (model.cells[k] || []).length);
+    const word = !empty
+      ? ''
+      : layer.kind === 'user'
+        ? ((col.sg.absent && col.sg.absent.moments[col.mo.index]) || {}).user || ''
+        : layer.row
+          ? jrnAbsentWord(col.sg, col.mo, layer.key)
+          : jrnAbsentKindWord(col.sg, col.mo, layer.kind);
+    html +=
+      '<div class="jrn-dlh ' +
+      esc(layer.cls || '') +
+      '"' +
+      (layer.absent ? ' data-absent="' + esc(layer.word) + '"' : '') +
+      '><span class="hud-label">' +
+      esc(layer.label) +
+      '</span>' +
+      (layer.sub ? '<span class="sub">' + esc(layer.sub) + '</span>' : '') +
+      (word ? '<span class="sub" data-sys="' + esc(layer.key) + '">' + jrnAbsentHtml(word) + '</span>' : '') +
+      ctl +
+      '</div>';
     for (let bi = 0; bi < Math.max(1, beats.length); bi++) {
       const list = model.cells[li + ':' + bi] || [];
       html += '<div class="jrn-dcell" data-layer="' + li + '" data-beat="' + bi + '">' + list.join('') + '</div>';
@@ -430,31 +855,62 @@ function jrnDrillWires() {
   const svg = host && host.querySelector('svg.jrn-wires');
   if (!svg) return;
   const hb = host.getBoundingClientRect();
-  svg.setAttribute('width', host.scrollWidth); svg.setAttribute('height', host.scrollHeight);
+  svg.setAttribute('width', host.scrollWidth);
+  svg.setAttribute('height', host.scrollHeight);
   let out = '';
   (S.JRN_WIRES || []).forEach((w) => {
-    const A = document.getElementById(w.a), B = document.getElementById(w.b);
+    const A = document.getElementById(w.a),
+      B = document.getElementById(w.b);
     if (!A || !B) return;
-    const ra = A.getBoundingClientRect(), rb = B.getBoundingClientRect();
-    const ax = ra.left - hb.left, ay = ra.top - hb.top, bx = rb.left - hb.left, by = rb.top - hb.top;
+    const ra = A.getBoundingClientRect(),
+      rb = B.getBoundingClientRect();
+    const ax = ra.left - hb.left,
+      ay = ra.top - hb.top,
+      bx = rb.left - hb.left,
+      by = rb.top - hb.top;
     let d, ex, ey, dir;
     if (rb.left >= ra.left + ra.width - 2) {
       // to the right: out the right edge, along the gutter, into the left edge
-      const y1 = ay + ra.height / 2, y2 = by + rb.height / 2, mx = ax + ra.width + Math.max(8, (bx - ax - ra.width) / 2);
-      d = 'M' + (ax + ra.width) + ',' + y1 + ' H' + mx + ' V' + y2 + ' H' + bx; ex = bx; ey = y2; dir = 'r';
+      const y1 = ay + ra.height / 2,
+        y2 = by + rb.height / 2,
+        mx = ax + ra.width + Math.max(8, (bx - ax - ra.width) / 2);
+      d = 'M' + (ax + ra.width) + ',' + y1 + ' H' + mx + ' V' + y2 + ' H' + bx;
+      ex = bx;
+      ey = y2;
+      dir = 'r';
     } else if (Math.abs(rb.left - ra.left) < 4 && rb.top > ra.top) {
       // the same column, below: straight down
       const x = ax + Math.min(ra.width, rb.width) / 2;
-      d = 'M' + x + ',' + (ay + ra.height) + ' V' + by; ex = x; ey = by; dir = 'd';
+      d = 'M' + x + ',' + (ay + ra.height) + ' V' + by;
+      ex = x;
+      ey = by;
+      dir = 'd';
     } else {
       // back to the left (a repeat, a continuation): out the left edge, along the gutter, into the right edge
-      const y1 = ay + ra.height / 2, y2 = by + rb.height / 2, mx = ax - Math.max(8, (ax - bx - rb.width) / 2);
-      d = 'M' + ax + ',' + y1 + ' H' + mx + ' V' + y2 + ' H' + (bx + rb.width); ex = bx + rb.width; ey = y2; dir = 'l';
+      const y1 = ay + ra.height / 2,
+        y2 = by + rb.height / 2,
+        mx = ax - Math.max(8, (ax - bx - rb.width) / 2);
+      d = 'M' + ax + ',' + y1 + ' H' + mx + ' V' + y2 + ' H' + (bx + rb.width);
+      ex = bx + rb.width;
+      ey = y2;
+      dir = 'l';
     }
-    const tri = dir === 'r' ? ex + ',' + ey + ' ' + (ex - 6) + ',' + (ey - 3.5) + ' ' + (ex - 6) + ',' + (ey + 3.5)
-      : dir === 'l' ? ex + ',' + ey + ' ' + (ex + 6) + ',' + (ey - 3.5) + ' ' + (ex + 6) + ',' + (ey + 3.5)
-      : ex + ',' + ey + ' ' + (ex - 3.5) + ',' + (ey - 6) + ' ' + (ex + 3.5) + ',' + (ey - 6);
-    out += '<path class="' + esc(w.cls || '') + '" d="' + d + '"/><polygon class="arrow ' + esc(w.cls || '') + '" points="' + tri + '"/>';
+    const tri =
+      dir === 'r'
+        ? ex + ',' + ey + ' ' + (ex - 6) + ',' + (ey - 3.5) + ' ' + (ex - 6) + ',' + (ey + 3.5)
+        : dir === 'l'
+          ? ex + ',' + ey + ' ' + (ex + 6) + ',' + (ey - 3.5) + ' ' + (ex + 6) + ',' + (ey + 3.5)
+          : ex + ',' + ey + ' ' + (ex - 3.5) + ',' + (ey - 6) + ' ' + (ex + 3.5) + ',' + (ey - 6);
+    out +=
+      '<path class="' +
+      esc(w.cls || '') +
+      '" d="' +
+      d +
+      '"/><polygon class="arrow ' +
+      esc(w.cls || '') +
+      '" points="' +
+      tri +
+      '"/>';
   });
   svg.innerHTML = out;
 }
@@ -519,7 +975,10 @@ function jrnInspRedraw() {
 function jrnInspImpactHtml(i) {
   const id = jrnStepNodeId(i);
   const entry = id ? impactCached(id) : null;
-  if (entry && entry.state === 'ok') { impactRings(entry); if (id) impactHash(id); }
+  if (entry && entry.state === 'ok') {
+    impactRings(entry);
+    if (id) impactHash(id);
+  }
   return '<div class="jrn-impact">' + impactBodyHtml(entry, jrnInspRedraw) + '</div>';
 }
 /**
@@ -545,7 +1004,10 @@ export function jrnInspTabFor(i) {
  */
 function jrnDrillInspTab(tab, i) {
   S.jrnInspTab = tab;
-  if (i != null && i >= 0 && i !== S.journeyActive) { jrnSelect(i); return; }
+  if (i != null && i >= 0 && i !== S.journeyActive) {
+    jrnSelect(i);
+    return;
+  }
   if (S.JRN_DRILL) jrnDrillInspect(S.journeyActive);
   else jrnSelect(S.journeyActive, true);
 }
@@ -564,14 +1026,21 @@ export function jrnOpenTests() {
  */
 export function jrnOpenImpact() {
   const id = S.JOURNEY ? jrnStepNodeId(S.journeyActive) : null;
-  if (!id) { window.openImpact(null); return; }
-  if (!impactHasHops(id)) { window.openImpact(id); return; }
+  if (!id) {
+    window.openImpact(null);
+    return;
+  }
+  if (!impactHasHops(id)) {
+    window.openImpact(id);
+    return;
+  }
   jrnDrillInspTab('impact');
 }
 /** The head of the inspector: the beat's word and ordinal, the step's name (method + operationId for a call), its ⧉ line.
  * @group Journey drill */
 function jrnInspHeadHtml(i, mk) {
-  const s = S.JOURNEY.steps[i] || {}, n = s.node || {};
+  const s = S.JOURNEY.steps[i] || {},
+    n = s.node || {};
   const c = n.contract || {};
   const drill = !!(S.JRN_DRILL && S.JRN_DRILL.colOf);
   const bi = drill ? S.JRN_DRILL.colOf[i] : null;
@@ -580,35 +1049,81 @@ function jrnInspHeadHtml(i, mk) {
   // the timeline's own head always said: which step of the walk this is
   // outside the drill there are no beats: the timeline's head says which step of
   // the walk this is — a developer's unit, so the business lens says where it is instead
-  const bizWhere = () => (mk && mk.kind === 'call' ? jrnBeatWord({ kind: 'api' })
-    : (n.kind === 'component' || n.kind === 'page') ? t('journey.beat.screen') : jrnBeatWord(null));
+  const bizWhere = () =>
+    mk && mk.kind === 'call'
+      ? jrnBeatWord({ kind: 'api' })
+      : n.kind === 'component' || n.kind === 'page'
+        ? t('journey.beat.screen')
+        : jrnBeatWord(null);
   // outside the drill the head names the stop the part sits in — the Sheet's column,
   // the drill's rail — and what kind of part it is; never the walk's own index
   // (`STEP 232`), which no other surface prints (swarm 2026-10-05, finding 3)
-  const kindWord = mk && mk.kind && S.STRINGS && S.STRINGS['journey.kind.' + mk.kind] ? t('journey.kind.' + mk.kind) : t('journey.kind.step');
+  const kindWord =
+    mk && mk.kind && S.STRINGS && S.STRINGS['journey.kind.' + mk.kind]
+      ? t('journey.kind.' + mk.kind)
+      : t('journey.kind.step');
   const stopWords = jrnStopText(i);
-  const word = !drill ? (currentLens() === 'business' ? bizWhere() : (stopWords ? stopWords + ' · ' : '') + kindWord)
-    : mk && mk.kind === 'call' ? jrnBeatWord({ kind: 'api' }) : jrnBeatWord(layer);
+  const word = !drill
+    ? currentLens() === 'business'
+      ? bizWhere()
+      : (stopWords ? stopWords + ' · ' : '') + kindWord
+    : mk && mk.kind === 'call'
+      ? jrnBeatWord({ kind: 'api' })
+      : jrnBeatWord(layer);
   // the same words the chip that opened this panel carries — the core's `title`
   // first, so the head and the marker cannot name one step two ways
   const lens = currentLens();
   const biz = lens === 'business';
-  const name = lens === 'code' ? (n.name || '')
-    : biz ? (mk && mk.kind === 'call' ? jrnCallWords(mk, n) : plainWords(mk && jrnMarkerTitle(mk)) || plainWords(n.bizLabel) || humanize(String(n.name || '')))
-    : (mk && mk.kind === 'call' ? ((c.spec && c.spec.operationId) || n.bizLabel || n.name || '')
-      : ((mk && jrnMarkerTitle(mk)) || n.bizLabel || jrnLabel(n)));
+  const name =
+    lens === 'code'
+      ? n.name || ''
+      : biz
+        ? mk && mk.kind === 'call'
+          ? jrnCallWords(mk, n)
+          : plainWords(mk && jrnMarkerTitle(mk)) || plainWords(n.bizLabel) || humanize(String(n.name || ''))
+        : mk && mk.kind === 'call'
+          ? (c.spec && c.spec.operationId) || n.bizLabel || n.name || ''
+          : (mk && jrnMarkerTitle(mk)) || n.bizLabel || jrnLabel(n);
   // hybrid keeps both names; business keeps one, and not the code's
-  return '<div class="sel"><span class="hud-label">' + esc(word) + (bi != null && !biz ? ' · ' + esc(t('journey.insp.beat').replace('{n}', bi + 1)) : '') + '</span>'
-    + '<div class="nm">' + (mk && mk.method && !biz ? '<b>' + esc(mk.method) + '</b>' : '') + esc(name) + (n.name && n.name !== name && lens === 'hybrid' ? '<span class="jrn-code-name">' + esc(n.name) + '</span>' : '') + '</div>'
-    + (n.loc && !biz ? '<div class="loc">' + pathHtml(n.loc.path + ':' + n.loc.line, { max: 64 }) + vsl(n.repo, n.loc.path, n.loc.line) + (n.repo ? ' · ' + esc(n.repo) : '') + '</div>' : '')
-    + (c.spec && c.spec.path && !biz ? '<div class="loc">' + pathHtml(c.spec.path + (c.spec.line ? ':' + c.spec.line : ''), { max: 64 }) + vsl(n.repo, c.spec.path, c.spec.line || 1) + ' · ' + esc(t('journey.contractHead')) + '</div>' : '')
+  return (
+    '<div class="sel"><span class="hud-label">' +
+    esc(word) +
+    (bi != null && !biz ? ' · ' + esc(t('journey.insp.beat').replace('{n}', bi + 1)) : '') +
+    '</span>' +
+    '<div class="nm">' +
+    (mk && mk.method && !biz ? '<b>' + esc(mk.method) + '</b>' : '') +
+    esc(name) +
+    (n.name && n.name !== name && lens === 'hybrid' ? '<span class="jrn-code-name">' + esc(n.name) + '</span>' : '') +
+    '</div>' +
+    (n.loc && !biz
+      ? '<div class="loc">' +
+        pathHtml(n.loc.path + ':' + n.loc.line, { max: 64 }) +
+        vsl(n.repo, n.loc.path, n.loc.line) +
+        (n.repo ? ' · ' + esc(n.repo) : '') +
+        '</div>'
+      : '') +
+    (c.spec && c.spec.path && !biz
+      ? '<div class="loc">' +
+        pathHtml(c.spec.path + (c.spec.line ? ':' + c.spec.line : ''), { max: 64 }) +
+        vsl(n.repo, c.spec.path, c.spec.line || 1) +
+        ' · ' +
+        esc(t('journey.contractHead')) +
+        '</div>'
+      : '') +
     // every detail is a door (round 2026-10-05 §3.2): where this part is read in full
-    + jrnInspDoorsHtml(mk, n)
-    + jrnTxLineHtml(mk)
+    jrnInspDoorsHtml(mk, n) +
+    jrnTxLineHtml(mk) +
     // what proves this step runs, in the head where the reader already is: the
     // same foot the screen cards and the Verified-by cells draw (B4.2)
-    + jrnTestsFootHtml(jrnStepTestFacts(i), { absent: 'journey.insp.noTestStep', tab: true, impact: jrnStepNodeId(i), wider: jrnStepActionFacts(i), cases: jrnStepNodeId(i) ? { node: jrnStepNodeId(i) } : null })
-    + '</div>';
+    jrnTestsFootHtml(jrnStepTestFacts(i), {
+      absent: 'journey.insp.noTestStep',
+      tab: true,
+      impact: jrnStepNodeId(i),
+      wider: jrnStepActionFacts(i),
+      cases: jrnStepNodeId(i) ? { node: jrnStepNodeId(i) } : null,
+    }) +
+    '</div>'
+  );
 }
 /**
  * The doors of the open marker, from the one builder the Map uses
@@ -620,16 +1135,24 @@ function jrnInspHeadHtml(i, mk) {
 function jrnInspDoorsHtml(mk, n) {
   const node = (n && n.id && S.BYID[n.id]) || n;
   if (!node || !node.id) return '';
-  const kind = mk && mk.kind === 'call' ? 'call' : mk && (mk.kind === 'record' || mk.kind === 'message' || mk.kind === 'external') ? mk.kind : node.kind;
+  const kind =
+    mk && mk.kind === 'call'
+      ? 'call'
+      : mk && (mk.kind === 'record' || mk.kind === 'message' || mk.kind === 'external')
+        ? mk.kind
+        : node.kind;
   const entry = (S.JOURNEY && S.JOURNEY.entry) || {};
-  const doors = doorsHtml(doorsFor(kind, node, { handler: (mk && mk.handler) || null, flow: entry.kind === 'flow' ? entry.id : null }));
+  const doors = doorsHtml(
+    doorsFor(kind, node, { handler: (mk && mk.handler) || null, flow: entry.kind === 'flow' ? entry.id : null }),
+  );
   return doors ? '<div class="dd-exp jrn-insp-doors" tabindex="0" data-doors>' + doors + '</div>' : '';
 }
 /** DOCS: the authored description, the links it carries, the gates on this step, the conditions needed to reach it.
  * @group Journey drill
  * @business What the people who wrote this step said it is for, and what must be true to get here. */
 function jrnInspDocsHtml(i) {
-  const s = S.JOURNEY.steps[i] || {}, n = s.node || {};
+  const s = S.JOURNEY.steps[i] || {},
+    n = s.node || {};
   const c = n.contract || {};
   const mk = jrnMarkerAt(i);
   // one call, several implementations: the candidates come first — one implementation's
@@ -637,15 +1160,38 @@ function jrnInspDocsHtml(i) {
   const oneof = mk && mk.choice ? jrnChoiceHtml(mk.choice) : '';
   const text = oneof ? '' : jrnWords(n.bizDescription || n.docs || c.description || c.summary || '');
   const refs = jrnRefAnchors(n);
-  let html = oneof || (text ? '<p>' + proseHtml(text) + '</p>' : '<p class="note">' + esc(t('journey.insp.noDocs')) + '</p>');
+  let html =
+    oneof || (text ? '<p>' + proseHtml(text) + '</p>' : '<p class="note">' + esc(t('journey.insp.noDocs')) + '</p>');
   if (refs.length) html += '<div class="jrn-refs">' + refs.join(' ') + '</div>';
   // the same words and the same drawn set as the lanes: a checkpoint this
   // register cannot name is counted here, not printed as its identifier
   const gs = jrnGatesShown(s.gates || []);
-  if (gs.rows.length) html += '<h4>' + esc(t('journey.insp.gatesHere')) + '</h4><div class="list">' + gs.drawn.map((g) => {
-    const gn = S.BYID[g.id];
-    return '<div class="r"' + (S.BYID[g.id] ? gateAttrs(g.id, { step: s.order, config: g.config }) : '') + '>' + sym(g.kind === 'rule' ? 'shield' : 'lock') + '<b>' + esc(jrnGateLabel(g)) + '</b>' + (g.planned ? '<span class="api-chip stub">' + esc(t('journey.plannedGate')) + '</span>' : '') + (gn && gn.loc ? vsl(gn.repo, gn.loc.path, gn.loc.line) : '') + '</div>';
-  }).join('') + (gs.mute ? '<div class="r note">' + sym('warning') + esc(t('journey.biz.notInWords').replace('{n}', gs.mute)) + '</div>' : '') + '</div>';
+  if (gs.rows.length)
+    html +=
+      '<h4>' +
+      esc(t('journey.insp.gatesHere')) +
+      '</h4><div class="list">' +
+      gs.drawn
+        .map((g) => {
+          const gn = S.BYID[g.id];
+          return (
+            '<div class="r"' +
+            (S.BYID[g.id] ? gateAttrs(g.id, { step: s.order, config: g.config }) : '') +
+            '>' +
+            sym(g.kind === 'rule' ? 'shield' : 'lock') +
+            '<b>' +
+            esc(jrnGateLabel(g)) +
+            '</b>' +
+            (g.planned ? '<span class="api-chip stub">' + esc(t('journey.plannedGate')) + '</span>' : '') +
+            (gn && gn.loc ? vsl(gn.repo, gn.loc.path, gn.loc.line) : '') +
+            '</div>'
+          );
+        })
+        .join('') +
+      (gs.mute
+        ? '<div class="r note">' + sym('warning') + esc(t('journey.biz.notInWords').replace('{n}', gs.mute)) + '</div>'
+        : '') +
+      '</div>';
   const req = jrnReqChips(i);
   if (req) html += '<h4>' + esc(t('journey.insp.toGetHere')) + '</h4><div class="list">' + req + '</div>';
   const meta = [n.kind, n.group, s.via ? jrnDrillVia(s) : ''].filter(Boolean).join(' · ');
@@ -662,7 +1208,8 @@ function jrnInspDocsHtml(i) {
  * @business The promise an API call makes: what it needs, what it sends back, and which answers it can give.
  */
 function jrnInspReqHtml(i) {
-  const s = S.JOURNEY.steps[i] || {}, n = s.node || {};
+  const s = S.JOURNEY.steps[i] || {},
+    n = s.node || {};
   const c = n.contract;
   if (!c) return '<p class="note">' + esc(t('journey.insp.noContract')) + '</p>';
   // the business lens reads the promise in words: what the call does, and each
@@ -671,29 +1218,100 @@ function jrnInspReqHtml(i) {
   if (currentLens() === 'business') {
     const what = plainWords(c.description || c.summary || '');
     const answers = (c.responses || []).map((r) => plainWords(r.description || '')).filter(Boolean);
-    return (what ? '<p>' + esc(what) + '</p>' : '<p class="note">' + esc(t('journey.biz.noWords')) + '</p>')
-      + (answers.length ? '<h4>' + esc(t('journey.insp.responses')) + '</h4><div class="list">' + answers.map((a) => '<div class="r"><span>' + esc(a) + '</span></div>').join('') + '</div>' : '')
-      + '<p class="note">' + esc(t('journey.insp.specNote')) + '</p>';
+    return (
+      (what ? '<p>' + esc(what) + '</p>' : '<p class="note">' + esc(t('journey.biz.noWords')) + '</p>') +
+      (answers.length
+        ? '<h4>' +
+          esc(t('journey.insp.responses')) +
+          '</h4><div class="list">' +
+          answers.map((a) => '<div class="r"><span>' + esc(a) + '</span></div>').join('') +
+          '</div>'
+        : '') +
+      '<p class="note">' +
+      esc(t('journey.insp.specNote')) +
+      '</p>'
+    );
   }
   let html = jrnContractHtml(n);
   const rb = c.requestBody;
-  if ((c.params || []).length) html += '<h4>' + esc(t('journey.insp.params')) + '</h4><div class="tree">' + c.params.map((p) =>
-    '<div class="f"><span class="tw">├</span><span class="nm">' + esc(p.name || '') + '</span><span class="ty">' + esc(p.in || '') + (p.schema ? ' · ' + esc(p.schema) : '') + '</span>' + (p.required ? '<span class="req">req</span>' : '') + (p.description ? '<span class="ds">' + proseHtml(p.description) + '</span>' : '') + '</div>').join('') + '</div>';
-  if (rb) html += '<h4>' + esc(t('journey.insp.request')) + '</h4><div class="tree"><div class="f"><span class="obj">' + esc(rb.schema || rb.contentType || '') + '</span>' + (rb.required ? '<span class="req">' + esc(t('journey.insp.required')) + '</span>' : '') + (rb.contentType && rb.schema ? '<span class="ds">' + esc(rb.contentType) + '</span>' : '') + '</div>'
-    + (rb.fields || []).map((f, k, arr) => '<div class="f" style="--d:1"><span class="tw">' + (k === arr.length - 1 ? '└' : '├') + '</span><span class="nm">' + esc(f) + '</span></div>').join('') + '</div>';
+  if ((c.params || []).length)
+    html +=
+      '<h4>' +
+      esc(t('journey.insp.params')) +
+      '</h4><div class="tree">' +
+      c.params
+        .map(
+          (p) =>
+            '<div class="f"><span class="tw">├</span><span class="nm">' +
+            esc(p.name || '') +
+            '</span><span class="ty">' +
+            esc(p.in || '') +
+            (p.schema ? ' · ' + esc(p.schema) : '') +
+            '</span>' +
+            (p.required ? '<span class="req">req</span>' : '') +
+            (p.description ? '<span class="ds">' + proseHtml(p.description) + '</span>' : '') +
+            '</div>',
+        )
+        .join('') +
+      '</div>';
+  if (rb)
+    html +=
+      '<h4>' +
+      esc(t('journey.insp.request')) +
+      '</h4><div class="tree"><div class="f"><span class="obj">' +
+      esc(rb.schema || rb.contentType || '') +
+      '</span>' +
+      (rb.required ? '<span class="req">' + esc(t('journey.insp.required')) + '</span>' : '') +
+      (rb.contentType && rb.schema ? '<span class="ds">' + esc(rb.contentType) + '</span>' : '') +
+      '</div>' +
+      (rb.fields || [])
+        .map(
+          (f, k, arr) =>
+            '<div class="f" style="--d:1"><span class="tw">' +
+            (k === arr.length - 1 ? '└' : '├') +
+            '</span><span class="nm">' +
+            esc(f) +
+            '</span></div>',
+        )
+        .join('') +
+      '</div>';
   const rs = c.responses || [];
-  if (rs.length) html += '<h4>' + esc(t('journey.insp.responses')) + '</h4><div class="list">' + rs.map((r) => {
-    const cls = /^2/.test(String(r.status)) ? ' ok' : /^4|^5/.test(String(r.status)) ? ' warn' : '';
-    return '<div class="r"><span class="api-chip st' + cls + '">' + esc(String(r.status)) + '</span>' + (r.schema ? '<b class="mono">' + esc(r.schema) + '</b>' : '') + (r.description ? '<span>' + proseHtml(r.description) + '</span>' : '') + '</div>';
-  }).join('') + '</div>';
-  if ((c.security || []).length) html += '<h4>' + esc(t('journey.insp.security')) + '</h4><div class="list"><div class="r">' + c.security.map((x) => sym('lock') + '<b>' + esc(x) + '</b>').join(' ') + '</div></div>';
+  if (rs.length)
+    html +=
+      '<h4>' +
+      esc(t('journey.insp.responses')) +
+      '</h4><div class="list">' +
+      rs
+        .map((r) => {
+          const cls = /^2/.test(String(r.status)) ? ' ok' : /^4|^5/.test(String(r.status)) ? ' warn' : '';
+          return (
+            '<div class="r"><span class="api-chip st' +
+            cls +
+            '">' +
+            esc(String(r.status)) +
+            '</span>' +
+            (r.schema ? '<b class="mono">' + esc(r.schema) + '</b>' : '') +
+            (r.description ? '<span>' + proseHtml(r.description) + '</span>' : '') +
+            '</div>'
+          );
+        })
+        .join('') +
+      '</div>';
+  if ((c.security || []).length)
+    html +=
+      '<h4>' +
+      esc(t('journey.insp.security')) +
+      '</h4><div class="list"><div class="r">' +
+      c.security.map((x) => sym('lock') + '<b>' + esc(x) + '</b>').join(' ') +
+      '</div></div>';
   html += '<p class="note">' + esc(t('journey.insp.specNote')) + '</p>';
   return html;
 }
 /** FORKS: the branch points recorded on this step's node — each with its arms, outcomes and the copyable mock-state recipe.
  * @group Journey drill */
 function jrnInspForksHtml(i) {
-  const s = S.JOURNEY.steps[i] || {}, n = s.node || {};
+  const s = S.JOURNEY.steps[i] || {},
+    n = s.node || {};
   const bps = Array.isArray(n.branches) ? n.branches : [];
   if (!bps.length) return '<p class="note">' + esc(t('journey.insp.noForks')) + '</p>';
   return bps.map((bp, bi) => jrnForkEntryHtml({ i, bi, bp })).join('');
@@ -730,40 +1348,115 @@ function jrnInspTestsHtml(i) {
     // the action this step belongs to may still be reached: say so, in its own scope
     const wider = jrnStepActionFacts(i);
     const k = wider && wider.counted && wider.counted.tests;
-    return '<p class="note">' + sym('warning') + ' ' + esc(t('journey.insp.noTestStep')) + '</p>'
-      + (k && k.n ? '<p class="note jrn-twider" data-scope="' + esc(k.scope) + '">' + esc(t('journey.tests.widerScope')).replace('{n}', () => jrnCountedHtml(k, { noFocus: true })) + '</p>' : '');
+    return (
+      '<p class="note">' +
+      sym('warning') +
+      ' ' +
+      esc(t('journey.insp.noTestStep')) +
+      '</p>' +
+      (k && k.n
+        ? '<p class="note jrn-twider" data-scope="' +
+          esc(k.scope) +
+          '">' +
+          esc(t('journey.tests.widerScope')).replace('{n}', () => jrnCountedHtml(k, { noFocus: true })) +
+          '</p>'
+        : '')
+    );
   }
-  const lead = !direct.length && via.length
-    ? '<p class="note">' + esc(t('journey.tests.throughAccessors').replace('{n}', s.coverageViaCount != null ? s.coverageViaCount : via.length)) + '</p>'
-    : '';
+  const lead =
+    !direct.length && via.length
+      ? '<p class="note">' +
+        esc(
+          t('journey.tests.throughAccessors').replace(
+            '{n}',
+            s.coverageViaCount != null ? s.coverageViaCount : via.length,
+          ),
+        ) +
+        '</p>'
+      : '';
   const shown = tests.slice(0, JRN_INSP_TESTS);
-  const rows = shown.map((x) => {
-    const cls = x.evidence === 'observed' ? (x.freshness === 'changed' ? 'stale' : 'observed') : x.evidence === 'static' ? 'reached' : 'declared';
-    // a run-level row carries the same observed class, attributed to the run
-    const evKey = x.runLevel ? 'tests.evidence.runSeen' : 'journey.evidence.' + cls;
-    const biz = currentLens() === 'business';
-    // where the test lives and how the edge was found are a developer's facts
-    const meta = biz ? '' : [
-      x.loc && x.loc.path ? x.loc.path + (x.loc.line ? ':' + x.loc.line : '') : '',
-      x.technique || '', x.confidence || '', x.project || '',
-      x.via && S.BYID[x.via] ? S.BYID[x.via].name : '',
-      x.twin ? t('tests.detail.twin').replace('{note}', x.twin.note) : '',
-      x.inactive ? t('tests.detail.inactive') : '',
-    ].filter(Boolean).join(' · ');
-    const status = !x.inactive && x.status && x.status !== 'passed'
-      ? JRN_ST_CHIP + esc(x.status) + '" title="' + esc(def('tests.run.' + x.status) || '') + '">' + esc(t('tests.run.' + x.status)) + '</span>' : '';
-    return JRN_LIST_ROW + encodeURIComponent(x.id || '') + '"' + (x.runLevel ? ' data-run="1"' : '') + '>'
-      + '<span class="t"><span class="nm">' + esc(biz ? (plainWords(x.name) || t('journey.biz.noWords')) : (x.name || x.id || '')) + '</span>' + (meta ? '<span class="cn">' + esc(meta) + '</span>' : '') + '</span>'
-      + '<span class="lv ' + esc(x.level === 'e2e' ? 'e2e' : x.level === 'integration' ? 'int' : 'unit') + '">' + esc(t('tests.level.' + (x.level || 'unit'))) + '</span>'
-      + (x.inactive ? '' : JRN_EV_CHIP + esc(cls) + '" title="' + esc(def(evKey) || '') + '">'
-        + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
-        + esc(t(evKey)) + '</span>')
-      + status + '</a></li>';
-  }).join('');
-  const more = tests.length > shown.length
-    ? '<li class="more">' + esc(t('journey.moreChips').replace('{n}', tests.length - shown.length)) + '</li>' : '';
-  return lead + '<ul class="jrn-tlist" role="list">' + rows + more + '</ul>'
-    + '<p class="note">' + esc(t('journey.tests.listHint')) + '</p>';
+  const rows = shown
+    .map((x) => {
+      const cls =
+        x.evidence === 'observed'
+          ? x.freshness === 'changed'
+            ? 'stale'
+            : 'observed'
+          : x.evidence === 'static'
+            ? 'reached'
+            : 'declared';
+      // a run-level row carries the same observed class, attributed to the run
+      const evKey = x.runLevel ? 'tests.evidence.runSeen' : 'journey.evidence.' + cls;
+      const biz = currentLens() === 'business';
+      // where the test lives and how the edge was found are a developer's facts
+      const meta = biz
+        ? ''
+        : [
+            x.loc && x.loc.path ? x.loc.path + (x.loc.line ? ':' + x.loc.line : '') : '',
+            x.technique || '',
+            x.confidence || '',
+            x.project || '',
+            x.via && S.BYID[x.via] ? S.BYID[x.via].name : '',
+            x.twin ? t('tests.detail.twin').replace('{note}', x.twin.note) : '',
+            x.inactive ? t('tests.detail.inactive') : '',
+          ]
+            .filter(Boolean)
+            .join(' · ');
+      const status =
+        !x.inactive && x.status && x.status !== 'passed'
+          ? JRN_ST_CHIP +
+            esc(x.status) +
+            '" title="' +
+            esc(def('tests.run.' + x.status) || '') +
+            '">' +
+            esc(t('tests.run.' + x.status)) +
+            '</span>'
+          : '';
+      return (
+        JRN_LIST_ROW +
+        encodeURIComponent(x.id || '') +
+        '"' +
+        (x.runLevel ? ' data-run="1"' : '') +
+        '>' +
+        '<span class="t"><span class="nm">' +
+        esc(biz ? plainWords(x.name) || t('journey.biz.noWords') : x.name || x.id || '') +
+        '</span>' +
+        (meta ? '<span class="cn">' + esc(meta) + '</span>' : '') +
+        '</span>' +
+        '<span class="lv ' +
+        esc(x.level === 'e2e' ? 'e2e' : x.level === 'integration' ? 'int' : 'unit') +
+        '">' +
+        esc(t('tests.level.' + (x.level || 'unit'))) +
+        '</span>' +
+        (x.inactive
+          ? ''
+          : JRN_EV_CHIP +
+            esc(cls) +
+            '" title="' +
+            esc(def(evKey) || '') +
+            '">' +
+            (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '') +
+            esc(t(evKey)) +
+            '</span>') +
+        status +
+        '</a></li>'
+      );
+    })
+    .join('');
+  const more =
+    tests.length > shown.length
+      ? '<li class="more">' + esc(t('journey.moreChips').replace('{n}', tests.length - shown.length)) + '</li>'
+      : '';
+  return (
+    lead +
+    '<ul class="jrn-tlist" role="list">' +
+    rows +
+    more +
+    '</ul>' +
+    '<p class="note">' +
+    esc(t('journey.tests.listHint')) +
+    '</p>'
+  );
 }
 /**
  * Fill the inspector for the selected step: the tab strip, the head, and the
@@ -783,16 +1476,47 @@ export function jrnInspPanelHtml(i) {
   if (i == null || i < 0 || !S.JOURNEY || !S.JOURNEY.steps[i]) {
     return '<div class="body"><div class="jrn-insp-hint">' + esc(t('journey.insp.hint')) + '</div></div>';
   }
-  const tabs = jrnInspTabs(i), tab = jrnInspTabFor(i);
+  const tabs = jrnInspTabs(i),
+    tab = jrnInspTabFor(i);
   jrnInspImpactAsk(i);
-  const body = tab === 'req' ? jrnInspReqHtml(i) : tab === 'code' ? '<div class="jrn-code">' + jrnExpBodyHtml(i) + '</div>'
-    : tab === 'forks' ? jrnInspForksHtml(i) : tab === 'tests' ? jrnInspTestsHtml(i)
-    : tab === 'impact' ? jrnInspImpactHtml(i) : jrnInspDocsHtml(i);
+  const body =
+    tab === 'req'
+      ? jrnInspReqHtml(i)
+      : tab === 'code'
+        ? '<div class="jrn-code">' + jrnExpBodyHtml(i) + '</div>'
+        : tab === 'forks'
+          ? jrnInspForksHtml(i)
+          : tab === 'tests'
+            ? jrnInspTestsHtml(i)
+            : tab === 'impact'
+              ? jrnInspImpactHtml(i)
+              : jrnInspDocsHtml(i);
   // IMPACT keeps the name it already has everywhere else (`impact.title`):
   // a second key with the same words is two names for one thing
-  return '<div class="tabs">' + tabs.map((k) => '<button class="' + (k === tab ? 'on' : '') + '" onclick="jrnDrillInspTab(\'' + k + '\')">' + esc(k === 'impact' ? t('impact.title') : t('journey.insp.' + k)) + '</button>').join('')
-    + '<button class="x" onclick="jrnSelect(-1)" aria-label="' + esc(t('journey.closeExpanded')) + '" title="' + esc(t('journey.closeExpanded')) + ' (esc)">✕</button></div>'
-    + '<div class="body">' + jrnInspHeadHtml(i, jrnMarkerAt(i)) + body + '</div>';
+  return (
+    '<div class="tabs">' +
+    tabs
+      .map(
+        (k) =>
+          '<button class="' +
+          (k === tab ? 'on' : '') +
+          '" onclick="jrnDrillInspTab(\'' +
+          k +
+          '\')">' +
+          esc(k === 'impact' ? t('impact.title') : t('journey.insp.' + k)) +
+          '</button>',
+      )
+      .join('') +
+    '<button class="x" onclick="jrnSelect(-1)" aria-label="' +
+    esc(t('journey.closeExpanded')) +
+    '" title="' +
+    esc(t('journey.closeExpanded')) +
+    ' (esc)">✕</button></div>' +
+    '<div class="body">' +
+    jrnInspHeadHtml(i, jrnMarkerAt(i)) +
+    body +
+    '</div>'
+  );
 }
 function jrnDrillInspect(i) {
   const insp = document.getElementById('jrn-insp');
@@ -803,8 +1527,10 @@ function jrnDrillInspect(i) {
   // a panel holding one sentence does not hold 38% of the window: .empty gives
   // the beats the difference back until there is something to read here
   insp.classList.toggle('empty', !open);
-  const bi = (S.JRN_DRILL && S.JRN_DRILL.colOf && i >= 0) ? S.JRN_DRILL.colOf[i] : null;
-  document.querySelectorAll('#jrn-lanes .jrn-dbh[data-beat]').forEach((el) => el.classList.toggle('on', bi != null && +el.dataset.beat === bi));
+  const bi = S.JRN_DRILL && S.JRN_DRILL.colOf && i >= 0 ? S.JRN_DRILL.colOf[i] : null;
+  document
+    .querySelectorAll('#jrn-lanes .jrn-dbh[data-beat]')
+    .forEach((el) => el.classList.toggle('on', bi != null && +el.dataset.beat === bi));
   jrnDrillWires();
 }
 
@@ -817,15 +1543,20 @@ function jrnDrillInspect(i) {
  * @group Journey drill
  */
 export function jrnDrillIndex(sum, keepActive) {
-  const cols = jrnDrillActions(sum), layers = jrnDrillLayers(sum);
+  const cols = jrnDrillActions(sum),
+    layers = jrnDrillLayers(sum);
   const byKey = {};
-  layers.forEach((l, li) => { byKey[l.key] = li; });
+  layers.forEach((l, li) => {
+    byKey[l.key] = li;
+  });
   S.JRN_DRILL = { cols, layers, byKey, colOf: {} };
   S.JRN_MARK = {};
-  cols.forEach((col) => col.sg.markers.forEach((m) => {
-    if (m.moment !== col.mo.index) return;
-    S.JRN_MARK[m.stepOrder] = { seg: col.sg.index, row: jrnDrillLayerOf(m, byKey), col: col.index };
-  }));
+  cols.forEach((col) =>
+    col.sg.markers.forEach((m) => {
+      if (m.moment !== col.mo.index) return;
+      S.JRN_MARK[m.stepOrder] = { seg: col.sg.index, row: jrnDrillLayerOf(m, byKey), col: col.index };
+    }),
+  );
   const keep = keepActive && S.journeyActive >= 0 && S.JRN_MARK[S.journeyActive];
   S.jrnAction = keep ? S.JRN_MARK[S.journeyActive].col : Math.min(S.jrnAction || 0, Math.max(0, cols.length - 1));
   if (!cols.length) S.jrnAction = 0;
@@ -836,11 +1567,14 @@ export function jrnDrillOrders() {
   const dr = S.JRN_DRILL;
   if (!dr) return [];
   const out = [];
-  dr.cols.forEach((col) => col.sg.markers.forEach((m) => {
-    if (m.moment !== col.mo.index) return;
-    if (col.index === S.jrnAction) { if (S.JRN_DRAWN && S.JRN_DRAWN.has(m.stepOrder)) out.push(m.stepOrder); }
-    else if (!m.helper && (m.tier == null || m.tier <= 1)) out.push(m.stepOrder);
-  }));
+  dr.cols.forEach((col) =>
+    col.sg.markers.forEach((m) => {
+      if (m.moment !== col.mo.index) return;
+      if (col.index === S.jrnAction) {
+        if (S.JRN_DRAWN && S.JRN_DRAWN.has(m.stepOrder)) out.push(m.stepOrder);
+      } else if (!m.helper && (m.tier == null || m.tier <= 1)) out.push(m.stepOrder);
+    }),
+  );
   return out;
 }
 /** Draw (or redraw) the open action's caption and lanes in place, register its folds and wires, and note what is drawn for j/k.
@@ -850,23 +1584,32 @@ function jrnDrillRenderAction() {
   const host = document.getElementById('jrn-dlanes');
   if (!dr || !host || !dr.cols.length) return;
   const col = dr.cols[S.jrnAction] || dr.cols[0];
-  S.JRN_FOLDS = []; S.JRN_FOLD_OF = {};
+  S.JRN_FOLDS = [];
+  S.JRN_FOLD_OF = {};
   const model = jrnDrillBeats(col, dr.layers);
-  dr.colOf = model.colOf; dr.beats = model.beats;
+  dr.colOf = model.colOf;
+  dr.beats = model.beats;
   S.JRN_WIRES = model.wires;
   const cap = document.getElementById('jrn-dcap');
-  if (cap) cap.outerHTML = jrnDrillCaptionHtml(dr.cols, model).replace('class="jrn-dcap"', 'class="jrn-dcap" id="jrn-dcap"');
+  if (cap)
+    cap.outerHTML = jrnDrillCaptionHtml(dr.cols, model).replace('class="jrn-dcap"', 'class="jrn-dcap" id="jrn-dcap"');
   host.innerHTML = jrnDrillLanesHtml(dr.cols, dr.layers, model, col);
   S.JRN_DRAWN = new Set(Array.from(host.querySelectorAll('[data-order]')).map((el) => +el.dataset.order));
   if (S.jrnDrillRO) S.jrnDrillRO.disconnect();
   if (window.ResizeObserver) {
     // a dock that opens or a pane that resizes: the wires redraw and the legend folds again to its one line
-    S.jrnDrillRO = new ResizeObserver(() => { jrnDrillWires(); jrnFoldLegend(); });
+    S.jrnDrillRO = new ResizeObserver(() => {
+      jrnDrillWires();
+      jrnFoldLegend();
+    });
     S.jrnDrillRO.observe(host);
     const lanes = document.getElementById('jrn-lanes');
     if (lanes) S.jrnDrillRO.observe(lanes);
   }
-  requestAnimationFrame(() => { jrnDrillWires(); jrnFoldLegend(); });
+  requestAnimationFrame(() => {
+    jrnDrillWires();
+    jrnFoldLegend();
+  });
 }
 /** The wires' legend keeps to one line beside the caption: what has no room folds to `+n`, its tip naming them. */
 function jrnFoldLegend() {
@@ -881,9 +1624,12 @@ function jrnFoldLegend() {
  */
 export function jrnDrillStageHtml(o = {}) {
   // the Map's dock holds the inspector unless the code is docked in place (lib/map-dock.js): `o.insp === false`
-  return '<div class="jrn-drill map-drill"><div class="jrn-dcap" id="jrn-dcap"></div>'
-    + '<div class="jrn-drill-main"><div class="jrn-lanes-wrap" id="jrn-dlanes"></div>'
-    + (o.insp === false ? '' : jrnInspHostHtml()) + '</div></div>';
+  return (
+    '<div class="jrn-drill map-drill"><div class="jrn-dcap" id="jrn-dcap"></div>' +
+    '<div class="jrn-drill-main"><div class="jrn-lanes-wrap" id="jrn-dlanes"></div>' +
+    (o.insp === false ? '' : jrnInspHostHtml()) +
+    '</div></div>'
+  );
 }
 /** The inspector's empty host, for whichever place holds it (the drill's own column, or the Map's dock). @group Journey drill */
 export function jrnInspHostHtml() {
@@ -905,6 +1651,8 @@ export function jrnDrillEnsureAction(i) {
 }
 /** Selection hook: the drill's inspector is where a selected step opens (there is no expansion slot and no dock here).
  * @group Journey drill */
-export function jrnDrillSelected(i) { jrnDrillInspect(i); }
+export function jrnDrillSelected(i) {
+  jrnDrillInspect(i);
+}
 
 expose({ jrnDrillInspTab });

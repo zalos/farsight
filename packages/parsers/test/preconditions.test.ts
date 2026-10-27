@@ -21,7 +21,14 @@ function tempRepo(files: Record<string, string>): string {
   return dir;
 }
 const ingest = (files: Record<string, string>): Promise<GraphFragment> =>
-  ingestRepo(tempRepo({ 'package.json': '{"name":"p"}', ...files }), { repoName: 'p', openapi: false, design: false, tests: false, stories: false, projects: false });
+  ingestRepo(tempRepo({ 'package.json': '{"name":"p"}', ...files }), {
+    repoName: 'p',
+    openapi: false,
+    design: false,
+    tests: false,
+    stories: false,
+    projects: false,
+  });
 const pres = (g: GraphFragment): GraphNode[] => g.nodes.filter((n) => n.precondition);
 const pre = (g: GraphFragment, action: string, record: string): GraphNode | undefined =>
   pres(g).find((n) => n.precondition!.action.endsWith(`::${action}`) && n.precondition!.record === record);
@@ -30,7 +37,7 @@ const REPO = {
   'src/migrations.ts': [
     'export const M1 = `',
     'CREATE TABLE orders (',
-    "  id uuid PRIMARY KEY, sync_status text, lines jsonb,",
+    '  id uuid PRIMARY KEY, sync_status text, lines jsonb,',
     "  status text NOT NULL CHECK (status IN ('DRAFT','SUBMITTED','VERIFIED','APPROVED','PAID'))",
     ');',
     "CREATE TABLE vendors (id uuid PRIMARY KEY, status text CHECK (status IN ('ACTIVE','SUSPENDED')));",
@@ -207,13 +214,20 @@ test('shapes 2 and 3: related records refused through a blocker list one hop awa
   assert.ok(link, 'a word resolves to the one table ending in it');
   assert.deepEqual(link!.precondition!.excludes, ['PENDING', 'REJECTED']);
   assert.equal(link!.precondition!.wordsFrom, 'humanize', 'two messages merged say it in words from the names');
-  const sync = pres(g).find((n) => n.precondition!.action.endsWith('::approveOrder') && n.precondition!.field === 'sync_status');
+  const sync = pres(g).find(
+    (n) => n.precondition!.action.endsWith('::approveOrder') && n.precondition!.field === 'sync_status',
+  );
   assert.deepEqual(sync?.precondition?.requires, ['SYNCED']);
 });
 
 test('shape 4: a transition table read inverted gives the move its prior status and a precondition', async () => {
   const g = await ingest(REPO);
-  const own = pres(g).find((n) => n.precondition!.action.endsWith('::approveOrder') && n.precondition!.record === 'orders' && n.precondition!.field === 'status');
+  const own = pres(g).find(
+    (n) =>
+      n.precondition!.action.endsWith('::approveOrder') &&
+      n.precondition!.record === 'orders' &&
+      n.precondition!.field === 'status',
+  );
   assert.ok(own);
   assert.equal(own!.precondition!.via, 'transition-table');
   assert.deepEqual(own!.precondition!.requires, ['VERIFIED']);
@@ -247,7 +261,9 @@ test('a @guard that moves a record is the action itself; a role constant is read
   assert.equal(approve.kind, 'guard');
   assert.ok(approve.tags.includes('action-gate'));
   assert.equal(gateTierOf(approve).class, 'action-gate');
-  const role = g.edges.find((e) => e.kind === 'guards' && e.from.endsWith('::requireRole') && typeof e.meta?.requires === 'string');
+  const role = g.edges.find(
+    (e) => e.kind === 'guards' && e.from.endsWith('::requireRole') && typeof e.meta?.requires === 'string',
+  );
   assert.equal(role?.meta?.requires, 'ops.approver');
   assert.equal(role?.meta?.requiresFrom, 'ROLES.approve');
 });
@@ -270,11 +286,17 @@ test('a role list declared as a typed array, not as const, is read onto its guar
       '});',
     ].join('\n'),
   });
-  const onVendor = g.edges.filter((e) => e.kind === 'guards' && e.from.endsWith('::requireRole') && e.meta?.requiresFrom === 'VENDOR_APPROVERS');
+  const onVendor = g.edges.filter(
+    (e) => e.kind === 'guards' && e.from.endsWith('::requireRole') && e.meta?.requiresFrom === 'VENDOR_APPROVERS',
+  );
   assert.ok(onVendor.length >= 1, 'the vendor route carries the roles');
   assert.equal(onVendor[0]!.meta?.requires, 'ops.approver, ops.admin');
   // the invoice approve keeps its own narrower list
-  assert.ok(g.edges.some((e) => e.kind === 'guards' && e.meta?.requiresFrom === 'ROLES.approve' && e.meta?.requires === 'ops.approver'));
+  assert.ok(
+    g.edges.some(
+      (e) => e.kind === 'guards' && e.meta?.requiresFrom === 'ROLES.approve' && e.meta?.requires === 'ops.approver',
+    ),
+  );
 });
 
 test('@guard[policy] sets the tier; a schema read over a response is not a gate', async () => {
@@ -283,17 +305,47 @@ test('@guard[policy] sets the tier; a schema read over a response is not a gate'
   assert.deepEqual(four.gateTier, { tier: 'policy', from: 'annotation' });
   assert.equal(four.name, 'fourEyes: four eyes');
   assert.equal(gateTierOf(four).class, 'integrity');
-  assert.ok(!g.edges.some((e) => e.kind === 'validates' && e.from.endsWith('::problemSchema')), 'reading an error body is no gate');
-  assert.ok(g.edges.some((e) => e.kind === 'validates' && e.from.endsWith('::orderSchema')), 'checking input still is');
+  assert.ok(
+    !g.edges.some((e) => e.kind === 'validates' && e.from.endsWith('::problemSchema')),
+    'reading an error body is no gate',
+  );
+  assert.ok(
+    g.edges.some((e) => e.kind === 'validates' && e.from.endsWith('::orderSchema')),
+    'checking input still is',
+  );
 });
 
 test('a long use-case that reads a setting is not a config check', () => {
-  const body = ['export function submit(c: Container, input: any) {', '  const x = process.env.APP_MODE;', ...Array.from({ length: 50 }, (_, i) => `  step${i}();`), '}'].join('\n');
-  const node = { id: 'x', kind: 'guard', name: 'submit: readiness', tags: [], snippet: body, loc: { repo: 'p', path: 'a.ts', line: 1, endLine: 53 } } as unknown as GraphNode;
+  const body = [
+    'export function submit(c: Container, input: any) {',
+    '  const x = process.env.APP_MODE;',
+    ...Array.from({ length: 50 }, (_, i) => `  step${i}();`),
+    '}',
+  ].join('\n');
+  const node = {
+    id: 'x',
+    kind: 'guard',
+    name: 'submit: readiness',
+    tags: [],
+    snippet: body,
+    loc: { repo: 'p', path: 'a.ts', line: 1, endLine: 53 },
+  } as unknown as GraphNode;
   assert.equal(isConfigCheck(node), false);
-  const short = { ...node, snippet: 'export function mode(env: Env) { if (process.env.MODE === "x") throw 1; }', loc: { repo: 'p', path: 'a.ts', line: 1, endLine: 1 } } as GraphNode;
+  const short = {
+    ...node,
+    snippet: 'export function mode(env: Env) { if (process.env.MODE === "x") throw 1; }',
+    loc: { repo: 'p', path: 'a.ts', line: 1, endLine: 1 },
+  } as GraphNode;
   assert.equal(isConfigCheck(short), true);
   // a long function handed the settings themselves is still a settings check
-  const long = { ...node, snippet: ['export function resolveMail(env: Record<string, string>) {', '  const x = process.env.MAIL;', ...Array.from({ length: 50 }, (_, i) => `  if (!env.A${i}) throw new Error("x");`), '}'].join('\n') } as GraphNode;
+  const long = {
+    ...node,
+    snippet: [
+      'export function resolveMail(env: Record<string, string>) {',
+      '  const x = process.env.MAIL;',
+      ...Array.from({ length: 50 }, (_, i) => `  if (!env.A${i}) throw new Error("x");`),
+      '}',
+    ].join('\n'),
+  } as GraphNode;
   assert.equal(isConfigCheck(long), true);
 });

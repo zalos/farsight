@@ -19,7 +19,8 @@ function tempRepo(files: Record<string, string | object>): string {
   return dir;
 }
 
-const byPath = (nodes: GraphNode[], path: string, name: string) => nodes.find((n) => n.loc?.path === path && n.name.split(': ')[0] === name)!;
+const byPath = (nodes: GraphNode[], path: string, name: string) =>
+  nodes.find((n) => n.loc?.path === path && n.name.split(': ')[0] === name)!;
 
 test('discovery: the root file first, then by folder depth, then by path — excludes and node_modules skipped', () => {
   const dir = tempRepo({
@@ -33,21 +34,36 @@ test('discovery: the root file first, then by folder depth, then by path — exc
   });
   try {
     const ws = loadWorkspaceConfig(dir, { exclude: ['examples/**'] });
-    assert.deepEqual(ws.files.map((f) => f.path), [
-      'farsight.config.json', 'libs/farsight.config.json', 'apps/a/farsight.config.json', 'apps/b/farsight.config.json', 'apps/a/feature/farsight.config.json',
-    ]);
-    assert.deepEqual(ws.files.map((f) => f.dir), ['.', 'libs', 'apps/a', 'apps/b', 'apps/a/feature']);
-    assert.deepEqual(ws.meta.files.map((f) => f.root), [true, false, false, false, false]);
+    assert.deepEqual(
+      ws.files.map((f) => f.path),
+      [
+        'farsight.config.json',
+        'libs/farsight.config.json',
+        'apps/a/farsight.config.json',
+        'apps/b/farsight.config.json',
+        'apps/a/feature/farsight.config.json',
+      ],
+    );
+    assert.deepEqual(
+      ws.files.map((f) => f.dir),
+      ['.', 'libs', 'apps/a', 'apps/b', 'apps/a/feature'],
+    );
+    assert.deepEqual(
+      ws.meta.files.map((f) => f.root),
+      [true, false, false, false, false],
+    );
     assert.deepEqual(ws.meta.files[0]!.fields, ['tags']);
     // a source with no root file still reads its nested ones
     rmSync(join(dir, 'farsight.config.json'));
     const noRoot = loadWorkspaceConfig(dir, { exclude: ['examples/**'] });
     assert.equal(noRoot.root, null);
     assert.equal(noRoot.files[0]!.path, 'libs/farsight.config.json');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
-test('the path rule: a nested file\'s paths are rebased to its folder, URLs kept, an escape refused with a note', () => {
+test("the path rule: a nested file's paths are rebased to its folder, URLs kept, an escape refused with a note", () => {
   const dir = tempRepo({
     'farsight.config.json': {
       plumbing: ['src/plumbing/**'],
@@ -57,15 +73,26 @@ test('the path rule: a nested file\'s paths are rebased to its folder, URLs kept
     },
     'apps/a/farsight.config.json': {
       plumbing: ['src/plumbing/**', './lib/http/**', '../../../outside/**', '/etc/**'],
-      design: [{ manifest: 'docs/design/screens.json', name: 'App A' }, { url: 'https://design.example.com/screens.json' }],
+      design: [
+        { manifest: 'docs/design/screens.json', name: 'App A' },
+        { url: 'https://design.example.com/screens.json' },
+      ],
       openapi: [{ path: 'openapi.yaml' }, { url: 'https://api.example.com/openapi.json' }],
       tests: {
         include: ['spec/**'],
-        unit: { runner: 'jest', results: ['coverage/a.json', 'coverage/b.json'], coverage: 'coverage/coverage-final.json', report: 'coverage/index.html' },
+        unit: {
+          runner: 'jest',
+          results: ['coverage/a.json', 'coverage/b.json'],
+          coverage: 'coverage/coverage-final.json',
+          report: 'coverage/index.html',
+        },
         e2e: { runner: 'playwright', results: 'e2e/results.json' },
       },
       storybook: { url: 'http://localhost:6007' },
-      externals: [{ import: 'src/erp.ts::ErpClient', name: 'ERP', kind: 'erp' }, { import: '@acme/sdk', name: 'Acme', kind: 'other' }],
+      externals: [
+        { import: 'src/erp.ts::ErpClient', name: 'ERP', kind: 'erp' },
+        { import: '@acme/sdk', name: 'Acme', kind: 'other' },
+      ],
     },
   });
   try {
@@ -82,7 +109,12 @@ test('the path rule: a nested file\'s paths are rebased to its folder, URLs kept
     // the root's block and the nested one stay two blocks, each with its own runner
     assert.deepEqual(m.tests!.unit, [
       { runner: 'vitest', results: 'coverage/results.json' },
-      { runner: 'jest', results: ['apps/a/coverage/a.json', 'apps/a/coverage/b.json'], coverage: 'apps/a/coverage/coverage-final.json', report: 'apps/a/coverage/index.html' },
+      {
+        runner: 'jest',
+        results: ['apps/a/coverage/a.json', 'apps/a/coverage/b.json'],
+        coverage: 'apps/a/coverage/coverage-final.json',
+        report: 'apps/a/coverage/index.html',
+      },
     ]);
     // a level only one file gives stays one block
     assert.deepEqual(m.tests!.e2e, { runner: 'playwright', results: 'apps/a/e2e/results.json' });
@@ -90,14 +122,27 @@ test('the path rule: a nested file\'s paths are rebased to its folder, URLs kept
       { configDir: '.storybook', url: 'http://localhost:6006' },
       { url: 'http://localhost:6007', configDir: 'apps/a/.storybook' },
     ]);
-    assert.deepEqual(m.externals!.map((e) => e.import), ['apps/a/src/erp.ts::ErpClient', '@acme/sdk']);
-    assert.ok(ws.meta.notes.some((n) => /apps\/a\/farsight\.config\.json → plumbing "\.\.\/\.\.\/\.\.\/outside\/\*\*" climbs out of the source/.test(n)), ws.meta.notes.join('\n'));
-    assert.ok(ws.meta.notes.some((n) => /"\/etc\/\*\*" is an absolute path/.test(n)), ws.meta.notes.join('\n'));
+    assert.deepEqual(
+      m.externals!.map((e) => e.import),
+      ['apps/a/src/erp.ts::ErpClient', '@acme/sdk'],
+    );
+    assert.ok(
+      ws.meta.notes.some((n) =>
+        /apps\/a\/farsight\.config\.json → plumbing "\.\.\/\.\.\/\.\.\/outside\/\*\*" climbs out of the source/.test(n),
+      ),
+      ws.meta.notes.join('\n'),
+    );
+    assert.ok(
+      ws.meta.notes.some((n) => /"\/etc\/\*\*" is an absolute path/.test(n)),
+      ws.meta.notes.join('\n'),
+    );
     // the root file's own config is unchanged: a source with one file reads as it did
     assert.deepEqual(ws.root!.plumbing, ['src/plumbing/**']);
     assert.equal(rebasePath('.', 'anything/**', 'x', []), 'anything/**');
     assert.equal(rebasePath('apps/a', '../b/x', 'x', []), 'apps/b/x');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('node matchers: a nested file speaks only for the code under its folder; the nearer glossary word wins and the conflict is recorded', async () => {
@@ -122,21 +167,31 @@ test('node matchers: a nested file speaks only for the code under its folder; th
     const x = byPath(g.nodes, 'apps/x/src/util.ts', 'helper');
     const y = byPath(g.nodes, 'apps/y/src/util.ts', 'helper');
     assert.equal(root.facets?.business?.label, 'Root word');
-    assert.equal(y.facets?.business?.label, 'Root word', 'a sibling folder\'s file does not reach apps/y');
-    assert.equal(x.facets?.business?.label, 'App word', 'the nearer file\'s word wins under its folder');
+    assert.equal(y.facets?.business?.label, 'Root word', "a sibling folder's file does not reach apps/y");
+    assert.equal(x.facets?.business?.label, 'App word', "the nearer file's word wins under its folder");
     assert.ok(x.tags.includes('app-x') && x.tags.includes('everywhere') && x.tags.includes('nightly'), 'tags add');
     assert.ok(!root.tags.includes('app-x') && !y.tags.includes('app-x'), 'a nested tag rule stays in its folder');
     assert.equal(g.configApplied, true);
     const meta = g.meta!.config!;
-    assert.deepEqual(meta.conflicts, [{ kind: 'glossary', key: 'helper', files: ['farsight.config.json', 'apps/x/farsight.config.json'], kept: 'apps/x/farsight.config.json' }]);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    assert.deepEqual(meta.conflicts, [
+      {
+        kind: 'glossary',
+        key: 'helper',
+        files: ['farsight.config.json', 'apps/x/farsight.config.json'],
+        kept: 'apps/x/farsight.config.json',
+      },
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('a function the root already made a guard is not renamed again by a nested guard rule — a guard conflict', async () => {
   const dir = tempRepo({
     'farsight.config.json': { guards: { tenant: ['withTenant'] } },
     'apps/x/farsight.config.json': { guards: { session: ['withTenant', 'requireSession'] } },
-    'apps/x/src/auth.ts': 'export function withTenant(fn: () => void) { fn(); }\nexport function requireSession(fn: () => void) { fn(); }\nexport function handler() { withTenant(() => 1); requireSession(() => 2); }\n',
+    'apps/x/src/auth.ts':
+      'export function withTenant(fn: () => void) { fn(); }\nexport function requireSession(fn: () => void) { fn(); }\nexport function handler() { withTenant(() => 1); requireSession(() => 2); }\n',
     'src/other.ts': 'export function requireSession() { return 0; }\n',
   });
   try {
@@ -145,27 +200,67 @@ test('a function the root already made a guard is not renamed again by a nested 
     assert.equal(wt.kind, 'guard');
     assert.equal(wt.name, 'withTenant: tenant', 'renamed once, by the root');
     assert.equal(byPath(g.nodes, 'apps/x/src/auth.ts', 'requireSession').name, 'requireSession: session');
-    assert.equal(byPath(g.nodes, 'src/other.ts', 'requireSession').kind, 'function', 'the nested rule stays in its folder');
-    assert.deepEqual(g.meta!.config!.conflicts, [{ kind: 'guard', key: 'withTenant', files: ['farsight.config.json', 'apps/x/farsight.config.json'], kept: 'farsight.config.json' }]);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    assert.equal(
+      byPath(g.nodes, 'src/other.ts', 'requireSession').kind,
+      'function',
+      'the nested rule stays in its folder',
+    );
+    assert.deepEqual(g.meta!.config!.conflicts, [
+      {
+        kind: 'guard',
+        key: 'withTenant',
+        files: ['farsight.config.json', 'apps/x/farsight.config.json'],
+        kept: 'farsight.config.json',
+      },
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
-test('externals and stores declared twice: the first file\'s is kept, the second is a conflict', () => {
+test("externals and stores declared twice: the first file's is kept, the second is a conflict", () => {
   const dir = tempRepo({
-    'farsight.config.json': { externals: [{ import: '@acme/erp', name: 'ERP', kind: 'erp' }], stores: [{ name: 'Main DB', kind: 'sql' }] },
-    'apps/x/farsight.config.json': { externals: [{ import: '@acme/erp', name: 'Other ERP', kind: 'erp' }], stores: [{ name: 'Main DB', kind: 'document' }, { name: 'Cache', kind: 'other' }] },
+    'farsight.config.json': {
+      externals: [{ import: '@acme/erp', name: 'ERP', kind: 'erp' }],
+      stores: [{ name: 'Main DB', kind: 'sql' }],
+    },
+    'apps/x/farsight.config.json': {
+      externals: [{ import: '@acme/erp', name: 'Other ERP', kind: 'erp' }],
+      stores: [
+        { name: 'Main DB', kind: 'document' },
+        { name: 'Cache', kind: 'other' },
+      ],
+    },
   });
   try {
     const ws = loadWorkspaceConfig(dir);
-    assert.deepEqual(ws.merged.externals!.map((e) => e.name), ['ERP']);
-    assert.deepEqual(ws.merged.stores!.map((s) => `${s.name}:${s.kind}`), ['Main DB:sql', 'Cache:other']);
-    assert.deepEqual(ws.meta.conflicts.map((c) => [c.kind, c.key, c.kept]), [['external', '@acme/erp', 'farsight.config.json'], ['store', 'Main DB', 'farsight.config.json']]);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    assert.deepEqual(
+      ws.merged.externals!.map((e) => e.name),
+      ['ERP'],
+    );
+    assert.deepEqual(
+      ws.merged.stores!.map((s) => `${s.name}:${s.kind}`),
+      ['Main DB:sql', 'Cache:other'],
+    );
+    assert.deepEqual(
+      ws.meta.conflicts.map((c) => [c.kind, c.key, c.kept]),
+      [
+        ['external', '@acme/erp', 'farsight.config.json'],
+        ['store', 'Main DB', 'farsight.config.json'],
+      ],
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('projects and tooling are root-only; an unknown field is ignored; each with a note', () => {
   const dir = tempRepo({
-    'farsight.config.json': { tooling: ['tools/**'], projects: { graphFile: 'g.json' }, $schema: 'https://example.com/s.json' },
+    'farsight.config.json': {
+      tooling: ['tools/**'],
+      projects: { graphFile: 'g.json' },
+      $schema: 'https://example.com/s.json',
+    },
     'apps/x/farsight.config.json': { tooling: ['scripts/**'], projects: { graphFile: 'x.json' }, glosary: {} },
   });
   try {
@@ -176,14 +271,16 @@ test('projects and tooling are root-only; an unknown field is ignored; each with
     assert.deepEqual(ws.meta.files[1]!.fields, []);
     assert.deepEqual(ws.meta.files[1]!.ignored, ['tooling', 'projects', 'glosary']);
     assert.deepEqual(ws.meta.notes, [
-      'tooling is root-only; apps/x/farsight.config.json\'s was ignored.',
-      'projects is root-only; apps/x/farsight.config.json\'s was ignored.',
+      "tooling is root-only; apps/x/farsight.config.json's was ignored.",
+      "projects is root-only; apps/x/farsight.config.json's was ignored.",
       '"glosary" is not a farsight.config.json field; apps/x/farsight.config.json\'s was ignored.',
     ]);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
-test('a file that is not valid JSON is a note with its path — the root\'s too — and the ingest goes on', async () => {
+test("a file that is not valid JSON is a note with its path — the root's too — and the ingest goes on", async () => {
   const dir = tempRepo({
     'farsight.config.json': '{ "tags": ',
     'apps/x/farsight.config.json': '[1, 2]',
@@ -193,20 +290,33 @@ test('a file that is not valid JSON is a note with its path — the root\'s too 
   try {
     const g = await ingestRepo(dir, { repoName: 'cfg' });
     const meta = g.meta!.config!;
-    assert.deepEqual(meta.files.map((f) => f.path), ['apps/y/farsight.config.json']);
+    assert.deepEqual(
+      meta.files.map((f) => f.path),
+      ['apps/y/farsight.config.json'],
+    );
     assert.match(meta.notes[0]!, /^farsight\.config\.json is not valid JSON — .*; it was not applied\.$/);
     assert.equal(meta.notes[1], 'apps/x/farsight.config.json is not a JSON object; it was not applied.');
     assert.equal(byPath(g.nodes, 'apps/y/src/util.ts', 'helper').facets?.business?.label, 'Y word');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('tests: every report of a results list is read, from the root block and a nested one', () => {
-  const vitest = (file: string, title: string) => JSON.stringify({
-    startTime: 1757462400000,
-    testResults: [{ name: file, assertionResults: [{ ancestorTitles: [], title, fullName: title, status: 'passed', duration: 1 }] }],
-  });
+  const vitest = (file: string, title: string) =>
+    JSON.stringify({
+      startTime: 1757462400000,
+      testResults: [
+        {
+          name: file,
+          assertionResults: [{ ancestorTitles: [], title, fullName: title, status: 'passed', duration: 1 }],
+        },
+      ],
+    });
   const dir = tempRepo({
-    'farsight.config.json': { tests: { unit: { runner: 'vitest', results: ['coverage/one.json', 'coverage/two.json'] } } },
+    'farsight.config.json': {
+      tests: { unit: { runner: 'vitest', results: ['coverage/one.json', 'coverage/two.json'] } },
+    },
     'apps/x/farsight.config.json': { tests: { unit: { runner: 'jest', results: 'coverage/results.json' } } },
     'test/a.test.ts': "import { test } from 'vitest';\ntest('a works', () => {});\n",
     'test/b.test.ts': "import { test } from 'vitest';\ntest('b works', () => {});\n",
@@ -220,10 +330,19 @@ test('tests: every report of a results list is read, from the root block and a n
   try {
     const fragment = { repo: 'cfg', nodes: [] as GraphNode[], edges: [], meta: { files: 0, sourceHash: 'x' } };
     const { meta } = applyTests(fragment, dir, {});
-    assert.deepEqual(meta.reports.map((r) => `${r.path}:${r.runner}`).sort(), ['apps/x/coverage/results.json:jest', 'coverage/one.json:vitest', 'coverage/two.json:vitest']);
-    const ran = fragment.nodes.filter((n) => n.kind === 'test' && n.test?.run?.status === 'passed').map((n) => n.name).sort();
+    assert.deepEqual(meta.reports.map((r) => `${r.path}:${r.runner}`).sort(), [
+      'apps/x/coverage/results.json:jest',
+      'coverage/one.json:vitest',
+      'coverage/two.json:vitest',
+    ]);
+    const ran = fragment.nodes
+      .filter((n) => n.kind === 'test' && n.test?.run?.status === 'passed')
+      .map((n) => n.name)
+      .sort();
     assert.deepEqual(ran, ['a works', 'b works', 'c works']);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('config: false reads no file at all — no glossary, no declarations, no meta.config', async () => {
@@ -238,12 +357,21 @@ test('config: false reads no file at all — no glossary, no declarations, no me
     assert.equal(byPath(g.nodes, 'src/util.ts', 'helper').facets?.business?.label, undefined);
     assert.equal(g.meta!.config, undefined);
     assert.equal(g.configApplied, undefined);
-    assert.ok(!(g.specErrors ?? []).some((e) => e.includes('screens/s.json')), 'the design declaration was not read either');
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    assert.ok(
+      !(g.specErrors ?? []).some((e) => e.includes('screens/s.json')),
+      'the design declaration was not read either',
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('a manifest a nested file declares and discovery also finds by name is read once', async () => {
-  const manifest = { name: 'App y', screens: [{ id: 'Y-01', name: 'Home', route: '/home' }], flows: [{ id: 'y-home', name: 'Go home', screens: ['Y-01'] }] };
+  const manifest = {
+    name: 'App y',
+    screens: [{ id: 'Y-01', name: 'Home', route: '/home' }],
+    flows: [{ id: 'y-home', name: 'Go home', screens: ['Y-01'] }],
+  };
   const dir = tempRepo({
     'apps/y/farsight.config.json': { design: [{ manifest: 'docs/design/screens.json', name: 'App y screens' }] },
     'apps/y/docs/design/screens.json': manifest,
@@ -255,16 +383,27 @@ test('a manifest a nested file declares and discovery also finds by name is read
     const designs = g.nodes.filter((n) => n.kind === 'design');
     assert.equal(designs.length, 1, designs.map((d) => d.id).join(', '));
     assert.equal(g.nodes.filter((n) => n.kind === 'flow').length, 1);
-    assert.equal(designs[0]!.name, 'App y screens', 'the declaration\'s name is the one used');
+    assert.equal(designs[0]!.name, 'App y screens', "the declaration's name is the one used");
     // the declaration in apps/z names a file that is not there: a sentence, without an absolute path
-    assert.deepEqual(g.specErrors, ['design apps/z/docs/design/screens.json: declared in farsight.config.json, but there is no file at that path']);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    assert.deepEqual(g.specErrors, [
+      'design apps/z/docs/design/screens.json: declared in farsight.config.json, but there is no file at that path',
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
-test('journeys blocks: the root\'s applies to every manifest, a nested one to the manifests under its folder, nearest last', () => {
+test("journeys blocks: the root's applies to every manifest, a nested one to the manifests under its folder, nearest last", () => {
   const dir = tempRepo({
-    'farsight.config.json': { journeys: { personas: [{ id: 'ops', name: 'Operations' }, { name: 'no id' }], flows: [{ id: 'f', order: 'x' }] } },
-    'apps/a/farsight.config.json': { journeys: { groups: [{ id: 'access', name: 'Access', persona: 'ops' }], flows: [{ id: 'sign-in', persona: ['ops', 'contractor'], group: 'access', order: 1 }] } },
+    'farsight.config.json': {
+      journeys: { personas: [{ id: 'ops', name: 'Operations' }, { name: 'no id' }], flows: [{ id: 'f', order: 'x' }] },
+    },
+    'apps/a/farsight.config.json': {
+      journeys: {
+        groups: [{ id: 'access', name: 'Access', persona: 'ops' }],
+        flows: [{ id: 'sign-in', persona: ['ops', 'contractor'], group: 'access', order: 1 }],
+      },
+    },
     'apps/b/farsight.config.json': { journeys: 'not a block' },
   });
   try {
@@ -272,19 +411,33 @@ test('journeys blocks: the root\'s applies to every manifest, a nested one to th
     // soft validation: an entry with no id is dropped, a field of the wrong type is left out, a block of the wrong shape goes
     assert.deepEqual(ws.root!.journeys, { personas: [{ id: 'ops', name: 'Operations' }], flows: [{ id: 'f' }] });
     assert.equal(ws.files.find((f) => f.dir === 'apps/b')!.config.journeys, undefined);
-    assert.deepEqual(journeysConfigFor(ws, 'apps/a/docs/design/screens.json').map((b) => b.from), ['farsight.config.json', 'apps/a/farsight.config.json']);
-    assert.deepEqual(journeysConfigFor(ws, 'docs/design/screens.json').map((b) => b.from), ['farsight.config.json']);
-    assert.deepEqual(journeysConfigFor(ws, 'https://design.example.com/screens.json').map((b) => b.from), ['farsight.config.json']);
-    assert.deepEqual(journeysConfigFor(ws, 'apps/a/docs/design/screens.json')[1]!.journeys.flows, [{ id: 'sign-in', persona: ['ops', 'contractor'], group: 'access', order: 1 }]);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    assert.deepEqual(
+      journeysConfigFor(ws, 'apps/a/docs/design/screens.json').map((b) => b.from),
+      ['farsight.config.json', 'apps/a/farsight.config.json'],
+    );
+    assert.deepEqual(
+      journeysConfigFor(ws, 'docs/design/screens.json').map((b) => b.from),
+      ['farsight.config.json'],
+    );
+    assert.deepEqual(
+      journeysConfigFor(ws, 'https://design.example.com/screens.json').map((b) => b.from),
+      ['farsight.config.json'],
+    );
+    assert.deepEqual(journeysConfigFor(ws, 'apps/a/docs/design/screens.json')[1]!.journeys.flows, [
+      { id: 'sign-in', persona: ['ops', 'contractor'], group: 'access', order: 1 },
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // ── nested stores[] scoped to their folder (docs/proposals/round-2026-10-05.md §6) ──
 
-const DRIZZLE = (name: string) => `import { pgTable, text } from 'drizzle-orm/pg-core';\nexport const ${name} = pgTable('${name}', { id: text('id') });\n`;
+const DRIZZLE = (name: string) =>
+  `import { pgTable, text } from 'drizzle-orm/pg-core';\nexport const ${name} = pgTable('${name}', { id: text('id') });\n`;
 const RAW = (table: string) => `export async function q(db: any) { return db.query('SELECT 1 FROM ${table}'); }\n`;
 
-test('stores: a nested catch-all names only the unnamed tables under its folder; the root\'s covers the rest', async () => {
+test("stores: a nested catch-all names only the unnamed tables under its folder; the root's covers the rest", async () => {
   const dir = tempRepo({
     'farsight.config.json': { stores: [{ name: 'Main DB', kind: 'sql', engine: 'postgres' }] },
     'apps/ledger/farsight.config.json': { stores: [{ name: 'Ledger DB', kind: 'sql', engine: 'mysql' }] },
@@ -294,10 +447,24 @@ test('stores: a nested catch-all names only the unnamed tables under its folder;
   try {
     const g = await ingestRepo(dir, { repoName: 'r' });
     const store = (name: string) => g.nodes.find((n) => n.kind === 'table' && n.name === name)?.store;
-    assert.deepEqual(store('ledger_lines'), { name: 'Ledger DB', kind: 'sql', engine: 'mysql', via: 'config', ref: 'apps/ledger/farsight.config.json stores: Ledger DB' });
-    assert.deepEqual(store('sessions'), { name: 'Main DB', kind: 'sql', engine: 'postgres', via: 'config', ref: 'farsight.config.json stores: Main DB' });
+    assert.deepEqual(store('ledger_lines'), {
+      name: 'Ledger DB',
+      kind: 'sql',
+      engine: 'mysql',
+      via: 'config',
+      ref: 'apps/ledger/farsight.config.json stores: Ledger DB',
+    });
+    assert.deepEqual(store('sessions'), {
+      name: 'Main DB',
+      kind: 'sql',
+      engine: 'postgres',
+      via: 'config',
+      ref: 'farsight.config.json stores: Main DB',
+    });
     assert.deepEqual(g.meta?.config?.conflicts, []);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('stores: a nested tables list names only those tables, and only under its folder', async () => {
@@ -313,27 +480,53 @@ test('stores: a nested tables list names only those tables, and only under its f
     assert.equal(store('blobs')?.name, 'Archive');
     assert.equal(store('audit'), undefined, 'a tables list is not a catch-all');
     assert.equal(store('sessions'), undefined, 'sessions is read from apps/b only, outside apps/a');
-    assert.ok(g.meta?.stores?.notes?.some((n) => n.includes('apps/a/farsight.config.json lists the table sessions') && n.includes('not under apps/a/')));
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    assert.ok(
+      g.meta?.stores?.notes?.some(
+        (n) => n.includes('apps/a/farsight.config.json lists the table sessions') && n.includes('not under apps/a/'),
+      ),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('stores: for a table under both, the nearer file wins; two files listing it differently is a store conflict', async () => {
   const dir = tempRepo({
-    'farsight.config.json': { stores: [{ name: 'Main DB', kind: 'sql' }, { name: 'Warehouse', kind: 'sql', tables: ['facts'] }] },
-    'apps/a/farsight.config.json': { stores: [{ name: 'App DB', kind: 'sql' }, { name: 'Lake', kind: 'files', tables: ['facts'] }] },
+    'farsight.config.json': {
+      stores: [
+        { name: 'Main DB', kind: 'sql' },
+        { name: 'Warehouse', kind: 'sql', tables: ['facts'] },
+      ],
+    },
+    'apps/a/farsight.config.json': {
+      stores: [
+        { name: 'App DB', kind: 'sql' },
+        { name: 'Lake', kind: 'files', tables: ['facts'] },
+      ],
+    },
     'apps/a/src/q.ts': RAW('orders') + RAW('facts').replace('q(', 'f('),
     'apps/a/src/schema.ts': DRIZZLE('invoices'),
   });
   try {
     const g = await ingestRepo(dir, { repoName: 'r' });
     const store = (name: string) => g.nodes.find((n) => n.kind === 'table' && n.name === name)?.store;
-    assert.equal(store('orders')?.name, 'App DB', 'the nearer catch-all wins over the root\'s');
-    assert.equal(store('facts')?.name, 'Lake', 'the nearer list wins over the root\'s');
+    assert.equal(store('orders')?.name, 'App DB', "the nearer catch-all wins over the root's");
+    assert.equal(store('facts')?.name, 'Lake', "the nearer list wins over the root's");
     assert.equal((store('invoices') as { via: string }).via, 'factory', 'config never overrides code');
-    assert.deepEqual(g.meta?.config?.conflicts.filter((c) => c.kind === 'store'), [
-      { kind: 'store', key: 'facts', files: ['apps/a/farsight.config.json', 'farsight.config.json'], kept: 'apps/a/farsight.config.json' },
-    ]);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    assert.deepEqual(
+      g.meta?.config?.conflicts.filter((c) => c.kind === 'store'),
+      [
+        {
+          kind: 'store',
+          key: 'facts',
+          files: ['apps/a/farsight.config.json', 'farsight.config.json'],
+          kept: 'apps/a/farsight.config.json',
+        },
+      ],
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('stores: the same store declared again in a nested file is scoped there, not a conflict', () => {
@@ -344,7 +537,18 @@ test('stores: the same store declared again in a nested file is scoped there, no
   try {
     const ws = loadWorkspaceConfig(dir);
     assert.deepEqual(ws.meta.conflicts, []);
-    assert.deepEqual(ws.stores.map((s) => [s.name, s.dir, s.from]), [['Main DB', '.', 'farsight.config.json'], ['Main DB', 'apps/x', 'apps/x/farsight.config.json']]);
-    assert.deepEqual(ws.merged.stores!.map((s) => s.name), ['Main DB']);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+    assert.deepEqual(
+      ws.stores.map((s) => [s.name, s.dir, s.from]),
+      [
+        ['Main DB', '.', 'farsight.config.json'],
+        ['Main DB', 'apps/x', 'apps/x/farsight.config.json'],
+      ],
+    );
+    assert.deepEqual(
+      ws.merged.stores!.map((s) => s.name),
+      ['Main DB'],
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -16,7 +16,14 @@ export interface OllamaSettings {
 export interface EchoProfile {
   identity: { individual: string; team?: string; project: string };
   backend: { mode: 'managed' | 'external'; url: string; secretRef?: string };
-  model: { provider: 'ollama' | 'openai-compatible'; baseUrl: string; model: string; secretRef?: string; allowInsecureHttp?: boolean; ollama?: OllamaSettings };
+  model: {
+    provider: 'ollama' | 'openai-compatible';
+    baseUrl: string;
+    model: string;
+    secretRef?: string;
+    allowInsecureHttp?: boolean;
+    ollama?: OllamaSettings;
+  };
   submind?: SubmindSettings;
   web: { port: number; farsightOrigin?: string };
   hooks: { claude: boolean; codex: boolean; vscode?: boolean };

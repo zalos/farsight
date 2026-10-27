@@ -15,6 +15,18 @@ import { tipAttrs } from './tooltip.js';
  * @group Readiness
  */
 export function readinessDoorHtml(id, cls, repo) {
-  return '<a class="rel rd-door ' + esc(cls || '') + '" href="#/readiness/' + esc(encodeURIComponent(id)) + (repo ? '?repo=' + esc(encodeURIComponent(repo)) : '') + '"'
-    + tipAttrs({ key: 'readiness.door', noFocus: true }) + '>' + sym('open') + ' ' + esc(t('readiness.door')) + '</a>';
+  return (
+    '<a class="rel rd-door ' +
+    esc(cls || '') +
+    '" href="#/readiness/' +
+    esc(encodeURIComponent(id)) +
+    (repo ? '?repo=' + esc(encodeURIComponent(repo)) : '') +
+    '"' +
+    tipAttrs({ key: 'readiness.door', noFocus: true }) +
+    '>' +
+    sym('open') +
+    ' ' +
+    esc(t('readiness.door')) +
+    '</a>'
+  );
 }

@@ -37,9 +37,13 @@ export function withParams(hash, params) {
   }
   for (const [k, v] of Object.entries(params)) {
     const at = pairs.findIndex((p) => p[0] === k);
-    if (v == null) { if (at >= 0) pairs.splice(at, 1); continue; }
+    if (v == null) {
+      if (at >= 0) pairs.splice(at, 1);
+      continue;
+    }
     const enc = encodeURIComponent(String(v));
-    if (at >= 0) pairs[at][1] = enc; else pairs.push([k, enc]);
+    if (at >= 0) pairs[at][1] = enc;
+    else pairs.push([k, enc]);
   }
   const qs = pairs.map(([k, v]) => (v === '' ? k : k + '=' + v)).join('&');
   return base + (qs ? '?' + qs : '');
@@ -152,7 +156,6 @@ export function screenRowAt(screens, screen) {
   return after >= 0 ? after : screens.length - 1;
 }
 
-
 /**
  * The walk order of the part a link names on a screen: the marker for `nodeId` on that screen's segment (a gate met
  * there counts), else the first marker for it anywhere in the journey; null when the journey does not reach it.
@@ -174,7 +177,10 @@ export function partOrder(segments, screen, nodeId) {
   };
   const here = on(sg);
   if (here != null) return here;
-  for (const x of segs) { const o = on(x); if (o != null) return o; }
+  for (const x of segs) {
+    const o = on(x);
+    if (o != null) return o;
+  }
   return null;
 }
 
@@ -232,7 +238,7 @@ export function mapStopOf(hashOrQuery) {
   const h = String(hashOrQuery || '');
   const qi = h.indexOf('?');
   const path = qi >= 0 ? h.slice(0, qi) : h;
-  const q = new URLSearchParams(qi >= 0 ? h.slice(qi + 1) : (h.startsWith('#') ? '' : h));
+  const q = new URLSearchParams(qi >= 0 ? h.slice(qi + 1) : h.startsWith('#') ? '' : h);
   const screen = screenOrdinal(q.get('screen') || q.get('step'));
   const action = screen != null ? screenOrdinal(q.get('action')) : null;
   const beat = action != null ? screenOrdinal(q.get('beat')) : null;
@@ -241,6 +247,14 @@ export function mapStopOf(hashOrQuery) {
   const dock = (action != null || part) && DOCKS.has(q.get('dock') || '') ? q.get('dock') : null;
   const flow = /^#\/map\/[^?@]/.test(path);
   const atAction = action != null || (part && ACTION_LAYOUTS.has(layout || ''));
-  const stop = atAction ? (dock ? 'code' : 'action') : q.get('node') ? 'screen' : flow || screen != null ? 'journey' : 'board';
+  const stop = atAction
+    ? dock
+      ? 'code'
+      : 'action'
+    : q.get('node')
+      ? 'screen'
+      : flow || screen != null
+        ? 'journey'
+        : 'board';
   return { stop, screen, action, beat, layout, dock, part };
 }

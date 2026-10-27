@@ -34,19 +34,42 @@ CREATE TABLE IF NOT EXISTS invoices (
 );
 CREATE INDEX IF NOT EXISTS invoices_status_idx ON invoices (status);
 CREATE TABLE "public"."invoice_lines" (id uuid PRIMARY KEY, invoice_id uuid, amount int);`);
-  assert.deepEqual(t.map((x) => x.name), ['invoices', 'invoice_lines']);
+  assert.deepEqual(
+    t.map((x) => x.name),
+    ['invoices', 'invoice_lines'],
+  );
   assert.deepEqual(t[0]!.columns, ['id', 'contractor_id', 'status', 'total_cents', 'created_at']);
   assert.deepEqual(t[1]!.columns, ['id', 'invoice_id', 'amount']);
 });
 
 test('sqlOps: reads from FROM / JOIN, writes from INSERT / UPDATE / DELETE, CTEs are not tables, prose is not SQL', () => {
-  assert.deepEqual(sqlOps('SELECT c.* FROM contact_vendor_links l JOIN contractors c ON c.id = l.contractor_id WHERE l.contact_id = $1'),
-    [{ table: 'contact_vendor_links', op: 'select', write: false }, { table: 'contractors', op: 'select', write: false }]);
-  assert.deepEqual(sqlOps('INSERT INTO audit_events (id, kind) VALUES ($1, $2) RETURNING *'), [{ table: 'audit_events', op: 'insert', write: true }]);
-  assert.deepEqual(sqlOps('UPDATE invoices SET status = $2, updated_at = now() WHERE id = $1 RETURNING *'), [{ table: 'invoices', op: 'update', write: true }]);
-  assert.deepEqual(sqlOps('DELETE FROM invoice_lines WHERE invoice_id = $1'), [{ table: 'invoice_lines', op: 'delete', write: true }]);
-  assert.deepEqual(sqlOps('WITH due AS (SELECT id FROM bc_outbox WHERE status = $1) UPDATE bc_outbox o SET status = $2 FROM due WHERE o.id = due.id'),
-    [{ table: 'bc_outbox', op: 'update', write: true }, { table: 'bc_outbox', op: 'select', write: false }]);
+  assert.deepEqual(
+    sqlOps(
+      'SELECT c.* FROM contact_vendor_links l JOIN contractors c ON c.id = l.contractor_id WHERE l.contact_id = $1',
+    ),
+    [
+      { table: 'contact_vendor_links', op: 'select', write: false },
+      { table: 'contractors', op: 'select', write: false },
+    ],
+  );
+  assert.deepEqual(sqlOps('INSERT INTO audit_events (id, kind) VALUES ($1, $2) RETURNING *'), [
+    { table: 'audit_events', op: 'insert', write: true },
+  ]);
+  assert.deepEqual(sqlOps('UPDATE invoices SET status = $2, updated_at = now() WHERE id = $1 RETURNING *'), [
+    { table: 'invoices', op: 'update', write: true },
+  ]);
+  assert.deepEqual(sqlOps('DELETE FROM invoice_lines WHERE invoice_id = $1'), [
+    { table: 'invoice_lines', op: 'delete', write: true },
+  ]);
+  assert.deepEqual(
+    sqlOps(
+      'WITH due AS (SELECT id FROM bc_outbox WHERE status = $1) UPDATE bc_outbox o SET status = $2 FROM due WHERE o.id = due.id',
+    ),
+    [
+      { table: 'bc_outbox', op: 'update', write: true },
+      { table: 'bc_outbox', op: 'select', write: false },
+    ],
+  );
   assert.deepEqual(sqlOps('No such tracking link.'), []);
 });
 
@@ -54,7 +77,10 @@ test('sqlOps: an English sentence that starts with a keyword is filtered by the 
   // the adapter only feeds template/string literals inside functions; a prose
   // literal that happens to start with "select" would read `the` as a table —
   // acceptable noise, documented rather than hidden
-  assert.deepEqual(sqlOps('select the account from the list').map((o) => o.table), ['the']);
+  assert.deepEqual(
+    sqlOps('select the account from the list').map((o) => o.table),
+    ['the'],
+  );
 });
 
 test('ingest: class methods, SQL reads/writes on CREATE TABLE tables, method-name calls, queue publishes/consumes', async () => {
@@ -141,14 +167,19 @@ test('ingest: class methods, SQL reads/writes on CREATE TABLE tables, method-nam
   assert.equal(create!.kind, 'function');
   assert.equal(create!.group, 'data');
   assert.equal(create!.facets?.business?.description, 'Saves a new invoice draft.');
-  assert.equal(byId.get('sqlrepo::src/repos/in-memory.ts::InMemoryInvoiceRepository.createDraft')?.group, 'InMemoryInvoiceRepository');
+  assert.equal(
+    byId.get('sqlrepo::src/repos/in-memory.ts::InMemoryInvoiceRepository.createDraft')?.group,
+    'InMemoryInvoiceRepository',
+  );
 
   // SQL reads / writes from the method that runs the statement, with the statement as the edge's code
   const w = edges('writes').find((e) => e.from === create!.id && e.to === 'sqlrepo::table::invoices');
   assert.ok(w, 'createDraft writes invoices');
   assert.equal(w!.meta?.op, 'insert');
   assert.match(String(w!.meta?.code), /^INSERT INTO invoices/);
-  const r = edges('reads').find((e) => e.from === 'sqlrepo::src/repos/pg.ts::PgInvoiceRepository.getById' && e.to === 'sqlrepo::table::invoices');
+  const r = edges('reads').find(
+    (e) => e.from === 'sqlrepo::src/repos/pg.ts::PgInvoiceRepository.getById' && e.to === 'sqlrepo::table::invoices',
+  );
   assert.ok(r, 'getById reads invoices');
   assert.equal(r!.meta?.op, 'select');
   // and both say how they were resolved: the name came out of the statement (B5.1)
@@ -175,16 +206,28 @@ test('ingest: class methods, SQL reads/writes on CREATE TABLE tables, method-nam
   const submitDraft = 'sqlrepo::src/service.ts::submitDraft';
   const post = 'sqlrepo::src/service.ts::POST';
   assert.equal(byId.get(submitDraft)?.kind, 'guard');
-  assert.ok(edges('guards').find((e) => e.from === submitDraft && e.to === post), 'guards edge back at the caller');
+  assert.ok(
+    edges('guards').find((e) => e.from === submitDraft && e.to === post),
+    'guards edge back at the caller',
+  );
   const gc = edges('calls').find((e) => e.from === post && e.to === submitDraft);
   assert.ok(gc, 'calls edge into the guard function');
   assert.equal(gc!.meta?.via, 'guard');
-  assert.ok(edges('writes').find((e) => e.from === submitDraft && e.to === 'sqlrepo::table::tracking_tokens'), 'the guard body writes tracking_tokens');
+  assert.ok(
+    edges('writes').find((e) => e.from === submitDraft && e.to === 'sqlrepo::table::tracking_tokens'),
+    'the guard body writes tracking_tokens',
+  );
 
   // queues: the name follows the imported constant; the worker consumes one and publishes to the poison twin
   const q = byId.get('sqlrepo::queue::q-documents');
   assert.ok(q, 'queue node from the imported constant');
   const worker = 'sqlrepo::src/worker.ts::main';
-  assert.ok(edges('consumes').find((e) => e.from === q!.id && e.to === worker), 'queue → worker consumes');
-  assert.ok(edges('publishes').find((e) => e.from === worker && e.to === 'sqlrepo::queue::q-documents-poison'), 'worker → poison publishes');
+  assert.ok(
+    edges('consumes').find((e) => e.from === q!.id && e.to === worker),
+    'queue → worker consumes',
+  );
+  assert.ok(
+    edges('publishes').find((e) => e.from === worker && e.to === 'sqlrepo::queue::q-documents-poison'),
+    'worker → poison publishes',
+  );
 });

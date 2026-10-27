@@ -13,7 +13,12 @@ import { applyTests, testGlobsOf } from './tests/index.js';
 import { applyStories } from './stories/index.js';
 import { applyStores } from './stores.js';
 import { applyProjects, projectOfPath } from './shared/projects.js';
-import { loadWorkspaceConfig, applyWorkspaceConfig, applyWorkspaceRouteGuards, recordConflict } from './shared/config-files.js';
+import {
+  loadWorkspaceConfig,
+  applyWorkspaceConfig,
+  applyWorkspaceRouteGuards,
+  recordConflict,
+} from './shared/config-files.js';
 import { applyLifecycleConfig } from './shared/lifecycle-config.js';
 import { applyDecisions, applyParties } from './decisions.js';
 import type { ParsedManifest } from './design/index.js';
@@ -22,31 +27,115 @@ import { declaredPathWarnings } from './shared/declared-paths.js';
 export type { LanguageAdapter, IngestOptions } from './types.js';
 export { tsJsAdapter, ingestTsJs, SQL_DRIVERS, storeLike } from './tsjs.js';
 export { applyStores, prismaProviders, springDatasourceJdbc } from './stores.js';
-export { applyProjects, discoverProjects, projectOfPath, projectImports, importSpecifiers, workspaceGlobs } from './shared/projects.js';
+export {
+  applyProjects,
+  discoverProjects,
+  projectOfPath,
+  projectImports,
+  importSpecifiers,
+  workspaceGlobs,
+} from './shared/projects.js';
 export { readNxProjectGraph, NX_GRAPH_PATHS, NX_GRAPH_MAX_BYTES } from './shared/nx-graph.js';
 export { applyLifecycleConfig } from './shared/lifecycle-config.js';
 export { applyDecisions, applyParties, decisionSites } from './decisions.js';
 export { applyCitedDocs, readDocQuote, headingSlug, docNodeId } from './cited-docs.js';
-export { loadWorkspaceConfig, emptyWorkspaceConfig, applyWorkspaceConfig, applyWorkspaceRouteGuards, journeysConfigFor, rebasePath, CONFIG_FILE } from './shared/config-files.js';
+export {
+  loadWorkspaceConfig,
+  emptyWorkspaceConfig,
+  applyWorkspaceConfig,
+  applyWorkspaceRouteGuards,
+  journeysConfigFor,
+  rebasePath,
+  CONFIG_FILE,
+} from './shared/config-files.js';
 export type { ConfigFile, WorkspaceConfig, ScopedStoreDecl } from './shared/config-files.js';
 export { javaAdapter, ingestJava } from './java/index.js';
-export { applySpecs, ingestSpec, parseSpecText, readSpecSource, specToYaml, isSpecUrl, discoverSpecs } from './openapi/index.js';
+export {
+  applySpecs,
+  ingestSpec,
+  parseSpecText,
+  readSpecSource,
+  specToYaml,
+  isSpecUrl,
+  discoverSpecs,
+} from './openapi/index.js';
 export type { SpecApplication } from './openapi/index.js';
 export { contentDigest } from './shared/files.js';
-export { gitLog, gitTags, gitShallow, gitHeadRef, gitHead, gitHeadAt, gitPrefix, gitShowPatch, gitKnows, gitUnreachable, commitInputsOf, GIT_STATUS_WORD, normalizeRepoPath, DEFAULT_MAX_COMMITS, GIT_ABSENT_WORD, headTitle, shallowFloorSentence } from './shared/git.js';
-export type {
-  GitCommit, GitFileChange, GitFileStatus, GitTag, GitTagScheme, GitLogOptions, GitLogResult,
-  GitHeadResult, GitFact, GitAbsent, GitAbsentReason,
+export {
+  gitLog,
+  gitTags,
+  gitShallow,
+  gitHeadRef,
+  gitHead,
+  gitHeadAt,
+  gitPrefix,
+  gitShowPatch,
+  gitKnows,
+  gitUnreachable,
+  commitInputsOf,
+  GIT_STATUS_WORD,
+  normalizeRepoPath,
+  DEFAULT_MAX_COMMITS,
+  GIT_ABSENT_WORD,
+  headTitle,
+  shallowFloorSentence,
 } from './shared/git.js';
-export { applyDesigns, ingestDesign, readManifestSource, parseManifestText, discoverManifests, isManifestUrl, figmaToken, figmaLastModified } from './design/index.js';
+export type {
+  GitCommit,
+  GitFileChange,
+  GitFileStatus,
+  GitTag,
+  GitTagScheme,
+  GitLogOptions,
+  GitLogResult,
+  GitHeadResult,
+  GitFact,
+  GitAbsent,
+  GitAbsentReason,
+} from './shared/git.js';
+export {
+  applyDesigns,
+  ingestDesign,
+  readManifestSource,
+  parseManifestText,
+  discoverManifests,
+  isManifestUrl,
+  figmaToken,
+  figmaLastModified,
+} from './design/index.js';
 export type { DesignApplication, ParsedManifest } from './design/index.js';
 export {
-  applyTests, importReports, isTestFile, DEFAULT_TEST_GLOBS, extractCases, runnerOf, levelOf, classifyCall, fileHeaderDoc,
-  CoverTargets, routeKey, fileSignals, findReports, readReport, freshnessOf, changedByOf, testsConfigOf, testGlobsOf,
-  eachTitleToRegExp, eachTitleMatches, foldRuns,
+  applyTests,
+  importReports,
+  isTestFile,
+  DEFAULT_TEST_GLOBS,
+  extractCases,
+  runnerOf,
+  levelOf,
+  classifyCall,
+  fileHeaderDoc,
+  CoverTargets,
+  routeKey,
+  fileSignals,
+  findReports,
+  readReport,
+  freshnessOf,
+  changedByOf,
+  testsConfigOf,
+  testGlobsOf,
+  eachTitleToRegExp,
+  eachTitleMatches,
+  foldRuns,
 } from './tests/index.js';
 export type { TestCase, ExtractedFile, TestGlobs, ReadReport, ObservedCase, CoverageHit } from './tests/index.js';
-export { applyStories, parseStoryFile, isStoryFile, findStorybookDirs, storiesGlobsOf, globBase } from './stories/index.js';
+export {
+  applyStories,
+  parseStoryFile,
+  isStoryFile,
+  findStorybookDirs,
+  storiesGlobsOf,
+  globBase,
+} from './stories/index.js';
 export type { ParsedStoryFile } from './stories/index.js';
 
 /** Adding a language = one adapter directory + one entry here. */
@@ -81,7 +170,8 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   const workspace = loadWorkspaceConfig(repoRoot, options);
   const config = workspace.merged;
   // the config's externals/plumbing/setup blocks travel into the adapters the way testGlobs does
-  const merge = <T,>(a?: T[], b?: T[]): T[] | undefined => (a?.length || b?.length ? [...(a ?? []), ...(b ?? [])] : undefined);
+  const merge = <T>(a?: T[], b?: T[]): T[] | undefined =>
+    a?.length || b?.length ? [...(a ?? []), ...(b ?? [])] : undefined;
   const opts: IngestOptions = {
     ...options,
     repoName: repo,
@@ -123,8 +213,9 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   }
   // which data store each table lives in: code rules first, the config's `stores` last (stores.ts)
   // each file's declarations scoped to its folder (the nearer file wins for a table under two)
-  const storesMeta = applyStores(merged, repoRoot, opts, workspace.stores, drivers,
-    (key, files, kept) => recordConflict(workspace, 'store', key, files, kept));
+  const storesMeta = applyStores(merged, repoRoot, opts, workspace.stores, drivers, (key, files, kept) =>
+    recordConflict(workspace, 'store', key, files, kept),
+  );
   // the words people use for a record's statuses, per persona, and the overlays they see — once, on the
   // records the code gave a lifecycle (the code decides the statuses; config only names them)
   applyLifecycleConfig(merged.nodes, workspace);
@@ -181,7 +272,10 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
 export function repoContentDigest(repoPath: string, options: IngestOptions = {}): string {
   const root = resolvePath(repoPath);
   const exts = [...new Set(adapters.flatMap((a) => a.extensions))];
-  return contentDigest(root, collectFiles(root, exts, options, (name) => name.endsWith('.d.ts')));
+  return contentDigest(
+    root,
+    collectFiles(root, exts, options, (name) => name.endsWith('.d.ts')),
+  );
 }
 
 /**

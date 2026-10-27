@@ -13,7 +13,9 @@ test.describe('a journey on the Map', () => {
    * @covers packages/server/public/app/lib/journey-draw.js::jrnHeaderHtml
    * @covers GET /api/journey
    */
-  test('opens Billing cycle from the front door on the Map, at the hybrid register\'s table, with its counts', async ({ page }) => {
+  test("opens Billing cycle from the front door on the Map, at the hybrid register's table, with its counts", async ({
+    page,
+  }) => {
     await openBillingCycle(page);
     await expect(page).toHaveURL(/layout=table/);
     const head = page.locator('.map-jhead .jrn-count');
@@ -25,7 +27,9 @@ test.describe('a journey on the Map', () => {
    * the storyboard → the street
    * @covers packages/server/public/app/lib/route-url.js::overlayToMap
    */
-  test('an old storyboard link is the business street: the screens in order, each with its own sentence', async ({ page }) => {
+  test('an old storyboard link is the business street: the screens in order, each with its own sentence', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/journeys/' + FLOW + '?view=storyboard&lens=business');
     await expect(page).toHaveURL(new RegExp('#/map/' + FLOW.replace(/%/g, '%')));
     await expect(page.locator('.map-layout [data-layout="screens"]')).toHaveAttribute('aria-pressed', 'true');
@@ -53,7 +57,9 @@ test.describe('a journey on the Map', () => {
    * the drill → the action stop; the timeline's ladder band → the action's ladder layout
    * @covers packages/server/public/app/surfaces/map-stops.js::openScreenAction
    */
-  test('an old drill link is the drill — the action rail over the beats — and its ladder is a layout there', async ({ page }) => {
+  test('an old drill link is the drill — the action rail over the beats — and its ladder is a layout there', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/journeys/' + FLOW + '?view=drill&step=1&lens=hybrid');
     await expect(page.locator('.map-act')).toBeVisible();
     await expect(page.locator('.map-act .map-rail .jrn-stop.on')).toBeVisible();
@@ -73,7 +79,9 @@ test.describe('a journey on the Map', () => {
    * @covers packages/server/public/app/surfaces/map-stops.js::tableKey
    * @covers packages/server/public/app/lib/journey-draw.js::jrnSetDock
    */
-  test('on the table j opens a part\'s code in the dock, d moves the dock, and the address names the part', async ({ page }) => {
+  test("on the table j opens a part's code in the dock, d moves the dock, and the address names the part", async ({
+    page,
+  }) => {
     await openJourneyAt(page, 'table');
     await page.locator('.map-jhead .nm').click();
     await page.keyboard.press('j');

@@ -39,7 +39,12 @@ export function loadStories(fresh) {
   LIVE.pending = fetch('/api/stories' + (fresh ? '?refresh=1' : ''))
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null)
-    .then((a) => { LIVE.answer = a; LIVE.at = Date.now(); LIVE.pending = null; return a; });
+    .then((a) => {
+      LIVE.answer = a;
+      LIVE.at = Date.now();
+      LIVE.pending = null;
+      return a;
+    });
   return LIVE.pending;
 }
 
@@ -58,25 +63,47 @@ export function storiesOf(n) {
   if (!n) return [];
   const live = LIVE.answer && LIVE.answer.byNode && LIVE.answer.byNode[n.id];
   if (live) return live;
-  return (n.stories || []).map((s) => ({ id: s.id, name: s.name, title: s.title, type: 'story', repo: repoOf(n), storybook: s.storybook, docs: s.docs, file: s.file, line: s.line, inGraph: true, live: false }));
+  return (n.stories || []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    title: s.title,
+    type: 'story',
+    repo: repoOf(n),
+    storybook: s.storybook,
+    docs: s.docs,
+    file: s.file,
+    line: s.line,
+    inGraph: true,
+    live: false,
+  }));
 }
 
 /** The live status of the Storybook a story belongs to (or the repo's first). @group Stories */
 function bookStatus(repo, configDir) {
   const books = (LIVE.answer && LIVE.answer.storybooks) || [];
-  return books.find((b) => b.repo === repo && (!configDir || b.configDir === configDir)) || books.find((b) => b.repo === repo) || null;
+  return (
+    books.find((b) => b.repo === repo && (!configDir || b.configDir === configDir)) ||
+    books.find((b) => b.repo === repo) ||
+    null
+  );
 }
 
 /** The author's sentence: text, with its `code` spans drawn as code rather than as backticks. @group Stories */
-function storyDocHtml(text) { return esc(String(text || '')).replace(/`([^`]+)`/g, '<code>$1</code>'); }
+function storyDocHtml(text) {
+  return esc(String(text || '')).replace(/`([^`]+)`/g, '<code>$1</code>');
+}
 
 /** What a reader calls a story: its name, and "Docs" for a docs page. @group Stories */
-function storyWord(s) { return s.type === 'docs' ? t('stories.docs') : s.name; }
+function storyWord(s) {
+  return s.type === 'docs' ? t('stories.docs') : s.name;
+}
 
 /** The storybook URL a story opens at in Storybook's own manager UI. @group Stories */
 function managerUrl(book, s) {
   if (!book || !book.url) return '';
-  return book.url.replace(/\/+$/, '') + '/?path=/' + (s.type === 'docs' ? 'docs' : 'story') + '/' + encodeURIComponent(s.id);
+  return (
+    book.url.replace(/\/+$/, '') + '/?path=/' + (s.type === 'docs' ? 'docs' : 'story') + '/' + encodeURIComponent(s.id)
+  );
 }
 
 /**
@@ -89,12 +116,25 @@ function notReachedHtml(book, repo) {
   const refs = storybooksOfRepo(repo);
   const ref = book || refs[0] || {};
   const url = ref.url || '';
-  const sentence = !url ? t('stories.noUrl')
-    : ref.command ? t('stories.notRunning').replace('{url}', url).replace('{command}', ref.command)
+  const sentence = !url
+    ? t('stories.noUrl')
+    : ref.command
+      ? t('stories.notRunning').replace('{url}', url).replace('{command}', ref.command)
       : t('stories.notRunningNoCmd').replace('{url}', url);
-  return '<div class="sb-absent"><span class="api-chip warn">' + sym('absent') + esc(t('journey.absent.notReached')) + '</span>'
-    + '<p>' + esc(sentence) + '</p>'
-    + '<button class="btn sb-retry" onclick="storiesRetry()">' + sym('sync') + ' ' + esc(t('stories.retry')) + '</button></div>';
+  return (
+    '<div class="sb-absent"><span class="api-chip warn">' +
+    sym('absent') +
+    esc(t('journey.absent.notReached')) +
+    '</span>' +
+    '<p>' +
+    esc(sentence) +
+    '</p>' +
+    '<button class="btn sb-retry" onclick="storiesRetry()">' +
+    sym('sync') +
+    ' ' +
+    esc(t('stories.retry')) +
+    '</button></div>'
+  );
 }
 
 /**
@@ -115,7 +155,9 @@ export function storiesSecHtml(n) {
     const el = document.getElementById('insp-stories');
     if (el && el.dataset.node === n.id) el.innerHTML = storiesBodyHtml(n);
   });
-  return '<div class="insp-sec sb-sec" id="insp-stories" data-node="' + esc(n.id) + '">' + storiesBodyHtml(n) + '</div>';
+  return (
+    '<div class="insp-sec sb-sec" id="insp-stories" data-node="' + esc(n.id) + '">' + storiesBodyHtml(n) + '</div>'
+  );
 }
 
 /**
@@ -141,21 +183,56 @@ function storiesHeadHtml(list, partIds) {
   const own = list.filter((s) => s.type === 'story').length;
   const docs = list.filter((s) => s.type === 'docs').length;
   const api = '/api/stories';
-  return '<span class="hud-label"' + defAttrs('stories.title') + '>' + sym('story') + ' ' + esc(t('stories.title')) + '</span>'
-    + '<div class="sb-own"><span class="hud-label">' + esc(t('count.scope.component')) + '</span> '
-    + '<span class="cnt"' + plainTip(own, 'stories.count', 'count.scope.component', api) + '>' + esc(countWords(own === 1 ? 'stories.countOne' : 'stories.count', own)) + '</span>'
-    + (docs ? ' · <span class="cnt"' + plainTip(docs, 'count.unit.docsPages', 'count.scope.component', api) + '>' + esc(countWords('count.unit.docsPages', docs)) + '</span>' : '')
-    + '</div>';
+  return (
+    '<span class="hud-label"' +
+    defAttrs('stories.title') +
+    '>' +
+    sym('story') +
+    ' ' +
+    esc(t('stories.title')) +
+    '</span>' +
+    '<div class="sb-own"><span class="hud-label">' +
+    esc(t('count.scope.component')) +
+    '</span> ' +
+    '<span class="cnt"' +
+    plainTip(own, 'stories.count', 'count.scope.component', api) +
+    '>' +
+    esc(countWords(own === 1 ? 'stories.countOne' : 'stories.count', own)) +
+    '</span>' +
+    (docs
+      ? ' · <span class="cnt"' +
+        plainTip(docs, 'count.unit.docsPages', 'count.scope.component', api) +
+        '>' +
+        esc(countWords('count.unit.docsPages', docs)) +
+        '</span>'
+      : '') +
+    '</div>'
+  );
 }
 
 /** The parts' stories, under their own heading, each part a chip that opens its large view. @group Stories */
 function storiesPartsHtml(partIds) {
   if (!partIds.length) return '';
-  const rows = partIds.map((id) => { const x = S.BYID[id]; return [x ? bizLabel(x) : id, storiesOf(x).filter((s) => s.type === 'story').length || (x && x.stories ? x.stories.length : 0)]; });
+  const rows = partIds.map((id) => {
+    const x = S.BYID[id];
+    return [
+      x ? bizLabel(x) : id,
+      storiesOf(x).filter((s) => s.type === 'story').length || (x && x.stories ? x.stories.length : 0),
+    ];
+  });
   const sum = rows.reduce((a, r) => a + r[1], 0);
-  return '<div class="sb-parts"><span class="hud-label">' + esc(t('count.scope.parts')) + ' · '
-    + '<span class="cnt"' + plainTip(sum, 'count.unit.partStories', 'count.scope.parts', '/api/stories', rows) + '>' + esc(countWords('count.unit.partStories', sum)) + '</span></span>'
-    + storyChipsHtml(partIds) + '</div>';
+  return (
+    '<div class="sb-parts"><span class="hud-label">' +
+    esc(t('count.scope.parts')) +
+    ' · ' +
+    '<span class="cnt"' +
+    plainTip(sum, 'count.unit.partStories', 'count.scope.parts', '/api/stories', rows) +
+    '>' +
+    esc(countWords('count.unit.partStories', sum)) +
+    '</span></span>' +
+    storyChipsHtml(partIds) +
+    '</div>'
+  );
 }
 
 /** The section's inside, from whatever is known right now. @group Stories */
@@ -170,29 +247,100 @@ function storiesBodyHtml(n) {
     // the absence word is for a true absence: with parts' stories below, the
     // count above already says *0* of its own and the sentence says why
     const none = lens === 'business' ? 'journey.biz.absent.noneIndexed' : 'journey.absent.noneIndexed';
-    return head + '<p class="sb-none">' + (partIds.length ? '' : '<span class="api-chip"' + defAttrs(none) + '>'
-      + sym('absent') + esc(t(none)) + '</span> ') + esc(t('stories.none')) + '</p>' + storiesPartsHtml(partIds);
+    return (
+      head +
+      '<p class="sb-none">' +
+      (partIds.length
+        ? ''
+        : '<span class="api-chip"' + defAttrs(none) + '>' + sym('absent') + esc(t(none)) + '</span> ') +
+      esc(t('stories.none')) +
+      '</p>' +
+      storiesPartsHtml(partIds)
+    );
   }
-  const pick = list.find((s) => s.id === PICKED[n.id]) || list.find((s) => s.frame && s.type === 'story') || list.find((s) => s.type === 'story') || list[0];
+  const pick =
+    list.find((s) => s.id === PICKED[n.id]) ||
+    list.find((s) => s.frame && s.type === 'story') ||
+    list.find((s) => s.type === 'story') ||
+    list[0];
   const book = bookStatus(repo, pick.storybook);
-  const tabs = '<div class="sb-tabs" role="tablist">' + list.map((s) => '<button class="sb-tab' + (s.id === pick.id ? ' on' : '') + (s.type === 'docs' ? ' docs' : '') + '"'
-    + ' role="tab" aria-selected="' + (s.id === pick.id ? 'true' : 'false') + '" onclick="storyPick(' + jsArg(n.id) + ',' + jsArg(s.id) + ')"'
-    + (s.docs ? tipAttrs({ text: s.docs, noFocus: true }) : '') + '>' + esc(storyWord(s)) + '</button>').join('') + '</div>';
+  const tabs =
+    '<div class="sb-tabs" role="tablist">' +
+    list
+      .map(
+        (s) =>
+          '<button class="sb-tab' +
+          (s.id === pick.id ? ' on' : '') +
+          (s.type === 'docs' ? ' docs' : '') +
+          '"' +
+          ' role="tab" aria-selected="' +
+          (s.id === pick.id ? 'true' : 'false') +
+          '" onclick="storyPick(' +
+          jsArg(n.id) +
+          ',' +
+          jsArg(s.id) +
+          ')"' +
+          (s.docs ? tipAttrs({ text: s.docs, noFocus: true }) : '') +
+          '>' +
+          esc(storyWord(s)) +
+          '</button>',
+      )
+      .join('') +
+    '</div>';
   let picture = '';
   if (!LIVE.answer) picture = '<p class="set-note">' + esc(t('stories.checking')) + '</p>';
   else if (!book || !book.reachable) picture = notReachedHtml(book, repo);
   else if (!pick.frame) {
-    picture = '<div class="sb-absent"><span class="api-chip warn"' + defAttrs('stories.notListed') + '>' + sym('absent') + esc(t('stories.notListed')) + '</span>'
-      + '<p>' + esc(def('stories.notListed')) + '</p></div>';
+    picture =
+      '<div class="sb-absent"><span class="api-chip warn"' +
+      defAttrs('stories.notListed') +
+      '>' +
+      sym('absent') +
+      esc(t('stories.notListed')) +
+      '</span>' +
+      '<p>' +
+      esc(def('stories.notListed')) +
+      '</p></div>';
   } else {
-    picture = '<div class="sb-frame-wrap"><iframe class="sb-frame" src="' + esc(pick.frame) + '" loading="lazy" title="'
-      + esc(t('stories.frameTitle').replace('{name}', storyWord(pick)).replace('{component}', bizLabel(n))) + '"></iframe>'
-      + '<button class="sb-enlarge" onclick="openStoryLightbox(' + jsArg(n.id) + ',' + jsArg(pick.id) + ')" title="' + esc(t('stories.openLarge')) + '" aria-label="' + esc(t('stories.openLarge')) + '"></button></div>'
-      + '<div class="sb-actions"><button class="btn primary" onclick="openStoryLightbox(' + jsArg(n.id) + ',' + jsArg(pick.id) + ')">' + sym('story') + ' ' + esc(t('stories.openLarge')) + '</button>'
-      + '<a class="btn" href="' + esc(managerUrl(book, pick)) + '" target="_blank" rel="noopener">' + sym('open') + ' ' + esc(t('stories.openInStorybook')) + '</a></div>';
+    picture =
+      '<div class="sb-frame-wrap"><iframe class="sb-frame" src="' +
+      esc(pick.frame) +
+      '" loading="lazy" title="' +
+      esc(t('stories.frameTitle').replace('{name}', storyWord(pick)).replace('{component}', bizLabel(n))) +
+      '"></iframe>' +
+      '<button class="sb-enlarge" onclick="openStoryLightbox(' +
+      jsArg(n.id) +
+      ',' +
+      jsArg(pick.id) +
+      ')" title="' +
+      esc(t('stories.openLarge')) +
+      '" aria-label="' +
+      esc(t('stories.openLarge')) +
+      '"></button></div>' +
+      '<div class="sb-actions"><button class="btn primary" onclick="openStoryLightbox(' +
+      jsArg(n.id) +
+      ',' +
+      jsArg(pick.id) +
+      ')">' +
+      sym('story') +
+      ' ' +
+      esc(t('stories.openLarge')) +
+      '</button>' +
+      '<a class="btn" href="' +
+      esc(managerUrl(book, pick)) +
+      '" target="_blank" rel="noopener">' +
+      sym('open') +
+      ' ' +
+      esc(t('stories.openInStorybook')) +
+      '</a></div>';
   }
-  const shows = pick.docs ? '<div class="rd sb-shows"><b>' + esc(t('stories.shows')) + '</b> ' + storyDocHtml(pick.docs) + '</div>' : '';
-  const where = lens !== 'business' && pick.file ? '<div class="rd sb-where">' + esc(pick.file + ':' + pick.line) + vsl(repo, pick.file, pick.line) + '</div>' : '';
+  const shows = pick.docs
+    ? '<div class="rd sb-shows"><b>' + esc(t('stories.shows')) + '</b> ' + storyDocHtml(pick.docs) + '</div>'
+    : '';
+  const where =
+    lens !== 'business' && pick.file
+      ? '<div class="rd sb-where">' + esc(pick.file + ':' + pick.line) + vsl(repo, pick.file, pick.line) + '</div>'
+      : '';
   return head + tabs + picture + shows + where + storiesPartsHtml(partIds);
 }
 
@@ -245,35 +393,92 @@ function drawLightbox(n, storyId) {
   let el = document.getElementById('sb-lb');
   if (!el) {
     el = document.createElement('div');
-    el.id = 'sb-lb'; el.className = 'sb-lb';
-    el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+    el.id = 'sb-lb';
+    el.className = 'sb-lb';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
     el.onclick = closeStoryLightbox;
     document.body.appendChild(el);
     document.addEventListener('keydown', storyLightboxKey, true);
   }
-  el.dataset.node = n.id; el.dataset.story = pick.id;
+  el.dataset.node = n.id;
+  el.dataset.story = pick.id;
   el.setAttribute('aria-label', t('stories.title') + ' · ' + bizLabel(n));
-  const picture = !book || !book.reachable ? notReachedHtml(book, repo)
-    : !pick.frame ? '<div class="sb-absent"><span class="api-chip warn">' + sym('absent') + esc(t('stories.notListed')) + '</span><p>' + esc(def('stories.notListed')) + '</p></div>'
-      : '<iframe class="sb-lb-frame" src="' + esc(pick.frame) + '" title="' + esc(t('stories.frameTitle').replace('{name}', storyWord(pick)).replace('{component}', bizLabel(n))) + '"></iframe>';
-  el.innerHTML = '<div class="sb-lb-inner" onclick="event.stopPropagation()">'
-    + '<div class="sb-lb-head">' + sym('story') + '<span class="sb-lb-name">' + esc(bizLabel(n)) + '</span>'
-    + (lens !== 'business' && pick.title ? '<span class="api-chip">' + esc(pick.title) + '</span>' : '')
-    + '<span class="sb-lb-story">' + esc(storyWord(pick)) + '</span>'
-    + (book && book.reachable && pick.frame ? '<a class="ext" href="' + esc(managerUrl(book, pick)) + '" target="_blank" rel="noopener">' + sym('open') + ' ' + esc(t('stories.openInStorybook')) + '</a>' : '')
-    + '<button class="x" onclick="closeStoryLightbox()" aria-label="' + esc(t('stories.close')) + '" title="' + esc(t('stories.close')) + '">✕</button></div>'
-    + '<div class="sb-lb-body"><nav class="sb-lb-list" aria-label="' + esc(t('stories.title')) + '">'
-    + list.map((s) => '<button class="sb-lb-item' + (s.id === pick.id ? ' on' : '') + '" aria-current="' + (s.id === pick.id ? 'true' : 'false') + '" onclick="storyPick(' + jsArg(n.id) + ',' + jsArg(s.id) + ')">'
-      + '<span class="nm">' + esc(storyWord(s)) + '</span>' + (s.docs ? '<span class="d">' + storyDocHtml(s.docs) + '</span>' : '') + '</button>').join('')
-    + '</nav><div class="sb-lb-stage">' + picture
-    + (lens !== 'business' && pick.file ? '<div class="rd sb-where">' + esc(pick.file + ':' + pick.line) + vsl(repo, pick.file, pick.line) + '</div>' : '')
-    + '</div></div></div>';
+  const picture =
+    !book || !book.reachable
+      ? notReachedHtml(book, repo)
+      : !pick.frame
+        ? '<div class="sb-absent"><span class="api-chip warn">' +
+          sym('absent') +
+          esc(t('stories.notListed')) +
+          '</span><p>' +
+          esc(def('stories.notListed')) +
+          '</p></div>'
+        : '<iframe class="sb-lb-frame" src="' +
+          esc(pick.frame) +
+          '" title="' +
+          esc(t('stories.frameTitle').replace('{name}', storyWord(pick)).replace('{component}', bizLabel(n))) +
+          '"></iframe>';
+  el.innerHTML =
+    '<div class="sb-lb-inner" onclick="event.stopPropagation()">' +
+    '<div class="sb-lb-head">' +
+    sym('story') +
+    '<span class="sb-lb-name">' +
+    esc(bizLabel(n)) +
+    '</span>' +
+    (lens !== 'business' && pick.title ? '<span class="api-chip">' + esc(pick.title) + '</span>' : '') +
+    '<span class="sb-lb-story">' +
+    esc(storyWord(pick)) +
+    '</span>' +
+    (book && book.reachable && pick.frame
+      ? '<a class="ext" href="' +
+        esc(managerUrl(book, pick)) +
+        '" target="_blank" rel="noopener">' +
+        sym('open') +
+        ' ' +
+        esc(t('stories.openInStorybook')) +
+        '</a>'
+      : '') +
+    '<button class="x" onclick="closeStoryLightbox()" aria-label="' +
+    esc(t('stories.close')) +
+    '" title="' +
+    esc(t('stories.close')) +
+    '">✕</button></div>' +
+    '<div class="sb-lb-body"><nav class="sb-lb-list" aria-label="' +
+    esc(t('stories.title')) +
+    '">' +
+    list
+      .map(
+        (s) =>
+          '<button class="sb-lb-item' +
+          (s.id === pick.id ? ' on' : '') +
+          '" aria-current="' +
+          (s.id === pick.id ? 'true' : 'false') +
+          '" onclick="storyPick(' +
+          jsArg(n.id) +
+          ',' +
+          jsArg(s.id) +
+          ')">' +
+          '<span class="nm">' +
+          esc(storyWord(s)) +
+          '</span>' +
+          (s.docs ? '<span class="d">' + storyDocHtml(s.docs) + '</span>' : '') +
+          '</button>',
+      )
+      .join('') +
+    '</nav><div class="sb-lb-stage">' +
+    picture +
+    (lens !== 'business' && pick.file
+      ? '<div class="rd sb-where">' + esc(pick.file + ':' + pick.line) + vsl(repo, pick.file, pick.line) + '</div>'
+      : '') +
+    '</div></div></div>';
 }
 
 /** Esc closes the large view before the central keymap sees the key (capture). @group Stories */
 function storyLightboxKey(e) {
   if (e.key !== 'Escape') return;
-  e.stopPropagation(); e.preventDefault();
+  e.stopPropagation();
+  e.preventDefault();
   closeStoryLightbox();
 }
 /** Tear the large view down and drop its key listener. @group Stories */
@@ -308,7 +513,11 @@ export function screenStoryIds(n, extra) {
   let frontier = ids.slice();
   for (let hop = 0; hop < 2; hop++) {
     const next = [];
-    for (const id of frontier) for (const to of RENDERS.out.get(id) || []) { ids.push(to); next.push(to); }
+    for (const id of frontier)
+      for (const to of RENDERS.out.get(id) || []) {
+        ids.push(to);
+        next.push(to);
+      }
     frontier = next;
   }
   return ids.filter((id) => {
@@ -334,8 +543,18 @@ export function storyChipsHtml(ids) {
     const n = S.BYID[id] || (S.GRAPH && S.GRAPH.nodes.find((x) => x.id === id));
     const count = n && (n.stories || []).length;
     if (!count) continue;
-    chips.push('<button class="api-chip sb-chip" onclick="event.stopPropagation();openStoryLightbox(' + jsArg(id) + ')"' + tipAttrs({ key: 'stories.title', noFocus: true }) + '>'
-      + sym('story') + esc(bizLabel(n)) + ' · ' + esc((count === 1 ? t('stories.countOne') : t('stories.count')).replace('{n}', count)) + '</button>');
+    chips.push(
+      '<button class="api-chip sb-chip" onclick="event.stopPropagation();openStoryLightbox(' +
+        jsArg(id) +
+        ')"' +
+        tipAttrs({ key: 'stories.title', noFocus: true }) +
+        '>' +
+        sym('story') +
+        esc(bizLabel(n)) +
+        ' · ' +
+        esc((count === 1 ? t('stories.countOne') : t('stories.count')).replace('{n}', count)) +
+        '</button>',
+    );
   }
   return chips.length ? '<div class="sb-chips" onclick="event.stopPropagation()">' + chips.join('') + '</div>' : '';
 }
@@ -352,8 +571,20 @@ export function storiesCatalogueHtml() {
   const meta = (S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.stories) || {};
   if (!Object.values(meta).some((m) => (m.storybooks || []).length || m.stories)) return '';
   setTimeout(() => loadStories(false).then(fillCatalogue), 0);
-  return '<section class="sb-cat-wrap"><h2' + defAttrs('stories.catalogue.title') + '>' + sym('story') + ' ' + esc(t('stories.catalogue.title')) + '</h2>'
-    + '<p class="sub">' + esc(t('stories.catalogue.sub')) + '</p><div id="sb-cat">' + catalogueBodyHtml() + '</div></section>';
+  return (
+    '<section class="sb-cat-wrap"><h2' +
+    defAttrs('stories.catalogue.title') +
+    '>' +
+    sym('story') +
+    ' ' +
+    esc(t('stories.catalogue.title')) +
+    '</h2>' +
+    '<p class="sub">' +
+    esc(t('stories.catalogue.sub')) +
+    '</p><div id="sb-cat">' +
+    catalogueBodyHtml() +
+    '</div></section>'
+  );
 }
 
 /**
@@ -365,10 +596,19 @@ export function storiesCatalogueHtml() {
 function matchedTip(live, c) {
   const k = live && live.counted && live.counted.matched;
   if (k) {
-    return plainTip(k.n, 'stories.catalogue.matched', k.scope, '/api/stories',
-      (k.breakdown || []).map((p) => [countWords(p.key, p.n).replace(String(p.n), '').trim(), p.n]), 'stories.catalogue.matched', { m: k.of != null ? k.of : c.resolved + c.unresolved });
+    return plainTip(
+      k.n,
+      'stories.catalogue.matched',
+      k.scope,
+      '/api/stories',
+      (k.breakdown || []).map((p) => [countWords(p.key, p.n).replace(String(p.n), '').trim(), p.n]),
+      'stories.catalogue.matched',
+      { m: k.of != null ? k.of : c.resolved + c.unresolved },
+    );
   }
-  return plainTip(c.resolved, 'stories.catalogue.matched', 'count.scope.storybook', '/api/stories', null, null, { m: c.resolved + c.unresolved });
+  return plainTip(c.resolved, 'stories.catalogue.matched', 'count.scope.storybook', '/api/stories', null, null, {
+    m: c.resolved + c.unresolved,
+  });
 }
 
 /** Redraw the catalogue's inside once the live answer is in. @group Stories */
@@ -382,23 +622,66 @@ function catalogueBodyHtml() {
   const meta = (S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.stories) || {};
   const scoped = S.scope === 'all' || !S.scope || !S.scope.length ? null : new Set(S.scope);
   const lens = currentLens();
-  const nodes = (S.GRAPH.nodes || []).filter((n) => (n.stories || []).length || (LIVE.answer && LIVE.answer.byNode && LIVE.answer.byNode[n.id]))
+  const nodes = (S.GRAPH.nodes || [])
+    .filter((n) => (n.stories || []).length || (LIVE.answer && LIVE.answer.byNode && LIVE.answer.byNode[n.id]))
     .filter((n) => !scoped || scoped.has(repoOf(n)));
-  const books = Object.entries(meta).filter(([repo]) => !scoped || scoped.has(repo))
+  const books = Object.entries(meta)
+    .filter(([repo]) => !scoped || scoped.has(repo))
     .flatMap(([repo, m]) => (m.storybooks || []).map((ref) => ({ repo, ref, live: bookStatus(repo, ref.configDir) })));
-  const bookRows = books.map(({ repo, ref, live }) => {
-    const reached = live && live.reachable;
-    const c = live && live.counts;
-    return '<div class="sb-book">' + '<span class="sb-book-name">' + esc(ref.name || repo) + '</span>'
-      + (reached ? '<span class="api-chip ok"' + defAttrs('stories.running') + '>' + esc(t('stories.running')) + '</span>'
-        : LIVE.answer ? '<span class="api-chip warn">' + sym('absent') + esc(t('journey.absent.notReached')) + '</span>' : '')
-      + (ref.url && /^https?:\/\//i.test(ref.url) ? '<a class="ext" href="' + esc(ref.url) + '" target="_blank" rel="noopener">' + sym('open') + ' ' + esc(ref.url) + '</a>' : '')
-      + (lens !== 'business' ? '<span class="sb-book-dir">' + esc(ref.configDir) + '</span>' : '')
-      + (c ? '<span class="sb-book-n"' + matchedTip(live, c) + '>' + esc(t('stories.catalogue.matched').replace('{n}', c.resolved).replace('{m}', c.resolved + c.unresolved)) + '</span>' : '')
-      + (c && c.unresolved ? '<span class="api-chip warn"' + plainTip(c.unresolved, 'stories.catalogue.unresolved', 'count.scope.storybook', '/api/stories') + '>' + esc(t('stories.catalogue.unresolved').replace('{n}', c.unresolved)) + '</span>' : '')
-      + (live && (live.notListed || []).length ? '<span class="api-chip warn"' + plainTip(live.notListed.length, 'stories.catalogue.notListed', 'count.scope.storybook', '/api/stories') + '>' + esc(t('stories.catalogue.notListed').replace('{n}', live.notListed.length)) + '</span>' : '')
-      + (live && !reached ? notReachedHtml(live, repo) : '') + '</div>';
-  }).join('');
+  const bookRows = books
+    .map(({ repo, ref, live }) => {
+      const reached = live && live.reachable;
+      const c = live && live.counts;
+      return (
+        '<div class="sb-book">' +
+        '<span class="sb-book-name">' +
+        esc(ref.name || repo) +
+        '</span>' +
+        (reached
+          ? '<span class="api-chip ok"' + defAttrs('stories.running') + '>' + esc(t('stories.running')) + '</span>'
+          : LIVE.answer
+            ? '<span class="api-chip warn">' + sym('absent') + esc(t('journey.absent.notReached')) + '</span>'
+            : '') +
+        (ref.url && /^https?:\/\//i.test(ref.url)
+          ? '<a class="ext" href="' +
+            esc(ref.url) +
+            '" target="_blank" rel="noopener">' +
+            sym('open') +
+            ' ' +
+            esc(ref.url) +
+            '</a>'
+          : '') +
+        (lens !== 'business' ? '<span class="sb-book-dir">' + esc(ref.configDir) + '</span>' : '') +
+        (c
+          ? '<span class="sb-book-n"' +
+            matchedTip(live, c) +
+            '>' +
+            esc(
+              t('stories.catalogue.matched')
+                .replace('{n}', c.resolved)
+                .replace('{m}', c.resolved + c.unresolved),
+            ) +
+            '</span>'
+          : '') +
+        (c && c.unresolved
+          ? '<span class="api-chip warn"' +
+            plainTip(c.unresolved, 'stories.catalogue.unresolved', 'count.scope.storybook', '/api/stories') +
+            '>' +
+            esc(t('stories.catalogue.unresolved').replace('{n}', c.unresolved)) +
+            '</span>'
+          : '') +
+        (live && (live.notListed || []).length
+          ? '<span class="api-chip warn"' +
+            plainTip(live.notListed.length, 'stories.catalogue.notListed', 'count.scope.storybook', '/api/stories') +
+            '>' +
+            esc(t('stories.catalogue.notListed').replace('{n}', live.notListed.length)) +
+            '</span>'
+          : '') +
+        (live && !reached ? notReachedHtml(live, repo) : '') +
+        '</div>'
+      );
+    })
+    .join('');
   const groups = new Map();
   for (const n of nodes) {
     const list = storiesOf(n);
@@ -407,15 +690,42 @@ function catalogueBodyHtml() {
     if (!groups.has(group)) groups.set(group, []);
     groups.get(group).push({ n, list });
   }
-  const groupHtml = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([g, items]) => '<div class="sb-group"><span class="hud-label">' + esc(g) + ' · <span class="cnt"'
-    + plainTip(items.length, 'surf.stories.components', 'surf.scope.storyGroup', '/api/stories') + '>' + items.length + '</span></span><div class="sb-grid">'
-    + items.sort((a, b) => bizLabel(a.n).localeCompare(bizLabel(b.n))).map(({ n, list }) => {
-      const k = list.filter((s) => s.type === 'story').length;
-      return '<button class="sb-card" onclick="openStoryLightbox(' + jsArg(n.id) + ')">' + sym('story')
-        + '<span class="nm">' + esc(bizLabel(n)) + '</span>'
-        + '<span class="ct"' + plainTip(k, 'stories.count', 'count.scope.component', '/api/stories', null, null) + '>' + esc((k === 1 ? t('stories.countOne') : t('stories.count')).replace('{n}', k)) + '</span>'
-        + (lens !== 'business' ? '<span class="cd">' + esc(n.name) + '</span>' : '') + '</button>';
-    }).join('') + '</div></div>').join('');
+  const groupHtml = [...groups.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(
+      ([g, items]) =>
+        '<div class="sb-group"><span class="hud-label">' +
+        esc(g) +
+        ' · <span class="cnt"' +
+        plainTip(items.length, 'surf.stories.components', 'surf.scope.storyGroup', '/api/stories') +
+        '>' +
+        items.length +
+        '</span></span><div class="sb-grid">' +
+        items
+          .sort((a, b) => bizLabel(a.n).localeCompare(bizLabel(b.n)))
+          .map(({ n, list }) => {
+            const k = list.filter((s) => s.type === 'story').length;
+            return (
+              '<button class="sb-card" onclick="openStoryLightbox(' +
+              jsArg(n.id) +
+              ')">' +
+              sym('story') +
+              '<span class="nm">' +
+              esc(bizLabel(n)) +
+              '</span>' +
+              '<span class="ct"' +
+              plainTip(k, 'stories.count', 'count.scope.component', '/api/stories', null, null) +
+              '>' +
+              esc((k === 1 ? t('stories.countOne') : t('stories.count')).replace('{n}', k)) +
+              '</span>' +
+              (lens !== 'business' ? '<span class="cd">' + esc(n.name) + '</span>' : '') +
+              '</button>'
+            );
+          })
+          .join('') +
+        '</div></div>',
+    )
+    .join('');
   return bookRows + (groupHtml || '<p class="set-note">' + esc(t('stories.none')) + '</p>');
 }
 

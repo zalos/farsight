@@ -32,13 +32,25 @@ function state() {
   return {
     nodes: g.nodes.length,
     covers: g.edges.filter((e: { kind: string }) => e.kind === 'covers').length,
-    edges: t.edges, runs: t.runs, cases: t.cases,
+    edges: t.edges,
+    runs: t.runs,
+    cases: t.cases,
     reports: t.reports.map((r: { path?: string; glob?: string; reason?: string }) => `${r.path ?? r.glob}:${r.reason}`),
   };
 }
 
-const unitArgs = ['tests', 'import', '--repo', 'invoice-app', '--level', 'unit',
-  '--results', 'coverage/vitest-results.json', '--coverage', 'coverage/coverage-final.json'];
+const unitArgs = [
+  'tests',
+  'import',
+  '--repo',
+  'invoice-app',
+  '--level',
+  'unit',
+  '--results',
+  'coverage/vitest-results.json',
+  '--coverage',
+  'coverage/coverage-final.json',
+];
 
 before(() => {
   // realpath: macOS /tmp is a symlink, and the CLI compares resolved paths
@@ -50,7 +62,13 @@ before(() => {
   assert.equal(ingest.status, 0, ingest.err);
 });
 
-after(() => { try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ } });
+after(() => {
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
+});
 
 describe('farsight digest', () => {
   test('prints the content digest ingest recorded for that repo', () => {
@@ -116,15 +134,29 @@ describe('farsight tests import', () => {
     assert.equal(second.status, 0, second.err);
     assert.doesNotMatch(second.out, /stamped /);
     assert.match(second.out, /digest matches/);
-    assert.deepEqual(state().reports.filter((r) => r.startsWith('coverage/')), [
-      'coverage/vitest-results.json:ok', 'coverage/coverage-final.json:ok',
-    ]);
+    assert.deepEqual(
+      state().reports.filter((r) => r.startsWith('coverage/')),
+      ['coverage/vitest-results.json:ok', 'coverage/coverage-final.json:ok'],
+    );
   });
 
   test('--strict fails on a glob that matched nothing, and the blind spot survives the import', () => {
     // the fixture's declared-but-absent artefact: Playwright writes no istanbul coverage here
-    const r = run(['tests', 'import', '--repo', 'invoice-app', '--level', 'e2e', '--runner', 'playwright',
-      '--coverage', 'e2e/coverage/coverage-final.json', '--strict', '--graph', graph]);
+    const r = run([
+      'tests',
+      'import',
+      '--repo',
+      'invoice-app',
+      '--level',
+      'e2e',
+      '--runner',
+      'playwright',
+      '--coverage',
+      'e2e/coverage/coverage-final.json',
+      '--strict',
+      '--graph',
+      graph,
+    ]);
     assert.equal(r.status, 1);
     assert.match(r.err, /matched 0 files/);
     // the unit reports this run did not read keep their entries
@@ -133,10 +165,13 @@ describe('farsight tests import', () => {
 });
 
 describe('farsight tests matrix', () => {
-  test('the CSV is the JSON document\'s rows, column for column', () => {
+  test("the CSV is the JSON document's rows, column for column", () => {
     const doc = JSON.parse(run(['tests', 'matrix', '--graph', graph, '--format', 'json']).out);
     assert.equal(doc.schema, 'farsight-tests-matrix v1');
-    assert.equal(doc.identity.source_digest['invoice-app'], JSON.parse(readFileSync(graph, 'utf8')).meta.repos['invoice-app'].sourceDigest);
+    assert.equal(
+      doc.identity.source_digest['invoice-app'],
+      JSON.parse(readFileSync(graph, 'utf8')).meta.repos['invoice-app'].sourceDigest,
+    );
     const csv = run(['tests', 'matrix', '--graph', graph, '--format', 'csv']).out.trim().split('\n');
     assert.equal(csv[0], TESTS_MATRIX_COLUMNS.join(','));
     assert.equal(csv.length - 1, doc.rows.length);
@@ -160,10 +195,20 @@ test('empty coverage is informational under strict import, and unrelated report 
   assert.doesNotMatch(skipped.err, /⚠/);
   const before = JSON.parse(readFileSync(graph, 'utf8')).meta.tests['invoice-app'];
   const report = join(repo, 'coverage/another-results.json');
-  writeFileSync(report, JSON.stringify({ testResults: [{ name: join(repo, 'test/unknown.spec.ts'), assertionResults: [{ title: 'new row', status: 'passed' }] }] }));
+  writeFileSync(
+    report,
+    JSON.stringify({
+      testResults: [
+        { name: join(repo, 'test/unknown.spec.ts'), assertionResults: [{ title: 'new row', status: 'passed' }] },
+      ],
+    }),
+  );
   const imported = run(['tests', 'import', '--repo', 'invoice-app', '--graph', graph, '--results', report]);
   assert.equal(imported.status, 0, imported.err);
   const after = JSON.parse(readFileSync(graph, 'utf8')).meta.tests['invoice-app'];
-  for (const prior of before.reports) assert.ok(after.reports.some((r: { path?: string; glob?: string }) => r.path === prior.path && r.glob === prior.glob));
+  for (const prior of before.reports)
+    assert.ok(
+      after.reports.some((r: { path?: string; glob?: string }) => r.path === prior.path && r.glob === prior.glob),
+    );
   for (const prior of before.gaps) assert.ok(after.gaps.some((g: { text: string }) => g.text === prior.text));
 });

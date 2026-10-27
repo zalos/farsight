@@ -16,13 +16,14 @@ function tempFile(name: string): string {
   return join(dir, name);
 }
 
-const node = (id: string): GraphNode =>
-  ({ id, kind: 'function', name: id.split('::').pop()!, tags: [] }) as GraphNode;
+const node = (id: string): GraphNode => ({ id, kind: 'function', name: id.split('::').pop()!, tags: [] }) as GraphNode;
 
-test('repoMeta answers per repo, and the fold is the single repo\'s own digest', () => {
+test("repoMeta answers per repo, and the fold is the single repo's own digest", () => {
   const store = new GraphStore();
   store.addFragment({
-    repo: 'shop', nodes: [node('shop::a.ts::alpha')], edges: [],
+    repo: 'shop',
+    nodes: [node('shop::a.ts::alpha')],
+    edges: [],
     meta: { files: 12, sourceHash: 'aaaaaaaaaaaa', sourceDigest: 'dddddddddddd' },
   });
   assert.deepEqual(store.repoMeta('shop'), { files: 12, sourceHash: 'aaaaaaaaaaaa', sourceDigest: 'dddddddddddd' });
@@ -32,8 +33,18 @@ test('repoMeta answers per repo, and the fold is the single repo\'s own digest',
 
 test('two repos: files sum, hash and digest fold, and each repo keeps its own', () => {
   const store = new GraphStore();
-  store.addFragment({ repo: 'a', nodes: [node('a::x.ts::x')], edges: [], meta: { files: 2, sourceHash: 'a1a1a1a1a1a1', sourceDigest: 'a2a2a2a2a2a2' } });
-  store.addFragment({ repo: 'b', nodes: [node('b::y.ts::y')], edges: [], meta: { files: 3, sourceHash: 'b1b1b1b1b1b1' } });
+  store.addFragment({
+    repo: 'a',
+    nodes: [node('a::x.ts::x')],
+    edges: [],
+    meta: { files: 2, sourceHash: 'a1a1a1a1a1a1', sourceDigest: 'a2a2a2a2a2a2' },
+  });
+  store.addFragment({
+    repo: 'b',
+    nodes: [node('b::y.ts::y')],
+    edges: [],
+    meta: { files: 3, sourceHash: 'b1b1b1b1b1b1' },
+  });
   assert.equal(store.meta.files, 5);
   assert.equal(store.repoMeta('a')!.sourceDigest, 'a2a2a2a2a2a2');
   // b carried no digest, so it has none — the fold is not b's hash borrowed
@@ -44,8 +55,18 @@ test('two repos: files sum, hash and digest fold, and each repo keeps its own', 
 
 test('save → load keeps meta.sourceDigest and every repoMeta row', () => {
   const store = new GraphStore();
-  store.addFragment({ repo: 'a', nodes: [node('a::x.ts::x')], edges: [], meta: { files: 2, sourceHash: 'a1a1a1a1a1a1', sourceDigest: 'a2a2a2a2a2a2' } });
-  store.addFragment({ repo: 'b', nodes: [node('b::y.ts::y')], edges: [], meta: { files: 3, sourceHash: 'b1b1b1b1b1b1', sourceDigest: 'b2b2b2b2b2b2' } });
+  store.addFragment({
+    repo: 'a',
+    nodes: [node('a::x.ts::x')],
+    edges: [],
+    meta: { files: 2, sourceHash: 'a1a1a1a1a1a1', sourceDigest: 'a2a2a2a2a2a2' },
+  });
+  store.addFragment({
+    repo: 'b',
+    nodes: [node('b::y.ts::y')],
+    edges: [],
+    meta: { files: 3, sourceHash: 'b1b1b1b1b1b1', sourceDigest: 'b2b2b2b2b2b2' },
+  });
   const folded = store.meta.sourceDigest;
   const path = tempFile('graph.json');
   store.save(path);
@@ -60,7 +81,12 @@ test('save → load keeps meta.sourceDigest and every repoMeta row', () => {
 
 test('re-adding a repo as a meta-less fragment keeps every row and the digest (the `tests import` path)', () => {
   const store = new GraphStore();
-  store.addFragment({ repo: 'a', nodes: [node('a::x.ts::x')], edges: [], meta: { files: 2, sourceHash: 'a1a1a1a1a1a1', sourceDigest: 'a2a2a2a2a2a2' } });
+  store.addFragment({
+    repo: 'a',
+    nodes: [node('a::x.ts::x')],
+    edges: [],
+    meta: { files: 2, sourceHash: 'a1a1a1a1a1a1', sourceDigest: 'a2a2a2a2a2a2' },
+  });
   const path = tempFile('graph.json');
   store.save(path);
 
@@ -72,17 +98,27 @@ test('re-adding a repo as a meta-less fragment keeps every row and the digest (t
   assert.equal(back.stats().nodes, 2);
 
   // but a fragment whose sourceHash has actually moved drops the digest instead of keeping a stale one
-  back.addFragment({ repo: 'a', nodes: [node('a::x.ts::x')], edges: [], meta: { files: 2, sourceHash: 'moved0000000' } });
+  back.addFragment({
+    repo: 'a',
+    nodes: [node('a::x.ts::x')],
+    edges: [],
+    meta: { files: 2, sourceHash: 'moved0000000' },
+  });
   assert.equal(back.repoMeta('a')!.sourceDigest, undefined);
   assert.equal(back.meta.sourceDigest, undefined);
 });
 
 test('a graph written before the content digest still loads; repoMeta simply has no answer', () => {
   const path = tempFile('legacy.json');
-  writeFileSync(path, JSON.stringify({
-    meta: { generatedAt: '2026-01-01T00:00:00.000Z', files: 4, sourceHash: 'legacy000000' },
-    roots: {}, nodes: [node('a::x.ts::x')], edges: [],
-  }));
+  writeFileSync(
+    path,
+    JSON.stringify({
+      meta: { generatedAt: '2026-01-01T00:00:00.000Z', files: 4, sourceHash: 'legacy000000' },
+      roots: {},
+      nodes: [node('a::x.ts::x')],
+      edges: [],
+    }),
+  );
   const back = GraphStore.load(path);
   assert.equal(back.meta.sourceHash, 'legacy000000');
   assert.equal(back.meta.sourceDigest, undefined);

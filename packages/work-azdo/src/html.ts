@@ -7,8 +7,23 @@
 // `markdownToHtml` is the small inverse used for description edits.
 
 const ENTITIES: Record<string, string> = {
-  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–', mdash: '—',
-  hellip: '…', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', trade: '™', copy: '©', reg: '®', bull: '•',
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+  ndash: '–',
+  mdash: '—',
+  hellip: '…',
+  lsquo: '‘',
+  rsquo: '’',
+  ldquo: '“',
+  rdquo: '”',
+  trade: '™',
+  copy: '©',
+  reg: '®',
+  bull: '•',
 };
 
 export function decodeEntities(s: string): string {
@@ -21,7 +36,12 @@ export function decodeEntities(s: string): string {
   });
 }
 
-interface Token { tag?: string; close?: boolean; attrs?: string; text?: string }
+interface Token {
+  tag?: string;
+  close?: boolean;
+  attrs?: string;
+  text?: string;
+}
 
 function tokenize(html: string): Token[] {
   const out: Token[] = [];
@@ -54,12 +74,31 @@ export function htmlToText(html: string | undefined | null): string {
   let row: string[] | null = null;
   let cell: string | null = null;
   let rowsInTable = 0;
-  const emit = (s: string) => { if (cell !== null) cell += s; else out += s; };
+  const emit = (s: string) => {
+    if (cell !== null) cell += s;
+    else out += s;
+  };
   // a bullet just written has no text yet: a <p> or <div> opening inside the <li> must not part them
   const bulletOpen = () => lists.length > 0 && /(^|\n) *(- |\d+\. )$/.test(out);
-  const newline = () => { if (cell !== null) { cell += ' '; return; } if (bulletOpen()) return; out = out.replace(/[ \t]+$/, ''); if (!out.endsWith('\n') && out) out += '\n'; };
+  const newline = () => {
+    if (cell !== null) {
+      cell += ' ';
+      return;
+    }
+    if (bulletOpen()) return;
+    out = out.replace(/[ \t]+$/, '');
+    if (!out.endsWith('\n') && out) out += '\n';
+  };
   // inside a list a block ends a line, not a paragraph: the next item follows on the next line
-  const blank = () => { if (cell !== null) { cell += ' '; return; } newline(); if (lists.length) return; if (out && !out.endsWith('\n\n')) out += '\n'; };
+  const blank = () => {
+    if (cell !== null) {
+      cell += ' ';
+      return;
+    }
+    newline();
+    if (lists.length) return;
+    if (out && !out.endsWith('\n\n')) out += '\n';
+  };
   for (const tk of toks) {
     if (tk.text !== undefined) {
       let t = decodeEntities(tk.text);
@@ -72,13 +111,39 @@ export function htmlToText(html: string | undefined | null): string {
       continue;
     }
     const tag = tk.tag!;
-    if (tag === 'br') { if (cell !== null) cell += ' '; else out = out.replace(/[ \t]+$/, '') + '\n'; continue; }
-    if (tag === 'hr' && !tk.close) { blank(); out += '---'; blank(); continue; }
-    if (tag === 'img' && !tk.close) { const alt = attr(tk.attrs, 'alt') ?? ''; const s = attr(tk.attrs, 'src'); if (s) emit(`![${alt}](${s})`); continue; }
-    if (/^h[1-6]$/.test(tag)) { if (!tk.close) { blank(); emit('#'.repeat(Number(tag[1])) + ' '); } else blank(); continue; }
+    if (tag === 'br') {
+      if (cell !== null) cell += ' ';
+      else out = out.replace(/[ \t]+$/, '') + '\n';
+      continue;
+    }
+    if (tag === 'hr' && !tk.close) {
+      blank();
+      out += '---';
+      blank();
+      continue;
+    }
+    if (tag === 'img' && !tk.close) {
+      const alt = attr(tk.attrs, 'alt') ?? '';
+      const s = attr(tk.attrs, 'src');
+      if (s) emit(`![${alt}](${s})`);
+      continue;
+    }
+    if (/^h[1-6]$/.test(tag)) {
+      if (!tk.close) {
+        blank();
+        emit('#'.repeat(Number(tag[1])) + ' ');
+      } else blank();
+      continue;
+    }
     if (tag === 'ul' || tag === 'ol') {
-      if (!tk.close) { lists.push({ ordered: tag === 'ol', n: 0 }); newline(); }
-      else { lists.pop(); if (!lists.length) blank(); else newline(); }
+      if (!tk.close) {
+        lists.push({ ordered: tag === 'ol', n: 0 });
+        newline();
+      } else {
+        lists.pop();
+        if (!lists.length) blank();
+        else newline();
+      }
       continue;
     }
     if (tag === 'li') {
@@ -90,29 +155,57 @@ export function htmlToText(html: string | undefined | null): string {
       } else newline();
       continue;
     }
-    if (tag === 'b' || tag === 'strong') { emit('**'); continue; }
-    if (tag === 'i' || tag === 'em') { emit('*'); continue; }
-    if (tag === 'pre') { if (!tk.close) { blank(); out += '```\n'; pre++; } else { pre = Math.max(0, pre - 1); newline(); out += '```'; blank(); } continue; }
-    if (tag === 'code') { if (!pre) emit('`'); continue; }
+    if (tag === 'b' || tag === 'strong') {
+      emit('**');
+      continue;
+    }
+    if (tag === 'i' || tag === 'em') {
+      emit('*');
+      continue;
+    }
+    if (tag === 'pre') {
+      if (!tk.close) {
+        blank();
+        out += '```\n';
+        pre++;
+      } else {
+        pre = Math.max(0, pre - 1);
+        newline();
+        out += '```';
+        blank();
+      }
+      continue;
+    }
+    if (tag === 'code') {
+      if (!pre) emit('`');
+      continue;
+    }
     if (tag === 'a') {
-      if (!tk.close) { const href = attr(tk.attrs, 'href'); links.push(href); emit('['); }
-      else {
+      if (!tk.close) {
+        const href = attr(tk.attrs, 'href');
+        links.push(href);
+        emit('[');
+      } else {
         const href = links.pop();
         // [text](href), or the bare url when the text is the url
         const buf: string = cell !== null ? cell : out;
         const at = buf.lastIndexOf('[');
         const text = at >= 0 ? buf.slice(at + 1) : '';
         const repl = !href ? text : text.trim() === href ? href : `[${text}](${href})`;
-        if (cell !== null) cell = buf.slice(0, at) + repl; else out = buf.slice(0, at) + repl;
+        if (cell !== null) cell = buf.slice(0, at) + repl;
+        else out = buf.slice(0, at) + repl;
       }
       continue;
     }
     if (tag === 'tr') {
-      if (!tk.close) { row = []; }
-      else if (row) {
+      if (!tk.close) {
+        row = [];
+      } else if (row) {
         newline();
         out += `| ${row.join(' | ')} |`;
-        if (rowsInTable === 0) { out += `\n|${row.map(() => ' --- ').join('|')}|`; }
+        if (rowsInTable === 0) {
+          out += `\n|${row.map(() => ' --- ').join('|')}|`;
+        }
         rowsInTable++;
         row = null;
       }
@@ -120,15 +213,32 @@ export function htmlToText(html: string | undefined | null): string {
     }
     if (tag === 'td' || tag === 'th') {
       if (!tk.close) cell = '';
-      else if (cell !== null) { row?.push(cell.trim().replace(/\|/g, '\\|')); cell = null; }
+      else if (cell !== null) {
+        row?.push(cell.trim().replace(/\|/g, '\\|'));
+        cell = null;
+      }
       continue;
     }
-    if (tag === 'table') { if (!tk.close) { rowsInTable = 0; blank(); } else blank(); continue; }
-    if (tag === 'div') { newline(); continue; }
-    if (BLOCK.has(tag)) { blank(); continue; }
+    if (tag === 'table') {
+      if (!tk.close) {
+        rowsInTable = 0;
+        blank();
+      } else blank();
+      continue;
+    }
+    if (tag === 'div') {
+      newline();
+      continue;
+    }
+    if (BLOCK.has(tag)) {
+      blank();
+      continue;
+    }
   }
   return out
-    .split('\n').map((l) => l.replace(/[ \t]+$/, '')).join('\n')
+    .split('\n')
+    .map((l) => l.replace(/[ \t]+$/, ''))
+    .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -137,7 +247,10 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 
 function inline(s: string): string {
   const codes: string[] = [];
-  let t = s.replace(/`([^`]+)`/g, (_, c: string) => { codes.push(`<code>${esc(c)}</code>`); return `\u0000${codes.length - 1}\u0000`; });
+  let t = s.replace(/`([^`]+)`/g, (_, c: string) => {
+    codes.push(`<code>${esc(c)}</code>`);
+    return `\u0000${codes.length - 1}\u0000`;
+  });
   t = esc(t);
   t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, text: string, href: string) => `<a href="${href}">${text}</a>`);
   t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
@@ -150,41 +263,64 @@ export function markdownToHtml(md: string): string {
   const out: string[] = [];
   let para: string[] = [];
   const stack: { type: 'ul' | 'ol'; indent: number }[] = [];
-  const flushPara = () => { if (para.length) { out.push(`<p>${para.map(inline).join('<br>')}</p>`); para = []; } };
+  const flushPara = () => {
+    if (para.length) {
+      out.push(`<p>${para.map(inline).join('<br>')}</p>`);
+      para = [];
+    }
+  };
   const closeLists = (toIndent = -1) => {
     while (stack.length && stack.at(-1)!.indent > toIndent) out.push(`</li></${stack.pop()!.type}>`);
   };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     if (/^```/.test(line)) {
-      flushPara(); closeLists();
+      flushPara();
+      closeLists();
       const body: string[] = [];
       while (++i < lines.length && !/^```/.test(lines[i]!)) body.push(lines[i]!);
       out.push(`<pre><code>${esc(body.join('\n'))}</code></pre>`);
       continue;
     }
     const h = /^(#{1,6})\s+(.*)$/.exec(line);
-    if (h) { flushPara(); closeLists(); out.push(`<h${h[1]!.length}>${inline(h[2]!)}</h${h[1]!.length}>`); continue; }
+    if (h) {
+      flushPara();
+      closeLists();
+      out.push(`<h${h[1]!.length}>${inline(h[2]!)}</h${h[1]!.length}>`);
+      continue;
+    }
     const li = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(line);
     if (li) {
       flushPara();
       const indent = li[1]!.length;
       const type: 'ul' | 'ol' = /\d/.test(li[2]!) ? 'ol' : 'ul';
       const top = stack.at(-1);
-      if (!top || indent > top.indent) { stack.push({ type, indent }); out.push(`<${type}><li>`); }
-      else {
+      if (!top || indent > top.indent) {
+        stack.push({ type, indent });
+        out.push(`<${type}><li>`);
+      } else {
         closeLists(indent);
         const cur = stack.at(-1);
-        if (!cur) { stack.push({ type, indent }); out.push(`<${type}><li>`); }
-        else out.push('</li><li>');
+        if (!cur) {
+          stack.push({ type, indent });
+          out.push(`<${type}><li>`);
+        } else out.push('</li><li>');
       }
       out.push(inline(li[3]!));
       continue;
     }
-    if (!line.trim()) { flushPara(); closeLists(); continue; }
-    if (stack.length) { out.push(' ' + inline(line.trim())); continue; }
+    if (!line.trim()) {
+      flushPara();
+      closeLists();
+      continue;
+    }
+    if (stack.length) {
+      out.push(' ' + inline(line.trim()));
+      continue;
+    }
     para.push(line.trim());
   }
-  flushPara(); closeLists();
+  flushPara();
+  closeLists();
   return out.join('');
 }

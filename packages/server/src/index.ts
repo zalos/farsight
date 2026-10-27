@@ -1,4 +1,9 @@
-import {companionDirectory,companionWorkspaceDigest,companionOrigin,readCompanion} from '@farsight/core/dist/sentinel-companion.js';
+import {
+  companionDirectory,
+  companionWorkspaceDigest,
+  companionOrigin,
+  readCompanion,
+} from '@farsight/core/dist/sentinel-companion.js';
 import { containsCredentialShape } from '@farsight/core/dist/credential-shapes.js';
 import { readinessOf } from './readiness.js';
 import { syncGraph, syncGraphJson, syncParam, compareAnswer, type SyncGraph } from './compare.js';
@@ -9,25 +14,130 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve, basename, sep } from 'node:path';
 import {
-  GraphStore, readModelHubState, rotateEventsFile, journey, journeySummary, withScreenPersonas, screenPersonaNotes, journeyLifecycles, resolveEntry, buildIndex, setFreshnessMeta, categorizeBranch, SnapshotDb, STRINGS,
-  stitchHttp, apiSurface, consumersOf, graphToSpec, reconcile, driftMarkdown,
-  designSurface, screensFor, reconcileDesign, designDriftMarkdown, figmaFileKey, designGuide, buildInfo, installState, currencyAdvice,
-  storybookLive, storybooksOf, isStorybookUrl, storyCounts,
-  testsSurface, testDetail, stepCoverage, verifiedThrough, cellCoverage, caseWord, viaRuns, testsIdentity, testsMatrixV1, testsMatrixCsv,
-  impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
-  packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
-  diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
-  counted, journeyTree, configCounts, gateCard, roleTable, rolesCsv, decisionsAnswer, stateOfPlay, historyFact, lifecycleViews, flowPersonas, placesOnJourney, flowWalks, type LifecyclePlace, type LifecyclePlaces, type LifecycleSwitchedPlace,
-  tourOf, ask, askExample,
+  GraphStore,
+  readModelHubState,
+  rotateEventsFile,
+  journey,
+  journeySummary,
+  withScreenPersonas,
+  screenPersonaNotes,
+  journeyLifecycles,
+  resolveEntry,
+  buildIndex,
+  setFreshnessMeta,
+  categorizeBranch,
+  SnapshotDb,
+  STRINGS,
+  stitchHttp,
+  apiSurface,
+  consumersOf,
+  graphToSpec,
+  reconcile,
+  driftMarkdown,
+  designSurface,
+  screensFor,
+  reconcileDesign,
+  designDriftMarkdown,
+  figmaFileKey,
+  designGuide,
+  buildInfo,
+  installState,
+  currencyAdvice,
+  storybookLive,
+  storybooksOf,
+  isStorybookUrl,
+  storyCounts,
+  testsSurface,
+  testDetail,
+  stepCoverage,
+  verifiedThrough,
+  cellCoverage,
+  caseWord,
+  viaRuns,
+  testsIdentity,
+  testsMatrixV1,
+  testsMatrixCsv,
+  impactOf,
+  affectedReach,
+  search,
+  buildLine,
+  projectGraph,
+  projectNodeIds,
+  appClosure,
+  findProject,
+  packagesOf,
+  importersOf,
+  resolvePackage,
+  IMPACT_MAX_HOPS,
+  diffGraphs,
+  toSarif,
+  toMarkdown,
+  changeSentence,
+  attributeDiffOver,
+  spineRowNote,
+  spineSentences,
+  parseSyncRef,
+  INCOMPLETE_SENTENCE,
+  counted,
+  journeyTree,
+  configCounts,
+  gateCard,
+  roleTable,
+  rolesCsv,
+  decisionsAnswer,
+  stateOfPlay,
+  historyFact,
+  lifecycleViews,
+  flowPersonas,
+  placesOnJourney,
+  flowWalks,
+  type LifecyclePlace,
+  type LifecyclePlaces,
+  type LifecycleSwitchedPlace,
+  tourOf,
+  ask,
+  askExample,
 } from '@farsight/core';
-import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
+import type {
+  CoverageTestRef,
+  GraphIndex,
+  GraphEdge,
+  GraphNode,
+  JourneyStep,
+  SourceStat,
+  GraphMeta,
+  TestsMeta,
+  CommitSpine,
+  SpineRow,
+  CheckoutFact,
+  ShotInput,
+  ShotRow,
+} from '@farsight/core';
 import { refuseRequest, refuseWrite } from './guard.js';
 import type { ReadOnlyWhy } from './guard.js';
 import { folded, scopeKey, leanMetric, leanCoverage, leanJourneyRow } from './folds.js';
 import { isSecretRef } from '@farsight/work';
 import { writeSpine, fillHistorySlot, syncWork, workSourcesOf, keyOptionsOf, handleWorkRoute } from './work.js';
 import type { SourceConfig as WorkSourceConfig, WorkSettingsSource } from './work.js';
-import { ingestRepo, ingestSpec, parseSpecText, readSpecSource, specToYaml, isSpecUrl, ingestDesign, readManifestSource, parseManifestText, isManifestUrl, gitHead, gitHeadRef, gitShallow, gitPrefix, GIT_ABSENT_WORD, headTitle, shallowFloorSentence } from '@farsight/parsers';
+import {
+  ingestRepo,
+  ingestSpec,
+  parseSpecText,
+  readSpecSource,
+  specToYaml,
+  isSpecUrl,
+  ingestDesign,
+  readManifestSource,
+  parseManifestText,
+  isManifestUrl,
+  gitHead,
+  gitHeadRef,
+  gitShallow,
+  gitPrefix,
+  GIT_ABSENT_WORD,
+  headTitle,
+  shallowFloorSentence,
+} from '@farsight/parsers';
 
 /**
  * Phase-1.5 app server: viewer + graph + settings/sources API.
@@ -36,7 +146,16 @@ import { ingestRepo, ingestSpec, parseSpecText, readSpecSource, specToYaml, isSp
  */
 
 export { readinessOf } from './readiness.js';
-export { writeSpine, resolveCommitNodes, syncWork, joinWork, workSourcesOf, keyOptionsOf, keyDetector, SYNC_MAX_COMMITS } from './work.js';
+export {
+  writeSpine,
+  resolveCommitNodes,
+  syncWork,
+  joinWork,
+  workSourcesOf,
+  keyOptionsOf,
+  keyDetector,
+  SYNC_MAX_COMMITS,
+} from './work.js';
 export type { WorkSettingsSource, WorkSyncOutcome, UnmatchedKey } from './work.js';
 
 export interface Source {
@@ -100,8 +219,12 @@ export interface Settings {
   lessons?: { text: string; pinned?: boolean; date?: string }[];
 }
 
-function settingsPath(ws: string) { return join(ws, '.farsight', 'settings.json'); }
-function cacheDir(ws: string) { return join(ws, '.farsight', 'cache'); }
+function settingsPath(ws: string) {
+  return join(ws, '.farsight', 'settings.json');
+}
+function cacheDir(ws: string) {
+  return join(ws, '.farsight', 'cache');
+}
 
 function loadSettings(ws: string): Settings {
   try {
@@ -133,17 +256,24 @@ export function settingsProblem(body: unknown): string | null {
   const mcp = (body as { mcp?: { tools?: unknown; budget?: unknown } }).mcp;
   if (mcp !== undefined) {
     if (!mcp || typeof mcp !== 'object' || Array.isArray(mcp)) return 'settings.mcp must be an object';
-    if (mcp.tools !== undefined && mcp.tools !== 'core' && mcp.tools !== 'all') return 'settings.mcp.tools must be core or all';
-    if (mcp.budget !== undefined && !(typeof mcp.budget === 'number' && Number.isInteger(mcp.budget) && mcp.budget >= 500)) return 'settings.mcp.budget must be a whole number of tokens, 500 or more';
+    if (mcp.tools !== undefined && mcp.tools !== 'core' && mcp.tools !== 'all')
+      return 'settings.mcp.tools must be core or all';
+    if (
+      mcp.budget !== undefined &&
+      !(typeof mcp.budget === 'number' && Number.isInteger(mcp.budget) && mcp.budget >= 500)
+    )
+      return 'settings.mcp.budget must be a whole number of tokens, 500 or more';
   }
   for (const [i, src] of s.sources.entries()) {
     if (!src || typeof src !== 'object') return `sources[${i}] must be an object`;
     const x = src as { id?: unknown; name?: unknown; type?: unknown; path?: unknown; auth?: { secret?: unknown } };
     if (typeof x.id !== 'string' || !x.id) return `sources[${i}].id must be a non-empty string`;
     if (typeof x.name !== 'string') return `sources[${i}].name must be a string`;
-    if (typeof x.type !== 'string' || !SOURCE_TYPES.has(x.type)) return `sources[${i}].type must be one of ${[...SOURCE_TYPES].join(', ')}`;
+    if (typeof x.type !== 'string' || !SOURCE_TYPES.has(x.type))
+      return `sources[${i}].type must be one of ${[...SOURCE_TYPES].join(', ')}`;
     if (x.path !== undefined && typeof x.path !== 'string') return `sources[${i}].path must be a string`;
-    if (x.type === 'git' && typeof x.path === 'string' && x.path.startsWith('-')) return `sources[${i}].path is not a clone URL`;
+    if (x.type === 'git' && typeof x.path === 'string' && x.path.startsWith('-'))
+      return `sources[${i}].path is not a clone URL`;
     const secret = x.auth?.secret;
     if (secret !== undefined && !(typeof secret === 'string' && isSecretRef(secret))) {
       // never echo it: it may be a pasted token
@@ -168,7 +298,8 @@ export function lessonsProblem(v: unknown): string | null {
     if (typeof x.text !== 'string' || !x.text.trim()) return `lessons[${i}].text must be a non-empty string`;
     if (x.text.length > LESSON_MAX) return `lessons[${i}].text is longer than ${LESSON_MAX} characters`;
     // never echo it: it may be a pasted token
-    if (containsCredentialShape(x.text)) return `lessons[${i}].text looks like a credential — a lesson is read by every agent, and a secret belongs in the keychain`;
+    if (containsCredentialShape(x.text))
+      return `lessons[${i}].text looks like a credential — a lesson is read by every agent, and a secret belongs in the keychain`;
     if (x.pinned !== undefined && typeof x.pinned !== 'boolean') return `lessons[${i}].pinned must be true or false`;
     if (x.date !== undefined && typeof x.date !== 'string') return `lessons[${i}].date must be a date string`;
   }
@@ -201,18 +332,23 @@ export async function syncSources(ws: string, settings: Settings, graphPath: str
   /** the code checkouts this sync read — their commit spines are written after the graph is built */
   const read: { source: Source; name: string; dir: string }[] = [];
   for (const source of settings.sources) {
-    if (!source.enabled) { results[source.id] = 'skipped (disabled)'; continue; }
+    if (!source.enabled) {
+      results[source.id] = 'skipped (disabled)';
+      continue;
+    }
     // a tracker is not code: its items join the graph after every code source is in (below)
     if (source.type === 'work') continue;
     try {
       if (source.type === 'openapi' || source.type === 'design') {
         // a spec / a screens manifest as a source: declared routes or screens + the api/design node, no code, no root
-        const abs = (isSpecUrl(source.path) || isManifestUrl(source.path)) ? source.path : resolve(ws, source.path);
-        const fragment = source.type === 'openapi'
-          ? await ingestSpec(abs, { repoName: source.name })
-          : await ingestDesign(abs, { repoName: source.name });
+        const abs = isSpecUrl(source.path) || isManifestUrl(source.path) ? source.path : resolve(ws, source.path);
+        const fragment =
+          source.type === 'openapi'
+            ? await ingestSpec(abs, { repoName: source.name })
+            : await ingestDesign(abs, { repoName: source.name });
         store.addFragment(fragment);
-        results[source.id] = `ok: ${fragment.nodes.length} nodes, ${fragment.edges.length} edges (${source.type === 'openapi' ? 'spec' : 'design'})`;
+        results[source.id] =
+          `ok: ${fragment.nodes.length} nodes, ${fragment.edges.length} edges (${source.type === 'openapi' ? 'spec' : 'design'})`;
         sourceStats.push({ name: source.name, files: 1, status: results[source.id] });
         source.status = results[source.id];
         continue;
@@ -222,7 +358,8 @@ export async function syncSources(ws: string, settings: Settings, graphPath: str
       const fragment = await ingestRepo(dir, { repoName: source.name, exclude: source.exclude });
       store.roots[fragment.repo] = dir;
       store.addFragment(fragment);
-      results[source.id] = `ok: ${fragment.nodes.length} nodes, ${fragment.edges.length} edges${fragment.specErrors?.length ? ` · ${fragment.specErrors.join('; ')}` : ''}`;
+      results[source.id] =
+        `ok: ${fragment.nodes.length} nodes, ${fragment.edges.length} edges${fragment.specErrors?.length ? ` · ${fragment.specErrors.join('; ')}` : ''}`;
       // this source's OWN head, not the workspace root's: the snapshot's `commit` column is
       // the workspace's, and a spine that folded it for every source would hand `app-a` the
       // farsight repository's commits. `gitHead` returns undefined when the checkout is not a
@@ -248,7 +385,9 @@ export async function syncSources(ws: string, settings: Settings, graphPath: str
   // Fail-soft throughout: a history or a tracker that cannot be read says so on its status line.
   const workSources = workSourcesOf(ws, settings.sources as WorkSettingsSource[]);
   let spineDb: SnapshotDb | undefined;
-  try { spineDb = new SnapshotDb(join(ws, '.farsight', 'farsight.db')); } catch (err) {
+  try {
+    spineDb = new SnapshotDb(join(ws, '.farsight', 'farsight.db'));
+  } catch (err) {
     for (const r of read) results[r.source.id] += ` · history not indexed: ${(err as Error).message.split('\n')[0]}`;
   }
   let workOutcome: Awaited<ReturnType<typeof syncWork>> | undefined;
@@ -284,11 +423,16 @@ export async function syncSources(ws: string, settings: Settings, graphPath: str
     const ref = db.write(store, { commit: gitHead(ws), sources: sourceStats });
     snapshot = `sync:${ref.sync} · digest ${ref.digest}`;
     // the history sentence, now that this sync's commit is recorded as ingested (finding 2.1)
-    for (const r of read) { results[r.source.id] = fillHistorySlot(results[r.source.id] ?? '', r.name, db); r.source.status = results[r.source.id]; }
+    for (const r of read) {
+      results[r.source.id] = fillHistorySlot(results[r.source.id] ?? '', r.name, db);
+      r.source.status = results[r.source.id];
+    }
     // opt in, and only then: with the flag unset nothing below runs, so this sync
     // writes no shot directory, no shot file and no shot row
     if (settings.flags?.designShots) {
-      try { shots = captureShots(ws, db, ref.sync, store); } catch (err) {
+      try {
+        shots = captureShots(ws, db, ref.sync, store);
+      } catch (err) {
         // a retained picture is never worth failing a sync for
         results['design-shots'] = `error: ${(err as Error).message.split('\n')[0]}`;
       }
@@ -297,12 +441,27 @@ export async function syncSources(ws: string, settings: Settings, graphPath: str
     snapshot = `history unavailable: ${(err as Error).message.split('\n')[0]}`;
   }
   // a slot no store could fill says so instead of a number
-  for (const r of read) { results[r.source.id] = fillHistorySlot(results[r.source.id] ?? '', r.name, undefined); r.source.status = results[r.source.id]; }
+  for (const r of read) {
+    results[r.source.id] = fillHistorySlot(results[r.source.id] ?? '', r.name, undefined);
+    r.source.status = results[r.source.id];
+  }
   store.save(graphPath);
   saveSettings(ws, settings);
   return {
-    results, stats: store.stats(), snapshot, ...(shots ? { shots } : {}),
-    ...(workOutcome ? { work: { reports: workOutcome.reports, nodes: workOutcome.nodes, edges: workOutcome.edges, unmatched: workOutcome.unmatched } } : {}),
+    results,
+    stats: store.stats(),
+    snapshot,
+    ...(shots ? { shots } : {}),
+    ...(workOutcome
+      ? {
+          work: {
+            reports: workOutcome.reports,
+            nodes: workOutcome.nodes,
+            edges: workOutcome.edges,
+            unmatched: workOutcome.unmatched,
+          },
+        }
+      : {}),
   };
 }
 
@@ -329,7 +488,11 @@ function loadJourneyGraph(graphPath: string): JourneyGraph {
     mtimeMs,
     roots: data.roots ?? {},
     meta: data.meta ?? {},
-    index: (() => { const ix = buildIndex(nodes, edges); setFreshnessMeta(ix, data.meta); return ix; })(),
+    index: (() => {
+      const ix = buildIndex(nodes, edges);
+      setFreshnessMeta(ix, data.meta);
+      return ix;
+    })(),
     edgesById: new Map(edges.map((e) => [e.id, e])),
   };
   return journeyGraphCache;
@@ -340,7 +503,10 @@ function enrichNode(node: GraphNode) {
   const repo = node.loc?.repo ?? node.id.split('::')[0];
   const biz = node.facets?.business;
   return {
-    id: node.id, kind: node.kind, name: node.name, repo,
+    id: node.id,
+    kind: node.kind,
+    name: node.name,
+    repo,
     ...(node.group ? { group: node.group } : {}),
     tags: node.tags,
     ...(node.docs ? { docs: node.docs } : {}),
@@ -360,7 +526,7 @@ function enrichNode(node: GraphNode) {
 
 const CODE_CAP = 160; // max lines sliced per step
 const SOURCE_WINDOW = 12; // lines /api/source reads from a part that has a line and no span
-const VIA_CAP = 24;   // accessor-borne test refs kept per table step; the total rides beside them
+const VIA_CAP = 24; // accessor-borne test refs kept per table step; the total rides beside them
 
 /** Slice loc.line..endLine (1-based inclusive) from disk, fail-soft + path-confined. Null on any miss. */
 function sliceFromDisk(
@@ -375,10 +541,16 @@ function sliceFromDisk(
   if (abs !== rootAbs && !abs.startsWith(rootAbs + sep)) return null;
   try {
     let lines = fileCache.get(abs);
-    if (!lines) { lines = readFileSync(abs, 'utf8').split('\n'); fileCache.set(abs, lines); }
+    if (!lines) {
+      lines = readFileSync(abs, 'utf8').split('\n');
+      fileCache.set(abs, lines);
+    }
     let slice = lines.slice(loc.line - 1, loc.endLine);
     let codeTruncated = false;
-    if (slice.length > CODE_CAP) { slice = slice.slice(0, CODE_CAP); codeTruncated = true; }
+    if (slice.length > CODE_CAP) {
+      slice = slice.slice(0, CODE_CAP);
+      codeTruncated = true;
+    }
     return { code: slice.join('\n'), codeTruncated };
   } catch {
     return null;
@@ -393,7 +565,18 @@ function enrichStep(step: JourneyStep, g: JourneyGraph, fileCache: Map<string, s
     // contract's intent, not a node: the viewer draws them dashed under the declared route they belong to
     if (step.planned.kind === 'calls') return { ...step, node: enrichNode(node) };
     const repo = node.loc?.repo ?? node.id.split('::')[0];
-    return { ...step, node: { id: `${node.id}#planned:${step.order}`, kind: 'planned', name: step.planned.label, repo, tags: [], routeId: node.id, ...(node.contract ? { contract: node.contract } : {}) } };
+    return {
+      ...step,
+      node: {
+        id: `${node.id}#planned:${step.order}`,
+        kind: 'planned',
+        name: step.planned.label,
+        repo,
+        tags: [],
+        routeId: node.id,
+        ...(node.contract ? { contract: node.contract } : {}),
+      },
+    };
   }
   const out: Record<string, unknown> = { ...step, node: enrichNode(node) };
   // what verifies this step (docs/proposals/tests-surface.md §3.4): unit/e2e counts +
@@ -406,7 +589,8 @@ function enrichStep(step: JourneyStep, g: JourneyGraph, fileCache: Map<string, s
     // carrying its own total so the cap is visible rather than silent (B4.2).
     const via = verifiedThrough(g.index, step.nodeId);
     if (via.length) {
-      out.coverageVia = via.slice(0, VIA_CAP); out.coverageViaCount = via.length;
+      out.coverageVia = via.slice(0, VIA_CAP);
+      out.coverageViaCount = via.length;
       // the accessors' cases by their own runs — counted in core, so the foot prints no verdict of its own
       out.coverageViaRuns = viaRuns(via);
     }
@@ -434,7 +618,14 @@ function enrichStep(step: JourneyStep, g: JourneyGraph, fileCache: Map<string, s
   return out;
 }
 
-const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.gif': 'image/gif' };
+const IMAGE_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+};
 function imageType(path: string): string {
   const ext = path.slice(path.lastIndexOf('.')).toLowerCase();
   return IMAGE_TYPES[ext] ?? 'application/octet-stream';
@@ -455,10 +646,17 @@ async function designImageFromFigma(ws: string, node: GraphNode): Promise<{ byte
   const file = join(dir, `${nodeId}.png`);
   try {
     const st = statSync(file);
-    const fresh = node.design?.lastModified ? st.mtimeMs >= Date.parse(node.design.lastModified) : Date.now() - st.mtimeMs < 864e5;
+    const fresh = node.design?.lastModified
+      ? st.mtimeMs >= Date.parse(node.design.lastModified)
+      : Date.now() - st.mtimeMs < 864e5;
     if (fresh) return { bytes: readFileSync(file), type: 'image/png' };
-  } catch { /* not cached */ }
-  const res = await fetch(`https://api.figma.com/v1/images/${key}?ids=${encodeURIComponent(nodeId.replace('-', ':'))}&format=png&scale=1`, { headers: { 'X-Figma-Token': token }, signal: AbortSignal.timeout(15_000) });
+  } catch {
+    /* not cached */
+  }
+  const res = await fetch(
+    `https://api.figma.com/v1/images/${key}?ids=${encodeURIComponent(nodeId.replace('-', ':'))}&format=png&scale=1`,
+    { headers: { 'X-Figma-Token': token }, signal: AbortSignal.timeout(15_000) },
+  );
   if (!res.ok) throw new Error(`Figma images API: HTTP ${res.status}`);
   const body = (await res.json()) as { images?: Record<string, string | null> };
   const src = Object.values(body.images ?? {})[0];
@@ -499,7 +697,9 @@ async function designImageFromFigma(ws: string, node: GraphNode): Promise<{ byte
 const SHOT_DIGEST = /^[0-9a-f]{8,64}$/;
 const SHOT_EXT = /^[a-z0-9]{1,5}$/;
 
-function shotsDir(ws: string): string { return join(cacheDir(ws), 'shots'); }
+function shotsDir(ws: string): string {
+  return join(cacheDir(ws), 'shots');
+}
 
 /**
  * Content address of a design image: sha-256, 16 hex characters. Wider than the
@@ -517,7 +717,11 @@ function designFileBytes(root: string | undefined, path: string | undefined): Bu
   const base = resolve(root);
   const abs = resolve(join(base, path));
   if (!(abs === base || abs.startsWith(base + sep)) || !existsSync(abs)) return null;
-  try { return readFileSync(abs); } catch { return null; }
+  try {
+    return readFileSync(abs);
+  } catch {
+    return null;
+  }
 }
 
 /** A Figma render this server has already cached — read only, no request during a sync. */
@@ -526,7 +730,11 @@ function figmaCacheBytes(ws: string, node: GraphNode): { bytes: Buffer; source: 
   const nodeId = node.design?.nodeId;
   if (!key || !nodeId) return null;
   const file = join(cacheDir(ws), 'design', key, `${nodeId}.png`);
-  try { return { bytes: readFileSync(file), source: `.farsight/cache/design/${key}/${nodeId}.png` }; } catch { return null; }
+  try {
+    return { bytes: readFileSync(file), source: `.farsight/cache/design/${key}/${nodeId}.png` };
+  } catch {
+    return null;
+  }
 }
 
 /** What a shot pass did — reported by `/api/sync` so a reader is never left guessing whether it ran. */
@@ -566,17 +774,26 @@ function captureShots(ws: string, db: SnapshotDb, sync: number, store: GraphStor
     let ext = 'png';
     if (img.kind === 'file') {
       bytes = designFileBytes(store.roots[repo], img.path);
-      if (!bytes) { out.skipped.push({ node: node.id, reason: 'file-not-reachable' }); continue; }
+      if (!bytes) {
+        out.skipped.push({ node: node.id, reason: 'file-not-reachable' });
+        continue;
+      }
       source = img.path!;
       const dot = source.lastIndexOf('.');
       ext = dot > 0 ? source.slice(dot + 1).toLowerCase() : '';
     } else {
       const got = figmaCacheBytes(ws, node);
-      if (!got) { out.skipped.push({ node: node.id, reason: 'figma-not-cached' }); continue; }
+      if (!got) {
+        out.skipped.push({ node: node.id, reason: 'figma-not-cached' });
+        continue;
+      }
       bytes = got.bytes;
       source = got.source;
     }
-    if (!SHOT_EXT.test(ext) || !IMAGE_TYPES['.' + ext]) { out.skipped.push({ node: node.id, reason: 'file-not-reachable' }); continue; }
+    if (!SHOT_EXT.test(ext) || !IMAGE_TYPES['.' + ext]) {
+      out.skipped.push({ node: node.id, reason: 'file-not-reachable' });
+      continue;
+    }
     const digest = shotDigest(bytes);
     const file = join(dir, `${digest}.${ext}`);
     if (!existsSync(file)) {
@@ -584,7 +801,10 @@ function captureShots(ws: string, db: SnapshotDb, sync: number, store: GraphStor
         mkdirSync(dir, { recursive: true });
         writeFileSync(file, bytes);
         out.written += bytes.length;
-      } catch { out.skipped.push({ node: node.id, reason: 'file-not-reachable' }); continue; }
+      } catch {
+        out.skipped.push({ node: node.id, reason: 'file-not-reachable' });
+        continue;
+      }
     }
     shots.push({ node: node.id, repo, digest, ext, kind: img.kind, source, bytes: bytes.length });
   }
@@ -605,7 +825,11 @@ function shotBytes(ws: string, row: ShotRow): { bytes: Buffer; type: string } | 
   const base = resolve(shotsDir(ws));
   const abs = resolve(join(base, `${row.digest}.${row.ext}`));
   if (!abs.startsWith(base + sep) || !existsSync(abs)) return null;
-  try { return { bytes: readFileSync(abs), type: imageType(abs) }; } catch { return null; }
+  try {
+    return { bytes: readFileSync(abs), type: imageType(abs) };
+  } catch {
+    return null;
+  }
 }
 
 // ── Change history: the spine, the diff, and the frozen permalink (chunk H5) ─
@@ -628,8 +852,11 @@ function knownRepos(ws: string, graphPath: string): string[] {
   const names = new Set<string>();
   try {
     if (existsSync(graphPath)) for (const r of Object.keys(loadJourneyGraph(graphPath).roots)) names.add(r);
-  } catch { /* an unreadable graph is not a reason to refuse the list */ }
-  for (const src of loadSettings(ws).sources) if (src.type === 'local' && src.enabled !== false) names.add(src.name || src.id);
+  } catch {
+    /* an unreadable graph is not a reason to refuse the list */
+  }
+  for (const src of loadSettings(ws).sources)
+    if (src.type === 'local' && src.enabled !== false) names.add(src.name || src.id);
   return [...names].sort();
 }
 
@@ -644,7 +871,9 @@ function checkoutRoot(ws: string, graphPath: string, repo: string): string | und
       const root = loadJourneyGraph(graphPath).roots[repo];
       if (root && existsSync(root)) return root;
     }
-  } catch { /* fall through to the workspace source */ }
+  } catch {
+    /* fall through to the workspace source */
+  }
   const src = loadSettings(ws).sources.find((x) => x.type === 'local' && (x.name === repo || x.id === repo));
   if (!src) return undefined;
   const abs = resolve(ws, src.path);
@@ -656,7 +885,9 @@ function attributionCheckout(ws: string, graphPath: string, repo: string): Check
   const root = checkoutRoot(ws, graphPath, repo);
   if (!root) return { kind: 'missing' };
   const p = gitPrefix(root);
-  return p.available ? { kind: 'prefix', prefix: p.prefix } : { kind: 'unreadable', root, reason: GIT_ABSENT_WORD[p.reason] };
+  return p.available
+    ? { kind: 'prefix', prefix: p.prefix }
+    : { kind: 'unreadable', root, reason: GIT_ABSENT_WORD[p.reason] };
 }
 
 /** "sync:41" | "41" | "latest" → a sync number, or null when it is neither. */
@@ -670,7 +901,9 @@ function resolveSync(db: SnapshotDb, value: string): number | null {
 /** The oldest commit this repository's recorded history holds — the floor a shallow clone reports. */
 function oldestKnownCommit(spine: CommitSpine): string | undefined {
   let oldest: { sha: string; at: string } | undefined;
-  const consider = (c: { sha: string; at: string }) => { if (!oldest || c.at < oldest.at) oldest = c; };
+  const consider = (c: { sha: string; at: string }) => {
+    if (!oldest || c.at < oldest.at) oldest = c;
+  };
   for (const c of spine.before) consider(c);
   for (const c of spine.after) consider(c);
   for (const row of spine.rows) for (const c of row.commits) consider(c);
@@ -730,7 +963,11 @@ function historyRowOut(row: SpineRow) {
  * A **copy** is deliberately not counted as a rename: it adds a path without
  * removing one, so it explains no removal.
  */
-function fileFacts(db: SnapshotDb, repo: string, shas: readonly string[]): { touched: number; renamed: number; identical: number } {
+function fileFacts(
+  db: SnapshotDb,
+  repo: string,
+  shas: readonly string[],
+): { touched: number; renamed: number; identical: number } {
   if (!shas.length) return { touched: 0, renamed: 0, identical: 0 };
   const { files } = db.historyRows(repo, { shas });
   const paths = new Set<string>();
@@ -757,7 +994,8 @@ function fileFacts(db: SnapshotDb, repo: string, shas: readonly string[]): { tou
  * from "resolved to a row".
  */
 function resolveFlowRows<T extends { flowId: string; designId?: string; name: string }>(
-  rows: T[], flow: string,
+  rows: T[],
+  flow: string,
 ): { rows: T[]; resolvedFrom?: 'id' | 'designId' | 'name' } {
   const byId = rows.filter((r) => r.flowId === flow);
   if (byId.length) return { rows: byId, resolvedFrom: 'id' };
@@ -782,20 +1020,31 @@ function resolveFlowRows<T extends { flowId: string; designId?: string; name: st
  * recorded that array — a graph written before the tests post-pass — and `[]` when
  * the pass ran and named nothing.
  */
-function testsEvidence(meta: Record<string, TestsMeta> | undefined, scope: Set<string> | null): {
+function testsEvidence(
+  meta: Record<string, TestsMeta> | undefined,
+  scope: Set<string> | null,
+): {
   reports?: (TestsMeta['reports'][number] & { repo: string })[];
   gaps?: (NonNullable<TestsMeta['gaps']>[number] & { repo: string })[];
 } {
   if (!meta) return {};
-  const repos = Object.keys(meta).filter((r) => !scope || scope.has(r)).sort();
+  const repos = Object.keys(meta)
+    .filter((r) => !scope || scope.has(r))
+    .sort();
   let anyReports = false;
   let anyGaps = false;
   const reports: (TestsMeta['reports'][number] & { repo: string })[] = [];
   const gaps: (NonNullable<TestsMeta['gaps']>[number] & { repo: string })[] = [];
   for (const repo of repos) {
     const tm = meta[repo]!;
-    if (tm.reports) { anyReports = true; for (const r of tm.reports) reports.push({ repo, ...r }); }
-    if (tm.gaps) { anyGaps = true; for (const gp of tm.gaps) gaps.push({ repo, ...gp }); }
+    if (tm.reports) {
+      anyReports = true;
+      for (const r of tm.reports) reports.push({ repo, ...r });
+    }
+    if (tm.gaps) {
+      anyGaps = true;
+      for (const gp of tm.gaps) gaps.push({ repo, ...gp });
+    }
   }
   return { ...(anyReports ? { reports } : {}), ...(anyGaps ? { gaps } : {}) };
 }
@@ -806,12 +1055,29 @@ export interface ServeOptions {
   readOnly?: ReadOnlyWhy | null;
 }
 
-export function serveGraph(graphPath: string, port: number, workspaceDir = process.cwd(), opts: ServeOptions = {}): void {
+export function serveGraph(
+  graphPath: string,
+  port: number,
+  workspaceDir = process.cwd(),
+  opts: ServeOptions = {},
+): void {
   const readOnly: ReadOnlyWhy | null = opts.readOnly ?? null;
   const publicDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
   const ws = resolve(workspaceDir);
-  const hostInstance='host-'+randomBytes(16).toString('hex');
-  const companionFor=(host:string|undefined)=>{try{if(!host)return null;const farsightOrigin=companionOrigin('http://'+host);return readCompanion(companionDirectory(),{workspaceDigest:companionWorkspaceDigest(ws),farsightOrigin,hostInstance});}catch{return null;}};
+  const hostInstance = 'host-' + randomBytes(16).toString('hex');
+  const companionFor = (host: string | undefined) => {
+    try {
+      if (!host) return null;
+      const farsightOrigin = companionOrigin('http://' + host);
+      return readCompanion(companionDirectory(), {
+        workspaceDigest: companionWorkspaceDigest(ws),
+        farsightOrigin,
+        hostInstance,
+      });
+    } catch {
+      return null;
+    }
+  };
 
   /**
    * The graph a request reads: the served one, or — with `?asof=<sync>` — that sync rebuilt from history
@@ -823,10 +1089,18 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     const raw = q.get('asof');
     if (!raw) return { g: served };
     const want = syncParam(raw);
-    if (want === null) return { code: 400, body: { error: `cannot read asof=${raw} as a sync: use a number or sync:N` } };
+    if (want === null)
+      return { code: 400, body: { error: `cannot read asof=${raw} as a sync: use a number or sync:N` } };
     if (want === 'latest' || want === served.meta.sync) return { g: served };
     const r = syncGraph(ws, want, served.roots);
-    if ('code' in r) return { code: r.code, body: { error: r.error, ...(r.absent ? { absent: r.absent, word: STRINGS['journey.absent.notIndexed']?.professional } : {}) } };
+    if ('code' in r)
+      return {
+        code: r.code,
+        body: {
+          error: r.error,
+          ...(r.absent ? { absent: r.absent, word: STRINGS['journey.absent.notIndexed']?.professional } : {}),
+        },
+      };
     return { g: r.g, sync: r.g };
   };
 
@@ -836,7 +1110,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
   /** per-source Storybook URL overrides from the workspace settings, keyed by source name (= repo) */
   const storybookOverrides = (): Record<string, { url?: string; command?: string }> => {
     const out: Record<string, { url?: string; command?: string }> = {};
-    for (const src of loadSettings(ws).sources ?? []) if (src.storybook?.url && isStorybookUrl(src.storybook.url)) out[src.name] = src.storybook;
+    for (const src of loadSettings(ws).sources ?? [])
+      if (src.storybook?.url && isStorybookUrl(src.storybook.url)) out[src.name] = src.storybook;
     return out;
   };
   /** the origins the viewer may frame: every Storybook URL the graph recorded, after overrides */
@@ -848,7 +1123,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         if (!isStorybookUrl(ref.url)) continue;
         origins.add(new URL(ref.url).origin);
       }
-    } catch { /* an unreadable graph frames nothing */ }
+    } catch {
+      /* an unreadable graph frames nothing */
+    }
     return [...origins].sort();
   };
 
@@ -868,9 +1145,18 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     if (url === '/' || url === '/index.html') {
       // frames: only this server and the Storybooks the graph (or a source's settings) recorded —
       // the viewer never frames an origin nobody configured or discovered (ADR 9)
-      const owner=companionFor(req.headers.host)?.ownerOrigin??'';
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': `object-src 'none'; base-uri 'self'; frame-src 'self' ${storybookOrigins().join(' ')} ${owner}`.trim() });
-      return res.end(readFileSync(join(publicDir, 'viewer.html'),'utf8').replace('<body',`<body data-sentinel-owner-origin="${owner}"`));
+      const owner = companionFor(req.headers.host)?.ownerOrigin ?? '';
+      res.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'content-security-policy':
+          `object-src 'none'; base-uri 'self'; frame-src 'self' ${storybookOrigins().join(' ')} ${owner}`.trim(),
+      });
+      return res.end(
+        readFileSync(join(publicDir, 'viewer.html'), 'utf8').replace(
+          '<body',
+          `<body data-sentinel-owner-origin="${owner}"`,
+        ),
+      );
     }
     if (url.startsWith('/compare/') && req.method === 'GET') {
       // §9: `farsight-diff v1` froze `permalink` as /compare/<base>...<head>#<id>
@@ -886,7 +1172,13 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // too; the range is still all that can be carried across.
       const path = decodeURIComponent(url.split('?')[0]!.split('#')[0]!);
       const m = path.match(/^\/compare\/(\d+)\.\.\.(\d+)(?:#.*)?$/);
-      if (!m) return send(404, JSON.stringify({ error: `not a comparison link: expected /compare/<baseSync>...<headSync> as farsight-diff v1 mints it (got ${url})` }));
+      if (!m)
+        return send(
+          404,
+          JSON.stringify({
+            error: `not a comparison link: expected /compare/<baseSync>...<headSync> as farsight-diff v1 mints it (got ${url})`,
+          }),
+        );
       res.writeHead(302, { location: `/#/changes/${m[1]}...${m[2]}` });
       return res.end();
     }
@@ -910,45 +1202,96 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       return send(200, JSON.stringify({ registers: ['hud', 'professional'], strings: STRINGS }));
     }
     if (url === '/graph') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       return send(200, readFileSync(graphPath));
     }
     if (url.startsWith('/graph?') && req.method === 'GET') {
       // any sync the history holds, as a graph file (round 2026-10-10, compare two syncs — the swarm's 9.1: a
       // pinned link could only say the server drew another sync). The served sync, or no asof, is the graph file.
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const at = graphAt(new URL(url, 'http://localhost').searchParams);
       if ('code' in at) return send(at.code, JSON.stringify(at.body));
       return send(200, at.sync == null ? readFileSync(graphPath) : syncGraphJson(at.sync));
     }
     if (url.startsWith('/api/compare') && req.method === 'GET') {
       // two syncs of one storyline side by side (round 2026-10-10, proposal 7): ?storyline=&from=&to=[&repo=&format=diff&failOn=]
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const g = loadJourneyGraph(graphPath);
-      const answer = compareAnswer(ws, { index: g.index, meta: g.meta, roots: g.roots }, new URL(url, 'http://localhost').searchParams);
+      const answer = compareAnswer(
+        ws,
+        { index: g.index, meta: g.meta, roots: g.roots },
+        new URL(url, 'http://localhost').searchParams,
+      );
       return send(answer.code, JSON.stringify(answer.body));
     }
-    if(url==='/api/sentinel/companion'&&req.method==='GET'){const owner=companionFor(req.headers.host);res.setHeader('cache-control','no-store');return send(200,JSON.stringify(owner?{available:true,ownerOrigin:owner.ownerOrigin}:{available:false,reasonCode:'sentinel.ownerUi.launch'}));}
+    if (url === '/api/sentinel/companion' && req.method === 'GET') {
+      const owner = companionFor(req.headers.host);
+      res.setHeader('cache-control', 'no-store');
+      return send(
+        200,
+        JSON.stringify(
+          owner
+            ? { available: true, ownerOrigin: owner.ownerOrigin }
+            : { available: false, reasonCode: 'sentinel.ownerUi.launch' },
+        ),
+      );
+    }
     if (url === '/api/version' && req.method === 'GET') {
       // which Farsight is serving (version · built · commit) and which one wrote the graph — a consumer's "when was this last updated"
       const m = existsSync(graphPath) ? loadJourneyGraph(graphPath).meta : {};
       // plus: is a newer build installed than this process runs, and does the graph match — with the steps to fix either
       const install = installState();
-      const currency = currencyAdvice({ role: 'server', running: buildInfo(), install, graph: { farsight: m.farsight, generatedAt: m.generatedAt, sync: m.sync } });
-      return send(200, JSON.stringify({ farsight: buildInfo(), install, currency, session: { instance:hostInstance, readOnly: !!readOnly, ...(readOnly ? { why: readOnly } : {}) }, graph: { generatedAt: m.generatedAt, sync: m.sync, workspace: m.workspace, graphPath: m.graphPath, farsight: m.farsight } }));
+      const currency = currencyAdvice({
+        role: 'server',
+        running: buildInfo(),
+        install,
+        graph: { farsight: m.farsight, generatedAt: m.generatedAt, sync: m.sync },
+      });
+      return send(
+        200,
+        JSON.stringify({
+          farsight: buildInfo(),
+          install,
+          currency,
+          session: { instance: hostInstance, readOnly: !!readOnly, ...(readOnly ? { why: readOnly } : {}) },
+          graph: {
+            generatedAt: m.generatedAt,
+            sync: m.sync,
+            workspace: m.workspace,
+            graphPath: m.graphPath,
+            farsight: m.farsight,
+          },
+        }),
+      );
     }
     if ((url === '/api/stories' || url.startsWith('/api/stories?')) && req.method === 'GET') {
       // the Storybooks the graph recorded, whether each answered, how its index mapped onto
       // nodes, and every component's stories with graph and live merged (core storybookLive).
       // Read only: this server never starts a Storybook. ?node= narrows to one node,
       // ?refresh=1 re-reads the index instead of the few-second cache.
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const q = new URL(url, 'http://localhost').searchParams;
       const g = loadJourneyGraph(graphPath);
       const scopeParam = q.get('scope');
-      const repos = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
+      const repos =
+        scopeParam && scopeParam !== 'all'
+          ? new Set(
+              scopeParam
+                .split(',')
+                .map((x) => x.trim())
+                .filter(Boolean),
+            )
+          : null;
       const nodeId = q.get('node');
-      storybookLive([...g.index.byId.values()], g.meta.stories, { overrides: storybookOverrides(), fresh: q.get('refresh') === '1', repos })
+      storybookLive([...g.index.byId.values()], g.meta.stories, {
+        overrides: storybookOverrides(),
+        fresh: q.get('refresh') === '1',
+        repos,
+      })
         .then((answer) => {
           if (nodeId) {
             const node = g.index.byId.get(nodeId);
@@ -957,7 +1300,16 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
             // the block's three numbers, named apart: this node's own stories, its docs
             // pages (tabs, never stories), and the stories of the parts it renders
             const { partIds, ...counts } = storyCounts(g.index, nodeId, answer.byNode);
-            return send(200, JSON.stringify({ node: nodeId, stories: answer.byNode[nodeId] ?? [], storybooks: answer.storybooks.filter((b) => b.repo === repo), counts, parts: partIds }));
+            return send(
+              200,
+              JSON.stringify({
+                node: nodeId,
+                stories: answer.byNode[nodeId] ?? [],
+                storybooks: answer.storybooks.filter((b) => b.repo === repo),
+                counts,
+                parts: partIds,
+              }),
+            );
           }
           return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...answer }));
         })
@@ -969,11 +1321,20 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     // the same core stateOfPlay() MCP graph_overview and `farsight state` print. Read-only: the history store is
     // only read, and only when it exists.
     if ((url === '/api/state' || url.startsWith('/api/state?')) && req.method === 'GET') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const g = loadJourneyGraph(graphPath);
       const scopeParam = u.searchParams.get('scope');
-      const scope = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
+      const scope =
+        scopeParam && scopeParam !== 'all'
+          ? new Set(
+              scopeParam
+                .split(',')
+                .map((x) => x.trim())
+                .filter(Boolean),
+            )
+          : null;
       const repos = Object.keys(g.roots).filter((r) => !scope || scope.has(r));
       let history: ReturnType<typeof historyFact> | null = null;
       const dbFile = join(ws, '.farsight', 'farsight.db');
@@ -983,32 +1344,60 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
           try {
             // the commits made with an AI assistant, by name, over the same sources (round 2026-10-10, proposal 9)
             const byAgent: Record<string, number> = {};
-            for (const r of repos) for (const [name, n] of Object.entries(db.agentCounts(r))) byAgent[name] = (byAgent[name] ?? 0) + n;
-            history = historyFact(repos.map((r) => db.commitSpine(r)), { byAgent });
-          } finally { db.close(); }
-        } catch { history = null; }
+            for (const r of repos)
+              for (const [name, n] of Object.entries(db.agentCounts(r))) byAgent[name] = (byAgent[name] ?? 0) + n;
+            history = historyFact(
+              repos.map((r) => db.commitSpine(r)),
+              { byAgent },
+            );
+          } finally {
+            db.close();
+          }
+        } catch {
+          history = null;
+        }
       }
-      const tests = folded(g.index, 'tests', scopeKey(scope) + '|all', () => testsSurface(g.index, scope, g.meta.tests));
-      const state = folded(g.index, 'state', scopeKey(scope) + '|' + (history ? `${history.read.n}/${history.notYet.n}/${history.agents?.n ?? '-'}` : '-'), () => stateOfPlay(g.index, g.meta, { scope, tests, history }));
+      const tests = folded(g.index, 'tests', scopeKey(scope) + '|all', () =>
+        testsSurface(g.index, scope, g.meta.tests),
+      );
+      const state = folded(
+        g.index,
+        'state',
+        scopeKey(scope) + '|' + (history ? `${history.read.n}/${history.notYet.n}/${history.agents?.n ?? '-'}` : '-'),
+        () => stateOfPlay(g.index, g.meta, { scope, tests, history }),
+      );
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', ...state }));
     }
     // ── walk me through it, and ask (round 2026-10-10, proposal 8): core tourOf() and ask(), assembled from the graph,
     // every clause carrying the node ids it cites — the same folds MCP `tour` / `ask` and `farsight tour` / `ask` print.
     // Read-only; one answer per target (or question) per index (folds.ts) ──
     if ((url === '/api/tour' || url.startsWith('/api/tour?')) && req.method === 'GET') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const q = new URL(url, 'http://localhost').searchParams;
       const target = (q.get('storyline') || q.get('flow') || '').trim();
       if (!target) return send(400, JSON.stringify({ error: 'missing ?storyline=<id> or ?flow=<flow node id>' }));
       const g = loadJourneyGraph(graphPath);
       const repo = q.get('repo') || undefined;
       const persona = q.get('persona') || undefined;
-      const tour = folded(g.index, 'tour', `${target}\u0000${repo ?? ''}\u0000${persona ?? ''}`, () => tourOf(g.index, target, { metas: g.meta.journeys, ...(repo ? { repo } : {}), ...(persona ? { persona } : {}) }) ?? null, 16);
+      const tour = folded(
+        g.index,
+        'tour',
+        `${target}\u0000${repo ?? ''}\u0000${persona ?? ''}`,
+        () =>
+          tourOf(g.index, target, {
+            metas: g.meta.journeys,
+            ...(repo ? { repo } : {}),
+            ...(persona ? { persona } : {}),
+          }) ?? null,
+        16,
+      );
       if (!tour) return send(404, JSON.stringify({ error: `no storyline or journey ${target} in this graph` }));
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, sync: g.meta.sync ?? null, tour }));
     }
     if ((url === '/api/ask' || url.startsWith('/api/ask?')) && req.method === 'GET') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const q = new URL(url, 'http://localhost').searchParams;
       const question = (q.get('q') ?? '').trim().slice(0, 500);
       const repo = q.get('repo') || undefined;
@@ -1016,28 +1405,56 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // placeholder asked about an *open* invoice the reference app has no status for)
       if (!question && q.get('example')) {
         const g = loadJourneyGraph(graphPath);
-        return send(200, JSON.stringify({ example: folded(g.index, 'ask-example', repo ?? '', () => askExample(g.index, repo) ?? null, 4) }));
+        return send(
+          200,
+          JSON.stringify({
+            example: folded(g.index, 'ask-example', repo ?? '', () => askExample(g.index, repo) ?? null, 4),
+          }),
+        );
       }
       if (!question) return send(400, JSON.stringify({ error: 'missing ?q=<question>' }));
       const g = loadJourneyGraph(graphPath);
-      const answer = folded(g.index, 'ask', `${question.toLowerCase()}\u0000${repo ?? ''}`, () => ask(g.index, question, { metas: g.meta.journeys, ...(repo ? { repo } : {}) }), 32);
+      const answer = folded(
+        g.index,
+        'ask',
+        `${question.toLowerCase()}\u0000${repo ?? ''}`,
+        () => ask(g.index, question, { metas: g.meta.journeys, ...(repo ? { repo } : {}) }),
+        32,
+      );
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, sync: g.meta.sync ?? null, answer }));
     }
     // ── journeys organised by persona and group (journey-organisation-and-config-files.md §4.4) — before
     // /api/journey, whose prefix it shares; the same journeyTree() the MCP tool and the CLI print ──
     if ((url === '/api/journeys' || url.startsWith('/api/journeys?')) && req.method === 'GET') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const at = graphAt(u.searchParams);
       if ('code' in at) return send(at.code, JSON.stringify(at.body));
       const g = at.g;
       const scopeParam = u.searchParams.get('scope');
-      const scope = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
-      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', tree: journeyTree(g.index, g.meta.journeys, scope) }));
+      const scope =
+        scopeParam && scopeParam !== 'all'
+          ? new Set(
+              scopeParam
+                .split(',')
+                .map((x) => x.trim())
+                .filter(Boolean),
+            )
+          : null;
+      return send(
+        200,
+        JSON.stringify({
+          generatedAt: g.meta.generatedAt,
+          scope: scopeParam ?? 'all',
+          tree: journeyTree(g.index, g.meta.journeys, scope),
+        }),
+      );
     }
     // ── the release readiness brief for one storyline (round 2026-10-10, proposal 6) ──
     if (url.startsWith('/api/readiness') && req.method === 'GET') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const id = (u.searchParams.get('storyline') ?? '').trim();
       if (!id) return send(400, JSON.stringify({ error: 'missing ?storyline=<id>' }));
@@ -1046,12 +1463,29 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // one source's tree when the address names it: two sources may declare a storyline of one id
       const tree = journeyTree(g.index, g.meta.journeys, repo ? new Set([repo]) : null);
       const { brief, spine } = readinessOf(g.index, tree, id, ws, repo);
-      if (!brief) return send(404, JSON.stringify({ error: `no storyline ${id}`, known: tree.storylines.map((s) => ({ id: s.id, name: s.name, repo: s.repo })) }));
-      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, sync: g.meta.sync ?? null, commit: g.meta.commit ?? null, spine, readiness: brief }));
+      if (!brief)
+        return send(
+          404,
+          JSON.stringify({
+            error: `no storyline ${id}`,
+            known: tree.storylines.map((s) => ({ id: s.id, name: s.name, repo: s.repo })),
+          }),
+        );
+      return send(
+        200,
+        JSON.stringify({
+          generatedAt: g.meta.generatedAt,
+          sync: g.meta.sync ?? null,
+          commit: g.meta.commit ?? null,
+          spine,
+          readiness: brief,
+        }),
+      );
     }
     if (url.startsWith('/api/journey') && req.method === 'GET') {
       // linearized execution walk from one entry node, enriched with on-disk code
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const q = new URL(url, 'http://localhost').searchParams;
       const entryArg = q.get('entry');
       if (!entryArg) return send(400, JSON.stringify({ error: 'missing ?entry=<node id or name>' }));
@@ -1059,7 +1493,10 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       if ('code' in at) return send(at.code, JSON.stringify(at.body));
       const g = at.g;
       // a name resolves the way the MCP `journey` tool resolves it; the payload carries the id it landed on
-      const entryNode = resolveEntry(g.index, entryArg, { ...(q.get('repo') ? { repo: q.get('repo')! } : {}), ...(q.get('group') ? { group: q.get('group')! } : {}) });
+      const entryNode = resolveEntry(g.index, entryArg, {
+        ...(q.get('repo') ? { repo: q.get('repo')! } : {}),
+        ...(q.get('group') ? { group: q.get('group')! } : {}),
+      });
       if (!entryNode) return send(404, JSON.stringify({ error: `nothing in the graph matches: ${entryArg}` }));
       const entry = entryNode.id;
       const depth = Number(q.get('depth'));
@@ -1079,73 +1516,117 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         // every place a writer runs on this journey, the most direct live one first, the switched-off ones apart
         ...(entryNode.kind === 'flow' ? { places: placesOnJourney({ id: entry, name: flowName }, jr, summary) } : {}),
       });
-      return send(200, JSON.stringify({
-        entry: enrichNode(entryNode),
-        ...(entry !== entryArg ? { resolvedFrom: entryArg } : {}),
-        generatedAt: g.meta.generatedAt,
-        truncated: jr.truncated,
-        forkCount: jr.forkCount,
-        plannedCount: jr.plannedCount,
-        // subtrees the walk did not follow — local, so the HUD draws "n cut points", not "truncated"
-        cutPoints: jr.cutPoints,
-        // the SCREEN band: the entry when it is a screen, else the pages/components upstream — derived, with their design refs
-        screens: screens.map(enrichNode),
-        // the three-band blueprint (what the user sees · business · what the system does) — same fold the MCP prints
-        summary,
-        // the records the walk reaches whose statuses the code declares: statuses, moves, writers, and each
-        // persona's words for them (core lifecycle.ts)
-        lifecycles,
-        ...(withSteps ? { steps: jr.steps.map((s) => enrichStep(s, g, fileCache)) } : { stepsOmitted: jr.steps.length }),
-        edges: jr.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })),
-      }));
+      return send(
+        200,
+        JSON.stringify({
+          entry: enrichNode(entryNode),
+          ...(entry !== entryArg ? { resolvedFrom: entryArg } : {}),
+          generatedAt: g.meta.generatedAt,
+          truncated: jr.truncated,
+          forkCount: jr.forkCount,
+          plannedCount: jr.plannedCount,
+          // subtrees the walk did not follow — local, so the HUD draws "n cut points", not "truncated"
+          cutPoints: jr.cutPoints,
+          // the SCREEN band: the entry when it is a screen, else the pages/components upstream — derived, with their design refs
+          screens: screens.map(enrichNode),
+          // the three-band blueprint (what the user sees · business · what the system does) — same fold the MCP prints
+          summary,
+          // the records the walk reaches whose statuses the code declares: statuses, moves, writers, and each
+          // persona's words for them (core lifecycle.ts)
+          lifecycles,
+          ...(withSteps
+            ? { steps: jr.steps.map((s) => enrichStep(s, g, fileCache)) }
+            : { stepsOmitted: jr.steps.length }),
+          edges: jr.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })),
+        }),
+      );
     }
     if ((url === '/api/lifecycle' || url.startsWith('/api/lifecycle?')) && req.method === 'GET') {
       // one record's lifecycle read by the persona(s) of a journey (round 2026-10-10 §3): every writer placed on the
       // journey screen it runs from — the open journey first (`flow`), else the first journey whose screens reach it.
       // Every journey's walk is folded once per index (core affected.ts flowWalks), so only this answer pays for it
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const q = new URL(url, 'http://localhost').searchParams;
       const id = q.get('node');
       if (!id) return send(400, JSON.stringify({ error: 'missing ?node=<record id>' }));
       const g = loadJourneyGraph(graphPath);
       const node = g.index.byId.get(id);
       if (!node) return send(404, JSON.stringify({ error: `no node ${id} in this graph` }));
-      if (!node.lifecycle) return send(404, JSON.stringify({ error: `${id} has no status lifecycle the code declares` }));
+      if (!node.lifecycle)
+        return send(404, JSON.stringify({ error: `${id} has no status lifecycle the code declares` }));
       const flow = q.get('flow') ?? '';
-      const answer = folded(g.index, 'lifecycle', `${id}\u0000${flow}`, () => {
-        const walks = flowWalks(g.index);
-        const order = [...walks.filter((w) => w.id === flow), ...walks.filter((w) => w.id !== flow)];
-        // every live place a writer runs (lane moves, 2026-10-13): the open journey first, then the action that calls the
-        // writer most directly — never the first screen the walks met; the places a constant switches off apart
-        const places = (writer: string): LifecyclePlaces => {
-          const live: (LifecyclePlace & { rank: number })[] = [];
-          const off: LifecycleSwitchedPlace[] = [];
-          order.forEach((w, wi) => {
-            const f = g.index.byId.get(w.id);
-            for (const sc of w.screens) {
-              const base = { flowId: w.id, flowName: f?.design?.name ?? w.name, screen: sc.segment + 1, screenName: sc.name, here: w.id === flow };
-              const wr = sc.writers?.get(writer);
-              if (wr) live.push({ ...base, action: wr.action, hops: wr.hops, rank: wi });
-              else if (sc.nodes.has(writer)) live.push({ ...base, rank: wi });
-              const o = sc.off?.get(writer);
-              if (o && (!wr || wr.action !== o.action)) off.push({ ...base, action: o.action, flag: o.flag, value: o.value, at: o.at });
-            }
-          });
-          live.sort((a, b) => Number(b.here) - Number(a.here) || (a.hops ?? 99) - (b.hops ?? 99) || a.rank - b.rank || a.screen - b.screen);
-          // one place per screen and action: the same screen on two journeys is one place a person acts from
-          const once = <T extends LifecyclePlace>(xs: T[]): T[] => { const seen = new Set<string>(); return xs.filter((p) => { const k = `${p.screenName}|${p.action ?? ''}`; if (seen.has(k)) return false; seen.add(k); return true; }); };
-          // a switched-off call is one fact per action, however many screens show that action
-          const offOnce = off.filter((p, i) => off.findIndex((q) => q.action === p.action && q.flag === p.flag) === i);
-          return { live: once(live.map(({ rank: _r, ...p }) => p)), off: offOnce };
-        };
-        return { node: id, name: node.name, views: lifecycleViews(g.index, node, { personas: flow ? flowPersonas(g.index, g.meta.journeys, flow) : [], places }) };
-      }, 32);
+      const answer = folded(
+        g.index,
+        'lifecycle',
+        `${id}\u0000${flow}`,
+        () => {
+          const walks = flowWalks(g.index);
+          const order = [...walks.filter((w) => w.id === flow), ...walks.filter((w) => w.id !== flow)];
+          // every live place a writer runs (lane moves, 2026-10-13): the open journey first, then the action that calls the
+          // writer most directly — never the first screen the walks met; the places a constant switches off apart
+          const places = (writer: string): LifecyclePlaces => {
+            const live: (LifecyclePlace & { rank: number })[] = [];
+            const off: LifecycleSwitchedPlace[] = [];
+            order.forEach((w, wi) => {
+              const f = g.index.byId.get(w.id);
+              for (const sc of w.screens) {
+                const base = {
+                  flowId: w.id,
+                  flowName: f?.design?.name ?? w.name,
+                  screen: sc.segment + 1,
+                  screenName: sc.name,
+                  here: w.id === flow,
+                };
+                const wr = sc.writers?.get(writer);
+                if (wr) live.push({ ...base, action: wr.action, hops: wr.hops, rank: wi });
+                else if (sc.nodes.has(writer)) live.push({ ...base, rank: wi });
+                const o = sc.off?.get(writer);
+                if (o && (!wr || wr.action !== o.action))
+                  off.push({ ...base, action: o.action, flag: o.flag, value: o.value, at: o.at });
+              }
+            });
+            live.sort(
+              (a, b) =>
+                Number(b.here) - Number(a.here) ||
+                (a.hops ?? 99) - (b.hops ?? 99) ||
+                a.rank - b.rank ||
+                a.screen - b.screen,
+            );
+            // one place per screen and action: the same screen on two journeys is one place a person acts from
+            const once = <T extends LifecyclePlace>(xs: T[]): T[] => {
+              const seen = new Set<string>();
+              return xs.filter((p) => {
+                const k = `${p.screenName}|${p.action ?? ''}`;
+                if (seen.has(k)) return false;
+                seen.add(k);
+                return true;
+              });
+            };
+            // a switched-off call is one fact per action, however many screens show that action
+            const offOnce = off.filter(
+              (p, i) => off.findIndex((q) => q.action === p.action && q.flag === p.flag) === i,
+            );
+            return { live: once(live.map(({ rank: _r, ...p }) => p)), off: offOnce };
+          };
+          return {
+            node: id,
+            name: node.name,
+            views: lifecycleViews(g.index, node, {
+              personas: flow ? flowPersonas(g.index, g.meta.journeys, flow) : [],
+              places,
+            }),
+          };
+        },
+        32,
+      );
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...answer }));
     }
     if ((url === '/api/source' || url.startsWith('/api/source?')) && req.method === 'GET') {
       // one node's own lines (round 2026-10-05 §3.2: a gate expands to its code). Only a node the
       // graph names, only inside its source's root — the same slice /api/journey puts on a step
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const id = new URL(url, 'http://localhost').searchParams.get('node');
       if (!id) return send(400, JSON.stringify({ error: 'missing ?node=<node id>' }));
       const g = loadJourneyGraph(graphPath);
@@ -1153,49 +1634,90 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       if (!node) return send(404, JSON.stringify({ error: `no node ${id} in this graph` }));
       if (!node.loc) return send(200, JSON.stringify({ id, code: null }));
       // a part found without a span (a guard named at its call) reads a short window from its line
-      const span = typeof node.loc.endLine === 'number' ? node.loc : { ...node.loc, endLine: node.loc.line + SOURCE_WINDOW - 1 };
+      const span =
+        typeof node.loc.endLine === 'number' ? node.loc : { ...node.loc, endLine: node.loc.line + SOURCE_WINDOW - 1 };
       const sliced = sliceFromDisk(g.roots[node.loc.repo], span, new Map());
-      const code = sliced ? sliced.code : node.snippet ?? null;
-      return send(200, JSON.stringify({
-        id, repo: node.loc.repo, path: node.loc.path, line: node.loc.line,
-        ...(typeof node.loc.endLine === 'number' ? { endLine: node.loc.endLine } : {}),
-        code, ...(sliced && sliced.codeTruncated ? { codeTruncated: true } : {}),
-      }));
+      const code = sliced ? sliced.code : (node.snippet ?? null);
+      return send(
+        200,
+        JSON.stringify({
+          id,
+          repo: node.loc.repo,
+          path: node.loc.path,
+          line: node.loc.line,
+          ...(typeof node.loc.endLine === 'number' ? { endLine: node.loc.endLine } : {}),
+          code,
+          ...(sliced && sliced.codeTruncated ? { codeTruncated: true } : {}),
+        }),
+      );
     }
     if ((url === '/api/decisions' || url.startsWith('/api/decisions?')) && req.method === 'GET') {
       // the decisions the sources declare and the code names (the 2026-10-13 outsider round, F8): every one, the one
       // `id` names, or the ones on `node` — the team's words quoted, the document's first paragraph quoted, where the
       // code names each — core decisionsAnswer(), the same fold MCP `decisions` and `farsight decisions` print
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const q = new URL(url, 'http://localhost').searchParams;
       const g = loadJourneyGraph(graphPath);
-      const opts = { ...(q.get('repo') ? { repo: q.get('repo')! } : {}), ...(q.get('id') ? { id: q.get('id')! } : {}), ...(q.get('node') ? { node: q.get('node')! } : {}) };
-      if (opts.node && !g.index.byId.has(opts.node)) return send(404, JSON.stringify({ error: `no node ${opts.node} in this graph` }));
-      const answer = folded(g.index, 'decisions', `${opts.repo ?? ''}\u0000${opts.id ?? ''}\u0000${opts.node ?? ''}`, () => decisionsAnswer(g.index, g.meta.decisions, opts), 64);
-      if (opts.id && !answer.decisions.length) return send(404, JSON.stringify({ error: `no decision ${opts.id} is declared or named in code` }));
+      const opts = {
+        ...(q.get('repo') ? { repo: q.get('repo')! } : {}),
+        ...(q.get('id') ? { id: q.get('id')! } : {}),
+        ...(q.get('node') ? { node: q.get('node')! } : {}),
+      };
+      if (opts.node && !g.index.byId.has(opts.node))
+        return send(404, JSON.stringify({ error: `no node ${opts.node} in this graph` }));
+      const answer = folded(
+        g.index,
+        'decisions',
+        `${opts.repo ?? ''}\u0000${opts.id ?? ''}\u0000${opts.node ?? ''}`,
+        () => decisionsAnswer(g.index, g.meta.decisions, opts),
+        64,
+      );
+      if (opts.id && !answer.decisions.length)
+        return send(404, JSON.stringify({ error: `no decision ${opts.id} is declared or named in code` }));
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...answer }));
     }
     if ((url === '/api/gate' || url.startsWith('/api/gate?')) && req.method === 'GET') {
       // one gate answered (swarm-fixes 2026-10-05, finding 4): what it is, the words somebody wrote, what it sits on,
       // the calls a request goes through to meet it and the tests that reach them — core gateCard(), the same fold
       // the MCP `gate` tool prints. Read-only; one answer per gate per index (folds.ts)
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const id = new URL(url, 'http://localhost').searchParams.get('node');
       if (!id) return send(400, JSON.stringify({ error: 'missing ?node=<gate id>' }));
       const g = loadJourneyGraph(graphPath);
       const card = folded(g.index, 'gate', id, () => gateCard(g.index, id) ?? null, 64);
-      if (!card) return send(404, JSON.stringify({ error: g.index.byId.has(id) ? `${id} is not a gate or a rule` : `no node ${id} in this graph` }));
+      if (!card)
+        return send(
+          404,
+          JSON.stringify({
+            error: g.index.byId.has(id) ? `${id} is not a gate or a rule` : `no node ${id} in this graph`,
+          }),
+        );
       // a role guard's card says who may do what at each action it guards (F4)
-      const roles = card.gate.gateKind === 'guard' ? folded(g.index, 'roles', JSON.stringify({ guard: id }), () => roleTable(g.index, { guard: id }), 16) : null;
-      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...card, ...(roles && roles.rows.length ? { roles } : {}) }));
+      const roles =
+        card.gate.gateKind === 'guard'
+          ? folded(g.index, 'roles', JSON.stringify({ guard: id }), () => roleTable(g.index, { guard: id }), 16)
+          : null;
+      return send(
+        200,
+        JSON.stringify({ generatedAt: g.meta.generatedAt, ...card, ...(roles && roles.rows.length ? { roles } : {}) }),
+      );
     }
     if ((url === '/api/roles' || url.startsWith('/api/roles?')) && req.method === 'GET') {
       // who may do what (outsider round 2026-10-13, F4): every action a role guard stands in front of, the roles the
       // code lists for it, where the list was read from, the journeys that reach it and the tests that prove it —
       // core roleTable(), the same fold the MCP `roles` tool and `farsight roles` print. `format=csv` for a sheet
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
-      const q = { repo: u.searchParams.get('repo') || undefined, role: u.searchParams.get('role') || undefined, action: u.searchParams.get('action') || undefined, guard: u.searchParams.get('guard') || undefined, flow: u.searchParams.get('flow') || undefined };
+      const q = {
+        repo: u.searchParams.get('repo') || undefined,
+        role: u.searchParams.get('role') || undefined,
+        action: u.searchParams.get('action') || undefined,
+        guard: u.searchParams.get('guard') || undefined,
+        flow: u.searchParams.get('flow') || undefined,
+      };
       const g = loadJourneyGraph(graphPath);
       const table = folded(g.index, 'roles', JSON.stringify(q), () => roleTable(g.index, q), 16);
       if (u.searchParams.get('format') === 'csv') return send(200, rolesCsv(table), 'text/csv; charset=utf-8');
@@ -1203,19 +1725,33 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     }
     // ── Tests surface (docs/proposals/tests-surface.md §3.4) ─────────────
     if (url.startsWith('/api/tests') && req.method === 'GET') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const g = loadJourneyGraph(graphPath);
       const rest = u.pathname.slice('/api/tests'.length).replace(/^\//, '');
       const scopeParam = u.searchParams.get('scope');
-      const scope = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
+      const scope =
+        scopeParam && scopeParam !== 'all'
+          ? new Set(
+              scopeParam
+                .split(',')
+                .map((x) => x.trim())
+                .filter(Boolean),
+            )
+          : null;
       // `matrix` is a reserved path segment, not a test id (ids are `repo::path::name`)
       if (rest === 'matrix') {
         // the `farsight-tests-matrix v1` document — the same fold, the same identity and
         // the same bytes `farsight tests matrix` prints (docs/contracts/farsight-tests-matrix-v1.md)
         const format = u.searchParams.get('format') ?? 'json';
-        if (format !== 'json' && format !== 'csv') return send(400, JSON.stringify({ error: `unknown ?format=${format} — json or csv` }));
-        const doc = testsMatrixV1(g.index, folded(g.index, 'tests', scopeKey(scope) + '|all', () => testsSurface(g.index, scope, g.meta.tests)), testsIdentity(g.meta));
+        if (format !== 'json' && format !== 'csv')
+          return send(400, JSON.stringify({ error: `unknown ?format=${format} — json or csv` }));
+        const doc = testsMatrixV1(
+          g.index,
+          folded(g.index, 'tests', scopeKey(scope) + '|all', () => testsSurface(g.index, scope, g.meta.tests)),
+          testsIdentity(g.meta),
+        );
         if (format === 'csv') return send(200, testsMatrixCsv(doc.rows), 'text/csv; charset=utf-8');
         return send(200, JSON.stringify(doc));
       }
@@ -1224,7 +1760,10 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         if (!detail) return send(404, JSON.stringify({ error: `no test with id ${decodeURIComponent(rest)}` }));
         // the same identity the catalogue carries: every claim on one test's
         // page is as of a named sync, commit and content digest (03 §4.2)
-        return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, identity: testsIdentity(g.meta), ...detail }));
+        return send(
+          200,
+          JSON.stringify({ generatedAt: g.meta.generatedAt, identity: testsIdentity(g.meta), ...detail }),
+        );
       }
       const level = u.searchParams.get('level');
       const flow = u.searchParams.get('flow');
@@ -1236,7 +1775,15 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         const node = g.index.byId.get(nodeId);
         if (!node) return send(404, JSON.stringify({ error: `nothing in the graph matches: ${nodeId}` }));
         const coverage = stepCoverage(g.index, nodeId);
-        return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, node: enrichNode(node), coverage, ...(coverage ? { cases: withWords(coverage.tests) } : {}) }));
+        return send(
+          200,
+          JSON.stringify({
+            generatedAt: g.meta.generatedAt,
+            node: enrichNode(node),
+            coverage,
+            ...(coverage ? { cases: withWords(coverage.tests) } : {}),
+          }),
+        );
       }
       // ?flow=&seg=n[&action=k] — one screen of a journey, or one action inside it: the cell a
       // journey's door was opened from, with its cases (swarm 2026-10-05: the doors kept no scope)
@@ -1247,32 +1794,62 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         const jr = journey(g.index, entryNode.id);
         const summary = journeySummary(g.index, jr, screensFor(g.index, entryNode.id));
         const actionArg = u.searchParams.get('action');
-        const cell = cellCoverage(g.index, jr, summary, Number(segArg), actionArg != null ? Number(actionArg) : undefined);
-        if (!cell) return send(404, JSON.stringify({ error: `no ${actionArg != null ? 'action ' + actionArg + ' in ' : ''}screen ${segArg} of ${entryNode.id}` }));
-        return send(200, JSON.stringify({
-          generatedAt: g.meta.generatedAt, identity: testsIdentity(g.meta), flow: entryNode.id, flowName: entryNode.name,
-          seg: Number(segArg), ...(actionArg != null ? { action: Number(actionArg) } : {}), label: cell.label,
-          coverage: leanCoverage(cell.facts), cases: withWords(cell.facts.tests),
-        }));
+        const cell = cellCoverage(
+          g.index,
+          jr,
+          summary,
+          Number(segArg),
+          actionArg != null ? Number(actionArg) : undefined,
+        );
+        if (!cell)
+          return send(
+            404,
+            JSON.stringify({
+              error: `no ${actionArg != null ? 'action ' + actionArg + ' in ' : ''}screen ${segArg} of ${entryNode.id}`,
+            }),
+          );
+        return send(
+          200,
+          JSON.stringify({
+            generatedAt: g.meta.generatedAt,
+            identity: testsIdentity(g.meta),
+            flow: entryNode.id,
+            flowName: entryNode.name,
+            seg: Number(segArg),
+            ...(actionArg != null ? { action: Number(actionArg) } : {}),
+            label: cell.label,
+            coverage: leanCoverage(cell.facts),
+            cases: withWords(cell.facts.tests),
+          }),
+        );
       }
       // the level filter reaches the counts and tiles as well as the rows: under ?level=e2e
       // the header used to print every level's cases above e2e rows (pass swarm 2026-09-25)
       const lv = level === 'unit' || level === 'integration' || level === 'e2e' ? level : undefined;
       // the fold is the same for every request on this index, scope and level (the Portfolio asks once per journey)
-      const surface = folded(g.index, 'tests', scopeKey(scope) + '|' + (lv ?? 'all'), () => testsSurface(g.index, scope, g.meta.tests, { level: lv }));
+      const surface = folded(g.index, 'tests', scopeKey(scope) + '|' + (lv ?? 'all'), () =>
+        testsSurface(g.index, scope, g.meta.tests, { level: lv }),
+      );
       const resolved = flow ? resolveFlowRows(surface.journeys, flow) : undefined;
       // ?lean=1 — the same numbers without the per-node lists behind them (folds.ts); with ?flow= only the flow's coverage
       const lean = ['1', 'true'].includes(u.searchParams.get('lean') ?? '');
       const wantCases = ['1', 'true'].includes(u.searchParams.get('cases') ?? '');
       if (lean && flow) {
         const row = resolved?.rows[0];
-        return send(200, JSON.stringify({
-          generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', identity: testsIdentity(g.meta), flow, lean: true,
-          ...(resolved?.resolvedFrom ? { resolvedFrom: resolved.resolvedFrom } : {}),
-          ...(row ? { coverage: leanCoverage(row.coverage), flowName: row.name } : {}),
-          // ?cases=1 — the flow's cases, each with its own word: the Tests page opened from a journey's door
-          ...(row && wantCases ? { cases: withWords(row.coverage.tests) } : {}),
-        }));
+        return send(
+          200,
+          JSON.stringify({
+            generatedAt: g.meta.generatedAt,
+            scope: scopeParam ?? 'all',
+            identity: testsIdentity(g.meta),
+            flow,
+            lean: true,
+            ...(resolved?.resolvedFrom ? { resolvedFrom: resolved.resolvedFrom } : {}),
+            ...(row ? { coverage: leanCoverage(row.coverage), flowName: row.name } : {}),
+            // ?cases=1 — the flow's cases, each with its own word: the Tests page opened from a journey's door
+            ...(row && wantCases ? { cases: withWords(row.coverage.tests) } : {}),
+          }),
+        );
       }
       const filtered = {
         ...surface,
@@ -1282,20 +1859,32 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       };
       // ?flow= also answers the flow's own coverage directly, so a caller need not scan the matrix
       const flowRow = resolved?.rows[0];
-      return send(200, JSON.stringify({
-        generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all',
-        // which build and which graph these numbers came from — the matrix's identity block, so
-        // a screen and a CI artefact quote the same sync, commit and content digest
-        identity: testsIdentity(g.meta),
-        ...(level ? { level } : {}), ...(flow ? { flow } : {}),
-        ...(resolved?.resolvedFrom ? { resolvedFrom: resolved.resolvedFrom } : {}),
-        ...(lean ? { ...filtered, lean: true, metric: leanMetric(filtered.metric), journeys: filtered.journeys.map(leanJourneyRow) } : filtered),
-        // the evidence behind the counts: every configured report with its glob and reason,
-        // and the gaps as data — absent when the graph recorded none, `[]` when it recorded nothing
-        ...testsEvidence(g.meta.tests, scope),
-        ...(flowRow ? { coverage: lean ? leanCoverage(flowRow.coverage) : flowRow.coverage } : {}),
-        ...(flowRow && wantCases ? { cases: withWords(flowRow.coverage.tests) } : {}),
-      }));
+      return send(
+        200,
+        JSON.stringify({
+          generatedAt: g.meta.generatedAt,
+          scope: scopeParam ?? 'all',
+          // which build and which graph these numbers came from — the matrix's identity block, so
+          // a screen and a CI artefact quote the same sync, commit and content digest
+          identity: testsIdentity(g.meta),
+          ...(level ? { level } : {}),
+          ...(flow ? { flow } : {}),
+          ...(resolved?.resolvedFrom ? { resolvedFrom: resolved.resolvedFrom } : {}),
+          ...(lean
+            ? {
+                ...filtered,
+                lean: true,
+                metric: leanMetric(filtered.metric),
+                journeys: filtered.journeys.map(leanJourneyRow),
+              }
+            : filtered),
+          // the evidence behind the counts: every configured report with its glob and reason,
+          // and the gaps as data — absent when the graph recorded none, `[]` when it recorded nothing
+          ...testsEvidence(g.meta.tests, scope),
+          ...(flowRow ? { coverage: lean ? leanCoverage(flowRow.coverage) : flowRow.coverage } : {}),
+          ...(flowRow && wantCases ? { cases: withWords(flowRow.coverage.tests) } : {}),
+        }),
+      );
     }
     // ── Design surface (docs/proposals/design-source.md) ─────────────────
     if (url === '/api/design/guide' && req.method === 'GET') {
@@ -1304,7 +1893,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     }
     if (url.startsWith('/api/design/image') && req.method === 'GET') {
       // the image behind a screen's design reference: a repo-relative file (path-confined) or a Figma render cached on disk
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const nodeId = u.searchParams.get('node');
       const g = loadJourneyGraph(graphPath);
@@ -1326,21 +1916,40 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
           db = new SnapshotDb(join(ws, '.farsight', 'farsight.db'));
           row = db.shotAt(node.id, at);
         } catch (err) {
-          return send(404, JSON.stringify({ error: `no snapshot history in this workspace: ${(err as Error).message.split('\n')[0]}`, sync: at, absent: true }));
-        } finally { db?.close(); }
+          return send(
+            404,
+            JSON.stringify({
+              error: `no snapshot history in this workspace: ${(err as Error).message.split('\n')[0]}`,
+              sync: at,
+              absent: true,
+            }),
+          );
+        } finally {
+          db?.close();
+        }
         if (!row) {
-          return send(404, JSON.stringify({
-            // the six absence words' posture: say what is missing, never substitute for it
-            error: `no design shot was kept for this screen at sync ${at} — the image on disk today is not what that sync saw, so it is not served here`,
-            sync: at, absent: true, node: node.id,
-          }));
+          return send(
+            404,
+            JSON.stringify({
+              // the six absence words' posture: say what is missing, never substitute for it
+              error: `no design shot was kept for this screen at sync ${at} — the image on disk today is not what that sync saw, so it is not served here`,
+              sync: at,
+              absent: true,
+              node: node.id,
+            }),
+          );
         }
         const got = shotBytes(ws, row);
         if (!got) {
-          return send(404, JSON.stringify({
-            error: `sync ${at} recorded a design shot (${row.digest}) whose file is no longer in .farsight/cache/shots`,
-            sync: at, absent: true, digest: row.digest,
-          }));
+          return send(
+            404,
+            JSON.stringify({
+              error: `sync ${at} recorded a design shot (${row.digest}) whose file is no longer in .farsight/cache/shots`,
+              sync: at,
+              absent: true,
+              digest: row.digest,
+            }),
+          );
         }
         // which picture this is, so a caller holding the bytes can still say where they came
         // from. ASCII only and quoted: a header value is latin-1 on the wire, so the HUD's
@@ -1352,27 +1961,55 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       if (img.kind === 'file') {
         const root = g.roots[repo];
         const abs = root && img.path ? resolve(join(root, img.path)) : '';
-        if (!root || !(abs === resolve(root) || abs.startsWith(resolve(root) + sep)) || !existsSync(abs)) return send(404, JSON.stringify({ error: 'design image not reachable from this workspace' }));
+        if (!root || !(abs === resolve(root) || abs.startsWith(resolve(root) + sep)) || !existsSync(abs))
+          return send(404, JSON.stringify({ error: 'design image not reachable from this workspace' }));
         return send(200, readFileSync(abs), imageType(abs));
       }
-      designImageFromFigma(ws, node).then((r) => (r ? send(200, r.bytes, r.type) : send(404, JSON.stringify({ error: 'no Figma render: set FIGMA_TOKEN (the deep link still works)' })))).catch((err) => send(502, JSON.stringify({ error: (err as Error).message })));
+      designImageFromFigma(ws, node)
+        .then((r) =>
+          r
+            ? send(200, r.bytes, r.type)
+            : send(404, JSON.stringify({ error: 'no Figma render: set FIGMA_TOKEN (the deep link still works)' })),
+        )
+        .catch((err) => send(502, JSON.stringify({ error: (err as Error).message })));
       return;
     }
     if (url.startsWith('/api/design') && req.method === 'GET') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const at = graphAt(u.searchParams);
       if ('code' in at) return send(at.code, JSON.stringify(at.body));
       const g = at.g;
       const scopeParam = u.searchParams.get('scope');
-      const scope = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
+      const scope =
+        scopeParam && scopeParam !== 'all'
+          ? new Set(
+              scopeParam
+                .split(',')
+                .map((x) => x.trim())
+                .filter(Boolean),
+            )
+          : null;
       const rest = u.pathname.slice('/api/design'.length).replace(/^\//, '');
-      if (!rest) return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', figmaToken: !!process.env.FIGMA_TOKEN, designs: designSurface(g.index, scope) }));
+      if (!rest)
+        return send(
+          200,
+          JSON.stringify({
+            generatedAt: g.meta.generatedAt,
+            scope: scopeParam ?? 'all',
+            figmaToken: !!process.env.FIGMA_TOKEN,
+            designs: designSurface(g.index, scope),
+          }),
+        );
       const designId = decodeURIComponent(rest);
       const surface = designSurface(g.index, null).find((d) => d.id === designId);
       if (!surface) return send(404, JSON.stringify({ error: `no design source with id ${designId}` }));
       const screens = surface.screens.map((row) => ({ ...row, node: enrichNode(g.index.byId.get(row.nodeId)!) }));
-      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, figmaToken: !!process.env.FIGMA_TOKEN, ...surface, screens }));
+      return send(
+        200,
+        JSON.stringify({ generatedAt: g.meta.generatedAt, figmaToken: !!process.env.FIGMA_TOKEN, ...surface, screens }),
+      );
     }
     if (url === '/api/design/diff' && req.method === 'POST') {
       // a proposed manifest against the code — same reconcileDesign() as ingest, nothing persisted (READ-ONLY)
@@ -1380,24 +2017,49 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       req.on('data', (c) => (body += c));
       req.on('end', async () => {
         try {
-          if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
-          const input = JSON.parse(body || '{}') as { manifest?: string; url?: string; path?: string; repo?: string; format?: string };
+          if (!existsSync(graphPath))
+            return send(
+              404,
+              JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }),
+            );
+          const input = JSON.parse(body || '{}') as {
+            manifest?: string;
+            url?: string;
+            path?: string;
+            repo?: string;
+            format?: string;
+          };
           const g = loadJourneyGraph(graphPath);
-          let manifest; let label: string; let fresh: { lastModified?: string; freshness?: 'figma' | 'manifest' } = {};
+          let manifest;
+          let label: string;
+          let fresh: { lastModified?: string; freshness?: 'figma' | 'manifest' } = {};
           if (input.url) {
             if (!isManifestUrl(input.url)) return send(400, JSON.stringify({ error: 'url must be http(s)' }));
-            const p = await readManifestSource(input.url); manifest = p.manifest; label = input.url; fresh = { ...(p.lastModified ? { lastModified: p.lastModified, freshness: p.freshness } : {}) };
+            const p = await readManifestSource(input.url);
+            manifest = p.manifest;
+            label = input.url;
+            fresh = { ...(p.lastModified ? { lastModified: p.lastModified, freshness: p.freshness } : {}) };
           } else if (input.path) {
             const abs = resolve(join(ws, input.path));
-            if (!(abs === ws || abs.startsWith(ws + sep)) || !existsSync(abs)) return send(400, JSON.stringify({ error: 'path must be inside the workspace' }));
-            const p = await readManifestSource(input.path, ws); manifest = p.manifest; label = input.path; fresh = { ...(p.lastModified ? { lastModified: p.lastModified, freshness: p.freshness } : {}) };
+            if (!(abs === ws || abs.startsWith(ws + sep)) || !existsSync(abs))
+              return send(400, JSON.stringify({ error: 'path must be inside the workspace' }));
+            const p = await readManifestSource(input.path, ws);
+            manifest = p.manifest;
+            label = input.path;
+            fresh = { ...(p.lastModified ? { lastModified: p.lastModified, freshness: p.freshness } : {}) };
           } else if (typeof input.manifest === 'string' && input.manifest.trim()) {
-            manifest = parseManifestText(input.manifest, 'pasted manifest'); label = 'proposed manifest';
+            manifest = parseManifestText(input.manifest, 'pasted manifest');
+            label = 'proposed manifest';
           } else {
             return send(400, JSON.stringify({ error: 'give one of manifest (text), url, or path' }));
           }
           const repo = input.repo ?? 'proposed';
-          const result = reconcileDesign(manifest, g.index, { repo, path: label, ...fresh }, { repo, designId: `${repo}::design::${label}` });
+          const result = reconcileDesign(
+            manifest,
+            g.index,
+            { repo, path: label, ...fresh },
+            { repo, designId: `${repo}::design::${label}` },
+          );
           if (input.format === 'md') return send(200, designDriftMarkdown(result), 'text/markdown; charset=utf-8');
           send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...result }));
         } catch (err) {
@@ -1408,27 +2070,53 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     }
     // ── APIs surface (docs/proposals/openapi-surface.md) ─────────────────
     if (url.startsWith('/api/apis') && req.method === 'GET') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const g = loadJourneyGraph(graphPath);
       const scopeParam = u.searchParams.get('scope');
-      const scope = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
+      const scope =
+        scopeParam && scopeParam !== 'all'
+          ? new Set(
+              scopeParam
+                .split(',')
+                .map((x) => x.trim())
+                .filter(Boolean),
+            )
+          : null;
       const rest = u.pathname.slice('/api/apis'.length).replace(/^\//, '');
-      if (!rest) return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', apis: apiSurface(g.index, scope) }));
+      if (!rest)
+        return send(
+          200,
+          JSON.stringify({
+            generatedAt: g.meta.generatedAt,
+            scope: scopeParam ?? 'all',
+            apis: apiSurface(g.index, scope),
+          }),
+        );
       const wantSpec = rest.endsWith('/spec');
       const apiId = decodeURIComponent(wantSpec ? rest.slice(0, -'/spec'.length) : rest);
       const surface = apiSurface(g.index, null).find((a) => a.id === apiId);
       if (!surface) return send(404, JSON.stringify({ error: `no API surface with id ${apiId}` }));
       if (wantSpec) {
         // the spec file itself (path-confined under the repo root) — a URL source is re-fetched
-        if (!surface.specPath) return send(404, JSON.stringify({ error: 'this surface is implied from code — no spec on file. GET /api/openapi?repo=… generates one.' }));
+        if (!surface.specPath)
+          return send(
+            404,
+            JSON.stringify({
+              error: 'this surface is implied from code — no spec on file. GET /api/openapi?repo=… generates one.',
+            }),
+          );
         if (isSpecUrl(surface.specPath)) {
-          readSpecSource(surface.specPath).then((p) => send(200, p.text, 'text/plain; charset=utf-8')).catch((err) => send(502, JSON.stringify({ error: (err as Error).message })));
+          readSpecSource(surface.specPath)
+            .then((p) => send(200, p.text, 'text/plain; charset=utf-8'))
+            .catch((err) => send(502, JSON.stringify({ error: (err as Error).message })));
           return;
         }
         const root = g.roots[surface.repo];
         const abs = root ? resolve(join(root, surface.specPath)) : '';
-        if (!root || !(abs === resolve(root) || abs.startsWith(resolve(root) + sep)) || !existsSync(abs)) return send(404, JSON.stringify({ error: 'spec file not reachable from this workspace' }));
+        if (!root || !(abs === resolve(root) || abs.startsWith(resolve(root) + sep)) || !existsSync(abs))
+          return send(404, JSON.stringify({ error: 'spec file not reachable from this workspace' }));
         return send(200, readFileSync(abs), 'text/plain; charset=utf-8');
       }
       const operations = surface.operations.map((op) => {
@@ -1438,16 +2126,23 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
           ...(node.contract ? { contract: node.contract } : {}),
           ...(node.docs ? { docs: node.docs } : {}),
           consumers: consumersOf(g.index, op.routeId).map((c) => ({
-            caller: enrichNode(c.caller), ...(c.line != null ? { line: c.line } : {}), crossRepo: c.crossRepo,
-            ...(c.confidence ? { confidence: c.confidence } : {}), screens: c.screens.map(enrichNode),
+            caller: enrichNode(c.caller),
+            ...(c.line != null ? { line: c.line } : {}),
+            crossRepo: c.crossRepo,
+            ...(c.confidence ? { confidence: c.confidence } : {}),
+            screens: c.screens.map(enrichNode),
           })),
         };
       });
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...surface, operations }));
     }
     // ── dependencies (docs/proposals/dependencies-and-nx.md §2.1, §2.3) — folds over the package nodes ──
-    if ((url === '/api/deps' || url.startsWith('/api/deps?') || url.startsWith('/api/deps/where')) && req.method === 'GET') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+    if (
+      (url === '/api/deps' || url.startsWith('/api/deps?') || url.startsWith('/api/deps/where')) &&
+      req.method === 'GET'
+    ) {
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const g = loadJourneyGraph(graphPath);
       const repo = u.searchParams.get('repo') || undefined;
@@ -1458,23 +2153,48 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       }
       // a graph written before the dependencies pass carries no package node: say so instead of an empty list that reads as "no dependencies"
       const hasPackages = [...g.index.byId.values()].some((n) => n.kind === 'package');
-      const stale = hasPackages ? {} : { note: 'this graph was written by a build that did not read imports as packages — re-sync the sources to see them' };
+      const stale = hasPackages
+        ? {}
+        : {
+            note: 'this graph was written by a build that did not read imports as packages — re-sync the sources to see them',
+          };
       if (u.pathname === '/api/deps/where') {
         const ref = u.searchParams.get('package');
         if (!ref) return send(400, JSON.stringify({ error: 'missing ?package=<package node id or name>' }));
         const found = resolvePackage(g.index, ref, repo);
         if (!found.hit) {
-          return send(400, JSON.stringify({
-            error: found.candidates.length ? `${found.candidates.length} sources import a package named ${ref}; pass its id or ?repo=` : `no package ${ref} in this graph`,
-            ...(found.candidates.length ? { candidates: found.candidates } : {}), ...stale,
-          }));
+          return send(
+            400,
+            JSON.stringify({
+              error: found.candidates.length
+                ? `${found.candidates.length} sources import a package named ${ref}; pass its id or ?repo=`
+                : `no package ${ref} in this graph`,
+              ...(found.candidates.length ? { candidates: found.candidates } : {}),
+              ...stale,
+            }),
+          );
         }
-        return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...importersOf(g.index, found.hit.id, hops != null ? { hops } : {}) }));
+        return send(
+          200,
+          JSON.stringify({
+            generatedAt: g.meta.generatedAt,
+            ...importersOf(g.index, found.hit.id, hops != null ? { hops } : {}),
+          }),
+        );
       }
       const kind = u.searchParams.get('kind') || undefined;
-      if (kind && kind !== 'third-party' && kind !== 'workspace') return send(400, JSON.stringify({ error: `unknown ?kind=${kind} — third-party or workspace` }));
+      if (kind && kind !== 'third-party' && kind !== 'workspace')
+        return send(400, JSON.stringify({ error: `unknown ?kind=${kind} — third-party or workspace` }));
       const scopeParam = u.searchParams.get('scope');
-      const scoped = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
+      const scoped =
+        scopeParam && scopeParam !== 'all'
+          ? new Set(
+              scopeParam
+                .split(',')
+                .map((x) => x.trim())
+                .filter(Boolean),
+            )
+          : null;
       const list = packagesOf(g.index, {
         ...(repo ? { repo } : {}),
         ...(u.searchParams.get('project') ? { project: u.searchParams.get('project')! } : {}),
@@ -1484,42 +2204,74 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const rows = scoped ? list.rows.filter((r) => scoped.has(r.repo)) : list.rows;
       const third = rows.filter((r) => r.scope === 'third-party').length;
       const packages = scoped
-        ? counted(rows.length, 'count.unit.packages', 'count.scope.workspace', list.packages.source, { breakdown: [
-          { key: 'count.part.packagesThirdParty', n: third }, { key: 'count.part.packagesWorkspace', n: rows.length - third }] })
+        ? counted(rows.length, 'count.unit.packages', 'count.scope.workspace', list.packages.source, {
+            breakdown: [
+              { key: 'count.part.packagesThirdParty', n: third },
+              { key: 'count.part.packagesWorkspace', n: rows.length - third },
+            ],
+          })
         : list.packages;
-      const builtins = Object.fromEntries(Object.entries(g.meta.packages ?? {})
-        .filter(([r]) => (!repo || r === repo) && (!scoped || scoped.has(r)))
-        .map(([r, m]) => [r, m]));
-      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', rows, packages, meta: builtins, ...stale }));
+      const builtins = Object.fromEntries(
+        Object.entries(g.meta.packages ?? {})
+          .filter(([r]) => (!repo || r === repo) && (!scoped || scoped.has(r)))
+          .map(([r, m]) => [r, m]),
+      );
+      return send(
+        200,
+        JSON.stringify({
+          generatedAt: g.meta.generatedAt,
+          scope: scopeParam ?? 'all',
+          rows,
+          packages,
+          meta: builtins,
+          ...stale,
+        }),
+      );
     }
     // ── projects (docs/proposals/dependencies-and-nx.md §2.2) — a fold over the graph and meta.projects ──
-    if ((url === '/api/projects' || url.startsWith('/api/projects?') || url.startsWith('/api/projects/')) && req.method === 'GET') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+    if (
+      (url === '/api/projects' || url.startsWith('/api/projects?') || url.startsWith('/api/projects/')) &&
+      req.method === 'GET'
+    ) {
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const g = loadJourneyGraph(graphPath);
       const repo = u.searchParams.get('repo') || undefined;
       const pg = projectGraph(g.index, g.meta.projects, repo ? { repo } : {});
       const rest = decodeURIComponent(u.pathname.slice('/api/projects'.length).replace(/^\//, ''));
-      if (!rest) return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...(repo ? { repo } : {}), ...pg }));
+      if (!rest)
+        return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...(repo ? { repo } : {}), ...pg }));
       const hit = findProject(pg, rest, repo);
       if (!hit) return send(404, JSON.stringify({ error: `no project named ${rest}${repo ? ` in ${repo}` : ''}` }));
-      if (Array.isArray(hit)) return send(409, JSON.stringify({ error: `${hit.length} sources have a project named ${rest}; pass ?repo=`, repos: hit.map((p) => p.repo) }));
+      if (Array.isArray(hit))
+        return send(
+          409,
+          JSON.stringify({
+            error: `${hit.length} sources have a project named ${rest}; pass ?repo=`,
+            repos: hit.map((p) => p.repo),
+          }),
+        );
       // the fold above is kept per loaded graph, so the node ids are a lookup, not a walk
       const nodeIds = projectNodeIds(g.index, g.meta.projects, hit.repo, hit.name);
       const closure = appClosure(pg, hit.name, hit.repo)!;
-      return send(200, JSON.stringify({
-        generatedAt: g.meta.generatedAt,
-        project: hit,
-        dependencies: pg.dependencies.filter((d) => d.repo === hit.repo && d.from === hit.name),
-        dependents: pg.dependencies.filter((d) => d.repo === hit.repo && d.to === hit.name),
-        closure: { projects: closure.projects, count: closure.count },
-        nodeIds,
-        tagDimensions: pg.repos.find((r) => r.repo === hit.repo)?.tagDimensions ?? [],
-      }));
+      return send(
+        200,
+        JSON.stringify({
+          generatedAt: g.meta.generatedAt,
+          project: hit,
+          dependencies: pg.dependencies.filter((d) => d.repo === hit.repo && d.from === hit.name),
+          dependents: pg.dependencies.filter((d) => d.repo === hit.repo && d.to === hit.name),
+          closure: { projects: closure.projects, count: closure.count },
+          nodeIds,
+          tagDimensions: pg.repos.find((r) => r.repo === hit.repo)?.tagDimensions ?? [],
+        }),
+      );
     }
     // ── config files (docs/proposals/journey-organisation-and-config-files.md §5.4) — meta.config as ingest recorded it ──
     if ((url === '/api/config' || url.startsWith('/api/config?')) && req.method === 'GET') {
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const g = loadJourneyGraph(graphPath);
       const repo = u.searchParams.get('repo') || undefined;
@@ -1527,18 +2279,24 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // the typed counts per source (files, conflicts), so the Settings list prints the fold's numbers
       const counts = Object.fromEntries(Object.entries(config).map(([r, m]) => [r, configCounts(m)]));
       // where a manifest's persona declarations and the code disagree about who uses a screen (core screenPersonaNotes)
-      const personaNotes = Object.fromEntries(Object.keys(config).map((r) => [r, screenPersonaNotes(g.index, g.meta.journeys, new Set([r]))]).filter(([, n]) => (n as string[]).length));
+      const personaNotes = Object.fromEntries(
+        Object.keys(config)
+          .map((r) => [r, screenPersonaNotes(g.index, g.meta.journeys, new Set([r]))])
+          .filter(([, n]) => (n as string[]).length),
+      );
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, config, counts, personaNotes }));
     }
     if (url.startsWith('/api/openapi') && req.method === 'GET') {
       // a spec generated from the code — every inference marked x-farsight-inferred
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const repo = u.searchParams.get('repo');
       if (!repo) return send(400, JSON.stringify({ error: 'missing ?repo=<source name>' }));
       const g = loadJourneyGraph(graphPath);
       const doc = graphToSpec(g.index, { repo, meta: g.meta });
-      if (!Object.keys(doc.paths ?? {}).length) return send(404, JSON.stringify({ error: `no implemented routes for repo ${repo}` }));
+      if (!Object.keys(doc.paths ?? {}).length)
+        return send(404, JSON.stringify({ error: `no implemented routes for repo ${repo}` }));
       if (u.searchParams.get('format') === 'yaml') return send(200, specToYaml(doc), 'application/yaml; charset=utf-8');
       return send(200, JSON.stringify(doc, null, 2));
     }
@@ -1548,25 +2306,44 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       req.on('data', (c) => (body += c));
       req.on('end', async () => {
         try {
-          if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
-          const input = JSON.parse(body || '{}') as { spec?: string; url?: string; path?: string; repo?: string; format?: string };
+          if (!existsSync(graphPath))
+            return send(
+              404,
+              JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }),
+            );
+          const input = JSON.parse(body || '{}') as {
+            spec?: string;
+            url?: string;
+            path?: string;
+            repo?: string;
+            format?: string;
+          };
           const g = loadJourneyGraph(graphPath);
           let parsed: ReturnType<typeof parseSpecText>;
           let label: string;
           if (input.url) {
             if (!isSpecUrl(input.url)) return send(400, JSON.stringify({ error: 'url must be http(s)' }));
-            parsed = await readSpecSource(input.url); label = input.url;
+            parsed = await readSpecSource(input.url);
+            label = input.url;
           } else if (input.path) {
             const abs = resolve(join(ws, input.path));
-            if (!(abs === ws || abs.startsWith(ws + sep)) || !existsSync(abs)) return send(400, JSON.stringify({ error: 'path must be inside the workspace' }));
-            parsed = parseSpecText(readFileSync(abs, 'utf8'), input.path); label = input.path;
+            if (!(abs === ws || abs.startsWith(ws + sep)) || !existsSync(abs))
+              return send(400, JSON.stringify({ error: 'path must be inside the workspace' }));
+            parsed = parseSpecText(readFileSync(abs, 'utf8'), input.path);
+            label = input.path;
           } else if (typeof input.spec === 'string' && input.spec.trim()) {
-            parsed = parseSpecText(input.spec, 'pasted spec'); label = 'proposed spec';
+            parsed = parseSpecText(input.spec, 'pasted spec');
+            label = 'proposed spec';
           } else {
             return send(400, JSON.stringify({ error: 'give one of spec (text), url, or path' }));
           }
           const apiId = input.repo ? `${input.repo}::api::${label}` : `proposed::api::${label}`;
-          const result = reconcile(parsed.doc, g.index, { repo: input.repo ?? 'proposed', path: label, lineOf: parsed.lineOf }, { ...(input.repo ? { repo: input.repo } : {}), apiId });
+          const result = reconcile(
+            parsed.doc,
+            g.index,
+            { repo: input.repo ?? 'proposed', path: label, lineOf: parsed.lineOf },
+            { ...(input.repo ? { repo: input.repo } : {}), apiId },
+          );
           if (input.format === 'md') return send(200, driftMarkdown(result), 'text/markdown; charset=utf-8');
           send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...result }));
         } catch (err) {
@@ -1581,7 +2358,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // with the cut points, the asides and the bound. There is no total in the payload
       // because the fold carries none — a consumer that wants one has to invent it, and
       // the house rule says it must not.
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
       const g = loadJourneyGraph(graphPath);
       const nodeArg = u.searchParams.get('node');
@@ -1590,8 +2368,12 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // tool use. `resolveEntry` is deliberately not used: it prefers pages and routes
       // because a journey needs somewhere to start, and "invoices" would resolve to a
       // screen rather than to the table the question was about.
-      const seed = g.index.byId.get(nodeArg)
-        ?? search(g.index, nodeArg, { limit: 1, ...(u.searchParams.get('repo') ? { repo: u.searchParams.get('repo')! } : {}) })[0];
+      const seed =
+        g.index.byId.get(nodeArg) ??
+        search(g.index, nodeArg, {
+          limit: 1,
+          ...(u.searchParams.get('repo') ? { repo: u.searchParams.get('repo')! } : {}),
+        })[0];
       if (!seed) return send(404, JSON.stringify({ error: `nothing in the graph matches: ${nodeArg}` }));
       const on = (name: string) => ['1', 'true', 'yes'].includes((u.searchParams.get(name) ?? '').toLowerCase());
       const hopsArg = u.searchParams.get('hops');
@@ -1618,15 +2400,18 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
             // tree on every request: unknown is left unsaid rather than reported as false
           },
         });
-        return send(200, JSON.stringify({
-          generatedAt: g.meta.generatedAt,
-          ...(seed.id !== nodeArg ? { resolvedFrom: nodeArg } : {}),
-          seedNode: enrichNode(seed),
-          ...report,
-          // the Map's Affected mode: the same answer placed on the journeys, screens and calls (one walk
-          // per flow, cached per graph) — additive, asked for by name
-          ...(on('reach') ? { reach: affectedReach(g.index, report) } : {}),
-        }));
+        return send(
+          200,
+          JSON.stringify({
+            generatedAt: g.meta.generatedAt,
+            ...(seed.id !== nodeArg ? { resolvedFrom: nodeArg } : {}),
+            seedNode: enrichNode(seed),
+            ...report,
+            // the Map's Affected mode: the same answer placed on the journeys, screens and calls (one walk
+            // per flow, cached per graph) — additive, asked for by name
+            ...(on('reach') ? { reach: affectedReach(g.index, report) } : {}),
+          }),
+        );
       } catch (err) {
         // a refused budget is a sentence with a 400, not a 500 (§8)
         return send(400, JSON.stringify({ error: (err as Error).message }));
@@ -1637,7 +2422,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const u = new URL(url, 'http://localhost');
       const sha = (u.searchParams.get('sha') ?? '').trim();
       if (!sha) return send(400, JSON.stringify({ error: 'missing ?sha=<commit sha, or its first characters>' }));
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       let db: SnapshotDb;
       try {
         db = openHistory(ws);
@@ -1656,14 +2442,21 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         const resolved = db.commitNodes(row.repo, row.sha);
         let parts: { node: string; how: 'lines' | 'file' }[] = [];
         if (resolved && resolved.some((r) => !r.fileOnly)) {
-          parts = resolved.filter((r) => !r.fileOnly && g.index.byId.has(r.node)).map((r) => ({ node: r.node, how: 'lines' as const }));
+          parts = resolved
+            .filter((r) => !r.fileOnly && g.index.byId.has(r.node))
+            .map((r) => ({ node: r.node, how: 'lines' as const }));
         } else {
           const files = db.filesForCommit(row.repo, row.sha).map((f) => f.path);
-          const inFile = (n: GraphNode) => !!n.loc?.path && (n.loc.repo ?? n.id.split('::')[0]) === row.repo
-            && files.some((f) => f === n.loc!.path || f.endsWith('/' + n.loc!.path));
+          const inFile = (n: GraphNode) =>
+            !!n.loc?.path &&
+            (n.loc.repo ?? n.id.split('::')[0]) === row.repo &&
+            files.some((f) => f === n.loc!.path || f.endsWith('/' + n.loc!.path));
           const hit = [...g.index.byId.values()].filter(inFile);
           const own = hit.filter((n) => n.kind !== 'module' && n.kind !== 'test');
-          parts = (own.length ? own : hit.filter((n) => n.kind !== 'test')).map((n) => ({ node: n.id, how: 'file' as const }));
+          parts = (own.length ? own : hit.filter((n) => n.kind !== 'test')).map((n) => ({
+            node: n.id,
+            how: 'file' as const,
+          }));
         }
         return send(200, JSON.stringify({ ...row, parts, ...(rows.length > 1 ? { ambiguous: rows.length } : {}) }));
       } finally {
@@ -1674,9 +2467,14 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     if (url.startsWith('/api/history/touching') && req.method === 'GET') {
       const u = new URL(url, 'http://localhost');
       const repo = u.searchParams.get('repo');
-      const ids = (u.searchParams.get('nodes') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
-      if (!repo || !ids.length) return send(400, JSON.stringify({ error: 'missing ?repo=<source name>&nodes=<node id>,<node id>' }));
-      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const ids = (u.searchParams.get('nodes') ?? '')
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean);
+      if (!repo || !ids.length)
+        return send(400, JSON.stringify({ error: 'missing ?repo=<source name>&nodes=<node id>,<node id>' }));
+      if (!existsSync(graphPath))
+        return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       let db: SnapshotDb;
       try {
         db = openHistory(ws);
@@ -1686,24 +2484,44 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       try {
         const g = loadJourneyGraph(graphPath);
         // a part's file, from the graph — only parts of this repository
-        const parts = ids.map((id) => g.index.byId.get(id)).filter((n): n is GraphNode => !!n && (n.loc?.repo ?? repo) === repo)
+        const parts = ids
+          .map((id) => g.index.byId.get(id))
+          .filter((n): n is GraphNode => !!n && (n.loc?.repo ?? repo) === repo)
           .map((n) => ({ node: n.id, ...(n.loc?.path ? { path: n.loc.path } : {}) }));
         const read = db.commitCount(repo);
         const commits = read ? db.commitsTouching(repo, parts) : [];
         const lines = commits.filter((c) => c.parts.some((p) => p.how === 'lines')).length;
-        return send(200, JSON.stringify({
-          repo,
-          // how many commits the history holds for this repository: 0 = never read, which is not "none touched"
-          read,
-          parts: parts.map((p) => p.node),
-          commits: commits.map((c) => ({ ...c, keys: db.keysForCommit(repo, c.sha).map((k) => k.key).filter((k, i, a) => a.indexOf(k) === i) })),
-          counted: {
-            commits: counted(commits.length, 'map.prop.changes.countCommits', 'journey.scopeHere', 'server /api/history/touching · commit_node + commit_file', {
-              bizUnit: 'map.prop.changes.countCommits',
-              breakdown: [{ key: 'count.part.commitLines', n: lines }, { key: 'count.part.commitFile', n: commits.length - lines }],
-            }),
-          },
-        }));
+        return send(
+          200,
+          JSON.stringify({
+            repo,
+            // how many commits the history holds for this repository: 0 = never read, which is not "none touched"
+            read,
+            parts: parts.map((p) => p.node),
+            commits: commits.map((c) => ({
+              ...c,
+              keys: db
+                .keysForCommit(repo, c.sha)
+                .map((k) => k.key)
+                .filter((k, i, a) => a.indexOf(k) === i),
+            })),
+            counted: {
+              commits: counted(
+                commits.length,
+                'map.prop.changes.countCommits',
+                'journey.scopeHere',
+                'server /api/history/touching · commit_node + commit_file',
+                {
+                  bizUnit: 'map.prop.changes.countCommits',
+                  breakdown: [
+                    { key: 'count.part.commitLines', n: lines },
+                    { key: 'count.part.commitFile', n: commits.length - lines },
+                  ],
+                },
+              ),
+            },
+          }),
+        );
       } finally {
         db.close();
       }
@@ -1718,7 +2536,12 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const repo = u.searchParams.get('repo');
       if (!repo) {
         const names = knownRepos(ws, graphPath);
-        return send(400, JSON.stringify({ error: `missing ?repo=<source name>${names.length ? ` — this workspace knows: ${names.join(', ')}` : ' — and .farsight/settings.json declares no local source'}` }));
+        return send(
+          400,
+          JSON.stringify({
+            error: `missing ?repo=<source name>${names.length ? ` — this workspace knows: ${names.join(', ')}` : ' — and .farsight/settings.json declares no local source'}`,
+          }),
+        );
       }
       let db: SnapshotDb;
       try {
@@ -1742,17 +2565,35 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         const head = root ? gitHeadRef(root) : undefined;
         const shallow = root ? gitShallow(root) : undefined;
         if (!root) {
-          notes.push({ level: 'warn', text: `no checkout recorded for ${repo} — the spine below is what the database holds; whether this repository is shallow, which ancestry HEAD walks, and what has been committed since the last sync cannot be read without the code` });
+          notes.push({
+            level: 'warn',
+            text: `no checkout recorded for ${repo} — the spine below is what the database holds; whether this repository is shallow, which ancestry HEAD walks, and what has been committed since the last sync cannot be read without the code`,
+          });
         } else if (head && !head.available) {
           // §8's no-git row: syncs only, and every commit column reads "not indexed"
-          notes.push({ level: 'warn', text: `${GIT_ABSENT_WORD[head.reason]}${head.detail ? ` — git said: ${head.detail}` : ''}` });
-          notes.push({ level: 'note', text: 'the snapshot spine below is unchanged; every commit it cannot name reads "not indexed"' });
+          notes.push({
+            level: 'warn',
+            text: `${GIT_ABSENT_WORD[head.reason]}${head.detail ? ` — git said: ${head.detail}` : ''}`,
+          });
+          notes.push({
+            level: 'note',
+            text: 'the snapshot spine below is unchanged; every commit it cannot name reads "not indexed"',
+          });
         }
         // then the unindexed count: a history holding commits no sync ingested says
         // so before any row is read as a complete account
         if (said.unindexed) notes.push(said.unindexed);
-        if (shallow?.available && shallow.shallow) notes.push({ level: 'warn', text: shallowFloorSentence(oldestKnownCommit(spine)) });
-        for (const key of ['syncs', 'noneRecorded', 'unanchored', 'outsideReach', 'belowFloor', 'noSnapshots', 'borrowed'] as const) {
+        if (shallow?.available && shallow.shallow)
+          notes.push({ level: 'warn', text: shallowFloorSentence(oldestKnownCommit(spine)) });
+        for (const key of [
+          'syncs',
+          'noneRecorded',
+          'unanchored',
+          'outsideReach',
+          'belowFloor',
+          'noSnapshots',
+          'borrowed',
+        ] as const) {
           const sentence = said[key];
           if (sentence) notes.push(sentence);
         }
@@ -1765,18 +2606,36 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         let range: unknown;
         if (toParam || fromParam) {
           const to = resolveSync(db, toParam ?? 'latest');
-          if (to === null) return send(400, JSON.stringify({ error: `to expects sync:<N> or latest (got "${toParam}")` }));
-          const from = fromParam ? resolveSync(db, fromParam) : db.previous(to) ?? null;
+          if (to === null)
+            return send(400, JSON.stringify({ error: `to expects sync:<N> or latest (got "${toParam}")` }));
+          const from = fromParam ? resolveSync(db, fromParam) : (db.previous(to) ?? null);
           if (from === null) {
-            return send(400, JSON.stringify({ error: fromParam ? `from expects sync:<N> or latest (got "${fromParam}")` : `no snapshot before sync:${to} to compare against — pass from=sync:<N>` }));
+            return send(
+              400,
+              JSON.stringify({
+                error: fromParam
+                  ? `from expects sync:<N> or latest (got "${fromParam}")`
+                  : `no snapshot before sync:${to} to compare against — pass from=sync:<N>`,
+              }),
+            );
           }
           try {
             const r = db.commitsBetween(repo, from, to);
             range = {
-              base: r.base, head: r.head,
+              base: r.base,
+              head: r.head,
               ...(r.baseCommit ? { baseCommit: r.baseCommit } : {}),
               ...(r.headCommit ? { headCommit: r.headCommit } : {}),
-              commits: r.commits.map((c) => ({ sha: c.sha, at: c.at, author: c.author, email: c.email, subject: c.subject, merge: c.merge, indexed: c.indexed, syncs: c.syncs })),
+              commits: r.commits.map((c) => ({
+                sha: c.sha,
+                at: c.at,
+                author: c.author,
+                email: c.email,
+                subject: c.subject,
+                merge: c.merge,
+                indexed: c.indexed,
+                syncs: c.syncs,
+              })),
               // how many of them no sync ever ingested — "not indexed", never a zero
               unindexed: r.unindexed,
               incomplete: r.incomplete,
@@ -1791,7 +2650,15 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
               // **Absent, never zeroes, when no history has been read**: `touched: 0`
               // would assert that nothing touched a file, which is the one claim an
               // unread history cannot make — the rule `attributeChanges` follows.
-              ...(spine.historyRead ? { files: fileFacts(db, repo, r.commits.map((c) => c.sha)) } : {}),
+              ...(spine.historyRead
+                ? {
+                    files: fileFacts(
+                      db,
+                      repo,
+                      r.commits.map((c) => c.sha),
+                    ),
+                  }
+                : {}),
             };
           } catch (err) {
             // a pruned or unknown sync explains itself rather than 500ing
@@ -1799,41 +2666,51 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
           }
         }
 
-        return send(200, JSON.stringify({
-          generatedAt: new Date().toISOString(),
-          repo,
-          root: root ?? null,
-          // what git log from here would walk — "ancestry of <sha>" on a detached HEAD (§8)
-          title: head ? headTitle(head) ?? null : null,
-          head: !head ? null
-            : head.available ? { available: true, sha: head.sha, ...(head.ref ? { ref: head.ref } : {}), detached: head.detached }
-            : { available: false, reason: head.reason, word: GIT_ABSENT_WORD[head.reason], ...(head.detail ? { detail: head.detail } : {}) },
-          // null, never false: a shallow check that could not run has not said "not shallow"
-          shallow: shallow?.available ? shallow.shallow : null,
-          // has any commit been read for this repository? With none, every containment
-          // question is unanswerable and every count here is a floor, not a measurement
-          historyRead: spine.historyRead,
-          bound: spine.bound,
-          commits: spine.commits,
-          unindexed: spine.unindexed,
-          syncs: spine.rows.length,
-          distinct: spine.distinct,
-          reindexed: spine.reindexed,
-          // rows where the absence is a fact about the sync: it walked this source and
-          // stamped nothing, or it did not walk it
-          withoutCommit: spine.withoutCommit,
-          // of those, how many did not include this source at all (H3b's third row state)
-          notInSync: spine.notInSync,
-          // and, kept apart from both, the rows whose commit is unplaceable only
-          // because no history has been read — never folded into withoutCommit
-          withoutHistory: spine.withoutHistory,
-          unverified: spine.unverified,
-          before: spine.before.length,
-          after: spine.after.length,
-          spine: spine.rows.map(historyRowOut),
-          notes,
-          ...(range ? { range } : {}),
-        }));
+        return send(
+          200,
+          JSON.stringify({
+            generatedAt: new Date().toISOString(),
+            repo,
+            root: root ?? null,
+            // what git log from here would walk — "ancestry of <sha>" on a detached HEAD (§8)
+            title: head ? (headTitle(head) ?? null) : null,
+            head: !head
+              ? null
+              : head.available
+                ? { available: true, sha: head.sha, ...(head.ref ? { ref: head.ref } : {}), detached: head.detached }
+                : {
+                    available: false,
+                    reason: head.reason,
+                    word: GIT_ABSENT_WORD[head.reason],
+                    ...(head.detail ? { detail: head.detail } : {}),
+                  },
+            // null, never false: a shallow check that could not run has not said "not shallow"
+            shallow: shallow?.available ? shallow.shallow : null,
+            // has any commit been read for this repository? With none, every containment
+            // question is unanswerable and every count here is a floor, not a measurement
+            historyRead: spine.historyRead,
+            bound: spine.bound,
+            commits: spine.commits,
+            unindexed: spine.unindexed,
+            syncs: spine.rows.length,
+            distinct: spine.distinct,
+            reindexed: spine.reindexed,
+            // rows where the absence is a fact about the sync: it walked this source and
+            // stamped nothing, or it did not walk it
+            withoutCommit: spine.withoutCommit,
+            // of those, how many did not include this source at all (H3b's third row state)
+            notInSync: spine.notInSync,
+            // and, kept apart from both, the rows whose commit is unplaceable only
+            // because no history has been read — never folded into withoutCommit
+            withoutHistory: spine.withoutHistory,
+            unverified: spine.unverified,
+            before: spine.before.length,
+            after: spine.after.length,
+            spine: spine.rows.map(historyRowOut),
+            notes,
+            ...(range ? { range } : {}),
+          }),
+        );
       } catch (err) {
         return send(500, JSON.stringify({ error: (err as Error).message }));
       } finally {
@@ -1855,11 +2732,24 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       try {
         const toParam = u.searchParams.get('to') ?? 'latest';
         const to = resolveSync(db, toParam);
-        if (to === null) return send(400, JSON.stringify({ error: `to expects sync:<N> or latest (got "${toParam}") — or there are no snapshots yet: run farsight ingest, or sync sources in settings` }));
+        if (to === null)
+          return send(
+            400,
+            JSON.stringify({
+              error: `to expects sync:<N> or latest (got "${toParam}") — or there are no snapshots yet: run farsight ingest, or sync sources in settings`,
+            }),
+          );
         const fromParam = u.searchParams.get('from');
-        const from = fromParam ? resolveSync(db, fromParam) : db.previous(to) ?? null;
+        const from = fromParam ? resolveSync(db, fromParam) : (db.previous(to) ?? null);
         if (from === null) {
-          return send(400, JSON.stringify({ error: fromParam ? `from expects sync:<N> or latest (got "${fromParam}")` : `no snapshot before sync:${to} to diff against — pass from=sync:<N>` }));
+          return send(
+            400,
+            JSON.stringify({
+              error: fromParam
+                ? `from expects sync:<N> or latest (got "${fromParam}")`
+                : `no snapshot before sync:${to} to diff against — pass from=sync:<N>`,
+            }),
+          );
         }
         let base, head;
         try {
@@ -1876,7 +2766,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         });
         const attribute = /^(1|true|yes)$/.test(u.searchParams.get('attribute') ?? '');
         const format = u.searchParams.get('format') ?? 'json';
-        if (!['json', 'sarif', 'md'].includes(format)) return send(400, JSON.stringify({ error: `unknown format "${format}" (json|sarif|md)` }));
+        if (!['json', 'sarif', 'md'].includes(format))
+          return send(400, JSON.stringify({ error: `unknown format "${format}" (json|sarif|md)` }));
 
         let out = diff;
         if (attribute) {
@@ -1893,9 +2784,15 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
           // they ride as ASCII headers plus a pointer at the surface whose job is the
           // narrative. Attribution is file-level and is not proof of cause; a reader
           // who sees only the commits must still be able to find that out.
-          res.setHeader('X-Farsight-Attribution', 'level=file; the commits that touched the file a change lives in, not proof of cause');
+          res.setHeader(
+            'X-Farsight-Attribution',
+            'level=file; the commits that touched the file a change lives in, not proof of cause',
+          );
           res.setHeader('X-Farsight-Attribution-Notes', String(attributed.notes.length));
-          res.setHeader('X-Farsight-Attribution-Words', `/api/history?repo=<name>&from=sync:${base.ref.sync}&to=sync:${head.ref.sync}`);
+          res.setHeader(
+            'X-Farsight-Attribution-Words',
+            `/api/history?repo=<name>&from=sync:${base.ref.sync}&to=sync:${head.ref.sync}`,
+          );
         }
         if (format === 'sarif') return send(200, JSON.stringify(toSarif(out), null, 2));
         if (format === 'md') return send(200, toMarkdown(out), 'text/markdown; charset=utf-8');
@@ -1932,11 +2829,24 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       try {
         const toParam = u.searchParams.get('to') ?? 'latest';
         const to = resolveSync(db, toParam);
-        if (to === null) return send(400, JSON.stringify({ error: `to expects sync:<N> or latest (got "${toParam}") — or there are no snapshots yet: run farsight ingest, or sync sources in settings` }));
+        if (to === null)
+          return send(
+            400,
+            JSON.stringify({
+              error: `to expects sync:<N> or latest (got "${toParam}") — or there are no snapshots yet: run farsight ingest, or sync sources in settings`,
+            }),
+          );
         const fromParam = u.searchParams.get('from');
-        const from = fromParam ? resolveSync(db, fromParam) : db.previous(to) ?? null;
+        const from = fromParam ? resolveSync(db, fromParam) : (db.previous(to) ?? null);
         if (from === null) {
-          return send(400, JSON.stringify({ error: fromParam ? `from expects sync:<N> or latest (got "${fromParam}")` : `no snapshot before sync:${to} to compare against — pass from=sync:<N>` }));
+          return send(
+            400,
+            JSON.stringify({
+              error: fromParam
+                ? `from expects sync:<N> or latest (got "${fromParam}")`
+                : `no snapshot before sync:${to} to compare against — pass from=sync:<N>`,
+            }),
+          );
         }
         let base, head;
         try {
@@ -1957,18 +2867,21 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
           ...(repoParam ? { repos: [repoParam] } : {}),
           checkout: (r) => attributionCheckout(ws, graphPath, r),
         });
-        return send(200, JSON.stringify({
-          generatedAt: new Date().toISOString(),
-          // the two ends as numbers, because the document's `base`/`head` are labels for
-          // reading and the surface needs the syncs to link and to name
-          baseSync: base.ref.sync,
-          headSync: head.ref.sync,
-          diff: attributed.diff,
-          // one sentence per change, from the core's `changeSentence` — the same words
-          // `farsight diff --format md` prints
-          sentences: Object.fromEntries(attributed.diff.changes.map((c) => [c.id, changeSentence(c)])),
-          attribution: { level: 'file', header: attributed.header, notes: attributed.notes },
-        }));
+        return send(
+          200,
+          JSON.stringify({
+            generatedAt: new Date().toISOString(),
+            // the two ends as numbers, because the document's `base`/`head` are labels for
+            // reading and the surface needs the syncs to link and to name
+            baseSync: base.ref.sync,
+            headSync: head.ref.sync,
+            diff: attributed.diff,
+            // one sentence per change, from the core's `changeSentence` — the same words
+            // `farsight diff --format md` prints
+            sentences: Object.fromEntries(attributed.diff.changes.map((c) => [c.id, changeSentence(c)])),
+            attribution: { level: 'file', header: attributed.header, notes: attributed.notes },
+          }),
+        );
       } catch (err) {
         return send(500, JSON.stringify({ error: (err as Error).message }));
       } finally {
@@ -1978,11 +2891,17 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     if (url.startsWith('/api/work')) {
       // work items (docs/proposals/work-items-sync.md §9, §10): the routes live in work.ts
       handleWorkRoute(req, url, {
-        ws, graphPath,
+        ws,
+        graphPath,
         sources: () => loadSettings(ws).sources as WorkSettingsSource[],
         graph: () => {
           if (!existsSync(graphPath)) return null;
-          try { const g = loadJourneyGraph(graphPath); return { index: g.index, roots: g.roots, meta: g.meta }; } catch { return null; }
+          try {
+            const g = loadJourneyGraph(graphPath);
+            return { index: g.index, roots: g.roots, meta: g.meta };
+          } catch {
+            return null;
+          }
         },
       })
         .then((a) => (a ? send(a.code, JSON.stringify(a.body)) : send(404, JSON.stringify({ error: 'not found' }))))
@@ -2032,9 +2951,13 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       .then((r) => r.json())
       .then((g: { meta?: { workspace?: string; graphPath?: string; generatedAt?: string } }) => {
         const m = g?.meta ?? {};
-        console.error(`farsight: port ${port} is already serving${m.workspace ? ` workspace "${m.workspace}"` : ' another Farsight'}${m.graphPath ? ` (${m.graphPath}${m.generatedAt ? `, generated ${m.generatedAt}` : ''})` : ''} — this workspace is ${ws}. Stop it, or pass --port.`);
+        console.error(
+          `farsight: port ${port} is already serving${m.workspace ? ` workspace "${m.workspace}"` : ' another Farsight'}${m.graphPath ? ` (${m.graphPath}${m.generatedAt ? `, generated ${m.generatedAt}` : ''})` : ''} — this workspace is ${ws}. Stop it, or pass --port.`,
+        );
       })
-      .catch(() => console.error(`farsight: port ${port} is in use by something that is not a Farsight server — pass --port.`))
+      .catch(() =>
+        console.error(`farsight: port ${port} is in use by something that is not a Farsight server — pass --port.`),
+      )
       .finally(() => process.exit(1));
   });
   // bind loopback only — Model Hub + graph are local-only surfaces (security posture)

@@ -16,26 +16,47 @@ const g = globalThis as any;
 g.window = g;
 g.document = { body: { className: 'lens-business surface-journeys' } };
 const store = await import(join(here, '..', 'public', 'app', 'store.js'));
-const { plainWords, filledMessage, refusalWords, schemaWords } = await import(join(here, '..', 'public', 'app', 'strings.js'));
+const { plainWords, filledMessage, refusalWords, schemaWords } = await import(
+  join(here, '..', 'public', 'app', 'strings.js')
+);
 const { STRINGS } = await import('@farsight/core');
 store.S.STRINGS = STRINGS;
 
 store.S.GRAPH = {
   nodes: [
-    { id: 'r::page::/me/vendor-accounts/new', kind: 'page', name: '/me/vendor-accounts/new', tags: [], design: { id: 'CON-03', name: 'Create your vendor account' } },
-    { id: 'r::page::/ops/invoices', kind: 'page', name: '/ops/invoices', tags: [], design: { id: 'OPS-04', name: 'Invoice list (ops queue)' } },
+    {
+      id: 'r::page::/me/vendor-accounts/new',
+      kind: 'page',
+      name: '/me/vendor-accounts/new',
+      tags: [],
+      design: { id: 'CON-03', name: 'Create your vendor account' },
+    },
+    {
+      id: 'r::page::/ops/invoices',
+      kind: 'page',
+      name: '/ops/invoices',
+      tags: [],
+      design: { id: 'OPS-04', name: 'Invoice list (ops queue)' },
+    },
   ],
   edges: [],
 };
 
 test('a design id in a sentence becomes the screen it names — never a hole', () => {
-  assert.equal(plainWords('A contractor with no Vendor ID creates a vendor account on CON-03 with business info, address, contacts and consent only.'),
-    'A contractor with no Vendor ID creates a vendor account on Create your vendor account with business info, address, contacts and consent only.');
-  assert.equal(plainWords("Unsubmitted ops-entered drafts are listed on OPS-04's Drafts tab and resume on OPS-04b."),
-    "Unsubmitted ops-entered drafts are listed on Invoice list (ops queue)'s Drafts tab and resume on a page.");
+  assert.equal(
+    plainWords(
+      'A contractor with no Vendor ID creates a vendor account on CON-03 with business info, address, contacts and consent only.',
+    ),
+    'A contractor with no Vendor ID creates a vendor account on Create your vendor account with business info, address, contacts and consent only.',
+  );
+  assert.equal(
+    plainWords("Unsubmitted ops-entered drafts are listed on OPS-04's Drafts tab and resume on OPS-04b."),
+    "Unsubmitted ops-entered drafts are listed on Invoice list (ops queue)'s Drafts tab and resume on a page.",
+  );
   // an id that is only a cross-reference, with no place in the sentence, still goes
   assert.equal(plainWords('Approve the invoice (OPS-04c).'), 'Approve the invoice.');
-  for (const s of ['on CON-03 with', "on OPS-04's", 'resume on OPS-04b.']) assert.doesNotMatch(plainWords(`x ${s} y`), /\bon\s+(?:with|'s|\.|$)/);
+  for (const s of ['on CON-03 with', "on OPS-04's", 'resume on OPS-04b.'])
+    assert.doesNotMatch(plainWords(`x ${s} y`), /\bon\s+(?:with|'s|\.|$)/);
   // a range of ids is a cross-reference: it goes, it is not read as two places
   assert.doesNotMatch(plainWords('Built: CON-01 to CON-08 and the receipt.'), /Create your vendor account|a page/);
 });

@@ -21,9 +21,17 @@ function tempRepo(files: Record<string, string>): string {
   return dir;
 }
 const ingest = (files: Record<string, string>): Promise<GraphFragment> =>
-  ingestRepo(tempRepo({ 'package.json': '{"name":"l"}', ...files }), { repoName: 'l', openapi: false, design: false, tests: false, stories: false, projects: false });
+  ingestRepo(tempRepo({ 'package.json': '{"name":"l"}', ...files }), {
+    repoName: 'l',
+    openapi: false,
+    design: false,
+    tests: false,
+    stories: false,
+    projects: false,
+  });
 const table = (g: GraphFragment, name: string): GraphNode => g.nodes.find((n) => n.id === `l::table::${name}`)!;
-const moves = (n: GraphNode) => n.lifecycle!.transitions.map((x) => `${x.from ?? '·'}>${x.to}@${x.by.split('::').pop()}/${x.via}`);
+const moves = (n: GraphNode) =>
+  n.lifecycle!.transitions.map((x) => `${x.from ?? '·'}>${x.to}@${x.by.split('::').pop()}/${x.via}`);
 
 // the reference app's shape: a migration's CHECK, a const list naming the same set, a repository
 // that writes `status = $2`, services that pass the new status in an update call's patch
@@ -39,7 +47,8 @@ const SQL_REPO = {
   ].join('\n'),
   'src/state.ts': "export const ORDER_STATUSES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'PAID', 'CANCELLED'] as const;",
   // a fixture imitating the same set is never where the statuses live
-  'src/mock/fixtures.ts': "export const FAKE_STATUSES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'PAID', 'CANCELLED'] as const;",
+  'src/mock/fixtures.ts':
+    "export const FAKE_STATUSES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'PAID', 'CANCELLED'] as const;",
   'src/repo.ts': [
     "import { Pool } from 'pg';",
     'const pool = new Pool();',
@@ -80,7 +89,10 @@ test('a SQL CHECK binds the record: statuses in declared order, the const list t
   assert.ok(life, 'orders has a lifecycle');
   assert.equal(life.field, 'status');
   assert.deepEqual(life.statuses, ['DRAFT', 'SUBMITTED', 'APPROVED', 'PAID', 'CANCELLED']);
-  assert.deepEqual(life.provenance.map((p) => `${p.kind}:${p.name ?? ''}`), ['sql-check:', 'const-array:ORDER_STATUSES']);
+  assert.deepEqual(
+    life.provenance.map((p) => `${p.kind}:${p.name ?? ''}`),
+    ['sql-check:', 'const-array:ORDER_STATUSES'],
+  );
 });
 
 test('each move has its writer; from only where the writer says what the status was', async () => {
@@ -92,7 +104,10 @@ test('each move has its writer; from only where the writer says what the status 
     'DRAFT>CANCELLED@PgOrderRepository.cancelStale/sql',
   ]);
   const by = table(g, 'orders').lifecycle!.transitions[0]!.by;
-  assert.ok(g.nodes.some((n) => n.id === by), 'the writer is a node of the graph');
+  assert.ok(
+    g.nodes.some((n) => n.id === by),
+    'the writer is a node of the graph',
+  );
 });
 
 test('a string-literal union binds a record only when every status written to it fits; a z.enum and an `as const` list do too', async () => {
@@ -110,17 +125,32 @@ test('a string-literal union binds a record only when every status written to it
     ].join('\n'),
   };
   // union on a row type
-  let g = await ingest({ ...base, 'src/types.ts': "export type InvoiceStatus = 'draft' | 'open' | 'paid';\nexport interface InvoiceRow { status: InvoiceStatus }" });
+  let g = await ingest({
+    ...base,
+    'src/types.ts':
+      "export type InvoiceStatus = 'draft' | 'open' | 'paid';\nexport interface InvoiceRow { status: InvoiceStatus }",
+  });
   assert.deepEqual(table(g, 'invoices').lifecycle?.statuses, ['draft', 'open', 'paid']);
-  assert.deepEqual(table(g, 'invoices').lifecycle?.provenance.map((p) => p.kind), ['union']);
+  assert.deepEqual(
+    table(g, 'invoices').lifecycle?.provenance.map((p) => p.kind),
+    ['union'],
+  );
   assert.deepEqual(moves(table(g, 'invoices')), ['·>draft@create/update-call', '·>open@send/update-call']);
   // notes writes `closed`, which no declared enum for `status` holds: no lifecycle, nothing guessed
   assert.equal(table(g, 'notes').lifecycle, undefined);
   // zod enum over a const array
-  g = await ingest({ ...base, 'src/schemas.ts': "import { z } from 'zod';\nexport const S = ['draft', 'open', 'void'] as const;\nexport const invoiceSchema = z.object({ status: z.enum(S) });" });
+  g = await ingest({
+    ...base,
+    'src/schemas.ts':
+      "import { z } from 'zod';\nexport const S = ['draft', 'open', 'void'] as const;\nexport const invoiceSchema = z.object({ status: z.enum(S) });",
+  });
   assert.deepEqual(table(g, 'invoices').lifecycle?.statuses, ['draft', 'open', 'void']);
   // an enum that does not hold every written status binds nothing
-  g = await ingest({ ...base, 'src/types.ts': "export type InvoiceStatus = 'draft' | 'paid';\nexport interface InvoiceRow { status: InvoiceStatus }" });
+  g = await ingest({
+    ...base,
+    'src/types.ts':
+      "export type InvoiceStatus = 'draft' | 'paid';\nexport interface InvoiceRow { status: InvoiceStatus }",
+  });
   assert.equal(table(g, 'invoices').lifecycle, undefined);
 });
 

@@ -19,7 +19,15 @@
  */
 import type { GraphNode, GateTier, NodeKind, Loc } from './graph.js';
 import type { GraphMeta } from './store.js';
-import { type GraphIndex, buildIndex, journey, journeySummary, humanizeName, type Journey, type JourneySummary } from './query.js';
+import {
+  type GraphIndex,
+  buildIndex,
+  journey,
+  journeySummary,
+  humanizeName,
+  type Journey,
+  type JourneySummary,
+} from './query.js';
 import type { SnapshotDb } from './snapshots.js';
 import { setFreshnessMeta } from './freshness.js';
 import { screensFor } from './design.js';
@@ -32,13 +40,13 @@ import { CHANGE_KINDS, type ChangeKind, type DiffChange, type DiffDelta, type Gr
 
 /** The five kinds a storyline delta can be. A closed set: a sixth is a decision recorded in the contract doc. */
 export const DELTA_KINDS = ['built', 'gate', 'writer', 'contract', 'verdict'] as const;
-export type DeltaKind = typeof DELTA_KINDS[number];
+export type DeltaKind = (typeof DELTA_KINDS)[number];
 /** Which way a delta went. `changed` is only ever a contract's status or shape, or a verdict. */
 export const DELTA_CHANGES = ['added', 'removed', 'changed'] as const;
-export type DeltaChange = typeof DELTA_CHANGES[number];
+export type DeltaChange = (typeof DELTA_CHANGES)[number];
 /** Where a delta's door opens. A closed set the viewer, the CLI and MCP each turn into an address. */
 export const DELTA_DOORS = ['gate', 'move', 'cases', 'contract', 'screen'] as const;
-export type DeltaDoorKind = typeof DELTA_DOORS[number];
+export type DeltaDoorKind = (typeof DELTA_DOORS)[number];
 
 /** One end of a comparison: the sync it is, when, at which commit. */
 export interface CompareEnd {
@@ -143,7 +151,14 @@ interface Walked {
 }
 
 /** A screen of the storyline: the first journey that shows it and its place there, and whether a page serves it. */
-interface ScreenFact { id: string; name: string; flow: string; index: number; built: boolean; designId?: string }
+interface ScreenFact {
+  id: string;
+  name: string;
+  flow: string;
+  index: number;
+  built: boolean;
+  designId?: string;
+}
 
 interface SideFacts {
   storyline: JourneyStoryline;
@@ -165,7 +180,10 @@ function opKey(n: GraphNode): string {
   if (n.contract?.spec?.operationId) return 'op:' + n.contract.spec.operationId;
   const name = n.name.trim();
   const m = name.match(/^([A-Z]+)\s+(\S+)/);
-  const path = (m ? m[2]! : name).replace(/\{[^}]+\}/g, ':p').replace(/:[A-Za-z_][\w]*/g, ':p').replace(/\[[^\]]+\]/g, ':p');
+  const path = (m ? m[2]! : name)
+    .replace(/\{[^}]+\}/g, ':p')
+    .replace(/:[A-Za-z_][\w]*/g, ':p')
+    .replace(/\[[^\]]+\]/g, ':p');
   return 'route:' + (m ? m[1] + ' ' : '') + path;
 }
 
@@ -179,13 +197,26 @@ function screenKey(u: JourneySummary['user'][number]): string {
   return u.designId ? 'design:' + u.designId : u.id;
 }
 
-function sideFacts(side: CompareSide, storylineId: string, repo: string | undefined, declaredBy?: CompareSide): SideFacts | undefined {
+function sideFacts(
+  side: CompareSide,
+  storylineId: string,
+  repo: string | undefined,
+  declaredBy?: CompareSide,
+): SideFacts | undefined {
   // a sync written before history kept its meta has no storyline declaration: read it with the other end's
   const metas = side.meta.journeys ?? declaredBy?.meta.journeys;
   const tree = journeyTree(side.index, metas, null);
   const st = tree.storylines.find((s) => s.id === storylineId && (!repo || s.repo === repo));
   if (!st) return undefined;
-  const facts: SideFacts = { storyline: st, walked: new Map(), screens: new Map(), gates: new Map(), ops: new Map(), records: new Map(), reach: new Map() };
+  const facts: SideFacts = {
+    storyline: st,
+    walked: new Map(),
+    screens: new Map(),
+    gates: new Map(),
+    ops: new Map(),
+    records: new Map(),
+    reach: new Map(),
+  };
   for (const row of [...st.journeys, ...st.branches]) {
     if (facts.walked.has(row.nodeId) || !side.index.byId.has(row.nodeId)) continue;
     let j: Journey;
@@ -193,14 +224,24 @@ function sideFacts(side: CompareSide, storylineId: string, repo: string | undefi
     try {
       j = journey(side.index, row.nodeId);
       sum = journeySummary(side.index, j, screensFor(side.index, row.nodeId));
-    } catch { continue; }
+    } catch {
+      continue;
+    }
     facts.walked.set(row.nodeId, { row, j, sum });
     const reach = new Set<string>();
     for (const s of j.steps) reach.add(s.nodeId);
     facts.reach.set(row.nodeId, reach);
     sum.user.forEach((u, i) => {
       const k = screenKey(u);
-      if (!facts.screens.has(k)) facts.screens.set(k, { id: u.id, name: u.name, flow: row.nodeId, index: i + 1, built: !!u.loc, ...(u.designId ? { designId: u.designId } : {}) });
+      if (!facts.screens.has(k))
+        facts.screens.set(k, {
+          id: u.id,
+          name: u.name,
+          flow: row.nodeId,
+          index: i + 1,
+          built: !!u.loc,
+          ...(u.designId ? { designId: u.designId } : {}),
+        });
     });
     const screenOfStep = (order: number) => {
       const seg = sum.segments.find((sg) => sg.from <= order && order <= sg.to && sg.screen);
@@ -224,7 +265,12 @@ function sideFacts(side: CompareSide, storylineId: string, repo: string | undefi
         if (!gate) continue;
         const k = g.id + '|' + targetKey(node);
         const sc = screenOfStep(s.order);
-        const e = facts.gates.get(k) ?? { gate, target: node, journeys: new Set<string>(), ...(sc ? { screen: sc } : {}) };
+        const e = facts.gates.get(k) ?? {
+          gate,
+          target: node,
+          journeys: new Set<string>(),
+          ...(sc ? { screen: sc } : {}),
+        };
         e.journeys.add(row.nodeId);
         facts.gates.set(k, e);
       }
@@ -242,7 +288,11 @@ function sideFacts(side: CompareSide, storylineId: string, repo: string | undefi
 /** The words a gate is printed with in the business register: what somebody wrote, else its requirement, else its name made readable. */
 function gateWords(g: GraphNode): string {
   const biz = g.facets?.business;
-  if (biz?.description) return biz.description.replace(/\s+/g, ' ').split(/(?<=\.)\s/)[0]!.replace(/\.$/, '');
+  if (biz?.description)
+    return biz.description
+      .replace(/\s+/g, ' ')
+      .split(/(?<=\.)\s/)[0]!
+      .replace(/\.$/, '');
   if (g.precondition?.words) return g.precondition.words;
   if (biz?.label) return biz.label;
   const { ident, phrase } = gateNameParts(g.name);
@@ -257,16 +307,30 @@ function statusWords(record: GraphNode | undefined, status: string): string {
 }
 
 /** A verdict's identity: the word without its freshness (stale is the one freshness fact, never a verdict change), the status, the skips and failures. */
-function verdictOf(sum: JourneySummary): { key: string; text: string; biz: string; short: string; skipped: number } | null {
+function verdictOf(
+  sum: JourneySummary,
+): { key: string; text: string; biz: string; short: string; skipped: number } | null {
   const v = sum.coverage?.journey?.verdict;
   if (!v) return null;
   const base = v.word.key === 'journey.evidence.stale' ? 'journey.evidence.observed' : v.word.key.replace(/Stale$/, '');
   const word = t(base, 'professional');
-  const parts = [v.status ?? '', v.skipped ? t('compare.verdict.skipped', 'professional').replace('{n}', String(v.skipped)) : '', v.failed ? t('compare.verdict.failed', 'professional').replace('{n}', String(v.failed)) : ''].filter(Boolean);
+  const parts = [
+    v.status ?? '',
+    v.skipped ? t('compare.verdict.skipped', 'professional').replace('{n}', String(v.skipped)) : '',
+    v.failed ? t('compare.verdict.failed', 'professional').replace('{n}', String(v.failed)) : '',
+  ].filter(Boolean);
   const text = v.status ? [v.status, ...parts.slice(1)].join(' · ') : [word, ...parts].join(' · ');
   // the verdict's words are the chip's in every register (lib/test-chip.js prints the same word in business)
   const biz = text;
-  return { short: v.status ?? word, skipped: v.skipped ?? 0, key: [v.word.cls === 'stale' ? 'observed' : v.word.cls, base, v.status ?? '', v.skipped ?? 0, v.failed ?? 0].join('|'), text, biz };
+  return {
+    short: v.status ?? word,
+    skipped: v.skipped ?? 0,
+    key: [v.word.cls === 'stale' ? 'observed' : v.word.cls, base, v.status ?? '', v.skipped ?? 0, v.failed ?? 0].join(
+      '|',
+    ),
+    text,
+    biz,
+  };
 }
 
 const SEVERITY_ORDER: Record<DeltaKind, number> = { built: 0, gate: 1, writer: 2, contract: 3, verdict: 4 };
@@ -277,16 +341,30 @@ const SEVERITY_ORDER: Record<DeltaKind, number> = { built: 0, gate: 1, writer: 2
  * The deltas on one storyline between sync A (`a`) and sync B (`b`), B being the later. `undefined` when
  * neither sync declares a storyline of that id. `repo` names the source when two declare the same id.
  */
-export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: string, opts: { repo?: string } = {}): StorylineDiff | undefined {
+export function storylineDiff(
+  a: CompareSide,
+  b: CompareSide,
+  storylineId: string,
+  opts: { repo?: string } = {},
+): StorylineDiff | undefined {
   const notes: string[] = [];
   const fb = sideFacts(b, storylineId, opts.repo, a);
   const fa = sideFacts(a, storylineId, opts.repo ?? fb?.storyline.repo, b);
   if (!fa && !fb) return undefined;
-  if (!a.meta.journeys && b.meta.journeys) notes.push(t('compare.note.metaA', 'professional').replace('{sync}', String(a.end.sync ?? '?')));
+  if (!a.meta.journeys && b.meta.journeys)
+    notes.push(t('compare.note.metaA', 'professional').replace('{sync}', String(a.end.sync ?? '?')));
   if (!fa) notes.push(t('compare.note.newStoryline', 'professional').replace('{sync}', String(a.end.sync ?? '?')));
   if (!fb) notes.push(t('compare.note.goneStoryline', 'professional').replace('{sync}', String(b.end.sync ?? '?')));
   const st = (fb ?? fa)!.storyline;
-  const empty: SideFacts = { storyline: st, walked: new Map(), screens: new Map(), gates: new Map(), ops: new Map(), records: new Map(), reach: new Map() };
+  const empty: SideFacts = {
+    storyline: st,
+    walked: new Map(),
+    screens: new Map(),
+    gates: new Map(),
+    ops: new Map(),
+    records: new Map(),
+    reach: new Map(),
+  };
   const A = fa ?? empty;
   const B = fb ?? empty;
   const out: Omit<StorylineDelta, 'id'>[] = [];
@@ -297,13 +375,18 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
     const sa = A.screens.get(k);
     if (!sa || sa.built === sb.built) continue;
     const now = sb.built;
-    const journeys = [...B.walked.values()].filter((w) => w.sum.user.some((u) => screenKey(u) === k)).map((w) => w.row.nodeId);
+    const journeys = [...B.walked.values()]
+      .filter((w) => w.sum.user.some((u) => screenKey(u) === k))
+      .map((w) => w.row.nodeId);
     const args = { screen: sb.name };
     out.push({
-      kind: 'built', change: now ? 'added' : 'removed',
+      kind: 'built',
+      change: now ? 'added' : 'removed',
       subject: { id: sb.id, name: sb.name, kind: (b.index.byId.get(sb.id)?.kind ?? 'page') as NodeKind },
-      journeys, screen: { id: sb.id, name: sb.name, flow: sb.flow, index: sb.index },
-      from: now ? 'notBuilt' : 'built', to: now ? 'built' : 'notBuilt',
+      journeys,
+      screen: { id: sb.id, name: sb.name, flow: sb.flow, index: sb.index },
+      from: now ? 'notBuilt' : 'built',
+      to: now ? 'built' : 'notBuilt',
       ...(b.index.byId.get(sb.id)?.loc ? { loc: b.index.byId.get(sb.id)!.loc! } : {}),
       sentence: { key: now ? 'compare.delta.built.added' : 'compare.delta.built.removed', args },
       biz: { key: now ? 'map.biz.compare.built.added' : 'map.biz.compare.built.removed', args },
@@ -318,14 +401,21 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
       const tier = gateTierOf(g.gate).tier;
       const screen = g.screen;
       const parts = gateNameParts(g.gate.name);
-      const args = { gate: parts.ident ? `${parts.ident} (${parts.phrase})` : g.gate.name, call: g.target.name, screen: screen?.name ?? nameOf(side, [...g.journeys][0]!) };
+      const args = {
+        gate: parts.ident ? `${parts.ident} (${parts.phrase})` : g.gate.name,
+        call: g.target.name,
+        screen: screen?.name ?? nameOf(side, [...g.journeys][0]!),
+      };
       const bizArgs = { words: gateWords(g.gate), screen: args.screen };
       out.push({
-        kind: 'gate', change,
+        kind: 'gate',
+        change,
         subject: { id: g.gate.id, name: g.gate.name, kind: g.gate.kind },
         target: { id: g.target.id, name: g.target.name, kind: g.target.kind },
-        journeys: [...g.journeys], ...(screen ? { screen: { id: screen.id, name: screen.name, flow: screen.flow, index: screen.index } } : {}),
-        tier, ...(g.gate.loc ? { loc: g.gate.loc } : {}),
+        journeys: [...g.journeys],
+        ...(screen ? { screen: { id: screen.id, name: screen.name, flow: screen.flow, index: screen.index } } : {}),
+        tier,
+        ...(g.gate.loc ? { loc: g.gate.loc } : {}),
         sentence: { key: `compare.delta.gate.${change}`, args, code: ['gate', 'call'] },
         biz: { key: `map.biz.compare.gate.${change}`, args: bizArgs },
         door: { kind: 'gate', key: 'compare.door.gate', node: g.gate.id },
@@ -338,15 +428,22 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
   // writer — a status of a record the storyline reaches gained or lost a writer
   const writers = (side: SideFacts) => {
     const m = new Map<string, { record: GraphNode; status: string; by: string }>();
-    for (const rec of side.records.values()) for (const tr of rec.lifecycle?.transitions ?? []) {
-      m.set(rec.id + '|' + tr.to + '|' + tr.by, { record: rec, status: tr.to, by: tr.by });
-    }
+    for (const rec of side.records.values())
+      for (const tr of rec.lifecycle?.transitions ?? []) {
+        m.set(rec.id + '|' + tr.to + '|' + tr.by, { record: rec, status: tr.to, by: tr.by });
+      }
     return m;
   };
   const unread = new Set<string>();
   const wa = writers(A);
   const wb = writers(B);
-  const writerDelta = (mine: typeof wa, theirs: typeof wa, side: SideFacts, idx: GraphIndex, change: 'added' | 'removed') => {
+  const writerDelta = (
+    mine: typeof wa,
+    theirs: typeof wa,
+    side: SideFacts,
+    idx: GraphIndex,
+    change: 'added' | 'removed',
+  ) => {
     for (const [k, w] of mine) {
       if (theirs.has(k)) continue;
       // a record only one sync reaches is not a writer change: the record joined or left the storyline
@@ -354,17 +451,23 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
       if (!other) continue;
       // a record whose statuses the other sync did not read at all is not a writer change either: that sync knows
       // no lifecycle for it (an older build, or the declaration came later) — said once as a note, never as moves
-      if (!other.lifecycle) { unread.add(`${w.record.name}|${change === 'added' ? a.end.sync : b.end.sync}`); continue; }
+      if (!other.lifecycle) {
+        unread.add(`${w.record.name}|${change === 'added' ? a.end.sync : b.end.sync}`);
+        continue;
+      }
       const writer = idx.byId.get(w.by);
       const journeys = [...side.reach].filter(([, r]) => r.has(w.by)).map(([f]) => f);
-      const wname = writer ? (gateNameParts(writer.name).ident || writer.name) : w.by.split('::').pop()!;
+      const wname = writer ? gateNameParts(writer.name).ident || writer.name : w.by.split('::').pop()!;
       const args = { status: w.status, writer: wname, record: w.record.name };
       const bizArgs = { status: statusWords(w.record, w.status), record: humanizeName(w.record.name).toLowerCase() };
       out.push({
-        kind: 'writer', change,
+        kind: 'writer',
+        change,
         subject: { id: w.by, name: args.writer, kind: (writer?.kind ?? 'function') as NodeKind },
         target: { id: w.record.id, name: w.record.name, kind: w.record.kind },
-        journeys, status: w.status, ...(writer?.loc ? { loc: writer.loc } : {}),
+        journeys,
+        status: w.status,
+        ...(writer?.loc ? { loc: writer.loc } : {}),
         sentence: { key: `compare.delta.writer.${change}`, args, code: ['status', 'writer'] },
         biz: { key: `map.biz.compare.writer.${change}`, args: bizArgs },
         door: { kind: 'move', key: 'compare.door.move', node: w.by },
@@ -378,11 +481,19 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
     notes.push(t('compare.note.noLifecycle', 'professional').replace('{record}', record!).replace('{sync}', sync!));
   }
   // two builds may read the same code differently: say so when both ends name the build that wrote them
-  const ba = a.meta.farsight?.commit, bb = b.meta.farsight?.commit;
-  if (ba && bb && ba !== bb) notes.push(t('compare.note.builds', 'professional').replace('{a}', ba.slice(0, 7)).replace('{b}', bb.slice(0, 7)));
+  const ba = a.meta.farsight?.commit,
+    bb = b.meta.farsight?.commit;
+  if (ba && bb && ba !== bb)
+    notes.push(t('compare.note.builds', 'professional').replace('{a}', ba.slice(0, 7)).replace('{b}', bb.slice(0, 7)));
 
   // contract — an operation the storyline reaches was added to, taken off or changed on the contract
-  const shape = (n: GraphNode) => JSON.stringify([n.contract?.params ?? [], n.contract?.requestBody ?? null, n.contract?.responses ?? [], n.contract?.security ?? []]);
+  const shape = (n: GraphNode) =>
+    JSON.stringify([
+      n.contract?.params ?? [],
+      n.contract?.requestBody ?? null,
+      n.contract?.responses ?? [],
+      n.contract?.security ?? [],
+    ]);
   for (const k of new Set([...A.ops.keys(), ...B.ops.keys()])) {
     const oa = A.ops.get(k);
     const ob = B.ops.get(k);
@@ -392,19 +503,32 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
     const declared = (c: GraphNode['contract']) => !!c && c.status !== 'code-only';
     let change: DeltaChange | null = null;
     let key = '';
-    if (!declared(ca) && declared(cb)) { change = 'added'; key = ob!.called ? 'added' : 'addedUncalled'; }
-    else if (declared(ca) && !declared(cb)) { change = 'removed'; key = 'removed'; }
-    else if (declared(ca) && declared(cb) && ca!.status !== cb!.status) { change = 'changed'; key = cb!.status === 'both' ? 'implemented' : ca!.status === 'both' ? 'unimplemented' : 'status'; }
-    else if (declared(ca) && declared(cb) && shape(oa!.route) !== shape(ob!.route)) { change = 'changed'; key = 'shape'; }
+    if (!declared(ca) && declared(cb)) {
+      change = 'added';
+      key = ob!.called ? 'added' : 'addedUncalled';
+    } else if (declared(ca) && !declared(cb)) {
+      change = 'removed';
+      key = 'removed';
+    } else if (declared(ca) && declared(cb) && ca!.status !== cb!.status) {
+      change = 'changed';
+      key = cb!.status === 'both' ? 'implemented' : ca!.status === 'both' ? 'unimplemented' : 'status';
+    } else if (declared(ca) && declared(cb) && shape(oa!.route) !== shape(ob!.route)) {
+      change = 'changed';
+      key = 'shape';
+    }
     if (!change) continue;
     const o = (change === 'removed' ? oa : ob)!;
     const c = (change === 'removed' ? ca : cb)!;
     const args = { op: o.route.name, from: ca?.status ?? 'none', to: cb?.status ?? 'none' };
     const bizArgs = { what: c.summary ? c.summary.replace(/\.$/, '') : humanizeName(o.route.name) };
     out.push({
-      kind: 'contract', change,
+      kind: 'contract',
+      change,
       subject: { id: o.route.id, name: o.route.name, kind: o.route.kind },
-      journeys: [...o.journeys], from: args.from, to: args.to, called: o.called,
+      journeys: [...o.journeys],
+      from: args.from,
+      to: args.to,
+      called: o.called,
       ...(o.route.loc ? { loc: o.route.loc } : {}),
       sentence: { key: `compare.delta.contract.${key}`, args, code: ['op'] },
       biz: { key: `map.biz.compare.contract.${key}`, args: bizArgs },
@@ -423,12 +547,19 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
     // the card's chip: the status (else the word) on each side; the skips when that is all that moved
     const same = va.short === vb.short;
     const chip = same
-      ? { from: t('compare.verdict.skipped', 'professional').replace('{n}', String(va.skipped)), to: t('compare.verdict.skipped', 'professional').replace('{n}', String(vb.skipped)) }
+      ? {
+          from: t('compare.verdict.skipped', 'professional').replace('{n}', String(va.skipped)),
+          to: t('compare.verdict.skipped', 'professional').replace('{n}', String(vb.skipped)),
+        }
       : { from: va.short, to: vb.short };
     out.push({
-      kind: 'verdict', change: 'changed', chip,
+      kind: 'verdict',
+      change: 'changed',
+      chip,
       subject: { id: flow, name: wbj.row.name, kind: 'flow' },
-      journeys: [flow], from: va.text, to: vb.text,
+      journeys: [flow],
+      from: va.text,
+      to: vb.text,
       sentence: { key: 'compare.delta.verdict.changed', args },
       biz: { key: 'map.biz.compare.verdict.changed', args: { journey: wbj.row.name, from: va.biz, to: vb.biz } },
       door: { kind: 'cases', key: 'compare.door.cases', flow },
@@ -436,10 +567,16 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
   }
 
   // the same source commit at both ends: nothing in the code moved, so every change is what Farsight reads of it
-  if (a.end.commit && b.end.commit && a.end.commit === b.end.commit && out.length) notes.push(t('compare.note.sameCommit', 'professional').replace('{commit}', a.end.commit.slice(0, 7)));
+  if (a.end.commit && b.end.commit && a.end.commit === b.end.commit && out.length)
+    notes.push(t('compare.note.sameCommit', 'professional').replace('{commit}', a.end.commit.slice(0, 7)));
   // a deterministic order: kind, then the subject, then the target — ids follow it
-  out.sort((x, y) => SEVERITY_ORDER[x.kind] - SEVERITY_ORDER[y.kind] || x.change.localeCompare(y.change)
-    || x.subject.id.localeCompare(y.subject.id) || (x.target?.id ?? '').localeCompare(y.target?.id ?? ''));
+  out.sort(
+    (x, y) =>
+      SEVERITY_ORDER[x.kind] - SEVERITY_ORDER[y.kind] ||
+      x.change.localeCompare(y.change) ||
+      x.subject.id.localeCompare(y.subject.id) ||
+      (x.target?.id ?? '').localeCompare(y.target?.id ?? ''),
+  );
   const deltas: StorylineDelta[] = out.map((d, i) => ({ id: `d${i + 1}`, ...d }));
 
   // the chips: per journey of the later sync, one entry per kind present
@@ -457,7 +594,8 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
     const w = B.walked.get(flow);
     const v = mine.find((d) => d.kind === 'verdict');
     byJourney.push({
-      flow, kinds,
+      flow,
+      kinds,
       ...(kinds.built && w ? { built: { n: w.sum.user.filter((u) => !!u.loc).length, of: w.sum.user.length } } : {}),
       ...(v ? { verdict: v.chip ?? { from: v.from!, to: v.to! } } : {}),
     });
@@ -467,7 +605,8 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
   const scope = 'count.scope.compare' as const;
   return {
     storyline: { id: st.id, name: st.name, repo: st.repo, ...(st.description ? { description: st.description } : {}) },
-    from: a.end, to: b.end,
+    from: a.end,
+    to: b.end,
     deltas,
     journeys: flows.map((f) => ({ flow: f, name: (B.walked.get(f) ?? A.walked.get(f))!.row.name })),
     byJourney,
@@ -477,7 +616,8 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
         breakdown: DELTA_KINDS.map((k) => ({ key: `count.part.delta.${k}`, n: by(k) })),
       }),
       journeys: counted(byJourney.length, 'count.unit.journeysChanged', scope, `${SRC} → byJourney`, {
-        of: new Set([...flows]).size, bizUnit: 'count.unit.journeysChanged',
+        of: new Set([...flows]).size,
+        bizUnit: 'count.unit.journeysChanged',
       }),
     },
     notes,
@@ -499,7 +639,8 @@ export function deltaLabel(d: Pick<StorylineDelta, 'kind' | 'change'>, register:
 
 /** The answer as lines — `farsight diff --storyline` and MCP `storyline_diff` print these. */
 export function storylineDiffLines(diff: StorylineDiff, opts: { biz?: boolean } = {}): string[] {
-  const end = (e: CompareEnd) => `sync ${e.sync ?? '?'}${e.commit ? ` · ${e.commit.slice(0, 7)}` : ''}${e.at ? ` · ${e.at.slice(0, 10)}` : ''}`;
+  const end = (e: CompareEnd) =>
+    `sync ${e.sync ?? '?'}${e.commit ? ` · ${e.commit.slice(0, 7)}` : ''}${e.at ? ` · ${e.at.slice(0, 10)}` : ''}`;
   const c = diff.counted.deltas;
   const parts = (c.breakdown ?? []).filter((p) => p.n).map((p) => t(p.key, 'professional').replace('{n}', String(p.n)));
   const lines = [
@@ -508,7 +649,9 @@ export function storylineDiffLines(diff: StorylineDiff, opts: { biz?: boolean } 
     `${t(c.n === 1 ? 'count.unit.deltasOne' : 'count.unit.deltas', 'professional').replace('{n}', String(c.n))} · ${t('count.scope.compare', 'professional')}${parts.length ? ' — ' + parts.join(' · ') : ''}`,
   ];
   for (const d of diff.deltas) {
-    lines.push(`  ${d.id}  ${deltaLabel(d).padEnd(22)} ${deltaText(d, { biz: opts.biz })}${d.tier ? ` [${d.tier}]` : ''}${d.loc ? `  (${d.loc.path}${d.loc.line != null ? ':' + d.loc.line : ''})` : ''}`);
+    lines.push(
+      `  ${d.id}  ${deltaLabel(d).padEnd(22)} ${deltaText(d, { biz: opts.biz })}${d.tier ? ` [${d.tier}]` : ''}${d.loc ? `  (${d.loc.path}${d.loc.line != null ? ':' + d.loc.line : ''})` : ''}`,
+    );
   }
   if (!diff.deltas.length) lines.push(`  ${t('compare.panel.none', 'professional')}`);
   for (const n of diff.notes) lines.push(`  note: ${n}`);
@@ -519,7 +662,11 @@ export function storylineDiffLines(diff: StorylineDiff, opts: { biz?: boolean } 
 // ── the frozen document: farsight-diff v1, grown by five kinds ──────────────
 
 const CHANGE_OF: Record<DeltaKind, ChangeKind> = {
-  built: 'storyline_built', gate: 'storyline_gate', writer: 'storyline_writer', contract: 'storyline_contract', verdict: 'storyline_verdict',
+  built: 'storyline_built',
+  gate: 'storyline_gate',
+  writer: 'storyline_writer',
+  contract: 'storyline_contract',
+  verdict: 'storyline_verdict',
 };
 
 /** The label a compare end prints in the document's `base` / `head`: `sync:41 · 4677268`, as `diffGraphs` labels its ends. */
@@ -534,7 +681,10 @@ function endLabel(e: CompareEnd): string {
  * because a storyline diff reports only its five), and the `storyline` block. With `failOn`, a `gate` block judges
  * it the way `farsight gate` does: a listed kind with at least one delta fails, exit 1.
  */
-export function storylineDiffDocument(diff: StorylineDiff, opts: { failOn?: readonly DeltaKind[]; limit?: number } = {}): GraphDiff {
+export function storylineDiffDocument(
+  diff: StorylineDiff,
+  opts: { failOn?: readonly DeltaKind[]; limit?: number } = {},
+): GraphDiff {
   const limit = opts.limit ?? 500;
   const counts = Object.fromEntries(CHANGE_KINDS.map((k) => [k, 0])) as Record<ChangeKind, number>;
   for (const d of diff.deltas) counts[CHANGE_OF[d.kind]]++;
@@ -542,8 +692,10 @@ export function storylineDiffDocument(diff: StorylineDiff, opts: { failOn?: read
   const b = diff.to.sync ?? 'x';
   const changes: DiffChange[] = diff.deltas.slice(0, limit).map((d, i) => {
     const delta: DiffDelta = {
-      kind: d.kind, change: d.change,
-      text: deltaText(d), biz: deltaText(d, { biz: true }),
+      kind: d.kind,
+      change: d.change,
+      text: deltaText(d),
+      biz: deltaText(d, { biz: true }),
       journeys: d.journeys,
       ...(d.screen ? { screen: d.screen } : {}),
       ...(d.target ? { target: d.target } : {}),
@@ -554,8 +706,10 @@ export function storylineDiffDocument(diff: StorylineDiff, opts: { failOn?: read
       ...(d.called != null ? { called: d.called } : {}),
       door: {
         kind: d.door.kind,
-        ...(d.door.node ? { node: d.door.node } : {}), ...(d.door.flow ? { flow: d.door.flow } : {}),
-        ...(d.door.screen != null ? { screen: d.door.screen } : {}), ...(d.door.api ? { api: d.door.api } : {}),
+        ...(d.door.node ? { node: d.door.node } : {}),
+        ...(d.door.flow ? { flow: d.door.flow } : {}),
+        ...(d.door.screen != null ? { screen: d.door.screen } : {}),
+        ...(d.door.api ? { api: d.door.api } : {}),
       },
     };
     const flow = d.screen?.flow ?? d.journeys[0];
@@ -565,7 +719,11 @@ export function storylineDiffDocument(diff: StorylineDiff, opts: { failOn?: read
       severity: 'notable' as const,
       confidence: 'resolved' as const,
       subject: d.subject,
-      ...(d.kind === 'verdict' ? { journey: { id: d.subject.id, name: d.subject.name } } : flow ? { journey: { id: flow, name: flow } } : {}),
+      ...(d.kind === 'verdict'
+        ? { journey: { id: d.subject.id, name: d.subject.name } }
+        : flow
+          ? { journey: { id: flow, name: flow } }
+          : {}),
       ...(d.loc && d.loc.line != null ? { loc: d.loc } : {}),
       permalink: `/compare/${a}...${b}#c${i + 1}`,
       delta,
@@ -574,7 +732,9 @@ export function storylineDiffDocument(diff: StorylineDiff, opts: { failOn?: read
   // a journey's name, not its id, where the change names one
   const names = new Map(diff.journeys.map((j) => [j.flow, j.name]));
   for (const c of changes) if (c.journey && names.has(c.journey.id)) c.journey.name = names.get(c.journey.id)!;
-  const byKind = Object.fromEntries(DELTA_KINDS.map((k) => [k, diff.deltas.filter((d) => d.kind === k).length])) as Record<DeltaKind, number>;
+  const byKind = Object.fromEntries(
+    DELTA_KINDS.map((k) => [k, diff.deltas.filter((d) => d.kind === k).length]),
+  ) as Record<DeltaKind, number>;
   const doc: GraphDiff = {
     schema: 'farsight-diff v1',
     base: endLabel(diff.from),
@@ -582,7 +742,15 @@ export function storylineDiffDocument(diff: StorylineDiff, opts: { failOn?: read
     truncated: diff.deltas.length > limit,
     counts,
     changes,
-    storyline: { id: diff.storyline.id, name: diff.storyline.name, repo: diff.storyline.repo, from: diff.from, to: diff.to, byKind, notes: diff.notes },
+    storyline: {
+      id: diff.storyline.id,
+      name: diff.storyline.name,
+      repo: diff.storyline.repo,
+      from: diff.from,
+      to: diff.to,
+      byKind,
+      notes: diff.notes,
+    },
   };
   if (opts.failOn?.length) {
     const rules = opts.failOn.map((k) => {
@@ -590,14 +758,22 @@ export function storylineDiffDocument(diff: StorylineDiff, opts: { failOn?: read
       return { rule: `fail on ${k}`, result: ids.length ? 'fail' : 'pass', changes: ids };
     });
     const failed = rules.some((r) => r.result === 'fail');
-    doc.gate = { policy: `--fail-on ${opts.failOn.join(',')}`, result: failed ? 'fail' : 'pass', exit: failed ? 1 : 0, rules };
+    doc.gate = {
+      policy: `--fail-on ${opts.failOn.join(',')}`,
+      result: failed ? 'fail' : 'pass',
+      exit: failed ? 1 : 0,
+      rules,
+    };
   }
   return doc;
 }
 
 /** `--fail-on gate,verdict` → the kinds, or the words that are not one of the five. */
 export function parseFailOn(value: string): { kinds: DeltaKind[]; unknown: string[] } {
-  const words = value.split(',').map((w) => w.trim()).filter(Boolean);
+  const words = value
+    .split(',')
+    .map((w) => w.trim())
+    .filter(Boolean);
   const kinds = words.filter((w): w is DeltaKind => (DELTA_KINDS as readonly string[]).includes(w));
   return { kinds, unknown: words.filter((w) => !(DELTA_KINDS as readonly string[]).includes(w)) };
 }
@@ -607,7 +783,8 @@ export function parseFailOn(value: string): { kinds: DeltaKind[]; unknown: strin
 /** How an end was named: a sync, the one before, the newest on or before a day, a release, the last green run. */
 export type CompareHow = 'sync' | 'previous' | 'date' | 'tag' | 'last-green' | 'now';
 
-export type CompareRef = { sync: number; how: CompareHow; label?: string } | { error: string; absent?: 'notIndexed'; noGreen?: true };
+export type CompareRef =
+  { sync: number; how: CompareHow; label?: string } | { error: string; absent?: 'notIndexed'; noGreen?: true };
 
 /** One sync's index and meta, read from history (the caller may serve the current one from its own graph). */
 export function compareSideOf(db: SnapshotDb, sync: number): CompareSide {
@@ -615,14 +792,23 @@ export function compareSideOf(db: SnapshotDb, sync: number): CompareSide {
   const { nodes, edges } = r.store.toJSON();
   const index = buildIndex(nodes, edges);
   setFreshnessMeta(index, r.store.meta);
-  return { index, meta: r.store.meta, end: { sync: r.ref.sync, at: r.ref.at, ...(r.ref.commit ? { commit: r.ref.commit } : {}), metaKept: r.metaKept } };
+  return {
+    index,
+    meta: r.store.meta,
+    end: { sync: r.ref.sync, at: r.ref.at, ...(r.ref.commit ? { commit: r.ref.commit } : {}), metaKept: r.metaKept },
+  };
 }
 
 /**
  * Whether a storyline was green at a side: every journey of it with cases has none that failed or was skipped on its
  * own last run, and at least one passed. A journey with no cases neither greens nor reddens it.
  */
-export function storylineGreen(side: CompareSide, storylineId: string, repo?: string, declaredBy?: CompareSide): boolean {
+export function storylineGreen(
+  side: CompareSide,
+  storylineId: string,
+  repo?: string,
+  declaredBy?: CompareSide,
+): boolean {
   const f = sideFacts(side, storylineId, repo, declaredBy);
   if (!f) return false;
   let passed = 0;
@@ -639,7 +825,12 @@ export function storylineGreen(side: CompareSide, storylineId: string, repo?: st
  * The newest sync before `head` at which the storyline was green (`storylineGreen`), looking back at most `window`
  * syncs the history holds. `undefined` when none in the window was.
  */
-export function lastGreenSync(db: SnapshotDb, storylineId: string, head: number, opts: { repo?: string; declaredBy?: CompareSide; window?: number } = {}): number | undefined {
+export function lastGreenSync(
+  db: SnapshotDb,
+  storylineId: string,
+  head: number,
+  opts: { repo?: string; declaredBy?: CompareSide; window?: number } = {},
+): number | undefined {
   const window = opts.window ?? 30;
   let looked = 0;
   for (let s = head - 1; s >= 1 && looked < window; s--) {
@@ -656,29 +847,59 @@ export function lastGreenSync(db: SnapshotDb, storylineId: string, head: number,
  * sync that ingested the release), `last-green`. A sync the history does not hold is said with the absence word
  * *not indexed*, never borrowed from a neighbour.
  */
-export function resolveCompareFrom(db: SnapshotDb, value: string, ctx: { head: number; storyline: string; repo?: string; declaredBy?: CompareSide; lastGreen?: () => number | undefined }): CompareRef {
+export function resolveCompareFrom(
+  db: SnapshotDb,
+  value: string,
+  ctx: {
+    head: number;
+    storyline: string;
+    repo?: string;
+    declaredBy?: CompareSide;
+    lastGreen?: () => number | undefined;
+  },
+): CompareRef {
   const v = value.trim();
-  const unheld = (n: number): CompareRef => ({ error: t('compare.panel.unheld', 'professional').replace('{sync}', String(n)), absent: 'notIndexed' });
+  const unheld = (n: number): CompareRef => ({
+    error: t('compare.panel.unheld', 'professional').replace('{sync}', String(n)),
+    absent: 'notIndexed',
+  });
   if (v === 'previous' || v === '') {
     // the newest earlier sync whose code differs: a sync that re-read the same commit compares to nothing
     const p = db.previousChanged(ctx.head) ?? db.previous(ctx.head);
-    return p == null ? { error: `no sync before sync ${ctx.head} in this history`, absent: 'notIndexed' } : { sync: p, how: 'previous' };
+    return p == null
+      ? { error: `no sync before sync ${ctx.head} in this history`, absent: 'notIndexed' }
+      : { sync: p, how: 'previous' };
   }
   const n = Number(v.replace(/^sync:/, ''));
   if (Number.isInteger(n) && n >= 1 && /^(sync:)?\d+$/.test(v)) return db.has(n) ? { sync: n, how: 'sync' } : unheld(n);
   const day = v.replace(/^date:/, '');
   if (/^\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?$/.test(day)) {
     const s = db.syncAtOrBefore(day);
-    return s == null ? { error: `no sync recorded on or before ${day} in this history`, absent: 'notIndexed' } : { sync: s, how: 'date', label: day.slice(0, 10) };
+    return s == null
+      ? { error: `no sync recorded on or before ${day} in this history`, absent: 'notIndexed' }
+      : { sync: s, how: 'date', label: day.slice(0, 10) };
   }
   if (v.startsWith('tag:')) {
     const name = v.slice(4);
     const rel = ctx.repo ? db.syncOfRelease(ctx.repo, name) : undefined;
-    return rel ? { sync: rel.sync, how: 'tag', label: name } : { error: `no release ${name} in this history${ctx.repo ? ` for ${ctx.repo}` : ''}`, absent: 'notIndexed' };
+    return rel
+      ? { sync: rel.sync, how: 'tag', label: name }
+      : { error: `no release ${name} in this history${ctx.repo ? ` for ${ctx.repo}` : ''}`, absent: 'notIndexed' };
   }
   if (v === 'last-green') {
-    const s = ctx.lastGreen ? ctx.lastGreen() : lastGreenSync(db, ctx.storyline, ctx.head, { ...(ctx.repo ? { repo: ctx.repo } : {}), ...(ctx.declaredBy ? { declaredBy: ctx.declaredBy } : {}) });
-    return s == null ? { error: t('compare.noGreen', 'professional').replace('{storyline}', ctx.storyline), absent: 'notIndexed', noGreen: true } : { sync: s, how: 'last-green' };
+    const s = ctx.lastGreen
+      ? ctx.lastGreen()
+      : lastGreenSync(db, ctx.storyline, ctx.head, {
+          ...(ctx.repo ? { repo: ctx.repo } : {}),
+          ...(ctx.declaredBy ? { declaredBy: ctx.declaredBy } : {}),
+        });
+    return s == null
+      ? {
+          error: t('compare.noGreen', 'professional').replace('{storyline}', ctx.storyline),
+          absent: 'notIndexed',
+          noGreen: true,
+        }
+      : { sync: s, how: 'last-green' };
   }
   return { error: `cannot read ${v} as a sync: use sync:N, previous, a day YYYY-MM-DD, tag:<name> or last-green` };
 }

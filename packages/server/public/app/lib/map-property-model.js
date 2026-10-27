@@ -21,7 +21,11 @@ function segIndex(sum, seg) {
 /** A node from the graph, else from the answer's screens, else a stub carrying what the segment knows. */
 function nodeOf(id, byId, data, fallback) {
   if (!id) return fallback || null;
-  return byId[id] || ((data && data.screens) || []).find((s) => s && s.id === id) || fallback || { id, name: id.split('::').pop(), kind: 'component' };
+  return (
+    byId[id] ||
+    ((data && data.screens) || []).find((s) => s && s.id === id) ||
+    fallback || { id, name: id.split('::').pop(), kind: 'component' }
+  );
 }
 
 /** What kind of picture the hero can draw: a file the server serves, a Figma frame it may render, or none declared. */
@@ -38,7 +42,9 @@ export function heroKind(node) {
  */
 export function screenComponents(seg, byId, data) {
   const ids = [];
-  const add = (id) => { if (id && !ids.includes(id)) ids.push(id); };
+  const add = (id) => {
+    if (id && !ids.includes(id)) ids.push(id);
+  };
   ((seg && seg.screen && seg.screen.components) || []).forEach(add);
   ((seg && seg.moments) || []).forEach((mo) => add(mo && mo.component && mo.component.id));
   ((seg && seg.markers) || []).forEach((m) => {
@@ -58,10 +64,18 @@ export function reachedData(calls) {
   for (const c of calls || []) {
     for (const d of (c && c.data) || []) {
       if (!d || !d.nodeId) continue;
-      const row = by.get(d.nodeId) || { nodeId: d.nodeId, name: d.name, kind: d.kind, modes: [], store: d.store || null };
+      const row = by.get(d.nodeId) || {
+        nodeId: d.nodeId,
+        name: d.name,
+        kind: d.kind,
+        modes: [],
+        store: d.store || null,
+      };
       if (!row.store && d.store) row.store = d.store;
       const modes = d.mode === 'both' ? ['read', 'write'] : [d.mode];
-      modes.forEach((m) => { if (m && !row.modes.includes(m)) row.modes.push(m); });
+      modes.forEach((m) => {
+        if (m && !row.modes.includes(m)) row.modes.push(m);
+      });
       by.set(d.nodeId, row);
     }
   }
@@ -80,7 +94,10 @@ export function dataByStore(rows) {
   for (const r of rows || []) {
     if (r.store && r.store.name) {
       let g = named.find((x) => x.store.name === r.store.name && x.store.kind === r.store.kind);
-      if (!g) { g = { store: r.store, kind: null, rows: [] }; named.push(g); }
+      if (!g) {
+        g = { store: r.store, kind: null, rows: [] };
+        named.push(g);
+      }
       g.rows.push(r);
     } else {
       const k = r.kind || 'record';
@@ -146,15 +163,19 @@ export function screenCases(cov) {
 export function testsScopeLine(sum, si, seg, cov, pageIds) {
   if (!cov || cov.notBuilt) return { actions: [], gates: [], page: null };
   const moments = (sum && sum.coverage && sum.coverage.moments && sum.coverage.moments[si]) || [];
-  const actions = ((seg && seg.moments) || []).map((mo, k) => {
-    const m = moments[k];
-    const n = m && m.counted && m.counted.tests ? m.counted.tests.n : 0;
-    return { mo, n };
-  }).filter((a) => a.n > 0 && !(a.mo && a.mo.repeat));
+  const actions = ((seg && seg.moments) || [])
+    .map((mo, k) => {
+      const m = moments[k];
+      const n = m && m.counted && m.counted.tests ? m.counted.tests.n : 0;
+      return { mo, n };
+    })
+    .filter((a) => a.n > 0 && !(a.mo && a.mo.repeat));
   const refs = screenCases(cov).filter((x) => !x.runLevel);
   const casesOn = (ids) => new Set(refs.filter((x) => x.reaches && ids.has(x.reaches.nodeId)).map((x) => x.id)).size;
-  const gates = ((seg && seg.gates) || []).map((g) => ({ gate: g, n: casesOn(new Set([g.id])) }))
-    .filter((g) => g.n > 0).sort((a, b) => b.n - a.n);
+  const gates = ((seg && seg.gates) || [])
+    .map((g) => ({ gate: g, n: casesOn(new Set([g.id])) }))
+    .filter((g) => g.n > 0)
+    .sort((a, b) => b.n - a.n);
   const page = casesOn(new Set((pageIds || []).filter(Boolean)));
   return { actions, gates, page };
 }
@@ -163,8 +184,14 @@ export function testsScopeLine(sum, si, seg, cov, pageIds) {
 export function screensNoTestReaches(sum) {
   const segs = (sum && sum.segments) || [];
   const cov = (sum && sum.coverage && sum.coverage.segments) || [];
-  return segs.map((sg, i) => ({ sg, c: cov[i] })).filter(({ c }) => c && c.counted && c.counted.tests && (c.notBuilt || !c.counted.tests.n))
-    .map(({ sg, c }) => ({ name: (sg.screen && sg.screen.name) || '', id: (sg.screen && sg.screen.id) || null, notBuilt: !!c.notBuilt }));
+  return segs
+    .map((sg, i) => ({ sg, c: cov[i] }))
+    .filter(({ c }) => c && c.counted && c.counted.tests && (c.notBuilt || !c.counted.tests.n))
+    .map(({ sg, c }) => ({
+      name: (sg.screen && sg.screen.name) || '',
+      id: (sg.screen && sg.screen.id) || null,
+      notBuilt: !!c.notBuilt,
+    }));
 }
 
 /** The number on the APIs tab: the distinct operations the code calls, or — for a screen not built — the stops its design declares. */
@@ -230,7 +257,10 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
         counted: c.gates || null,
         decisionsCounted: c.decisions || null,
         // the config checks this screen's code meets on the way (core gates.ts): never one of its gates
-        config: (seg.configChecks || []).slice().sort((a, b) => (a.stepOrder || 0) - (b.stepOrder || 0)).map((g) => ({ ...g, kind: 'guard', config: true })),
+        config: (seg.configChecks || [])
+          .slice()
+          .sort((a, b) => (a.stepOrder || 0) - (b.stepOrder || 0))
+          .map((g) => ({ ...g, kind: 'guard', config: true })),
         configCounted: c.configChecks || null,
       },
       apis: {
@@ -241,7 +271,9 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
       },
       ux: { page: node, components, built: screen.state !== 'planned' },
       tests: {
-        facts: cov, cases: screenCases(cov).filter((x) => !x.runLevel), reports: screenCases(cov).filter((x) => x.runLevel),
+        facts: cov,
+        cases: screenCases(cov).filter((x) => !x.runLevel),
+        reports: screenCases(cov).filter((x) => x.runLevel),
         scopeLine: testsScopeLine(sum, si, seg, cov, [pageId].concat(components.map((x) => x.id))),
         unreached: screensNoTestReaches(sum),
       },
@@ -249,7 +281,9 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
         route: (node && node.name) || screen.route || '',
         status: screen.state === 'planned' ? 'planned' : 'built',
         design,
-        declaredIn: designNode ? { id: designNode.id, name: designNode.name, path: designNode.loc && designNode.loc.path } : null,
+        declaredIn: designNode
+          ? { id: designNode.id, name: designNode.name, path: designNode.loc && designNode.loc.path }
+          : null,
         codeAt: (seg.screen && seg.screen.loc) || null,
         journeyLinks: sum.links || { requires: [], leadsTo: [], partOf: [] },
         otherWays: pageId ? otherWaysIn(pageId, byId, [data && data.edges, graphEdges]) : [],
@@ -261,8 +295,20 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
     // journey names that it did not reach, each with the absence word that says why
     place: placeOf(sum, screens.length),
     // the parts the Changes tab keeps a change for: the page, its components, the handlers its calls reach
-    changeIds: [pageId].concat(components.map((x) => x.id), handlerIds(seg)).filter(Boolean),
-    counts: { gates: c.gates || null, apis: apisCount(screen, seg), ux: null, tests: testsCount, work: null, changes: null },
+    changeIds: [pageId]
+      .concat(
+        components.map((x) => x.id),
+        handlerIds(seg),
+      )
+      .filter(Boolean),
+    counts: {
+      gates: c.gates || null,
+      apis: apisCount(screen, seg),
+      ux: null,
+      tests: testsCount,
+      work: null,
+      changes: null,
+    },
   };
 }
 
@@ -274,10 +320,16 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
  */
 export function placeOf(sum, streetLength) {
   const k = (sum && sum.counted) || {};
-  const reachedIds = new Set(((sum && sum.segments) || []).map((sg) => sg && sg.screen && sg.screen.id).filter(Boolean));
-  const notReached = ((sum && sum.user) || []).filter((u) => u && !reachedIds.has(u.id)).map((u) => ({
-    id: u.id, name: u.name, word: u.designStatus === 'design-only' || (!u.designStatus && !u.loc) ? 'notBuilt' : 'notReached',
-  }));
+  const reachedIds = new Set(
+    ((sum && sum.segments) || []).map((sg) => sg && sg.screen && sg.screen.id).filter(Boolean),
+  );
+  const notReached = ((sum && sum.user) || [])
+    .filter((u) => u && !reachedIds.has(u.id))
+    .map((u) => ({
+      id: u.id,
+      name: u.name,
+      word: u.designStatus === 'design-only' || (!u.designStatus && !u.loc) ? 'notBuilt' : 'notReached',
+    }));
   const reached = k.screensReached && k.screensReached.n === streetLength ? k.screensReached : null;
   return { reached, declared: k.screens || null, notReached };
 }

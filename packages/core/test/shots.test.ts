@@ -25,7 +25,9 @@ import { GraphStore, SnapshotDb, digestOf, sqliteAvailable } from '../dist/index
 import type { GraphNode, ShotInput } from '../dist/index.js';
 
 const available = sqliteAvailable();
-const opts = { skip: available ? false : 'node:sqlite unavailable on this runtime — degraded mode has no history to test' };
+const opts = {
+  skip: available ? false : 'node:sqlite unavailable on this runtime — degraded mode has no history to test',
+};
 
 function tempDb(): string {
   const dir = mkdtempSync(join(tmpdir(), 'farsight-shots-'));
@@ -44,7 +46,14 @@ const mkStore = (ids: string[]): GraphStore => {
 };
 
 const shot = (node: string, digest: string, over: Partial<ShotInput> = {}): ShotInput => ({
-  node, repo: 'r', digest, ext: 'png', kind: 'file', source: 'docs/design/screens/s.png', bytes: 1024, ...over,
+  node,
+  repo: 'r',
+  digest,
+  ext: 'png',
+  kind: 'file',
+  source: 'docs/design/screens/s.png',
+  bytes: 1024,
+  ...over,
 });
 
 test('two syncs with a changed image keep two digests, and both stay addressable', opts, () => {
@@ -58,9 +67,13 @@ test('two syncs with a changed image keep two digests, and both stay addressable
   assert.equal(db.shotAt('r::SCR-07', 1)!.digest, 'aaaa1111aaaa1111');
   assert.equal(db.shotAt('r::SCR-07', 2)!.digest, 'bbbb2222bbbb2222');
   // the strip reads newest first, and the two syncs are two different pictures
-  assert.deepEqual(db.shotsOf('r::SCR-07').map((r) => [r.sync, r.digest]), [
-    [2, 'bbbb2222bbbb2222'], [1, 'aaaa1111aaaa1111'],
-  ]);
+  assert.deepEqual(
+    db.shotsOf('r::SCR-07').map((r) => [r.sync, r.digest]),
+    [
+      [2, 'bbbb2222bbbb2222'],
+      [1, 'aaaa1111aaaa1111'],
+    ],
+  );
   assert.equal(db.shotsOf('r::SCR-07')[0]!.bytes, 2048);
   db.close();
 });
@@ -123,7 +136,10 @@ test('digestOf does not move when a shot is retained, and no node gains a field'
   const nodesAfter = JSON.stringify(db.read(1).store.toJSON().nodes);
   assert.equal(nodesAfter, nodesBefore, 'a picture is provenance, not graph content');
   assert.ok(!/digest|shot/.test(nodesAfter));
-  assert.deepEqual(db.list().map((s) => [s.sync, s.nodes, s.edges]), [[1, 2, 0]]);
+  assert.deepEqual(
+    db.list().map((s) => [s.sync, s.nodes, s.edges]),
+    [[1, 2, 0]],
+  );
   db.close();
 });
 
@@ -138,14 +154,21 @@ test('a database written before H8 gains sync_shot and keeps every row it had', 
   const raw = new DatabaseSync(path);
   raw.exec('DROP TABLE sync_shot');
   const tables = () =>
-    (raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[])
-      .map((r) => r.name);
+    (raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[]).map(
+      (r) => r.name,
+    );
   assert.ok(!tables().includes('sync_shot'));
   raw.close();
 
   const db = new SnapshotDb(path);
   const back = db.read(1);
-  assert.deepEqual(back.store.toJSON().nodes.map((n) => n.id).sort(), ['r::also', 'r::kept']);
+  assert.deepEqual(
+    back.store
+      .toJSON()
+      .nodes.map((n) => n.id)
+      .sort(),
+    ['r::also', 'r::kept'],
+  );
   assert.equal(back.ref.digest, digest);
   assert.equal(db.shotsAt(1).rows.length, 0, 'a migrated database has no shots, not an error');
   db.writeShots(1, [shot('r::kept', 'aaaa1111aaaa1111')]);

@@ -61,18 +61,24 @@ export function neighbourhoodModel(designs, workByFlow, tree) {
     }
   }
   // a container holds every screen of some other journey, and more
-  const contains = (a, b) => b.screens.length > 0 && b.screens.length < a.screens.length && b.screens.every((x) => a.screens.includes(x));
+  const contains = (a, b) =>
+    b.screens.length > 0 && b.screens.length < a.screens.length && b.screens.every((x) => a.screens.includes(x));
   const isContainer = new Map(rows.map((r) => [r.id, rows.some((o) => o !== r && contains(r, o))]));
   // bands by source, in the order the design answer names them; inside a band the containers, then by name
   const bandOrder = [...new Set(rows.map((r) => r.repo || ''))];
-  rows.sort((a, b) => (bandOrder.indexOf(a.repo || '') - bandOrder.indexOf(b.repo || ''))
-    || (Number(isContainer.get(b.id)) - Number(isContainer.get(a.id)))
-    || a.name.localeCompare(b.name));
+  rows.sort(
+    (a, b) =>
+      bandOrder.indexOf(a.repo || '') - bandOrder.indexOf(b.repo || '') ||
+      Number(isContainer.get(b.id)) - Number(isContainer.get(a.id)) ||
+      a.name.localeCompare(b.name),
+  );
   const at = placesFromTree(tree);
   const districts = rows.map((r, index) => {
     const places = at.places.get(r.id) || [];
     return {
-      ...r, index, container: !!isContainer.get(r.id),
+      ...r,
+      index,
+      container: !!isContainer.get(r.id),
       personaIds: places.map((x) => x.persona),
       groupId: places.length ? places[0].group : null,
       order: places.length ? places[0].order : null,
@@ -103,7 +109,8 @@ export function placesFromTree(tree) {
       for (const j of g.journeys || []) {
         if (!places.has(j.nodeId)) places.set(j.nodeId, []);
         const list = places.get(j.nodeId);
-        if (!list.some((x) => x.persona === p.id)) list.push({ persona: p.id, group: g.id, order: typeof j.order === 'number' ? j.order : null, rank: rank++ });
+        if (!list.some((x) => x.persona === p.id))
+          list.push({ persona: p.id, group: g.id, order: typeof j.order === 'number' ? j.order : null, rank: rank++ });
       }
     }
   }
@@ -164,10 +171,21 @@ export function layoutDistricts(items, opts = {}) {
         if (k > 0) echoes.set(id, it.id);
         // an echo is a card that leads to the street, not the street: `opts.echoW` narrows it
         const w = k > 0 && o.echoW > 0 ? Math.min(it.w, o.echoW) : it.w;
-        slots.push({ ...it, id, w, band: pl.persona, sub: pl.group == null ? '' : String(pl.group), rank: typeof pl.rank === 'number' ? pl.rank : i, at: i });
+        slots.push({
+          ...it,
+          id,
+          w,
+          band: pl.persona,
+          sub: pl.group == null ? '' : String(pl.group),
+          rank: typeof pl.rank === 'number' ? pl.rank : i,
+          at: i,
+        });
       });
     });
-    const bi = (k) => { const x = order.indexOf(k); return x < 0 ? order.length + (k === '\u0002' ? 1 : 0) : x; };
+    const bi = (k) => {
+      const x = order.indexOf(k);
+      return x < 0 ? order.length + (k === '\u0002' ? 1 : 0) : x;
+    };
     slots.sort((a, b) => bi(a.band) - bi(b.band) || a.rank - b.rank || a.at - b.at);
     const L = layoutDistricts(slots, { ...o, bandKey: (it) => it.band, subKey: o.groupRows ? (it) => it.sub : null });
     L.echoes = echoes;
@@ -181,7 +199,11 @@ export function layoutDistricts(items, opts = {}) {
   for (const it of list) {
     const key = bandKey(it) || '';
     let b = byKey.get(key);
-    if (!b) { b = { repo: key, items: [], subs: new Set() }; bands.push(b); byKey.set(key, b); }
+    if (!b) {
+      b = { repo: key, items: [], subs: new Set() };
+      bands.push(b);
+      byKey.set(key, b);
+    }
     b.items.push(it);
     if (subKey) b.subs.add(subKey(it) || '');
   }
@@ -194,7 +216,10 @@ export function layoutDistricts(items, opts = {}) {
   for (const b of bands) {
     for (let i = 0; i < b.items.length; i++) {
       let w = 0;
-      for (let j = i; j < b.items.length; j++) { w += b.items[j].w + (j > i ? o.colGap : 0); if (w >= widest) cands.add(w); }
+      for (let j = i; j < b.items.length; j++) {
+        w += b.items[j].w + (j > i ? o.colGap : 0);
+        if (w >= widest) cands.add(w);
+      }
     }
   }
   const subW = Number(o.subW) > 0 ? Number(o.subW) : 0;
@@ -202,23 +227,34 @@ export function layoutDistricts(items, opts = {}) {
     const rects = new Map();
     const out = [];
     const subs = [];
-    let y = o.margin, maxW = 0;
+    let y = o.margin,
+      maxW = 0;
     for (const b of bands) {
       const rowH = Math.max(0, ...b.items.map((i) => i.h));
       const top = y;
       const grouped = runs(b);
       const x0 = o.margin + (grouped ? subW : 0);
-      let x = x0, rowY = y + o.labelH, bandW = 0, cur = null, run = null;
+      let x = x0,
+        rowY = y + o.labelH,
+        bandW = 0,
+        cur = null,
+        run = null;
       for (const it of b.items) {
         const k = grouped ? subKey(it) || '' : null;
         // a new run (group) starts a new row; a row past the width wraps
-        if (x > x0 && ((grouped && k !== cur) || x - x0 + it.w > rowW)) { x = x0; rowY += rowH + o.rowGap; }
+        if (x > x0 && ((grouped && k !== cur) || x - x0 + it.w > rowW)) {
+          x = x0;
+          rowY += rowH + o.rowGap;
+        }
         if (grouped && k !== cur) {
           cur = k;
           run = { band: b.repo, key: k, x: o.margin, y: rowY, w: subW, h: rowH, n: 0 };
           subs.push(run);
         }
-        if (run) { run.n++; run.h = rowY + rowH - run.y; }
+        if (run) {
+          run.n++;
+          run.h = rowY + rowH - run.y;
+        }
         rects.set(it.id, { x, y: rowY, w: it.w, h: rowH });
         x += it.w + o.colGap;
         bandW = Math.max(bandW, x - o.colGap - o.margin);
@@ -233,11 +269,15 @@ export function layoutDistricts(items, opts = {}) {
     const size = { w: maxW + o.margin * 2, h: (bands.length ? y - o.bandGap : o.margin) + o.margin };
     return { rects, bands: out, size, rowW, subs };
   };
-  let best = null, bestScore = Infinity;
+  let best = null,
+    bestScore = Infinity;
   for (const w of [...cands].sort((a, b) => a - b)) {
     const r = place(w);
-    const score = Math.abs(Math.log((r.size.w / r.size.h) / o.aspect));
-    if (score < bestScore - 1e-9) { best = r; bestScore = score; }
+    const score = Math.abs(Math.log(r.size.w / r.size.h / o.aspect));
+    if (score < bestScore - 1e-9) {
+      best = r;
+      bestScore = score;
+    }
   }
   if (best) best.echoes = echoes;
   return best || place(widest);
@@ -263,24 +303,61 @@ export function storylineModel(nb, story) {
   }
   const districts = ids.map((id, i) => ({ ...byId.get(id), index: i, step: i + 1, steps: ids.length }));
   // a chain reads on: each line leaves a journey east or south and arrives at the next one west or north
-  const then = ids.slice(1).map((id, i) => ({ from: ids[i], to: id, kind: 'then', fromSides: ['e', 's'], toSides: ['w', 'n'] }));
+  const then = ids
+    .slice(1)
+    .map((id, i) => ({ from: ids[i], to: id, kind: 'then', fromSides: ['e', 's'], toSides: ['w', 'n'] }));
   // the branches (swarm-fixes 2026-10-05 §6): each leaves a step it is drawn below, with its condition on the line,
   // and a dashed line back to the step it rejoins; a branch whose journey or step is not drawn here is left out
   const branches = [];
   for (const b of Array.isArray(story.branches) ? story.branches : []) {
     const id = b && b.nodeId;
-    if (!id || !byId.has(id) || ids.includes(id) || branches.some((x) => x.id === id) || !ids.includes(b.branchOf)) continue;
+    if (!id || !byId.has(id) || ids.includes(id) || branches.some((x) => x.id === id) || !ids.includes(b.branchOf))
+      continue;
     const rejoins = b.rejoins && ids.includes(b.rejoins) ? b.rejoins : null;
-    branches.push({ id, of: b.branchOf, ofName: b.branchOfName || '', when: String(b.when || ''), rejoins, rejoinsName: rejoins ? b.rejoinsName || '' : '' });
+    branches.push({
+      id,
+      of: b.branchOf,
+      ofName: b.branchOfName || '',
+      when: String(b.when || ''),
+      rejoins,
+      rejoinsName: rejoins ? b.rejoinsName || '' : '',
+    });
   }
   const steps = ids.length;
   for (const b of branches) {
-    districts.push({ ...byId.get(b.id), index: districts.length, steps, branch: { of: b.of, ofName: b.ofName, when: b.when, rejoins: b.rejoins, rejoinsName: b.rejoinsName, step: ids.indexOf(b.of) + 1 } });
+    districts.push({
+      ...byId.get(b.id),
+      index: districts.length,
+      steps,
+      branch: {
+        of: b.of,
+        ofName: b.ofName,
+        when: b.when,
+        rejoins: b.rejoins,
+        rejoinsName: b.rejoinsName,
+        step: ids.indexOf(b.of) + 1,
+      },
+    });
   }
   // down from the step to the branch below it; back from the branch to the step it rejoins
-  const branchLinks = branches.map((b) => ({ from: b.of, to: b.id, kind: 'branch', when: b.when, fromSides: ['s'], toSides: ['n'] }));
-  const rejoinLinks = branches.filter((b) => b.rejoins).map((b) => ({ from: b.id, to: b.rejoins, kind: 'rejoin', fromSides: ['w', 'e'], toSides: ['w', 'e'] }));
-  return { ...base, districts, storyline: { id: story.id, name: story.name || story.id }, then: then.concat(branchLinks, rejoinLinks), branches };
+  const branchLinks = branches.map((b) => ({
+    from: b.of,
+    to: b.id,
+    kind: 'branch',
+    when: b.when,
+    fromSides: ['s'],
+    toSides: ['n'],
+  }));
+  const rejoinLinks = branches
+    .filter((b) => b.rejoins)
+    .map((b) => ({ from: b.id, to: b.rejoins, kind: 'rejoin', fromSides: ['w', 'e'], toSides: ['w', 'e'] }));
+  return {
+    ...base,
+    districts,
+    storyline: { id: story.id, name: story.name || story.id },
+    then: then.concat(branchLinks, rejoinLinks),
+    branches,
+  };
 }
 
 /**
@@ -304,7 +381,9 @@ export function placeBranches(L, branches, opts = {}) {
   for (const top of rowTops) {
     const row = [...rects.entries()].filter(([, r]) => r.y === top);
     for (const [, r] of row) r.y = top + shift;
-    const under = list.filter((b) => row.some(([k]) => k === b.of)).sort((a, b) => rects.get(a.of).x - rects.get(b.of).x);
+    const under = list
+      .filter((b) => row.some(([k]) => k === b.of))
+      .sort((a, b) => rects.get(a.of).x - rects.get(b.of).x);
     if (!under.length) continue;
     const rowH = Math.max(...row.map(([, r]) => r.h));
     const y = top + shift + rowH + o.gap;
@@ -321,7 +400,12 @@ export function placeBranches(L, branches, opts = {}) {
   for (const [k, r] of placed) rects.set(k, r);
   const right = Math.max(...[...rects.values()].map((r) => r.x + r.w));
   const bottom = Math.max(...[...rects.values()].map((r) => r.y + r.h));
-  const bands = (L.bands || []).map((b) => ({ ...b, w: Math.max(b.w, right - b.x + o.pad), h: Math.max(b.h, bottom - b.y + o.pad), n: (b.n || 0) + placed.size }));
+  const bands = (L.bands || []).map((b) => ({
+    ...b,
+    w: Math.max(b.w, right - b.x + o.pad),
+    h: Math.max(b.h, bottom - b.y + o.pad),
+    n: (b.n || 0) + placed.size,
+  }));
   const size = { w: Math.max(L.size.w, right + o.margin), h: Math.max(L.size.h, bottom + o.pad + o.margin) };
   return { ...L, rects, bands, size };
 }
@@ -353,7 +437,15 @@ export function storylineEvidence(ids, words) {
     { key: 'count.part.evNone', n: part.none },
     ...(part.unread ? [{ key: 'count.part.evUnread', n: part.unread }] : []),
   ];
-  return { n: part.run, of: all.length, unit: 'count.unit.storylineObserved', bizUnit: 'count.unit.storylineObserved', scope: 'count.scope.storyline', source: EVIDENCE_SRC, breakdown };
+  return {
+    n: part.run,
+    of: all.length,
+    unit: 'count.unit.storylineObserved',
+    bizUnit: 'count.unit.storylineObserved',
+    scope: 'count.scope.storyline',
+    source: EVIDENCE_SRC,
+    breakdown,
+  };
 }
 
 /**
@@ -398,100 +490,161 @@ export function routeLinks(rects, links, opts = {}) {
     { side: 'w', port: { x: r.x, y: r.y + r.h / 2 }, exit: { x: r.x - m, y: r.y + r.h / 2 }, dir: 3 },
   ];
   // the lanes: every district edge pushed out by the margin, and every port's line
-  const xs = new Set(), ys = new Set();
+  const xs = new Set(),
+    ys = new Set();
   for (const r of R) {
-    xs.add(r.x - m); xs.add(r.x + r.w + m); xs.add(r.x + r.w / 2);
-    ys.add(r.y - m); ys.add(r.y + r.h + m); ys.add(r.y + r.h / 2);
+    xs.add(r.x - m);
+    xs.add(r.x + r.w + m);
+    xs.add(r.x + r.w / 2);
+    ys.add(r.y - m);
+    ys.add(r.y + r.h + m);
+    ys.add(r.y + r.h / 2);
   }
-  const X = [...xs].sort((a, b) => a - b), Y = [...ys].sort((a, b) => a - b);
-  const NX = X.length, NY = Y.length;
+  const X = [...xs].sort((a, b) => a - b),
+    Y = [...ys].sort((a, b) => a - b);
+  const NX = X.length,
+    NY = Y.length;
   // a lane crossing is open unless it lies inside some district's margin: each district closes the crossings
   // inside its own box (a binary search into the sorted lanes), instead of every crossing asking every district
   // (lanes² × districts was most of a board's draw at 300 journeys)
   const ok = new Uint8Array(NX * NY).fill(1);
-  const firstAbove = (A, v) => { let lo = 0, hi = A.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (A[mid] > v) hi = mid; else lo = mid + 1; } return lo; };
+  const firstAbove = (A, v) => {
+    let lo = 0,
+      hi = A.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (A[mid] > v) hi = mid;
+      else lo = mid + 1;
+    }
+    return lo;
+  };
   for (const r of R) {
-    const x0 = r.x - m + 0.5, x1 = r.x + r.w + m - 0.5, y0 = r.y - m + 0.5, y1 = r.y + r.h + m - 0.5;
-    const i0 = firstAbove(X, x0), j0 = firstAbove(Y, y0);
+    const x0 = r.x - m + 0.5,
+      x1 = r.x + r.w + m - 0.5,
+      y0 = r.y - m + 0.5,
+      y1 = r.y + r.h + m - 0.5;
+    const i0 = firstAbove(X, x0),
+      j0 = firstAbove(Y, y0);
     for (let j = j0; j < NY && Y[j] < y1; j++) for (let i = i0; i < NX && X[i] < x1; i++) ok[j * NX + i] = 0;
   }
-  const xi = new Map(X.map((v, i) => [v, i])), yi = new Map(Y.map((v, j) => [v, j]));
-  const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
-  const used = new Map();                      // lane segment → how many lines run on it
+  const xi = new Map(X.map((v, i) => [v, i])),
+    yi = new Map(Y.map((v, j) => [v, j]));
+  const DX = [0, 1, 0, -1],
+    DY = [-1, 0, 1, 0];
+  const used = new Map(); // lane segment → how many lines run on it
   const segKey = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
 
   const route = (ra, rb, only, onlyTo) => {
     const dOnly = onlyTo === undefined ? only : onlyTo;
-    const src = sides(ra).filter((x) => !only || only.includes(x.side)), dst = sides(rb).filter((x) => !dOnly || dOnly.includes(x.side));
+    const src = sides(ra).filter((x) => !only || only.includes(x.side)),
+      dst = sides(rb).filter((x) => !dOnly || dOnly.includes(x.side));
     const dist = new Float64Array(NX * NY * 4).fill(Infinity);
     const prev = new Int32Array(NX * NY * 4).fill(-1);
     const heap = [];
     const push = (c, s) => {
       heap.push([c, s]);
       let i = heap.length - 1;
-      while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; }
+      while (i > 0) {
+        const p = (i - 1) >> 1;
+        if (heap[p][0] <= heap[i][0]) break;
+        [heap[p], heap[i]] = [heap[i], heap[p]];
+        i = p;
+      }
     };
     const pop = () => {
-      const top = heap[0], last = heap.pop();
+      const top = heap[0],
+        last = heap.pop();
       if (heap.length) {
         heap[0] = last;
         let i = 0;
         for (;;) {
-          const l = 2 * i + 1, r = l + 1;
+          const l = 2 * i + 1,
+            r = l + 1;
           let k = i;
           if (l < heap.length && heap[l][0] < heap[k][0]) k = l;
           if (r < heap.length && heap[r][0] < heap[k][0]) k = r;
           if (k === i) break;
-          [heap[k], heap[i]] = [heap[i], heap[k]]; i = k;
+          [heap[k], heap[i]] = [heap[i], heap[k]];
+          i = k;
         }
       }
       return top;
     };
     for (const s of src) {
-      const i = xi.get(s.exit.x), j = yi.get(s.exit.y);
+      const i = xi.get(s.exit.x),
+        j = yi.get(s.exit.y);
       if (i == null || j == null || !ok[j * NX + i]) continue;
       const st = (j * NX + i) * 4 + s.dir;
-      if (dist[st] > 0) { dist[st] = 0; prev[st] = -2 - src.indexOf(s); push(0, st); }
+      if (dist[st] > 0) {
+        dist[st] = 0;
+        prev[st] = -2 - src.indexOf(s);
+        push(0, st);
+      }
     }
     const goal = new Map();
     for (const d of dst) {
-      const i = xi.get(d.exit.x), j = yi.get(d.exit.y);
+      const i = xi.get(d.exit.x),
+        j = yi.get(d.exit.y);
       if (i != null && j != null && ok[j * NX + i]) goal.set(j * NX + i, d);
     }
-    let best = Infinity, bestSt = -1, bestDst = null;
+    let best = Infinity,
+      bestSt = -1,
+      bestDst = null;
     while (heap.length) {
       const [c, st] = pop();
       if (c > dist[st] || c >= best) continue;
-      const node = st >> 2, dir = st & 3;
+      const node = st >> 2,
+        dir = st & 3;
       const g = goal.get(node);
       if (g) {
         const inward = (g.dir + 2) & 3;
         const tot = c + (dir === inward ? 0 : o.bend);
-        if (tot < best) { best = tot; bestSt = st; bestDst = g; }
+        if (tot < best) {
+          best = tot;
+          bestSt = st;
+          bestDst = g;
+        }
       }
-      const i = node % NX, j = (node - i) / NX;
+      const i = node % NX,
+        j = (node - i) / NX;
       for (let nd = 0; nd < 4; nd++) {
         if (nd === ((dir + 2) & 3)) continue;
-        const ni = i + DX[nd], nj = j + DY[nd];
+        const ni = i + DX[nd],
+          nj = j + DY[nd];
         if (ni < 0 || nj < 0 || ni >= NX || nj >= NY || !ok[nj * NX + ni]) continue;
         const len = Math.abs(X[ni] - X[i]) + Math.abs(Y[nj] - Y[j]);
         const k = segKey(node, nj * NX + ni);
         const nc = c + len + (nd === dir ? 0 : o.bend) + (used.get(k) || 0) * o.reuse;
         const ns = (nj * NX + ni) * 4 + nd;
-        if (nc < dist[ns]) { dist[ns] = nc; prev[ns] = st; push(nc, ns); }
+        if (nc < dist[ns]) {
+          dist[ns] = nc;
+          prev[ns] = st;
+          push(nc, ns);
+        }
       }
     }
     if (bestSt < 0) return null;
     const cells = [];
-    let st = bestSt, first = null;
-    while (st >= 0) { cells.push(st >> 2); const p = prev[st]; if (p < -1) first = src[-2 - p]; st = p; }
+    let st = bestSt,
+      first = null;
+    while (st >= 0) {
+      cells.push(st >> 2);
+      const p = prev[st];
+      if (p < -1) first = src[-2 - p];
+      st = p;
+    }
     cells.reverse();
-    for (let c = 1; c < cells.length; c++) { const k = segKey(cells[c - 1], cells[c]); used.set(k, (used.get(k) || 0) + 1); }
+    for (let c = 1; c < cells.length; c++) {
+      const k = segKey(cells[c - 1], cells[c]);
+      used.set(k, (used.get(k) || 0) + 1);
+    }
     const pts = [first.port, ...cells.map((n) => ({ x: X[n % NX], y: Y[Math.floor(n / NX)] })), bestDst.port];
     // keep the corners only
     const out = [pts[0]];
     for (let c = 1; c < pts.length - 1; c++) {
-      const a = out[out.length - 1], b = pts[c], n = pts[c + 1];
+      const a = out[out.length - 1],
+        b = pts[c],
+        n = pts[c + 1];
       if ((a.x === b.x && b.x === n.x) || (a.y === b.y && b.y === n.y)) continue;
       out.push(b);
     }
@@ -499,10 +652,18 @@ export function routeLinks(rects, links, opts = {}) {
     return out.map((p) => ({ x: p.x, y: p.y }));
   };
 
-  const offRects = (bx) => !R.some((r) => bx.x - bx.w / 2 < r.x + r.w + o.pad && r.x - o.pad < bx.x + bx.w / 2 && bx.y - bx.h / 2 < r.y + r.h + o.pad && r.y - o.pad < bx.y + bx.h / 2);
+  const offRects = (bx) =>
+    !R.some(
+      (r) =>
+        bx.x - bx.w / 2 < r.x + r.w + o.pad &&
+        r.x - o.pad < bx.x + bx.w / 2 &&
+        bx.y - bx.h / 2 < r.y + r.h + o.pad &&
+        r.y - o.pad < bx.y + bx.h / 2,
+    );
   const hasRoom = (pts, w, h) => {
     for (let k = 0; k < pts.length - 1; k++) {
-      const a = pts[k], b = pts[k + 1];
+      const a = pts[k],
+        b = pts[k + 1];
       if (a.y !== b.y || Math.abs(a.x - b.x) < w + 2 * o.pad) continue;
       if (offRects({ x: (a.x + b.x) / 2, y: a.y, w, h })) return true;
     }
@@ -510,7 +671,8 @@ export function routeLinks(rects, links, opts = {}) {
   };
   const routed = [];
   for (const l of links || []) {
-    const a = rects.get(l.from), b = rects.get(l.to);
+    const a = rects.get(l.from),
+      b = rects.get(l.to);
     if (!a || !b || l.from === l.to) continue;
     // a link may name the sides it leaves and arrives by (a storyline's then reads on: out east or south, in west or north)
     let points = (l.fromSides || l.toSides ? route(a, b, l.fromSides || null, l.toSides || null) : null) || route(a, b);
@@ -530,7 +692,8 @@ export function routeLinks(rects, links, opts = {}) {
     const lanes = new Map();
     routed.forEach((l, li) => {
       for (let k = 1; k < l.points.length - 2; k++) {
-        const a = l.points[k], b = l.points[k + 1];
+        const a = l.points[k],
+          b = l.points[k + 1];
         if (a[axis] !== b[axis]) continue;
         const key = a[axis];
         if (!lanes.has(key)) lanes.set(key, []);
@@ -543,7 +706,10 @@ export function routeLinks(rects, links, opts = {}) {
       const tracks = [];
       for (const r of runs.sort((p, q) => p.lo - q.lo)) {
         let t = tracks.findIndex((tr) => tr.every((x) => x.hi <= r.lo || x.lo >= r.hi || x.li === r.li));
-        if (t < 0) { tracks.push([]); t = tracks.length - 1; }
+        if (t < 0) {
+          tracks.push([]);
+          t = tracks.length - 1;
+        }
         tracks[t].push(r);
         r.track = t;
       }
@@ -559,15 +725,27 @@ export function routeLinks(rects, links, opts = {}) {
 
   // one label per line, on its longest clear straight run
   const boxes = [];
-  const clear = (bx) => offRects(bx)
-    && !boxes.some((b) => bx.x - bx.w / 2 < b.x + b.w / 2 && b.x - b.w / 2 < bx.x + bx.w / 2 && bx.y - bx.h / 2 < b.y + b.h / 2 && b.y - b.h / 2 < bx.y + bx.h / 2);
+  const clear = (bx) =>
+    offRects(bx) &&
+    !boxes.some(
+      (b) =>
+        bx.x - bx.w / 2 < b.x + b.w / 2 &&
+        b.x - b.w / 2 < bx.x + bx.w / 2 &&
+        bx.y - bx.h / 2 < b.y + b.h / 2 &&
+        b.y - b.h / 2 < bx.y + bx.h / 2,
+    );
   for (const l of routed) {
     if (!l.labelW || !l.labelH) continue;
     // the label grows with the counter-scale up to the largest of `scales`; it is placed at the largest it fits at,
     // and drawn only while the board is zoomed in at least that far (`label.scale`)
     for (const sc of [...o.scales].sort((p, q) => q - p)) {
       const placed = placeLabel(l, l.labelW * sc, l.labelH * sc);
-      if (placed) { placed.scale = sc; boxes.push(placed); l.label = placed; break; }
+      if (placed) {
+        placed.scale = sc;
+        boxes.push(placed);
+        l.label = placed;
+        break;
+      }
     }
   }
   return routed;
@@ -575,7 +753,8 @@ export function routeLinks(rects, links, opts = {}) {
   function placeLabel(l, w, h) {
     const runs = [];
     for (let k = 0; k < l.points.length - 1; k++) {
-      const a = l.points[k], b = l.points[k + 1];
+      const a = l.points[k],
+        b = l.points[k + 1];
       const len = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
       runs.push({ a, b, len, flat: a.y === b.y });
     }
@@ -587,10 +766,14 @@ export function routeLinks(rects, links, opts = {}) {
       // the middle first, then towards either end
       for (const f of [0.5, 0.35, 0.65, 0.2, 0.8]) {
         const bx = { x: r.a.x + (r.b.x - r.a.x) * f, y: r.a.y + (r.b.y - r.a.y) * f, w, h };
-        const lo = r.flat ? Math.min(r.a.x, r.b.x) : Math.min(r.a.y, r.b.y), hi = r.flat ? Math.max(r.a.x, r.b.x) : Math.max(r.a.y, r.b.y);
+        const lo = r.flat ? Math.min(r.a.x, r.b.x) : Math.min(r.a.y, r.b.y),
+          hi = r.flat ? Math.max(r.a.x, r.b.x) : Math.max(r.a.y, r.b.y);
         const c = r.flat ? bx.x : bx.y;
         if (c - room / 2 < lo + o.pad || c + room / 2 > hi - o.pad) continue;
-        if (clear(bx)) { placed = bx; break; }
+        if (clear(bx)) {
+          placed = bx;
+          break;
+        }
       }
       if (placed) break;
     }
@@ -683,7 +866,8 @@ export function streetModel(data, graphById) {
   const get = getter(graphById);
   const summary = (data && data.summary) || {};
   const entry = summary.entry || (data && data.entry) || {};
-  const services = (summary.systems || []).filter((r) => r && r.kind === 'api')
+  const services = (summary.systems || [])
+    .filter((r) => r && r.kind === 'api')
     .map((r, index) => ({ key: r.key, label: r.label || r.key, index, planned: !!r.planned }));
   const fullScreens = new Map(((data && data.screens) || []).filter(Boolean).map((n) => [n.id, n]));
   const coverage = (summary.coverage && summary.coverage.segments) || [];
@@ -693,16 +877,22 @@ export function streetModel(data, graphById) {
   const lead = [];
   const screens = [];
   for (const seg of segments) {
-    if (!seg.screen) { lead.push(seg); continue; }
+    if (!seg.screen) {
+      lead.push(seg);
+      continue;
+    }
     screens.push(screenRow(seg, screens.length, lead.splice(0)));
   }
 
   function screenRow(seg, index, folded) {
     const sc = seg.screen;
-    const node = fullScreens.get(sc.id) || get(sc.id) || {
-      id: sc.id, name: sc.name, kind: sc.kind,
-      design: sc.designStatus ? { status: sc.designStatus, id: sc.designId } : undefined,
-    };
+    const node = fullScreens.get(sc.id) ||
+      get(sc.id) || {
+        id: sc.id,
+        name: sc.name,
+        kind: sc.kind,
+        design: sc.designStatus ? { status: sc.designStatus, id: sc.designId } : undefined,
+      };
     const routeName = node && node.kind === 'page' && /^\//.test(String(node.name || '')) ? node.name : '';
     const planned = sc.designStatus === 'design-only' || (!sc.loc && !(node && node.loc));
     const cov = coverage[seg.index] || null;
@@ -717,7 +907,8 @@ export function streetModel(data, graphById) {
         marker: null,
         moment: null,
         service: route && route.contract ? serviceFor(services, 'api:' + route.contract.apiId) : null,
-        method: mp.method, path: mp.path,
+        method: mp.method,
+        path: mp.path,
         operationId: d.op || (route && route.contract && route.contract.spec && route.contract.spec.operationId) || '',
         summary: (route && route.contract && route.contract.summary) || d.label || '',
         label: d.label || (route && route.contract && route.contract.summary) || d.op || '',
@@ -757,13 +948,16 @@ export function streetModel(data, graphById) {
     const markers = (seg.markers || []).slice().sort((a, b) => a.stepOrder - b.stepOrder);
     const byOrder = new Map(markers.map((m) => [m.stepOrder, m]));
     const moments = seg.moments || [];
-    const callOf = new Map();          // stepOrder of a call marker → its MapCall
+    const callOf = new Map(); // stepOrder of a call marker → its MapCall
     for (const m of markers) {
       if (m.kind !== 'call') continue;
       const route = get(m.nodeId);
       const moment = moments[m.moment] || null;
       const prior = calls.find((c) => c.nodeId === m.nodeId);
-      if (prior) { callOf.set(m.stepOrder, prior); continue; }
+      if (prior) {
+        callOf.set(m.stepOrder, prior);
+        continue;
+      }
       const mp = methodPath(m);
       const contract = (route && route.contract) || {};
       const label = m.title || contract.summary || (moment && moment.label) || m.name || '';
@@ -772,7 +966,8 @@ export function streetModel(data, graphById) {
         marker: m,
         moment,
         service: serviceFor(services, m.system),
-        method: mp.method, path: mp.path,
+        method: mp.method,
+        path: mp.path,
         operationId: (contract.spec && contract.spec.operationId) || '',
         summary: contract.summary || m.title || '',
         label,
@@ -801,9 +996,20 @@ export function streetModel(data, graphById) {
       if (!call || call.evidence === 'not built') continue;
       const mode = dataMode(m);
       const have = call.data.find((d) => d.nodeId === m.nodeId);
-      if (have) { have.mode = mergeMode(have.mode, mode); if (!have.store) have.store = storeOf(m, have.node); continue; }
+      if (have) {
+        have.mode = mergeMode(have.mode, mode);
+        if (!have.store) have.store = storeOf(m, have.node);
+        continue;
+      }
       const node = get(m.nodeId);
-      call.data.push({ kind: m.kind, nodeId: m.nodeId, name: m.name || (node && node.name) || m.nodeId, node, mode, store: storeOf(m, node) });
+      call.data.push({
+        kind: m.kind,
+        nodeId: m.nodeId,
+        name: m.name || (node && node.name) || m.nodeId,
+        node,
+        mode,
+        store: storeOf(m, node),
+      });
     }
   }
 
@@ -825,7 +1031,9 @@ export function streetModel(data, graphById) {
  */
 function journeyStores(summary, screens) {
   const listed = summary && summary.system && Array.isArray(summary.system.stores) ? summary.system.stores : [];
-  const out = listed.filter((s) => s && s.name).map((s) => ({ name: String(s.name), kind: s.kind || 'other', ops: (s.ops || []).slice() }));
+  const out = listed
+    .filter((s) => s && s.name)
+    .map((s) => ({ name: String(s.name), kind: s.kind || 'other', ops: (s.ops || []).slice() }));
   const fromSummary = new Set(out.map((r) => r.name + '|' + r.kind));
   for (const sc of screens) {
     for (const c of sc.calls) {
@@ -833,9 +1041,19 @@ function journeyStores(summary, screens) {
         if (!d.store) continue;
         const key = d.store.name + '|' + d.store.kind;
         let row = out.find((r) => r.name + '|' + r.kind === key);
-        if (!row) { row = { name: d.store.name, kind: d.store.kind, ops: [] }; out.push(row); }
-        if (fromSummary.has(key)) continue;   // the summary's own ops stand
-        const ops = d.mode === 'both' ? ['reads', 'writes'] : d.mode === 'read' ? ['reads'] : d.mode === 'write' ? ['writes'] : [];
+        if (!row) {
+          row = { name: d.store.name, kind: d.store.kind, ops: [] };
+          out.push(row);
+        }
+        if (fromSummary.has(key)) continue; // the summary's own ops stand
+        const ops =
+          d.mode === 'both'
+            ? ['reads', 'writes']
+            : d.mode === 'read'
+              ? ['reads']
+              : d.mode === 'write'
+                ? ['writes']
+                : [];
         for (const o of ops) if (!row.ops.includes(o)) row.ops.push(o);
       }
     }
@@ -848,7 +1066,7 @@ function journeyStores(summary, screens) {
  * @group Map
  */
 export function storesOf(model) {
-  return (model && Array.isArray(model.stores)) ? model.stores : [];
+  return model && Array.isArray(model.stores) ? model.stores : [];
 }
 
 /**
@@ -857,9 +1075,9 @@ export function storesOf(model) {
  * @group Map
  */
 export function screensUsing(model, kind, nodeId) {
-  return ((model && model.screens) || []).filter((s) => s.calls.some((c) => (kind === 'call'
-    ? c.nodeId === nodeId
-    : c.data.some((d) => d.nodeId === nodeId))));
+  return ((model && model.screens) || []).filter((s) =>
+    s.calls.some((c) => (kind === 'call' ? c.nodeId === nodeId : c.data.some((d) => d.nodeId === nodeId))),
+  );
 }
 
 /**

@@ -19,7 +19,12 @@ function tempRepo(files: Record<string, string>): string {
   return dir;
 }
 const ingest = (files: Record<string, string>) =>
-  ingestRepo(tempRepo({ 'package.json': '{"name":"w"}', ...files }), { repoName: 'w', openapi: false, design: false, tests: false });
+  ingestRepo(tempRepo({ 'package.json': '{"name":"w"}', ...files }), {
+    repoName: 'w',
+    openapi: false,
+    design: false,
+    tests: false,
+  });
 
 /** The server: GET and POST on one path, a lone PATCH, nothing at /api/v1/missing. */
 export const SERVER = [
@@ -68,7 +73,11 @@ test('a wrapper with the literal method at the caller: GET and POST on one path 
   assert.equal(create?.resolution?.confidence, 'HIGH');
   const [patch] = httpFrom(g, 'patchInvoice');
   assert.equal(patch?.to, 'w::route::PATCH /api/v1/ops/invoices/:id', 'a destructured { method, url } wrapper');
-  assert.equal(g.edges.some((e) => e.kind === 'http' && e.from.startsWith('w::src/api/http.ts::apiFetch')), false, 'the wrapper itself is no call site');
+  assert.equal(
+    g.edges.some((e) => e.kind === 'http' && e.from.startsWith('w::src/api/http.ts::apiFetch')),
+    false,
+    'the wrapper itself is no call site',
+  );
 });
 
 test('two levels: post(path) → apiFetch(path, { method: "POST" }) — the outer literal wins', async () => {
@@ -88,7 +97,11 @@ test('no literal at the caller on a path with GET and POST: GET assumed, flagged
   assert.equal(any?.meta?.candidates, 'w::route::POST /api/v1/ops/invoices');
   assert.deepEqual(any?.resolution?.candidates, ['w::route::POST /api/v1/ops/invoices']);
   assert.equal(any?.resolution?.confidence, 'MEDIUM');
-  assert.equal(g.nodes.some((n) => n.kind === 'unknown' && n.name.startsWith('? ')), false, 'no `?` stub for a path a route serves');
+  assert.equal(
+    g.nodes.some((n) => n.kind === 'unknown' && n.name.startsWith('? ')),
+    false,
+    'no `?` stub for a path a route serves',
+  );
 });
 
 test('a path no route serves is still a stub', async () => {
@@ -114,8 +127,15 @@ test('direct fetch is unchanged: a literal URL is its own site, a wrapper in a h
       '}',
     ].join('\n'),
   });
-  assert.equal(g.edges.find((e) => e.kind === 'http' && e.from === 'w::src/a.ts::a')?.to, 'w::route::POST /api/v1/ops/invoices');
-  assert.equal(g.nodes.some((n) => n.kind === 'unknown'), false, 'the ERP client does not leak stubs for its own paths');
+  assert.equal(
+    g.edges.find((e) => e.kind === 'http' && e.from === 'w::src/a.ts::a')?.to,
+    'w::route::POST /api/v1/ops/invoices',
+  );
+  assert.equal(
+    g.nodes.some((n) => n.kind === 'unknown'),
+    false,
+    'the ERP client does not leak stubs for its own paths',
+  );
   assert.ok(g.edges.some((e) => e.kind === 'http' && e.to === 'w::external::erp.example.com'));
 });
 
@@ -128,6 +148,13 @@ test('the journey says when a method was assumed: the call marker carries method
     const sum = journeySummary(index, journey(index, id), screensFor(index, index.byId.get(id)!));
     return sum.segments.flatMap((sg) => sg.markers).filter((m) => m.kind === 'call');
   };
-  assert.deepEqual(calls('anyInvoices').map((m) => [m.method, m.methodAssumed]), [['GET', 'GET']]);
-  assert.deepEqual(calls('listInvoices').map((m) => [m.method, m.methodAssumed ?? null]), [['GET', null]], 'a GET the code names is not assumed');
+  assert.deepEqual(
+    calls('anyInvoices').map((m) => [m.method, m.methodAssumed]),
+    [['GET', 'GET']],
+  );
+  assert.deepEqual(
+    calls('listInvoices').map((m) => [m.method, m.methodAssumed ?? null]),
+    [['GET', null]],
+    'a GET the code names is not assumed',
+  );
 });

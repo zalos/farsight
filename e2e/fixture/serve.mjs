@@ -8,7 +8,12 @@ const port = process.argv[2] ?? '4510';
 const ws = makeWorkspace(`serve-${port}`, { fixed: true });
 console.log(`[e2e] fixture workspace ${ws.dir}`);
 const child = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', port], { cwd: ws.dir, stdio: 'inherit' });
-const stop = () => { child.kill('SIGTERM'); };
+const stop = () => {
+  child.kill('SIGTERM');
+};
 process.on('SIGTERM', stop);
 process.on('SIGINT', stop);
-child.on('exit', (code) => { ws.cleanup(); process.exit(code ?? 0); });
+child.on('exit', (code) => {
+  ws.cleanup();
+  process.exit(code ?? 0);
+});

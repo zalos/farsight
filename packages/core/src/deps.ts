@@ -103,7 +103,9 @@ export function journeysReaching(index: GraphIndex, packageId: string, hops = 2)
   const report = impactOf(index, packageId, { hops });
   for (const hp of report.hops) for (const n of hp.nodes) users.add(n.nodeId);
   if (!users.size) return [];
-  return journeyNodeSets(index).filter((j) => [...users].some((u) => j.nodes.has(u))).map((j) => ({ id: j.id, name: j.name }));
+  return journeyNodeSets(index)
+    .filter((j) => [...users].some((u) => j.nodes.has(u)))
+    .map((j) => ({ id: j.id, name: j.name }));
 }
 
 /** The files that import a package (its `module` importers), as node ids. */
@@ -134,7 +136,10 @@ export function depsRowOf(index: GraphIndex, n: GraphNode, hops = 2): DepsRow {
   const modules = importerModules(index, n.id);
   const journeys = journeysReaching(index, n.id, hops);
   return {
-    id: n.id, name: n.name, repo: repoOf(n), scope: p.scope,
+    id: n.id,
+    name: n.name,
+    repo: repoOf(n),
+    scope: p.scope,
     ...(p.version ? { version: p.version } : {}),
     ...(p.dev ? { dev: true as const } : {}),
     ...(p.project ? { project: p.project } : {}),
@@ -142,9 +147,19 @@ export function depsRowOf(index: GraphIndex, n: GraphNode, hops = 2): DepsRow {
     ...(p.externalId ? { externalId: p.externalId } : {}),
     ...(p.note ? { note: p.note } : {}),
     versions: versionsOf(n, index),
-    importers: counted(modules.length, 'count.unit.importers', 'count.scope.package', 'core deps.ts depsRowOf → module nodes with an imports edge to the package'),
-    journeys: counted(journeys.length, 'count.unit.journeysReached', 'count.scope.package', `core deps.ts journeysReaching → impactOf(package, ${hops} hops) met by each journey's walk`,
-      { bizUnit: 'count.unit.journeysReached' }),
+    importers: counted(
+      modules.length,
+      'count.unit.importers',
+      'count.scope.package',
+      'core deps.ts depsRowOf → module nodes with an imports edge to the package',
+    ),
+    journeys: counted(
+      journeys.length,
+      'count.unit.journeysReached',
+      'count.scope.package',
+      `core deps.ts journeysReaching → impactOf(package, ${hops} hops) met by each journey's walk`,
+      { bizUnit: 'count.unit.journeysReached' },
+    ),
     journeyRefs: journeys,
   };
 }
@@ -156,8 +171,12 @@ export function packagesOf(index: GraphIndex, opts: DepsOptions = {}): DepsList 
     if (n.kind !== 'package') continue;
     if (opts.repo && repoOf(n) !== opts.repo) continue;
     if (opts.scope && (n.package?.scope ?? 'third-party') !== opts.scope) continue;
-    if (opts.project && n.package?.project !== opts.project
-      && !importerModules(index, n.id).some((m) => projectOf(m) === opts.project)) continue;
+    if (
+      opts.project &&
+      n.package?.project !== opts.project &&
+      !importerModules(index, n.id).some((m) => projectOf(m) === opts.project)
+    )
+      continue;
     rows.push(depsRowOf(index, n, opts.hops));
   }
   rows.sort((a, b) => a.name.localeCompare(b.name) || a.repo.localeCompare(b.repo));
@@ -168,7 +187,13 @@ export function packagesOf(index: GraphIndex, opts: DepsOptions = {}): DepsList 
   ];
   return {
     rows,
-    packages: counted(rows.length, 'count.unit.packages', 'count.scope.workspace', 'core deps.ts packagesOf → package nodes in scope', { breakdown: parts }),
+    packages: counted(
+      rows.length,
+      'count.unit.packages',
+      'count.scope.workspace',
+      'core deps.ts packagesOf → package nodes in scope',
+      { breakdown: parts },
+    ),
   };
 }
 
@@ -208,12 +233,18 @@ export function importersOf(index: GraphIndex, packageId: string, opts: { hops?:
       const path = from.loc?.path;
       if (!path) continue;
       const list = usersByFile.get(path) ?? [];
-      list.push({ id: from.id, name: from.name, kind: from.kind, ...(typeof e.meta?.line === 'number' ? { line: e.meta.line } : {}) });
+      list.push({
+        id: from.id,
+        name: from.name,
+        kind: from.kind,
+        ...(typeof e.meta?.line === 'number' ? { line: e.meta.line } : {}),
+      });
       usersByFile.set(path, list);
       continue;
     }
     rows.push({
-      id: from.id, path: from.loc?.path ?? from.name,
+      id: from.id,
+      path: from.loc?.path ?? from.name,
       line: typeof e.meta?.line === 'number' ? e.meta.line : 1,
       specifier: String(e.meta?.specifier ?? pkg.name),
       ...(e.meta?.subpath ? { subpath: String(e.meta.subpath) } : {}),
@@ -222,26 +253,45 @@ export function importersOf(index: GraphIndex, packageId: string, opts: { hops?:
       users: [],
     });
   }
-  for (const r of rows) r.users = (usersByFile.get(r.path) ?? []).sort((a, b) => (a.line ?? 0) - (b.line ?? 0) || a.name.localeCompare(b.name));
+  for (const r of rows)
+    r.users = (usersByFile.get(r.path) ?? []).sort(
+      (a, b) => (a.line ?? 0) - (b.line ?? 0) || a.name.localeCompare(b.name),
+    );
   const grouped = new Map<string, { by: 'project' | 'repo'; importers: DepsImporter[] }>();
   for (const r of rows) {
     const m = index.byId.get(r.id);
     const proj = projectOf(m);
     const key = proj ?? (m ? repoOf(m) : repoOf(pkg));
-    const g = grouped.get(key) ?? { by: proj ? 'project' as const : 'repo' as const, importers: [] };
+    const g = grouped.get(key) ?? { by: proj ? ('project' as const) : ('repo' as const), importers: [] };
     g.importers.push(r);
     grouped.set(key, g);
   }
-  const groups = [...grouped].sort(([a], [b]) => a.localeCompare(b)).map(([key, g]) => {
-    g.importers.sort((a, b) => a.path.localeCompare(b.path));
-    return { key, by: g.by, importers: g.importers,
-      count: counted(g.importers.length, 'count.unit.importers', 'count.scope.package', 'core deps.ts importersOf → module nodes of this group') };
-  });
+  const groups = [...grouped]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, g]) => {
+      g.importers.sort((a, b) => a.path.localeCompare(b.path));
+      return {
+        key,
+        by: g.by,
+        importers: g.importers,
+        count: counted(
+          g.importers.length,
+          'count.unit.importers',
+          'count.scope.package',
+          'core deps.ts importersOf → module nodes of this group',
+        ),
+      };
+    });
   return {
     package: depsRowOf(index, pkg, opts.hops),
     groups,
-    importers: counted(rows.length, 'count.unit.importers', 'count.scope.package', 'core deps.ts importersOf → module nodes with an imports edge to the package',
-      { breakdown: groups.map((g) => ({ key: 'count.unit.importers', n: g.importers.length, label: g.key })) }),
+    importers: counted(
+      rows.length,
+      'count.unit.importers',
+      'count.scope.package',
+      'core deps.ts importersOf → module nodes with an imports edge to the package',
+      { breakdown: groups.map((g) => ({ key: 'count.unit.importers', n: g.importers.length, label: g.key })) },
+    ),
   };
 }
 
@@ -249,9 +299,15 @@ export function importersOf(index: GraphIndex, packageId: string, opts: { hops?:
  * A package by id, or by name (`zod`, `@scope/pkg`) — `hit` when exactly one package node answers,
  * else every candidate id so the caller can say which sources carry it.
  */
-export function resolvePackage(index: GraphIndex, ref: string, repo?: string): { hit?: GraphNode; candidates: string[] } {
+export function resolvePackage(
+  index: GraphIndex,
+  ref: string,
+  repo?: string,
+): { hit?: GraphNode; candidates: string[] } {
   const direct = index.byId.get(ref);
   if (direct?.kind === 'package') return { hit: direct, candidates: [direct.id] };
-  const hits = [...index.byId.values()].filter((n) => n.kind === 'package' && n.name === ref && (!repo || repoOf(n) === repo));
+  const hits = [...index.byId.values()].filter(
+    (n) => n.kind === 'package' && n.name === ref && (!repo || repoOf(n) === repo),
+  );
   return hits.length === 1 ? { hit: hits[0], candidates: [hits[0]!.id] } : { candidates: hits.map((n) => n.id).sort() };
 }

@@ -17,7 +17,10 @@ export const AZDO_RESOURCE = '499b84ac-1321-427f-aa17-267ca6975798';
 
 /** An auth kind this provider knows but has not built — names what it needs. */
 export class AzdoAuthNotBuilt extends Error {
-  constructor(readonly kind: string, readonly needs: string) {
+  constructor(
+    readonly kind: string,
+    readonly needs: string,
+  ) {
     super(`Azure DevOps auth kind ${kind} is not built yet: it needs ${needs}`);
     this.name = 'AzdoAuthNotBuilt';
   }
@@ -25,7 +28,10 @@ export class AzdoAuthNotBuilt extends Error {
 
 /** The credential could not be obtained. Names the kind or reference, never a value. */
 export class AzdoAuthUnavailable extends Error {
-  constructor(readonly kind: string, readonly why: string) {
+  constructor(
+    readonly kind: string,
+    readonly why: string,
+  ) {
     super(`Azure DevOps credential (${kind}) unavailable: ${why}`);
     this.name = 'AzdoAuthUnavailable';
   }
@@ -59,7 +65,11 @@ export interface Authorizer {
  * Build the authorizer for a source. `secret` is the value the engine already
  * resolved (for `pat`); when absent the provider resolves `auth.secret` itself.
  */
-export async function authorizerFor(cfg: SourceConfig, secret: string | undefined, opts: AuthOptions = {}): Promise<Authorizer> {
+export async function authorizerFor(
+  cfg: SourceConfig,
+  secret: string | undefined,
+  opts: AuthOptions = {},
+): Promise<Authorizer> {
   const kind = cfg.auth?.kind ?? 'pat';
   if (kind === 'pat') {
     let pat = secret;
@@ -88,10 +98,17 @@ export async function authorizerFor(cfg: SourceConfig, secret: string | undefine
         out = await run('az', ['account', 'get-access-token', '--resource', AZDO_RESOURCE, '--output', 'json']);
       } catch (err) {
         const code = (err as NodeJS.ErrnoException).code;
-        throw new AzdoAuthUnavailable('az-cli', code === 'ENOENT' ? 'the Azure CLI (az) is not installed' : 'az could not issue a token — run az login');
+        throw new AzdoAuthUnavailable(
+          'az-cli',
+          code === 'ENOENT' ? 'the Azure CLI (az) is not installed' : 'az could not issue a token — run az login',
+        );
       }
       let j: { accessToken?: string; expires_on?: number; expiresOn?: string };
-      try { j = JSON.parse(out); } catch { throw new AzdoAuthUnavailable('az-cli', 'az answered something that is not a token'); }
+      try {
+        j = JSON.parse(out);
+      } catch {
+        throw new AzdoAuthUnavailable('az-cli', 'az answered something that is not a token');
+      }
       if (!j.accessToken) throw new AzdoAuthUnavailable('az-cli', 'az answered without a token');
       token = j.accessToken;
       expires = j.expires_on ? j.expires_on * 1000 : j.expiresOn ? Date.parse(j.expiresOn) : now() + 50 * 60_000;
@@ -106,7 +123,15 @@ export async function authorizerFor(cfg: SourceConfig, secret: string | undefine
       },
     };
   }
-  if (kind === 'entra-device-code') throw new AzdoAuthNotBuilt(kind, 'MSAL (@azure/msal-node), an Entra app client id and tenant, and the scope 499b84ac-1321-427f-aa17-267ca6975798/.default');
-  if (kind === 'entra-auth-code') throw new AzdoAuthNotBuilt(kind, 'MSAL (@azure/msal-node), an Entra app client id and tenant, and a loopback redirect with PKCE');
+  if (kind === 'entra-device-code')
+    throw new AzdoAuthNotBuilt(
+      kind,
+      'MSAL (@azure/msal-node), an Entra app client id and tenant, and the scope 499b84ac-1321-427f-aa17-267ca6975798/.default',
+    );
+  if (kind === 'entra-auth-code')
+    throw new AzdoAuthNotBuilt(
+      kind,
+      'MSAL (@azure/msal-node), an Entra app client id and tenant, and a loopback redirect with PKCE',
+    );
   throw new AzdoAuthNotBuilt(kind, 'an Azure DevOps auth kind: pat, az-cli, entra-device-code or entra-auth-code');
 }

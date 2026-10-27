@@ -12,7 +12,12 @@ export interface Recorded {
   response: unknown;
 }
 
-export interface Call { method: string; path: string; body?: unknown; auth: boolean }
+export interface Call {
+  method: string;
+  path: string;
+  body?: unknown;
+  auth: boolean;
+}
 
 export const load = (name: string): Recorded[] =>
   JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')) as Recorded[];
@@ -34,12 +39,22 @@ export function replay(...tapes: Recorded[][]) {
     const path = u.pathname + u.search;
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
     const headers = (init.headers ?? {}) as Record<string, string>;
-    calls.push({ method, path, ...(body !== undefined ? { body } : {}), auth: typeof headers.Authorization === 'string' });
-    const hit = entries.find((e) => !e.used && e.r.method === method && e.r.path === path && (e.r.body === undefined || same(e.r.body, body)));
+    calls.push({
+      method,
+      path,
+      ...(body !== undefined ? { body } : {}),
+      auth: typeof headers.Authorization === 'string',
+    });
+    const hit = entries.find(
+      (e) => !e.used && e.r.method === method && e.r.path === path && (e.r.body === undefined || same(e.r.body, body)),
+    );
     if (!hit) throw new Error(`no recording for ${method} ${path} ${body ? JSON.stringify(body).slice(0, 200) : ''}`);
     hit.used = true;
     const nullBody = [204, 205, 304].includes(hit.r.status);
-    return new Response(nullBody ? null : JSON.stringify(hit.r.response), { status: hit.r.status, headers: hit.r.headers ?? {} });
+    return new Response(nullBody ? null : JSON.stringify(hit.r.response), {
+      status: hit.r.status,
+      headers: hit.r.headers ?? {},
+    });
   };
   return { fetcher, calls, unused: () => entries.filter((e) => !e.used).map((e) => `${e.r.method} ${e.r.path}`) };
 }

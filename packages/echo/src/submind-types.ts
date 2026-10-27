@@ -35,10 +35,19 @@ export interface ResearchSearch {
   inspected: number;
 }
 export interface ResearchStore {
-  search(input: { query: string; limit: number; maxChars: number; since: string }, signal?: AbortSignal): Promise<ResearchSearch>;
-  read(input: { id: string; revision: string; maxChars: number }, signal?: AbortSignal): Promise<{ status: 'ready' | 'changed' | 'missing'; memory?: ResearchMemory }>;
+  search(
+    input: { query: string; limit: number; maxChars: number; since: string },
+    signal?: AbortSignal,
+  ): Promise<ResearchSearch>;
+  read(
+    input: { id: string; revision: string; maxChars: number },
+    signal?: AbortSignal,
+  ): Promise<{ status: 'ready' | 'changed' | 'missing'; memory?: ResearchMemory }>;
 }
-export interface ModelMessage { role: 'system' | 'user' | 'assistant'; content: string }
+export interface ModelMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
 export interface SubmindModelRequest {
   messages: ModelMessage[];
   schema: Record<string, unknown>;
@@ -81,7 +90,15 @@ export interface SubmindResult {
     exhaustive: false;
     since: string;
     inspected: number;
-    stopReason: 'complete' | 'no_matches' | 'disabled' | 'budget' | 'timeout' | 'model_unavailable' | 'invalid_response' | 'store_unavailable';
+    stopReason:
+      | 'complete'
+      | 'no_matches'
+      | 'disabled'
+      | 'budget'
+      | 'timeout'
+      | 'model_unavailable'
+      | 'invalid_response'
+      | 'store_unavailable';
     truncated: boolean;
   };
   usage: {

@@ -12,20 +12,75 @@ import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
-  SnapshotDb, workToFragment, detectWorkKeysFallback, hunksOfPatch, nodesTouched, strongestLinks,
-  itemsByState, itemSummaryOf, touchedCount, workFindings, filterWorkItems, flowNodeSet, counted, parseWorkNodeId,
-  COMMIT_KEY_VIAS, historyFact, historySentence,
+  SnapshotDb,
+  workToFragment,
+  detectWorkKeysFallback,
+  hunksOfPatch,
+  nodesTouched,
+  strongestLinks,
+  itemsByState,
+  itemSummaryOf,
+  touchedCount,
+  workFindings,
+  filterWorkItems,
+  flowNodeSet,
+  counted,
+  parseWorkNodeId,
+  COMMIT_KEY_VIAS,
+  historyFact,
+  historySentence,
 } from '@farsight/core';
 import type {
-  GraphStore, GraphIndex, GraphNode, KeyDetectOptions, KeyDetector, DetectedKey, WorkLinkFact, WorkLinkVia, WorkItemFacts,
-  ConfidenceTier, WorkSourceFacts,
+  GraphStore,
+  GraphIndex,
+  GraphNode,
+  KeyDetectOptions,
+  KeyDetector,
+  DetectedKey,
+  WorkLinkFact,
+  WorkLinkVia,
+  WorkItemFacts,
+  ConfidenceTier,
+  WorkSourceFacts,
 } from '@farsight/core';
-import { gitLog, gitKnows, gitShowPatch, gitPrefix, gitUnreachable, commitInputsOf, GIT_ABSENT_WORD } from '@farsight/parsers';
 import {
-  WorkCache, WorkCacheUnavailable, workDbPath, providerFor, registerProvider, syncSource, connectSource, freshness,
-  applyIntent, detectWorkKeys, evaluatePolicy, decide, attributed, STATE_CATEGORIES, WORK_ACTIONS,
+  gitLog,
+  gitKnows,
+  gitShowPatch,
+  gitPrefix,
+  gitUnreachable,
+  commitInputsOf,
+  GIT_ABSENT_WORD,
+} from '@farsight/parsers';
+import {
+  WorkCache,
+  WorkCacheUnavailable,
+  workDbPath,
+  providerFor,
+  registerProvider,
+  syncSource,
+  connectSource,
+  freshness,
+  applyIntent,
+  detectWorkKeys,
+  evaluatePolicy,
+  decide,
+  attributed,
+  STATE_CATEGORIES,
+  WORK_ACTIONS,
 } from '@farsight/work';
-import type { SourceConfig, SyncReport, WorkItem, Intent, IntentPayload, WorkAction, Person, StateCategory, OutboxRow, ApplyOutcome } from '@farsight/work';
+import type {
+  SourceConfig,
+  SyncReport,
+  WorkItem,
+  Intent,
+  IntentPayload,
+  WorkAction,
+  Person,
+  StateCategory,
+  OutboxRow,
+  ApplyOutcome,
+} from '@farsight/work';
 import { fixtureProvider } from '@farsight/work-fixture';
 import { jiraProvider } from '@farsight/work-jira';
 import { azdoProvider } from '@farsight/work-azdo';
@@ -100,12 +155,23 @@ export function keyDetector(orgs: readonly string[]): KeyDetector {
   return (text, where, opts) => {
     const projects = new Set((opts.projects ?? []).map((p) => p.toUpperCase()));
     const src = where === 'branch' ? text.toUpperCase().replace(/HTTPS?:\/\/\S+/g, ' ') : text;
-    const fromWork: DetectedKey[] = detectWorkKeys(src, { ...(opts.ado ? { adoOrgs: [...orgs] } : {}), branch: where === 'branch' })
-      .map((d) => ({ key: d.key.toUpperCase(), provider: d.provider, form: d.via === 'url' ? 'url' as const : 'key' as const }));
+    const fromWork: DetectedKey[] = detectWorkKeys(src, {
+      ...(opts.ado ? { adoOrgs: [...orgs] } : {}),
+      branch: where === 'branch',
+    }).map((d) => ({
+      key: d.key.toUpperCase(),
+      provider: d.provider,
+      form: d.via === 'url' ? ('url' as const) : ('key' as const),
+    }));
     const all = [...fromWork, ...detectWorkKeysFallback(text, where, opts)];
     const out = new Map<string, DetectedKey>();
     for (const d of all) {
-      if (d.provider === 'azure-devops' ? !opts.ado : !projects.has(d.key.slice(0, d.key.lastIndexOf('-')) ) || /-0\d*$/.test(d.key)) continue;
+      if (
+        d.provider === 'azure-devops'
+          ? !opts.ado
+          : !projects.has(d.key.slice(0, d.key.lastIndexOf('-'))) || /-0\d*$/.test(d.key)
+      )
+        continue;
       const k = `${d.provider}|${d.key}`;
       const prev = out.get(k);
       if (!prev || (d.form === 'url' && prev.form !== 'url')) out.set(k, d);
@@ -116,14 +182,22 @@ export function keyDetector(orgs: readonly string[]): KeyDetector {
 
 // ── sync: the commit spine ─────────────────────────────────────────────────
 
-export interface CodeSourceRead { name: string; dir: string }
+export interface CodeSourceRead {
+  name: string;
+  dir: string;
+}
 
 /**
  * Write one repository's commits (and the keys they name) into the spine, and
  * resolve each keyed commit's hunks to the nodes it changed. Returns words for
  * the source's status line, or '' when there is nothing to say. Never throws.
  */
-export function writeSpine(db: SnapshotDb, store: GraphStore, src: CodeSourceRead, keys: ReturnType<typeof keyOptionsOf>): string {
+export function writeSpine(
+  db: SnapshotDb,
+  store: GraphStore,
+  src: CodeSourceRead,
+  keys: ReturnType<typeof keyOptionsOf>,
+): string {
   try {
     const detect = keyDetector(keys.orgs);
     // `r` is the detection rules' revision: bumping it re-reads the window once, so keys an older rule
@@ -134,12 +208,20 @@ export function writeSpine(db: SnapshotDb, store: GraphStore, src: CodeSourceRea
     const incremental = newest && db.spineReadSig(src.name) === sig && gitKnows(src.dir, newest.sha);
     const wantKeys = (keys.projects?.length ?? 0) > 0 || keys.ado;
     const keyRefs = wantKeys ? (name: string) => detect(name, 'branch', keys).length > 0 : undefined;
-    const log = gitLog(src.dir, { max: SYNC_MAX_COMMITS, ...(incremental ? { after: newest!.sha } : {}), ...(keyRefs ? { keyRefs } : {}) });
-    if (!log.available) return `history not indexed: ${GIT_ABSENT_WORD[log.reason]}${log.detail ? ` (${log.detail})` : ''}`;
+    const log = gitLog(src.dir, {
+      max: SYNC_MAX_COMMITS,
+      ...(incremental ? { after: newest!.sha } : {}),
+      ...(keyRefs ? { keyRefs } : {}),
+    });
+    if (!log.available)
+      return `history not indexed: ${GIT_ABSENT_WORD[log.reason]}${log.detail ? ` (${log.detail})` : ''}`;
     db.writeCommits(src.name, commitInputsOf(log.commits, { opts: keys, detect }));
     db.markSpineRead(src.name, sig, new Date().toISOString());
     // a keyed commit git no longer has or reaches (a rewritten history) stops naming its work items
-    const keyed = db.keyedCommits().filter((c) => c.repo === src.name).map((c) => c.sha);
+    const keyed = db
+      .keyedCommits()
+      .filter((c) => c.repo === src.name)
+      .map((c) => c.sha);
     const unreachable = gitUnreachable(src.dir, keyed);
     const forgot = unreachable.available ? db.forgetCommitKeys(src.name, unreachable.gone) : 0;
     const resolved = resolveCommitNodes(db, store, src);
@@ -172,7 +254,11 @@ export function fillHistorySlot(status: string, repo: string, db: SnapshotDb | u
   if (!status.includes(HISTORY_SLOT)) return status;
   let said = 'history not indexed';
   if (db) {
-    try { said = historySentence(historyFact([db.commitSpine(repo)])); } catch { /* the store could not answer: say so */ }
+    try {
+      said = historySentence(historyFact([db.commitSpine(repo)]));
+    } catch {
+      /* the store could not answer: say so */
+    }
   }
   return status.split(HISTORY_SLOT).join(said);
 }
@@ -185,10 +271,16 @@ function graphIdOf(store: GraphStore, repo: string): string {
 /** Keyed commits of one repository whose nodes were not resolved against this graph yet → resolve them. */
 export function resolveCommitNodes(db: SnapshotDb, store: GraphStore, src: CodeSourceRead): number {
   const graph = graphIdOf(store, src.name);
-  const todo = db.keyedCommits().filter((c) => c.repo === src.name && db.commitNodes(c.repo, c.sha, graph) === null).slice(0, SYNC_MAX_HUNK_COMMITS);
+  const todo = db
+    .keyedCommits()
+    .filter((c) => c.repo === src.name && db.commitNodes(c.repo, c.sha, graph) === null)
+    .slice(0, SYNC_MAX_HUNK_COMMITS);
   if (!todo.length) return 0;
   const nodes = store.allNodes().filter((n) => n.loc?.repo === src.name);
-  const prefix = (() => { const p = gitPrefix(src.dir); return p.available ? p.prefix : ''; })();
+  const prefix = (() => {
+    const p = gitPrefix(src.dir);
+    return p.available ? p.prefix : '';
+  })();
   for (const c of todo) db.writeCommitNodes(src.name, c.sha, graph, commitNodesOf(db, src, c.sha, nodes, prefix));
   return todo.length;
 }
@@ -212,7 +304,11 @@ function commitNodesOf(db: SnapshotDb, src: CodeSourceRead, sha: string, nodes: 
 
 // ── sync: work sources and the join ────────────────────────────────────────
 
-export interface UnmatchedKey { key: string; where: string; reason: string }
+export interface UnmatchedKey {
+  key: string;
+  where: string;
+  reason: string;
+}
 
 export interface WorkSyncOutcome {
   /** per work source id: its status line */
@@ -247,7 +343,10 @@ export async function syncWork(
   try {
     cache = openWorkCache(ws);
   } catch (err) {
-    const why = err instanceof WorkCacheUnavailable ? 'work cache unavailable' : `work cache unavailable: ${(err as Error).message.split('\n')[0]}`;
+    const why =
+      err instanceof WorkCacheUnavailable
+        ? 'work cache unavailable'
+        : `work cache unavailable: ${(err as Error).message.split('\n')[0]}`;
     for (const s of sources) out.results[s.id] = why;
     return out;
   }
@@ -261,7 +360,10 @@ export async function syncWork(
         continue;
       }
       const provider = providerFor(cfg.provider);
-      if (!provider) { out.results[cfg.id] = `error: no provider "${cfg.provider}" is registered in this build`; continue; }
+      if (!provider) {
+        out.results[cfg.id] = `error: no provider "${cfg.provider}" is registered in this build`;
+        continue;
+      }
       const r = await syncSource(cfg, provider, cache);
       out.reports.push(r);
       const held = cache.listItems({ source: cfg.id }).length;
@@ -277,7 +379,8 @@ export async function syncWork(
     out.edges = frag.applied.edges;
     for (const cfg of sources) {
       const linked = frag.edges.filter((e) => parseWorkNodeId(e.from)?.source === cfg.id).length;
-      if (out.results[cfg.id]?.startsWith('ok')) out.results[cfg.id] += ` · ${linked} link${linked === 1 ? '' : 's'} to the graph`;
+      if (out.results[cfg.id]?.startsWith('ok'))
+        out.results[cfg.id] += ` · ${linked} link${linked === 1 ? '' : 's'} to the graph`;
     }
   } finally {
     cache.close();
@@ -295,10 +398,20 @@ function itemsByKey(items: readonly WorkItem[]): Map<string, WorkItem[]> {
   return m;
 }
 
-const VIA_OF: Record<string, WorkLinkVia> = { subject: 'commit', 'merge-subject': 'commit', branch: 'branch', url: 'url' };
+const VIA_OF: Record<string, WorkLinkVia> = {
+  subject: 'commit',
+  'merge-subject': 'commit',
+  branch: 'branch',
+  url: 'url',
+};
 
 /** The join, pure over the cache, the store and the spine. Also rewrites the cache's `link` table. */
-export function joinWork(cache: WorkCache, sources: readonly SourceConfig[], store: GraphStore, db: SnapshotDb | undefined) {
+export function joinWork(
+  cache: WorkCache,
+  sources: readonly SourceConfig[],
+  store: GraphStore,
+  db: SnapshotDb | undefined,
+) {
   const ids = new Set(sources.map((s) => s.id));
   const items = cache.listItems().filter((i) => ids.has(i.source));
   const byKey = itemsByKey(items);
@@ -317,14 +430,20 @@ export function joinWork(cache: WorkCache, sources: readonly SourceConfig[], sto
       const hit = byKey.get(`${shape}|${key}`);
       if (!hit?.length) {
         const project = key.slice(0, key.lastIndexOf('-'));
-        const reason = shape === 'azure-devops'
-          ? (keys.ado ? `no work item ${key} in the cache` : 'no Azure DevOps source is configured')
-          : projects.has(project) ? `no work item ${key} in the cache` : `no work source reads project ${project}`;
+        const reason =
+          shape === 'azure-devops'
+            ? keys.ado
+              ? `no work item ${key} in the cache`
+              : 'no Azure DevOps source is configured'
+            : projects.has(project)
+              ? `no work item ${key} in the cache`
+              : `no work source reads project ${project}`;
         unmatched.push({ key, where, reason });
         continue;
       }
       const how = n.kind === 'flow' || n.design?.origin === 'manifest' ? 'the design manifest' : 'a @work tag';
-      for (const it of hit) links.push({ work: it.id, node: n.id, via: 'declared', tier: 'HIGH', detail: `declared in ${how}` });
+      for (const it of hit)
+        links.push({ work: it.id, node: n.id, via: 'declared', tier: 'HIGH', detail: `declared in ${how}` });
     }
   }
 
@@ -336,7 +455,14 @@ export function joinWork(cache: WorkCache, sources: readonly SourceConfig[], sto
         for (const n of nodes) {
           if (!store.nodeById(n.node)) continue;
           const tier: ConfidenceTier = n.fileOnly ? 'LOW' : 'MEDIUM';
-          links.push({ work: it.id, node: n.node, via: VIA_OF[row.via] ?? 'commit', tier, sha: row.sha, detail: `${row.sha.slice(0, 7)} ${n.path}${row.ref ? ` on ${row.ref}` : ''}` });
+          links.push({
+            work: it.id,
+            node: n.node,
+            via: VIA_OF[row.via] ?? 'commit',
+            tier,
+            sha: row.sha,
+            detail: `${row.sha.slice(0, 7)} ${n.path}${row.ref ? ` on ${row.ref}` : ''}`,
+          });
         }
       }
     }
@@ -359,8 +485,13 @@ function replaceJoinLinks(cache: WorkCache, links: readonly WorkLinkFact[]): voi
     raw?.prepare("DELETE FROM link WHERE kind = 'tracks' AND provenance IN ('declared','commit','branch','url')").run();
     for (const l of links) {
       cache.putLink({
-        work: l.work, node: l.node, kind: 'tracks', provenance: l.via, tier: l.tier,
-        detail: JSON.stringify({ ...(l.sha ? { sha: l.sha } : {}), ...(l.detail ? { what: l.detail } : {}) }), at,
+        work: l.work,
+        node: l.node,
+        kind: 'tracks',
+        provenance: l.via,
+        tier: l.tier,
+        detail: JSON.stringify({ ...(l.sha ? { sha: l.sha } : {}), ...(l.detail ? { what: l.detail } : {}) }),
+        at,
       });
     }
   });
@@ -381,11 +512,16 @@ function userOf(cfg: SourceConfig): Promise<{ id: string; name: string } | undef
   if (!p) {
     const provider = providerFor(cfg.provider);
     p = provider
-      ? connectSource(cfg, provider).then((s) => s.user, () => undefined)
+      ? connectSource(cfg, provider).then(
+          (s) => s.user,
+          () => undefined,
+        )
       : Promise.resolve(undefined);
     sessionUsers.set(key, p);
     // a failed connect is not remembered: the next request asks again
-    void p.then((u) => { if (!u) sessionUsers.delete(key); });
+    void p.then((u) => {
+      if (!u) sessionUsers.delete(key);
+    });
   }
   return p;
 }
@@ -397,7 +533,9 @@ function userOf(cfg: SourceConfig): Promise<{ id: string; name: string } | undef
 const USER_WAIT_MS = 2000;
 function cardUser(cfg: SourceConfig, waitMs = USER_WAIT_MS): Promise<{ id: string; name: string } | undefined> {
   let timer: NodeJS.Timeout | undefined;
-  const late = new Promise<undefined>((r) => { timer = setTimeout(() => r(undefined), waitMs); });
+  const late = new Promise<undefined>((r) => {
+    timer = setTimeout(() => r(undefined), waitMs);
+  });
   return Promise.race([userOf(cfg), late]).finally(() => clearTimeout(timer));
 }
 
@@ -412,7 +550,10 @@ export interface WorkRouteContext {
   now?: () => Date;
 }
 
-export interface RouteAnswer { code: number; body: unknown }
+export interface RouteAnswer {
+  code: number;
+  body: unknown;
+}
 
 const J = (code: number, body: unknown): RouteAnswer => ({ code, body });
 
@@ -424,7 +565,11 @@ async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> 
 }
 
 function openHistoryDb(ws: string): SnapshotDb | undefined {
-  try { return new SnapshotDb(join(ws, '.farsight', 'farsight.db')); } catch { return undefined; }
+  try {
+    return new SnapshotDb(join(ws, '.farsight', 'farsight.db'));
+  } catch {
+    return undefined;
+  }
 }
 
 /** The link facts the graph holds: one per tracks edge (the strongest per pair). */
@@ -435,7 +580,10 @@ function graphLinks(index: GraphIndex | null): WorkLinkFact[] {
     for (const e of edges) {
       if (e.kind !== 'tracks') continue;
       out.push({
-        work: e.from, node: e.to, via: (e.meta?.via as WorkLinkVia) ?? 'declared', tier: e.resolution?.confidence ?? 'LOW',
+        work: e.from,
+        node: e.to,
+        via: (e.meta?.via as WorkLinkVia) ?? 'declared',
+        tier: e.resolution?.confidence ?? 'LOW',
         ...(typeof e.meta?.sha === 'string' ? { sha: e.meta.sha } : {}),
       });
     }
@@ -443,7 +591,11 @@ function graphLinks(index: GraphIndex | null): WorkLinkFact[] {
   return out;
 }
 
-async function sourceCard(cfg: SourceConfig, cache: WorkCache, items: readonly WorkItem[]): Promise<WorkSourceFacts & { counts: { items: ReturnType<typeof itemsByState> } }> {
+async function sourceCard(
+  cfg: SourceConfig,
+  cache: WorkCache,
+  items: readonly WorkItem[],
+): Promise<WorkSourceFacts & { counts: { items: ReturnType<typeof itemsByState> } }> {
   const user = await cardUser(cfg);
   const row = cache.getSource(cfg.id);
   const f = freshness(row);
@@ -463,7 +615,13 @@ async function sourceCard(cfg: SourceConfig, cache: WorkCache, items: readonly W
       ...(row?.lastSync != null ? { syncNo: row.lastSync } : {}),
       ...(f.error ? { error: f.error } : {}),
     },
-    counts: { items: itemsByState(items.filter((i) => i.source === cfg.id), 'count.scope.workSource', 'server work.ts sourceCard · cache.listItems') },
+    counts: {
+      items: itemsByState(
+        items.filter((i) => i.source === cfg.id),
+        'count.scope.workSource',
+        'server work.ts sourceCard · cache.listItems',
+      ),
+    },
     ...(user ? { user } : {}),
   };
 }
@@ -482,19 +640,41 @@ function nodeRef(index: GraphIndex | null, id: string) {
 function commitCounts(db: SnapshotDb | undefined): Map<string, number> {
   return db ? db.keyCommitCounts() : new Map();
 }
-const commitsOf = (counts: Map<string, number>, i: WorkItemFacts) => counts.get(`${shapeOf(i.provider)}|${i.key.toUpperCase()}`) ?? 0;
+const commitsOf = (counts: Map<string, number>, i: WorkItemFacts) =>
+  counts.get(`${shapeOf(i.provider)}|${i.key.toUpperCase()}`) ?? 0;
 
 function linksOfItemFromCache(cache: WorkCache, id: string): WorkLinkFact[] {
-  return cache.linksFor(id).filter((l) => l.work === id && l.kind === 'tracks').map((l) => {
-    let d: { sha?: string; what?: string } = {};
-    try { d = l.detail ? JSON.parse(l.detail) : {}; } catch { d = { what: l.detail }; }
-    return { work: l.work, node: l.node, via: l.provenance as WorkLinkVia, tier: l.tier, ...(d.sha ? { sha: d.sha } : {}), ...(d.what ? { detail: d.what } : {}) };
-  });
+  return cache
+    .linksFor(id)
+    .filter((l) => l.work === id && l.kind === 'tracks')
+    .map((l) => {
+      let d: { sha?: string; what?: string } = {};
+      try {
+        d = l.detail ? JSON.parse(l.detail) : {};
+      } catch {
+        d = { what: l.detail };
+      }
+      return {
+        work: l.work,
+        node: l.node,
+        via: l.provenance as WorkLinkVia,
+        tier: l.tier,
+        ...(d.sha ? { sha: d.sha } : {}),
+        ...(d.what ? { detail: d.what } : {}),
+      };
+    });
 }
 
 /** The findings of every item that tracks a set of nodes (a flow). */
-function flowFindings(items: readonly WorkItem[], index: GraphIndex, links: readonly WorkLinkFact[], counts: Map<string, number>) {
-  return items.flatMap((i) => workFindings(i, index, { links, commits: commitsOf(counts, i) }).map((f) => ({ item: i.id, ...f })));
+function flowFindings(
+  items: readonly WorkItem[],
+  index: GraphIndex,
+  links: readonly WorkLinkFact[],
+  counts: Map<string, number>,
+) {
+  return items.flatMap((i) =>
+    workFindings(i, index, { links, commits: commitsOf(counts, i) }).map((f) => ({ item: i.id, ...f })),
+  );
 }
 
 /** Contract payload → the engine's canonical IntentPayload. */
@@ -506,20 +686,32 @@ function toPayload(action: WorkAction, p: Record<string, unknown>): IntentPayloa
       // a state named by the tracker, with its category when the caller knows it (the HUD's state menu
       // does): a grant's `to` allow-lists categories, so a name alone never passes one
       const cat = String(p.category ?? '');
-      return { toName: to, ...((STATE_CATEGORIES as readonly string[]).includes(cat) ? { to: cat as StateCategory } : {}) };
+      return {
+        toName: to,
+        ...((STATE_CATEGORIES as readonly string[]).includes(cat) ? { to: cat as StateCategory } : {}),
+      };
     }
     case 'edit': {
       const fields: Record<string, unknown> = {};
       if (p.title !== undefined) fields.title = p.title;
       if (p.description !== undefined) fields.description = p.description;
       const labels = p.labels as { add?: string[]; remove?: string[] } | undefined;
-      return { fields, ...(labels?.add ? { add: labels.add } : {}), ...(labels?.remove ? { remove: labels.remove } : {}) };
+      return {
+        fields,
+        ...(labels?.add ? { add: labels.add } : {}),
+        ...(labels?.remove ? { remove: labels.remove } : {}),
+      };
     }
-    case 'assign': return { assignee: (p.assignee as string | null | undefined) ?? null };
-    case 'comment': return { body: String(p.body ?? '') };
-    case 'label': return { ...(p.add ? { add: p.add as string[] } : {}), ...(p.remove ? { remove: p.remove as string[] } : {}) };
-    case 'link': return { target: String(p.target ?? ''), ...(p.kind ? { kind: p.kind as IntentPayload['kind'] } : {}) };
-    default: return p as IntentPayload;
+    case 'assign':
+      return { assignee: (p.assignee as string | null | undefined) ?? null };
+    case 'comment':
+      return { body: String(p.body ?? '') };
+    case 'label':
+      return { ...(p.add ? { add: p.add as string[] } : {}), ...(p.remove ? { remove: p.remove as string[] } : {}) };
+    case 'link':
+      return { target: String(p.target ?? ''), ...(p.kind ? { kind: p.kind as IntentPayload['kind'] } : {}) };
+    default:
+      return p as IntentPayload;
   }
 }
 
@@ -539,7 +731,11 @@ const NOT_ASKED = { allowed: false, reason: 'not asked' };
  * Every answer is JSON; 404 for unknown ids; 503 when the work cache cannot
  * open; a conflict is a 200 with `status: 'conflict'`.
  */
-export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: WorkRouteContext): Promise<RouteAnswer | null> {
+export async function handleWorkRoute(
+  req: IncomingMessage,
+  url: string,
+  ctx: WorkRouteContext,
+): Promise<RouteAnswer | null> {
   if (!url.startsWith('/api/work')) return null;
   const u = new URL(url, 'http://localhost');
   const path = decodeURIComponent(u.pathname);
@@ -565,14 +761,24 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
       const items = allItems();
       const links = graphLinks(index);
       const counts = commitCounts(db);
-      const f = Object.fromEntries(['source', 'state', 'assignee', 'q', 'flow', 'node', 'repo'].flatMap((k) => (u.searchParams.get(k) ? [[k, u.searchParams.get(k)!]] : [])));
+      const f = Object.fromEntries(
+        ['source', 'state', 'assignee', 'q', 'flow', 'node', 'repo'].flatMap((k) =>
+          u.searchParams.get(k) ? [[k, u.searchParams.get(k)!]] : [],
+        ),
+      );
       const shown = filterWorkItems(items, links, f, index);
       return J(200, {
         sources: await Promise.all(sources.map((s) => sourceCard(s, cache, items))),
         items: shown.map((i) => itemSummaryOf(i, { links, commits: commitsOf(counts, i) })),
         counts: {
           items: itemsByState(shown, 'count.scope.workSources', 'server /api/work · cache.listItems, filtered'),
-          sources: counted(sources.length, 'work.count.sources', 'count.scope.workspace', 'server /api/work · settings sources[type=work]', { bizUnit: 'work.count.sources' }),
+          sources: counted(
+            sources.length,
+            'work.count.sources',
+            'count.scope.workspace',
+            'server /api/work · settings sources[type=work]',
+            { bizUnit: 'work.count.sources' },
+          ),
         },
         generatedAt: (ctx.now?.() ?? new Date()).toISOString(),
         sync: g?.meta.sync ?? null,
@@ -589,14 +795,17 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
       return J(200, {
         node,
         items: items.map((i) => itemSummaryOf(i, { links, commits: commitsOf(counts, i) })),
-        counts: { items: itemsByState(items, 'count.scope.node', 'server /api/work/links · tracks edges into the node') },
+        counts: {
+          items: itemsByState(items, 'count.scope.node', 'server /api/work/links · tracks edges into the node'),
+        },
       });
     }
 
     // GET /api/work/flow/<flowId>
     if (path.startsWith('/api/work/flow/') && method === 'GET') {
       const flow = path.slice('/api/work/flow/'.length);
-      if (!index?.byId.has(flow) || index.byId.get(flow)!.kind !== 'flow') return J(404, { error: `no flow ${flow} in the graph` });
+      if (!index?.byId.has(flow) || index.byId.get(flow)!.kind !== 'flow')
+        return J(404, { error: `no flow ${flow} in the graph` });
       const links = graphLinks(index);
       const counts = commitCounts(db);
       const reach = flowNodeSet(index, flow);
@@ -605,10 +814,23 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
         flow,
         items: items.map((i) => itemSummaryOf(i, { links, commits: commitsOf(counts, i) })),
         counts: {
-          items: itemsByState(items, 'journey.scopeAll', 'server /api/work/flow · tracks edges into the flow and the screens it renders'),
-          byState: itemsByState(items, 'journey.scopeAll', 'server /api/work/flow · tracks edges into the flow and the screens it renders'),
+          items: itemsByState(
+            items,
+            'journey.scopeAll',
+            'server /api/work/flow · tracks edges into the flow and the screens it renders',
+          ),
+          byState: itemsByState(
+            items,
+            'journey.scopeAll',
+            'server /api/work/flow · tracks edges into the flow and the screens it renders',
+          ),
         },
-        findings: flowFindings(items, index, links.filter((l) => reach.has(l.node)), counts),
+        findings: flowFindings(
+          items,
+          index,
+          links.filter((l) => reach.has(l.node)),
+          counts,
+        ),
       });
     }
 
@@ -636,13 +858,21 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
         const r = [...rs].sort((a, b) => rank(a.via) - rank(b.via))[0]!;
         const repos = [...new Set(rs.map((x) => x.repo))];
         const nodes = repos.flatMap((repo) => db?.commitNodes(repo, r.sha) ?? []);
-        const branch = rs.find((x) => x.ref)?.ref ?? repos.map((repo) => db?.branchesForCommit(repo, r.sha)[0]).find(Boolean);
+        const branch =
+          rs.find((x) => x.ref)?.ref ?? repos.map((repo) => db?.branchesForCommit(repo, r.sha)[0]).find(Boolean);
         const files = new Map<string, { path: string; status: string }>();
-        for (const repo of repos) for (const f of db?.filesForCommit(repo, r.sha) ?? []) if (!files.has(f.path)) files.set(f.path, { path: f.path, status: f.status });
+        for (const repo of repos)
+          for (const f of db?.filesForCommit(repo, r.sha) ?? [])
+            if (!files.has(f.path)) files.set(f.path, { path: f.path, status: f.status });
         return {
-          repo: r.repo, sha: r.sha, at: r.at, author: r.author, subject: r.subject,
+          repo: r.repo,
+          sha: r.sha,
+          at: r.at,
+          author: r.author,
+          subject: r.subject,
           ...(branch ? { branch } : {}),
-          via: r.via, vias: [...new Set(rs.map((x) => x.via))],
+          via: r.via,
+          vias: [...new Set(rs.map((x) => x.via))],
           files: [...files.values()].sort((a, b) => a.path.localeCompare(b.path)),
           nodes: [...new Set(nodes.map((n) => n.node))],
           ...(nodes.length ? { resolved: nodes.some((n) => n.fileOnly) ? 'file' : 'hunk' } : {}),
@@ -652,7 +882,13 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
       const f = freshness(cache.getSource(cfg.id));
       const allowed = Object.fromEntries(
         (['comment', 'assign', 'transition', 'edit', 'label', 'link'] as WorkAction[]).map((action) => {
-          const probe: Intent = { id: 'probe', item: id, action, payload: {}, requestedBy: { kind: 'human', id: 'viewer' } };
+          const probe: Intent = {
+            id: 'probe',
+            item: id,
+            action,
+            payload: {},
+            requestedBy: { kind: 'human', id: 'viewer' },
+          };
           const d = evaluatePolicy(cfg.permissions, probe, item, { mode: cfg.mode });
           return [action, { policy: d.verdict.allowed, reason: d.verdict.reason }];
         }),
@@ -662,15 +898,21 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
       return J(200, {
         item: withWriters(item, cache),
         links: strongestLinks(links).map((l) => ({
-          ...nodeRef(index, l.node), via: l.via, tier: l.tier, ...(l.sha ? { sha: l.sha } : {}),
+          ...nodeRef(index, l.node),
+          via: l.via,
+          tier: l.tier,
+          ...(l.sha ? { sha: l.sha } : {}),
           provenance: l.detail ?? (l.via === 'declared' ? 'declared' : l.sha ? `commit ${l.sha.slice(0, 7)}` : l.via),
         })),
         commits,
         touched: touchedCount(index, touchedIds),
         findings: workFindings(item, index, { links, commits: commits.length }),
         freshness: {
-          state: f.state, ...(f.since ? { since: f.since } : {}), ...(f.ago != null ? { ago: Math.round(f.ago / 1000) } : {}),
-          ...(cache.getSource(cfg.id)?.lastSync != null ? { syncNo: cache.getSource(cfg.id)!.lastSync } : {}), ...(f.error ? { error: f.error } : {}),
+          state: f.state,
+          ...(f.since ? { since: f.since } : {}),
+          ...(f.ago != null ? { ago: Math.round(f.ago / 1000) } : {}),
+          ...(cache.getSource(cfg.id)?.lastSync != null ? { syncNo: cache.getSource(cfg.id)!.lastSync } : {}),
+          ...(f.error ? { error: f.error } : {}),
         },
         mode: cfg.mode ?? 'read-only',
         allowed,
@@ -692,7 +934,20 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
         for (const cfg of sources) {
           if (only && cfg.id !== only) continue;
           const provider = providerFor(cfg.provider);
-          if (!provider) { reports.push({ sourceId: cfg.id, syncNo: 0, pulled: 0, changed: 0, deleted: 0, cursor: null, durationMs: 0, error: `no provider "${cfg.provider}" is registered in this build`, errorKind: 'other' }); continue; }
+          if (!provider) {
+            reports.push({
+              sourceId: cfg.id,
+              syncNo: 0,
+              pulled: 0,
+              changed: 0,
+              deleted: 0,
+              cursor: null,
+              durationMs: 0,
+              error: `no provider "${cfg.provider}" is registered in this build`,
+              errorKind: 'other',
+            });
+            continue;
+          }
           reports.push(await syncSource(cfg, provider, c2));
         }
       } finally {
@@ -708,10 +963,13 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
       const action = String(body.action ?? '') as WorkAction;
       if (!(WORK_ACTIONS as readonly string[]).includes(action)) return J(400, { error: `unknown action ${action}` });
       const item = cache.getItem(String(body.item ?? ''));
-      if (!item || !configured.has(item.source)) return J(404, { error: `no work item ${String(body.item)} in the cache` });
+      if (!item || !configured.has(item.source))
+        return J(404, { error: `no work item ${String(body.item)} in the cache` });
       const rb = (body.requestedBy ?? {}) as { kind?: string; id?: string };
       const intent: Intent = {
-        id: `intent-${randomUUID()}`, item: item.id, action,
+        id: `intent-${randomUUID()}`,
+        item: item.id,
+        action,
         payload: toPayload(action, (body.payload ?? {}) as Record<string, unknown>),
         requestedBy: { kind: rb.kind === 'agent' ? 'agent' : 'human', id: rb.id ?? 'viewer' },
         // the revision the person was shown, when the viewer sends it — a write against what they saw
@@ -731,22 +989,54 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
       const at = (ctx.now?.() ?? new Date()).toISOString();
       // the outbox's state machine: confirm a queued request, re-base a conflict, drop either — nothing else.
       // A confirm after a drop, or a second confirm of an applied comment, would write to the tracker again
-      const may: Record<string, readonly string[]> = { confirm: ['queued'], rebase: ['conflict'], drop: ['queued', 'conflict'] };
+      const may: Record<string, readonly string[]> = {
+        confirm: ['queued'],
+        rebase: ['conflict'],
+        drop: ['queued', 'conflict'],
+      };
       if (!may[im[2]!]!.includes(row.state)) {
         const dropped = row.state === 'failed' && row.result?.error === 'dropped by a person';
-        return J(409, { error: `intent ${row.intent.id} is ${dropped ? 'dropped' : row.state}; ${im[2]} applies only to a ${may[im[2]!]!.join(' or ')} intent`, state: row.state });
+        return J(409, {
+          error: `intent ${row.intent.id} is ${dropped ? 'dropped' : row.state}; ${im[2]} applies only to a ${may[im[2]!]!.join(' or ')} intent`,
+          state: row.state,
+        });
       }
       if (im[2] === 'drop') {
         cache.updateIntent(row.intent.id, { state: 'failed', result: { ok: false, error: 'dropped by a person' }, at });
-        cache.audit({ at, source: row.source, intent: row.intent.id, item: row.intent.item, action: row.intent.action, requestedBy: row.intent.requestedBy, outcome: 'dropped' });
-        return J(200, { intent: row.intent, verdicts: row.verdicts ?? { policy: NOT_ASKED, tracker: NOT_ASKED, credential: NOT_ASKED }, status: 'failed', error: 'dropped by a person' });
+        cache.audit({
+          at,
+          source: row.source,
+          intent: row.intent.id,
+          item: row.intent.item,
+          action: row.intent.action,
+          requestedBy: row.intent.requestedBy,
+          outcome: 'dropped',
+        });
+        return J(200, {
+          intent: row.intent,
+          verdicts: row.verdicts ?? { policy: NOT_ASKED, tracker: NOT_ASKED, credential: NOT_ASKED },
+          status: 'failed',
+          error: 'dropped by a person',
+        });
       }
       if (im[2] === 'rebase') {
         // the conflict re-read the item into the cache: the same request against what the tracker now says
         const current = cache.getItem(row.intent.item);
         if (!current) return J(404, { error: `no work item ${row.intent.item} in the cache` });
-        cache.updateIntent(row.intent.id, { state: 'failed', result: { ok: false, error: 'rebased onto the tracker’s current revision' }, at });
-        cache.audit({ at, source: row.source, intent: row.intent.id, item: row.intent.item, action: row.intent.action, requestedBy: row.intent.requestedBy, outcome: 'rebased' });
+        cache.updateIntent(row.intent.id, {
+          state: 'failed',
+          result: { ok: false, error: 'rebased onto the tracker’s current revision' },
+          at,
+        });
+        cache.audit({
+          at,
+          source: row.source,
+          intent: row.intent.id,
+          item: row.intent.item,
+          action: row.intent.action,
+          requestedBy: row.intent.requestedBy,
+          outcome: 'rebased',
+        });
         const next: Intent = { ...row.intent, id: `intent-${randomUUID()}`, baseRevision: current.revision };
         return J(200, await runIntent(next, cfg, cache, true));
       }
@@ -758,12 +1048,17 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
       const source = u.searchParams.get('source') ?? undefined;
       return J(200, {
         intents: cache.listOutbox(source ? { source } : {}).map((r: OutboxRow) => ({
-          ...r.intent, source: r.source, state: r.state, status: r.state,
+          ...r.intent,
+          source: r.source,
+          state: r.state,
+          status: r.state,
           key: cache.getItem(r.intent.item, { includeDeleted: true })?.key ?? r.intent.item,
-          ...(r.verdicts ? { verdicts: r.verdicts } : {}), ...(r.result ? { result: r.result } : {}),
+          ...(r.verdicts ? { verdicts: r.verdicts } : {}),
+          ...(r.result ? { result: r.result } : {}),
           // a conflict re-read the item into the cache: what the tracker says now, beside the request
           ...(r.state === 'conflict' ? { theirs: cache.getItem(r.intent.item, { includeDeleted: true }) } : {}),
-          created: r.created, updated: r.updated,
+          created: r.created,
+          updated: r.updated,
         })),
       });
     }
@@ -782,7 +1077,8 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
       const people = new Map<string, Person>();
       for (const i of cache.listItems(source ? { source } : {})) {
         if (!configured.has(i.source)) continue;
-        for (const p of [i.assignee, i.reporter, ...i.comments.map((c) => c.author)]) if (p && !people.has(p.id)) people.set(p.id, { id: p.id, name: p.name });
+        for (const p of [i.assignee, i.reporter, ...i.comments.map((c) => c.author)])
+          if (p && !people.has(p.id)) people.set(p.id, { id: p.id, name: p.name });
       }
       return J(200, { people: [...people.values()].sort((a, b) => a.name.localeCompare(b.name)) });
     }
@@ -794,8 +1090,8 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
       const schema = cache.getSource(source)?.schema;
       const type = u.searchParams.get('type');
       const states = type
-        ? schema?.types.find((t) => t.name === type || t.category === type)?.states ?? schema?.states ?? []
-        : schema?.states ?? [];
+        ? (schema?.types.find((t) => t.name === type || t.category === type)?.states ?? schema?.states ?? [])
+        : (schema?.states ?? []);
       return J(200, { states: states.map((s) => ({ name: s.name, category: s.category })) });
     }
 
@@ -813,7 +1109,13 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
  */
 async function previewIntent(intent: Intent, cfg: SourceConfig, cache: WorkCache) {
   const provider = providerFor(cfg.provider);
-  if (!provider) return { intent, verdicts: { policy: NOT_ASKED, tracker: NOT_ASKED, credential: NOT_ASKED }, status: 'failed', error: `no provider "${cfg.provider}" is registered in this build` };
+  if (!provider)
+    return {
+      intent,
+      verdicts: { policy: NOT_ASKED, tracker: NOT_ASKED, credential: NOT_ASKED },
+      status: 'failed',
+      error: `no provider "${cfg.provider}" is registered in this build`,
+    };
   const item = cache.getItem(intent.item)!;
   const at = new Date().toISOString();
   try {
@@ -824,11 +1126,27 @@ async function previewIntent(intent: Intent, cfg: SourceConfig, cache: WorkCache
       return { intent, verdicts: d.verdicts, status: 'failed', error: 'this source has no dry run' };
     }
     const p = await provider.preview(session, attributed(intent, cfg.permissions));
-    const preview = { ok: p.ok, reason: p.ok ? 'ok' : p.error ?? 'the tracker would refuse it' };
-    cache.audit({ at, source: cfg.id, intent: intent.id, item: intent.item, action: intent.action, requestedBy: intent.requestedBy, verdicts: d.verdicts, preview, outcome: 'previewed', detail: p.error });
+    const preview = { ok: p.ok, reason: p.ok ? 'ok' : (p.error ?? 'the tracker would refuse it') };
+    cache.audit({
+      at,
+      source: cfg.id,
+      intent: intent.id,
+      item: intent.item,
+      action: intent.action,
+      requestedBy: intent.requestedBy,
+      verdicts: d.verdicts,
+      preview,
+      outcome: 'previewed',
+      detail: p.error,
+    });
     return { intent, verdicts: d.verdicts, preview, status: 'previewed', ...(p.ok ? {} : { error: preview.reason }) };
   } catch (err) {
-    return { intent, verdicts: { policy: NOT_ASKED, tracker: NOT_ASKED, credential: NOT_ASKED }, status: 'failed', error: (err as Error).message.split('\n')[0] };
+    return {
+      intent,
+      verdicts: { policy: NOT_ASKED, tracker: NOT_ASKED, credential: NOT_ASKED },
+      status: 'failed',
+      error: (err as Error).message.split('\n')[0],
+    };
   }
 }
 
@@ -838,25 +1156,48 @@ async function previewIntent(intent: Intent, cfg: SourceConfig, cache: WorkCache
  * is Farsight's when a confirmed comment intent on this item sent that body.
  */
 function withWriters(item: WorkItem, cache: WorkCache): WorkItem {
-  const sent = cache.listOutbox({ item: item.id }).filter((r) => r.intent.action === 'comment' && r.state === 'confirmed');
+  const sent = cache
+    .listOutbox({ item: item.id })
+    .filter((r) => r.intent.action === 'comment' && r.state === 'confirmed');
   if (!sent.length) return item;
-  const confirmed = new Set(cache.listAudit({ item: item.id }).filter((a) => a.outcome === 'confirmed' && a.intent).map((a) => a.intent!));
-  const bodies = sent.filter((r) => confirmed.has(r.intent.id)).map((r) => ({ body: String(r.intent.payload.body ?? ''), by: r.intent.requestedBy }));
+  const confirmed = new Set(
+    cache
+      .listAudit({ item: item.id })
+      .filter((a) => a.outcome === 'confirmed' && a.intent)
+      .map((a) => a.intent!),
+  );
+  const bodies = sent
+    .filter((r) => confirmed.has(r.intent.id))
+    .map((r) => ({ body: String(r.intent.payload.body ?? ''), by: r.intent.requestedBy }));
   return {
     ...item,
     comments: item.comments.map((c) => {
-      const hit = bodies.find((b) => b.body && (c.body.text.trim() === b.body.trim() || c.body.text.trim().endsWith(b.body.trim())));
-      return hit ? { ...c, requestedBy: hit.by } as typeof c : c;
+      const hit = bodies.find(
+        (b) => b.body && (c.body.text.trim() === b.body.trim() || c.body.text.trim().endsWith(b.body.trim())),
+      );
+      return hit ? ({ ...c, requestedBy: hit.by } as typeof c) : c;
     }),
   };
 }
 
 async function runIntent(intent: Intent, cfg: SourceConfig, cache: WorkCache, confirmed: boolean) {
   const provider = providerFor(cfg.provider);
-  if (!provider) return { intent, verdicts: { policy: NOT_ASKED, tracker: NOT_ASKED, credential: NOT_ASKED }, status: 'failed', error: `no provider "${cfg.provider}" is registered in this build` };
+  if (!provider)
+    return {
+      intent,
+      verdicts: { policy: NOT_ASKED, tracker: NOT_ASKED, credential: NOT_ASKED },
+      status: 'failed',
+      error: `no provider "${cfg.provider}" is registered in this build`,
+    };
   try {
     // connected only once the policy allows the write: a denied request calls no tracker
-    const o = await applyIntent(intent, { cfg, provider, session: () => connectSource(cfg, provider), cache, confirmed });
+    const o = await applyIntent(intent, {
+      cfg,
+      provider,
+      session: () => connectSource(cfg, provider),
+      cache,
+      confirmed,
+    });
     return {
       intent: o.intent,
       verdicts: o.verdicts ?? { policy: NOT_ASKED, tracker: NOT_ASKED, credential: NOT_ASKED },
@@ -866,7 +1207,12 @@ async function runIntent(intent: Intent, cfg: SourceConfig, cache: WorkCache, co
       ...(o.reason && statusOf(o) !== 'applied' ? { error: o.reason } : {}),
     };
   } catch (err) {
-    return { intent, verdicts: { policy: NOT_ASKED, tracker: NOT_ASKED, credential: NOT_ASKED }, status: 'failed', error: (err as Error).message.split('\n')[0] };
+    return {
+      intent,
+      verdicts: { policy: NOT_ASKED, tracker: NOT_ASKED, credential: NOT_ASKED },
+      status: 'failed',
+      error: (err as Error).message.split('\n')[0],
+    };
   }
 }
 
@@ -886,23 +1232,48 @@ function rootOf(ctx: WorkRouteContext, repo: string): string | undefined {
  * that repository's own checkout; paths come from the recorded file list, so no
  * request can name a file outside it. Fail-soft: `{ error }` in words.
  */
-function diffAnswer(ctx: WorkRouteContext, db: SnapshotDb | undefined, rows: { repo: string; sha: string; at: string; author: string; subject: string }[], sha: string) {
+function diffAnswer(
+  ctx: WorkRouteContext,
+  db: SnapshotDb | undefined,
+  rows: { repo: string; sha: string; at: string; author: string; subject: string }[],
+  sha: string,
+) {
   if (!/^[0-9a-f]{7,64}$/.test(sha)) return { error: `?sha= must be a commit id (got "${sha}")` };
   const row = rows.find((r) => r.sha === sha || r.sha.startsWith(sha));
   if (!row) return { error: `commit ${sha} does not name this work item in the indexed history` };
   const root = rootOf(ctx, row.repo);
-  if (!root) return { sha: row.sha, subject: row.subject, at: row.at, author: row.author, files: [], error: `the checkout of ${row.repo} is not on this machine` };
+  if (!root)
+    return {
+      sha: row.sha,
+      subject: row.subject,
+      at: row.at,
+      author: row.author,
+      files: [],
+      error: `the checkout of ${row.repo} is not on this machine`,
+    };
   const files = db?.filesForCommit(row.repo, row.sha) ?? [];
   // the same commit recorded by every source reading this checkout: their nodes together (KAN-8)
   const repos = [...new Set(rows.filter((r) => r.sha === row.sha).map((r) => r.repo))];
   const nodes = repos.flatMap((repo) => db?.commitNodes(repo, row.sha) ?? []);
   const patch = gitShowPatch(root, row.sha, { context: 3 });
-  if (!patch.available) return { sha: row.sha, subject: row.subject, at: row.at, author: row.author, files: [], error: `git could not show ${row.sha.slice(0, 7)}: ${GIT_ABSENT_WORD[patch.reason]}${patch.detail ? ` (${patch.detail})` : ''}` };
+  if (!patch.available)
+    return {
+      sha: row.sha,
+      subject: row.subject,
+      at: row.at,
+      author: row.author,
+      files: [],
+      error: `git could not show ${row.sha.slice(0, 7)}: ${GIT_ABSENT_WORD[patch.reason]}${patch.detail ? ` (${patch.detail})` : ''}`,
+    };
   const byFile = splitPatch(patch.patch);
   return {
-    sha: row.sha, subject: row.subject, at: row.at, author: row.author,
+    sha: row.sha,
+    subject: row.subject,
+    at: row.at,
+    author: row.author,
     files: files.map((f) => ({
-      path: f.path, status: f.status,
+      path: f.path,
+      status: f.status,
       patch: byFile.get(f.path) ?? '',
       nodes: [...new Set(nodes.filter((n) => n.path === f.path).map((n) => n.node))],
     })),

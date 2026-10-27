@@ -40,7 +40,9 @@ test.describe('lens and register', () => {
     const toggle = page.locator('#regtoggle');
     const search = page.locator('#searchlabel');
     // at 1440 the bar overflows and fitTopbar moves the toggle into the ⋯ menu
-    const openMore = async () => { if (await page.locator('#morewrap').isVisible()) await page.locator('#morebtn').click(); };
+    const openMore = async () => {
+      if (await page.locator('#morewrap').isVisible()) await page.locator('#morebtn').click();
+    };
     await expect(toggle).toContainText(/Professional terms/i);
     await expect(search).toHaveText('search…');
     await openMore();

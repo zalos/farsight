@@ -1,52 +1,102 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { adfToMarkdown, markdownToAdf, adfBody, typeCategory, stateCategory, linkKind, currentSprint, isoUtc, decodeCursor, encodeCursor, buildJql, keyOf } from '../dist/index.js';
+import {
+  adfToMarkdown,
+  markdownToAdf,
+  adfBody,
+  typeCategory,
+  stateCategory,
+  linkKind,
+  currentSprint,
+  isoUtc,
+  decodeCursor,
+  encodeCursor,
+  buildJql,
+  keyOf,
+} from '../dist/index.js';
 import { load } from './replay.ts';
 
 const doc = (...content: unknown[]) => ({ version: 1, type: 'doc', content });
 const p = (...content: unknown[]) => ({ type: 'paragraph', content });
-const tx = (text: string, ...marks: string[]) => ({ type: 'text', text, ...(marks.length ? { marks: marks.map((type) => ({ type })) } : {}) });
+const tx = (text: string, ...marks: string[]) => ({
+  type: 'text',
+  text,
+  ...(marks.length ? { marks: marks.map((type) => ({ type })) } : {}),
+});
 
 test('ADF → markdown: the recorded epic description', () => {
   const pages = load('pull-full.json');
-  const epic = pages.flatMap((pg) => (pg.response as { issues: { key: string; fields: { description: unknown } }[] }).issues).find((i) => i.key === 'KAN-4')!;
-  assert.equal(adfToMarkdown(epic.fields.description), [
-    '## Invoice submission',
-    'A contractor submits an invoice from the **portal**; see [the spec](https://example.com/spec). Owner: @Farsight Test.',
-    '- validate totals\n- call `finalizeInvoice`',
-    '1. draft\n2. submit\n   then approve',
-    '```ts\nawait finalizeInvoice(id);\n```',
-    '| step | owner |\n| --- | --- |\n| submit | contractor |',
-  ].join('\n\n'));
+  const epic = pages
+    .flatMap((pg) => (pg.response as { issues: { key: string; fields: { description: unknown } }[] }).issues)
+    .find((i) => i.key === 'KAN-4')!;
+  assert.equal(
+    adfToMarkdown(epic.fields.description),
+    [
+      '## Invoice submission',
+      'A contractor submits an invoice from the **portal**; see [the spec](https://example.com/spec). Owner: @Farsight Test.',
+      '- validate totals\n- call `finalizeInvoice`',
+      '1. draft\n2. submit\n   then approve',
+      '```ts\nawait finalizeInvoice(id);\n```',
+      '| step | owner |\n| --- | --- |\n| submit | contractor |',
+    ].join('\n\n'),
+  );
 });
 
 test('ADF → markdown: media is a reference, never bytes; mentions, emoji, dates, status, cards, quotes, rules, tasks, nesting', () => {
   const d = doc(
-    { type: 'mediaSingle', content: [{ type: 'media', attrs: { id: 'abc-123', type: 'file', collection: 'x', alt: 'screenshot.png' } }] },
+    {
+      type: 'mediaSingle',
+      content: [{ type: 'media', attrs: { id: 'abc-123', type: 'file', collection: 'x', alt: 'screenshot.png' } }],
+    },
     { type: 'mediaGroup', content: [{ type: 'media', attrs: { id: 'f-1', type: 'file' } }] },
-    p({ type: 'mention', attrs: { id: '712020:x', text: 'Ann' } }, tx(' '), { type: 'emoji', attrs: { shortName: ':smile:', text: '😄' } }, tx(' '),
-      { type: 'date', attrs: { timestamp: '1790726400000' } }, tx(' '), { type: 'status', attrs: { text: 'BLOCKED', color: 'red' } }, tx(' '),
-      { type: 'inlineCard', attrs: { url: 'https://x.test/a' } }),
+    p(
+      { type: 'mention', attrs: { id: '712020:x', text: 'Ann' } },
+      tx(' '),
+      { type: 'emoji', attrs: { shortName: ':smile:', text: '😄' } },
+      tx(' '),
+      { type: 'date', attrs: { timestamp: '1790726400000' } },
+      tx(' '),
+      { type: 'status', attrs: { text: 'BLOCKED', color: 'red' } },
+      tx(' '),
+      { type: 'inlineCard', attrs: { url: 'https://x.test/a' } },
+    ),
     { type: 'blockquote', content: [p(tx('quoted'))] },
     { type: 'rule' },
-    { type: 'taskList', content: [{ type: 'taskItem', attrs: { state: 'DONE' }, content: [tx('shipped')] }, { type: 'taskItem', attrs: { state: 'TODO' }, content: [tx('verify')] }] },
-    { type: 'bulletList', content: [{ type: 'listItem', content: [p(tx('outer')), { type: 'bulletList', content: [{ type: 'listItem', content: [p(tx('inner'))] }] }] }] },
+    {
+      type: 'taskList',
+      content: [
+        { type: 'taskItem', attrs: { state: 'DONE' }, content: [tx('shipped')] },
+        { type: 'taskItem', attrs: { state: 'TODO' }, content: [tx('verify')] },
+      ],
+    },
+    {
+      type: 'bulletList',
+      content: [
+        {
+          type: 'listItem',
+          content: [p(tx('outer')), { type: 'bulletList', content: [{ type: 'listItem', content: [p(tx('inner'))] }] }],
+        },
+      ],
+    },
     { type: 'panel', attrs: { panelType: 'info' }, content: [p(tx('in a panel', 'em'))] },
     { type: 'expand', attrs: { title: 'More' }, content: [p(tx('hidden', 'strike'))] },
     { type: 'unknownFutureNode', content: [p(tx('still read'))] },
   );
-  assert.equal(adfToMarkdown(d), [
-    '[attachment: screenshot.png]',
-    '[attachment: f-1]',
-    '@Ann 😄 2026-09-30 [BLOCKED] https://x.test/a',
-    '> quoted',
-    '---',
-    '- [x] shipped\n- [ ] verify',
-    '- outer\n  - inner',
-    '*in a panel*',
-    '**More**\n\n~~hidden~~',
-    'still read',
-  ].join('\n\n'));
+  assert.equal(
+    adfToMarkdown(d),
+    [
+      '[attachment: screenshot.png]',
+      '[attachment: f-1]',
+      '@Ann 😄 2026-09-30 [BLOCKED] https://x.test/a',
+      '> quoted',
+      '---',
+      '- [x] shipped\n- [ ] verify',
+      '- outer\n  - inner',
+      '*in a panel*',
+      '**More**\n\n~~hidden~~',
+      'still read',
+    ].join('\n\n'),
+  );
 });
 
 test('ADF → markdown tolerates null, a v2 wiki string and an empty doc', () => {
@@ -59,7 +109,9 @@ test('ADF → markdown tolerates null, a v2 wiki string and an empty doc', () =>
 });
 
 test('markdown → ADF: the nodes Farsight writes', () => {
-  const d = markdownToAdf('# Title\n\nSome **bold**, *em*, _em2_, ~~gone~~, `code` and [a link](https://x.test).\nsecond line\n\n- one\n- two\n  - nested\n\n3. three\n4. four\n\n```js\nlet a = 1;\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |');
+  const d = markdownToAdf(
+    '# Title\n\nSome **bold**, *em*, _em2_, ~~gone~~, `code` and [a link](https://x.test).\nsecond line\n\n- one\n- two\n  - nested\n\n3. three\n4. four\n\n```js\nlet a = 1;\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |',
+  );
   assert.equal(d.type, 'doc');
   assert.equal(d.version, 1);
   const types = d.content.map((n) => n.type);
@@ -71,7 +123,10 @@ test('markdown → ADF: the nodes Farsight writes', () => {
   assert.deepEqual(marked('strike'), ['gone']);
   assert.deepEqual(marked('code'), ['code']);
   assert.deepEqual(para.find((n) => n.text === 'a link')!.marks, [{ type: 'link', attrs: { href: 'https://x.test' } }]);
-  assert.ok(para.some((n) => n.type === 'hardBreak'), 'a line break inside a paragraph is a hardBreak');
+  assert.ok(
+    para.some((n) => n.type === 'hardBreak'),
+    'a line break inside a paragraph is a hardBreak',
+  );
   assert.deepEqual(d.content[3]!.attrs, { order: 3 });
   assert.deepEqual(d.content[4]!.attrs, { language: 'js' });
   assert.equal(d.content[5]!.content![0]!.content![0]!.type, 'tableHeader');
@@ -134,9 +189,21 @@ test('categories: §3 rules only', () => {
 
 test('sprint: the active one, else the last; dates to ISO UTC', () => {
   assert.equal(currentSprint(null), undefined);
-  assert.deepEqual(currentSprint([{ name: 'S1', state: 'closed' }, { name: 'S2', state: 'active', startDate: '2026-09-01T00:00:00.000Z', endDate: '2026-09-15T00:00:00.000Z' }, { name: 'S3', state: 'future' }]),
-    { name: 'S2', start: '2026-09-01T00:00:00.000Z', end: '2026-09-15T00:00:00.000Z' });
-  assert.deepEqual(currentSprint([{ name: 'S1', state: 'closed' }, { name: 'S3', state: 'future' }]), { name: 'S3' });
+  assert.deepEqual(
+    currentSprint([
+      { name: 'S1', state: 'closed' },
+      { name: 'S2', state: 'active', startDate: '2026-09-01T00:00:00.000Z', endDate: '2026-09-15T00:00:00.000Z' },
+      { name: 'S3', state: 'future' },
+    ]),
+    { name: 'S2', start: '2026-09-01T00:00:00.000Z', end: '2026-09-15T00:00:00.000Z' },
+  );
+  assert.deepEqual(
+    currentSprint([
+      { name: 'S1', state: 'closed' },
+      { name: 'S3', state: 'future' },
+    ]),
+    { name: 'S3' },
+  );
   assert.equal(isoUtc('2026-09-30T18:32:46.656-0400'), '2026-09-30T22:32:46.656Z');
   assert.equal(isoUtc(1790807566656), '2026-09-30T22:32:46.656Z');
 });
@@ -146,7 +213,10 @@ test('cursor and JQL: epoch-ms bound, quoted keys, bare ISO accepted', () => {
   assert.deepEqual(decodeCursor(c), { v: 1, at: 1790807566656, seen: ['10010@1790807566656'] });
   assert.equal(decodeCursor('2026-09-30T22:32:46.656Z')!.at, 1790807566656);
   assert.equal(decodeCursor('junk'), null);
-  assert.equal(buildJql(['KAN'], { since: 1790807566656.7, areas: ['Portal "x"'] }), 'project in ("KAN") AND component in ("Portal \\"x\\"") AND updated >= 1790807566656 ORDER BY updated ASC');
+  assert.equal(
+    buildJql(['KAN'], { since: 1790807566656.7, areas: ['Portal "x"'] }),
+    'project in ("KAN") AND component in ("Portal \\"x\\"") AND updated >= 1790807566656 ORDER BY updated ASC',
+  );
   assert.equal(keyOf('work::acme-jira::ACME-12'), 'ACME-12');
 });
 
@@ -155,8 +225,18 @@ test('markdown → ADF edges: snake_case is not emphasis, a list may follow a li
   const inline = snake.content[0]!.content!;
   assert.equal(inline[0]!.text, 'rename foo_bar_baz to qux, keep ');
   assert.deepEqual(inline[1], { type: 'text', text: 'this', marks: [{ type: 'em' }] });
-  assert.deepEqual(markdownToAdf('Steps:\n- one\n- two').content.map((n) => n.type), ['paragraph', 'bulletList']);
-  assert.deepEqual(markdownToAdf('in 2026\n3. not a list').content.map((n) => n.type), ['paragraph'], 'an ordered list interrupts a paragraph only from 1');
+  assert.deepEqual(
+    markdownToAdf('Steps:\n- one\n- two').content.map((n) => n.type),
+    ['paragraph', 'bulletList'],
+  );
+  assert.deepEqual(
+    markdownToAdf('in 2026\n3. not a list').content.map((n) => n.type),
+    ['paragraph'],
+    'an ordered list interrupts a paragraph only from 1',
+  );
   assert.deepEqual(markdownToAdf('**`x`**').content[0]!.content![0]!.marks, [{ type: 'code' }]);
-  assert.deepEqual(markdownToAdf('[`x`](https://x.test)').content[0]!.content![0]!.marks, [{ type: 'code' }, { type: 'link', attrs: { href: 'https://x.test' } }]);
+  assert.deepEqual(markdownToAdf('[`x`](https://x.test)').content[0]!.content![0]!.marks, [
+    { type: 'code' },
+    { type: 'link', attrs: { href: 'https://x.test' } },
+  ]);
 });

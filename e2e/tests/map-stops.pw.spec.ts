@@ -12,16 +12,20 @@ async function mapOn(page: Page) {
   await gotoReady(page, '#/portfolio');
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
 }
 async function go(page: Page, hash: string) {
-  await page.evaluate((h) => { location.hash = h; }, hash);
+  await page.evaluate((h) => {
+    location.hash = h;
+  }, hash);
 }
 const hash = (page: Page) => page.evaluate(() => decodeURIComponent(location.hash));
 const pressed = (page: Page, l: string) => page.locator(`.map-lvls button[data-l="${l}"]`);
 
-test('one zoom from the storyline board to a beat\'s code, with no change of surface', async ({ page }) => {
+test("one zoom from the storyline board to a beat's code, with no change of surface", async ({ page }) => {
   await mapOn(page);
   await go(page, '#/map?storyline=invoice');
   // the level control has five stops, the board's LAYOUT is its one choice (nothing to pick)
@@ -93,7 +97,7 @@ test('the action stop draws Finalize invoice as five beats, and the ladder is it
   await expect(page.locator('.mp')).toBeVisible();
 });
 
-test('a call card\'s door and a property call row open the action stop', async ({ page }) => {
+test("a call card's door and a property call row open the action stop", async ({ page }) => {
   await mapOn(page);
   await go(page, STREET + '?plumb=1');
   const call = page.locator(`.map-pl[data-flow="${FLOW}"][data-si="1"]`).first();
@@ -140,7 +144,12 @@ test('the address of every stop round-trips through route-url.js', async ({ page
     // a URL the browser resolves; typed loosely, the module is plain JS served by the viewer
     const url = '/app/lib/route-url.js';
     const R: any = await import(/* @vite-ignore */ url);
-    const cases = [{ screen: 2, action: 6, beat: 4, dock: 'right' }, { screen: 1, action: 1 }, { layout: 'table' }, { screen: 2, action: 3, layout: 'ladder' }];
+    const cases = [
+      { screen: 2, action: 6, beat: 4, dock: 'right' },
+      { screen: 1, action: 1 },
+      { layout: 'table' },
+      { screen: 2, action: 3, layout: 'ladder' },
+    ];
     return cases.map((o) => ({ o, back: R.mapStopOf(R.mapStopHash(flow, o)) }));
   }, FLOW);
   for (const { o, back } of out) {
@@ -159,14 +168,20 @@ test('the address of every stop round-trips through route-url.js', async ({ page
 // The owner's words: "the guided journey buttons should be fixed at the top, it's too difficult to know where the
 // buttons are as they keep changing", and the head that rode over the first screen card in the sweep's shots.
 type Box = { x: number; y: number; width: number; height: number };
-const meets = (a: Box, b: Box) => a.x < b.x + b.width - 0.5 && b.x < a.x + a.width - 0.5 && a.y < b.y + b.height - 0.5 && b.y < a.y + a.height - 0.5;
-const WIDTHS = [{ width: 1440, height: 900 }, { width: 1280, height: 800 }];
+const meets = (a: Box, b: Box) =>
+  a.x < b.x + b.width - 0.5 && b.x < a.x + a.width - 0.5 && a.y < b.y + b.height - 0.5 && b.y < a.y + a.height - 0.5;
+const WIDTHS = [
+  { width: 1440, height: 900 },
+  { width: 1280, height: 800 },
+];
 
 /**
  * @covers packages/server/public/app/surfaces/map.js::drawHead
  * @covers packages/server/public/app/surfaces/map.js::headBarHtml
  */
-test('the journey head sits above the stage: the first screen card is never under it, in every register, at 1440 and 1280', async ({ page }) => {
+test('the journey head sits above the stage: the first screen card is never under it, in every register, at 1440 and 1280', async ({
+  page,
+}) => {
   await mapOn(page);
   for (const size of WIDTHS) {
     await page.setViewportSize(size);
@@ -177,12 +192,17 @@ test('the journey head sits above the stage: the first screen card is never unde
       const first = page.locator(`.map-district[data-flow="${FLOW}"] .map-scr`).first();
       await expect(first).toBeVisible();
       await page.waitForTimeout(500);
-      const h = (await head.boundingBox())!, c = (await first.boundingBox())!, b = (await page.locator('.map-board').boundingBox())!;
+      const h = (await head.boundingBox())!,
+        c = (await first.boundingBox())!,
+        b = (await page.locator('.map-board').boundingBox())!;
       expect(meets(h, c), `${lens} at ${size.width}: the head and the first card`).toBe(false);
       // the head is chrome, not the world: the board starts under it
       expect(b.y).toBeGreaterThanOrEqual(h.y + h.height - 1);
       // what the first card's middle shows is the card
-      const mid = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('.map-scr'), [c.x + c.width / 2, c.y + Math.min(c.height / 2, 40)]);
+      const mid = await page.evaluate(
+        ([x, y]) => !!document.elementFromPoint(x, y)?.closest('.map-scr'),
+        [c.x + c.width / 2, c.y + Math.min(c.height / 2, 40)],
+      );
       expect(mid).toBe(true);
     }
   }
@@ -198,7 +218,11 @@ test('WALK keeps one place at the five stops, at 1440 and 1280', async ({ page }
     await page.setViewportSize(size);
     const walk = page.locator('.map-chrome .map-tb-walk');
     const boxes: Box[] = [];
-    const at = async () => { await expect(walk).toBeVisible(); await page.waitForTimeout(250); boxes.push((await walk.boundingBox())!); };
+    const at = async () => {
+      await expect(walk).toBeVisible();
+      await page.waitForTimeout(250);
+      boxes.push((await walk.boundingBox())!);
+    };
     await go(page, '#/map?storyline=invoice');
     await expect(page.locator('.map-world')).toHaveClass(/lvl-nb/);
     await at();
@@ -230,7 +254,9 @@ test('WALK keeps one place at the five stops, at 1440 and 1280', async ({ page }
  * @covers packages/server/public/app/surfaces/map.js::onDockChange
  * @covers packages/server/public/app/lib/tour.js::openWalk
  */
-test('the dock takes its own column: the walk, the code and a table part never draw over the stage', async ({ page }) => {
+test('the dock takes its own column: the walk, the code and a table part never draw over the stage', async ({
+  page,
+}) => {
   await mapOn(page);
   for (const size of WIDTHS) {
     await page.setViewportSize(size);
@@ -279,7 +305,9 @@ test('the dock takes its own column: the walk, the code and a table part never d
  * @covers packages/server/public/app/surfaces/journey-drill.js::jrnDrillRailHtml
  * @covers packages/server/public/app/surfaces/map.js::drawJourneyLanes
  */
-test('the journey stop offers screens · lanes · table · drill: drill is the action rail over the beats, lanes the journey\'s lanes', async ({ page }) => {
+test("the journey stop offers screens · lanes · table · drill: drill is the action rail over the beats, lanes the journey's lanes", async ({
+  page,
+}) => {
   await mapOn(page);
   await go(page, STREET + '?layout=screens');
   await expect(page.locator('.map-layout .map-seg[data-layout]')).toHaveText(['screens', 'lanes', 'table', 'drill']);

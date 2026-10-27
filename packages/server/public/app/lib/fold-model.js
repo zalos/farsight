@@ -17,17 +17,26 @@ export function foldPlan(items, { rowW, gap = 0, maxRows = 2, moreW = () => 24 }
       if (i === first) shown.push({ w: moreW(hidden.size), rows: 1 });
       if (!hidden.has(i)) shown.push(it);
     });
-    let rows = 0, x = 0, tall = 0;
+    let rows = 0,
+      x = 0,
+      tall = 0;
     for (const it of shown) {
       const w = Math.min(it.w, rowW);
-      if (x > 0 && x + gap + w > rowW + 0.5) { rows += tall; x = 0; tall = 0; }
+      if (x > 0 && x + gap + w > rowW + 0.5) {
+        rows += tall;
+        x = 0;
+        tall = 0;
+      }
       x += (x > 0 ? gap : 0) + w;
       tall = Math.max(tall, it.rows || 1);
     }
     return rows + tall;
   };
   const hidden = new Set();
-  const order = items.map((it, i) => i).filter((i) => !items[i].keep).reverse();
+  const order = items
+    .map((it, i) => i)
+    .filter((i) => !items[i].keep)
+    .reverse();
   let rows = lay(hidden);
   for (const i of order) {
     if (rows <= maxRows) break;

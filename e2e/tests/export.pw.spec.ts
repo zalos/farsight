@@ -11,7 +11,9 @@ import { test, expect, gotoReady } from './support';
 
 type AnyRec = Record<string, any>;
 const here = dirname(fileURLToPath(import.meta.url));
-const MANIFEST = JSON.parse(readFileSync(join(here, '..', '..', 'examples', 'invoice-app', 'docs', 'design', 'screens.json'), 'utf8'));
+const MANIFEST = JSON.parse(
+  readFileSync(join(here, '..', '..', 'examples', 'invoice-app', 'docs', 'design', 'screens.json'), 'utf8'),
+);
 const STORY = (MANIFEST.storylines || [])[0] as AnyRec;
 const FLOW = 'invoice-app::flow::billing-cycle';
 
@@ -19,13 +21,18 @@ const FLOW = 'invoice-app::flow::billing-cycle';
 async function mapOn(page: Page) {
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
 }
 
 /** Width and height from a PNG's IHDR. */
 function pngSize(b: Buffer) {
-  expect(b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), 'a PNG signature').toBe(true);
+  expect(
+    b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+    'a PNG signature',
+  ).toBe(true);
   expect(b.subarray(12, 16).toString('latin1')).toBe('IHDR');
   return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
 }
@@ -54,10 +61,14 @@ async function footer(page: Page, surface: string) {
  * @covers packages/server/public/app/surfaces/map.js::mapPicture
  * @covers packages/server/public/app/lib/export-model.js::pdfFromJpeg
  */
-test('the Map saves its storyline board whole, as a picture and as a PDF, with the footer under it', async ({ page }) => {
+test('the Map saves its storyline board whole, as a picture and as a PDF, with the footer under it', async ({
+  page,
+}) => {
   await gotoReady(page, '#/portfolio');
   await mapOn(page);
-  await page.evaluate((id) => { location.hash = '#/map?storyline=' + id; }, STORY.id);
+  await page.evaluate((id) => {
+    location.hash = '#/map?storyline=' + id;
+  }, STORY.id);
   await expect(page.locator('.map-band.story .w')).toHaveText([STORY.name]);
   // panned off to one corner: the picture is still the whole band, not the part on screen (+ from the board is a
   // journey's stop since the chrome holds still, and Save there saves that stop — the next test)
@@ -65,10 +76,12 @@ test('the Map saves its storyline board whole, as a picture and as a PDF, with t
   for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowRight');
 
   const { d, bytes } = await save(page, 'map', 'png');
-  expect(d.suggestedFilename()).toMatch(new RegExp(`^farsight-map-[a-z0-9-]+-${STORY.id}(-sync\\d+)?(-\\d{4}-\\d{2}-\\d{2})?\\.png$`));
+  expect(d.suggestedFilename()).toMatch(
+    new RegExp(`^farsight-map-[a-z0-9-]+-${STORY.id}(-sync\\d+)?(-\\d{4}-\\d{2}-\\d{2})?\\.png$`),
+  );
   const { width, height } = pngSize(bytes);
   const board = await page.evaluate(() => {
-    const w = (document.querySelector('.map-world') as HTMLElement);
+    const w = document.querySelector('.map-world') as HTMLElement;
     const band = w.querySelector('.map-band.story') as HTMLElement;
     return { bandW: band.offsetWidth };
   });
@@ -99,7 +112,10 @@ test('the Map saves its storyline board whole, as a picture and as a PDF, with t
 
 /** Save one stop's picture from the Save control at `within` (the street head or the table head). */
 async function saveAt(page: Page, within: string, fmt: 'png' | 'pdf'): Promise<{ d: Download; bytes: Buffer }> {
-  await page.locator(within + ' [data-export="street"]').first().click();
+  await page
+    .locator(within + ' [data-export="street"]')
+    .first()
+    .click();
   const menu = page.getByRole('menu', { name: 'Save this view' });
   await expect(menu).toBeVisible();
   const [d] = await Promise.all([page.waitForEvent('download'), menu.locator(`[data-fx-fmt="${fmt}"]`).click()]);
@@ -114,7 +130,9 @@ async function saveAt(page: Page, within: string, fmt: 'png' | 'pdf'): Promise<{
  * @covers packages/server/public/app/surfaces/map-stops.js::stopPicture
  * @covers packages/server/public/app/lib/export.js::exportToolHtml
  */
-test('a journey saves from its stop on the Map: the business street with every screen, and the table', async ({ page }) => {
+test('a journey saves from its stop on the Map: the business street with every screen, and the table', async ({
+  page,
+}) => {
   await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=screens&lens=business');
   const head = '.map-district[data-flow="' + FLOW + '"]';
   await expect(page.locator(head + ' .map-scr')).toHaveCount(3);
@@ -188,12 +206,14 @@ test('the Save menu is reached and left by the keyboard', async ({ page }) => {
  * @covers packages/server/public/app/share.js::pinnedLink
  * @covers packages/server/public/app/share.js::drawPinNote
  */
-test('the pinned link names the sync and the day, and a link pinned to another sync says so beside the chip', async ({ page }) => {
+test('the pinned link names the sync and the day, and a link pinned to another sync says so beside the chip', async ({
+  page,
+}) => {
   await gotoReady(page, '#/portfolio');
   const served = await page.evaluate(() => {
     const S = (window as any).S;
     const v = S.VERSION && S.VERSION.graph;
-    return v && v.sync != null ? v.sync : S.GRAPH.meta.sync ?? null;
+    return v && v.sync != null ? v.sync : (S.GRAPH.meta.sync ?? null);
   });
   // the fixture's ingest writes snapshot history, so its graph has a sync number to pin to
   expect(served, 'the fixture graph carries a sync number').not.toBeNull();
@@ -203,8 +223,12 @@ test('the pinned link names the sync and the day, and a link pinned to another s
   expect(link).toMatch(new RegExp(`#/portfolio@sync:${served}(\\?|$)`));
   await page.evaluate(() => (window as any).closeShare());
   await expect(page.locator('#pinnote')).toHaveCount(0);
-  await page.evaluate((n) => { location.hash = '#/portfolio@sync:' + n + '?asof=2026-01-01'; }, served + 1);
+  await page.evaluate((n) => {
+    location.hash = '#/portfolio@sync:' + n + '?asof=2026-01-01';
+  }, served + 1);
   await expect(page.locator('#pinnote')).toHaveText(`pinned to sync ${served + 1} · this server shows sync ${served}`);
-  await page.evaluate((n) => { location.hash = '#/portfolio@sync:' + n; }, served);
+  await page.evaluate((n) => {
+    location.hash = '#/portfolio@sync:' + n;
+  }, served);
   await expect(page.locator('#pinnote')).toHaveCount(0);
 });

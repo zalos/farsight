@@ -21,7 +21,9 @@ import { defAttrs, plainTip, countKey } from './lib/counted.js';
 import { scopeWordHtml } from './lib/test-chip.js';
 
 /** A tip-bearing span for a catalog word (its define and its Grammar Book entry). @group Change impact */
-function impTip(key) { return '<span class="imp-tip"' + (def(key) ? defAttrs(key) : '') + '>'; }
+function impTip(key) {
+  return '<span class="imp-tip"' + (def(key) ? defAttrs(key) : '') + '>';
+}
 
 /** Default distance. Two is the question ("what uses it, and what uses those"); more is asked for. */
 const IMP_HOPS = 2;
@@ -85,20 +87,43 @@ export function impactFetch(id, opts, done) {
   const o = opts || impactOpts();
   const key = impKey(id, o);
   const hit = IMP_CACHE.get(key);
-  if (hit) { if (hit.state !== 'loading' && done) done(hit); return hit; }
+  if (hit) {
+    if (hit.state !== 'loading' && done) done(hit);
+    return hit;
+  }
   const entry = { state: 'loading', report: null };
   IMP_CACHE.set(key, entry);
-  const q = '?node=' + encodeURIComponent(id) + '&hops=' + (o.hops || IMP_HOPS)
-    + (o.tests ? '&tests=1' : '') + (o.flows ? '&flows=1' : '');
-  fetch('/api/impact' + q).then((r) => {
-    if (r.status === 404 && !S.impactHasEndpoint) { entry.state = 'off'; return null; }
-    if (!r.ok) { entry.state = 'error'; return null; }
-    S.impactHasEndpoint = true;
-    return r.json();
-  }).then((rep) => {
-    if (rep) { entry.report = rep; entry.state = rep.hops && rep.hops.length ? 'ok' : 'none'; }
-    if (done) done(entry);
-  }).catch(() => { entry.state = 'error'; if (done) done(entry); });
+  const q =
+    '?node=' +
+    encodeURIComponent(id) +
+    '&hops=' +
+    (o.hops || IMP_HOPS) +
+    (o.tests ? '&tests=1' : '') +
+    (o.flows ? '&flows=1' : '');
+  fetch('/api/impact' + q)
+    .then((r) => {
+      if (r.status === 404 && !S.impactHasEndpoint) {
+        entry.state = 'off';
+        return null;
+      }
+      if (!r.ok) {
+        entry.state = 'error';
+        return null;
+      }
+      S.impactHasEndpoint = true;
+      return r.json();
+    })
+    .then((rep) => {
+      if (rep) {
+        entry.report = rep;
+        entry.state = rep.hops && rep.hops.length ? 'ok' : 'none';
+      }
+      if (done) done(entry);
+    })
+    .catch(() => {
+      entry.state = 'error';
+      if (done) done(entry);
+    });
   return entry;
 }
 
@@ -114,11 +139,14 @@ function impactRing(id, hops, done) {
   const hit = IMP_CACHE.get(key);
   if (hit) return hit.n;
   IMP_CACHE.set(key, { n: null });
-  fetch('/api/impact?node=' + encodeURIComponent(id) + '&hops=' + (hops + 1)).then((r) => r.ok ? r.json() : null).then((rep) => {
-    const h = rep && rep.hops && rep.hops[hops];
-    IMP_CACHE.set(key, { n: h ? h.found : null });
-    if (done && h) done();
-  }).catch(() => {});
+  fetch('/api/impact?node=' + encodeURIComponent(id) + '&hops=' + (hops + 1))
+    .then((r) => (r.ok ? r.json() : null))
+    .then((rep) => {
+      const h = rep && rep.hops && rep.hops[hops];
+      IMP_CACHE.set(key, { n: h ? h.found : null });
+      if (done && h) done();
+    })
+    .catch(() => {});
   return null;
 }
 
@@ -134,11 +162,24 @@ function impHowHtml(n) {
   const head = r ? esc(r.technique + ' ' + r.confidence) : esc(t('impact.notRecorded'));
   const parts = [impTip(r ? 'impact.strength' : 'impact.notRecorded') + head + '</span>'];
   if (n.hop > 1 && n.strength.unstamped) {
-    parts.push(esc(t('impact.strength').replace('{tier}', n.strength.tier || t('impact.notRecorded')).replace('{n}', n.strength.unstamped)));
+    parts.push(
+      esc(
+        t('impact.strength')
+          .replace('{tier}', n.strength.tier || t('impact.notRecorded'))
+          .replace('{n}', n.strength.unstamped),
+      ),
+    );
   }
   if (n.oneOf) {
-    parts.push(impTip('impact.oneOf')
-      + esc(t('impact.oneOf').replace('{chosen}', n.oneOf.chosen.split('::').pop()).replace('{n}', n.oneOf.alternatives.length)) + '</span>');
+    parts.push(
+      impTip('impact.oneOf') +
+        esc(
+          t('impact.oneOf')
+            .replace('{chosen}', n.oneOf.chosen.split('::').pop())
+            .replace('{n}', n.oneOf.alternatives.length),
+        ) +
+        '</span>',
+    );
   }
   if (n.shared) parts.push(esc(t('impact.sharedHere')));
   if (n.declaredOnly) parts.push(esc(t('journey.absent.notBuilt')));
@@ -152,12 +193,23 @@ function impHowHtml(n) {
  * @group Change impact */
 function impNodeHtml(n) {
   const loc = n.via.loc || n.loc;
-  return IMP_ROW + esc(n.nodeId) + '">'
-    + '<span class="k">' + esc(n.via.kind) + '</span>'
-    + '<span class="nm">' + esc(n.name) + '</span>'
-    + (loc ? '<span class="loc">' + esc(loc.path + ':' + loc.line) + '</span>' : '')
-    + '</a>' + (loc ? vsl(n.repo, loc.path, loc.line) : '')
-    + '<span class="how">' + impHowHtml(n) + '</span></li>';
+  return (
+    IMP_ROW +
+    esc(n.nodeId) +
+    '">' +
+    '<span class="k">' +
+    esc(n.via.kind) +
+    '</span>' +
+    '<span class="nm">' +
+    esc(n.name) +
+    '</span>' +
+    (loc ? '<span class="loc">' + esc(loc.path + ':' + loc.line) + '</span>' : '') +
+    '</a>' +
+    (loc ? vsl(n.repo, loc.path, loc.line) : '') +
+    '<span class="how">' +
+    impHowHtml(n) +
+    '</span></li>'
+  );
 }
 
 /**
@@ -177,7 +229,7 @@ export function impTestsReaching(report, upto) {
   const seen = new Map();
   for (const h of report.hops) {
     if (h.hop > upto) break;
-    for (const n of h.nodes) for (const x of (n.tests || [])) if (!seen.has(x.id)) seen.set(x.id, x);
+    for (const n of h.nodes) for (const x of n.tests || []) if (!seen.has(x.id)) seen.set(x.id, x);
   }
   const byLevel = {};
   for (const x of seen.values()) byLevel[x.level] = (byLevel[x.level] || 0) + 1;
@@ -198,28 +250,72 @@ function impTestsHtml(report, upto) {
   const scope = upto === 1 ? 'surf.scope.hop1' : 'surf.scope.hopsSoFar';
   // a test number with its scope on the chip (round 2026-10-10): impact's *2 tests* beside a screen's *323 cases*
   // reads as two scopes — the tests among what uses it, never the screen's own
-  return '<div class="imp-tests" data-tchip data-scope="' + esc(scope) + '"><span class="cnt-n"' + plainTip(r.total, 'surf.impact.tests', scope, '/api/impact',
-    levels.map((k) => [t('tests.level.' + k), r.byLevel[k]]), key) + '>' + esc(t('surf.impact.tests').replace('{n}', String(r.total))) + '</span>'
-    + '<span class="tc-sep"> · </span>' + scopeWordHtml(scope)
-    + (list ? '<span class="tc-sep"> · </span>' + esc(list) : '') + '</div>';
+  return (
+    '<div class="imp-tests" data-tchip data-scope="' +
+    esc(scope) +
+    '"><span class="cnt-n"' +
+    plainTip(
+      r.total,
+      'surf.impact.tests',
+      scope,
+      '/api/impact',
+      levels.map((k) => [t('tests.level.' + k), r.byLevel[k]]),
+      key,
+    ) +
+    '>' +
+    esc(t('surf.impact.tests').replace('{n}', String(r.total))) +
+    '</span>' +
+    '<span class="tc-sep"> · </span>' +
+    scopeWordHtml(scope) +
+    (list ? '<span class="tc-sep"> · </span>' + esc(list) : '') +
+    '</div>'
+  );
 }
 
 /** One hop: its head with what it holds by kind, then its dependents.
  * @group Change impact */
 function impHopHtml(report, h) {
-  const head = h.hop === 1 ? t('impact.hop1') : h.hop === 2 ? t('impact.hop2') : t('impact.hopN').replace('{n}', h.hop - 1);
-  const kinds = Object.keys(h.byKind).sort((a, b) => h.byKind[b] - h.byKind[a]).map((k) => h.byKind[k] + ' ' + k).join(' · ');
+  const head =
+    h.hop === 1 ? t('impact.hop1') : h.hop === 2 ? t('impact.hop2') : t('impact.hopN').replace('{n}', h.hop - 1);
+  const kinds = Object.keys(h.byKind)
+    .sort((a, b) => h.byKind[b] - h.byKind[a])
+    .map((k) => h.byKind[k] + ' ' + k)
+    .join(' · ');
   const shown = h.nodes.slice(0, IMP_PER_HOP);
-  const more = h.nodes.length > shown.length
-    ? '<li class="more">' + esc(t('journey.moreChips').replace('{n}', h.nodes.length - shown.length)) + '</li>' : '';
+  const more =
+    h.nodes.length > shown.length
+      ? '<li class="more">' + esc(t('journey.moreChips').replace('{n}', h.nodes.length - shown.length)) + '</li>'
+      : '';
   // found · listed · behind are three numbers; a capped hop prints all three
-  const capped = h.found > h.nodes.length
-    ? '<div class="imp-note">' + esc(t('impact.cut.cap').replace('{n}', h.found - h.nodes.length)) + '</div>' : '';
-  return '<div class="imp-hop"><div class="imp-hophead"><span class="hud-label">' + esc(head) + '</span>'
-    + '<span class="cnt"' + plainTip(h.found, 'surf.impact.found', 'surf.scope.hop', '/api/impact',
-      Object.keys(h.byKind).sort((a, b) => h.byKind[b] - h.byKind[a]).map((k) => [k, h.byKind[k]])) + '>' + esc(h.found + (kinds ? ' · ' + kinds : '')) + '</span></div>'
-    + '<ul class="imp-list" role="list">' + shown.map(impNodeHtml).join('') + more + '</ul>'
-    + capped + impTestsHtml(report, h.hop) + '</div>';
+  const capped =
+    h.found > h.nodes.length
+      ? '<div class="imp-note">' + esc(t('impact.cut.cap').replace('{n}', h.found - h.nodes.length)) + '</div>'
+      : '';
+  return (
+    '<div class="imp-hop"><div class="imp-hophead"><span class="hud-label">' +
+    esc(head) +
+    '</span>' +
+    '<span class="cnt"' +
+    plainTip(
+      h.found,
+      'surf.impact.found',
+      'surf.scope.hop',
+      '/api/impact',
+      Object.keys(h.byKind)
+        .sort((a, b) => h.byKind[b] - h.byKind[a])
+        .map((k) => [k, h.byKind[k]]),
+    ) +
+    '>' +
+    esc(h.found + (kinds ? ' · ' + kinds : '')) +
+    '</span></div>' +
+    '<ul class="imp-list" role="list">' +
+    shown.map(impNodeHtml).join('') +
+    more +
+    '</ul>' +
+    capped +
+    impTestsHtml(report, h.hop) +
+    '</div>'
+  );
 }
 
 /**
@@ -236,39 +332,99 @@ function impNotWalkedHtml(report, redraw) {
   if (hopCuts.length) {
     const budget = report.hops.length;
     const ring = impactRing(report.seed.id, budget, redraw);
-    rows.push('<li class="imp-row"><span class="nm">' + esc(ring != null
-      ? t('impact.cut.hops').replace('{n}', ring).replace('{h}', budget).replace('{stops}', hopCuts.length)
-      : t('impact.cut.hopsOnly').replace('{n}', hopCuts.length).replace('{max}', IMP_MAX_HOPS)) + '</span></li>');
+    rows.push(
+      '<li class="imp-row"><span class="nm">' +
+        esc(
+          ring != null
+            ? t('impact.cut.hops').replace('{n}', ring).replace('{h}', budget).replace('{stops}', hopCuts.length)
+            : t('impact.cut.hopsOnly').replace('{n}', hopCuts.length).replace('{max}', IMP_MAX_HOPS),
+        ) +
+        '</span></li>',
+    );
   }
   for (const c of report.cutPoints.filter((x) => x.reason === 'shared')) {
-    rows.push(IMP_CUTROW + esc(c.nodeId || '') + '"><span class="nm">'
-      + esc(t('impact.cut.shared').replace('{name}', c.name || '').replace('{n}', c.direct)) + '</span>'
-      + '<span class="loc">' + esc(t('impact.behind').replace('{n}', c.behind)) + '</span></a></li>');
+    rows.push(
+      IMP_CUTROW +
+        esc(c.nodeId || '') +
+        '"><span class="nm">' +
+        esc(
+          t('impact.cut.shared')
+            .replace('{name}', c.name || '')
+            .replace('{n}', c.direct),
+        ) +
+        '</span>' +
+        '<span class="loc">' +
+        esc(t('impact.behind').replace('{n}', c.behind)) +
+        '</span></a></li>',
+    );
   }
   for (const c of report.cutPoints.filter((x) => x.reason === 'cap')) {
-    rows.push('<li class="imp-row"><span class="nm">' + esc(t('impact.cut.cap').replace('{n}', c.behind)) + '</span></li>');
+    rows.push(
+      '<li class="imp-row"><span class="nm">' + esc(t('impact.cut.cap').replace('{n}', c.behind)) + '</span></li>',
+    );
   }
   for (const n of report.excluded.setup) {
-    rows.push(IMP_CUTROW + esc(n.nodeId) + '"><span class="k">' + esc(t('impact.excluded.setup')) + '</span><span class="nm">' + esc(n.name) + '</span></a></li>');
+    rows.push(
+      IMP_CUTROW +
+        esc(n.nodeId) +
+        '"><span class="k">' +
+        esc(t('impact.excluded.setup')) +
+        '</span><span class="nm">' +
+        esc(n.name) +
+        '</span></a></li>',
+    );
   }
   for (const n of report.excluded.deferred) {
-    rows.push(IMP_CUTROW + esc(n.nodeId) + '"><span class="k">' + esc(t('impact.excluded.deferred')) + '</span><span class="nm">' + esc(n.name) + '</span></a></li>');
+    rows.push(
+      IMP_CUTROW +
+        esc(n.nodeId) +
+        '"><span class="k">' +
+        esc(t('impact.excluded.deferred')) +
+        '</span><span class="nm">' +
+        esc(n.name) +
+        '</span></a></li>',
+    );
   }
   if (!rows.length) return '';
-  return '<div class="imp-hop imp-notwalked"><div class="imp-hophead"><span class="hud-label">' + esc(t('impact.notWalked'))
-    + '</span>' + impTip('impact.notWalked') + sym('absent') + '</span></div>'
-    + '<ul class="imp-list" role="list">' + rows.join('') + '</ul></div>';
+  return (
+    '<div class="imp-hop imp-notwalked"><div class="imp-hophead"><span class="hud-label">' +
+    esc(t('impact.notWalked')) +
+    '</span>' +
+    impTip('impact.notWalked') +
+    sym('absent') +
+    '</span></div>' +
+    '<ul class="imp-list" role="list">' +
+    rows.join('') +
+    '</ul></div>'
+  );
 }
 
 /** The legend for the sheet's rings — shape, not colour, so it reads the same in grey.
  * @group Change impact */
 function impRingsLegendHtml() {
-  return '<ul class="imp-legend" role="list">'
-    + IMP_RINGLEG + 'seed">' + esc(t('impact.seedRing')) + '</li>'
-    + IMP_RINGLEG + '1">' + esc(t('impact.ring.direct')) + '</li>'
-    + IMP_RINGLEG + 'n">' + esc(t('impact.ring.through')) + '</li>'
-    + IMP_RINGLEG + 'cut">' + esc(t('impact.ring.behind')) + '</li>'
-    + IMP_RINGLEG + 'stop">' + esc(t('impact.ring.stop')) + '</li></ul>';
+  return (
+    '<ul class="imp-legend" role="list">' +
+    IMP_RINGLEG +
+    'seed">' +
+    esc(t('impact.seedRing')) +
+    '</li>' +
+    IMP_RINGLEG +
+    '1">' +
+    esc(t('impact.ring.direct')) +
+    '</li>' +
+    IMP_RINGLEG +
+    'n">' +
+    esc(t('impact.ring.through')) +
+    '</li>' +
+    IMP_RINGLEG +
+    'cut">' +
+    esc(t('impact.ring.behind')) +
+    '</li>' +
+    IMP_RINGLEG +
+    'stop">' +
+    esc(t('impact.ring.stop')) +
+    '</li></ul>'
+  );
 }
 
 // ── the business register: one sentence, its because, its bound ──
@@ -278,8 +434,8 @@ function impFlowFacts(report) {
   const flows = new Map();
   const actions = new Set();
   const first = report.hops[0];
-  for (const n of (first ? first.nodes : [])) {
-    for (const f of (n.flows || [])) {
+  for (const n of first ? first.nodes : []) {
+    for (const f of n.flows || []) {
       flows.set(f.flowId, f.name);
       for (const a of f.actions) actions.add(f.flowId + '|' + a.screen + '|' + a.rank);
     }
@@ -297,13 +453,16 @@ function impFlowFacts(report) {
  */
 function impTestFacts(report) {
   const seen = new Set();
-  let direct = 0, near = 0, e2e = 0;
+  let direct = 0,
+    near = 0,
+    e2e = 0;
   report.hops.forEach((h) => {
     for (const n of h.nodes) {
-      for (const x of (n.tests || [])) {
+      for (const x of n.tests || []) {
         if (seen.has(x.id)) continue;
         seen.add(x.id);
-        if (h.hop === 1) direct++; else near++;
+        if (h.hop === 1) direct++;
+        else near++;
         if (x.level === 'e2e') e2e++;
       }
     }
@@ -332,11 +491,17 @@ export function impactBizLine(direct, subject, flows) {
   const uses = bizCount('impact.biz.uses', direct, { subject });
   if (!flows) return t('impact.biz.lineNoFlow').split('{uses}').join(uses);
   const n = flows.flows.size;
-  const journeys = flows.total === 1 && n === 1 ? t('impact.biz.journeysOnly')
-    : bizCount('impact.biz.journeysOf', n, { m: flows.total });
-  return t('impact.biz.line').split('{uses}').join(uses)
-    .split('{actions}').join(bizCount('impact.biz.actions', flows.actions))
-    .split('{journeys}').join(journeys);
+  const journeys =
+    flows.total === 1 && n === 1
+      ? t('impact.biz.journeysOnly')
+      : bizCount('impact.biz.journeysOf', n, { m: flows.total });
+  return t('impact.biz.line')
+    .split('{uses}')
+    .join(uses)
+    .split('{actions}')
+    .join(bizCount('impact.biz.actions', flows.actions))
+    .split('{journeys}')
+    .join(journeys);
 }
 
 /**
@@ -357,31 +522,56 @@ export function impactBizHtml(report) {
   const f = impFlowFacts(report);
   const tests = impTestFacts(report);
   const line = impactBizLine(direct, subject, f.flows.size ? f : null);
-  const because = tests.direct ? bizCount('impact.biz.evidence.direct', tests.direct)
-    : tests.near ? bizCount('impact.biz.evidence.near', tests.near)
-    : t('impact.biz.evidence.none');
+  const because = tests.direct
+    ? bizCount('impact.biz.evidence.direct', tests.direct)
+    : tests.near
+      ? bizCount('impact.biz.evidence.near', tests.near)
+      : t('impact.biz.evidence.none');
   const why = [];
   if (report.cutPoints.length) why.push(t('impact.biz.why.cut'));
   if (report.hops.some((h) => h.nodes.some((n) => n.oneOf))) why.push(t('impact.biz.why.runtime'));
-  if (report.hops.some((h) => h.nodes.some((n) => !n.via.resolution || n.strength.unstamped))) why.push(t('impact.biz.why.unrecorded'));
-  const floor = report.bound === 'floor' && why.length
-    ? '<p class="imp-floor">' + esc(t('impact.biz.floor').replace('{why}', why.join('; '))) + '</p>' : '';
+  if (report.hops.some((h) => h.nodes.some((n) => !n.via.resolution || n.strength.unstamped)))
+    why.push(t('impact.biz.why.unrecorded'));
+  const floor =
+    report.bound === 'floor' && why.length
+      ? '<p class="imp-floor">' + esc(t('impact.biz.floor').replace('{why}', why.join('; '))) + '</p>'
+      : '';
   const flows = f.flows.size
-    ? '<div class="imp-hop"><div class="imp-hophead"><span class="hud-label">' + esc(t('impact.biz.journeys')) + '</span></div>'
-      + '<ul class="imp-list biz" role="list">' + [...f.flows.entries()].map(([id, name]) =>
-        IMP_ROW + esc(id) + '"><span class="nm">' + esc(name) + '</span></a></li>').join('') + '</ul></div>'
+    ? '<div class="imp-hop"><div class="imp-hophead"><span class="hud-label">' +
+      esc(t('impact.biz.journeys')) +
+      '</span></div>' +
+      '<ul class="imp-list biz" role="list">' +
+      [...f.flows.entries()]
+        .map(([id, name]) => IMP_ROW + esc(id) + '"><span class="nm">' + esc(name) + '</span></a></li>')
+        .join('') +
+      '</ul></div>'
     : '<p class="imp-floor">' + esc(t('journey.absent.notInvolved')) + '</p>';
   // the sentence's numbers, each named with what it counts: a sentence cannot carry a tip per number
-  const facts = tipAttrs({ id: 'table', args: { caption: 'surf.impact.facts', rows: [
-    [t('surf.impact.direct').replace('{n}', '').trim(), direct],
-    [t('surf.impact.journeys').replace('{n}', '').trim(), f.flows.size],
-    [t('surf.impact.testsNear').replace('{n}', '').trim(), tests.direct],
-    [t('surf.impact.testsFar').replace('{n}', '').trim(), tests.near],
-  ] } });
-  return '<p class="imp-biz"' + facts + '>' + esc(line) + ' ' + esc(because)
-    + (tests.e2e ? '' : ' ' + esc(t('impact.biz.noE2e'))) + '</p>'
-    + floor + flows
-    + (impactRingsDrawn() ? '<p class="imp-floor">' + esc(t('impact.biz.rings')) + '</p>' : '');
+  const facts = tipAttrs({
+    id: 'table',
+    args: {
+      caption: 'surf.impact.facts',
+      rows: [
+        [t('surf.impact.direct').replace('{n}', '').trim(), direct],
+        [t('surf.impact.journeys').replace('{n}', '').trim(), f.flows.size],
+        [t('surf.impact.testsNear').replace('{n}', '').trim(), tests.direct],
+        [t('surf.impact.testsFar').replace('{n}', '').trim(), tests.near],
+      ],
+    },
+  });
+  return (
+    '<p class="imp-biz"' +
+    facts +
+    '>' +
+    esc(line) +
+    ' ' +
+    esc(because) +
+    (tests.e2e ? '' : ' ' + esc(t('impact.biz.noE2e'))) +
+    '</p>' +
+    floor +
+    flows +
+    (impactRingsDrawn() ? '<p class="imp-floor">' + esc(t('impact.biz.rings')) + '</p>' : '')
+  );
 }
 
 // ── the distance control ─────────────────────────────────────────
@@ -398,11 +588,29 @@ let IMP_REDRAW = null;
  */
 function impHopCtlHtml(seedId) {
   const cur = S.impactHops || IMP_HOPS;
-  let html = '<div class="imp-hopctl" role="group" aria-label="' + esc(t('impact.hops.label')) + '">'
-    + '<span class="hud-label"' + defAttrs('impact.hops.label') + '>' + esc(t('impact.hops.label')) + '</span>';
+  let html =
+    '<div class="imp-hopctl" role="group" aria-label="' +
+    esc(t('impact.hops.label')) +
+    '">' +
+    '<span class="hud-label"' +
+    defAttrs('impact.hops.label') +
+    '>' +
+    esc(t('impact.hops.label')) +
+    '</span>';
   for (let h = 1; h <= IMP_MAX_HOPS; h++) {
-    html += '<button type="button" data-hops="' + h + '" data-node="' + esc(seedId) + '" aria-pressed="' + (h === cur) + '"'
-      + ' aria-label="' + esc(t(countKey('impact.hops.button', h)).replace('{n}', h)) + '" onclick="return impactSetHops(this)">' + h + '</button>';
+    html +=
+      '<button type="button" data-hops="' +
+      h +
+      '" data-node="' +
+      esc(seedId) +
+      '" aria-pressed="' +
+      (h === cur) +
+      '"' +
+      ' aria-label="' +
+      esc(t(countKey('impact.hops.button', h)).replace('{n}', h)) +
+      '" onclick="return impactSetHops(this)">' +
+      h +
+      '</button>';
   }
   return html + '</div>';
 }
@@ -442,27 +650,48 @@ export function impactBodyHtml(entry, redraw) {
   IMP_REDRAW = redraw || null;
   if (!entry || entry.state === 'loading') return '<p class="ph-body">' + esc(t('impact.reading')) + '</p>';
   if (entry.state === 'off') return '<p class="ph-body">' + esc(t('impact.unavailable')) + '</p>';
-  if (entry.state === 'error') return '<p class="ph-body">' + esc(t("sys.impactFailed")) + '</p>';
+  if (entry.state === 'error') return '<p class="ph-body">' + esc(t('sys.impactFailed')) + '</p>';
   if (entry.state === 'none') return '<p class="ph-body">' + esc(t('impact.none')) + '</p>';
   const r = entry.report;
   // the scope first, as the journey's tests feet print theirs: three numbers on one
   // step (verified-by, the foot, this panel) are three scopes, each named
   const scope = impScopeHtml();
   if (currentLens() === 'business') return scope + impactBizHtml(r);
-  const clauses = r.hops.map((h) => h.hop === 1 ? t('impact.clause.direct').replace('{n}', h.found)
-    : h.hop === 2 ? t('impact.clause.through').replace('{n}', h.found)
-    : t('impact.clause.far').replace('{n}', h.found).replace('{h}', h.hop));
-  const asOf = [r.asOf.sync != null ? t('chrome.sync') + ' ' + r.asOf.sync : null, r.asOf.commit ? r.asOf.commit.slice(0, 7) : null].filter(Boolean).join(' · ');
-  return scope + '<div class="imp-head-line">' + impTip('impact.notASum') + esc(clauses.join(' · ')) + '</span>'
-    + '<span class="sub">' + esc(t('impact.notASum')) + '</span></div>'
-    + '<p class="imp-bound">' + esc(r.bound === 'floor'
-      ? t('impact.bound.floor').replace('{why}', (r.uncertainty && r.uncertainty.note) || '')
-      : t('impact.bound.exact')) + '</p>'
-    + (asOf ? '<p class="imp-asof">' + esc(asOf) + '</p>' : '')
-    + impHopCtlHtml(r.seed.id)
-    + r.hops.map((h) => impHopHtml(r, h)).join('')
-    + impNotWalkedHtml(r, redraw)
-    + (impactRingsDrawn() ? impRingsLegendHtml() : '');
+  const clauses = r.hops.map((h) =>
+    h.hop === 1
+      ? t('impact.clause.direct').replace('{n}', h.found)
+      : h.hop === 2
+        ? t('impact.clause.through').replace('{n}', h.found)
+        : t('impact.clause.far').replace('{n}', h.found).replace('{h}', h.hop),
+  );
+  const asOf = [
+    r.asOf.sync != null ? t('chrome.sync') + ' ' + r.asOf.sync : null,
+    r.asOf.commit ? r.asOf.commit.slice(0, 7) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    scope +
+    '<div class="imp-head-line">' +
+    impTip('impact.notASum') +
+    esc(clauses.join(' · ')) +
+    '</span>' +
+    '<span class="sub">' +
+    esc(t('impact.notASum')) +
+    '</span></div>' +
+    '<p class="imp-bound">' +
+    esc(
+      r.bound === 'floor'
+        ? t('impact.bound.floor').replace('{why}', (r.uncertainty && r.uncertainty.note) || '')
+        : t('impact.bound.exact'),
+    ) +
+    '</p>' +
+    (asOf ? '<p class="imp-asof">' + esc(asOf) + '</p>' : '') +
+    impHopCtlHtml(r.seed.id) +
+    r.hops.map((h) => impHopHtml(r, h)).join('') +
+    impNotWalkedHtml(r, redraw) +
+    (impactRingsDrawn() ? impRingsLegendHtml() : '')
+  );
 }
 
 /**
@@ -472,7 +701,13 @@ export function impactBodyHtml(entry, redraw) {
  * @group Change impact
  */
 function impScopeHtml() {
-  return '<div class="imp-scope"><span class="hud-label" data-scope="impact.scope"' + defAttrs('impact.scope') + '>' + esc(t('impact.scope')) + '</span></div>';
+  return (
+    '<div class="imp-scope"><span class="hud-label" data-scope="impact.scope"' +
+    defAttrs('impact.scope') +
+    '>' +
+    esc(t('impact.scope')) +
+    '</span></div>'
+  );
 }
 
 /** The panel's head: the node the question was asked on, and the question itself.
@@ -480,9 +715,15 @@ function impScopeHtml() {
 function impHeadHtml(node, id) {
   // the business lens names the part by its business name and its kind in words
   const name = node ? (currentLens() === 'code' ? node.name : bizName(node)) : id;
-  return '<div class="imp-node">' + (node ? '<span class="kind k-' + esc(node.kind) + '">' + esc(kindWord(node.kind)) + '</span> ' : '')
-    + esc(name) + '</div>'
-    + '<p class="imp-q">' + esc(t('impact.of').replace('{name}', name)) + '</p>';
+  return (
+    '<div class="imp-node">' +
+    (node ? '<span class="kind k-' + esc(node.kind) + '">' + esc(kindWord(node.kind)) + '</span> ' : '') +
+    esc(name) +
+    '</div>' +
+    '<p class="imp-q">' +
+    esc(t('impact.of').replace('{name}', name)) +
+    '</p>'
+  );
 }
 
 /**
@@ -498,16 +739,28 @@ export function openImpact(id) {
   if (!panel) return;
   const node = id && S.BYID[id];
   const draw = (entry) => {
-    panel.innerHTML = '<div class="imp-head"><span class="hud-label">' + esc(t('impact.title'))
-      + '</span><button class="x" onclick="closeImpact()" aria-label="Close">✕</button></div>'
-      + (id ? impHeadHtml(node, id) : '')
-      + (id ? impactBodyHtml(entry, () => openImpact(id)) : '<p class="ph-body">' + esc(t('impact.nothingSelected')) + '</p>');
+    panel.innerHTML =
+      '<div class="imp-head"><span class="hud-label">' +
+      esc(t('impact.title')) +
+      '</span><button class="x" onclick="closeImpact()" aria-label="Close">✕</button></div>' +
+      (id ? impHeadHtml(node, id) : '') +
+      (id
+        ? impactBodyHtml(entry, () => openImpact(id))
+        : '<p class="ph-body">' + esc(t('impact.nothingSelected')) + '</p>');
   };
   panel.classList.add('open');
-  if (!id) { draw(null); return; }
+  if (!id) {
+    draw(null);
+    return;
+  }
   S.impactSeed = id;
   impactHash(id);
-  const entry = impactFetch(id, impactOpts(), (e) => { if (S.impactSeed === id) { impactRings(e); draw(e); } });
+  const entry = impactFetch(id, impactOpts(), (e) => {
+    if (S.impactSeed === id) {
+      impactRings(e);
+      draw(e);
+    }
+  });
   impactRings(entry);
   draw(entry);
 }
@@ -567,9 +820,15 @@ export function impactRings(entry) {
   if (!entry || entry.state !== 'ok') S.IMPACT_RINGS = null;
   else {
     const hop = {};
-    entry.report.hops.forEach((h) => h.nodes.forEach((n) => { if (hop[n.nodeId] == null) hop[n.nodeId] = h.hop; }));
+    entry.report.hops.forEach((h) =>
+      h.nodes.forEach((n) => {
+        if (hop[n.nodeId] == null) hop[n.nodeId] = h.hop;
+      }),
+    );
     const cut = new Set();
-    entry.report.cutPoints.forEach((c) => { if (c.nodeId) cut.add(c.nodeId); });
+    entry.report.cutPoints.forEach((c) => {
+      if (c.nodeId) cut.add(c.nodeId);
+    });
     entry.report.excluded.setup.concat(entry.report.excluded.deferred).forEach((n) => cut.add(n.nodeId));
     const first = entry.report.hops[0];
     S.IMPACT_RINGS = {
@@ -598,8 +857,13 @@ export function impactHash(id) {
   const qi = h.indexOf('?');
   const base = qi >= 0 ? h.slice(0, qi) : h;
   const q = new URLSearchParams(qi >= 0 ? h.slice(qi + 1) : '');
-  if (id) { q.set('impact', id); q.set('hops', String(S.impactHops || IMP_HOPS)); }
-  else { q.delete('impact'); q.delete('hops'); }
+  if (id) {
+    q.set('impact', id);
+    q.set('hops', String(S.impactHops || IMP_HOPS));
+  } else {
+    q.delete('impact');
+    q.delete('hops');
+  }
   const qs = q.toString();
   history.replaceState(null, '', base + (qs ? '?' + qs : ''));
 }

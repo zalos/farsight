@@ -3,9 +3,7 @@
 // never from a status or type name, except where §3 names the name (Bug, and
 // Story / Task at hierarchy level 0).
 import { workItemId } from '@farsight/work';
-import type {
-  WorkItem, WorkType, StateCategory, Person, Link, LinkKind, Change, Comment,
-} from '@farsight/work';
+import type { WorkItem, WorkType, StateCategory, Person, Link, LinkKind, Change, Comment } from '@farsight/work';
 import { adfBody } from './adf.js';
 
 /** Site-specific field ids, resolved by discover() or pinned in settings. */
@@ -18,16 +16,35 @@ export interface FieldMap {
   declared: Record<string, string>;
 }
 
-export interface JiraUser { accountId?: string; displayName?: string; emailAddress?: string | null }
-export interface JiraStatus { name?: string; id?: string; statusCategory?: { key?: string } }
-export interface JiraIssueType { name?: string; id?: string; subtask?: boolean; hierarchyLevel?: number }
+export interface JiraUser {
+  accountId?: string;
+  displayName?: string;
+  emailAddress?: string | null;
+}
+export interface JiraStatus {
+  name?: string;
+  id?: string;
+  statusCategory?: { key?: string };
+}
+export interface JiraIssueType {
+  name?: string;
+  id?: string;
+  subtask?: boolean;
+  hierarchyLevel?: number;
+}
 export interface JiraLink {
   id?: string;
   type?: { name?: string; inward?: string; outward?: string };
   inwardIssue?: { key?: string };
   outwardIssue?: { key?: string };
 }
-export interface JiraSprint { id?: number; name?: string; state?: string; startDate?: string; endDate?: string }
+export interface JiraSprint {
+  id?: number;
+  name?: string;
+  state?: string;
+  startDate?: string;
+  endDate?: string;
+}
 export interface JiraIssue {
   id: string;
   key: string;
@@ -54,9 +71,23 @@ export interface JiraIssue {
 
 /** The fields pull() asks for — explicit, because search/jql defaults to `id`. */
 export const BASE_FIELDS = [
-  'summary', 'description', 'issuetype', 'status', 'statuscategorychangedate', 'priority',
-  'assignee', 'reporter', 'labels', 'components', 'parent', 'subtasks', 'issuelinks',
-  'created', 'updated', 'resolutiondate', 'project',
+  'summary',
+  'description',
+  'issuetype',
+  'status',
+  'statuscategorychangedate',
+  'priority',
+  'assignee',
+  'reporter',
+  'labels',
+  'components',
+  'parent',
+  'subtasks',
+  'issuelinks',
+  'created',
+  'updated',
+  'resolutiondate',
+  'project',
 ] as const;
 
 export function fieldList(map: FieldMap): string[] {
@@ -143,11 +174,14 @@ export function mapIssue(issue: JiraIssue, ctx: MapContext): WorkItem {
   const f = issue.fields ?? {};
   const links: Link[] = [];
   if (f.parent?.key) links.push({ kind: 'parent', target: targetOf(ctx, f.parent.key), native: 'parent' });
-  for (const st of f.subtasks ?? []) if (st.key) links.push({ kind: 'child', target: targetOf(ctx, st.key), native: 'subtask' });
+  for (const st of f.subtasks ?? [])
+    if (st.key) links.push({ kind: 'child', target: targetOf(ctx, st.key), native: 'subtask' });
   for (const l of f.issuelinks ?? []) {
     const native = l.type?.name ?? 'link';
-    if (l.outwardIssue?.key) links.push({ kind: linkKind(native, 'outward'), target: targetOf(ctx, l.outwardIssue.key), native });
-    if (l.inwardIssue?.key) links.push({ kind: linkKind(native, 'inward'), target: targetOf(ctx, l.inwardIssue.key), native });
+    if (l.outwardIssue?.key)
+      links.push({ kind: linkKind(native, 'outward'), target: targetOf(ctx, l.outwardIssue.key), native });
+    if (l.inwardIssue?.key)
+      links.push({ kind: linkKind(native, 'inward'), target: targetOf(ctx, l.inwardIssue.key), native });
   }
 
   const fields: Record<string, unknown> = {};
@@ -206,7 +240,14 @@ export interface JiraChangeHistory {
   author?: JiraUser;
   /** ISO with offset from /issue/{key}/changelog; epoch ms from /changelog/bulkfetch (measured) */
   created?: string | number;
-  items?: { field?: string; fieldId?: string; from?: string | null; fromString?: string | null; to?: string | null; toString?: string | null }[];
+  items?: {
+    field?: string;
+    fieldId?: string;
+    from?: string | null;
+    fromString?: string | null;
+    to?: string | null;
+    toString?: string | null;
+  }[];
 }
 
 export function mapHistory(histories: JiraChangeHistory[]): Change[] {
@@ -228,7 +269,13 @@ export function mapHistory(histories: JiraChangeHistory[]): Change[] {
   return out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 }
 
-export interface JiraComment { id: string; author?: JiraUser; created?: string; updated?: string; body?: unknown }
+export interface JiraComment {
+  id: string;
+  author?: JiraUser;
+  created?: string;
+  updated?: string;
+  body?: unknown;
+}
 
 export function mapComment(c: JiraComment): Comment {
   const out: Comment = {

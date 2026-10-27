@@ -16,7 +16,15 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { GraphStore, buildIndex, projectGraph, type GraphMeta, type GraphNode, type GraphEdge, type GraphIndex } from '@farsight/core';
+import {
+  GraphStore,
+  buildIndex,
+  projectGraph,
+  type GraphMeta,
+  type GraphNode,
+  type GraphEdge,
+  type GraphIndex,
+} from '@farsight/core';
 import { ingestRepo } from '@farsight/parsers';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
@@ -49,29 +57,49 @@ before(async () => {
   work = realpathSync(mkdtempSync(join(tmpdir(), 'farsight-projects-api-')));
   const graphPath = join(work, 'graph.json');
   const store = new GraphStore();
-  for (const [name, dir] of [['nx-workspace', 'examples/nx-workspace'], ['invoice-app', 'examples/invoice-app']] as const) {
+  for (const [name, dir] of [
+    ['nx-workspace', 'examples/nx-workspace'],
+    ['invoice-app', 'examples/invoice-app'],
+  ] as const) {
     const fragment = await ingestRepo(join(repoRoot, dir), { repoName: name });
     store.roots[name] = join(repoRoot, dir);
     store.addFragment(fragment);
   }
   store.save(graphPath);
-  const data = JSON.parse(readFileSync(graphPath, 'utf8')) as { nodes: GraphNode[]; edges: GraphEdge[]; meta: GraphMeta };
+  const data = JSON.parse(readFileSync(graphPath, 'utf8')) as {
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    meta: GraphMeta;
+  };
   index = buildIndex(data.nodes, data.edges);
   meta = data.meta;
   port = await freePort();
-  const boot = `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n`
-    + `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
+  const boot =
+    `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n` +
+    `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
   child = spawn(process.execPath, ['--input-type=module', '-e', boot], {
-    cwd: work, env: { ...process.env, MODELHUB_DIR: join(work, 'modelhub'), FIGMA_TOKEN: '' }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: work,
+    env: { ...process.env, MODELHUB_DIR: join(work, 'modelhub'), FIGMA_TOKEN: '' },
+    stdio: ['ignore', 'pipe', 'pipe'],
   }) as ChildProcessWithoutNullStreams;
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (d: string) => { childLog += d; });
-  child.stderr.on('data', (d: string) => { childLog += d; });
+  child.stdout.on('data', (d: string) => {
+    childLog += d;
+  });
+  child.stderr.on('data', (d: string) => {
+    childLog += d;
+  });
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     if (child.exitCode != null) throw new Error(`the server exited with code ${child.exitCode}:\n${childLog}`);
-    try { const r = await fetch(`http://127.0.0.1:${port}/graph`); await r.arrayBuffer(); if (r.ok) return; } catch { /* not yet */ }
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/graph`);
+      await r.arrayBuffer();
+      if (r.ok) return;
+    } catch {
+      /* not yet */
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error(`the server never answered on port ${port}:\n${childLog}`);
@@ -84,7 +112,11 @@ after(async () => {
     await Promise.race([gone, new Promise((r) => setTimeout(r, 2000))]);
     if (child.exitCode == null) child.kill('SIGKILL');
   }
-  try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ }
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
 });
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -100,11 +132,25 @@ test('GET /api/projects serves the projectGraph fold whole, every source togethe
   assert.deepEqual(body.projects, JSON.parse(JSON.stringify(fold.projects)));
   assert.deepEqual(body.dependencies, JSON.parse(JSON.stringify(fold.dependencies)));
   assert.deepEqual(body.counts, JSON.parse(JSON.stringify(fold.counts)));
-  assert.deepEqual(body.repos.map((r: any) => `${r.repo}:${r.tool}`), ['invoice-app:none', 'nx-workspace:nx']);
+  assert.deepEqual(
+    body.repos.map((r: any) => `${r.repo}:${r.tool}`),
+    ['invoice-app:none', 'nx-workspace:nx'],
+  );
   // every project's tree rides on its row, the same as /api/projects/<name> answers it
   const web = body.projects.find((p: any) => p.name === 'billing-web');
-  assert.deepEqual(web.closure, ['billing-web', '@nxw/shared-ui', 'billing-feature-invoices', 'shared-util', 'billing-data-access', 'billing-ui']);
-  assert.deepEqual(body.repos.find((r: any) => r.repo === 'nx-workspace').graphFile, { path: 'nx-project-graph.json', projects: 8, dependencies: 11 });
+  assert.deepEqual(web.closure, [
+    'billing-web',
+    '@nxw/shared-ui',
+    'billing-feature-invoices',
+    'shared-util',
+    'billing-data-access',
+    'billing-ui',
+  ]);
+  assert.deepEqual(body.repos.find((r: any) => r.repo === 'nx-workspace').graphFile, {
+    path: 'nx-project-graph.json',
+    projects: 8,
+    dependencies: 11,
+  });
 });
 
 test('GET /api/projects?repo= narrows to one source', async () => {
@@ -119,16 +165,32 @@ test('GET /api/projects/<name> — dependencies, dependents, closure and node id
   const { code, body } = await get('/api/projects/billing-web');
   assert.equal(code, 200);
   assert.equal(body.project.name, 'billing-web');
-  assert.deepEqual(body.dependencies.map((d: any) => d.to), ['@nxw/shared-ui', 'billing-feature-invoices', 'shared-util']);
-  assert.deepEqual(body.dependents.map((d: any) => `${d.from}${d.implicit ? ' (implicit)' : ''}`), ['billing-web-e2e (implicit)']);
-  assert.deepEqual(body.closure.projects, ['billing-web', '@nxw/shared-ui', 'billing-feature-invoices', 'shared-util', 'billing-data-access', 'billing-ui']);
+  assert.deepEqual(
+    body.dependencies.map((d: any) => d.to),
+    ['@nxw/shared-ui', 'billing-feature-invoices', 'shared-util'],
+  );
+  assert.deepEqual(
+    body.dependents.map((d: any) => `${d.from}${d.implicit ? ' (implicit)' : ''}`),
+    ['billing-web-e2e (implicit)'],
+  );
+  assert.deepEqual(body.closure.projects, [
+    'billing-web',
+    '@nxw/shared-ui',
+    'billing-feature-invoices',
+    'shared-util',
+    'billing-data-access',
+    'billing-ui',
+  ]);
   // the app's own screens manifest (apps/billing-web/docs/design/screens.json) is its node too
   assert.deepEqual(Object.keys(body.nodeIds).sort(), ['component', 'design', 'page']);
   assert.equal(body.tagDimensions[0].key, 'domain');
   // a scoped package name travels percent-encoded
   const scoped = await get(`/api/projects/${encodeURIComponent('@nxw/shared-ui')}`);
   assert.equal(scoped.code, 200);
-  assert.deepEqual(scoped.body.dependents.map((d: any) => d.from), ['billing-web', 'ops-admin']);
+  assert.deepEqual(
+    scoped.body.dependents.map((d: any) => d.from),
+    ['billing-web', 'ops-admin'],
+  );
 });
 
 test('an unknown project is a 404 with a sentence', async () => {
@@ -139,21 +201,32 @@ test('an unknown project is a 404 with a sentence', async () => {
 
 // ── GET /api/config (docs/proposals/journey-organisation-and-config-files.md §5.4): meta.config as ingest recorded it ──
 
-test('GET /api/config serves every source\'s config files, and ?repo= narrows to one', async () => {
+test("GET /api/config serves every source's config files, and ?repo= narrows to one", async () => {
   const all = await get('/api/config');
   assert.equal(all.code, 200);
   assert.deepEqual(Object.keys(all.body.config).sort(), ['invoice-app', 'nx-workspace']);
   assert.deepEqual(all.body.config, meta.config, 'the handler serves the recorded meta, not a second reading');
-  assert.deepEqual(all.body.config['invoice-app'].files.map((f: { path: string }) => f.path), ['farsight.config.json']);
+  assert.deepEqual(
+    all.body.config['invoice-app'].files.map((f: { path: string }) => f.path),
+    ['farsight.config.json'],
+  );
   const one = await get('/api/config?repo=nx-workspace');
   assert.deepEqual(Object.keys(one.body.config), ['nx-workspace']);
-  assert.deepEqual(one.body.config['nx-workspace'].files.map((f: { path: string; root: boolean }) => `${f.path}:${f.root}`), [
-    'farsight.config.json:true', 'apps/billing-web/farsight.config.json:false', 'apps/ops-admin/farsight.config.json:false',
-    'libs/billing/data-access/farsight.config.json:false',
-  ]);
+  assert.deepEqual(
+    one.body.config['nx-workspace'].files.map((f: { path: string; root: boolean }) => `${f.path}:${f.root}`),
+    [
+      'farsight.config.json:true',
+      'apps/billing-web/farsight.config.json:false',
+      'apps/ops-admin/farsight.config.json:false',
+      'libs/billing/data-access/farsight.config.json:false',
+    ],
+  );
   assert.equal(one.body.config['nx-workspace'].conflicts[0].kind, 'glossary');
   // the typed counts ride beside the meta, so the Settings list prints the fold's numbers
   assert.equal(one.body.counts['nx-workspace'].files.n, 4);
-  assert.deepEqual(one.body.counts['nx-workspace'].files.breakdown.map((p: { n: number }) => p.n), [1, 3]);
+  assert.deepEqual(
+    one.body.counts['nx-workspace'].files.breakdown.map((p: { n: number }) => p.n),
+    [1, 3],
+  );
   assert.equal(one.body.counts['nx-workspace'].conflicts.n, 1);
 });

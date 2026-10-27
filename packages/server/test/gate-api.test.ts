@@ -52,7 +52,9 @@ async function waitReady(): Promise<void> {
       await r.arrayBuffer();
       if (r.ok) return;
       last = `HTTP ${r.status}`;
-    } catch (err) { last = (err as Error).message; }
+    } catch (err) {
+      last = (err as Error).message;
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error(`the server never answered on port ${port} (${last}):\n${childLog}`);
@@ -68,8 +70,9 @@ before(async () => {
   stitchHttp(store);
   store.save(graphPath);
   port = await freePort();
-  const boot = `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n`
-    + `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
+  const boot =
+    `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n` +
+    `serveGraph(${JSON.stringify(graphPath)}, ${port}, ${JSON.stringify(work)});\n`;
   child = spawn(process.execPath, ['--input-type=module', '-e', boot], {
     cwd: work,
     env: { ...process.env, MODELHUB_DIR: join(work, 'modelhub'), FIGMA_TOKEN: '' },
@@ -77,8 +80,12 @@ before(async () => {
   }) as ChildProcessWithoutNullStreams;
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (d: string) => { childLog += d; });
-  child.stderr.on('data', (d: string) => { childLog += d; });
+  child.stdout.on('data', (d: string) => {
+    childLog += d;
+  });
+  child.stderr.on('data', (d: string) => {
+    childLog += d;
+  });
   await waitReady();
 });
 
@@ -89,7 +96,11 @@ after(async () => {
     await Promise.race([gone, new Promise((r) => setTimeout(r, 2000))]);
     if (child.exitCode == null) child.kill('SIGKILL');
   }
-  try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ }
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
 });
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -106,21 +117,33 @@ test('a gate answers with the calls it guards, the tests that reach them and typ
   assert.equal(body.gate.id, GATE);
   assert.equal(body.gate.gateKind, 'guard');
   assert.equal(body.gate.configCheck, false);
-  assert.deepEqual(body.calls.map((c: any) => [c.name, c.depth]).sort(), [['PATCH /invoices/:id', 0], ['POST /invoices', 0]]);
+  assert.deepEqual(body.calls.map((c: any) => [c.name, c.depth]).sort(), [
+    ['PATCH /invoices/:id', 0],
+    ['POST /invoices', 0],
+  ]);
   assert.equal(body.counted.calls.n, 2);
   assert.equal(body.counted.calls.scope, 'count.scope.gate');
   assert.equal(body.counted.calls.of, body.routesInGraph);
-  assert.equal(body.counted.calls.breakdown.reduce((a: number, p: any) => a + p.n, 0), 2, 'the parts add up');
+  assert.equal(
+    body.counted.calls.breakdown.reduce((a: number, p: any) => a + p.n, 0),
+    2,
+    'the parts add up',
+  );
   assert.ok(body.tests.length >= 1, 'a test reaches a call it guards');
   assert.equal(body.counted.tests.tests.n, body.tests.filter((t: any) => !t.runLevel).length);
   assert.ok(body.evidenceWord && body.evidenceWord.key);
 });
 
 test('a rule answers too; a missing id and an unknown id do not', async () => {
-  const rule = await get('/api/gate?node=' + encodeURIComponent('invoice-app::src/server/schemas.ts::draftInvoiceSchema'));
+  const rule = await get(
+    '/api/gate?node=' + encodeURIComponent('invoice-app::src/server/schemas.ts::draftInvoiceSchema'),
+  );
   assert.equal(rule.status, 200);
   assert.equal(rule.body.gate.gateKind, 'rule');
-  assert.deepEqual(rule.body.calls.map((c: any) => c.name), ['POST /invoices']);
+  assert.deepEqual(
+    rule.body.calls.map((c: any) => c.name),
+    ['POST /invoices'],
+  );
   assert.equal((await get('/api/gate')).status, 400);
   const miss = await get('/api/gate?node=nope::x');
   assert.equal(miss.status, 404);
@@ -132,7 +155,10 @@ test('a rule answers too; a missing id and an unknown id do not', async () => {
 test('the decisions answer: D1 declared and named on the approval, D2 named in code only, counted twice over', async () => {
   const { status, body } = await get('/api/decisions');
   assert.equal(status, 200);
-  assert.deepEqual(body.decisions.map((d: any) => `${d.id}:${d.declared}`), ['D1:true', 'D2:false']);
+  assert.deepEqual(
+    body.decisions.map((d: any) => `${d.id}:${d.declared}`),
+    ['D1:true', 'D2:false'],
+  );
   const d1 = body.decisions[0];
   assert.equal(d1.state, 'open');
   assert.equal(d1.docRef.title, 'ADR 0001 — Approval has no amount limit yet');
@@ -140,8 +166,13 @@ test('the decisions answer: D1 declared and named on the approval, D2 named in c
   assert.equal(body.counted.decisions.n, 2);
   assert.equal(body.counted.decisions.scope, 'count.scope.workspace');
   assert.ok(body.notes.some((n: string) => n.includes('"D2"')));
-  const on = await get('/api/decisions?node=' + encodeURIComponent('invoice-app::src/server/approvals.ts::approveInvoice'));
-  assert.deepEqual(on.body.decisions.map((d: any) => d.id), ['D1']);
+  const on = await get(
+    '/api/decisions?node=' + encodeURIComponent('invoice-app::src/server/approvals.ts::approveInvoice'),
+  );
+  assert.deepEqual(
+    on.body.decisions.map((d: any) => d.id),
+    ['D1'],
+  );
   assert.equal((await get('/api/decisions?id=D9')).status, 404);
   assert.equal((await get('/api/decisions?node=nope::x')).status, 404);
 });

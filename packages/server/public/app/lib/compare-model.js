@@ -32,7 +32,11 @@ export function compareParam(spec) {
 export function compareOfRaw(raw) {
   const m = /(?:^|[?&])compare=([^&]*)/.exec(String(raw || ''));
   if (!m) return null;
-  try { return decodeURIComponent(m[1]); } catch { return m[1]; }
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return m[1];
+  }
 }
 
 /** The query `/api/compare` is asked with. */
@@ -59,15 +63,36 @@ export function chipsFor(entry, biz) {
     if (!k) continue;
     if (kind === 'built') {
       const b = entry.built || { n: 0, of: 0 };
-      out.push({ kind, key: 'compare.chip.built.' + (k.added >= k.removed ? 'added' : 'removed'), n: k.added + k.removed, vars: { n: b.n, m: b.of }, tone: k.added >= k.removed ? 'up' : 'down' });
+      out.push({
+        kind,
+        key: 'compare.chip.built.' + (k.added >= k.removed ? 'added' : 'removed'),
+        n: k.added + k.removed,
+        vars: { n: b.n, m: b.of },
+        tone: k.added >= k.removed ? 'up' : 'down',
+      });
     } else if (kind === 'verdict') {
       const v = entry.verdict || { from: '', to: '' };
       out.push({ kind, key: 'compare.chip.verdict', n: k.changed, vars: { from: v.from, to: v.to }, tone: 'warn' });
     } else {
       // gate · writer · contract: a chip for what was added and one for what was removed, a contract change apart
-      if (k.added) out.push({ kind, key: pre + kind + '.added' + (k.added === 1 ? 'One' : ''), n: k.added, vars: { n: k.added }, tone: kind === 'contract' ? 'contract' : 'up' });
-      if (k.removed) out.push({ kind, key: pre + kind + '.removed' + (k.removed === 1 ? 'One' : ''), n: k.removed, vars: { n: k.removed }, tone: 'down' });
-      if (k.changed && kind === 'contract') out.push({ kind, key: pre + 'contract.changed', n: k.changed, vars: { n: k.changed }, tone: 'contract' });
+      if (k.added)
+        out.push({
+          kind,
+          key: pre + kind + '.added' + (k.added === 1 ? 'One' : ''),
+          n: k.added,
+          vars: { n: k.added },
+          tone: kind === 'contract' ? 'contract' : 'up',
+        });
+      if (k.removed)
+        out.push({
+          kind,
+          key: pre + kind + '.removed' + (k.removed === 1 ? 'One' : ''),
+          n: k.removed,
+          vars: { n: k.removed },
+          tone: 'down',
+        });
+      if (k.changed && kind === 'contract')
+        out.push({ kind, key: pre + 'contract.changed', n: k.changed, vars: { n: k.changed }, tone: 'contract' });
     }
   }
   return out;
@@ -79,7 +104,11 @@ export function chipsFor(entry, biz) {
  */
 export function stageDeltas(diff, flow, name, firstOfJourney) {
   if (!diff) return [];
-  return diff.deltas.filter((d) => (d.screen ? d.screen.name === name && (d.screen.flow === flow || d.journeys.includes(flow)) : firstOfJourney && d.journeys.includes(flow)));
+  return diff.deltas.filter((d) =>
+    d.screen
+      ? d.screen.name === name && (d.screen.flow === flow || d.journeys.includes(flow))
+      : firstOfJourney && d.journeys.includes(flow),
+  );
 }
 
 /** The per-kind count of a list of deltas, in the shape `chipsFor` reads (built and verdict carry what the card needs). */
@@ -123,15 +152,25 @@ export function sentenceParts(template, s) {
  */
 export function doorHref(door) {
   if (!door) return null;
-  if (door.kind === 'screen' && door.flow) return '#/map/' + encodeURIComponent(door.flow) + '?screen=' + (door.screen || 1);
+  if (door.kind === 'screen' && door.flow)
+    return '#/map/' + encodeURIComponent(door.flow) + '?screen=' + (door.screen || 1);
   if (door.kind === 'gate' && door.node) return '#/codemap?node=' + encodeURIComponent(door.node);
   if (door.kind === 'move' && door.node) return '#/codemap?node=' + encodeURIComponent(door.node);
   if (door.kind === 'cases' && door.flow) return '#/tests?flow=' + encodeURIComponent(door.flow);
-  if (door.kind === 'contract' && door.node) return door.api ? '#/apis/' + encodeURIComponent(door.api) + '?op=' + encodeURIComponent(door.node) : '#/codemap?node=' + encodeURIComponent(door.node);
+  if (door.kind === 'contract' && door.node)
+    return door.api
+      ? '#/apis/' + encodeURIComponent(door.api) + '?op=' + encodeURIComponent(door.node)
+      : '#/codemap?node=' + encodeURIComponent(door.node);
   return null;
 }
 
 /** The file-name subject of a saved comparison: `<storyline>-sync<a>-to-sync<b>`. */
 export function compareSubject(storyline, from, to) {
-  return storyline + '-sync' + (from && from.sync != null ? from.sync : 'x') + '-to-sync' + (to && to.sync != null ? to.sync : 'x');
+  return (
+    storyline +
+    '-sync' +
+    (from && from.sync != null ? from.sync : 'x') +
+    '-to-sync' +
+    (to && to.sync != null ? to.sync : 'x')
+  );
 }

@@ -20,27 +20,42 @@ async function mapOn(page: Page) {
   await gotoReady(page, '#/portfolio');
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
 }
 async function go(page: Page, hash: string) {
-  await page.evaluate((h) => { location.hash = h; }, hash);
+  await page.evaluate((h) => {
+    location.hash = h;
+  }, hash);
 }
 /** Billing cycle with its screens repeated to WIDE: each copy a screen of its own (its id suffixed), calls and all. */
 async function stubWide(page: Page) {
-  await page.route(/\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle(&steps=0)?$/, async (route) => {
-    let data: any;
-    try { data = await (await route.fetch()).json(); } catch { return; }
-    const segs = data.summary.segments as any[];
-    const withScreen = segs.filter((s) => s.screen);
-    const out = segs.slice();
-    for (let k = withScreen.length; k < WIDE; k++) {
-      const src = withScreen[k % withScreen.length];
-      out.push({ ...src, index: out.length, screen: { ...src.screen, id: src.screen.id + '#' + k, name: 'Step ' + (k + 1) } });
-    }
-    data.summary.segments = out;
-    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
-  });
+  await page.route(
+    /\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle(&steps=0)?$/,
+    async (route) => {
+      let data: any;
+      try {
+        data = await (await route.fetch()).json();
+      } catch {
+        return;
+      }
+      const segs = data.summary.segments as any[];
+      const withScreen = segs.filter((s) => s.screen);
+      const out = segs.slice();
+      for (let k = withScreen.length; k < WIDE; k++) {
+        const src = withScreen[k % withScreen.length];
+        out.push({
+          ...src,
+          index: out.length,
+          screen: { ...src.screen, id: src.screen.id + '#' + k, name: 'Step ' + (k + 1) },
+        });
+      }
+      data.summary.segments = out;
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify(data) });
+    },
+  );
 }
 async function openStreet(page: Page, screens: number, plumb = true) {
   // the street itself (the hybrid register's own view of a journey is its table)
@@ -50,7 +65,11 @@ async function openStreet(page: Page, screens: number, plumb = true) {
   // the open frame lands (it is refitted once the journey's walk arrives)
   await page.waitForTimeout(600);
 }
-const zoom = (page: Page) => page.locator('.map-zoomro').textContent().then((t) => Number(String(t).replace('×', '')));
+const zoom = (page: Page) =>
+  page
+    .locator('.map-zoomro')
+    .textContent()
+    .then((t) => Number(String(t).replace('×', '')));
 /** The stops as the page computes them: the calls stop from the stylesheet, the enter stop from the stage. */
 async function stops(page: Page) {
   return page.evaluate(() => {
@@ -64,7 +83,7 @@ async function stops(page: Page) {
 async function dataLabelPx(page: Page) {
   return page.evaluate(() => {
     const e = [...document.querySelectorAll('.map-pd .nm')].find((x) => (x as HTMLElement).offsetHeight) as HTMLElement;
-    return parseFloat(getComputedStyle(e).fontSize) * e.getBoundingClientRect().height / e.offsetHeight;
+    return (parseFloat(getComputedStyle(e).fontSize) * e.getBoundingClientRect().height) / e.offsetHeight;
   });
 }
 
@@ -74,13 +93,24 @@ const at = { x: 720, y: 560 };
 const ctrlWheel = (events: number, dy: number, gap: number) => async (page: Page) => {
   await page.mouse.move(at.x, at.y);
   await page.keyboard.down('Control');
-  for (let i = 0; i < events; i++) { await page.mouse.wheel(0, dy); if (gap) await page.waitForTimeout(gap); }
+  for (let i = 0; i < events; i++) {
+    await page.mouse.wheel(0, dy);
+    if (gap) await page.waitForTimeout(gap);
+  }
   await page.keyboard.up('Control');
 };
 /** A synthetic wheel the input layer cannot send: a pinch's fractional ctrlKey deltas, or Firefox's lines. */
 const synthetic = (events: number, dy: number, mode: number) => async (page: Page) => {
   for (let i = 0; i < events; i++) {
-    await page.dispatchEvent('.map-board', 'wheel', { deltaY: dy, deltaMode: mode, ctrlKey: true, clientX: at.x, clientY: at.y, bubbles: true, cancelable: true });
+    await page.dispatchEvent('.map-board', 'wheel', {
+      deltaY: dy,
+      deltaMode: mode,
+      ctrlKey: true,
+      clientX: at.x,
+      clientY: at.y,
+      bubbles: true,
+      cancelable: true,
+    });
   }
 };
 const PROFILES: Profile[] = [
@@ -99,7 +129,9 @@ test.describe('map — zoom stops, Fit, the opening frame and the chrome', () =>
      * @covers packages/server/public/app/lib/map-canvas.js::settle
      * @covers packages/server/public/app/surfaces/map.js::mapStops
      */
-    test(`${p.name}: settles on the calls stop, then one screen with the hint, and only then enters`, async ({ page }) => {
+    test(`${p.name}: settles on the calls stop, then one screen with the hint, and only then enters`, async ({
+      page,
+    }) => {
       await stubWide(page);
       await mapOn(page);
       await openStreet(page, WIDE);
@@ -131,7 +163,9 @@ test.describe('map — zoom stops, Fit, the opening frame and the chrome', () =>
    * @covers packages/server/public/app/surfaces/map.js::enterJourney
    * @covers packages/server/public/app/lib/map-canvas.js::nextStop
    */
-  test('+ and − go stop to stop; − from inside a journey stops at it fitted before the board; Fit keeps the journey', async ({ page }) => {
+  test('+ and − go stop to stop; − from inside a journey stops at it fitted before the board; Fit keeps the journey', async ({
+    page,
+  }) => {
     await stubWide(page);
     await mapOn(page);
     await openStreet(page, WIDE);
@@ -172,14 +206,18 @@ test.describe('map — zoom stops, Fit, the opening frame and the chrome', () =>
    * @covers packages/server/public/app/surfaces/map.js::enterJourney
    * @covers packages/server/public/app/surfaces/map.js::journeyScale
    */
-  test('a journey opens centred and fitted, its head at the top of the board with nothing above it', async ({ page }) => {
+  test('a journey opens centred and fitted, its head at the top of the board with nothing above it', async ({
+    page,
+  }) => {
     await mapOn(page);
     await openStreet(page, 3, false);
     const f = await page.evaluate((flow) => {
       const b = document.querySelector('.map-board')!.getBoundingClientRect();
       const d = document.querySelector(`.map-district[data-flow="${flow}"]`)!.getBoundingClientRect();
-      const others = [...document.querySelectorAll('.map-district')].filter((x) => (x as HTMLElement).dataset.flow !== flow)
-        .map((x) => x.getBoundingClientRect()).filter((r) => r.bottom > b.top && r.top < d.top && r.right > b.left && r.left < b.right).length;
+      const others = [...document.querySelectorAll('.map-district')]
+        .filter((x) => (x as HTMLElement).dataset.flow !== flow)
+        .map((x) => x.getBoundingClientRect())
+        .filter((r) => r.bottom > b.top && r.top < d.top && r.right > b.left && r.left < b.right).length;
       return { left: d.left - b.left, right: b.right - d.right, top: d.top - b.top, others };
     }, FLOW);
     expect(Math.abs(f.left - f.right)).toBeLessThanOrEqual(2);
@@ -190,7 +228,7 @@ test.describe('map — zoom stops, Fit, the opening frame and the chrome', () =>
     // Billing cycle is short: fitted, its screens' names already read at ≥ 11 px
     const name = await page.evaluate(() => {
       const e = document.querySelector('.map-scr .nm') as HTMLElement;
-      return parseFloat(getComputedStyle(e).fontSize) * e.getBoundingClientRect().height / e.offsetHeight;
+      return (parseFloat(getComputedStyle(e).fontSize) * e.getBoundingClientRect().height) / e.offsetHeight;
     });
     expect(name).toBeGreaterThanOrEqual(11);
   });
@@ -215,16 +253,32 @@ test.describe('map — zoom stops, Fit, the opening frame and the chrome', () =>
     // the count is the screens whose middle is past the right edge
     const past = await page.evaluate(() => {
       const b = document.querySelector('.map-board')!.getBoundingClientRect();
-      return [...document.querySelectorAll('.map-district.focus .map-scr')].filter((e) => { const r = e.getBoundingClientRect(); return r.left + r.width / 2 > b.right; }).length;
+      return [...document.querySelectorAll('.map-district.focus .map-scr')].filter((e) => {
+        const r = e.getBoundingClientRect();
+        return r.left + r.width / 2 > b.right;
+      }).length;
     });
     expect(n).toBe(past);
     await right.click();
     await expect(left).toBeVisible();
-    await expect.poll(async () => Number(await right.locator('.n').textContent().catch(() => '0')) || 0).toBeLessThan(n);
+    await expect
+      .poll(
+        async () =>
+          Number(
+            await right
+              .locator('.n')
+              .textContent()
+              .catch(() => '0'),
+          ) || 0,
+      )
+      .toBeLessThan(n);
     // it never sits on a screen's name
     const clash = await page.evaluate(() => {
       const cue = document.querySelector('.map-edgecue.l')!.getBoundingClientRect();
-      return [...document.querySelectorAll('.map-scr .nm')].some((e) => { const r = e.getBoundingClientRect(); return r.left < cue.right && cue.left < r.right && r.top < cue.bottom && cue.top < r.bottom; });
+      return [...document.querySelectorAll('.map-scr .nm')].some((e) => {
+        const r = e.getBoundingClientRect();
+        return r.left < cue.right && cue.left < r.right && r.top < cue.bottom && cue.top < r.bottom;
+      });
     });
     expect(clash).toBe(false);
   });
@@ -247,7 +301,11 @@ test.describe('map — zoom stops, Fit, the opening frame and the chrome', () =>
             if (e && e.closest('.map-world')) under++;
           }
         }
-        return { under, gap: board.top - chrome.bottom, bg: getComputedStyle(document.querySelector('.map-chrome')!).backgroundColor };
+        return {
+          under,
+          gap: board.top - chrome.bottom,
+          bg: getComputedStyle(document.querySelector('.map-chrome')!).backgroundColor,
+        };
       });
       expect(r.under).toBe(0);
       expect(r.gap).toBeGreaterThanOrEqual(-1);

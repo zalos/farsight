@@ -55,10 +55,18 @@ export function facetsOfTags(tags, dims, tagValues) {
   const other = [];
   for (const tag of tags || []) {
     let best = null;
-    for (const d of dims) if (tag.startsWith(d.prefix) && tag.length > d.prefix.length && (!best || d.prefix.length > best.prefix.length)) best = d;
-    if (!best) { other.push(tag); continue; }
+    for (const d of dims)
+      if (tag.startsWith(d.prefix) && tag.length > d.prefix.length && (!best || d.prefix.length > best.prefix.length))
+        best = d;
+    if (!best) {
+      other.push(tag);
+      continue;
+    }
     const value = tag.slice(best.prefix.length);
-    (byDimension[best.key] = byDimension[best.key] || []).push({ value, word: tagValueWord(best.key, value, tagValues) });
+    (byDimension[best.key] = byDimension[best.key] || []).push({
+      value,
+      word: tagValueWord(best.key, value, tagValues),
+    });
   }
   return { byDimension, other };
 }
@@ -77,7 +85,8 @@ export function projectDecl(metas, repo, name) {
 export function projectOfItem(item, metas) {
   if (!item) return null;
   const repo = repoOfNode(item.members && item.members.length ? item.members[0] : item);
-  const own = item.project || (item.members && item.members.length ? (item.members.find((m) => m.project) || {}).project : null);
+  const own =
+    item.project || (item.members && item.members.length ? (item.members.find((m) => m.project) || {}).project : null);
   if (own && own.name) return { repo, name: own.name, type: own.type, tags: own.tags || [] };
   if (item.kind === 'package' && item.package && item.package.scope === 'workspace' && item.package.project) {
     const d = projectDecl(metas, repo, item.package.project);
@@ -119,7 +128,10 @@ export function groupChoices(nodes, metas) {
     }
   }
   // the order the sources list their dimensions in, the defaults first
-  const order = (k) => { const i = DEFAULT_DIMENSIONS.findIndex((d) => d.key === k); return i < 0 ? 99 : i; };
+  const order = (k) => {
+    const i = DEFAULT_DIMENSIONS.findIndex((d) => d.key === k);
+    return i < 0 ? 99 : i;
+  };
   dims.sort((a, b) => order(a.key) - order(b.key) || a.key.localeCompare(b.key));
   return out.concat(dims);
 }
@@ -148,7 +160,8 @@ export const TEST_FILE = /(?:\.(?:spec|test|e2e|cy)\.[cm]?[jt]sx?$)|(?:^|\/)(?:_
 /** True when a node (or a file group, by its first member) lives in a test file. */
 export function isTestFileNode(n) {
   if (!n || n.kind === 'package') return false;
-  const path = (n.loc && n.loc.path) || n.path || (n.members && n.members[0] && n.members[0].loc && n.members[0].loc.path) || '';
+  const path =
+    (n.loc && n.loc.path) || n.path || (n.members && n.members[0] && n.members[0].loc && n.members[0].loc.path) || '';
   return TEST_FILE.test(String(path));
 }
 
@@ -196,11 +209,17 @@ export function buildCodemapIndex(nodes, edges, metas) {
       for (const [dim, vals] of Object.entries(row.facets.byDimension)) {
         if (!projectsByValue.has(dim)) projectsByValue.set(dim, new Map());
         const m = projectsByValue.get(dim);
-        for (const v of vals) { if (!m.has(v.value)) m.set(v.value, new Set()); m.get(v.value).add(k); }
+        for (const v of vals) {
+          if (!m.has(v.value)) m.set(v.value, new Set());
+          m.get(v.value).add(k);
+        }
       }
     }
     nodesByProject.get(k).add(n.id);
-    if (n.kind !== 'module') { if (!row.parts) partOrder.push(k); row.parts++; }
+    if (n.kind !== 'module') {
+      if (!row.parts) partOrder.push(k);
+      row.parts++;
+    }
   }
   for (const e of edges || []) {
     if (e.kind === 'imports' && packageIds.has(e.to)) {
@@ -208,7 +227,19 @@ export function buildCodemapIndex(nodes, edges, metas) {
       importersOf.get(e.to).add(e.from);
     } else if (e.kind === 'validates') validatesTo.set(e.to, (validatesTo.get(e.to) || 0) + 1);
   }
-  return { projectKeyOf, projects, partOrder, nodesByProject, projectsByValue, packageIds, importersOf, validatesTo, testFiles, byRepo, metas };
+  return {
+    projectKeyOf,
+    projects,
+    partOrder,
+    nodesByProject,
+    projectsByValue,
+    packageIds,
+    importersOf,
+    validatesTo,
+    testFiles,
+    byRepo,
+    metas,
+  };
 }
 
 /**
@@ -229,7 +260,10 @@ export function groupChoicesFor(index, repos) {
       if (!dims.some((x) => x.key === d.key)) dims.push({ key: d.key, label: d.label });
     }
   }
-  const order = (k) => { const i = DEFAULT_DIMENSIONS.findIndex((d) => d.key === k); return i < 0 ? 99 : i; };
+  const order = (k) => {
+    const i = DEFAULT_DIMENSIONS.findIndex((d) => d.key === k);
+    return i < 0 ? 99 : i;
+  };
   dims.sort((a, b) => order(a.key) - order(b.key) || a.key.localeCompare(b.key));
   return out.concat(dims);
 }
@@ -261,10 +295,15 @@ export function passFor(index, { projects, values, closure, dep, nodeIds } = {})
   let keep = null;
   if (projectish) {
     let pass = null;
-    const narrow = (set) => { pass = pass ? intersect(pass, set) : set; };
+    const narrow = (set) => {
+      pass = pass ? intersect(pass, set) : set;
+    };
     if (closure) {
       const set = new Set();
-      for (const name of closure.names || []) { const k = closure.repo + '::' + name; if (index.projects.has(k)) set.add(k); }
+      for (const name of closure.names || []) {
+        const k = closure.repo + '::' + name;
+        if (index.projects.has(k)) set.add(k);
+      }
       narrow(set);
     }
     if (picked) narrow(new Set([...picked].filter((k) => index.projects.has(k))));
@@ -279,7 +318,11 @@ export function passFor(index, { projects, values, closure, dep, nodeIds } = {})
     // a package a kept part imports stays: packages × their importers, never every edge
     for (const pkg of index.packageIds) {
       if (keep.has(pkg)) continue;
-      for (const id of index.importersOf.get(pkg) || []) if (keep.has(id)) { keep.add(pkg); break; }
+      for (const id of index.importersOf.get(pkg) || [])
+        if (keep.has(id)) {
+          keep.add(pkg);
+          break;
+        }
     }
   }
   if (dep) {
@@ -315,7 +358,9 @@ export function groupKeyOf(item, by, index) {
 }
 
 /** True when the argument is an index from `buildCodemapIndex` (not a graph's `meta.projects`). */
-function isIndex(x) { return !!(x && x.projectKeyOf instanceof Map); }
+function isIndex(x) {
+  return !!(x && x.projectKeyOf instanceof Map);
+}
 
 /**
  * An application's closure from the graph the page holds: the project first,
@@ -339,10 +384,11 @@ export function projectClosure(metas, repo, name) {
     if (!names.has(i.from) || !names.has(i.to) || i.from === i.to) continue;
     dep(i.from, i.to).imports += i.imports || 0;
   }
-  for (const p of list) for (const to of p.implicitDependencies || []) {
-    if (to === p.name || !names.has(to)) continue;
-    dep(p.name, to).implicit = true;
-  }
+  for (const p of list)
+    for (const to of p.implicitDependencies || []) {
+      if (to === p.name || !names.has(to)) continue;
+      dep(p.name, to).implicit = true;
+    }
   // NX's own project graph, when the workspace wrote one: it augments, never takes an import count away
   for (const x of m.dependencies || []) {
     if (!names.has(x.from) || !names.has(x.to) || x.from === x.to) continue;
@@ -353,11 +399,30 @@ export function projectClosure(metas, repo, name) {
   const all = [...deps.values()].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
   const order = [name];
   const seen = new Set(order);
-  for (let i = 0; i < order.length; i++) for (const d of all) if (d.from === order[i] && !seen.has(d.to)) { seen.add(d.to); order.push(d.to); }
+  for (let i = 0; i < order.length; i++)
+    for (const d of all)
+      if (d.from === order[i] && !seen.has(d.to)) {
+        seen.add(d.to);
+        order.push(d.to);
+      }
   return { projects: order, dependencies: all.filter((d) => seen.has(d.from) && seen.has(d.to)) };
 }
 
-const KIND_RANK = { page: 0, component: 1, api: 2, route: 3, function: 4, rule: 5, group: 4, table: 6, queue: 7, external: 8, unknown: 9, module: 10, package: 11 };
+const KIND_RANK = {
+  page: 0,
+  component: 1,
+  api: 2,
+  route: 3,
+  function: 4,
+  rule: 5,
+  group: 4,
+  table: 6,
+  queue: 7,
+  external: 8,
+  unknown: 9,
+  module: 10,
+  package: 11,
+};
 const TAIL = { noTag: 1, noProject: 2, thirdParty: 3 };
 
 /**
@@ -378,16 +443,29 @@ export function foldGroups(items, by, metas) {
     row.members.push(it);
     // a folded group counts each part it folds under that part's own kind (round 2: a file's functions were all
     // counted under the file's lane, so a component file's twenty functions read as twenty components)
-    if (it.kind === 'group') for (const m of it.members || []) { const k = m.kind || it.laneKind || 'function'; row.byKind[k] = (row.byKind[k] || 0) + 1; }
+    if (it.kind === 'group')
+      for (const m of it.members || []) {
+        const k = m.kind || it.laneKind || 'function';
+        row.byKind[k] = (row.byKind[k] || 0) + 1;
+      }
     else row.byKind[it.kind] = (row.byKind[it.kind] || 0) + 1;
   }
   const name = (n) => String((n && (n.name || n.codename)) || '');
   const list = [...groups.values()];
   for (const g of list) {
-    g.members.sort((a, b) => ((KIND_RANK[a.kind === 'group' ? a.laneKind : a.kind] ?? 9) - (KIND_RANK[b.kind === 'group' ? b.laneKind : b.kind] ?? 9)) || name(a).localeCompare(name(b)));
+    g.members.sort(
+      (a, b) =>
+        (KIND_RANK[a.kind === 'group' ? a.laneKind : a.kind] ?? 9) -
+          (KIND_RANK[b.kind === 'group' ? b.laneKind : b.kind] ?? 9) || name(a).localeCompare(name(b)),
+    );
     g.parts = Object.values(g.byKind).reduce((s, n) => s + n, 0);
   }
-  list.sort((a, b) => (TAIL[a.kind] || 0) - (TAIL[b.kind] || 0) || String(a.word || '').localeCompare(String(b.word || '')) || a.key.localeCompare(b.key));
+  list.sort(
+    (a, b) =>
+      (TAIL[a.kind] || 0) - (TAIL[b.kind] || 0) ||
+      String(a.word || '').localeCompare(String(b.word || '')) ||
+      a.key.localeCompare(b.key),
+  );
   return list;
 }
 
@@ -411,12 +489,17 @@ export function dependsOnIds(edges, packageId) {
 export function closureColumns(projects, dependencies) {
   const names = Array.isArray(projects) ? projects : [];
   const col = new Map(names.map((n, i) => [n, i === 0 ? 0 : 1]));
-  const deps = (dependencies || []).filter((d) => col.has(d.from) && col.has(d.to) && d.from !== d.to && d.to !== names[0]);
+  const deps = (dependencies || []).filter(
+    (d) => col.has(d.from) && col.has(d.to) && d.from !== d.to && d.to !== names[0],
+  );
   for (let pass = 0; pass < names.length; pass++) {
     let moved = false;
     for (const d of deps) {
       const want = Math.min(col.get(d.from) + 1, names.length - 1);
-      if (want > col.get(d.to)) { col.set(d.to, want); moved = true; }
+      if (want > col.get(d.to)) {
+        col.set(d.to, want);
+        moved = true;
+      }
     }
     if (!moved) break;
   }
@@ -433,7 +516,13 @@ export function versionFor(versions, groupKey) {
   if (!list.length) return null;
   const own = list.find((v) => v.where === groupKey);
   if (own) return own;
-  return list.slice().sort((a, b) => String(a.declaredIn).split('/').length - String(b.declaredIn).split('/').length || String(a.declaredIn).localeCompare(String(b.declaredIn)))[0];
+  return list
+    .slice()
+    .sort(
+      (a, b) =>
+        String(a.declaredIn).split('/').length - String(b.declaredIn).split('/').length ||
+        String(a.declaredIn).localeCompare(String(b.declaredIn)),
+    )[0];
 }
 
 /**

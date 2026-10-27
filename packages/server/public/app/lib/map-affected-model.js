@@ -47,12 +47,30 @@ export function hopsOf(v) {
 }
 
 /** Which parts of a change to ask about first: screens and calls before the code behind them, then by name. */
-const KIND_RANK = { page: 0, route: 1, component: 2, function: 3, guard: 4, rule: 5, table: 6, queue: 7, external: 8, package: 9, module: 10 };
+const KIND_RANK = {
+  page: 0,
+  route: 1,
+  component: 2,
+  function: 3,
+  guard: 4,
+  rule: 5,
+  table: 6,
+  queue: 7,
+  external: 8,
+  package: 9,
+  module: 10,
+};
 export function pickSeeds(nodes, max = AFF_MAX_SEEDS) {
   const uniq = [];
   const seen = new Set();
-  for (const n of nodes || []) if (n && n.id && !seen.has(n.id)) { seen.add(n.id); uniq.push(n); }
-  uniq.sort((a, b) => (KIND_RANK[a.kind] ?? 20) - (KIND_RANK[b.kind] ?? 20) || String(a.name).localeCompare(String(b.name)));
+  for (const n of nodes || [])
+    if (n && n.id && !seen.has(n.id)) {
+      seen.add(n.id);
+      uniq.push(n);
+    }
+  uniq.sort(
+    (a, b) => (KIND_RANK[a.kind] ?? 20) - (KIND_RANK[b.kind] ?? 20) || String(a.name).localeCompare(String(b.name)),
+  );
   return { seeds: uniq.slice(0, max), more: Math.max(0, uniq.length - max) };
 }
 
@@ -68,7 +86,10 @@ export function combineReaches(entries) {
   const nodes = new Map();
   const put = (map, key, seed, hop) => {
     const cur = map.get(key);
-    if (!cur) { map.set(key, { hop, by: [{ seed, hop }] }); return; }
+    if (!cur) {
+      map.set(key, { hop, by: [{ seed, hop }] });
+      return;
+    }
     cur.by.push({ seed, hop });
     if (hop < cur.hop) cur.hop = hop;
   };
@@ -142,7 +163,11 @@ export function groupScreens(screens) {
   const at = new Map();
   for (const s of screens || []) {
     let g = at.get(s.screenId);
-    if (!g) { g = { screenId: s.screenId, name: s.name, hop: s.hop, flows: [] }; at.set(s.screenId, g); out.push(g); }
+    if (!g) {
+      g = { screenId: s.screenId, name: s.name, hop: s.hop, flows: [] };
+      at.set(s.screenId, g);
+      out.push(g);
+    }
     if (!g.flows.includes(s.flowId)) g.flows.push(s.flowId);
     if (s.hop < g.hop) g.hop = s.hop;
   }
@@ -170,7 +195,13 @@ export function affectedTests(rows) {
     const had = at.get(r.id);
     if (!had || r.distance < had.distance) at.set(r.id, r);
   }
-  return [...at.values()].sort((a, b) => (a.distance - b.distance) || String(a.spec).localeCompare(String(b.spec)) || (Number(a.line) || 0) - (Number(b.line) || 0) || String(a.name).localeCompare(String(b.name)));
+  return [...at.values()].sort(
+    (a, b) =>
+      a.distance - b.distance ||
+      String(a.spec).localeCompare(String(b.spec)) ||
+      (Number(a.line) || 0) - (Number(b.line) || 0) ||
+      String(a.name).localeCompare(String(b.name)),
+  );
 }
 
 /**
@@ -179,7 +210,10 @@ export function affectedTests(rows) {
  * tests first met there. `owner(flowId)` and `journeyName(flowId)` are the board's.
  * @returns {{ seed: string, distance: number, kind: 'journey'|'screen'|'owner'|'test', id: string, name: string, journeys: string, owner: string, evidence: string }[]}
  */
-export function affectedRows(entries, { owner = () => '', journeyName = (id) => id, seedName = (id) => id, evidence = () => '' } = {}) {
+export function affectedRows(
+  entries,
+  { owner = () => '', journeyName = (id) => id, seedName = (id) => id, evidence = () => '' } = {},
+) {
   const rows = [];
   for (const e of entries || []) {
     const seed = seedName(e.seed);
@@ -188,19 +222,50 @@ export function affectedRows(entries, { owner = () => '', journeyName = (id) => 
       for (const j of g.journeys) {
         const o = owner(j.flowId) || '';
         if (o) owners.add(o);
-        rows.push({ seed, distance: g.hop, kind: 'journey', id: j.flowId, name: journeyName(j.flowId, j.name), journeys: '', owner: o, evidence: '' });
+        rows.push({
+          seed,
+          distance: g.hop,
+          kind: 'journey',
+          id: j.flowId,
+          name: journeyName(j.flowId, j.name),
+          journeys: '',
+          owner: o,
+          evidence: '',
+        });
       }
       for (const s of groupScreens(g.screens)) {
         const os = [...new Set(s.flows.map((f) => owner(f)).filter(Boolean))];
-        rows.push({ seed, distance: g.hop, kind: 'screen', id: s.screenId, name: s.name, journeys: s.flows.map((f) => journeyName(f)).join('; '), owner: os.join('; '), evidence: '' });
+        rows.push({
+          seed,
+          distance: g.hop,
+          kind: 'screen',
+          id: s.screenId,
+          name: s.name,
+          journeys: s.flows.map((f) => journeyName(f)).join('; '),
+          owner: os.join('; '),
+          evidence: '',
+        });
       }
-      for (const o of owners) rows.push({ seed, distance: g.hop, kind: 'owner', id: o, name: o, journeys: '', owner: o, evidence: '' });
+      for (const o of owners)
+        rows.push({ seed, distance: g.hop, kind: 'owner', id: o, name: o, journeys: '', owner: o, evidence: '' });
       // a test carries where it is written (spec file and line) and its own last run (status and when), so the list
       // is the one to run — a coverage run reached as a whole has no line of its own (round-3 swarm, LIST THESE)
       for (const x of g.tests) {
-        rows.push({ seed, distance: g.hop, kind: 'test', id: x.id, name: x.name, journeys: '', owner: '', evidence: evidence(x),
-          level: x.level || '', spec: (x.loc && x.loc.path) || '', line: x.loc && x.loc.line != null ? x.loc.line : '',
-          lastRun: x.runLevel ? '' : x.status || '', at: x.at || '' });
+        rows.push({
+          seed,
+          distance: g.hop,
+          kind: 'test',
+          id: x.id,
+          name: x.name,
+          journeys: '',
+          owner: '',
+          evidence: evidence(x),
+          level: x.level || '',
+          spec: (x.loc && x.loc.path) || '',
+          line: x.loc && x.loc.line != null ? x.loc.line : '',
+          lastRun: x.runLevel ? '' : x.status || '',
+          at: x.at || '',
+        });
       }
     }
   }
@@ -208,13 +273,33 @@ export function affectedRows(entries, { owner = () => '', journeyName = (id) => 
 }
 
 // additive (farsight-affected v0, not frozen): the test columns ride after the first eight
-const CSV_COLS = ['seed', 'distance', 'kind', 'id', 'name', 'journeys', 'owner', 'evidence', 'level', 'spec', 'line', 'lastRun', 'at'];
+const CSV_COLS = [
+  'seed',
+  'distance',
+  'kind',
+  'id',
+  'name',
+  'journeys',
+  'owner',
+  'evidence',
+  'level',
+  'spec',
+  'line',
+  'lastRun',
+  'at',
+];
 /** The rows as CSV (RFC 4180 quoting), one header line. */
 export function affectedCsv(rows) {
-  const q = (v) => { const s = String(v == null ? '' : v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const q = (v) => {
+    const s = String(v == null ? '' : v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
   return [CSV_COLS.join(','), ...(rows || []).map((r) => CSV_COLS.map((c) => q(r[c])).join(','))].join('\n') + '\n';
 }
 /** The rows as JSON under a header that says what they are — `farsight-affected v0`, not a frozen contract. */
 export function affectedJson(rows, meta = {}) {
-  return JSON.stringify({ format: 'farsight-affected', version: 0, frozen: false, ...meta, rows: rows || [] }, null, 2) + '\n';
+  return (
+    JSON.stringify({ format: 'farsight-affected', version: 0, frozen: false, ...meta, rows: rows || [] }, null, 2) +
+    '\n'
+  );
 }

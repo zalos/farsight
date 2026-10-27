@@ -18,7 +18,14 @@ import { apiSurface } from './openapi.js';
 import { journeyTree } from './journeys.js';
 import { testsSurface, type TestsSurface } from './tests.js';
 import { testNodes, type EvidenceWord } from './coverage.js';
-import { freshnessFact, codeAtOfIndex, fillFreshness, freshnessVars, type FreshnessFact, type FreshnessRun } from './freshness.js';
+import {
+  freshnessFact,
+  codeAtOfIndex,
+  fillFreshness,
+  freshnessVars,
+  type FreshnessFact,
+  type FreshnessRun,
+} from './freshness.js';
 import { historySentence, type HistoryFact } from './history.js';
 import type { BuildInfo } from './version.js';
 
@@ -114,11 +121,33 @@ export function stateOfPlay(
   const branches = tree.storylines.reduce((s, x) => s + x.branches.length, 0);
 
   const built = {
-    journeys: counted(flowsBuilt, 'count.unit.journeysBuilt', SCOPE, `${SRC} ← designSurface().flows[].status = both`, { of: flows.size, bizUnit: 'count.unit.journeysBuilt', recheck: RECHECK.state }),
-    screens: counted(screensBuilt, 'state.unit.screensBuilt', SCOPE, `${SRC} ← designSurface().counts.built / .designed`, { of: designed, bizUnit: 'state.unit.screensBuilt', recheck: RECHECK.design }),
-    operations: counted(opsImpl, 'state.unit.operations', SCOPE, `${SRC} ← apiSurface().counts.implemented / .operations`, { of: opsAll, recheck: RECHECK.apis }),
-    storylines: counted(tree.storylines.length, 'count.unit.storylines', SCOPE, `${SRC} ← journeyTree().storylines`, { bizUnit: 'count.unit.storylines', recheck: RECHECK.journeys }),
-    branches: counted(branches, 'count.part.storylineBranches', SCOPE, `${SRC} ← journeyTree().storylines[].branches`, { bizUnit: 'count.part.storylineBranches', recheck: RECHECK.journeys }),
+    journeys: counted(flowsBuilt, 'count.unit.journeysBuilt', SCOPE, `${SRC} ← designSurface().flows[].status = both`, {
+      of: flows.size,
+      bizUnit: 'count.unit.journeysBuilt',
+      recheck: RECHECK.state,
+    }),
+    screens: counted(
+      screensBuilt,
+      'state.unit.screensBuilt',
+      SCOPE,
+      `${SRC} ← designSurface().counts.built / .designed`,
+      { of: designed, bizUnit: 'state.unit.screensBuilt', recheck: RECHECK.design },
+    ),
+    operations: counted(
+      opsImpl,
+      'state.unit.operations',
+      SCOPE,
+      `${SRC} ← apiSurface().counts.implemented / .operations`,
+      { of: opsAll, recheck: RECHECK.apis },
+    ),
+    storylines: counted(tree.storylines.length, 'count.unit.storylines', SCOPE, `${SRC} ← journeyTree().storylines`, {
+      bizUnit: 'count.unit.storylines',
+      recheck: RECHECK.journeys,
+    }),
+    branches: counted(branches, 'count.part.storylineBranches', SCOPE, `${SRC} ← journeyTree().storylines[].branches`, {
+      bizUnit: 'count.part.storylineBranches',
+      recheck: RECHECK.journeys,
+    }),
   };
 
   // ── validated by a run ──
@@ -130,16 +159,32 @@ export function stateOfPlay(
     const word = r.coverage.verdict?.word ?? r.coverage.evidenceWord;
     if (!word) continue;
     // build state wins: a journey with a screen not built never counts under a word
-    if (word.builtOnly) { partly++; continue; }
-    if (r.coverage.sharedEvidence) { noneBuilt++; continue; }
+    if (word.builtOnly) {
+      partly++;
+      continue;
+    }
+    if (r.coverage.sharedEvidence) {
+      noneBuilt++;
+      continue;
+    }
     // the brief holds it on its own case: said apart, so *passed* never counts a held journey (outsider demo 2026-10-13)
-    if (word.held) { held++; continue; }
+    if (word.held) {
+      held++;
+      continue;
+    }
     const hit = byKey.get(word.key);
-    if (hit) hit.n++; else byKey.set(word.key, { word, n: 1 });
+    if (hit) hit.n++;
+    else byKey.set(word.key, { word, n: 1 });
   }
   const byVerdict = [...byKey.values()]
     .sort((a, b) => CLS_ORDER[a.word.cls] - CLS_ORDER[b.word.cls] || b.n - a.n || (a.word.key < b.word.key ? -1 : 1))
-    .map((v) => ({ word: v.word, journeys: counted(v.n, 'count.unit.journeys', SCOPE, `${SRC} ← testsSurface().journeys[].coverage.verdict.word`, { bizUnit: 'count.unit.journeys', recheck: { cli: 'farsight tests matrix', mcp: 'test_coverage' } }) }));
+    .map((v) => ({
+      word: v.word,
+      journeys: counted(v.n, 'count.unit.journeys', SCOPE, `${SRC} ← testsSurface().journeys[].coverage.verdict.word`, {
+        bizUnit: 'count.unit.journeys',
+        recheck: { cli: 'farsight tests matrix', mcp: 'test_coverage' },
+      }),
+    }));
 
   // the newest end-to-end run: the cases its report recorded, and the one freshness fact over them — the fact is
   // about that run, never a fold over every report a source ever read (an older report with no digest beside it)
@@ -150,11 +195,22 @@ export function stateOfPlay(
     if (ref.level !== 'e2e' || !ref.run || ref.inactive) continue;
     const run = ref.run;
     const report = run.report;
-    e2e.push({ run: { freshness: run.freshness, ...(run.changedBy ? { changedBy: run.changedBy } : {}), at: run.at, ...(run.commit ? { commit: run.commit } : {}), repo: t.loc?.repo ?? t.id.split('::')[0] }, ...(report ? { report } : {}) });
+    e2e.push({
+      run: {
+        freshness: run.freshness,
+        ...(run.changedBy ? { changedBy: run.changedBy } : {}),
+        at: run.at,
+        ...(run.commit ? { commit: run.commit } : {}),
+        repo: t.loc?.repo ?? t.id.split('::')[0],
+      },
+      ...(report ? { report } : {}),
+    });
     if (!newest || run.at > newest.at) newest = { at: run.at, ...(report ? { report } : {}) };
   }
   const last = newest;
-  const lastRuns = last ? e2e.filter((x) => (last.report ? x.report === last.report : x.run.at === last.at)).map((x) => x.run) : [];
+  const lastRuns = last
+    ? e2e.filter((x) => (last.report ? x.report === last.report : x.run.at === last.at)).map((x) => x.run)
+    : [];
   const lastE2e = last ? { at: last.at, fresh: freshnessFact(lastRuns, codeAtOfIndex(index)) } : null;
 
   const runs = { passed: 0, failed: 0, skipped: 0, flaky: 0, noRun: 0 };
@@ -162,47 +218,101 @@ export function stateOfPlay(
   for (const c of tests.sources) {
     cases += c.cases;
     const r = c.runs;
-    if (!r) { runs.noRun += c.cases; continue; }
-    runs.passed += r.passed; runs.failed += r.failed; runs.skipped += r.skipped; runs.flaky += r.flaky;
+    if (!r) {
+      runs.noRun += c.cases;
+      continue;
+    }
+    runs.passed += r.passed;
+    runs.failed += r.failed;
+    runs.skipped += r.skipped;
+    runs.flaky += r.flaky;
     // a verdict nobody recorded and no run at all read as one absence, as on the Tests page's cards
     runs.noRun += r.unknown + r.noRun;
   }
   const caseParts: CountPart[] = [
-    { key: 'count.part.passed', n: runs.passed }, { key: 'count.part.failed', n: runs.failed },
-    { key: 'count.part.skipped', n: runs.skipped }, { key: 'count.part.flaky', n: runs.flaky },
+    { key: 'count.part.passed', n: runs.passed },
+    { key: 'count.part.failed', n: runs.failed },
+    { key: 'count.part.skipped', n: runs.skipped },
+    { key: 'count.part.flaky', n: runs.flaky },
     { key: 'count.part.noRun', n: runs.noRun },
   ];
 
   const validated = {
     byVerdict,
-    notFullyBuilt: counted(partly + noneBuilt, 'state.unit.journeysBuiltOnly', SCOPE, `${SRC} ← testsSurface().journeys[].coverage (verdict.word.builtOnly · sharedEvidence)`, {
-      bizUnit: 'state.unit.journeysBuiltOnly',
-      breakdown: [{ key: 'count.part.partlyBuilt', n: partly }, { key: 'count.part.noScreenBuilt', n: noneBuilt }],
-      recheck: { cli: 'farsight tests matrix', mcp: 'test_coverage' },
-    }),
-    heldInBrief: counted(held, 'state.unit.journeysHeld', SCOPE, `${SRC} ← testsSurface().journeys[].coverage.verdict.word.held (core ownCaseHold)`, {
-      bizUnit: 'state.unit.journeysHeld', recheck: { cli: 'farsight tests matrix', mcp: 'test_coverage' },
-    }),
+    notFullyBuilt: counted(
+      partly + noneBuilt,
+      'state.unit.journeysBuiltOnly',
+      SCOPE,
+      `${SRC} ← testsSurface().journeys[].coverage (verdict.word.builtOnly · sharedEvidence)`,
+      {
+        bizUnit: 'state.unit.journeysBuiltOnly',
+        breakdown: [
+          { key: 'count.part.partlyBuilt', n: partly },
+          { key: 'count.part.noScreenBuilt', n: noneBuilt },
+        ],
+        recheck: { cli: 'farsight tests matrix', mcp: 'test_coverage' },
+      },
+    ),
+    heldInBrief: counted(
+      held,
+      'state.unit.journeysHeld',
+      SCOPE,
+      `${SRC} ← testsSurface().journeys[].coverage.verdict.word.held (core ownCaseHold)`,
+      {
+        bizUnit: 'state.unit.journeysHeld',
+        recheck: { cli: 'farsight tests matrix', mcp: 'test_coverage' },
+      },
+    ),
     lastE2e,
-    cases: counted(cases, 'count.unit.cases', SCOPE, `${SRC} ← testsSurface().sources[].runs`, { bizUnit: 'journey.biz.countTests', breakdown: caseParts, recheck: RECHECK.tests }),
+    cases: counted(cases, 'count.unit.cases', SCOPE, `${SRC} ← testsSurface().sources[].runs`, {
+      bizUnit: 'journey.biz.countTests',
+      breakdown: caseParts,
+      recheck: RECHECK.tests,
+    }),
   };
 
   // ── still open ──
-  const notBuiltNames = designs.flatMap((d) => d.screens.filter((s) => s.status === 'design-only').map((s) => s.name)).slice(0, 5);
+  const notBuiltNames = designs
+    .flatMap((d) => d.screens.filter((s) => s.status === 'design-only').map((s) => s.name))
+    .slice(0, 5);
   const drift = designs.reduce((s, d) => s + d.counts.drift, 0);
   const open = {
-    screensNotBuilt: counted(designOnly, 'state.unit.screensNotBuilt', SCOPE, `${SRC} ← designSurface().counts.designOnly`, { bizUnit: 'state.unit.screensNotBuilt', recheck: RECHECK.design }),
+    screensNotBuilt: counted(
+      designOnly,
+      'state.unit.screensNotBuilt',
+      SCOPE,
+      `${SRC} ← designSurface().counts.designOnly`,
+      { bizUnit: 'state.unit.screensNotBuilt', recheck: RECHECK.design },
+    ),
     notBuiltNames,
-    operationsNotImplemented: counted(opsGap, 'state.unit.operationsNotImplemented', SCOPE, `${SRC} ← apiSurface().counts.notImplemented (spec-only sources left out)`, { recheck: RECHECK.apis }),
-    blindSpots: counted(tests.blindSpots.length, 'state.unit.blindSpots', SCOPE, `${SRC} ← testsSurface().blindSpots`, { bizUnit: 'state.unit.blindSpots', recheck: RECHECK.tests }),
+    operationsNotImplemented: counted(
+      opsGap,
+      'state.unit.operationsNotImplemented',
+      SCOPE,
+      `${SRC} ← apiSurface().counts.notImplemented (spec-only sources left out)`,
+      { recheck: RECHECK.apis },
+    ),
+    blindSpots: counted(tests.blindSpots.length, 'state.unit.blindSpots', SCOPE, `${SRC} ← testsSurface().blindSpots`, {
+      bizUnit: 'state.unit.blindSpots',
+      recheck: RECHECK.tests,
+    }),
     blindSpotSentences: tests.blindSpots,
-    drift: counted(drift, 'state.unit.drift', SCOPE, `${SRC} ← designSurface().counts.drift`, { bizUnit: 'state.unit.drift', recheck: RECHECK.design }),
+    drift: counted(drift, 'state.unit.drift', SCOPE, `${SRC} ← designSurface().counts.drift`, {
+      bizUnit: 'state.unit.drift',
+      recheck: RECHECK.design,
+    }),
     history: opts.history ?? null,
   };
 
   // the sources: what the graph read code from (a work item has no location and is not a source)
-  const repos = [...new Set([...Object.keys(meta?.repos ?? {}), ...[...index.byId.values()].map((n) => n.loc?.repo).filter((r): r is string => !!r)])]
-    .filter((r) => !scope || scope.has(r)).sort();
+  const repos = [
+    ...new Set([
+      ...Object.keys(meta?.repos ?? {}),
+      ...[...index.byId.values()].map((n) => n.loc?.repo).filter((r): r is string => !!r),
+    ]),
+  ]
+    .filter((r) => !scope || scope.has(r))
+    .sort();
   const glossary = repos.flatMap((repo) => (meta?.config?.[repo]?.glossary ?? []).map((g) => ({ ...g, repo })));
 
   return {
@@ -213,7 +323,10 @@ export function stateOfPlay(
       ...(meta?.commit ? { commit: meta.commit } : {}),
       ...(meta?.farsight ? { farsight: meta.farsight } : {}),
     },
-    built, validated, open, glossary,
+    built,
+    validated,
+    open,
+    glossary,
   };
 }
 
@@ -221,33 +334,56 @@ export function stateOfPlay(
 export function stateOfPlayLines(s: StateOfPlay, opts: { register?: Register } = {}): string[] {
   const register = opts.register ?? 'professional';
   const w = (c: Counted) => countedText(c, { register, scope: false });
-  const re = (c: Counted) => (c.recheck ? `  — re-check: ${c.recheck.cli}${c.recheck.mcp ? ` · MCP ${c.recheck.mcp}` : ''}` : '');
+  const re = (c: Counted) =>
+    c.recheck ? `  — re-check: ${c.recheck.cli}${c.recheck.mcp ? ` · MCP ${c.recheck.mcp}` : ''}` : '';
   const p = s.provenance;
   const out: string[] = [];
-  out.push(`${t('state.title', register)} — ${[
-    p.sources.join(', '),
-    p.sync != null ? t('state.asOf', register).replace('{n}', String(p.sync)) : '',
-    p.generatedAt ? p.generatedAt.replace('T', ' ').slice(0, 16) : '',
-    p.commit ? t('state.codeAt', register).replace('{c}', p.commit.slice(0, 7)) : t('state.codeAtNone', register),
-    p.farsight ? t('state.drawnBy', register).replace('{b}', `${p.farsight.version}${p.farsight.commit ? ` · ${p.farsight.commit}` : ''}`) : '',
-  ].filter(Boolean).join(' · ')}`);
+  out.push(
+    `${t('state.title', register)} — ${[
+      p.sources.join(', '),
+      p.sync != null ? t('state.asOf', register).replace('{n}', String(p.sync)) : '',
+      p.generatedAt ? p.generatedAt.replace('T', ' ').slice(0, 16) : '',
+      p.commit ? t('state.codeAt', register).replace('{c}', p.commit.slice(0, 7)) : t('state.codeAtNone', register),
+      p.farsight
+        ? t('state.drawnBy', register).replace(
+            '{b}',
+            `${p.farsight.version}${p.farsight.commit ? ` · ${p.farsight.commit}` : ''}`,
+          )
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' · ')}`,
+  );
   out.push(`${t('state.col.built', register)}:`);
   for (const c of [s.built.journeys, s.built.screens, s.built.operations]) out.push(`- ${w(c)}${re(c)}`);
   out.push(`- ${w(s.built.storylines)} · ${w(s.built.branches)}${re(s.built.storylines)}`);
   out.push(`${t('state.col.validated', register)}:`);
-  for (const v of s.validated.byVerdict) if (v.word.cls !== 'none') out.push(`- ${w(v.journeys)} ${t(v.word.key, register)}${re(v.journeys)}`);
-  if (s.validated.notFullyBuilt?.n) out.push(`- ${w(s.validated.notFullyBuilt)} (${breakdownText(s.validated.notFullyBuilt, register)})${re(s.validated.notFullyBuilt)}`);
+  for (const v of s.validated.byVerdict)
+    if (v.word.cls !== 'none') out.push(`- ${w(v.journeys)} ${t(v.word.key, register)}${re(v.journeys)}`);
+  if (s.validated.notFullyBuilt?.n)
+    out.push(
+      `- ${w(s.validated.notFullyBuilt)} (${breakdownText(s.validated.notFullyBuilt, register)})${re(s.validated.notFullyBuilt)}`,
+    );
   if (s.validated.heldInBrief?.n) out.push(`- ${w(s.validated.heldInBrief)}${re(s.validated.heldInBrief)}`);
   if (s.validated.lastE2e) {
     const f = s.validated.lastE2e.fresh;
-    out.push(`- ${t('state.lastE2e', register).replace('{date}', s.validated.lastE2e.at.slice(0, 10))}${f ? ` · ${fillFreshness(t(f.key, register), freshnessVars(f))}` : ''}`);
+    out.push(
+      `- ${t('state.lastE2e', register).replace('{date}', s.validated.lastE2e.at.slice(0, 10))}${f ? ` · ${fillFreshness(t(f.key, register), freshnessVars(f))}` : ''}`,
+    );
   } else out.push(`- ${t('state.noE2e', register)}`);
   out.push(`- ${w(s.validated.cases)}: ${breakdownText(s.validated.cases, register)}${re(s.validated.cases)}`);
   out.push(`${t('state.col.open', register)}:`);
-  out.push(`- ${w(s.open.screensNotBuilt)}${s.open.notBuiltNames.length ? ` (${s.open.notBuiltNames.join(', ')})` : ''}${re(s.open.screensNotBuilt)}`);
+  out.push(
+    `- ${w(s.open.screensNotBuilt)}${s.open.notBuiltNames.length ? ` (${s.open.notBuiltNames.join(', ')})` : ''}${re(s.open.screensNotBuilt)}`,
+  );
   for (const c of [s.open.operationsNotImplemented, s.open.blindSpots, s.open.drift]) out.push(`- ${w(c)}${re(c)}`);
-  out.push(`- ${s.open.history ? `${historySentence(s.open.history, register)}${re(s.open.history.read)}` : t('state.historyNone', register)}`);
+  out.push(
+    `- ${s.open.history ? `${historySentence(s.open.history, register)}${re(s.open.history.read)}` : t('state.historyNone', register)}`,
+  );
   // of those commits, the ones made with an AI assistant (round 2026-10-10, proposal 9) — when the store keeps it
-  if (s.open.history?.agents) out.push(`- ${w(s.open.history.agents)}${s.open.history.agents.breakdown?.length ? ` (${breakdownText(s.open.history.agents, register)})` : ''}${re(s.open.history.agents)}`);
+  if (s.open.history?.agents)
+    out.push(
+      `- ${w(s.open.history.agents)}${s.open.history.agents.breakdown?.length ? ` (${breakdownText(s.open.history.agents, register)})` : ''}${re(s.open.history.agents)}`,
+    );
   return out;
 }

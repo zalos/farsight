@@ -39,7 +39,10 @@ async function visibleText(page: Page): Promise<string> {
     const s = document.getElementById('surface');
     if (s && s.style.display !== 'none') roots.push(s);
     if (document.body.classList.contains('surface-graph')) {
-      for (const id of ['chips', 'stage', 'inspector']) { const e = document.getElementById(id); if (e) roots.push(e); }
+      for (const id of ['chips', 'stage', 'inspector']) {
+        const e = document.getElementById(id);
+        if (e) roots.push(e);
+      }
     }
     const out: string[] = [];
     for (const r of roots) {
@@ -99,7 +102,10 @@ test.describe('numbers carry their scope', () => {
    * @covers packages/server/public/app/surfaces/tests.js::sourcesHtml
    * @covers GET /api/tests
    */
-  test('the E2E filter moves every count on the page, and says what the unfiltered total is', async ({ page, request }) => {
+  test('the E2E filter moves every count on the page, and says what the unfiltered total is', async ({
+    page,
+    request,
+  }) => {
     const api = await (await request.get('/api/tests?scope=all&level=e2e')).json();
     const all = await (await request.get('/api/tests?scope=all')).json();
     await gotoReady(page, '#/tests?level=e2e');
@@ -132,8 +138,12 @@ test.describe('numbers carry their scope', () => {
 test.describe('the business register', () => {
   // each surface, and the element that says it has drawn its answer
   const SURFACES: [string, string][] = [
-    ['#/portfolio', '#pf-body table'], ['#/apis', '.api-card'], ['#/tests', '.tst-kpis'], ['#/tests?view=suites', '.tst-suites'],
-    ['#/changes', '.ch-table'], ['#/codemap?node=invoice-app%3A%3Asrc%2Fserver%2FtaxEngine.ts%3A%3AcomputeTax', '#inspector h2'],
+    ['#/portfolio', '#pf-body table'],
+    ['#/apis', '.api-card'],
+    ['#/tests', '.tst-kpis'],
+    ['#/tests?view=suites', '.tst-suites'],
+    ['#/changes', '.ch-table'],
+    ['#/codemap?node=invoice-app%3A%3Asrc%2Fserver%2FtaxEngine.ts%3A%3AcomputeTax', '#inspector h2'],
   ];
   for (const [hash, ready] of SURFACES) {
     /**
@@ -157,7 +167,7 @@ test.describe('the business register', () => {
    * @covers packages/server/public/app/strings.js::proseHtml
    * @covers packages/server/public/app/strings.js::plainWords
    */
-  test('no identifier in the front door\'s descriptions in business', async ({ page }) => {
+  test("no identifier in the front door's descriptions in business", async ({ page }) => {
     await gotoReady(page, '#/journeys?lens=business');
     await expect(page.locator('body')).toHaveClass(/lens-business/);
     await expect(page.locator('.dsg-flow-desc').first()).toBeVisible({ timeout: 15_000 });
@@ -205,7 +215,12 @@ test.describe('the business register', () => {
 
 test.describe('the window', () => {
   test.use({ viewport: { width: 1920, height: 1080 } });
-  for (const [hash, sel] of [['#/portfolio', '#pf-body table'], ['#/apis', '.api-grid'], ['#/changes', '.ch-table'], ['#/tests', '.tst-table']] as const) {
+  for (const [hash, sel] of [
+    ['#/portfolio', '#pf-body table'],
+    ['#/apis', '.api-grid'],
+    ['#/changes', '.ch-table'],
+    ['#/tests', '.tst-table'],
+  ] as const) {
     /**
      * @covers packages/server/public/app/surfaces/portfolio.js::mountPortfolio
      * @covers packages/server/public/app/surfaces/apis.js::mountApis
@@ -215,7 +230,9 @@ test.describe('the window', () => {
       await gotoReady(page, hash);
       await expect(page.locator(sel).first()).toBeVisible({ timeout: 15_000 });
       // polled: the Portfolio redraws its table as each flow's cells fill in
-      await expect.poll(async () => (await page.locator(sel).first().boundingBox())?.width || 0).toBeGreaterThanOrEqual(0.9 * 1920);
+      await expect
+        .poll(async () => (await page.locator(sel).first().boundingBox())?.width || 0)
+        .toBeGreaterThanOrEqual(0.9 * 1920);
     });
   }
 
@@ -225,7 +242,11 @@ test.describe('the window', () => {
     const when = page.locator('.ch-table td.when').first();
     await expect(when).toBeVisible();
     // one line box for the whole timestamp: it used to break as `2026-09-25 05:0` / `3`
-    const lines = await when.evaluate((e) => { const r = document.createRange(); r.selectNodeContents(e); return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size; });
+    const lines = await when.evaluate((e) => {
+      const r = document.createRange();
+      r.selectNodeContents(e);
+      return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size;
+    });
     expect(lines).toBe(1);
   });
 
@@ -268,7 +289,10 @@ test.describe('chrome', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('.map-table')).toHaveCount(0);
     await expect(page).toHaveURL(/#\/map(\?|$)/);
-    await page.getByRole('navigation', { name: 'Surfaces' }).getByRole('button', { name: 'Journeys', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'Surfaces' })
+      .getByRole('button', { name: 'Journeys', exact: true })
+      .click();
     await expect(page).toHaveURL(/#\/journeys$/);
     // it used to read `focus: …` in the search box, wear an *exit focus* chip and cut the status bar
     await expect(page.getByRole('button', { name: /exit focus/ })).toBeHidden();
@@ -283,7 +307,10 @@ test.describe('chrome', () => {
   test('the light theme can be previewed without writing the shared settings', async ({ page }) => {
     const writes: string[] = [];
     await page.route('**/*', (r) => {
-      if (r.request().method() !== 'GET') { writes.push(r.request().method() + ' ' + r.request().url()); return r.abort(); }
+      if (r.request().method() !== 'GET') {
+        writes.push(r.request().method() + ' ' + r.request().url());
+        return r.abort();
+      }
       return r.continue();
     });
     await gotoReady(page, '#/portfolio');
@@ -296,7 +323,7 @@ test.describe('chrome', () => {
   });
 
   /** @covers packages/server/public/app/shell.js::applyTheme */
-  test('with no theme saved, the viewer follows the system\'s colour scheme', async ({ page }) => {
+  test("with no theme saved, the viewer follows the system's colour scheme", async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await page.route('**/api/settings', async (r) => {
       const res = await r.fetch();

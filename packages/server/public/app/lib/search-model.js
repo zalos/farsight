@@ -54,7 +54,10 @@ function rowOf(n, fns) {
     repo: fns.repoOf(n),
     name,
     ident: name.split(':')[0].trim(),
-    tail: String(n.id || '').split('::').pop().toLowerCase(),
+    tail: String(n.id || '')
+      .split('::')
+      .pop()
+      .toLowerCase(),
     words: String(fns.bizName(n)).toLowerCase(),
     label: String(fns.bizLabel(n)).toLowerCase(),
     tags,
@@ -74,10 +77,20 @@ export function scoreRow(r, raw, terms) {
   // plain loops: this runs once per node per keystroke
   for (let t = 0; t < terms.length; t++) {
     const term = terms[t];
-    if (ident === term || words === term || label === term) { score += 10; continue; }
-    if (name.includes(term) || words.includes(term) || label.includes(term)) { score += 5; continue; }
+    if (ident === term || words === term || label === term) {
+      score += 10;
+      continue;
+    }
+    if (name.includes(term) || words.includes(term) || label.includes(term)) {
+      score += 5;
+      continue;
+    }
     let tagged = false;
-    for (let k = 0; k < tags.length; k++) if (tags[k].includes(term)) { tagged = true; break; }
+    for (let k = 0; k < tags.length; k++)
+      if (tags[k].includes(term)) {
+        tagged = true;
+        break;
+      }
     if (tagged) score += 4;
     else if (r.rest.includes(term)) score += 1;
   }
@@ -90,9 +103,14 @@ export function scoreRow(r, raw, terms) {
  * `{ hits: [{ n, score }], matched }` — `matched` counts every row with a score.
  */
 export function searchIndex(index, q, repos, limit = LIMIT) {
-  const raw = String(q || '').trim().toLowerCase();
+  const raw = String(q || '')
+    .trim()
+    .toLowerCase();
   const terms = raw.split(/\s+/).filter(Boolean);
-  if (!terms.length) { index.last = null; return { hits: [], matched: 0 }; }
+  if (!terms.length) {
+    index.last = null;
+    return { hits: [], matched: 0 };
+  }
   if (!index.done) continueSearchIndex(index, Infinity);
   // a query that only grew its last word matches a subset of what the last one matched
   const last = index.last;
@@ -134,11 +152,21 @@ export function storylineTravelItems(metas, repos) {
       seen.add(st.id.toLowerCase());
       const q = encodeURIComponent(st.id);
       out.push({
-        kind: 'storyline', id: 'storyline:' + st.id, storyline: st.id, repo, name: st.name || st.id, description: st.description || '',
-        steps: (st.journeys || []).length, branches: (st.branches || []).length,
+        kind: 'storyline',
+        id: 'storyline:' + st.id,
+        storyline: st.id,
+        repo,
+        name: st.name || st.id,
+        description: st.description || '',
+        steps: (st.journeys || []).length,
+        branches: (st.branches || []).length,
         hash: '#/map?storyline=' + q,
         // what it is matched on, lower-cased once
-        m: { name: String(st.name || st.id).toLowerCase(), id: String(st.id).toLowerCase(), words: String(st.description || '').toLowerCase() },
+        m: {
+          name: String(st.name || st.id).toLowerCase(),
+          id: String(st.id).toLowerCase(),
+          words: String(st.description || '').toLowerCase(),
+        },
       });
     }
   }

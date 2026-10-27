@@ -37,7 +37,9 @@ export function freshSentence(f, opts) {
 }
 
 /** True when the fact is worth a line of its own (anything but *no run recorded*). */
-export function freshShown(f) { return !!(f && f.state && f.state !== 'none'); }
+export function freshShown(f) {
+  return !!(f && f.state && f.state !== 'none');
+}
 
 /** The tip: the word, its sentence, both sides, the recipe, and the runs read. */
 export function freshTipHtml(f) {
@@ -45,21 +47,33 @@ export function freshTipHtml(f) {
   const v = freshVars(f);
   const biz = isBusiness();
   const runs = f.runs || {};
-  const sides = biz ? [] : [
-    ['fresh.tip.ran', [v.ran, v.ranAt].filter(Boolean).join(' · ')],
-    ['fresh.tip.code', v.code],
-    ['fresh.tip.sync', v.sync],
-  ].filter((r) => r[1]);
+  const sides = biz
+    ? []
+    : [
+        ['fresh.tip.ran', [v.ran, v.ranAt].filter(Boolean).join(' · ')],
+        ['fresh.tip.code', v.code],
+        ['fresh.tip.sync', v.sync],
+      ].filter((r) => r[1]);
   const parts = [
     ['count.part.freshCurrent', runs.current || 0],
     ['count.part.freshStale', runs.stale || 0],
     ['count.part.freshNoDigest', runs.noDigest || 0],
-  ].filter((p) => p[1]).map(([k, n]) => [fill(t(k), { n }).replace(String(n), '').trim(), n]);
-  return '<div class="tip-h">' + esc(t(f.word || 'fresh.state.' + f.state)) + '</div>'
-    + '<p class="tip-p">' + esc(freshSentence(f)) + '</p>'
-    + (sides.length ? tableTip({ caption: 'fresh.tip.against', rows: sides }) : '')
-    + (f.recipe && !(biz && f.recipe === 'fresh.recipe.stamp') ? '<p class="tip-p"><b>' + esc(t('fresh.tip.recipe')) + '</b> · ' + esc(t(f.recipe)) + '</p>' : '')
-    + (parts.length > 1 || (parts.length && !biz) ? tableTip({ caption: 'fresh.tip.runs', rows: parts }) : '');
+  ]
+    .filter((p) => p[1])
+    .map(([k, n]) => [fill(t(k), { n }).replace(String(n), '').trim(), n]);
+  return (
+    '<div class="tip-h">' +
+    esc(t(f.word || 'fresh.state.' + f.state)) +
+    '</div>' +
+    '<p class="tip-p">' +
+    esc(freshSentence(f)) +
+    '</p>' +
+    (sides.length ? tableTip({ caption: 'fresh.tip.against', rows: sides }) : '') +
+    (f.recipe && !(biz && f.recipe === 'fresh.recipe.stamp')
+      ? '<p class="tip-p"><b>' + esc(t('fresh.tip.recipe')) + '</b> · ' + esc(t(f.recipe)) + '</p>'
+      : '') +
+    (parts.length > 1 || (parts.length && !biz) ? tableTip({ caption: 'fresh.tip.runs', rows: parts }) : '')
+  );
 }
 registerTip('fresh', (el, a) => freshTipHtml(a));
 
@@ -74,6 +88,14 @@ export function freshAttrs(f, opts) {
  */
 export function freshLineHtml(f, cls) {
   if (!freshShown(f)) return '';
-  return '<span class="fresh fresh-' + esc(f.state) + (cls ? ' ' + esc(cls) : '') + '"' + freshAttrs(f, { noFocus: true }) + '>'
-    + esc(freshSentence(f)) + '</span>';
+  return (
+    '<span class="fresh fresh-' +
+    esc(f.state) +
+    (cls ? ' ' + esc(cls) : '') +
+    '"' +
+    freshAttrs(f, { noFocus: true }) +
+    '>' +
+    esc(freshSentence(f)) +
+    '</span>'
+  );
 }

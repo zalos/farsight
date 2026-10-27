@@ -58,7 +58,11 @@ export function classifyError(err: unknown): 'unreachable' | 'credential' | 'oth
   if (e?.name && /AuthUnavailable$|^SecretUnavailable$/.test(e.name)) return 'credential';
   if (e?.code === 'credential' || e?.code === 'auth') return 'credential';
   const code = e?.code ?? e?.cause?.code;
-  if (code && ['ENOTFOUND', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT'].includes(code)) return 'unreachable';
+  if (
+    code &&
+    ['ENOTFOUND', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT'].includes(code)
+  )
+    return 'unreachable';
   if (/fetch failed|network|unreachable/i.test(e?.message ?? '')) return 'unreachable';
   return 'other';
 }
@@ -79,7 +83,12 @@ export async function connectSource(
 }
 
 /** One sync of one source: connect → discover (cached) → pull from the cursor → hydrate changed → replace → deletes → cursor. */
-export async function syncSource(cfg: SourceConfig, provider: WorkProvider, cache: WorkCache, opts: EngineOptions = {}): Promise<SyncReport> {
+export async function syncSource(
+  cfg: SourceConfig,
+  provider: WorkProvider,
+  cache: WorkCache,
+  opts: EngineOptions = {},
+): Promise<SyncReport> {
   const now = opts.now ?? (() => new Date());
   const started = now();
   cache.upsertSource(cfg);
@@ -94,7 +103,11 @@ export async function syncSource(cfg: SourceConfig, provider: WorkProvider, cach
     const ttl = opts.schemaTtlMs ?? parseDuration(cfg.rediscoverAfter, DEFAULT_REDISCOVER_AFTER_MS);
     const stale = !before.schema || !before.schemaAt || started.getTime() - Date.parse(before.schemaAt) > ttl;
     const cached = opts.rediscover || stale ? null : before.schema;
-    const session = await connectSource(cfg, provider, { ...opts, schema: cached, schemaAt: cached ? before.schemaAt : null });
+    const session = await connectSource(cfg, provider, {
+      ...opts,
+      schema: cached,
+      schemaAt: cached ? before.schemaAt : null,
+    });
     const rediscover = async () => {
       const schema = await provider.discover(session);
       session.schema = schema;
@@ -105,17 +118,24 @@ export async function syncSource(cfg: SourceConfig, provider: WorkProvider, cach
     // every Nth pull of an incremental source is a reconcile: the provider is told what the cache holds
     const every = cfg.reconcileEvery ?? DEFAULT_RECONCILE_EVERY;
     const nth = cache.countSyncs(cfg.id, 'pull');
-    const scope: Scope = every > 0 && before.cursor !== null && nth % every === 0
-      ? { ...cfg.scope, reconcile: { known: cache.listItems({ source: cfg.id }).map((i) => i.id) } }
-      : cfg.scope;
+    const scope: Scope =
+      every > 0 && before.cursor !== null && nth % every === 0
+        ? { ...cfg.scope, reconcile: { known: cache.listItems({ source: cfg.id }).map((i) => i.id) } }
+        : cfg.scope;
 
     const fromPages = new Map<string, WorkItem>();
     const gone = new Set<string>();
     let finalCursor: Cursor | null = before.cursor;
     const pullAll = async () => {
       for await (const page of provider.pull(session, before.cursor, scope)) {
-        for (const it of page.items) { fromPages.set(it.id, it); gone.delete(it.id); }
-        for (const d of page.deleted ?? []) { gone.add(d); fromPages.delete(d); }
+        for (const it of page.items) {
+          fromPages.set(it.id, it);
+          gone.delete(it.id);
+        }
+        for (const d of page.deleted ?? []) {
+          gone.add(d);
+          fromPages.delete(d);
+        }
         if (page.cursor !== null) finalCursor = page.cursor;
         if (page.isLast) break;
       }
@@ -125,13 +145,17 @@ export async function syncSource(cfg: SourceConfig, provider: WorkProvider, cach
     } catch (err) {
       // a 4xx under a cached schema may mean the tracker's fields or types moved: discover once and retry
       if (!cached || !smellsLikeSchemaChange(err)) throw err;
-      fromPages.clear(); gone.clear(); finalCursor = before.cursor;
+      fromPages.clear();
+      gone.clear();
+      finalCursor = before.cursor;
       await rediscover();
       await pullAll();
     }
 
     // hydrate only what moved since the cache last agreed (new, or a different revision)
-    const moved = [...fromPages.values()].filter((it) => cache.getItem(it.id)?.revision !== it.revision).map((it) => it.id);
+    const moved = [...fromPages.values()]
+      .filter((it) => cache.getItem(it.id)?.revision !== it.revision)
+      .map((it) => it.id);
     const full = new Map<string, WorkItem>();
     for (let i = 0; i < moved.length; i += 100) {
       for (const it of await provider.hydrate(session, moved.slice(i, i + 100))) full.set(it.id, it);
@@ -156,7 +180,16 @@ export async function syncSource(cfg: SourceConfig, provider: WorkProvider, cach
     // SecretUnavailable names the reference only; provider errors are expected to carry no secret either
     const error = err instanceof Error ? err.message : String(err);
     const durationMs = now().getTime() - started.getTime();
-    cache.finishSync(cfg.id, syncNo, { at: now().toISOString(), pulled, changed, deleted, cursor: before.cursor, durationMs, error, errorKind });
+    cache.finishSync(cfg.id, syncNo, {
+      at: now().toISOString(),
+      pulled,
+      changed,
+      deleted,
+      cursor: before.cursor,
+      durationMs,
+      error,
+      errorKind,
+    });
     return { sourceId: cfg.id, syncNo, pulled, changed, deleted, cursor: before.cursor, durationMs, error, errorKind };
   }
 }
@@ -183,7 +216,10 @@ export function freshness(row: SourceRow | null, now: Date = new Date()): Freshn
     const since = row.failingSince ?? row.lastAttemptAt;
     return {
       state: row.lastErrorKind === 'credential' ? 'credential-expired' : 'unreachable',
-      since, ago: ago(since), lastOkAt: row.lastOkAt, error: row.lastError,
+      since,
+      ago: ago(since),
+      lastOkAt: row.lastOkAt,
+      error: row.lastError,
     };
   }
   if (!row.lastOkAt) return { state: 'never', since: null, ago: null, lastOkAt: null };

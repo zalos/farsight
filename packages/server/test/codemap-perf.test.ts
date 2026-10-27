@@ -11,7 +11,15 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { GraphStore, appClosure, projectGraph, buildIndex, type GraphNode, type GraphEdge, type GraphMeta } from '@farsight/core';
+import {
+  GraphStore,
+  appClosure,
+  projectGraph,
+  buildIndex,
+  type GraphNode,
+  type GraphEdge,
+  type GraphMeta,
+} from '@farsight/core';
 import { ingestRepo } from '@farsight/parsers';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -29,18 +37,40 @@ function synthetic() {
     const projects = [];
     for (let i = 0; i < 15; i++) {
       const type = i < 3 ? 'application' : 'library';
-      projects.push({ name: `${repo}-p${i}`, root: `libs/p${i}`, type, tags: [`scope:${domains[i % domains.length]}`, `type:${i % 2 ? 'ui' : 'data-access'}`], via: 'nx' });
+      projects.push({
+        name: `${repo}-p${i}`,
+        root: `libs/p${i}`,
+        type,
+        tags: [`scope:${domains[i % domains.length]}`, `type:${i % 2 ? 'ui' : 'data-access'}`],
+        via: 'nx',
+      });
     }
-    const imports = projects.slice(1).map((p, i) => ({ from: projects[i]!.name, to: p.name, imports: 2, files: 1, top: [] }));
+    const imports = projects
+      .slice(1)
+      .map((p, i) => ({ from: projects[i]!.name, to: p.name, imports: 2, files: 1, top: [] }));
     metas[repo] = { tool: 'nx', projects, imports };
     for (let i = 0; i < 10_000; i++) {
       const p = projects[i % projects.length]!;
       const file = `libs/p${i % projects.length}/src/f${Math.floor(i / 8)}.ts`;
       const path = i % 50 === 0 ? file.replace('.ts', '.spec.ts') : file;
-      nodes.push({ id: `${repo}::${path}::fn${i}`, repo, kind: i % 9 === 0 ? 'component' : 'function', name: `fn${i}`, group: path,
-        loc: { repo, path, line: i % 200 }, project: { name: p.name, type: p.type, tags: p.tags } });
+      nodes.push({
+        id: `${repo}::${path}::fn${i}`,
+        repo,
+        kind: i % 9 === 0 ? 'component' : 'function',
+        name: `fn${i}`,
+        group: path,
+        loc: { repo, path, line: i % 200 },
+        project: { name: p.name, type: p.type, tags: p.tags },
+      });
     }
-    for (let k = 0; k < 20; k++) nodes.push({ id: `${repo}::package::dep${k}`, repo, kind: 'package', name: `dep${k}`, package: { scope: 'third-party' } });
+    for (let k = 0; k < 20; k++)
+      nodes.push({
+        id: `${repo}::package::dep${k}`,
+        repo,
+        kind: 'package',
+        name: `dep${k}`,
+        package: { scope: 'third-party' },
+      });
     const first = nodes.length - 10_020;
     for (let i = 0; i < 1500; i++) {
       edges.push({ from: nodes[first + i * 6]!.id, to: `${repo}::package::dep${i % 20}`, kind: 'imports' });
@@ -57,14 +87,25 @@ test('index, choices, two filters and a grouped fold over ≈20k nodes take well
   const index = M.buildCodemapIndex(nodes, edges, metas);
   const choices = M.groupChoicesFor(index, null);
   const one = M.passFor(index, { projects: new Set(['alpha::alpha-p1', 'beta::beta-p4']) });
-  const two = M.passFor(index, { projects: new Set(['alpha::alpha-p1', 'alpha::alpha-p6']), values: { domain: new Set(['ops']) }, dep: 'alpha::package::dep1' });
+  const two = M.passFor(index, {
+    projects: new Set(['alpha::alpha-p1', 'alpha::alpha-p6']),
+    values: { domain: new Set(['ops']) },
+    dep: 'alpha::package::dep1',
+  });
   const groups = M.foldGroups(nodes, 'domain', index);
   const ms = performance.now() - t0;
   assert.ok(ms < 2000, `took ${ms.toFixed(0)} ms`);
-  assert.deepEqual(choices.map((c: AnyRec) => c.key), ['none', 'project', 'domain', 'type']);
+  assert.deepEqual(
+    choices.map((c: AnyRec) => c.key),
+    ['none', 'project', 'domain', 'type'],
+  );
   assert.equal(index.projects.size, 30);
   assert.ok(one.size > 0 && two.size > 0 && two.size < one.size);
-  assert.equal(groups.reduce((s: number, g: AnyRec) => s + g.members.length, 0), nodes.length, 'every card in one box');
+  assert.equal(
+    groups.reduce((s: number, g: AnyRec) => s + g.members.length, 0),
+    nodes.length,
+    'every card in one box',
+  );
 });
 
 // ── the proof: the set algebra against the per-node predicate it replaced ──
@@ -75,7 +116,10 @@ let meta: GraphMeta;
 before(async () => {
   const work = mkdtempSync(join(tmpdir(), 'farsight-codemap-perf-'));
   const store = new GraphStore();
-  for (const [name, dir] of [['nx-workspace', 'examples/nx-workspace'], ['invoice-app', 'examples/invoice-app']] as const) {
+  for (const [name, dir] of [
+    ['nx-workspace', 'examples/nx-workspace'],
+    ['invoice-app', 'examples/invoice-app'],
+  ] as const) {
     store.addFragment(await ingestRepo(join(repoRoot, dir), { repoName: name }));
   }
   store.save(join(work, 'graph.json'));
@@ -84,7 +128,12 @@ before(async () => {
 });
 
 /** The code map's filter as it was, one predicate per node (surfaces/codemap-projects.js before the index). */
-function naive(f: { projects?: Set<string>; values?: Record<string, Set<string>>; closure?: { repo: string; names: Set<string> }; dep?: string }) {
+function naive(f: {
+  projects?: Set<string>;
+  values?: Record<string, Set<string>>;
+  closure?: { repo: string; names: Set<string> };
+  dep?: string;
+}) {
   const m = meta.projects;
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const projects = f.projects ?? new Set<string>();
@@ -104,8 +153,12 @@ function naive(f: { projects?: Set<string>; values?: Record<string, Set<string>>
   let keep = new Set<string>();
   for (const n of nodes) if (n.kind !== 'package' && (!projectish || ok(M.projectOfItem(n, m)))) keep.add(n.id);
   for (const n of nodes) if (n.kind === 'package' && (!projectish || ok(M.projectOfItem(n, m)))) keep.add(n.id);
-  for (const e of edges) if (e.kind === 'imports' && keep.has(e.from) && byId.get(e.to)?.kind === 'package') keep.add(e.to);
-  if (f.dep) { const d = M.dependsOnIds(edges, f.dep); keep = new Set([...keep].filter((id) => d.has(id))); }
+  for (const e of edges)
+    if (e.kind === 'imports' && keep.has(e.from) && byId.get(e.to)?.kind === 'package') keep.add(e.to);
+  if (f.dep) {
+    const d = M.dependsOnIds(edges, f.dep);
+    keep = new Set([...keep].filter((id) => d.has(id)));
+  }
   return keep;
 }
 const sorted = (s: Set<string> | null) => [...(s ?? [])].sort();
@@ -114,16 +167,36 @@ test('the set algebra keeps what the per-node predicate kept', () => {
   const index = M.buildCodemapIndex(nodes, edges, meta.projects);
   // a package some billing part imports, read from the graph rather than named here
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const billingDep = edges.find((e) => e.kind === 'imports' && byId.get(e.to)?.kind === 'package'
-    && (M.projectFacets(M.projectOfItem(byId.get(e.from), meta.projects), meta.projects).byDimension.domain || []).some((v: AnyRec) => v.value === 'billing'))!.to;
+  const billingDep = edges.find(
+    (e) =>
+      e.kind === 'imports' &&
+      byId.get(e.to)?.kind === 'package' &&
+      (M.projectFacets(M.projectOfItem(byId.get(e.from), meta.projects), meta.projects).byDimension.domain || []).some(
+        (v: AnyRec) => v.value === 'billing',
+      ),
+  )!.to;
   const cases: { name: string; f: AnyRec }[] = [
     { name: 'projects', f: { projects: new Set(['nx-workspace::ops-admin', 'nx-workspace::shared-util']) } },
     { name: 'a tag', f: { values: { domain: new Set(['billing']) } } },
-    { name: 'projects ∩ tag', f: { projects: new Set(['nx-workspace::billing-web', 'nx-workspace::ops-admin']), values: { domain: new Set(['billing']) } } },
+    {
+      name: 'projects ∩ tag',
+      f: {
+        projects: new Set(['nx-workspace::billing-web', 'nx-workspace::ops-admin']),
+        values: { domain: new Set(['billing']) },
+      },
+    },
     { name: 'two dimensions', f: { values: { domain: new Set(['billing', 'shared']), type: new Set(['ui']) } } },
     { name: 'depends on', f: { dep: 'invoice-app::package::zod' } },
     { name: 'tag and depends on', f: { values: { domain: new Set(['billing']) }, dep: billingDep } },
-    { name: 'app closure', f: { closure: { repo: 'nx-workspace', names: new Set(appClosure(projectGraph(buildIndex(nodes, edges), meta.projects), 'billing-web')!.projects) } } },
+    {
+      name: 'app closure',
+      f: {
+        closure: {
+          repo: 'nx-workspace',
+          names: new Set(appClosure(projectGraph(buildIndex(nodes, edges), meta.projects), 'billing-web')!.projects),
+        },
+      },
+    },
   ];
   for (const { name, f } of cases) {
     const want = naive(f);
@@ -137,16 +210,26 @@ test('the choices and the groups from the index are the folds they replace', () 
   const index = M.buildCodemapIndex(nodes, edges, meta.projects);
   assert.deepEqual(M.groupChoicesFor(index, null), M.groupChoices(nodes, meta.projects));
   for (const repo of ['nx-workspace', 'invoice-app']) {
-    assert.deepEqual(M.groupChoicesFor(index, new Set([repo])), M.groupChoices(nodes.filter((n) => n.id.startsWith(repo + '::')), meta.projects), repo);
+    assert.deepEqual(
+      M.groupChoicesFor(index, new Set([repo])),
+      M.groupChoices(
+        nodes.filter((n) => n.id.startsWith(repo + '::')),
+        meta.projects,
+      ),
+      repo,
+    );
   }
   for (const by of ['project', 'domain', 'type']) {
-    for (const n of nodes) assert.deepEqual(M.groupKeyOf(n, by, index), M.groupOf(n, by, meta.projects), `${n.id} by ${by}`);
+    for (const n of nodes)
+      assert.deepEqual(M.groupKeyOf(n, by, index), M.groupOf(n, by, meta.projects), `${n.id} by ${by}`);
     const viaIndex = M.foldGroups(nodes, by, index).map((g: AnyRec) => [g.key, g.members.length, g.parts]);
     const viaFold = M.foldGroups(nodes, by, meta.projects).map((g: AnyRec) => [g.key, g.members.length, g.parts]);
     assert.deepEqual(viaIndex, viaFold, by);
   }
   // a test file's cards, by the file they live in
-  assert.ok([...index.testFiles].every((id: string) => M.TEST_FILE.test(String(nodes.find((n) => n.id === id)!.loc?.path))));
+  assert.ok(
+    [...index.testFiles].every((id: string) => M.TEST_FILE.test(String(nodes.find((n) => n.id === id)!.loc?.path))),
+  );
 });
 
 test('an application’s closure on the page is core appClosure’s', () => {
@@ -155,9 +238,17 @@ test('an application’s closure on the page is core appClosure’s', () => {
     const core = appClosure(pg, p.name, 'nx-workspace')!;
     const page = M.projectClosure(meta.projects, 'nx-workspace', p.name);
     assert.deepEqual(page.projects, core.projects, p.name);
-    assert.deepEqual(page.dependencies.map((d: AnyRec) => [d.from, d.to, d.imports]), core.dependencies.map((d) => [d.from, d.to, d.imports]), p.name);
+    assert.deepEqual(
+      page.dependencies.map((d: AnyRec) => [d.from, d.to, d.imports]),
+      core.dependencies.map((d) => [d.from, d.to, d.imports]),
+      p.name,
+    );
     // …and the tree every ProjectRow carries
-    assert.deepEqual(page.projects, pg.projects.find((r) => r.repo === 'nx-workspace' && r.name === p.name)!.closure, p.name + ' row');
+    assert.deepEqual(
+      page.projects,
+      pg.projects.find((r) => r.repo === 'nx-workspace' && r.name === p.name)!.closure,
+      p.name + ' row',
+    );
   }
   assert.deepEqual(M.projectClosure(meta.projects, 'nx-workspace', 'no-such-project').projects, []);
 });

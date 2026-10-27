@@ -18,7 +18,11 @@ const MAX_BYTES = 512 * 1024;
 
 /** A GitHub-style heading slug: lower case, punctuation out, spaces to hyphens. */
 export function headingSlug(text: string): string {
-  return text.trim().toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s/g, '-');
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .replace(/\s/g, '-');
 }
 
 /** The first paragraph of prose in `lines` from `at`: headings, tables, comments, rules and `Key: value` lines skipped. */
@@ -29,15 +33,29 @@ function firstParagraph(lines: string[], at: number, stopAtHeading: boolean): { 
   for (let i = at; i < lines.length; i++) {
     const raw = lines[i]!;
     const line = raw.trim();
-    if (inComment) { if (line.includes('-->')) inComment = false; continue; }
-    if (line.startsWith('<!--')) { if (!line.includes('-->')) inComment = true; if (para.length) break; continue; }
-    if (!line) { if (para.length) break; continue; }
+    if (inComment) {
+      if (line.includes('-->')) inComment = false;
+      continue;
+    }
+    if (line.startsWith('<!--')) {
+      if (!line.includes('-->')) inComment = true;
+      if (para.length) break;
+      continue;
+    }
+    if (!line) {
+      if (para.length) break;
+      continue;
+    }
     if (/^#{1,6}\s/.test(line)) {
       if (para.length || stopAtHeading) break;
       // a `## Status` heading: its next line is the status
       if (/^#{1,6}\s+status\s*$/i.test(line)) {
         const next = lines.slice(i + 1).find((l) => l.trim());
-        if (next && !status) status = next.trim().replace(/^[-*]\s+/, '').replace(/\*\*/g, '');
+        if (next && !status)
+          status = next
+            .trim()
+            .replace(/^[-*]\s+/, '')
+            .replace(/\*\*/g, '');
       }
       continue;
     }
@@ -56,7 +74,10 @@ function firstParagraph(lines: string[], at: number, stopAtHeading: boolean): { 
       continue;
     }
     // a leading quoted note (`> 2026-07-12 revisions: …`) is an aside to the document, not its first paragraph
-    if (!para.length && line.startsWith('>')) { for (; i < lines.length && lines[i]!.trim(); i++); continue; }
+    if (!para.length && line.startsWith('>')) {
+      for (; i < lines.length && lines[i]!.trim(); i++);
+      continue;
+    }
     if (!para.length && (/^\|/.test(line) || /^(-{3,}|\*{3,}|_{3,})$/.test(line) || /^```/.test(line))) continue;
     // the line under a `## Status` heading is the status, not the paragraph
     if (!para.length && status && line.replace(/^[-*]\s+/, '').replace(/\*\*/g, '') === status) continue;
@@ -70,8 +91,13 @@ function firstParagraph(lines: string[], at: number, stopAtHeading: boolean): { 
  * backticked span read *x*. Nothing is reworded.
  */
 function inline(text: string): string {
-  return text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1')
-    .replace(/`([^`]*)`/g, '$1').replace(/\s+/g, ' ').trim();
+  return text
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** Cut a paragraph at a word near `QUOTE_MAX`, never inside a word. */
@@ -79,7 +105,10 @@ function cutQuote(text: string): { quote: string; cut?: true } {
   if (text.length <= QUOTE_MAX) return { quote: text };
   const head = text.slice(0, QUOTE_MAX + 1);
   const at = head.lastIndexOf(' ');
-  return { quote: (at > QUOTE_MAX * 0.6 ? head.slice(0, at) : text.slice(0, QUOTE_MAX)).replace(/[\s,;:]+$/, ''), cut: true };
+  return {
+    quote: (at > QUOTE_MAX * 0.6 ? head.slice(0, at) : text.slice(0, QUOTE_MAX)).replace(/[\s,;:]+$/, ''),
+    cut: true,
+  };
 }
 
 /**
@@ -99,7 +128,9 @@ export function readDocQuote(repoRoot: string, ref: string, anchor?: string): Do
     const st = statSync(abs);
     if (!st.isFile() || st.size > MAX_BYTES) return undefined;
     text = readFileSync(abs, 'utf8');
-  } catch { return undefined; }
+  } catch {
+    return undefined;
+  }
   const lines = text.split(/\r?\n/);
   let at = 0;
   let title: string | undefined;
@@ -111,15 +142,26 @@ export function readDocQuote(repoRoot: string, ref: string, anchor?: string): Do
       const slug = headingSlug(m[1]!);
       return slug === want || slug.startsWith(`${want}-`);
     });
-    if (i >= 0) { title = /^#{1,6}\s+(.+?)\s*#*\s*$/.exec(lines[i]!.trim())![1]; at = i + 1; }
+    if (i >= 0) {
+      title = /^#{1,6}\s+(.+?)\s*#*\s*$/.exec(lines[i]!.trim())![1];
+      at = i + 1;
+    }
   }
   if (!title) {
     const i = lines.findIndex((l) => /^#\s+\S/.test(l));
-    if (i >= 0) { title = lines[i]!.replace(/^#\s+/, '').trim(); at = i + 1; }
+    if (i >= 0) {
+      title = lines[i]!.replace(/^#\s+/, '').trim();
+      at = i + 1;
+    }
   }
   const { text: para, status } = firstParagraph(lines, at, !!anchor && at > 0);
   const q = para ? cutQuote(para) : undefined;
-  return { path: norm, ...(title ? { title } : {}), ...(q ? { quote: q.quote, ...(q.cut ? { cut: true as const } : {}) } : {}), ...(status ? { status } : {}) };
+  return {
+    path: norm,
+    ...(title ? { title } : {}),
+    ...(q ? { quote: q.quote, ...(q.cut ? { cut: true as const } : {}) } : {}),
+    ...(status ? { status } : {}),
+  };
 }
 
 /** The `doc` node id for a source-relative path. */
@@ -135,7 +177,12 @@ const PATH_RE = /(?:^|[\s(`'"[])((?:\.\/)?[\w@.-]+(?:\/[\w@.-]+)*\.md)(?:#([\w-]
  * something that is not a node (a decision's `doc`) — they get a node and no edge; the caller reads their quote from
  * the answer. Returns the doc refs read, by `path` or `path#anchor`.
  */
-export function applyCitedDocs(fragment: GraphFragment, repoRoot: string, options: IngestOptions, extra: { path: string; anchor?: string }[] = []): Map<string, DocRef> {
+export function applyCitedDocs(
+  fragment: GraphFragment,
+  repoRoot: string,
+  options: IngestOptions,
+  extra: { path: string; anchor?: string }[] = [],
+): Map<string, DocRef> {
   const repo = fragment.repo;
   const read = new Map<string, DocRef | null>();
   const quoteOf = (path: string, anchor?: string): DocRef | undefined => {
@@ -154,7 +201,9 @@ export function applyCitedDocs(fragment: GraphFragment, repoRoot: string, option
           const m = /(?:^|\/)(?:adr|adrs|decisions|decision-records)\/0*(\d{1,4})[-_ ][^/]*\.md$/i.exec(rel);
           if (m && !adrs.has(Number(m[1]))) adrs.set(Number(m[1]), rel);
         }
-      } catch { /* an unreadable tree has no ADRs to offer */ }
+      } catch {
+        /* an unreadable tree has no ADRs to offer */
+      }
     }
     return adrs.get(n);
   };
@@ -164,7 +213,13 @@ export function applyCitedDocs(fragment: GraphFragment, repoRoot: string, option
     if (!nodes.has(id)) {
       // the node carries the document's own heading and first paragraph — never the anchor's section
       const whole = quoteOf(ref.path) ?? ref;
-      const n: GraphNode = { id, kind: 'doc', name: whole.title ?? ref.path.split('/').pop()!, tags: ['doc'], doc: whole };
+      const n: GraphNode = {
+        id,
+        kind: 'doc',
+        name: whole.title ?? ref.path.split('/').pop()!,
+        tags: ['doc'],
+        doc: whole,
+      };
       nodes.set(id, n);
       fragment.nodes.push(n);
     }
@@ -180,21 +235,34 @@ export function applyCitedDocs(fragment: GraphFragment, repoRoot: string, option
     if (seen.has(key) || from === to) return;
     seen.add(key);
     fragment.edges.push({
-      id: `cites${seq++}`, kind: 'cites', from, to,
+      id: `cites${seq++}`,
+      kind: 'cites',
+      from,
+      to,
       meta: { via, ...(anchor ? { anchor } : {}) },
-      resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: via === 'docs' ? 'listed in the manifest' : 'named in a sentence the team wrote' },
+      resolution: {
+        status: 'resolved',
+        technique: 'annotation-scan',
+        confidence: 'HIGH',
+        note: via === 'docs' ? 'listed in the manifest' : 'named in a sentence the team wrote',
+      },
     });
   };
   // the sentences a person wrote on the node: its `@business` line and its doc comment (a flow's description is its docs)
-  const sentencesOf = (n: GraphNode): string[] => [n.facets?.business?.description, n.docs].filter((x): x is string => typeof x === 'string' && !!x);
+  const sentencesOf = (n: GraphNode): string[] =>
+    [n.facets?.business?.description, n.docs].filter((x): x is string => typeof x === 'string' && !!x);
   for (const n of [...fragment.nodes]) {
     if (n.kind === 'doc') continue;
-    for (const l of n.links ?? []) if (l.kind === 'doc' && l.ref) {
-      const [p, a] = l.ref.split('#');
-      cite(n.id, p!, 'docs', a || undefined);
-    }
+    for (const l of n.links ?? [])
+      if (l.kind === 'doc' && l.ref) {
+        const [p, a] = l.ref.split('#');
+        cite(n.id, p!, 'docs', a || undefined);
+      }
     for (const text of sentencesOf(n)) {
-      for (const m of text.matchAll(ADR_RE)) { const p = adrPath(Number(m[1])); if (p) cite(n.id, p, 'text'); }
+      for (const m of text.matchAll(ADR_RE)) {
+        const p = adrPath(Number(m[1]));
+        if (p) cite(n.id, p, 'text');
+      }
       for (const m of text.matchAll(PATH_RE)) cite(n.id, m[1]!, 'text', m[2] || undefined);
     }
   }

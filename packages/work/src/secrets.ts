@@ -10,13 +10,19 @@ import { KeychainReadError, readKeychain, type KeychainRunner } from '@farsight/
 
 /** A reference could not be resolved. `message` names the ref and why — never a value. */
 export class SecretUnavailable extends Error {
-  constructor(readonly ref: string, readonly why: string) {
+  constructor(
+    readonly ref: string,
+    readonly why: string,
+  ) {
     super(`secret ${ref} unavailable: ${why}`);
     this.name = 'SecretUnavailable';
   }
 }
 
-export interface KeychainRef { service: string; account: string }
+export interface KeychainRef {
+  service: string;
+  account: string;
+}
 
 /** Parse `keychain:<service>/<account>`; the account is everything after the LAST slash. */
 export function parseKeychainRef(ref: string): KeychainRef | null {
@@ -51,8 +57,13 @@ export async function resolveSecret(ref: string, opts: ResolveOptions = {}): Pro
       return await readKeychain(k, opts);
     } catch (error) {
       if (error instanceof KeychainReadError) {
-        if (error.code === 'unsupported') throw new SecretUnavailable(ref, error.platform === 'win32'
-          ? 'the Windows credential store (DPAPI) is not built yet' : `no keychain support on ${error.platform}`);
+        if (error.code === 'unsupported')
+          throw new SecretUnavailable(
+            ref,
+            error.platform === 'win32'
+              ? 'the Windows credential store (DPAPI) is not built yet'
+              : `no keychain support on ${error.platform}`,
+          );
         if (error.code === 'missing-tool') throw new SecretUnavailable(ref, `${error.command} is not installed`);
         if (error.code === 'empty') throw new SecretUnavailable(ref, 'the keychain entry is empty');
       }
@@ -60,11 +71,17 @@ export async function resolveSecret(ref: string, opts: ResolveOptions = {}): Pro
     }
   }
   // not a reference: it may BE a pasted secret, so it is never echoed
-  throw new SecretUnavailable('(a literal value)', 'not a secret reference (expected keychain: or env:) — secrets never go in settings');
+  throw new SecretUnavailable(
+    '(a literal value)',
+    'not a secret reference (expected keychain: or env:) — secrets never go in settings',
+  );
 }
 
 /** Resolve a value that may be a reference or a literal (e.g. `auth.user`). */
-export async function resolveMaybeSecret(value: string | undefined, opts: ResolveOptions = {}): Promise<string | undefined> {
+export async function resolveMaybeSecret(
+  value: string | undefined,
+  opts: ResolveOptions = {},
+): Promise<string | undefined> {
   if (value === undefined) return undefined;
   return isSecretRef(value) ? resolveSecret(value, opts) : value;
 }

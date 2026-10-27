@@ -2,7 +2,10 @@ import { KeychainReadError, readKeychain, type KeychainRunner } from '@farsight/
 import { echoConfigWord } from '@farsight/core/dist/strings-echo-config.js';
 import { requireCredentialOrigin } from './trust.js';
 
-export interface KeychainRef { service: string; account: string }
+export interface KeychainRef {
+  service: string;
+  account: string;
+}
 
 export function parseKeychainRef(ref: unknown): KeychainRef | null {
   if (typeof ref !== 'string' || ref.length > 512 || /[\s\x00-\x1f\x7f]/.test(ref)) return null;
@@ -10,7 +13,11 @@ export function parseKeychainRef(ref: unknown): KeychainRef | null {
   return match ? { service: 'farsight-echo', account: match[1]! } : null;
 }
 
-export interface SecretOptions { platform?: NodeJS.Platform; runner?: KeychainRunner; origin?: string }
+export interface SecretOptions {
+  platform?: NodeJS.Platform;
+  runner?: KeychainRunner;
+  origin?: string;
+}
 
 /** Resolves only the selected reference; never falls back to inherited process credentials. */
 export async function resolveSecret(ref?: string, options: SecretOptions = {}): Promise<string> {
@@ -23,7 +30,8 @@ export async function resolveSecret(ref?: string, options: SecretOptions = {}): 
     if (!value || /[\r\n]/.test(value)) throw new Error();
     return value;
   } catch (error) {
-    if (error instanceof KeychainReadError && error.code === 'unsupported') throw new Error(echoConfigWord('echo.secret.platform'));
+    if (error instanceof KeychainReadError && error.code === 'unsupported')
+      throw new Error(echoConfigWord('echo.secret.platform'));
     throw new Error(echoConfigWord('echo.secret.unavailable'));
   }
 }

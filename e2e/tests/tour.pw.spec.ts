@@ -4,17 +4,20 @@
 import { test, expect, gotoReady } from './support';
 
 /** Identifier-shaped tokens — the journey-numbers spec's list: camelCase, PascalCase compounds, snake_case, paths, HTTP verbs, spec files, document ids. */
-const IDENTIFIER = new RegExp([
-  String.raw`\b[a-z]+[A-Z][A-Za-z0-9]*\b`,
-  String.raw`\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b`,
-  String.raw`\b[a-z0-9]+_[a-z0-9_]+\b`,
-  String.raw`\b[A-Z0-9]+_[A-Z0-9_]+\b`,
-  String.raw`(?:^|[\s(])\/[\w.:{}\-]+`,
-  String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
-  String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
-  String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
-  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+`,
-].join('|'), 'g');
+const IDENTIFIER = new RegExp(
+  [
+    String.raw`\b[a-z]+[A-Z][A-Za-z0-9]*\b`,
+    String.raw`\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b`,
+    String.raw`\b[a-z0-9]+_[a-z0-9_]+\b`,
+    String.raw`\b[A-Z0-9]+_[A-Z0-9_]+\b`,
+    String.raw`(?:^|[\s(])\/[\w.:{}\-]+`,
+    String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
+    String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
+    String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
+    String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+`,
+  ].join('|'),
+  'g',
+);
 
 const panel = '.map-tour';
 
@@ -26,7 +29,9 @@ test.describe('walk me through it', () => {
    * @covers GET /api/tour
    * @covers GET /api/ask
    */
-  test('the walk opens on the storyline, its stops move the Map, and Ask says the skipped proof as it is', async ({ page }) => {
+  test('the walk opens on the storyline, its stops move the Map, and Ask says the skipped proof as it is', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/map?storyline=invoice&walk=1');
     const p = page.locator(panel);
     await expect(p.locator('.tw-stop-title')).toHaveText('New invoice');
@@ -78,7 +83,7 @@ test.describe('walk me through it', () => {
     // six stops: the fifth is the customer's bank paying, which the design says is done outside the code
     for (let i = 0; i < 6; i++) {
       await expect(p.locator('.tw-n')).toHaveText(new RegExp(`stop ${i + 1} of 6`, 'i'));
-      const words = (await p.locator('.tw-body').innerText());
+      const words = await p.locator('.tw-body').innerText();
       const hits = [...new Set(words.match(IDENTIFIER) || [])];
       if (hits.length) found[`stop ${i + 1}`] = hits;
       if (i < 5) await p.locator('.tw-next').click();

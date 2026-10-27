@@ -237,7 +237,8 @@ function better(a: Cand, b: Cand): Cand {
   const tb = b.tier ? TIER_RANK[b.tier] : 0;
   if (ta !== tb) return ta > tb ? a : b;
   if (a.unstamped !== b.unstamped) return a.unstamped < b.unstamped ? a : b;
-  const ja = a.path.join(' '), jb = b.path.join(' ');
+  const ja = a.path.join(' '),
+    jb = b.path.join(' ');
   return ja <= jb ? a : b;
 }
 
@@ -261,7 +262,10 @@ export function isSharedNode(index: GraphIndex, n: GraphNode): boolean {
 
 function edgeRef(e: GraphEdge): ImpactEdgeRef {
   return {
-    id: e.id, kind: e.kind, from: e.from, to: e.to,
+    id: e.id,
+    kind: e.kind,
+    from: e.from,
+    to: e.to,
     ...(e.resolution ? { resolution: e.resolution } : {}),
     ...(isDeferredEdge(e) ? { deferred: true as const } : {}),
     ...(isSetupEdge(e) ? { origin: 'setup' as const } : {}),
@@ -306,10 +310,14 @@ export function impactOf(index: GraphIndex, id: string, opts: ImpactOptions = {}
   if (!seed) throw new Error(`impactOf: no node with id ${JSON.stringify(id)} in this graph`);
   const hopBudget = opts.hops ?? 2;
   if (!Number.isInteger(hopBudget) || hopBudget < 1) {
-    throw new RangeError(`impactOf: hops must be a whole number of at least 1 — 0 hops asks nothing (got ${String(opts.hops)})`);
+    throw new RangeError(
+      `impactOf: hops must be a whole number of at least 1 — 0 hops asks nothing (got ${String(opts.hops)})`,
+    );
   }
   if (hopBudget > IMPACT_MAX_HOPS) {
-    throw new RangeError(`impactOf: ${hopBudget} hops is refused — past ${IMPACT_MAX_HOPS} hops, "reaches it through others" describes the application rather than a dependency (docs/proposals/dependency-impact.md §8)`);
+    throw new RangeError(
+      `impactOf: ${hopBudget} hops is refused — past ${IMPACT_MAX_HOPS} hops, "reaches it through others" describes the application rather than a dependency (docs/proposals/dependency-impact.md §8)`,
+    );
   }
   const direction: ImpactDirection = opts.direction ?? 'upstream';
   const perHopCap = opts.perHopCap ?? 50;
@@ -320,8 +328,8 @@ export function impactOf(index: GraphIndex, id: string, opts: ImpactOptions = {}
     (direction === 'upstream' ? index.in.get(nodeId) : index.out.get(nodeId)) ?? [];
   const otherEnd = (e: GraphEdge): string => (direction === 'upstream' ? e.from : e.to);
 
-  const best = new Map<string, Cand>();     // node id -> best-known shortest path
-  const hopOf = new Map<string, number>();  // node id -> fewest edges from the seed
+  const best = new Map<string, Cand>(); // node id -> best-known shortest path
+  const hopOf = new Map<string, number>(); // node id -> fewest edges from the seed
   const skipped: { edge: GraphEdge; hop: number; reason: 'setup' | 'deferred' }[] = [];
   const hops: ImpactHop[] = [];
   const cutPoints: ImpactCut[] = [];
@@ -335,12 +343,18 @@ export function impactOf(index: GraphIndex, id: string, opts: ImpactOptions = {}
       for (const e of neighbours(u)) {
         // a test is evidence about a node, not a dependent of it
         if (e.kind === 'covers' || e.kind === 'tracks') continue;
-        if (skipSetup && isSetupEdge(e)) { skipped.push({ edge: e, hop: h, reason: 'setup' }); continue; }
-        if (skipDeferred && isDeferredEdge(e)) { skipped.push({ edge: e, hop: h, reason: 'deferred' }); continue; }
+        if (skipSetup && isSetupEdge(e)) {
+          skipped.push({ edge: e, hop: h, reason: 'setup' });
+          continue;
+        }
+        if (skipDeferred && isDeferredEdge(e)) {
+          skipped.push({ edge: e, hop: h, reason: 'deferred' });
+          continue;
+        }
         const other = otherEnd(e);
         if (other === seed.id || !index.byId.has(other)) continue;
         const known = hopOf.get(other);
-        if (known != null && known < h) continue;  // already answered at a shorter distance
+        if (known != null && known < h) continue; // already answered at a shorter distance
         const cand: Cand = {
           tier: weaker(parent?.tier ?? null, e.resolution?.confidence ?? null),
           unstamped: (parent?.unstamped ?? 0) + (e.resolution ? 0 : 1),
@@ -379,16 +393,17 @@ export function impactOf(index: GraphIndex, id: string, opts: ImpactOptions = {}
       const shared = isSharedNode(index, n);
       const site = callSite(index, cand.via);
       return {
-        nodeId: n.id, name: n.name, kind: n.kind, repo: repoOf(n),
+        nodeId: n.id,
+        name: n.name,
+        kind: n.kind,
+        repo: repoOf(n),
         ...(n.loc ? { loc: n.loc } : {}),
         ...(n.group ? { group: n.group } : {}),
         hop: h,
         via: { ...edgeRef(cand.via), ...(site ? { loc: site } : {}) },
         path: cand.path,
         strength: { tier: cand.tier, unstamped: cand.unstamped, hops: cand.path.length - 1 },
-        ...(alternatives.length
-          ? { oneOf: { chosen: index.byId.get(chosenId)?.name ?? chosenId, alternatives } }
-          : {}),
+        ...(alternatives.length ? { oneOf: { chosen: index.byId.get(chosenId)?.name ?? chosenId, alternatives } } : {}),
         ...(shared ? { shared: true as const } : {}),
         ...(isDeclaredOnly(n) ? { declaredOnly: true as const } : {}),
       };
@@ -402,7 +417,8 @@ export function impactOf(index: GraphIndex, id: string, opts: ImpactOptions = {}
   // what was not walked
   const reported = new Set<string>([seed.id, ...hops.flatMap((hp) => hp.nodes.map((n) => n.nodeId))]);
   const rules = { direction, skipSetup, skipDeferred, expandShared: !!opts.expandShared };
-  const behind = (from: string): { behind: number; direct: number } => behindCount(index, from, rules, reported, seed.id);
+  const behind = (from: string): { behind: number; direct: number } =>
+    behindCount(index, from, rules, reported, seed.id);
 
   for (const hp of hops) {
     for (const n of hp.nodes) {
@@ -411,7 +427,8 @@ export function impactOf(index: GraphIndex, id: string, opts: ImpactOptions = {}
       if (!reason) continue;
       const b = behind(n.nodeId);
       // a stop with nothing new behind it stopped nothing
-      if (b.behind > 0) cutPoints.push({ reason, nodeId: n.nodeId, name: n.name, behind: b.behind, direct: b.direct, hop: n.hop });
+      if (b.behind > 0)
+        cutPoints.push({ reason, nodeId: n.nodeId, name: n.name, behind: b.behind, direct: b.direct, hop: n.hop });
     }
     const capped = cappedAtHop.get(hp.hop);
     // the overflow is the fact: every one of them is a dependent this hop found and did not list
@@ -430,7 +447,10 @@ export function impactOf(index: GraphIndex, id: string, opts: ImpactOptions = {}
     const parent = parentId === seed.id ? undefined : best.get(parentId);
     const site = callSite(index, sk.edge);
     excluded[sk.reason].push({
-      nodeId: n.id, name: n.name, kind: n.kind, repo: repoOf(n),
+      nodeId: n.id,
+      name: n.name,
+      kind: n.kind,
+      repo: repoOf(n),
       ...(n.loc ? { loc: n.loc } : {}),
       ...(n.group ? { group: n.group } : {}),
       hop: sk.hop,
@@ -495,14 +515,16 @@ export function impactOf(index: GraphIndex, id: string, opts: ImpactOptions = {}
         setup: 'run once at start-up',
         deferred: 'run later, not on this path',
       };
-      why.push(`something was not walked (${[...per]
-        .map(([r, n]) => `${n} ${CUT_PHRASE[r] ?? String(r)}`)
-        .join('; ')})`);
+      why.push(
+        `something was not walked (${[...per].map(([r, n]) => `${n} ${CUT_PHRASE[r] ?? String(r)}`).join('; ')})`,
+      );
     }
     if (unstampedNodes.length) {
-      why.push(unstampedNodes.length === listedNodes.length
-        ? 'no edge on any of these paths records how it was resolved'
-        : `${unstampedNodes.length} of these paths cross an edge that records nothing about how it was resolved`);
+      why.push(
+        unstampedNodes.length === listedNodes.length
+          ? 'no edge on any of these paths records how it was resolved'
+          : `${unstampedNodes.length} of these paths cross an edge that records nothing about how it was resolved`,
+      );
     }
     if (ambiguous.length) why.push(`${ambiguous.length} reach it through a call the code resolves at run time`);
     uncertainty = {
@@ -568,7 +590,11 @@ export function impactTestsReaching(report: ImpactReport, upto: number): ImpactT
   }
   const tests = [...seen.values()];
   const tally = (key: (t: CoverageTestRef) => string): Record<string, number> =>
-    tests.reduce<Record<string, number>>((a, t) => { const k = key(t); a[k] = (a[k] ?? 0) + 1; return a; }, {});
+    tests.reduce<Record<string, number>>((a, t) => {
+      const k = key(t);
+      a[k] = (a[k] ?? 0) + 1;
+      return a;
+    }, {});
   return { upto, total: tests.length, byLevel: tally((t) => t.level), byEvidence: tally((t) => t.evidence), tests };
 }
 
@@ -606,7 +632,10 @@ function behindCount(
         const node = index.byId.get(other);
         if (!node) continue;
         seen.add(other);
-        if (!reported.has(other)) { n++; if (ring === 1) direct++; }
+        if (!reported.has(other)) {
+          n++;
+          if (ring === 1) direct++;
+        }
         if (rules.expandShared || !isSharedNode(index, node)) next.push(other);
       }
     }
@@ -660,7 +689,10 @@ export function flowActions(index: GraphIndex): Map<string, ImpactFlowRef[]> {
 }
 
 /** One changed range, `path` or `path:line` or `path:from-to`, resolved to the nodes defined inside it. */
-export interface HunkSeed { node: GraphNode; hunk: string }
+export interface HunkSeed {
+  node: GraphNode;
+  hunk: string;
+}
 
 /**
  * Changed file ranges → the nodes whose definition **starts** inside them, at
@@ -681,9 +713,16 @@ export function nodesInHunks(nodes: Iterable<GraphNode>, specs: string[]): { see
     const path = (m?.[1] ?? spec).replace(/^\.\//, '');
     const from = m ? Number(m[2]) : undefined;
     const to = m ? Number(m[3] ?? m[2]) : undefined;
-    const hit = all.filter((n) => n.loc && (n.loc.path === path || n.loc.path.endsWith(`/${path}`) || path.endsWith(`/${n.loc.path}`))
-      && (from == null || (n.loc.line >= from && n.loc.line <= to!)));
-    if (!hit.length) { unmatched.push(spec); continue; }
+    const hit = all.filter(
+      (n) =>
+        n.loc &&
+        (n.loc.path === path || n.loc.path.endsWith(`/${path}`) || path.endsWith(`/${n.loc.path}`)) &&
+        (from == null || (n.loc.line >= from && n.loc.line <= to!)),
+    );
+    if (!hit.length) {
+      unmatched.push(spec);
+      continue;
+    }
     for (const n of hit) seeds.push({ node: n, hunk: m ? `${path}:${from}-${to}` : path });
   }
   return { seeds, unmatched };
@@ -706,8 +745,12 @@ export function nodesInHunks(nodes: Iterable<GraphNode>, specs: string[]): { see
  */
 export type ImpactUnselectableReason = 'no covers edge' | 'declared only' | 'inactive' | 'run-level only';
 
-export const IMPACT_UNSELECTABLE_REASONS: readonly ImpactUnselectableReason[] =
-  ['no covers edge', 'declared only', 'inactive', 'run-level only'];
+export const IMPACT_UNSELECTABLE_REASONS: readonly ImpactUnselectableReason[] = [
+  'no covers edge',
+  'declared only',
+  'inactive',
+  'run-level only',
+];
 
 /** The printed evidence vocabulary — the graph stores `static`, every consumer reads *reached*. */
 export type ImpactEvidenceClass = 'declared' | 'reached' | 'observed';
@@ -754,7 +797,11 @@ export interface ImpactTestsNode {
   tests: ImpactTestsRef[];
 }
 
-export interface ImpactTestsSelectEntry { file: string; title: string; project: string }
+export interface ImpactTestsSelectEntry {
+  file: string;
+  title: string;
+  project: string;
+}
 
 export interface ImpactTestsV1 {
   schema: 'farsight-impact-tests v1';
@@ -785,15 +832,18 @@ export interface ImpactTestsInput {
   hunk?: string;
 }
 
-const EVIDENCE: Record<CoveringTest['evidence'], ImpactEvidenceClass> =
-  { declared: 'declared', static: 'reached', observed: 'observed' };
+const EVIDENCE: Record<CoveringTest['evidence'], ImpactEvidenceClass> = {
+  declared: 'declared',
+  static: 'reached',
+  observed: 'observed',
+};
 
 function testRefs(index: GraphIndex, nodeId: string): ImpactTestsRef[] {
   return testsCovering(index, nodeId).map((t) => ({
     id: t.id,
     title: t.name,
     file: t.loc?.path ?? '',
-    line: t.runLevel ? null : t.loc?.line ?? null,
+    line: t.runLevel ? null : (t.loc?.line ?? null),
     level: t.level,
     runner: t.runner,
     project: t.project ?? '',
@@ -819,7 +869,11 @@ const runnable = (t: ImpactTestsRef): boolean => !t.run_level && !t.inactive && 
  * built cannot be tested at all; then no evidence; then evidence that names no
  * case to re-run.
  */
-function unselectableReason(index: GraphIndex, node: GraphNode | undefined, tests: ImpactTestsRef[]): ImpactUnselectableReason | null {
+function unselectableReason(
+  index: GraphIndex,
+  node: GraphNode | undefined,
+  tests: ImpactTestsRef[],
+): ImpactUnselectableReason | null {
   if (node && isDeclaredOnly(node)) return 'declared only';
   if (!node || !isCoverable(index, node)) return null;
   if (!tests.length) return 'no covers edge';
@@ -849,7 +903,9 @@ export function impactTestsV1(
   opts: { digestMatches?: boolean } = {},
 ): ImpactTestsV1 {
   const seeds: ImpactTestsSeed[] = inputs.map(({ report, from, hunk }) => ({
-    id: report.seed.id, name: report.seed.name, kind: report.seed.kind,
+    id: report.seed.id,
+    name: report.seed.name,
+    kind: report.seed.kind,
     from: from ?? 'node',
     ...(hunk ? { hunk } : {}),
   }));
@@ -870,8 +926,11 @@ export function impactTestsV1(
     const tests = testsOf.get(n.nodeId) ?? testRefs(index, n.nodeId);
     testsOf.set(n.nodeId, tests);
     return {
-      id: n.nodeId, name: n.name, kind: n.kind,
-      file: n.loc?.path ?? '', line: n.loc?.line ?? null,
+      id: n.nodeId,
+      name: n.name,
+      kind: n.kind,
+      file: n.loc?.path ?? '',
+      line: n.loc?.line ?? null,
       edge: {
         kind: n.via.kind,
         technique: n.via.resolution?.technique ?? null,
@@ -885,7 +944,7 @@ export function impactTestsV1(
 
   const byHop = new Map<number, ImpactTestsNode[]>();
   for (const { hop, n } of at.values()) {
-    if (seedIds.has(n.nodeId)) continue;      // a seed is not its own dependent
+    if (seedIds.has(n.nodeId)) continue; // a seed is not its own dependent
     const rows = byHop.get(hop) ?? [];
     rows.push(nodeRow(n));
     byHop.set(hop, rows);
@@ -914,7 +973,9 @@ export function impactTestsV1(
   }
   for (const hp of hops) for (const n of hp.nodes) addSelect(n.tests);
   for (const rows of Object.values(select)) {
-    rows.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
+    rows.sort((a, b) =>
+      a.file < b.file ? -1 : a.file > b.file ? 1 : a.title < b.title ? -1 : a.title > b.title ? 1 : 0,
+    );
   }
 
   // the gate: the seeds and their direct dependents
@@ -928,17 +989,23 @@ export function impactTestsV1(
     if (reason) unselectable.push({ node: n.id, name: n.name, reason });
   }
 
-  const cut = inputs.flatMap(({ report }) => report.cutPoints.map((c) => ({
-    reason: c.reason,
-    ...(c.nodeId ? { node: c.nodeId } : {}),
-    ...(c.name ? { name: c.name } : {}),
-    behind: c.behind, direct: c.direct, hop: c.hop,
-  })));
+  const cut = inputs.flatMap(({ report }) =>
+    report.cutPoints.map((c) => ({
+      reason: c.reason,
+      ...(c.nodeId ? { node: c.nodeId } : {}),
+      ...(c.name ? { name: c.name } : {}),
+      behind: c.behind,
+      direct: c.direct,
+      hop: c.hop,
+    })),
+  );
   const hopCutAtOne = cut.some((c) => c.reason === 'hops' && c.hop === 1);
 
   const why: string[] = [];
   if (unselectable.length) {
-    why.push(`${unselectable.length} of the changed things and their direct dependents have no test a job could name and run`);
+    why.push(
+      `${unselectable.length} of the changed things and their direct dependents have no test a job could name and run`,
+    );
   }
   if (hopCutAtOne) why.push('the walk ended at hop 1, so the direct dependents are not all known');
   if (opts.digestMatches === false) why.push('this graph no longer matches the working tree');
