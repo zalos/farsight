@@ -48,8 +48,8 @@ function docker({
     created = false,
     started = false,
     removed = false,
-    inspections = 0,
-    tmpfs = {};
+    inspections = 0;
+  const tmpfs = {};
   const runner = async (program, args, options = {}) => {
     assert.equal(program, 'docker');
     calls.push({ args, options });

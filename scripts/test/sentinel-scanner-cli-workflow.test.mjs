@@ -58,6 +58,7 @@ test('workflow image indexes and native manifests exactly match all five adapter
     assert.equal(new RegExp(`^      ${prefix}_AMD64: (.+)$`, 'm').exec(workflow)?.[1], manifest, id);
   }
   assert.equal(
+    // eslint-disable-next-line no-regex-spaces -- Match the provisioning shell command's exact ten-space workflow indentation.
     (workflow.match(/^          check "\$[A-Z]+_INDEX" "\$[A-Z]+_AMD64"$/gm) ?? []).length,
     5,
     'each exact image is explicitly provisioned',
