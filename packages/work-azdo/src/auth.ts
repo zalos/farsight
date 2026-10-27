@@ -84,6 +84,7 @@ export async function authorizerFor(
       }
     }
     const value = basicPat(pat);
+    // eslint-disable-next-line no-useless-assignment -- Release the temporary PAT binding after deriving the header.
     pat = undefined;
     return { kind, header: async () => value };
   }

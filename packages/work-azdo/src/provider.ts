@@ -287,7 +287,10 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
       for (const f of fm) {
         if (!f.canonical) continue;
         const list = fieldRefs.get(f.canonical) ?? [];
-        if (!list.includes(f.id)) f.origin === 'declared' ? list.unshift(f.id) : list.push(f.id);
+        if (!list.includes(f.id)) {
+          if (f.origin === 'declared') list.unshift(f.id);
+          else list.push(f.id);
+        }
         fieldRefs.set(f.canonical, list);
       }
       schemaFields = mergeFields(schemaFields, fm);
