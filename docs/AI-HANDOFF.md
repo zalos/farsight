@@ -1,5 +1,20 @@
 # Farsight — shared Codex / Claude memory
 
+## Phase 0 hygiene landed — 2026-10-27
+
+#199 tooling `b1bca9f9`, #202 gitleaks allowlist `136600b9` and #201 Sentinel formatting `b1439457` landed;
+#204 scripts formatting `9d108e34`, #205 string lint `35c12add` and #206 packages formatting `b32b70e5` complete hygiene.
+The style PRs proved unchanged JS/TS ASTs and comments: Sentinel 563 files, scripts 70, remaining packages 447.
+Sentinel's five worker digests stayed identical; scripts retained all 240 evidence sha256 pins and the feasibility harness.
+Sentinel source grew 51,875 → 87,305 lines; scripts 10,170 → 18,166; remaining eligible areas 122,057 → 175,473.
+Build, types, unit tests, schemas, package checks, catalog lint and final CI passed; 319 ESLint suppressions remain frozen.
+`lint` is the seventh required check. Linked worktrees share one hooks directory; keep the installed hook path lasting.
+After pulling into an existing worktree, run `pnpm install --config.confirm-modules-purge=false` once.
+A branch without `lefthook.yml` relies on CI's `commits` check until rebased; never commit on main from such a worktree.
+`packages/code-parser` and `packages/mcp` stay unformatted until PR #121; its new test file needs `prettier --write` before `format:check`.
+Open follow-ups: #200 fixes Sentinel's ESLint/uri-js closure refusal; #203 makes test-file import detection independent of layout.
+The three style squash commits are in `.git-blame-ignore-revs`; hook installation sets `blame.ignoreRevsFile` when it exists.
+
 ## Sentinel v2 P0-1 tooling — 2026-10-26
 
 Branch `build/prettier-eslint-lefthook` adds pinned Prettier/ESLint/lefthook, frozen lint suppressions, the CI lint
