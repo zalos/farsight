@@ -1,5 +1,5 @@
 // Durable preparation is separate from run execution. These are projections/data, never receipt capabilities.
-import type { CatalogKey, Count, Digest, Id, Ordinal, Timestamp } from './common.js';
+import type { CatalogKey, Digest, Id, Ordinal, Timestamp } from './common.js';
 import type { ControlAdmissionVerdict } from './service.js';
 import type { ReportCount } from './report.js';
 export type PreparationPhase =

@@ -3,7 +3,7 @@
 // container cases live in execution-isolation.test.ts.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SENTINEL_EXECUTION_STRINGS } from '@farsight/core/dist/strings-sentinel-execution.js';
 import { FrameDecoder, WorkerSession, encodeFrame } from '../dist/execution/protocol.js';
@@ -13,16 +13,7 @@ import { boundOwner } from '../dist/store/owner-binding.js';
 import { spawnWorker } from '../dist/execution/processes.js';
 import { createAdapterRegistry, TRUSTED_ADAPTERS, DEFAULT_ADAPTER_LIMITS } from '../dist/execution/registry.js';
 import { EXECUTION_ERROR_CODES, isExecutionError } from '../dist/execution/errors.js';
-import {
-  builtInRegistry,
-  inputs,
-  removeScratch,
-  runAttempt,
-  scratch,
-  storeIn,
-  work,
-  WORKER,
-} from './execution-helpers.ts';
+import { builtInRegistry, inputs, removeScratch, runAttempt, scratch, storeIn, work } from './execution-helpers.ts';
 
 const s = scratch('protocol');
 const store = await storeIn(s.root);

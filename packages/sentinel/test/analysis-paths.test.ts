@@ -677,7 +677,7 @@ test(
   "round 3: imported locations are checked against verified captured bytes, never a reader's length",
   needsStore,
   async (t) => {
-    const { doc, run, entry, snapshot, text } = await importFixture(t);
+    const { doc, entry, snapshot, text } = await importFixture(t);
     const routes = entry('src/routes.ts');
     const wide = {
       ...doc,

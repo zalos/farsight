@@ -13,7 +13,7 @@ import { publicRegistry } from './scanner-profile.js';
 // verdicts) first, and a receipt is issued and spent only here, after the owner's own confirm. The background
 // service (owner-service.ts) reuses the store-level reads below; it holds the store while it runs.
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ActionEffect, ActionIntent, AdmissionEnvelope } from '../contracts/index.js';
 import {

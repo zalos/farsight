@@ -547,7 +547,6 @@ test(
   needsStore,
   async (t) => {
     const policy = trustedPolicy();
-    const origin = 'https://models.example.com';
     const binding = bindProvider(policy, 'hosted-review', 'review');
     const s = await setup(t);
     const budget = { maxTokens: 1000, maxCost: '1.00', currency: 'USD' };

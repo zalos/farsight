@@ -21,7 +21,7 @@ const needsStore = QUALIFIED || process.env.CI ? {} : { skip: 'not a qualified s
 /** Stops the workspace's background service (SIGTERM to the pid its private descriptor names) and waits for it. */
 function stopService(env: { XDG_STATE_HOME: string }) {
   const dir = join(env.XDG_STATE_HOME, 'farsight', 'sentinel', 'trust', 'services');
-  let names: string[] = [];
+  let names: string[];
   try {
     names = readdirSync(dir).filter((n) => n.endsWith('.json'));
   } catch {

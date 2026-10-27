@@ -22,7 +22,6 @@ import {
 } from '../frameworks/controls/definitions.js';
 import {
   FRAMEWORKS,
-  CONTROL_FAMILIES,
   INSPECTED_PROPERTIES,
   inspect,
   inspectionReport,

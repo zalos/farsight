@@ -84,6 +84,7 @@ export const SCANNER_PATH_PREFIX = 'scan/tree/';
 
 const sha256 = (b: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 // A tab is carried (the report's file field is last, so it may hold tabs); every other control character is not.
+// eslint-disable-next-line no-control-regex -- Job lines reject control characters except the permitted tab in paths.
 const CONTROL = /[\u0000-\u0008\u000a-\u001f\u007f]/;
 /** Whether one line of the job (and of the names file) can carry this path. */
 export const lineSafe = (relativePath: string) => !CONTROL.test(relativePath);

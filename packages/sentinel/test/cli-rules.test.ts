@@ -286,7 +286,7 @@ test('promotions racing from one revision: exactly one succeeds each revision, t
           assert.equal(shown.revision, 1 + won.length, 'no promotion was lost');
           assert.ok(won.some((b) => b.facts.lock === shown.lock));
           const book = new RuleLockBook(join(env.XDG_STATE_HOME, 'farsight', 'sentinel', 'trust'));
-          let digest = book.current()!.digest;
+          const digest = book.current()!.digest;
           const chain = [digest];
           for (let lock = book.read(digest); lock.previous; lock = book.read(lock.previous)) chain.push(lock.previous);
           assert.equal(

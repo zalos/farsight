@@ -452,13 +452,12 @@ test(
     const boot = planBootstrap({ runId: 'run-boot', sourceIds: ['app'], profile: profile as any });
     await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: record });
     const parseUnit = boot.units.find((u) => u.stage === 'parse')!;
-    let c: any;
     const hooks = {
       at: (b: string, ctx: any) => {
         if (b === 'after-attempt-start' && ctx.work.id === parseUnit.id) c.cancel();
       },
     };
-    c = await Coordinator.open({
+    const c: any = await Coordinator.open({
       store,
       runId: 'run-boot',
       run: runEnvelope(snapshot.id, pin, policy.revision, profile.id),

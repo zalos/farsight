@@ -12,6 +12,7 @@ export interface ParsedJson {
 
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 // Scanned in bounded runs so the budget and the clock are read inside one long string.
+// eslint-disable-next-line no-control-regex -- JSON string runs must stop at unescaped control characters so the parser can reject them.
 const RUN = /[^"\\\u0000-\u001f]{1,65536}/y;
 const NUMBER = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
 const WS = /[ \t\n\r]*/y;

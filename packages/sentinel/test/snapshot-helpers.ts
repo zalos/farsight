@@ -41,7 +41,7 @@ export function unlock(dir: string): void {
   } catch {
     return;
   }
-  let names: string[] = [];
+  let names: string[];
   try {
     names = readdirSync(dir);
   } catch {

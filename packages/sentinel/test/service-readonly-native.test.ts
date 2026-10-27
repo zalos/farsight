@@ -81,9 +81,9 @@ for (const cancel of [false, true])
       );
       const store = await openStore(ws.storePath),
         work = scratchUnder(store);
-      let service: OwnerService | undefined;
+      const cleanup: { service?: OwnerService } = {};
       t.after(async () => {
-        await service?.stop();
+        await cleanup.service?.stop();
         if (store.held) removeScratch(work);
         store.close();
         removeRoot(s.root);
@@ -119,7 +119,8 @@ for (const cancel of [false, true])
       const clean = (await planWorkspaceCanonical(store, terms())).disclosure.runId;
       assert.equal((await executeRun(store, clean, { scratchRoot: work, trustDir: ws.trustDir })).state, 'completed');
       rmSync(join(path, 'src'), { recursive: true });
-      service = new OwnerService(store, ws);
+      const service = new OwnerService(store, ws);
+      cleanup.service = service;
       const call = (op: string, body: any) => service!.handle(op, body, requester);
       const report = async (runId: string, format: string, baselineRunId?: string) => {
         const m: any = await call('report.open', { runId, format, ...(baselineRunId ? { baselineRunId } : {}) });

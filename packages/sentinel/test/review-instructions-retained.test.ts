@@ -17,7 +17,7 @@ import { readPublishedInstructions } from '../dist/review/instructions.js';
 import { bindProvider } from '../dist/review/providers/index.js';
 import { digestOf } from '../dist/store/ledger-json.js';
 import { scratch, needsStore } from './snapshot-helpers.ts';
-import { trustedPolicy, NOW, mockEndpoint, json, ollamaReply } from './provider-helpers.ts';
+import { trustedPolicy, mockEndpoint, json, ollamaReply } from './provider-helpers.ts';
 const RESOURCE = { deadlineMs: 120000, memoryBytes: 268435456, cpuQuota: 1, maxPids: 8, maxOutputBytes: 4194304 };
 test(
   'genuine self-planned owned-child publication cannot impersonate an admitted canonical review operation before or after reopen',

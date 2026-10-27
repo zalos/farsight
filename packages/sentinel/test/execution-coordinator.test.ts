@@ -186,14 +186,13 @@ test('pause lets in-flight work finish and publish, admits nothing new, and resu
   const store = await storeIn(s.root);
   try {
     const p = await syntheticPlan(store, s.root, { A: 'slow-ok' });
-    let c: any;
     // Paused once A's attempt is recorded and its worker runs: A is in flight, nothing else has been admitted.
     const hooks = {
       at: (b: string, ctx: any) => {
         if (b === 'after-attempt-start' && ctx.work.id === p.ids.A) c.pause();
       },
     };
-    c = await open(store, p, s, { hooks });
+    const c: any = await open(store, p, s, { hooks });
     const running = c.run();
     const paused = await running;
     assert.equal(paused.state, 'paused');
@@ -228,13 +227,12 @@ test('cancel stops the workers and revokes publication, even for a result alread
     const store2 = await storeIn(s2.root);
     try {
       const p2 = await syntheticPlan(store2, s2.root);
-      let c2: any;
       const hooks = {
         at: (b: string) => {
           if (b === 'before-staging') c2.cancel();
         },
       };
-      c2 = await open(store2, p2, s2, { hooks });
+      const c2: any = await open(store2, p2, s2, { hooks });
       const late = await c2.run();
       assert.equal(late.state, 'canceled');
       assert.equal(late.published, 0, 'the ledger refused the publication');

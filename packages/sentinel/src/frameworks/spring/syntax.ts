@@ -79,7 +79,7 @@ export async function parseJava(path: string, content: string, raw: Buffer): Pro
   const parser = new Parser();
   parser.setLanguage(language);
   const text = raw.toString('utf8');
-  let tree: ReturnType<TreeSitterParser['parse']> = null;
+  let tree: ReturnType<TreeSitterParser['parse']>;
   try {
     tree = parser.parse(text);
   } catch {

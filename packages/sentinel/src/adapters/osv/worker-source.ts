@@ -90,7 +90,7 @@ if [ "$SIZE" -gt "$MAX_OUT" ]; then TRUNC=true; fi
 # evidence is what the coordinator requires. Nothing else from stderr leaves the container.
 LOADED=''
 for e in npm Maven; do
-  if grep -q "^Loaded $e local db from $W/db/osv-scalibr/$e/all.zip" "$W/err.txt"; then LOADED="$LOADED\\\"$e\\\","; fi
+  if grep -q "^Loaded $e local db from $W/db/osv-scalibr/$e/all.zip" "$W/err.txt"; then LOADED="$LOADED\\"$e\\","; fi
 done
 LOADED="[\${LOADED%,}]"
 # How many packages the engine itself dropped from matching as local or unscannable: digits only.

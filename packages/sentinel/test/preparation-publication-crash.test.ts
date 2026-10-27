@@ -73,12 +73,13 @@ for (const cut of ['record-before-link', 'record-linked', 'update-before-rename'
       await exited;
       await pending.catch(() => {});
       const reopened = await openStore(f.ws.storePath);
-      let service: OwnerService | undefined;
+      const cleanup: { service?: OwnerService } = {};
       t.after(async () => {
-        await service?.stop();
+        await cleanup.service?.stop();
         reopened.close();
       });
-      service = new OwnerService(reopened, f.ws, { registry: f.registry });
+      const service = new OwnerService(reopened, f.ws, { registry: f.registry });
+      cleanup.service = service;
       assert.ok(await service.handle('service.capabilities', {}, by));
       assert.ok(await service.handle('service.info', {}, by));
       const status: any = await service.handle('prepare.status', { requestKey: key }, by);

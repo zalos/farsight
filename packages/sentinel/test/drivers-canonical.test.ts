@@ -2,7 +2,7 @@
 // code runs; fixtures are original, databases are synthetic/offline, and the checkout is removed before bootstrap.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { productionDrivers } from '../dist/adapters/drivers/index.js';
@@ -29,7 +29,6 @@ import { scratch, removeScratch, storeIn } from './execution-helpers.ts';
 import { PARSE, RESOURCES } from './coordinator-helpers.ts';
 import { PACKS } from './driver-helpers.ts';
 import { syntheticSnapshot } from './osv-helpers.ts';
-import { IAC_FIXTURES } from './iac-helpers.ts';
 const D = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
 const skip =
   process.env.SENTINEL_ISOLATION !== '1' &&

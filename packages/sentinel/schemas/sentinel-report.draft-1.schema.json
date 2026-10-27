@@ -630,7 +630,6 @@
     },
     "PlaceLabel": {
       "type": "object",
-      "additionalProperties": false,
       "properties": {
         "business": {
           "$ref": "#/definitions/BoundedText"
@@ -643,6 +642,7 @@
         "business",
         "code"
       ],
+      "additionalProperties": false,
       "description": "A readable label captured from pinned context, so a recipient never looks one up in today's graph."
     },
     "ScreenIds": {

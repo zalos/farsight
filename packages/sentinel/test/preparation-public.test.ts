@@ -14,12 +14,7 @@ import { OwnerService, ServiceError, connectService } from '../dist/service/owne
 import { listenOwnerSocket, runtimeAddress, newOwnerNonce } from '../dist/transport/ipc.js';
 import { writePrivateFileAtomic } from '../dist/policy/user-state.js';
 import { validateEnvelope } from '../dist/validate.js';
-import {
-  configurationPreview,
-  preparationCapabilities,
-  preparationOutcome,
-  checkPreparationArguments,
-} from '../dist/service/preparation-projection.js';
+import { configurationPreview, checkPreparationArguments } from '../dist/service/preparation-projection.js';
 import { loadPlan } from '../dist/execution/plans.js';
 import { preparationFixture } from './helpers/preparation-fixture.ts';
 import { needsStore } from './snapshot-helpers.ts';

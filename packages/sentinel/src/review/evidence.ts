@@ -47,6 +47,7 @@ export type Partition = ReviewPartition;
 export type PartitionPlan = ReviewPartitionsEnvelope;
 
 const scopeOf = (sourceId: string, path: string) =>
+  // eslint-disable-next-line no-control-regex -- Hash paths containing controls or line separators instead of exposing them in evidence scope labels.
   /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(path)
     ? `${sourceId}:#${sha(path).slice(7, 31)}`
     : `${sourceId}:${path}`;
@@ -308,6 +309,7 @@ const LIMIT_CEILINGS: Readonly<EvidenceLimits> = Object.freeze({
   maxToolCalls: 1000,
   maxServedBytes: 16 * 1024 * 1024,
 });
+// eslint-disable-next-line no-control-regex -- Evidence identifiers must exclude control characters before entering retained records.
 const ID_TEXT = /^[^\u0000-\u001f\u007f]{1,1024}$/;
 
 /** Line boundaries in UTF-8 bytes: line n (1-based) spans [starts[n-1], starts[n]). */

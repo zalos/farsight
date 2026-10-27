@@ -2,9 +2,8 @@
 // official image in its Linux container (existing locally, never pulled), the coordinator's own accepted publication.
 // Faults are injected only at the trusted driver's normalize output, after the real engine ran, never by fabricating
 // a publication, store capability or receipt. Original inert synthetic values only; no assertion message prints one.
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore } from '../dist/store/index.js';
@@ -13,13 +12,11 @@ import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { initWorkspace } from '../dist/cli/init.js';
 import { planWorkspaceCanonical } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
-import { loadPlan } from '../dist/execution/plans.js';
-import { assessRun, fullReport, renderingOf } from '../dist/service/full-report.js';
 import { publicRegistry, scannerExecution } from '../dist/service/scanner-profile.js';
 import { adoptScannerAsset } from '../dist/service/scanner-assets.js';
 import { Coordinator } from '../dist/execution/coordinator.js';
 import { createCheckDriverRegistry } from '../dist/execution/check-drivers.js';
-import { VALUE, GENERIC_VALUE, absent } from './secrets-helpers.ts';
+import { VALUE, GENERIC_VALUE } from './secrets-helpers.ts';
 import { unlock } from './snapshot-helpers.ts';
 
 // Native evidence fixtures run only in the explicitly opted-in scanner job. Pure projection tests stay ungated.
@@ -27,20 +24,6 @@ export const nativeSecrets = {
   skip: process.env.SENTINEL_ISOLATION !== '1' && 'requires the existing pinned local Gitleaks image; no acquisition',
 };
 const DUPLICATE = `api_key = "${GENERIC_VALUE}"\n`;
-
-/** Every rendering and fact of a report, checked for both synthetic values and the secret-shaped file name. */
-function noSecret(r: any, where: string) {
-  const all = [
-    r.json,
-    r.markdown,
-    r.html,
-    JSON.stringify(r.sarif),
-    JSON.stringify(r.comparison ?? null),
-    JSON.stringify(r.context),
-  ];
-  for (const [i, text] of all.entries())
-    for (const value of [VALUE, GENERIC_VALUE]) absent(text, `${where} rendering ${i}`, value);
-}
 
 export async function publishedSecrets(t: any, mode: string, extra: Record<string, string> = {}) {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-report-secrets-')));

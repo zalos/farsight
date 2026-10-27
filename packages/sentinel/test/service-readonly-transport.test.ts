@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect } from 'node:net';
-import { publishedReadonly, requester } from './service-readonly-helpers.ts';
+import { publishedReadonly } from './service-readonly-helpers.ts';
 import {
   listenOwnerSocket,
   runtimeAddress,

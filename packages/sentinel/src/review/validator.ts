@@ -31,6 +31,7 @@ const exactKeys = (o: Record<string, unknown>, required: readonly string[], opti
   required.every((k) => Object.hasOwn(o, k)) &&
   Object.keys(o).every((k) => required.includes(k) || optional.includes(k));
 const text = (v: unknown, max: number) =>
+  // eslint-disable-next-line no-control-regex -- Review reply text rejects controls while allowing tabs and newlines.
   typeof v === 'string' && v.length > 0 && v.length <= max && !/[\u0000-\u0008\u000b-\u001f\u007f]/.test(v);
 const CWE = /^CWE-[1-9][0-9]{0,4}$/;
 

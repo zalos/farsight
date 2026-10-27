@@ -130,20 +130,18 @@ export async function nativeClaudeCall(authority: NativeCallAuthority): Promise<
       });
       child.once('spawn', () => {
         if (limits.signal?.aborted || Date.now() >= limits.deadlineAt) {
-          limits.signal?.aborted
-            ? cancel()
-            : stop(new ProviderError('sentinel.provider.timeout', 'original native deadline elapsed', 'possible'));
+          if (limits.signal?.aborted) cancel();
+          else stop(new ProviderError('sentinel.provider.timeout', 'original native deadline elapsed', 'possible'));
           return;
         }
         void sendNativeClaudeToken(currentToken, child.stdio[3] as Writable, limits.deadlineAt, limits.signal)
           .then(() => {
             if (failure || limits.signal?.aborted || Date.now() >= limits.deadlineAt) {
-              if (!failure)
-                limits.signal?.aborted
-                  ? cancel()
-                  : stop(
-                      new ProviderError('sentinel.provider.timeout', 'original native deadline elapsed', 'possible'),
-                    );
+              if (!failure) {
+                if (limits.signal?.aborted) cancel();
+                else
+                  stop(new ProviderError('sentinel.provider.timeout', 'original native deadline elapsed', 'possible'));
+              }
               return;
             }
             try {

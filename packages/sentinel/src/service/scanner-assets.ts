@@ -1,7 +1,7 @@
 // Explicit owner adoption of already-held pinned assets. Scans never acquire. Each immutable private copy and its
 // provenance are bound to the spent promotion receipt, including a state digest over the exact metadata bytes.
 import { createHash } from 'node:crypto';
-import { constants as FS, closeSync, fstatSync, openSync, readSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { constants as FS, closeSync, fstatSync, openSync, readSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import type { LockedDatabase, LockedTool, ReceiptEnvelope, RuleLockEnvelope } from '../contracts/index.js';
 import { canonicalJsonBytes } from '../store/objects.js';
@@ -40,7 +40,6 @@ const bad = (): never => {
 };
 const digest = (bytes: Uint8Array) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 const MAX_ARCHIVE = 512 * 1024 * 1024;
-const stamp = (d: Date) => d.toISOString().replace(/Z$/, '000000Z');
 const validStamp = (v: unknown): v is string =>
   typeof v === 'string' &&
   /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{9}Z$/.test(v) &&

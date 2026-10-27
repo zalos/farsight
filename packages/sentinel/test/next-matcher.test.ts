@@ -446,6 +446,7 @@ test('pnpm patches do not inherit the measured registry package identity', async
   }
   const v6 = base
     .replace("lockfileVersion: '9.0'", "lockfileVersion: '6.0'")
+    // eslint-disable-next-line no-regex-spaces -- Match the literal two-space pnpm package-key indentation in the fixture.
     .replace(/^  (next|react|react-dom)@/gm, '  /$1@');
   assert.equal(
     (await versions({ 'pnpm-lock.yaml': v6 })).next.state,

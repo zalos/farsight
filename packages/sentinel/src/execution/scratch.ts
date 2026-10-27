@@ -28,7 +28,7 @@ export function removeOwned(path: string): void {
     } catch {
       return;
     }
-    let names: string[] = [];
+    let names: string[];
     try {
       names = readdirSync(dir);
     } catch {
