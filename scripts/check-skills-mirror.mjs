@@ -94,17 +94,12 @@ export function mirrorReport(differences, trees = MIRROR) {
     else if (d.only === 'b') lines.push(`  only in ${b}: ${d.path}`);
     else lines.push(`  differs: ${d.path}`);
   }
-  lines.push(
-    `skills mirror: make each edit in both trees (copy the changed files across), then run this check again.`,
-  );
+  lines.push(`skills mirror: make each edit in both trees (copy the changed files across), then run this check again.`);
   return lines;
 }
 
 /** `argv` → exit code: 0 identical, 1 different (or a tree missing), 2 a bad command line. */
-export function main(
-  argv,
-  { cwd = process.cwd(), defaultRoot = cwd, out = console.log, err = console.error } = {},
-) {
+export function main(argv, { cwd = process.cwd(), defaultRoot = cwd, out = console.log, err = console.error } = {}) {
   let root;
   try {
     const { values } = parseArgs({ args: argv, options: { root: { type: 'string' } } });

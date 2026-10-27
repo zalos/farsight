@@ -24,13 +24,17 @@ test('a drifted mirror fails and names every differing path', () => {
     writeFileSync(join(root, MIRROR[1], 'one', 'SKILL.md'), 'b');
     mkdirSync(join(root, MIRROR[1], 'stale'));
     writeFileSync(join(root, MIRROR[1], 'stale', 'SKILL.md'), 'left behind');
-    assert.deepEqual(compareTrees(join(root, MIRROR[0]), join(root, MIRROR[1])),
-      [{ path: 'one/SKILL.md', differs: true }, { path: 'stale', only: 'b' }]);
+    assert.deepEqual(compareTrees(join(root, MIRROR[0]), join(root, MIRROR[1])), [
+      { path: 'one/SKILL.md', differs: true },
+      { path: 'stale', only: 'b' },
+    ]);
     const errs = [];
     assert.equal(main(['--root', root], { cwd: root, out: () => {}, err: (l) => errs.push(l) }), 1);
     assert.match(errs.join('\n'), /differs: one\/SKILL\.md/);
     assert.match(errs.join('\n'), /only in \.agents\/skills: stale/);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a missing tree is a failure, never a pass', () => {
@@ -38,5 +42,7 @@ test('a missing tree is a failure, never a pass', () => {
   try {
     mkdirSync(join(root, MIRROR[0]), { recursive: true });
     assert.equal(main(['--root', root], { cwd: root, ...quiet }), 1);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
