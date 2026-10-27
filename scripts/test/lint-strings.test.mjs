@@ -84,20 +84,66 @@ for (const [name, path, source] of realShapes) {
   });
 }
 
-for (const [name, source] of [
+test('RULE 1 permits a pragma on a following block boundary', () => {
+  const result = lint({
+    'shell.js': `const label = {
+  text: 'A raw chrome message',
+} // str:ok retained source text
+`,
+  });
+  assert.equal(result.status, 0, result.output);
+});
+
+for (const [name, source, line = 1] of [
   ['untranslated prose', "const label = 'A raw chrome message';\n"],
   ['a catalog call in the next statement', "const label = 'A raw chrome message';\nt('map.head.title');\n"],
   ['a pragma in the next statement', "const label = 'A raw chrome message';\nconst count = 1; // str:ok a count\n"],
   ['a catalog call after a blank line', "const label = 'A raw chrome message' +\n\n  t('map.head.title');\n"],
   ['a pragma after a blank line', "const label = 'A raw chrome message' +\n\n  ''; // str:ok a command\n"],
   [
-    'a catalog call beyond the 40-line bound',
-    "const label = 'A raw chrome message' +\n" + '  // continuation\n'.repeat(39) + "  t('map.head.title');\n",
+    'a catalog call beyond the eight-line bound',
+    "const label = 'A raw chrome message' +\n" + '  // continuation\n'.repeat(7) + "  t('map.head.title');\n",
+  ],
+  [
+    'a catalog call after a completed block without a semicolon',
+    "if (label === 'A raw chrome message') {} // unrelated comment\nel.title = t('map.head.title');\n",
+  ],
+  [
+    'a catalog call inside a block whose head contains prose',
+    "if (label === 'A raw chrome message') { // unrelated comment\n  el.title = t('map.head.title');\n}\n",
+  ],
+  [
+    'a catalog call inside an else-if body',
+    "if (ready) {\n} else if (label === 'A raw chrome message') {\n  el.title = t('map.head.title');\n}\n",
+    2,
+  ],
+  [
+    'a catalog call in a function body after a prose default parameter',
+    "function render(label = 'A raw chrome message') {\n  el.title = t('map.head.title');\n}\n",
+  ],
+  [
+    'a catalog call after a multiline prose default parameter',
+    "function render(\n  label = 'A raw chrome message',\n) {\n  el.title = t('map.head.title');\n}\n",
+    2,
+  ],
+  [
+    'a catalog call after a prose case label',
+    "switch (label) {\n  case 'A raw chrome message': // unrelated comment\n    el.title = t('map.head.title');\n}\n",
+    2,
+  ],
+  [
+    'a catalog call beyond a default label',
+    "switch (label) {\n  case 'x':\n    el.title = 'A raw chrome message'\n  default:\n    el.title = t('map.head.title');\n}\n",
+    3,
+  ],
+  [
+    'a catalog call after a completed block containing a quoted URL',
+    "if (label === 'A raw chrome message' && origin === 'https://example.test') {}\nel.title = t('map.head.title');\n",
   ],
 ]) {
   test(`RULE 1 still rejects ${name}`, () => {
     const result = lint({ 'shell.js': source });
     assert.equal(result.status, 1, result.output);
-    assert.match(result.output, /RULE1 shell\.js:1 raw prose literal outside t\(\)/);
+    assert.ok(result.output.includes(`RULE1 shell.js:${line} raw prose literal outside t():`), result.output);
   });
 }

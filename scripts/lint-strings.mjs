@@ -138,15 +138,21 @@ const viewerHtml = readFileSync(join(pub, 'viewer.html'), 'utf8');
 const PROSE = /[A-Za-z][a-z’']* +[a-z][a-z’']* +[a-z]/;
 
 function statementAllowsProse(lines, start) {
-  // Keep this text scan bounded: the literal's line plus at most 39 following
-  // lines, stopping at a blank line or a line ending in ; (before a // comment).
-  // Check the closing line too, so a trailing // str:ok applies to the statement.
-  for (let i = start; i < Math.min(lines.length, start + 40); i++) {
+  // Scan the literal's line plus at most seven following lines. Stop at a blank
+  // line, a line ending in ;, { or }, or a case/default label. Check that boundary
+  // line first so its trailing // str:ok still applies; never scan into its body.
+  for (let i = start; i < Math.min(lines.length, start + 8); i++) {
     const line = lines[i];
     if (!line.trim()) break;
     const code = line.replace(/^\s*(\/\/|\*|\/\*\*?).*$/, '');
     if (/\bt\(/.test(code) || /\/\/\s*str:ok\b/.test(line)) return true;
-    if (/;\s*(?:\/\/.*)?$/.test(line)) break;
+    // Mask quoted strings before stripping a trailing comment: https:// in a
+    // string must not hide the actual statement or block boundary after it.
+    const end = line
+      .replace(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"/g, "''")
+      .replace(/\/\/.*$/, '')
+      .trimEnd();
+    if (/[;{}]$/.test(end) || /^\s*(?:case\b.*|default)\s*:$/.test(end)) break;
   }
   return false;
 }
