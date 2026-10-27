@@ -102,6 +102,7 @@ test('schema: a 4xx under a cached schema re-discovers once and retries', async 
     pull: (s: Session, c, scope) => {
       if (!failed) {
         failed = true;
+        // eslint-disable-next-line require-yield -- This failure fixture rejects its first next() without yielding a page.
         return (async function* () {
           throw Object.assign(new Error('field gone'), { status: 400 });
         })();
