@@ -7,7 +7,6 @@ import type { Page } from '@playwright/test';
 import { test, expect, gotoReady } from './support';
 
 const FLOW = 'invoice-app::flow::billing-cycle';
-const GATE = 'invoice-app::guard::requireScope(billing:read)';
 const ROUTE = 'invoice-app::route::GET /invoices';
 const enc = encodeURIComponent;
 
