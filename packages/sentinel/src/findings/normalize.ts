@@ -52,14 +52,27 @@ export interface NormalizedObservation {
 }
 
 const SEVERITY_ALIASES: Record<string, Severity> = {
-  critical: 'critical', blocker: 'critical', high: 'high', error: 'high', major: 'high', medium: 'medium', moderate: 'medium',
-  warning: 'medium', low: 'low', minor: 'low', note: 'low', info: 'info', informational: 'info', none: 'info',
+  critical: 'critical',
+  blocker: 'critical',
+  high: 'high',
+  error: 'high',
+  major: 'high',
+  medium: 'medium',
+  moderate: 'medium',
+  warning: 'medium',
+  low: 'low',
+  minor: 'low',
+  note: 'low',
+  info: 'info',
+  informational: 'info',
+  none: 'info',
 };
 
 const sha = (b: string | Uint8Array): Digest => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
 export const isSecretObservation = (o: ObservationEnvelope): boolean =>
-  (o.rule?.familyId ?? '').startsWith('sentinel.secrets.') || o.limitationKeys.some(k => k.startsWith('sentinel.secrets.'));
+  (o.rule?.familyId ?? '').startsWith('sentinel.secrets.') ||
+  o.limitationKeys.some((k) => k.startsWith('sentinel.secrets.'));
 
 function producerOf(o: ObservationEnvelope): string {
   const p = o.producer;
@@ -72,9 +85,17 @@ export interface NormalizeOptions {
   readonly withheldKey?: (evidence: WithheldLocationEvidence) => string;
 }
 
-export async function normalizeObservation(o: ObservationEnvelope, readContent: (id: ArtifactId) => Promise<Uint8Array>,
-  cache: Map<string, Promise<Uint8Array>> = new Map(), options: NormalizeOptions = {}): Promise<NormalizedObservation> {
-  const read = (id: string) => { let p = cache.get(id); if (!p) cache.set(id, p = readContent(id)); return p; };
+export async function normalizeObservation(
+  o: ObservationEnvelope,
+  readContent: (id: ArtifactId) => Promise<Uint8Array>,
+  cache: Map<string, Promise<Uint8Array>> = new Map(),
+  options: NormalizeOptions = {},
+): Promise<NormalizedObservation> {
+  const read = (id: string) => {
+    let p = cache.get(id);
+    if (!p) cache.set(id, (p = readContent(id)));
+    return p;
+  };
   const anchors: Anchor[] = [];
   const n = o.evidence.length;
   for (let i = 0; i < n; i++) {
@@ -84,25 +105,56 @@ export async function normalizeObservation(o: ObservationEnvelope, readContent: 
       // A withheld location is never read or turned into a path: its identity is an opaque key for the file, the cited
       // content and the span. Identical bytes in two files are two locations, never one.
       const locationKey = options.withheldKey ? options.withheldKey(e) : `entry:${e.entry}`;
-      anchors.push({ role, sourceId: e.sourceId, relativePath: null, withheld: true, content: e.content, locationKey, span: { startByte: e.span.startByte, endByte: e.span.endByte },
-        nodeId: null, textDigest: sha(`withheld\u0000${locationKey}\u0000${e.content}\u0000${e.span.startByte}\u0000${e.span.endByte}`), evidenceIndex: i });
+      anchors.push({
+        role,
+        sourceId: e.sourceId,
+        relativePath: null,
+        withheld: true,
+        content: e.content,
+        locationKey,
+        span: { startByte: e.span.startByte, endByte: e.span.endByte },
+        nodeId: null,
+        textDigest: sha(
+          `withheld\u0000${locationKey}\u0000${e.content}\u0000${e.span.startByte}\u0000${e.span.endByte}`,
+        ),
+        evidenceIndex: i,
+      });
       continue;
     }
     const bytes = await read(e.content);
-    const slice = Buffer.from(bytes).subarray(Math.min(e.span.startByte, bytes.length), Math.min(e.span.endByte, bytes.length));
+    const slice = Buffer.from(bytes).subarray(
+      Math.min(e.span.startByte, bytes.length),
+      Math.min(e.span.endByte, bytes.length),
+    );
     const text = slice.toString('utf8').replace(/\s+/g, ' ').trim();
     anchors.push({
-      role, sourceId: e.sourceId, relativePath: e.relativePath, withheld: false, content: e.content, locationKey: null, span: { startByte: e.span.startByte, endByte: e.span.endByte },
-      nodeId: e.nodeId ?? null, textDigest: sha(text), evidenceIndex: i,
+      role,
+      sourceId: e.sourceId,
+      relativePath: e.relativePath,
+      withheld: false,
+      content: e.content,
+      locationKey: null,
+      span: { startByte: e.span.startByte, endByte: e.span.endByte },
+      nodeId: e.nodeId ?? null,
+      textDigest: sha(text),
+      evidenceIndex: i,
     });
   }
   const original = o.originalSeverity;
   const mapped = SEVERITY_ALIASES[original.trim().toLowerCase()];
-  const familyId = o.rule?.familyId ?? `${o.producer.kind === 'imported' ? 'imported' : o.producer.adapterId}/${o.producerRuleId}`;
+  const familyId =
+    o.rule?.familyId ?? `${o.producer.kind === 'imported' ? 'imported' : o.producer.adapterId}/${o.producerRuleId}`;
   return {
-    observationId: o.id, snapshotId: o.snapshotId, producer: producerOf(o), ruleFamilyId: familyId,
+    observationId: o.id,
+    snapshotId: o.snapshotId,
+    producer: producerOf(o),
+    ruleFamilyId: familyId,
     ruleRevision: o.rule?.revisionDigest ?? null,
-    severity: mapped ?? 'info', originalSeverity: original, severityUnmapped: !mapped,
-    anchors, secret: isSecretObservation(o) || anchors.some(a => a.withheld), observation: o,
+    severity: mapped ?? 'info',
+    originalSeverity: original,
+    severityUnmapped: !mapped,
+    anchors,
+    secret: isSecretObservation(o) || anchors.some((a) => a.withheld),
+    observation: o,
   };
 }

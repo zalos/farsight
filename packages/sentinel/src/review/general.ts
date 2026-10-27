@@ -6,11 +6,22 @@ import { canonicalDigest } from '../policy/digest.js';
 import type { EvidenceLimits, Partition, PartitionPlan, PathFact } from './evidence.js';
 import { reviewFail } from './errors.js';
 import { GENERAL_PROMPT, promptDigest } from './prompts.js';
-import { runSession, type RunSessionOptions, type SessionBudget, type SessionResult, type SessionSpec } from './session.js';
+import {
+  runSession,
+  type RunSessionOptions,
+  type SessionBudget,
+  type SessionResult,
+  type SessionSpec,
+} from './session.js';
 import { REPLY_BOUNDS } from './validator.js';
 
 export const GENERAL_ADAPTER_ID = 'sentinel.review.general';
-export const GENERAL_ADAPTER_DIGEST = canonicalDigest({ adapter: GENERAL_ADAPTER_ID, revision: 1, prompt: promptDigest(GENERAL_PROMPT), reply: REPLY_BOUNDS }) as Digest;
+export const GENERAL_ADAPTER_DIGEST = canonicalDigest({
+  adapter: GENERAL_ADAPTER_ID,
+  revision: 1,
+  prompt: promptDigest(GENERAL_PROMPT),
+  reply: REPLY_BOUNDS,
+}) as Digest;
 
 export interface GeneralRequest {
   readonly runId: string;
@@ -23,19 +34,32 @@ export interface GeneralRequest {
 }
 
 export function generalSpec(req: GeneralRequest): SessionSpec {
-  const part: Partition | undefined = req.plan.partitions.find(p => p.id === req.partitionId);
+  const part: Partition | undefined = req.plan.partitions.find((p) => p.id === req.partitionId);
   if (!part) return reviewFail('sentinel.review.invalidInput', 'the partition is not in the plan');
   return {
     sessionId: `rv-p-${canonicalDigest({ run: req.runId, plan: req.plan.digest, partition: part.id }).slice(7, 31)}`,
-    kind: 'general', runId: req.runId, attemptId: req.attemptId, adapterId: GENERAL_ADAPTER_ID, adapterDigest: GENERAL_ADAPTER_DIGEST,
+    kind: 'general',
+    runId: req.runId,
+    attemptId: req.attemptId,
+    adapterId: GENERAL_ADAPTER_ID,
+    adapterDigest: GENERAL_ADAPTER_DIGEST,
     prompt: GENERAL_PROMPT,
-    scope: { snapshotId: req.plan.snapshotId, sourceId: req.plan.sourceId, files: part.members, rules: [], paths: req.paths ?? [] },
-    limits: req.limits, budget: req.budget, producerRuleId: GENERAL_ADAPTER_ID,
+    scope: {
+      snapshotId: req.plan.snapshotId,
+      sourceId: req.plan.sourceId,
+      files: part.members,
+      rules: [],
+      paths: req.paths ?? [],
+    },
+    limits: req.limits,
+    budget: req.budget,
+    producerRuleId: GENERAL_ADAPTER_ID,
     tools: req.paths?.length ? ['list', 'read', 'paths'] : ['list', 'read'],
   };
 }
 
-export const generalReview = (req: GeneralRequest, opts: RunSessionOptions): Promise<SessionResult> => runSession(generalSpec(req), opts);
+export const generalReview = (req: GeneralRequest, opts: RunSessionOptions): Promise<SessionResult> =>
+  runSession(generalSpec(req), opts);
 
 /**
  * Every partition of the plan, in plan order, each its own session; a stopped session never hides the next. The plan's

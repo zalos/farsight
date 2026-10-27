@@ -26,9 +26,16 @@ export class FakeOwner implements LedgerOwner {
     this.epoch = epoch;
     this.storeId = storeId;
   }
-  assertHeld(): void { if (!this.held) throw new Error('owner released'); }
-  registerResource(r: { close(): void }): void { this.resources.push(r); }
-  release(): void { this.held = false; for (const r of this.resources.splice(0)) r.close(); }
+  assertHeld(): void {
+    if (!this.held) throw new Error('owner released');
+  }
+  registerResource(r: { close(): void }): void {
+    this.resources.push(r);
+  }
+  release(): void {
+    this.held = false;
+    for (const r of this.resources.splice(0)) r.close();
+  }
 }
 
 export function scratch(t: { after(fn: () => void): void }): string {
@@ -44,13 +51,24 @@ export function runEnvelope(epoch: string, over: Record<string, unknown> = {}) {
 }
 
 export function workEnvelope(epoch: string, over: Record<string, unknown> = {}) {
-  return { ...load('work-idle'), coordinatorEpoch: epoch, id: 'work-pattern-api', state: 'ready', dependencies: [], ...over };
+  return {
+    ...load('work-idle'),
+    coordinatorEpoch: epoch,
+    id: 'work-pattern-api',
+    state: 'ready',
+    dependencies: [],
+    ...over,
+  };
 }
 
 export function attemptEnvelope(epoch: string, over: Record<string, unknown> = {}) {
   const base = load('attempt-running');
-  return { ...base, coordinatorEpoch: epoch,
-    worker: { kind: 'owned-child', pid: 4242, processStartedAt: '2026-10-21T12:00:00Z' }, ...over };
+  return {
+    ...base,
+    coordinatorEpoch: epoch,
+    worker: { kind: 'owned-child', pid: 4242, processStartedAt: '2026-10-21T12:00:00Z' },
+    ...over,
+  };
 }
 
 /**
@@ -60,7 +78,9 @@ export function attemptEnvelope(epoch: string, over: Record<string, unknown> = {
 export class FakeObjects implements ObjectVerifier {
   readonly bytes = new Map<string, Buffer>();
   readonly storeId: string;
-  constructor(storeId = 'store-1') { this.storeId = storeId; }
+  constructor(storeId = 'store-1') {
+    this.storeId = storeId;
+  }
   put(text: string): ObjectReceipt {
     const b = Buffer.from(text);
     const id = sha(text);
@@ -71,7 +91,14 @@ export class FakeObjects implements ObjectVerifier {
     const b = this.bytes.get(`${ref.id}|${ref.codec}`);
     if (!b) return null;
     const d = `sha256:${createHash('sha256').update(b).digest('hex')}`;
-    return { id: d, codec: 'identity', storedDigest: d, rawSize: b.length, storedSize: b.length, storeId: this.storeId };
+    return {
+      id: d,
+      codec: 'identity',
+      storedDigest: d,
+      rawSize: b.length,
+      storedSize: b.length,
+      storeId: this.storeId,
+    };
   }
 }
 
@@ -84,5 +111,11 @@ export const identityReceipt = (text: string): ObjectReceipt => OBJECTS.put(text
 /** A well-formed receipt for bytes that were never stored: what a forged or lost write looks like. */
 export function unstoredReceipt(text: string): ObjectReceipt {
   const id = sha(text);
-  return { id, codec: 'identity', storedDigest: id, rawSize: Buffer.byteLength(text), storedSize: Buffer.byteLength(text) };
+  return {
+    id,
+    codec: 'identity',
+    storedDigest: id,
+    rawSize: Buffer.byteLength(text),
+    storedSize: Buffer.byteLength(text),
+  };
 }

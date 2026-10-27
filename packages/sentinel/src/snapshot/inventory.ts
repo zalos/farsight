@@ -8,7 +8,10 @@ import { foldPath, isGenerated, lfsPointer, type CapturePolicy } from './policy.
 
 /** Raised when bytes changed between two reads of one capture; a working copy is then captured again. */
 export class CaptureChanged extends Error {
-  constructor(detail: string) { super(detail); this.name = 'CaptureChanged'; }
+  constructor(detail: string) {
+    super(detail);
+    this.name = 'CaptureChanged';
+  }
 }
 
 /** What restore needs beyond the bytes: the executable bit, and where the bytes came from. */
@@ -27,7 +30,8 @@ export interface PendingContent {
   read(): Buffer;
 }
 
-export const contentId = (bytes: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+export const contentId = (bytes: Uint8Array): ArtifactId =>
+  `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 
 export class Inventory {
   readonly entries: CaptureEntry[] = [];
@@ -56,13 +60,33 @@ export class Inventory {
   }
 
   /** Releases one reserved slot, before the entry it was reserved for is added or a sub-folder is listed. */
-  release(n = 1): void { this.#reserved = Math.max(0, this.#reserved - n); }
-
-  boundary(sourceId: string, relativePath: string, disposition: 'excluded' | 'refused' | 'unreadable', reasonCode: CaptureReasonCode): void {
-    this.entries.push({ sourceId, relativePath, kind: 'directory-boundary', disposition, reasonCode, knownDescendants: null });
+  release(n = 1): void {
+    this.#reserved = Math.max(0, this.#reserved - n);
   }
 
-  symlink(sourceId: string, relativePath: string, disposition: 'excluded' | 'refused', reasonCode: CaptureReasonCode, target?: string): void {
+  boundary(
+    sourceId: string,
+    relativePath: string,
+    disposition: 'excluded' | 'refused' | 'unreadable',
+    reasonCode: CaptureReasonCode,
+  ): void {
+    this.entries.push({
+      sourceId,
+      relativePath,
+      kind: 'directory-boundary',
+      disposition,
+      reasonCode,
+      knownDescendants: null,
+    });
+  }
+
+  symlink(
+    sourceId: string,
+    relativePath: string,
+    disposition: 'excluded' | 'refused',
+    reasonCode: CaptureReasonCode,
+    target?: string,
+  ): void {
     this.entries.push({ sourceId, relativePath, kind: 'symlink', disposition, reasonCode });
     if (target !== undefined) this.symlinkTargets.set(`${sourceId}\u0000${relativePath}`, target);
   }
@@ -72,7 +96,7 @@ export class Inventory {
     if (relativePath === '') return;
     this.#listed++;
     let set = this.directories.get(sourceId);
-    if (!set) this.directories.set(sourceId, set = new Set());
+    if (!set) this.directories.set(sourceId, (set = new Set()));
     set.add(relativePath);
   }
 
@@ -80,10 +104,22 @@ export class Inventory {
     this.gitlinks.set(`${sourceId}\u0000${relativePath}`, commit);
   }
 
-  recorded(sourceId: string, relativePath: string, disposition: 'excluded' | 'refused' | 'unreadable' | 'too-large',
-    reasonCode: CaptureReasonCode, bytes?: number): void {
-    this.entries.push({ sourceId, relativePath, kind: 'file', disposition, reasonCode, ...(bytes === undefined ? {} : { bytes }),
-      generated: isGenerated(this.policy, relativePath, undefined) });
+  recorded(
+    sourceId: string,
+    relativePath: string,
+    disposition: 'excluded' | 'refused' | 'unreadable' | 'too-large',
+    reasonCode: CaptureReasonCode,
+    bytes?: number,
+  ): void {
+    this.entries.push({
+      sourceId,
+      relativePath,
+      kind: 'file',
+      disposition,
+      reasonCode,
+      ...(bytes === undefined ? {} : { bytes }),
+      generated: isGenerated(this.policy, relativePath, undefined),
+    });
   }
 
   /** Size limits before a file is read: the per-file limit, then the remaining total quota. */
@@ -98,15 +134,24 @@ export class Inventory {
     const id = contentId(bytes);
     this.facts.set(`${sourceId}\u0000${relativePath}`, facts);
     this.#totalBytes += bytes.length;
-    this.entries.push({ sourceId, relativePath, kind: 'file', disposition: 'included', content: id, bytes: bytes.length,
-      generated: isGenerated(this.policy, relativePath, bytes) });
+    this.entries.push({
+      sourceId,
+      relativePath,
+      kind: 'file',
+      disposition: 'included',
+      content: id,
+      bytes: bytes.length,
+      generated: isGenerated(this.policy, relativePath, bytes),
+    });
     if (!this.contents.has(id)) {
       const size = bytes.length;
       this.contents.set(id, {
-        id, bytes: size,
+        id,
+        bytes: size,
         read: () => {
           const again = reread();
-          if (again.length !== size || contentId(again) !== id) throw new CaptureChanged(`${relativePath} changed during capture`);
+          if (again.length !== size || contentId(again) !== id)
+            throw new CaptureChanged(`${relativePath} changed during capture`);
           return again;
         },
       });
@@ -135,11 +180,12 @@ export class Inventory {
         const prefix = parts.slice(0, i).join('/');
         const key = keyOf(sourceId, prefix);
         let set = owners.get(key);
-        if (!set) owners.set(key, set = new Set());
+        if (!set) owners.set(key, (set = new Set()));
         set.add(prefix);
       }
     };
-    for (const e of this.entries) if (e.kind === 'file' && e.disposition === 'included') add(e.sourceId, e.relativePath);
+    for (const e of this.entries)
+      if (e.kind === 'file' && e.disposition === 'included') add(e.sourceId, e.relativePath);
     for (const [sourceId, dirs] of this.directories) for (const d of dirs) add(sourceId, d);
     const collides = (sourceId: string, path: string) => (owners.get(keyOf(sourceId, path))?.size ?? 0) > 1;
     const onCollidingPath = (sourceId: string, path: string) => {
@@ -150,20 +196,35 @@ export class Inventory {
     for (let i = 0; i < this.entries.length; i++) {
       const e = this.entries[i]!;
       if (e.kind !== 'file' || e.disposition !== 'included' || !onCollidingPath(e.sourceId, e.relativePath)) continue;
-      this.entries[i] = { sourceId: e.sourceId, relativePath: e.relativePath, kind: 'file', disposition: 'refused',
-        reasonCode: 'sentinel.capture.caseCollision', bytes: e.bytes, generated: e.generated };
+      this.entries[i] = {
+        sourceId: e.sourceId,
+        relativePath: e.relativePath,
+        kind: 'file',
+        disposition: 'refused',
+        reasonCode: 'sentinel.capture.caseCollision',
+        bytes: e.bytes,
+        generated: e.generated,
+      };
     }
     for (const [sourceId, dirs] of this.directories) {
-      const refused = [...dirs].filter(d => collides(sourceId, d)).sort();
+      const refused = [...dirs].filter((d) => collides(sourceId, d)).sort();
       for (const d of refused) {
         // Its descendants are each recorded on their own, but a subtree may hold unknown boundaries, so no exact
         // count is claimed.
-        this.entries.push({ sourceId, relativePath: d, kind: 'directory-boundary', disposition: 'refused',
-          reasonCode: 'sentinel.capture.caseCollision', knownDescendants: null });
+        this.entries.push({
+          sourceId,
+          relativePath: d,
+          kind: 'directory-boundary',
+          disposition: 'refused',
+          reasonCode: 'sentinel.capture.caseCollision',
+          knownDescendants: null,
+        });
       }
       for (const d of [...dirs]) if (onCollidingPath(sourceId, d)) dirs.delete(d);
     }
-    const kept = new Set(this.entries.flatMap(e => (e.kind === 'file' && e.disposition === 'included' ? [e.content] : [])));
+    const kept = new Set(
+      this.entries.flatMap((e) => (e.kind === 'file' && e.disposition === 'included' ? [e.content] : [])),
+    );
     for (const id of [...this.contents.keys()]) if (!kept.has(id)) this.contents.delete(id);
   }
 }
@@ -174,22 +235,37 @@ export class Inventory {
  * (canonical) root must be a real folder, not a link, with the same identity before and after the read, and the
  * file is opened without following a link; anything else is refused, never followed. Nothing is downloaded.
  */
-export function resolveLfs(pointer: { oid: string; size: number }, lfsObjects: string | undefined):
-  { bytes: Buffer } | { reason: CaptureReasonCode } {
+export function resolveLfs(
+  pointer: { oid: string; size: number },
+  lfsObjects: string | undefined,
+): { bytes: Buffer } | { reason: CaptureReasonCode } {
   if (!lfsObjects) return { reason: 'sentinel.capture.lfsObjectMissing' };
-  const dirs = [lfsObjects, join(lfsObjects, pointer.oid.slice(0, 2)), join(lfsObjects, pointer.oid.slice(0, 2), pointer.oid.slice(2, 4))];
+  const dirs = [
+    lfsObjects,
+    join(lfsObjects, pointer.oid.slice(0, 2)),
+    join(lfsObjects, pointer.oid.slice(0, 2), pointer.oid.slice(2, 4)),
+  ];
   const seen: { dev: number; ino: number }[] = [];
   for (const d of dirs) {
     let st;
-    try { st = lstatSync(d); } catch { return { reason: 'sentinel.capture.lfsObjectMissing' }; }
+    try {
+      st = lstatSync(d);
+    } catch {
+      return { reason: 'sentinel.capture.lfsObjectMissing' };
+    }
     if (st.isSymbolicLink() || !st.isDirectory()) return { reason: 'sentinel.capture.lfsStoreUnsafe' };
     seen.push({ dev: st.dev, ino: st.ino });
   }
   const path = join(dirs[2]!, pointer.oid);
   let fd: number;
-  try { fd = openSync(path, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0)); } catch (e) {
+  try {
+    fd = openSync(path, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0));
+  } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
-    return { reason: code === 'ELOOP' || code === 'EMLINK' ? 'sentinel.capture.lfsStoreUnsafe' : 'sentinel.capture.lfsObjectMissing' };
+    return {
+      reason:
+        code === 'ELOOP' || code === 'EMLINK' ? 'sentinel.capture.lfsStoreUnsafe' : 'sentinel.capture.lfsObjectMissing',
+    };
   }
   try {
     const st = fstatSync(fd);
@@ -197,19 +273,28 @@ export function resolveLfs(pointer: { oid: string; size: number }, lfsObjects: s
     if (st.size !== pointer.size) return { reason: 'sentinel.capture.lfsObjectMismatch' };
     const buf = Buffer.alloc(st.size);
     let off = 0;
-    while (off < st.size) { const n = readSync(fd, buf, off, st.size - off, off); if (n === 0) break; off += n; }
+    while (off < st.size) {
+      const n = readSync(fd, buf, off, st.size - off, off);
+      if (n === 0) break;
+      off += n;
+    }
     // The folders read through must still be the ones checked, and the name must still be this file.
     for (let i = 0; i < dirs.length; i++) {
       const again = lstatSync(dirs[i]!);
-      if (again.isSymbolicLink() || again.dev !== seen[i]!.dev || again.ino !== seen[i]!.ino) return { reason: 'sentinel.capture.lfsStoreUnsafe' };
+      if (again.isSymbolicLink() || again.dev !== seen[i]!.dev || again.ino !== seen[i]!.ino)
+        return { reason: 'sentinel.capture.lfsStoreUnsafe' };
     }
     const named = lstatSync(path);
-    if (named.isSymbolicLink() || named.dev !== st.dev || named.ino !== st.ino) return { reason: 'sentinel.capture.lfsStoreUnsafe' };
-    if (off !== st.size || createHash('sha256').update(buf).digest('hex') !== pointer.oid) return { reason: 'sentinel.capture.lfsObjectMismatch' };
+    if (named.isSymbolicLink() || named.dev !== st.dev || named.ino !== st.ino)
+      return { reason: 'sentinel.capture.lfsStoreUnsafe' };
+    if (off !== st.size || createHash('sha256').update(buf).digest('hex') !== pointer.oid)
+      return { reason: 'sentinel.capture.lfsObjectMismatch' };
     return { bytes: buf };
   } catch {
     return { reason: 'sentinel.capture.lfsStoreUnsafe' };
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 export { lfsPointer };

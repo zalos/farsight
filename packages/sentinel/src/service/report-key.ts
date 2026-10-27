@@ -16,10 +16,14 @@ const KEY_BYTES = 32;
 const FOLDER = 'report-keys';
 
 export class ReportKeyError extends Error {
-  constructor(readonly reason: string) { super(reason); this.name = 'ReportKeyError'; }
+  constructor(readonly reason: string) {
+    super(reason);
+    this.name = 'ReportKeyError';
+  }
 }
 
-const nameOf = (storeId: string) => `${createHash('sha256').update(`sentinel-report-key-name/1\u0000${storeId}`).digest('hex').slice(0, 40)}.key`;
+const nameOf = (storeId: string) =>
+  `${createHash('sha256').update(`sentinel-report-key-name/1\u0000${storeId}`).digest('hex').slice(0, 40)}.key`;
 
 /** The store's withheld-location key, created once if it does not exist yet. */
 export function withheldLocationKey(trustDir: string, storeId: string): Buffer {
@@ -27,14 +31,18 @@ export function withheldLocationKey(trustDir: string, storeId: string): Buffer {
   const name = nameOf(storeId);
   const read = () => {
     let bytes: Buffer | undefined;
-    try { bytes = readPublished(dir, name, KEY_BYTES); } catch (e) {
+    try {
+      bytes = readPublished(dir, name, KEY_BYTES);
+    } catch (e) {
       if (e instanceof UnsafeRecordError) throw new ReportKeyError(`the report key is unsafe: ${e.reason}`);
       throw e;
     }
     if (bytes !== undefined && bytes.length !== KEY_BYTES) throw new ReportKeyError('the report key is not 32 bytes');
     return bytes;
   };
-  try { ensureDurableDir(dir, trustDir); } catch (e) {
+  try {
+    ensureDurableDir(dir, trustDir);
+  } catch (e) {
     if (e instanceof UnsafeRecordError) throw new ReportKeyError(`the report key folder is unsafe: ${e.reason}`);
     throw e;
   }

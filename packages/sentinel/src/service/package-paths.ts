@@ -29,7 +29,16 @@ export function ownPackage(): { root: string; bin: string } {
 }
 
 /** Rule packs this package ships, by name: `builtin:<name>` on the command line. */
-export const BUILTIN_PACKS = ['foundation-preview', 'pattern', 'advisories', 'infrastructure', 'ci', 'secrets', 'framework-controls', 'bounded-paths'] as const;
+export const BUILTIN_PACKS = [
+  'foundation-preview',
+  'pattern',
+  'advisories',
+  'infrastructure',
+  'ci',
+  'secrets',
+  'framework-controls',
+  'bounded-paths',
+] as const;
 
 /** The folder of a pack this package ships, or undefined for any other name. */
 export function builtinPackDir(name: string): string | undefined {

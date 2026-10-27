@@ -19,7 +19,17 @@
 //   pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs [--expect-version X.Y.Z]
 //   → build/sentinel/farsight-sentinel-<sentinel version>.tgz
 import { build } from 'esbuild';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { builtinModules } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -36,41 +46,62 @@ const fail = (message, details = []) => {
   for (const line of details) console.error('  ' + line);
   process.exit(1);
 };
-if (!existsSync(join(dir, 'package.json'))) fail('packages/sentinel/package.json is missing; there is no Sentinel package to pack.');
+if (!existsSync(join(dir, 'package.json')))
+  fail('packages/sentinel/package.json is missing; there is no Sentinel package to pack.');
 const sentinel = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 // Sentinel's own version, or nothing: never farsight-cli's.
 if (typeof sentinel.version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(sentinel.version)) {
-  fail('packages/sentinel/package.json has no version of its own; farsight-sentinel is never versioned from farsight-cli.');
+  fail(
+    'packages/sentinel/package.json has no version of its own; farsight-sentinel is never versioned from farsight-cli.',
+  );
 }
 const expectAt = process.argv.indexOf('--expect-version');
 const expected = expectAt >= 0 ? process.argv[expectAt + 1] : undefined;
 if (expectAt >= 0 && !expected) fail('--expect-version needs a version.');
-if (expected && expected !== sentinel.version) fail(`packages/sentinel/package.json is ${sentinel.version}, not the expected ${expected}.`);
+if (expected && expected !== sentinel.version)
+  fail(`packages/sentinel/package.json is ${sentinel.version}, not the expected ${expected}.`);
 
 // Sentinel's own workspace closure must be built (its imports resolve through each `main`);
 // checked before build/sentinel is touched.
 const missing = missingBuildOutputs(root, sentinel.name, [join(root, 'packages', 'core', 'dist', 'version.js')]);
 if (missing.length) {
-  fail('compiled packages are missing. Run `pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs`.',
-    missing.map((path) => 'missing: ' + (isAbsolute(path) ? relative(root, path) : path)));
+  fail(
+    'compiled packages are missing. Run `pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs`.',
+    missing.map((path) => 'missing: ' + (isAbsolute(path) ? relative(root, path) : path)),
+  );
 }
 
-const target = (entry) => (typeof entry === 'string' ? entry : entry?.import ?? entry?.default);
+const target = (entry) => (typeof entry === 'string' ? entry : (entry?.import ?? entry?.default));
 const rel = (file) => String(file).replace(/^\.\//, '');
 // subpath → its JavaScript target and declaration; non-JavaScript subpaths (schemas, package.json) are handled below
-const declared = typeof sentinel.exports === 'string' || !sentinel.exports
-  ? { '.': { types: sentinel.types, import: sentinel.exports ?? sentinel.main } } : sentinel.exports;
+const declared =
+  typeof sentinel.exports === 'string' || !sentinel.exports
+    ? { '.': { types: sentinel.types, import: sentinel.exports ?? sentinel.main } }
+    : sentinel.exports;
 const jsExports = Object.entries(declared)
   .map(([subpath, entry]) => [subpath, target(entry), typeof entry === 'object' ? entry?.types : undefined])
   .filter(([, file]) => typeof file === 'string' && /\.js$/.test(file));
 const untyped = jsExports.filter(([, , types]) => typeof types !== 'string' || !/^dist\/.+\.d\.ts$/.test(rel(types)));
-if (untyped.length) fail('every JavaScript export needs a `types` condition under dist/ (public types are part of the package).', untyped.map(([subpath]) => `untyped: ${subpath}`));
+if (untyped.length)
+  fail(
+    'every JavaScript export needs a `types` condition under dist/ (public types are part of the package).',
+    untyped.map(([subpath]) => `untyped: ${subpath}`),
+  );
 const missingTypes = jsExports.map(([, , types]) => rel(types)).filter((types) => !existsSync(join(dir, types)));
-if (missingTypes.length) fail('declarations are missing. Run `pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs`.', missingTypes.map((types) => `missing: packages/sentinel/${types}`));
+if (missingTypes.length)
+  fail(
+    'declarations are missing. Run `pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs`.',
+    missingTypes.map((types) => `missing: packages/sentinel/${types}`),
+  );
 const schemaDir = join(dir, 'schemas');
-const schemaFiles = existsSync(schemaDir) ? readdirSync(schemaDir, { recursive: true }).map(String).filter((f) => f.endsWith('.json')) : [];
-if (declared['./schemas/*'] && !schemaFiles.length) fail('the manifest exports ./schemas/* but packages/sentinel/schemas has no JSON schema.');
+const schemaFiles = existsSync(schemaDir)
+  ? readdirSync(schemaDir, { recursive: true })
+      .map(String)
+      .filter((f) => f.endsWith('.json'))
+  : [];
+if (declared['./schemas/*'] && !schemaFiles.length)
+  fail('the manifest exports ./schemas/* but packages/sentinel/schemas has no JSON schema.');
 // `dist/<x>.js` → `src/<x>.ts`; the published file is `dist/<x>.mjs`.
 const entries = new Map();
 const entryFor = (target) => {
@@ -82,19 +113,27 @@ const entryFor = (target) => {
   entries.set(m[1], source); // dist/contracts/index.js → dist/contracts/index.mjs
   return `dist/${m[1]}.mjs`;
 };
-const bins = Object.fromEntries(Object.entries(typeof sentinel.bin === 'string' ? { 'farsight-sentinel': sentinel.bin } : sentinel.bin ?? {})
-  .map(([name, target]) => [name, entryFor(target)]));
+const bins = Object.fromEntries(
+  Object.entries(typeof sentinel.bin === 'string' ? { 'farsight-sentinel': sentinel.bin } : (sentinel.bin ?? {})).map(
+    ([name, target]) => [name, entryFor(target)],
+  ),
+);
 if (!Object.keys(bins).length || !jsExports.some(([subpath]) => subpath === '.')) {
   fail('the Sentinel manifest needs a `bin` and a root export (`exports["."]` or `main`).');
 }
 // Files started or hashed by path rather than imported ship as their own entries (not exports): the launch gate
 // a built-in worker process runs first (src/execution/assets.ts finds it from the package root).
 // It is required whenever the package can start a built-in worker (it has the supervisor).
-const ASSETS = [['execution/launch-gate', 'execution/supervisor'], ['frameworks/controls/worker', 'frameworks/controls/driver'], ['analysis/paths/worker', 'analysis/paths/driver']];
+const ASSETS = [
+  ['execution/launch-gate', 'execution/supervisor'],
+  ['frameworks/controls/worker', 'frameworks/controls/driver'],
+  ['analysis/paths/worker', 'analysis/paths/driver'],
+];
 for (const [asset, needs] of ASSETS) {
   const source = join(dir, 'src', `${asset}.ts`);
   if (!existsSync(join(dir, 'src', `${needs}.ts`))) continue;
-  if (!existsSync(source)) fail(`packages/sentinel/src/${asset}.ts is missing; the launch gate must ship with the package.`);
+  if (!existsSync(source))
+    fail(`packages/sentinel/src/${asset}.ts is missing; the launch gate must ship with the package.`);
   entries.set(asset, source);
 }
 // A fixed internal dist member for the built-in descriptor. It is byte-pinned with the whole dist closure, not a
@@ -102,18 +141,22 @@ for (const [asset, needs] of ASSETS) {
 for (const stem of ['frameworks/controls', 'analysis/paths']) {
   if (!existsSync(join(dir, `src/${stem}/worker.ts`))) continue;
   const driver = join(dir, `src/${stem}/driver.ts`);
-  if (!existsSync(driver)) fail(`packages/sentinel/src/${stem}/driver.ts is missing; the built-in worker requires its fixed driver.`);
+  if (!existsSync(driver))
+    fail(`packages/sentinel/src/${stem}/driver.ts is missing; the built-in worker requires its fixed driver.`);
   entries.set(`${stem}/driver`, driver);
 }
 // The fixed coordinator review operation is hashed by its own path at registry creation.
 // It must remain a real installed entry even when its shared implementation is split into chunks.
 if (existsSync(join(dir, 'src/service/review-adapter.ts'))) {
   const dispatch = join(dir, 'src/review/dispatch.ts');
-  if (!existsSync(dispatch)) fail('packages/sentinel/src/review/dispatch.ts is missing; the model registry requires its fixed operation.');
+  if (!existsSync(dispatch))
+    fail('packages/sentinel/src/review/dispatch.ts is missing; the model registry requires its fixed operation.');
   entries.set('review/dispatch', dispatch);
 }
 // `types` first: TypeScript takes the first condition that matches.
-const exportsMap = Object.fromEntries(jsExports.map(([subpath, file, types]) => [subpath, { types: `./${rel(types)}`, import: `./${entryFor(file)}` }]));
+const exportsMap = Object.fromEntries(
+  jsExports.map(([subpath, file, types]) => [subpath, { types: `./${rel(types)}`, import: `./${entryFor(file)}` }]),
+);
 exportsMap['./package.json'] = './package.json';
 
 // Third-party dependencies of the closure: kept external, declared once with one range.
@@ -122,7 +165,8 @@ for (const member of buildClosure(root, sentinel.name).closure) {
   for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
     for (const [name, spec] of Object.entries(member.manifest[field] ?? {})) {
       if (typeof spec !== 'string' || spec.startsWith('workspace:')) continue;
-      if (dependencies[name] && dependencies[name] !== spec) fail(`${name} is required as both ${dependencies[name]} and ${spec}; align the ranges.`);
+      if (dependencies[name] && dependencies[name] !== spec)
+        fail(`${name} is required as both ${dependencies[name]} and ${spec}; align the ranges.`);
       dependencies[name] = spec;
     }
   }
@@ -132,7 +176,10 @@ for (const member of buildClosure(root, sentinel.name).closure) {
 // `./x.js` specifiers inside them resolve to `./x.d.ts`, so each relative target must exist too.
 const packageOf = (s) => (s.startsWith('@') ? s.split('/').slice(0, 2).join('/') : s.split('/')[0]);
 const closureByName = new Map(buildClosure(root, sentinel.name).closure.map((m) => [m.name, m]));
-const vendorable = (name) => { const m = closureByName.get(name); return Boolean(m && m.manifest.publishConfig && !m.manifest.private); };
+const vendorable = (name) => {
+  const m = closureByName.get(name);
+  return Boolean(m && m.manifest.publishConfig && !m.manifest.private);
+};
 const declarations = new Map();
 const specifiers = new Set();
 const dist = join(dir, 'dist');
@@ -140,9 +187,14 @@ const brokenRelative = [];
 const queue = [];
 const queued = new Set();
 const enqueueTree = (srcDist, prefix) => {
-  for (const file of readdirSync(srcDist, { recursive: true }).map(String).filter((f) => f.endsWith('.d.ts'))) {
+  for (const file of readdirSync(srcDist, { recursive: true })
+    .map(String)
+    .filter((f) => f.endsWith('.d.ts'))) {
     const out = prefix ? `${prefix}/${file}` : file;
-    if (!queued.has(out)) { queued.add(out); queue.push({ abs: join(srcDist, file), out }); }
+    if (!queued.has(out)) {
+      queued.add(out);
+      queue.push({ abs: join(srcDist, file), out });
+    }
   }
 };
 const vendoredRoots = new Set();
@@ -155,7 +207,10 @@ const vendorTarget = (spec) => {
   const types = typeof entry === 'object' && entry ? entry.types : sub === '' ? member.manifest.types : undefined;
   if (typeof types !== 'string' || !/^(\.\/)?dist\/.+\.d\.ts$/.test(types)) return null;
   const short = name.split('/').pop();
-  if (!vendoredRoots.has(name)) { vendoredRoots.add(name); enqueueTree(join(member.dir, 'dist'), `vendor/${short}`); }
+  if (!vendoredRoots.has(name)) {
+    vendoredRoots.add(name);
+    enqueueTree(join(member.dir, 'dist'), `vendor/${short}`);
+  }
   return `vendor/${short}/${rel(types).replace(/^dist\//, '')}`;
 };
 /**
@@ -169,14 +224,22 @@ const maskComments = (text) => {
     if (c === '"' || c === "'" || c === '`') {
       let j = i + 1;
       while (j < text.length && text[j] !== c) j += text[j] === '\\' ? 2 : 1;
-      out += c + ' '.repeat(Math.max(0, Math.min(j, text.length) - i - 1)) + (j < text.length ? c : ''); i = j + 1;
+      out += c + ' '.repeat(Math.max(0, Math.min(j, text.length) - i - 1)) + (j < text.length ? c : '');
+      i = j + 1;
     } else if (c === '/' && text[i + 1] === '/' && !text.startsWith('///', i)) {
-      const j = text.indexOf('\n', i); const end = j < 0 ? text.length : j;
-      out += ' '.repeat(end - i); i = end;
+      const j = text.indexOf('\n', i);
+      const end = j < 0 ? text.length : j;
+      out += ' '.repeat(end - i);
+      i = end;
     } else if (c === '/' && text[i + 1] === '*') {
-      const j = text.indexOf('*/', i + 2); const end = j < 0 ? text.length : j + 2;
-      out += text.slice(i, end).replace(/[^\n]/g, ' '); i = end;
-    } else { out += c; i++; }
+      const j = text.indexOf('*/', i + 2);
+      const end = j < 0 ? text.length : j + 2;
+      out += text.slice(i, end).replace(/[^\n]/g, ' ');
+      i = end;
+    } else {
+      out += c;
+      i++;
+    }
   }
   return out;
 };
@@ -184,7 +247,10 @@ const KEYWORD = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+|\/\/\/\s*<reference
 enqueueTree(dist, '');
 for (let i = 0; i < queue.length; i++) {
   const { abs, out } = queue[i];
-  let text = readFileSync(abs, 'utf8').replace(/^\/\/# sourceMappingURL=\S+$/m, '').trimEnd() + '\n';
+  let text =
+    readFileSync(abs, 'utf8')
+      .replace(/^\/\/# sourceMappingURL=\S+$/m, '')
+      .trimEnd() + '\n';
   const masked = maskComments(text);
   const edits = [];
   for (const m of masked.matchAll(KEYWORD)) {
@@ -192,18 +258,31 @@ for (let i = 0; i < queue.length; i++) {
     const quoteAt = m.index + m[0].length - 1;
     const end = text.indexOf(text[quoteAt], quoteAt + 1);
     if (end < 0) continue;
-    edits.push({ at: m.index, whole: text.slice(m.index, end + 1), open: text.slice(m.index, quoteAt + 1), spec: text.slice(quoteAt + 1, end), close: text[end] });
+    edits.push({
+      at: m.index,
+      whole: text.slice(m.index, end + 1),
+      open: text.slice(m.index, quoteAt + 1),
+      spec: text.slice(quoteAt + 1, end),
+      close: text[end],
+    });
   }
   const rewrite = ({ whole, open, spec, close }) => {
     if (spec.startsWith('.')) {
       const target = join(dirname(abs), spec).replace(/\.js$/, '.d.ts');
-      if (!existsSync(target) && !existsSync(join(target.replace(/\.d\.ts$/, ''), 'index.d.ts'))) brokenRelative.push(`${out}: ${spec}`);
+      if (!existsSync(target) && !existsSync(join(target.replace(/\.d\.ts$/, ''), 'index.d.ts')))
+        brokenRelative.push(`${out}: ${spec}`);
       return whole;
     }
     if (packageOf(spec).startsWith('@farsight/') && vendorable(packageOf(spec))) {
       const target = vendorTarget(spec);
-      if (!target) { specifiers.add(spec); return whole; }
-      let path = relative(dirname(out), target).split('\\').join('/').replace(/\.d\.ts$/, '.js');
+      if (!target) {
+        specifiers.add(spec);
+        return whole;
+      }
+      let path = relative(dirname(out), target)
+        .split('\\')
+        .join('/')
+        .replace(/\.d\.ts$/, '.js');
       if (!path.startsWith('.')) path = `./${path}`;
       return `${open}${path}${close}`;
     }
@@ -213,14 +292,21 @@ for (let i = 0; i < queue.length; i++) {
   for (const e of edits.reverse()) text = text.slice(0, e.at) + rewrite(e) + text.slice(e.at + e.whole.length);
   declarations.set(out, text);
 }
-if (brokenRelative.length) fail('a declaration imports a sibling declaration that is not built. Run `pnpm --filter @farsight/sentinel... build`.', brokenRelative.map((s) => `missing: ${s}`));
+if (brokenRelative.length)
+  fail(
+    'a declaration imports a sibling declaration that is not built. Run `pnpm --filter @farsight/sentinel... build`.',
+    brokenRelative.map((s) => `missing: ${s}`),
+  );
 const unresolvable = [...specifiers].filter((s) => {
   const name = packageOf(s);
   if (s.startsWith('node:') || builtinModules.includes(name)) return !dependencies['@types/node'];
   return name.startsWith('@farsight/') || !dependencies[name];
 });
 if (unresolvable.length) {
-  fail('a declaration imports a module a consumer could not resolve (a workspace package, or one the tarball does not declare; node: builtins need @types/node).', unresolvable.map((s) => `import: ${s}`));
+  fail(
+    'a declaration imports a module a consumer could not resolve (a workspace package, or one the tarball does not declare; node: builtins need @types/node).',
+    unresolvable.map((s) => `import: ${s}`),
+  );
 }
 
 // Everything is built in a staging directory; build/sentinel is replaced only after the bundle and
@@ -230,7 +316,9 @@ const version = sentinel.version;
 const { gitIdentity } = await import(pathToFileURL(join(root, 'packages', 'core', 'dist', 'version.js')).href);
 const git = gitIdentity(root);
 const buildIdentity = {
-  name: 'farsight-sentinel', version, built: new Date().toISOString(),
+  name: 'farsight-sentinel',
+  version,
+  built: new Date().toISOString(),
   ...(git.commit ? { commit: git.commit } : {}),
   ...(git.codeCommit ? { codeCommit: git.codeCommit } : {}),
   ...(git.codeCommit && typeof git.dirty === 'boolean' ? { dirty: git.dirty } : {}),
@@ -244,14 +332,21 @@ try {
   await build({
     logLevel: 'silent',
     entryPoints: Object.fromEntries([...entries].map(([name, source]) => [name, source])),
-    bundle: true, platform: 'node', format: 'esm', target: 'node24',
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node24',
     // One build with shared chunks: a module two entries import (the store, its error class) exists once, so
     // `root.X === subpath.X` and `instanceof` hold across subpaths. Separate bundles would each carry a copy.
-    splitting: true, chunkNames: 'chunks/[name]-[hash]',
-    outdir: join(out, 'dist'), outExtension: { '.js': '.mjs' },
+    splitting: true,
+    chunkNames: 'chunks/[name]-[hash]',
+    outdir: join(out, 'dist'),
+    outExtension: { '.js': '.mjs' },
     external: Object.keys(dependencies).flatMap((name) => [name, `${name}/*`]),
     // inlined CommonJS dependencies call require() for builtins; an ESM bundle has none
-    banner: { js: "import { createRequire as __sentinelCreateRequire } from 'node:module';\nconst require = __sentinelCreateRequire(import.meta.url);" },
+    banner: {
+      js: "import { createRequire as __sentinelCreateRequire } from 'node:module';\nconst require = __sentinelCreateRequire(import.meta.url);",
+    },
   });
   // esbuild keeps an entry's own shebang; a bin without one still has to run from npm's .bin link.
   for (const target of new Set(Object.values(bins))) {
@@ -274,39 +369,71 @@ try {
     exportsMap['./schemas/*'] = './schemas/*';
   }
   // The rule packs Sentinel ships (data only: a manifest, detector descriptions, fixtures), promoted by the owner.
-  if (existsSync(join(dir, 'rules'))) { cpSync(join(dir, 'rules'), join(out, 'rules'), { recursive: true }); if (!files.includes('rules')) files.push('rules'); }
+  if (existsSync(join(dir, 'rules'))) {
+    cpSync(join(dir, 'rules'), join(out, 'rules'), { recursive: true });
+    if (!files.includes('rules')) files.push('rules');
+  }
   // Provenance of the files the package starts by path rather than imports (the launch gate): where and which bytes.
   const assets = {};
   for (const [asset] of ASSETS) {
     const emitted = join(out, 'dist', `${asset}.mjs`);
-    if (existsSync(emitted)) assets[asset] = { path: `dist/${asset}.mjs`, sha256: createHash('sha256').update(readFileSync(emitted)).digest('hex') };
+    if (existsSync(emitted))
+      assets[asset] = {
+        path: `dist/${asset}.mjs`,
+        sha256: createHash('sha256').update(readFileSync(emitted)).digest('hex'),
+      };
   }
   // Non-code assets the package owns (in-container workers and their digest manifests), each staged by its own hook,
   // scripts/package-assets*.mjs, in name order.
-  for (const hook of (existsSync(join(dir, 'scripts')) ? readdirSync(join(dir, 'scripts')) : []).filter((f) => /^package-assets.*\.mjs$/.test(f)).sort()) {
+  for (const hook of (existsSync(join(dir, 'scripts')) ? readdirSync(join(dir, 'scripts')) : [])
+    .filter((f) => /^package-assets.*\.mjs$/.test(f))
+    .sort()) {
     const staged = await (await import(pathToFileURL(join(dir, 'scripts', hook)).href)).stageAssets(dir, out);
     for (const f of staged.files) if (!files.includes(f)) files.push(f);
     Object.assign(exportsMap, staged.exports);
   }
-  for (const doc of ['README.md']) if (existsSync(join(dir, doc))) { cpSync(join(dir, doc), join(out, doc)); files.push(doc); }
-  writeFileSync(join(out, 'package.json'), JSON.stringify({
-    name: 'farsight-sentinel', version,
-    ...(sentinel.private ? { private: true } : {}),
-    description: sentinel.description ?? 'Optional Sentinel package for Farsight, installed and run separately from farsight-cli.',
-    license: 'MIT', ...(pkg.repository ? { repository: pkg.repository } : {}), type: 'module',
-    bin: bins, types: exportsMap['.'].types, exports: exportsMap, files,
-    ...(Object.keys(assets).length ? { sentinel: { assets } } : {}),
-    ...(Object.keys(dependencies).length ? { dependencies } : {}),
-    engines: { node: sentinel.engines?.node ?? pkg.engines?.node ?? '>=24' },
-  }, null, 2) + '\n');
+  for (const doc of ['README.md'])
+    if (existsSync(join(dir, doc))) {
+      cpSync(join(dir, doc), join(out, doc));
+      files.push(doc);
+    }
+  writeFileSync(
+    join(out, 'package.json'),
+    JSON.stringify(
+      {
+        name: 'farsight-sentinel',
+        version,
+        ...(sentinel.private ? { private: true } : {}),
+        description:
+          sentinel.description ??
+          'Optional Sentinel package for Farsight, installed and run separately from farsight-cli.',
+        license: 'MIT',
+        ...(pkg.repository ? { repository: pkg.repository } : {}),
+        type: 'module',
+        bin: bins,
+        types: exportsMap['.'].types,
+        exports: exportsMap,
+        files,
+        ...(Object.keys(assets).length ? { sentinel: { assets } } : {}),
+        ...(Object.keys(dependencies).length ? { dependencies } : {}),
+        engines: { node: sentinel.engines?.node ?? pkg.engines?.node ?? '>=24' },
+      },
+      null,
+      2,
+    ) + '\n',
+  );
   execFileSync('npm', ['pack', '--pack-destination', '..'], { cwd: out, stdio: 'inherit', env: npmPackEnv() });
   assertTarball(join(stage, `farsight-sentinel-${version}.tgz`)); // before build/sentinel is replaced
 } catch (error) {
   rmSync(stage, { recursive: true, force: true });
-  const detail = error?.errors?.length ? error.errors.map((e) => `${e.location?.file ?? ''} ${e.text}`.trim()) : [error?.message];
+  const detail = error?.errors?.length
+    ? error.errors.map((e) => `${e.location?.file ?? ''} ${e.text}`.trim())
+    : [error?.message];
   fail('the bundle or the tarball failed; prior artifacts in build/ are unchanged.', detail);
 }
 const published = join(buildDir, 'sentinel');
 rmSync(published, { recursive: true, force: true });
 renameSync(stage, published);
-console.log(`\npackaged: build/sentinel/farsight-sentinel-${version}.tgz  (built ${buildIdentity.built}${buildIdentity.commit ? `, commit ${buildIdentity.commit}` : ''}${buildIdentity.dirty ? ', with uncommitted changes' : ''})`);
+console.log(
+  `\npackaged: build/sentinel/farsight-sentinel-${version}.tgz  (built ${buildIdentity.built}${buildIdentity.commit ? `, commit ${buildIdentity.commit}` : ''}${buildIdentity.dirty ? ', with uncommitted changes' : ''})`,
+);

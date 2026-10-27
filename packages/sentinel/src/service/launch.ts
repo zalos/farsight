@@ -16,18 +16,36 @@ export interface LaunchedService {
   stop(): void;
 }
 
-export function launchService(workspace: string, idleMs: number, env: NodeJS.ProcessEnv = process.env): LaunchedService {
+export function launchService(
+  workspace: string,
+  idleMs: number,
+  env: NodeJS.ProcessEnv = process.env,
+): LaunchedService {
   const given: Record<string, string> = {};
   for (const name of SERVICE_ENV) if (typeof env[name] === 'string') given[name] = env[name]!;
-  const child: ChildProcess = spawn(process.execPath, [ownExecutable(), 'serve', '--workspace', workspace, '--idle-ms', String(idleMs)], {
-    detached: true, stdio: 'ignore', env: given, cwd: workspace, shell: false,
-  });
+  const child: ChildProcess = spawn(
+    process.execPath,
+    [ownExecutable(), 'serve', '--workspace', workspace, '--idle-ms', String(idleMs)],
+    {
+      detached: true,
+      stdio: 'ignore',
+      env: given,
+      cwd: workspace,
+      shell: false,
+    },
+  );
   let exited = false;
-  child.on('exit', () => { exited = true; });
-  child.on('error', () => { exited = true; /* the caller sees no service answer and reports it */ });
+  child.on('exit', () => {
+    exited = true;
+  });
+  child.on('error', () => {
+    exited = true; /* the caller sees no service answer and reports it */
+  });
   child.unref();
   return Object.freeze({
     pid: child.pid,
-    stop: () => { if (!exited && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM'); },
+    stop: () => {
+      if (!exited && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+    },
   });
 }

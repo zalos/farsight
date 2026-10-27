@@ -1,4 +1,11 @@
-export type {InstructionContent,SelectedSkill,ReviewInstructionsEnvelope,ReviewInstructionBinding,ReviewRequestEnvelope,ReviewProviderSelection} from './instructions.js';
+export type {
+  InstructionContent,
+  SelectedSkill,
+  ReviewInstructionsEnvelope,
+  ReviewInstructionBinding,
+  ReviewRequestEnvelope,
+  ReviewProviderSelection,
+} from './instructions.js';
 // The draft Sentinel contracts. Types here are the one source; schemas/*.schema.json and
 // src/schemas.generated.ts are generated from them by scripts/generate-schemas.mjs (--check detects drift).
 export type * from './common.js';
@@ -54,11 +61,11 @@ export const ENVELOPES = {
   controls: { schema: 'sentinel-controls/draft-1', type: 'ControlFactsEnvelope' },
   plan: { schema: 'sentinel-plan/draft-1', type: 'PlanEnvelope' },
   paths: { schema: 'sentinel-paths/draft-1', type: 'PathEvidenceEnvelope' },
-  decisioninput:{schema:'sentinel-decision-input/draft-1',type:'OwnerDecisionInput'},
-  decisionview:{schema:'sentinel-decision-view/draft-1',type:'DecisionViewEnvelope'},
-  decisionpage:{schema:'sentinel-decision-page/draft-1',type:'DecisionPageEnvelope'},
-  importview: {schema:'sentinel-import-view/draft-1',type:'ImportViewEnvelope'},
-  importpage: {schema:'sentinel-import-page/draft-1',type:'ImportPageEnvelope'},
+  decisioninput: { schema: 'sentinel-decision-input/draft-1', type: 'OwnerDecisionInput' },
+  decisionview: { schema: 'sentinel-decision-view/draft-1', type: 'DecisionViewEnvelope' },
+  decisionpage: { schema: 'sentinel-decision-page/draft-1', type: 'DecisionPageEnvelope' },
+  importview: { schema: 'sentinel-import-view/draft-1', type: 'ImportViewEnvelope' },
+  importpage: { schema: 'sentinel-import-page/draft-1', type: 'ImportPageEnvelope' },
   pathrequest: { schema: 'sentinel-path-request/draft-1', type: 'PathRequestEnvelope' },
   deepimport: { schema: 'sentinel-deep-import/draft-1', type: 'DeepImportEnvelope' },
   servicecapabilities: { schema: 'sentinel-service-capabilities/draft-1', type: 'ServiceCapabilities' },
@@ -74,8 +81,8 @@ export const ENVELOPES = {
   preparationoutcome: { schema: 'sentinel-preparation-outcome/draft-1', type: 'PreparationOutcome' },
   partitions: { schema: 'sentinel-review-partitions/draft-1', type: 'ReviewPartitionsEnvelope' },
   checkpoint: { schema: 'sentinel-review-checkpoint/draft-1', type: 'ReviewCheckpointEnvelope' },
-  instructions: {schema:'sentinel-review-instructions/draft-1',type:'ReviewInstructionsEnvelope'},
-  reviewrequest: {schema:'sentinel-review-request/draft-1',type:'ReviewRequestEnvelope'},
+  instructions: { schema: 'sentinel-review-instructions/draft-1', type: 'ReviewInstructionsEnvelope' },
+  reviewrequest: { schema: 'sentinel-review-request/draft-1', type: 'ReviewRequestEnvelope' },
   review: { schema: 'sentinel-review-record/draft-1', type: 'ReviewRecordEnvelope' },
 } as const;
 
@@ -87,15 +94,40 @@ export const ENVELOPE_KINDS = Object.keys(ENVELOPES) as EnvelopeKind[];
 export const RUN_STATES = ['planned', 'running', 'pausing', 'paused', 'canceling', 'canceled', 'completed'] as const;
 export const RUN_OUTCOMES = ['complete-coverage', 'partial-coverage', 'execution-failure'] as const;
 export const POLICY_RESULTS = [
-  'satisfied', 'finding-policy-failed', 'required-coverage-incomplete', 'configuration-failure', 'awaiting-confirmation',
+  'satisfied',
+  'finding-policy-failed',
+  'required-coverage-incomplete',
+  'configuration-failure',
+  'awaiting-confirmation',
 ] as const;
 export const WORK_STATES = [
-  'pending', 'ready', 'published', 'failed', 'running', 'leased', 'blocked', 'disabled-by-policy', 'satisfied-by-reuse',
+  'pending',
+  'ready',
+  'published',
+  'failed',
+  'running',
+  'leased',
+  'blocked',
+  'disabled-by-policy',
+  'satisfied-by-reuse',
 ] as const;
 export const STAGE_KINDS = ['coded', 'agentic', 'external-tool'] as const;
-export const ATTEMPT_STATES = ['running', 'succeeded', 'failed', 'interrupted', 'canceled', 'canceled-after-spend'] as const;
+export const ATTEMPT_STATES = [
+  'running',
+  'succeeded',
+  'failed',
+  'interrupted',
+  'canceled',
+  'canceled-after-spend',
+] as const;
 export const USAGE_CERTAINTIES = ['confirmed', 'unknown', 'not-applicable'] as const;
-export const IDENTITY_SOURCES = ['provider-response', 'local-weight-digest', 'host-reported', 'self-reported', 'unknown'] as const;
+export const IDENTITY_SOURCES = [
+  'provider-response',
+  'local-weight-digest',
+  'host-reported',
+  'self-reported',
+  'unknown',
+] as const;
 export const CAPTURE_MODES = ['committed-tree', 'working-copy-stability-checked'] as const;
 export const COVERAGE_STATUSES = ['complete', 'partial', 'unsupported', 'not-run', 'error'] as const;
 export const COVERAGE_GRANULARITIES = ['per-file-per-rule', 'per-file', 'aggregate'] as const;
@@ -104,37 +136,109 @@ export const DISPOSITION_DECISIONS = ['accepted-risk', 'false-positive', 'mitiga
 export const DECISION_CHANNELS = ['owner-cli', 'mcp', 'http-bridge', 'model', 'local-service', 'owner-ui'] as const;
 export const ASSERTION_TRUSTS = ['asserted', 'imported-config', 'runtime-observed'] as const;
 export const COMPARISON_LABELS = [
-  'new', 'persistent', 'changed-evidence', 'changed-detection', 'reopened', 'reopened-disposition-expired',
-  'resolved-by-comparable-check', 'removed-surface', 'unassessed-in-current-scope', 'incomparable-conditions',
+  'new',
+  'persistent',
+  'changed-evidence',
+  'changed-detection',
+  'reopened',
+  'reopened-disposition-expired',
+  'resolved-by-comparable-check',
+  'removed-surface',
+  'unassessed-in-current-scope',
+  'incomparable-conditions',
 ] as const;
 export const PROTOCOL_MESSAGE_TYPES = [
-  'hello', 'welcome', 'refuse', 'start', 'cancel', 'progress', 'checkpoint', 'heartbeat', 'diagnostic', 'cancel-ack', 'result',
+  'hello',
+  'welcome',
+  'refuse',
+  'start',
+  'cancel',
+  'progress',
+  'checkpoint',
+  'heartbeat',
+  'diagnostic',
+  'cancel-ack',
+  'result',
 ] as const;
 
 export const RULE_LANGUAGES = ['typescript', 'javascript', 'java'] as const;
-export const RULE_SCOPE_KINDS = ['source-file', 'surface', 'dependency-manifest', 'ci-config', 'infrastructure-config', 'repository'] as const;
+export const RULE_SCOPE_KINDS = [
+  'source-file',
+  'surface',
+  'dependency-manifest',
+  'ci-config',
+  'infrastructure-config',
+  'repository',
+] as const;
 export const RULE_CAPABILITIES = [
-  'source-bytes', 'pattern-match', 'source-span', 'call-occurrence', 'resolved-receiver-type',
-  'framework-order', 'interprocedural-flow', 'runtime-observation', 'dependency-manifest', 'advisory-database',
+  'source-bytes',
+  'pattern-match',
+  'source-span',
+  'call-occurrence',
+  'resolved-receiver-type',
+  'framework-order',
+  'interprocedural-flow',
+  'runtime-observation',
+  'dependency-manifest',
+  'advisory-database',
 ] as const;
 export const RULE_MEANINGS = ['candidate', 'finding'] as const;
 /** Ordered from least to most severe; a lower failing threshold is stricter. */
 export const SEVERITIES = ['info', 'low', 'medium', 'high', 'critical'] as const;
-export const RULE_EVIDENCE = ['source-span', 'matched-pattern', 'control-fact', 'dependency-version', 'advisory-id', 'call-path'] as const;
+export const RULE_EVIDENCE = [
+  'source-span',
+  'matched-pattern',
+  'control-fact',
+  'dependency-version',
+  'advisory-id',
+  'call-path',
+] as const;
 export const FRAMEWORK_IDS = ['next', 'express', 'nest', 'spring'] as const;
 export const RULE_ORIGINS = ['sentinel-original', 'third-party'] as const;
 export const SENTINEL_ACTIONS = [
-  'run.start', 'capture.source', 'disposition.propose', 'disposition.approve', 'rule.promote',
-  'tool.acquire', 'paid.admit', 'disclosure.send', 'settings.adopt', 'run.pause', 'run.cancel', 'context.pin', 'evidence.import', 'evidence.abandon',
+  'run.start',
+  'capture.source',
+  'disposition.propose',
+  'disposition.approve',
+  'rule.promote',
+  'tool.acquire',
+  'paid.admit',
+  'disclosure.send',
+  'settings.adopt',
+  'run.pause',
+  'run.cancel',
+  'context.pin',
+  'evidence.import',
+  'evidence.abandon',
 ] as const;
 /** Owner actions: an agent can never be granted them, and a person always confirms them with a receipt. */
-export const OWNER_ACTIONS = ['disposition.approve', 'rule.promote', 'tool.acquire', 'settings.adopt', 'context.pin', 'evidence.import', 'evidence.abandon'] as const;
-export const ACTION_EFFECTS = ['local-artifacts', 'source-disclosure', 'paid-inference', 'network', 'tool-execution'] as const;
+export const OWNER_ACTIONS = [
+  'disposition.approve',
+  'rule.promote',
+  'tool.acquire',
+  'settings.adopt',
+  'context.pin',
+  'evidence.import',
+  'evidence.abandon',
+] as const;
+export const ACTION_EFFECTS = [
+  'local-artifacts',
+  'source-disclosure',
+  'paid-inference',
+  'network',
+  'tool-execution',
+] as const;
 export const SETTINGS_TRUST = ['adopted', 'not-adopted', 'changed', 'missing', 'invalid'] as const;
 export const ADMISSION_OUTCOMES = ['admitted', 'denied', 'awaiting-confirmation'] as const;
 export const CREDENTIAL_BASES = ['local-only', 'keychain-scope', 'unknown', 'not-asked'] as const;
 export const CONTROL_PROPERTIES = [
-  'authentication', 'authorization', 'csrf', 'input-validation', 'rate-limit', 'security-headers', 'cors',
+  'authentication',
+  'authorization',
+  'csrf',
+  'input-validation',
+  'rate-limit',
+  'security-headers',
+  'cors',
 ] as const;
 export const CONTROL_VERDICTS = ['applies', 'does-not-apply', 'unknown'] as const;
 export const REVIEW_VERDICTS = ['finding', 'no-finding', 'inconclusive'] as const;

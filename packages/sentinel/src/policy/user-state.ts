@@ -5,8 +5,21 @@
 // as the owner can change user state, and that is outside this boundary (as for the store, ADR 19).
 import { randomBytes } from 'node:crypto';
 import {
-  closeSync, constants as FS, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, renameSync, unlinkSync,
-  writeSync, type Stats,
+  closeSync,
+  constants as FS,
+  fstatSync,
+  fsyncSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readSync,
+  realpathSync,
+  renameSync,
+  unlinkSync,
+  writeSync,
+  type Stats,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import { policyFail, type PolicyErrorCode } from './errors.js';
@@ -22,26 +35,42 @@ function assertOwnerOnly(st: Stats, what: string, code: PolicyErrorCode): void {
 
 /** Creates the folder (and missing parents) 0700, then checks that the folder itself is a private directory. */
 export function ensurePrivateDir(dir: string, code: PolicyErrorCode): void {
-  if (!isAbsolute(dir) || normalize(dir) !== dir) policyFail(code, 'a user-state folder is an absolute, normalised path');
-  try { mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch (e) { policyFail(code, `the user-state folder cannot be created (${errno(e) ?? 'error'})`, e); }
+  if (!isAbsolute(dir) || normalize(dir) !== dir)
+    policyFail(code, 'a user-state folder is an absolute, normalised path');
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+  } catch (e) {
+    policyFail(code, `the user-state folder cannot be created (${errno(e) ?? 'error'})`, e);
+  }
   assertPrivateDir(dir, code);
 }
 
 /** Requires an existing private directory, without making or repairing anything. */
 export function assertPrivateDir(dir: string, code: PolicyErrorCode): void {
   let st: Stats;
-  try { st = lstatSync(dir); } catch (e) { return policyFail(code, `the user-state folder cannot be inspected (${errno(e) ?? 'error'})`, e); }
+  try {
+    st = lstatSync(dir);
+  } catch (e) {
+    return policyFail(code, `the user-state folder cannot be inspected (${errno(e) ?? 'error'})`, e);
+  }
   if (st.isSymbolicLink() || !st.isDirectory()) policyFail(code, 'the user-state folder is not a directory');
   assertOwnerOnly(st, 'the user-state folder', code);
 }
 
 /** Reads a private regular file, or undefined when it does not exist. Never follows a link. */
-export function readPrivateFile(path: string, maxBytes: number, code: PolicyErrorCode, options: {
-  /** Pure preflight must refuse a pending alias instead of repairing a prior writer's publication. */
-  readonly repairTemporaryAliases?: boolean;
-} = {}): Buffer | undefined {
+export function readPrivateFile(
+  path: string,
+  maxBytes: number,
+  code: PolicyErrorCode,
+  options: {
+    /** Pure preflight must refuse a pending alias instead of repairing a prior writer's publication. */
+    readonly repairTemporaryAliases?: boolean;
+  } = {},
+): Buffer | undefined {
   let fd: number;
-  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW | (options.repairTemporaryAliases === false ? (FS.O_NONBLOCK ?? 0) : 0)); } catch (e) {
+  try {
+    fd = openSync(path, FS.O_RDONLY | NOFOLLOW | (options.repairTemporaryAliases === false ? (FS.O_NONBLOCK ?? 0) : 0));
+  } catch (e) {
     if (errno(e) === 'ENOENT') return undefined;
     if (errno(e) === 'ELOOP') return policyFail(code, 'a user-state file is a symbolic link');
     return policyFail(code, `a user-state file cannot be opened (${errno(e) ?? 'error'})`, e);
@@ -60,13 +89,22 @@ export function readPrivateFile(path: string, maxBytes: number, code: PolicyErro
     assertOwnerOnly(st, 'a user-state file', code);
     if (st.size > maxBytes) policyFail(code, `a user-state file is larger than ${maxBytes} bytes`);
     return readExactly(fd, st.size, code);
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /** Reads a regular file of a checkout (settings), refusing links; owner checks do not apply to checkout files. */
-export function readCheckoutFile(path: string, maxBytes: number, code: PolicyErrorCode, options: { readonly nonblocking?: boolean } = {}): Buffer | undefined {
+export function readCheckoutFile(
+  path: string,
+  maxBytes: number,
+  code: PolicyErrorCode,
+  options: { readonly nonblocking?: boolean } = {},
+): Buffer | undefined {
   let fd: number;
-  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW | (options.nonblocking ? (FS.O_NONBLOCK ?? 0) : 0)); } catch (e) {
+  try {
+    fd = openSync(path, FS.O_RDONLY | NOFOLLOW | (options.nonblocking ? (FS.O_NONBLOCK ?? 0) : 0));
+  } catch (e) {
     if (errno(e) === 'ENOENT') return undefined;
     if (errno(e) === 'ELOOP') return policyFail(code, 'the file is a symbolic link');
     return policyFail(code, `the file cannot be opened (${errno(e) ?? 'error'})`, e);
@@ -76,7 +114,9 @@ export function readCheckoutFile(path: string, maxBytes: number, code: PolicyErr
     if (!st.isFile()) policyFail(code, 'not a regular file');
     if (st.size > maxBytes) policyFail(code, `larger than ${maxBytes} bytes`);
     return readExactly(fd, st.size, code);
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function readExactly(fd: number, size: number, code: PolicyErrorCode): Buffer {
@@ -87,7 +127,8 @@ function readExactly(fd: number, size: number, code: PolicyErrorCode): Buffer {
     if (n === 0) break;
     off += n;
   }
-  if (off !== size || readSync(fd, Buffer.alloc(1), 0, 1, size) !== 0) policyFail(code, 'the file changed while it was read');
+  if (off !== size || readSync(fd, Buffer.alloc(1), 0, 1, size) !== 0)
+    policyFail(code, 'the file changed while it was read');
   return buf;
 }
 
@@ -99,7 +140,11 @@ function writeAll(fd: number, bytes: Uint8Array): void {
 
 function syncDir(dir: string): void {
   const fd = openSync(dir, FS.O_RDONLY | (FS.O_DIRECTORY ?? 0) | NOFOLLOW);
-  try { fsyncSync(fd); } finally { closeSync(fd); }
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /** Replaces `name` in a private folder with exactly `bytes`, atomically. */
@@ -107,19 +152,32 @@ export function writePrivateFileAtomic(dir: string, name: string, bytes: Uint8Ar
   ensurePrivateDir(dir, code);
   const tmp = join(dir, `.${name}.${randomBytes(8).toString('hex')}.tmp`);
   let fd: number;
-  try { fd = openSync(tmp, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | NOFOLLOW, 0o600); } catch (e) {
+  try {
+    fd = openSync(tmp, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | NOFOLLOW, 0o600);
+  } catch (e) {
     return policyFail(code, `a user-state file cannot be created (${errno(e) ?? 'error'})`, e);
   }
   try {
     writeAll(fd, bytes);
   } catch (e) {
     closeSync(fd);
-    try { unlinkSync(tmp); } catch { /* best effort */ }
+    try {
+      unlinkSync(tmp);
+    } catch {
+      /* best effort */
+    }
     return policyFail(code, `a user-state file cannot be written (${errno(e) ?? 'error'})`, e);
   }
   closeSync(fd);
-  try { renameSync(tmp, join(dir, name)); syncDir(dir); } catch (e) {
-    try { unlinkSync(tmp); } catch { /* best effort */ }
+  try {
+    renameSync(tmp, join(dir, name));
+    syncDir(dir);
+  } catch (e) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      /* best effort */
+    }
     policyFail(code, `a user-state file cannot be published (${errno(e) ?? 'error'})`, e);
   }
 }
@@ -132,17 +190,31 @@ export function createPrivateFileOnce(dir: string, name: string, bytes: Uint8Arr
   // or missing content: a failure or crash before the link leaves nothing there.
   const temp = join(dir, `.${name}.${randomBytes(8).toString('hex')}.tmp`);
   let fd: number;
-  try { fd = openSync(temp, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | NOFOLLOW, 0o600); } catch (e) {
+  try {
+    fd = openSync(temp, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | NOFOLLOW, 0o600);
+  } catch (e) {
     return policyFail(code, `a user-state file cannot be created (${errno(e) ?? 'error'})`, e);
   }
   let linked = false;
   try {
-    try { writeAll(fd, bytes); } finally { closeSync(fd); }
-    try { linkSync(temp, join(dir, name)); linked = true; } catch (e) {
-      if (errno(e) !== 'EEXIST') return policyFail(code, `a user-state file cannot be published (${errno(e) ?? 'error'})`, e);
+    try {
+      writeAll(fd, bytes);
+    } finally {
+      closeSync(fd);
+    }
+    try {
+      linkSync(temp, join(dir, name));
+      linked = true;
+    } catch (e) {
+      if (errno(e) !== 'EEXIST')
+        return policyFail(code, `a user-state file cannot be published (${errno(e) ?? 'error'})`, e);
     }
   } finally {
-    try { unlinkSync(temp); } catch { /* removed already */ }
+    try {
+      unlinkSync(temp);
+    } catch {
+      /* removed already */
+    }
   }
   syncDir(dir);
   return linked;
@@ -152,13 +224,19 @@ export function createPrivateFileOnce(dir: string, name: string, bytes: Uint8Arr
 function removeTemporaryAliases(dir: string, name: string, file: Stats): void {
   const pattern = new RegExp(`^\\.${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.[0-9a-f]{16}\\.tmp$`);
   let entries: string[];
-  try { entries = readdirSync(dir); } catch { return; }
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return;
+  }
   for (const entry of entries) {
     if (!pattern.test(entry)) continue;
     try {
       const other = lstatSync(join(dir, entry));
       if (other.isFile() && other.dev === file.dev && other.ino === file.ino) unlinkSync(join(dir, entry));
-    } catch { /* removed by its writer meanwhile */ }
+    } catch {
+      /* removed by its writer meanwhile */
+    }
   }
 }
 
@@ -168,22 +246,30 @@ function removeTemporaryAliases(dir: string, name: string, file: Stats): void {
  * or a non-folder on the way is refused, so a check made here holds for what a later create makes.
  */
 export function prospectiveCanonical(path: string, code: PolicyErrorCode): string {
-  if (!isAbsolute(path) || normalize(path) !== path) policyFail(code, 'a user-state folder is an absolute, normalised path');
+  if (!isAbsolute(path) || normalize(path) !== path)
+    policyFail(code, 'a user-state folder is an absolute, normalised path');
   const parts = path.split(sep).filter(Boolean);
   let existing: string = sep;
   let i = 0;
   for (; i < parts.length; i++) {
     const next = join(existing, parts[i]!);
     let st: Stats;
-    try { st = lstatSync(next); } catch (e) {
+    try {
+      st = lstatSync(next);
+    } catch (e) {
       if (errno(e) === 'ENOENT') break;
       return policyFail(code, `a user-state folder cannot be inspected (${errno(e) ?? 'error'})`, e);
     }
-    if (st.isSymbolicLink() || !st.isDirectory()) policyFail(code, 'a user-state folder passes through a link or a file');
+    if (st.isSymbolicLink() || !st.isDirectory())
+      policyFail(code, 'a user-state folder passes through a link or a file');
     existing = next;
   }
   let real: string;
-  try { real = realpathSync.native(existing); } catch (e) { return policyFail(code, 'a user-state folder cannot be resolved', e); }
+  try {
+    real = realpathSync.native(existing);
+  } catch (e) {
+    return policyFail(code, 'a user-state folder cannot be resolved', e);
+  }
   if (real !== existing) policyFail(code, 'a user-state folder is not spelled canonically');
   return parts.length === i ? existing : join(existing, ...parts.slice(i));
 }

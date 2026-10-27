@@ -20,7 +20,12 @@ const CONCAT = new RegExp(String.raw`(["'])(?:(?!\1).)*${SQL}(?:(?!\1).)*\1\s*\+
 /** A template literal with SQL text and an interpolation. */
 const TEMPLATE = new RegExp(String.raw`\`[^\`]*${SQL}[^\`]*\$\{`, 'i');
 
-export interface PreviewFinding { readonly input: string; readonly path: string; readonly line: number; readonly rule: string }
+export interface PreviewFinding {
+  readonly input: string;
+  readonly path: string;
+  readonly line: number;
+  readonly rule: string;
+}
 
 /** The check itself, pure: findings in one file's text. */
 export function detect(path: string, text: string, input: string): PreviewFinding[] {
@@ -61,19 +66,36 @@ export async function runPreviewWorker(): Promise<void> {
   let buffered = '';
   process.stdin.on('data', (b: Buffer) => {
     buffered += b.toString('utf8');
-    for (let nl; (nl = buffered.indexOf('\n')) >= 0;) { lines.push(JSON.parse(buffered.slice(0, nl))); buffered = buffered.slice(nl + 1); wake?.(); }
+    for (let nl; (nl = buffered.indexOf('\n')) >= 0;) {
+      lines.push(JSON.parse(buffered.slice(0, nl)));
+      buffered = buffered.slice(nl + 1);
+      wake?.();
+    }
   });
   const next = async (): Promise<Record<string, any>> => {
-    while (!lines.length) await new Promise<void>(r => { wake = r; });
+    while (!lines.length)
+      await new Promise<void>((r) => {
+        wake = r;
+      });
     return lines.shift() as Record<string, any>;
   };
-  send({ protocol: P, type: 'hello', supported: [P], adapterId: process.env.SENTINEL_ADAPTER_ID, adapterDigest: process.env.SENTINEL_ADAPTER_DIGEST });
+  send({
+    protocol: P,
+    type: 'hello',
+    supported: [P],
+    adapterId: process.env.SENTINEL_ADAPTER_ID,
+    adapterDigest: process.env.SENTINEL_ADAPTER_DIGEST,
+  });
   if ((await next()).type !== 'welcome') process.exit(9);
   const start = await next();
   if (start.type !== 'start') process.exit(9);
 
   // The canonical driver adds a sealed job. Only scoped captured inputs are source, never that auxiliary file.
-  const inputs = ((start.inputs ?? []) as string[]).filter(id => (start.inputScopes ?? []).some((i: any) => i.input === id && i.scopes.some((scope: string) => (start.scopes ?? []).includes(scope))));
+  const inputs = ((start.inputs ?? []) as string[]).filter((id) =>
+    (start.inputScopes ?? []).some(
+      (i: any) => i.input === id && i.scopes.some((scope: string) => (start.scopes ?? []).includes(scope)),
+    ),
+  );
   const scopes = (start.scopes ?? []) as string[];
   const checks = (start.checks ?? []) as string[];
   const findings: PreviewFinding[] = [];
@@ -85,23 +107,53 @@ export async function runPreviewWorker(): Promise<void> {
     const scopeId = scopes[0]!;
     const path = scopeId.slice(scopeId.indexOf(':') + 1);
     let text: string | undefined;
-    try { text = new TextDecoder('utf-8', { fatal: true }).decode(readFileSync(`${IN}/${inputs[0]!.slice('sha256:'.length)}`)); } catch { text = undefined; }
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(
+        readFileSync(`${IN}/${inputs[0]!.slice('sha256:'.length)}`),
+      );
+    } catch {
+      text = undefined;
+    }
     if (!LANGUAGES.test(path)) skipped.push({ scopeId, reasonCode: PREVIEW_SKIP_REASONS.language });
     else if (text === undefined) skipped.push({ scopeId, reasonCode: PREVIEW_SKIP_REASONS.notText });
-    else { findings.push(...detect(path, text, inputs[0]!)); scanned.push(scopeId); }
+    else {
+      findings.push(...detect(path, text, inputs[0]!));
+      scanned.push(scopeId);
+    }
   }
-  const doc = Buffer.from(JSON.stringify({
-    schema: PREVIEW_FINDINGS_SCHEMA, detector: PREVIEW_DETECTOR_ID, rule: PREVIEW_RULE, label: 'foundation-preview',
-    checks: [...checks].sort(), scopes: [...scopes].sort(), scanned, skipped, findings,
-  }));
+  const doc = Buffer.from(
+    JSON.stringify({
+      schema: PREVIEW_FINDINGS_SCHEMA,
+      detector: PREVIEW_DETECTOR_ID,
+      rule: PREVIEW_RULE,
+      label: 'foundation-preview',
+      checks: [...checks].sort(),
+      scopes: [...scopes].sort(),
+      scanned,
+      skipped,
+      findings,
+    }),
+  );
   const hex = sha(doc);
   writeFileSync(`${OUT}/${hex}`, doc);
   const artifact = { id: `sha256:${hex}`, mediaType: 'application/json', bytes: doc.length };
   send({
-    protocol: P, type: 'result', attemptId: start.attemptId, work: start.work, coordinatorEpoch: start.coordinatorEpoch, seq: 0,
-    inputFingerprint: start.inputFingerprint, granularity: 'per-file-per-rule', artifacts: [artifact], observations: [artifact.id],
+    protocol: P,
+    type: 'result',
+    attemptId: start.attemptId,
+    work: start.work,
+    coordinatorEpoch: start.coordinatorEpoch,
+    seq: 0,
+    inputFingerprint: start.inputFingerprint,
+    granularity: 'per-file-per-rule',
+    artifacts: [artifact],
+    observations: [artifact.id],
     // A check is reported covered only with its evidence; a skipped scope keeps it partial in the coverage records.
-    coveredChecks: checks.map(checkId => ({ checkId, coverage: artifact.id })), scannedSet: scanned, skipped,
-    actualReadSet: scanned, unresolvedFrontiers: [], diagnostics: [],
+    coveredChecks: checks.map((checkId) => ({ checkId, coverage: artifact.id })),
+    scannedSet: scanned,
+    skipped,
+    actualReadSet: scanned,
+    unresolvedFrontiers: [],
+    diagnostics: [],
   });
 }

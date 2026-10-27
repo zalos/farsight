@@ -1,7 +1,17 @@
 // Model review contracts (PR 22, ADR 39): the general review's partition plan, a session's checkpoint and its record.
 // A review record is model-review inspection, never coverage of a formal check; its claims are observations.
-import type { ArtifactId, CatalogKey, Count, Digest, Id, RelativePath, ScopedReason, SourceEvidence, Timestamp } from './common.js';
-import type { ReviewInstructionsEnvelope,ReviewInstructionBinding,ReviewRequestEnvelope } from './instructions.js';
+import type {
+  ArtifactId,
+  CatalogKey,
+  Count,
+  Digest,
+  Id,
+  RelativePath,
+  ScopedReason,
+  SourceEvidence,
+  Timestamp,
+} from './common.js';
+import type { ReviewInstructionsEnvelope, ReviewInstructionBinding, ReviewRequestEnvelope } from './instructions.js';
 import type { CweId, ModelIdentity } from './observation.js';
 
 /**
@@ -112,9 +122,9 @@ export interface ServedCitation {
 
 export interface ReviewOperation {
   /** Exact retained request for instruction-bound sessions only. */
-  request?:ArtifactId;
+  request?: ArtifactId;
   /** Reported identity of this reply, never inferred from instruction text. */
-  identity?:ModelIdentity;
+  identity?: ModelIdentity;
   operationId: Id;
   /** `settled`: the call answered and was recorded; `unsettled`: it failed and may have been charged. */
   state: 'settled' | 'unsettled';
@@ -130,12 +140,12 @@ export interface ReviewCheckpointEnvelope {
   sessionId: ReviewSessionId;
   /** The digest of the session's scope, prompt, limits, budget and tools; another spec cannot resume it. */
   specDigest: Digest;
-  instructions?:ReviewInstructionsEnvelope;
+  instructions?: ReviewInstructionsEnvelope;
   /**
    * Includes at most one prepared request whose caller outcome remains unknown.
    * @maxItems 256
    */
-  requests?:ReviewRequestEnvelope[];
+  requests?: ReviewRequestEnvelope[];
   startedAt: Timestamp;
   /**
    * @minItems 2
@@ -179,7 +189,7 @@ export interface ReviewRecordEnvelope {
   sourceId: Id;
   specDigest: Digest;
   promptDigest: Digest;
-  instructions?:ReviewInstructionBinding;
+  instructions?: ReviewInstructionBinding;
   model: ModelIdentity | null;
   /** `mock` replies can never qualify anything. */
   callerKind: 'mock' | 'provider';
@@ -193,7 +203,14 @@ export interface ReviewRecordEnvelope {
   frontiers: ScopedReason[];
   /** @maxItems 256 */
   operations: ReviewOperation[];
-  totals: { steps: Count; toolCalls: Count; inputBytes: Count; inputTokens: Count; outputTokens: Count; usage: 'confirmed' | 'unknown' };
+  totals: {
+    steps: Count;
+    toolCalls: Count;
+    inputBytes: Count;
+    inputTokens: Count;
+    outputTokens: Count;
+    usage: 'confirmed' | 'unknown';
+  };
   refusals: Count;
   rejectedReplies: Count;
   /** @maxItems 16 */

@@ -20,8 +20,35 @@ export interface ServiceCapabilities {
   schemas: string[];
   controlsSupported: false;
   /** @maxItems 64 */
-  features: Array<{ id: string; library: 'available-draft' | 'unavailable'; readiness: 'not-checked'; reasonCode: CatalogKey }>;
-  limits: { pageRows: Count; pageBytes: Count; viewUnits: Count; viewAttempts: Count; viewBytes: Count; viewTtlMs: Count; views: Count; viewCacheBytes: Count; inspectMs: Count; copyMs: Count; reportMs: Count; reportReads: Count; reportDecodedBytes: Count; reportEncodedBytes: Count; deliveryBytes: Count; deliveryCacheBytes: Count; deliveries: Count; deliveryTtlMs: Count; chunkDefault: Count; chunkMax: Count; cursors: Count };
+  features: Array<{
+    id: string;
+    library: 'available-draft' | 'unavailable';
+    readiness: 'not-checked';
+    reasonCode: CatalogKey;
+  }>;
+  limits: {
+    pageRows: Count;
+    pageBytes: Count;
+    viewUnits: Count;
+    viewAttempts: Count;
+    viewBytes: Count;
+    viewTtlMs: Count;
+    views: Count;
+    viewCacheBytes: Count;
+    inspectMs: Count;
+    copyMs: Count;
+    reportMs: Count;
+    reportReads: Count;
+    reportDecodedBytes: Count;
+    reportEncodedBytes: Count;
+    deliveryBytes: Count;
+    deliveryCacheBytes: Count;
+    deliveries: Count;
+    deliveryTtlMs: Count;
+    chunkDefault: Count;
+    chunkMax: Count;
+    cursors: Count;
+  };
   limitationKey: 'sentinel.service.readLimits';
 }
 export interface RunInspection {
@@ -70,9 +97,19 @@ export interface InspectionAttempt {
   accepted: boolean;
   error?: { code: CatalogKey; retryable: boolean };
 }
-export interface InspectionInput { kind: 'input'; workKey: ViewHandle; sourceKey: ViewHandle; inputKey: ViewHandle; contentKey: ViewHandle }
+export interface InspectionInput {
+  kind: 'input';
+  workKey: ViewHandle;
+  sourceKey: ViewHandle;
+  inputKey: ViewHandle;
+  contentKey: ViewHandle;
+}
 export interface InspectionOutput {
-  kind: 'output'; workKey: ViewHandle; attemptKey: ViewHandle; outputKey: ViewHandle; accepted: boolean;
+  kind: 'output';
+  workKey: ViewHandle;
+  attemptKey: ViewHandle;
+  outputKey: ViewHandle;
+  accepted: boolean;
   /** Fixed allowlisted schema or null, never arbitrary producer text. */
   mediaType: string | null;
   privacy: 'metadata' | 'source-derived' | 'source' | null;
@@ -136,16 +173,34 @@ export interface ControlCapabilities {
 
 /** The canonical command vocabulary; tests pin it to cli/outcome.ts without another verdict fold. */
 export type ControlCommandOutcome =
-  | 'satisfied' | 'finding-policy-failed' | 'required-coverage-incomplete' | 'configuration-failure' | 'awaiting-confirmation'
-  | 'submitted' | 'requested' | 'unavailable' | 'prepared' | 'kept' | 'answered' | 'refused';
-export interface ControlAdmissionVerdict { allowed: boolean; asked: boolean; reasonCode: CatalogKey }
+  | 'satisfied'
+  | 'finding-policy-failed'
+  | 'required-coverage-incomplete'
+  | 'configuration-failure'
+  | 'awaiting-confirmation'
+  | 'submitted'
+  | 'requested'
+  | 'unavailable'
+  | 'prepared'
+  | 'kept'
+  | 'answered'
+  | 'refused';
+export interface ControlAdmissionVerdict {
+  allowed: boolean;
+  asked: boolean;
+  reasonCode: CatalogKey;
+}
 /** Sanitized projection of the existing CommandResult; no producer facts or authority tokens. */
 export interface ControlOutcome {
   schema: 'sentinel-control-outcome/draft-1';
   outcome: ControlCommandOutcome;
   /** @asType integer @minimum 0 @maximum 4 */
   exitCode: number;
-  verdicts: { policy: ControlAdmissionVerdict; capability: ControlAdmissionVerdict; credential: ControlAdmissionVerdict };
+  verdicts: {
+    policy: ControlAdmissionVerdict;
+    capability: ControlAdmissionVerdict;
+    credential: ControlAdmissionVerdict;
+  };
   reasonCode?: CatalogKey;
   state: RunState | 'interrupted' | 'awaiting-first-execution' | null;
   joined?: boolean;

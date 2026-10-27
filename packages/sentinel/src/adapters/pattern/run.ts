@@ -30,18 +30,24 @@ export async function runPatternAttempt(service: ExecutionService, attempt: Patt
   try {
     const built = buildPatternJob(attempt.rules, attempt.targets, jobDir, attempt.adapter);
     const outcome = await service.run({
-      adapterId: attempt.adapterId ?? attempt.adapter?.definition.id ?? PATTERN_ADAPTER.id, attemptId: attempt.attemptId, work: attempt.work, inputs: built.inputs,
+      adapterId: attempt.adapterId ?? attempt.adapter?.definition.id ?? PATTERN_ADAPTER.id,
+      attemptId: attempt.attemptId,
+      work: attempt.work,
+      inputs: built.inputs,
       ...(attempt.signal ? { signal: attempt.signal } : {}),
     });
     try {
-      const byId = new Map(outcome.outputs.map(o => [o.id, o.path]));
+      const byId = new Map(outcome.outputs.map((o) => [o.id, o.path]));
       // Targets are read from the attempt's sealed input copies, the bytes the supervisor hashed while copying and the
       // engine actually scanned; never again from the caller's paths, which may have changed since.
       const sealed = join(outcome.workDir, 'input');
       return normalizePatternRun({
-        job: built.job, jobDigest: built.jobDigest, rules: attempt.rules, outcome,
-        outputBytes: id => readFileSync(byId.get(id)!),
-        targetBytes: artifact => readSealed(sealed, artifact),
+        job: built.job,
+        jobDigest: built.jobDigest,
+        rules: attempt.rules,
+        outcome,
+        outputBytes: (id) => readFileSync(byId.get(id)!),
+        targetBytes: (artifact) => readSealed(sealed, artifact),
         ...(attempt.qualifyingArchitecture ? { qualifyingArchitecture: attempt.qualifyingArchitecture } : {}),
       });
     } finally {
@@ -57,13 +63,23 @@ function readSealed(dir: string, artifact: ArtifactId): Uint8Array | undefined {
   const m = /^sha256:([0-9a-f]{64})$/.exec(artifact);
   if (!m) return undefined;
   let fd: number;
-  try { fd = openSync(join(dir, m[1]!), FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0)); } catch { return undefined; }
+  try {
+    fd = openSync(join(dir, m[1]!), FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0));
+  } catch {
+    return undefined;
+  }
   try {
     const st = fstatSync(fd);
     if (!st.isFile()) return undefined;
     const buf = Buffer.alloc(st.size);
     let off = 0;
-    while (off < st.size) { const n = readSync(fd, buf, off, st.size - off, off); if (n === 0) break; off += n; }
+    while (off < st.size) {
+      const n = readSync(fd, buf, off, st.size - off, off);
+      if (n === 0) break;
+      off += n;
+    }
     return off === st.size ? buf : undefined;
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }

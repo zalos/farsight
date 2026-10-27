@@ -7,14 +7,29 @@
 // alias readPublished removes (only that exact name, only for that same file) before reading. Node offers no
 // rename-without-replace, so link-then-unlink is the no-overwrite publication here.
 import { randomBytes } from 'node:crypto';
-import { closeSync, constants as FS, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, unlinkSync, writeSync } from 'node:fs';
+import {
+  closeSync,
+  constants as FS,
+  fstatSync,
+  fsyncSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readSync,
+  unlinkSync,
+  writeSync,
+} from 'node:fs';
 import { isAbsolute, join, relative, sep } from 'node:path';
 
 const NOFOLLOW = FS.O_NOFOLLOW ?? 0;
 
 /** The boundaries a crash or failure test stops at. Production passes none. */
 export type PublishBoundary = 'temp-opened' | 'temp-written' | 'linked' | 'temp-removed';
-export interface PublishHooks { readonly at?: (boundary: PublishBoundary, name: string) => void }
+export interface PublishHooks {
+  readonly at?: (boundary: PublishBoundary, name: string) => void;
+}
 
 /** Temporary names: a leading dot and a `.tmp` suffix, never a name a reader looks up. */
 export const isTemporaryName = (name: string) => name.startsWith('.') && name.endsWith('.tmp');
@@ -27,14 +42,21 @@ export const isTemporaryName = (name: string) => name.startsWith('.') && name.en
  */
 export function ensureDurableDir(dir: string, base: string): void {
   const rel = relative(base, dir);
-  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) throw new UnsafeRecordError('the folder is not below its base');
+  if (rel === '' || rel.startsWith('..') || isAbsolute(rel))
+    throw new UnsafeRecordError('the folder is not below its base');
   let parent = base;
   for (const part of rel.split(sep)) {
     const level = join(parent, part);
     let st;
-    try { st = lstatSync(level); } catch (e) {
+    try {
+      st = lstatSync(level);
+    } catch (e) {
       if (errno(e) !== 'ENOENT') throw new UnsafeRecordError(`a folder cannot be inspected (${errno(e) ?? 'error'})`);
-      try { mkdirSync(level, { mode: 0o700 }); } catch (e2) { if (errno(e2) !== 'EEXIST') throw e2; }
+      try {
+        mkdirSync(level, { mode: 0o700 });
+      } catch (e2) {
+        if (errno(e2) !== 'EEXIST') throw e2;
+      }
       st = lstatSync(level);
     }
     if (st.isSymbolicLink() || !st.isDirectory()) throw new UnsafeRecordError('not a folder');
@@ -46,7 +68,11 @@ export function ensureDurableDir(dir: string, base: string): void {
 
 function syncDir(dir: string): void {
   const fd = openSync(dir, FS.O_RDONLY | (FS.O_DIRECTORY ?? 0) | NOFOLLOW);
-  try { fsyncSync(fd); } finally { closeSync(fd); }
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**
@@ -62,7 +88,9 @@ export function publishOnce(dir: string, name: string, bytes: Uint8Array, hooks:
       hooks.at?.('temp-opened', name);
       for (let off = 0; off < bytes.length;) off += writeSync(fd, bytes, off, bytes.length - off, off);
       fsyncSync(fd);
-    } finally { closeSync(fd); }
+    } finally {
+      closeSync(fd);
+    }
     hooks.at?.('temp-written', name);
     try {
       linkSync(temp, join(dir, name));
@@ -73,7 +101,11 @@ export function publishOnce(dir: string, name: string, bytes: Uint8Array, hooks:
     if (linked) hooks.at?.('linked', name);
   } finally {
     // Only the name this call created; never a name another writer chose.
-    try { unlinkSync(temp); } catch { /* already gone */ }
+    try {
+      unlinkSync(temp);
+    } catch {
+      /* already gone */
+    }
   }
   hooks.at?.('temp-removed', name);
   syncDir(dir);
@@ -85,7 +117,10 @@ const errno = (e: unknown) => (e as NodeJS.ErrnoException | undefined)?.code;
 
 /** A published record that cannot be trusted: a link, not a file, another account's, open to others, too large. */
 export class UnsafeRecordError extends Error {
-  constructor(readonly reason: string) { super(reason); this.name = 'UnsafeRecordError'; }
+  constructor(readonly reason: string) {
+    super(reason);
+    this.name = 'UnsafeRecordError';
+  }
 }
 
 /**
@@ -94,21 +129,28 @@ export class UnsafeRecordError extends Error {
  * an alias, recognised by its exact temporary pattern and the same file, is removed here. Any other second name is
  * refused. Returns undefined when the record does not exist.
  */
-export function readPublished(dir: string, name: string, maxBytes: number, options: {
-  /** Pure preparation preflight refuses an unfinished publication, without deleting its alias. */
-  readonly repairTemporaryAliases?: boolean;
-} = {}): Buffer | undefined {
+export function readPublished(
+  dir: string,
+  name: string,
+  maxBytes: number,
+  options: {
+    /** Pure preparation preflight refuses an unfinished publication, without deleting its alias. */
+    readonly repairTemporaryAliases?: boolean;
+  } = {},
+): Buffer | undefined {
   const path = join(dir, name);
   let fd: number;
   // Inspect the opened object before reading. A substituted FIFO must not wait for a writer before fstat can refuse it.
-  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW | (FS.O_NONBLOCK ?? 0)); } catch (e) {
+  try {
+    fd = openSync(path, FS.O_RDONLY | NOFOLLOW | (FS.O_NONBLOCK ?? 0));
+  } catch (e) {
     if (errno(e) === 'ENOENT') return undefined;
     throw new UnsafeRecordError(errno(e) === 'ELOOP' ? 'a symbolic link' : `cannot be opened (${errno(e) ?? 'error'})`);
   }
   try {
     let st = fstatSync(fd);
     if (!st.isFile()) throw new UnsafeRecordError('not a regular file');
-    if (UID !== undefined && st.uid !== UID) throw new UnsafeRecordError('another account\'s');
+    if (UID !== undefined && st.uid !== UID) throw new UnsafeRecordError("another account's");
     if ((st.mode & 0o077) !== 0) throw new UnsafeRecordError('open to other accounts');
     if (st.nlink > 1) {
       if (options.repairTemporaryAliases === false) throw new UnsafeRecordError('the record has another name');
@@ -118,7 +160,9 @@ export function readPublished(dir: string, name: string, maxBytes: number, optio
         try {
           const other = lstatSync(join(dir, entry));
           if (other.isFile() && other.dev === st.dev && other.ino === st.ino) unlinkSync(join(dir, entry));
-        } catch { /* removed by its writer meanwhile */ }
+        } catch {
+          /* removed by its writer meanwhile */
+        }
       }
       st = fstatSync(fd);
       if (st.nlink !== 1) throw new UnsafeRecordError('the record has another name');
@@ -126,8 +170,14 @@ export function readPublished(dir: string, name: string, maxBytes: number, optio
     if (st.size > maxBytes) throw new UnsafeRecordError(`larger than ${maxBytes} bytes`);
     const buf = Buffer.alloc(st.size);
     let off = 0;
-    while (off < st.size) { const n = readSync(fd, buf, off, st.size - off, off); if (n === 0) break; off += n; }
+    while (off < st.size) {
+      const n = readSync(fd, buf, off, st.size - off, off);
+      if (n === 0) break;
+      off += n;
+    }
     if (off !== st.size) throw new UnsafeRecordError('changed while it was read');
     return buf;
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }

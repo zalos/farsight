@@ -16,7 +16,14 @@ import { canonicalDigest } from '../policy/digest.js';
 import type { EvidenceLimits, PartitionPlan } from './evidence.js';
 import { reviewFail, type EvaluationCode } from './errors.js';
 import { GENERAL_PROMPT, GUIDED_PROMPT } from './prompts.js';
-import { runSession, type CheckpointStore, type ModelCaller, type ReviewCheckpoint, type SessionBudget, type SessionSpec } from './session.js';
+import {
+  runSession,
+  type CheckpointStore,
+  type ModelCaller,
+  type ReviewCheckpoint,
+  type SessionBudget,
+  type SessionSpec,
+} from './session.js';
 import { GENERAL_ADAPTER_DIGEST, GENERAL_ADAPTER_ID } from './general.js';
 import { GUIDED_ADAPTER_DIGEST, GUIDED_ADAPTER_ID } from './guided.js';
 import type { Verdict } from './validator.js';
@@ -59,14 +66,25 @@ export interface EvaluationPlan {
 
 /** Every model × case × trial × {clean, canary}: two models, 30 cases and five trials are 600 evaluations. */
 export function planEvaluation(models: readonly string[], corpus: EvaluationCorpus, trials: number): EvaluationPlan {
-  if (!Number.isSafeInteger(trials) || trials < 1 || trials > 50) reviewFail('sentinel.review.invalidInput', 'trials are 1–50');
-  if (new Set(models).size !== models.length || models.some(m => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(m))) reviewFail('sentinel.review.invalidInput', 'model ids are distinct short ids');
-  if (new Set(corpus.cases.map(c => c.id)).size !== corpus.cases.length) reviewFail('sentinel.review.invalidInput', 'case ids are distinct');
+  if (!Number.isSafeInteger(trials) || trials < 1 || trials > 50)
+    reviewFail('sentinel.review.invalidInput', 'trials are 1–50');
+  if (new Set(models).size !== models.length || models.some((m) => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(m)))
+    reviewFail('sentinel.review.invalidInput', 'model ids are distinct short ids');
+  if (new Set(corpus.cases.map((c) => c.id)).size !== corpus.cases.length)
+    reviewFail('sentinel.review.invalidInput', 'case ids are distinct');
   const items: EvaluationItem[] = [];
-  for (const modelId of models) for (const c of corpus.cases) for (let trial = 1; trial <= trials; trial++) {
-    for (const variant of ['clean', 'canary'] as const) items.push({ modelId, caseId: c.id, trial, variant });
-  }
-  return Object.freeze({ schema: 'sentinel-e5-plan/draft-1', models: [...models], trials, items: Object.freeze(items), corpusDigest: canonicalDigest(corpus) as Digest });
+  for (const modelId of models)
+    for (const c of corpus.cases)
+      for (let trial = 1; trial <= trials; trial++) {
+        for (const variant of ['clean', 'canary'] as const) items.push({ modelId, caseId: c.id, trial, variant });
+      }
+  return Object.freeze({
+    schema: 'sentinel-e5-plan/draft-1',
+    models: [...models],
+    trials,
+    items: Object.freeze(items),
+    corpusDigest: canonicalDigest(corpus) as Digest,
+  });
 }
 
 export interface EvaluationOutcome extends EvaluationItem {
@@ -79,12 +97,20 @@ export interface EvaluationOutcome extends EvaluationItem {
   readonly inputBytes: number;
 }
 
-export interface Interval { readonly value: number | null; readonly low: number | null; readonly high: number | null; readonly n: number }
+export interface Interval {
+  readonly value: number | null;
+  readonly low: number | null;
+  readonly high: number | null;
+  readonly n: number;
+}
 
 export interface ModelMetrics {
   readonly modelId: string;
   readonly callerKind: 'mock' | 'provider';
-  readonly tp: number; readonly fp: number; readonly tn: number; readonly fn: number;
+  readonly tp: number;
+  readonly fp: number;
+  readonly tn: number;
+  readonly fn: number;
   /** Runs, clean and canary, with no final assessment or an inconclusive one; never counted as either verdict. */
   readonly unfinished: number;
   /** The clean part of `unfinished`. */
@@ -104,7 +130,12 @@ export interface ModelMetrics {
   readonly canaryChangedCases: readonly string[];
 }
 
-export interface Thresholds { readonly minPrecision: number; readonly minRecall: number; readonly maxCanaryChanges: number; readonly maxUnfinished: number }
+export interface Thresholds {
+  readonly minPrecision: number;
+  readonly minRecall: number;
+  readonly maxCanaryChanges: number;
+  readonly maxUnfinished: number;
+}
 
 export interface GateReport {
   /** Never "qualified": owner acceptance is a separate decision over this report. */
@@ -125,20 +156,34 @@ export function wilson(successes: number, n: number): Interval {
 
 class MemoryCheckpoints implements CheckpointStore {
   readonly #m = new Map<string, ReviewCheckpoint>();
-  async load(id: string) { return this.#m.get(id) ?? null; }
-  async save(cp: ReviewCheckpoint) { this.#m.set(cp.sessionId, structuredClone(cp)); }
+  async load(id: string) {
+    return this.#m.get(id) ?? null;
+  }
+  async save(cp: ReviewCheckpoint) {
+    this.#m.set(cp.sessionId, structuredClone(cp));
+  }
 }
 
 /** The in-memory scope an evaluation packet is reviewed under: content ids are the bytes' digests. */
 function packetScope(caseId: string, files: Readonly<Record<string, string>>) {
   const bytes = new Map<string, Uint8Array>();
-  const members = Object.keys(files).sort().map(path => {
-    const b = Buffer.from(files[path]!, 'utf8');
-    const content = sha(b);
-    bytes.set(content, b);
-    return { relativePath: path, content, bytes: b.byteLength };
-  });
-  return { members, read: async (id: string) => { const b = bytes.get(id); if (!b) reviewFail('sentinel.review.integrity', 'unknown packet content'); return b!; }, snapshotId: `e5-${caseId}`.slice(0, 120) };
+  const members = Object.keys(files)
+    .sort()
+    .map((path) => {
+      const b = Buffer.from(files[path]!, 'utf8');
+      const content = sha(b);
+      bytes.set(content, b);
+      return { relativePath: path, content, bytes: b.byteLength };
+    });
+  return {
+    members,
+    read: async (id: string) => {
+      const b = bytes.get(id);
+      if (!b) reviewFail('sentinel.review.integrity', 'unknown packet content');
+      return b!;
+    },
+    snapshotId: `e5-${caseId}`.slice(0, 120),
+  };
 }
 
 export interface EvaluationRun {
@@ -147,10 +192,15 @@ export interface EvaluationRun {
   readonly metrics: readonly ModelMetrics[];
 }
 
-export async function runEvaluation(plan: EvaluationPlan, corpus: EvaluationCorpus, callers: Readonly<Record<string, ModelCaller>>,
-  config: { limits: EvidenceLimits; budget: SessionBudget; now?: () => number }): Promise<EvaluationRun> {
-  if (canonicalDigest(corpus) !== plan.corpusDigest) reviewFail('sentinel.review.invalidInput', 'the corpus is not the one planned');
-  const byId = new Map(corpus.cases.map(c => [c.id, c]));
+export async function runEvaluation(
+  plan: EvaluationPlan,
+  corpus: EvaluationCorpus,
+  callers: Readonly<Record<string, ModelCaller>>,
+  config: { limits: EvidenceLimits; budget: SessionBudget; now?: () => number },
+): Promise<EvaluationRun> {
+  if (canonicalDigest(corpus) !== plan.corpusDigest)
+    reviewFail('sentinel.review.invalidInput', 'the corpus is not the one planned');
+  const byId = new Map(corpus.cases.map((c) => [c.id, c]));
   const outcomes: EvaluationOutcome[] = [];
   for (const item of plan.items) {
     const c = byId.get(item.caseId)!;
@@ -160,53 +210,133 @@ export async function runEvaluation(plan: EvaluationPlan, corpus: EvaluationCorp
     const guided = !!c.rule;
     const tag = `${item.modelId}.${c.id}.${item.trial}.${item.variant}`;
     const spec: SessionSpec = {
-      sessionId: `e5-${canonicalDigest({ plan: plan.corpusDigest, tag }).slice(7, 31)}`, kind: guided ? 'guided' : 'general', runId: 'e5-evaluation', attemptId: 'e5-attempt',
-      adapterId: guided ? GUIDED_ADAPTER_ID : GENERAL_ADAPTER_ID, adapterDigest: guided ? GUIDED_ADAPTER_DIGEST : GENERAL_ADAPTER_DIGEST,
+      sessionId: `e5-${canonicalDigest({ plan: plan.corpusDigest, tag }).slice(7, 31)}`,
+      kind: guided ? 'guided' : 'general',
+      runId: 'e5-evaluation',
+      attemptId: 'e5-attempt',
+      adapterId: guided ? GUIDED_ADAPTER_ID : GENERAL_ADAPTER_ID,
+      adapterDigest: guided ? GUIDED_ADAPTER_DIGEST : GENERAL_ADAPTER_DIGEST,
       prompt: guided ? GUIDED_PROMPT : GENERAL_PROMPT,
-      scope: { snapshotId: scope.snapshotId, sourceId: 'e5', files: scope.members,
-        rules: c.rule ? [{ familyId: c.rule.familyId, revisionDigest: sha(c.rule.text) as Digest, text: c.rule.text }] : [], paths: [] },
-      limits: config.limits, budget: config.budget, producerRuleId: c.rule?.familyId ?? GENERAL_ADAPTER_ID,
+      scope: {
+        snapshotId: scope.snapshotId,
+        sourceId: 'e5',
+        files: scope.members,
+        rules: c.rule
+          ? [{ familyId: c.rule.familyId, revisionDigest: sha(c.rule.text) as Digest, text: c.rule.text }]
+          : [],
+        paths: [],
+      },
+      limits: config.limits,
+      budget: config.budget,
+      producerRuleId: c.rule?.familyId ?? GENERAL_ADAPTER_ID,
       ...(c.rule ? { rule: { familyId: c.rule.familyId, revisionDigest: sha(c.rule.text) as Digest } } : {}),
       tools: guided ? ['list', 'read', 'rule'] : ['list', 'read'],
     };
     const checkpoints = new MemoryCheckpoints();
-    const { record, observations } = await runSession(spec, { caller, checkpoints, read: scope.read, ...(config.now ? { now: config.now } : {}) });
+    const { record, observations } = await runSession(spec, {
+      caller,
+      checkpoints,
+      read: scope.read,
+      ...(config.now ? { now: config.now } : {}),
+    });
     const cp = (await checkpoints.load(spec.sessionId))!;
-    const replies = cp.messages.filter(m => m.role === 'assistant').map(m => m.content).join('\n');
-    const cited = new Set(observations.flatMap(o => o.evidence.flatMap(e => ('relativePath' in e ? [e.relativePath] : []))));
+    const replies = cp.messages
+      .filter((m) => m.role === 'assistant')
+      .map((m) => m.content)
+      .join('\n');
+    const cited = new Set(
+      observations.flatMap((o) => o.evidence.flatMap((e) => ('relativePath' in e ? [e.relativePath] : []))),
+    );
     const verdict = record.verdict;
-    const correct = record.outcome === 'completed' && (c.label === 'finding'
-      ? verdict === 'finding' && c.evidencePaths.some(p => cited.has(p))
-      : verdict === 'no-finding');
-    outcomes.push(Object.freeze({ ...item, completed: record.outcome === 'completed', verdict, correct, leaked: replies.includes(c.canaryToken),
-      rejectedReplies: record.rejectedReplies, inputBytes: record.totals.inputBytes }));
+    const correct =
+      record.outcome === 'completed' &&
+      (c.label === 'finding'
+        ? verdict === 'finding' && c.evidencePaths.some((p) => cited.has(p))
+        : verdict === 'no-finding');
+    outcomes.push(
+      Object.freeze({
+        ...item,
+        completed: record.outcome === 'completed',
+        verdict,
+        correct,
+        leaked: replies.includes(c.canaryToken),
+        rejectedReplies: record.rejectedReplies,
+        inputBytes: record.totals.inputBytes,
+      }),
+    );
   }
-  const metrics = plan.models.map(modelId => metricsFor(modelId, callers[modelId]!.kind, outcomes.filter(o => o.modelId === modelId), byId));
+  const metrics = plan.models.map((modelId) =>
+    metricsFor(
+      modelId,
+      callers[modelId]!.kind,
+      outcomes.filter((o) => o.modelId === modelId),
+      byId,
+    ),
+  );
   return Object.freeze({ plan, outcomes: Object.freeze(outcomes), metrics: Object.freeze(metrics) });
 }
 
-function metricsFor(modelId: string, callerKind: 'mock' | 'provider', outs: readonly EvaluationOutcome[], cases: ReadonlyMap<string, EvaluationCase>): ModelMetrics {
-  let tp = 0, fp = 0, tn = 0, fn = 0, unfinished = 0;
-  for (const o of outs.filter(x => x.variant === 'clean')) {
+function metricsFor(
+  modelId: string,
+  callerKind: 'mock' | 'provider',
+  outs: readonly EvaluationOutcome[],
+  cases: ReadonlyMap<string, EvaluationCase>,
+): ModelMetrics {
+  let tp = 0,
+    fp = 0,
+    tn = 0,
+    fn = 0,
+    unfinished = 0;
+  for (const o of outs.filter((x) => x.variant === 'clean')) {
     const label = cases.get(o.caseId)!.label;
-    if (!o.completed || o.verdict === 'inconclusive' || o.verdict === null) { unfinished++; if (label === 'finding') fn++; continue; }
-    if (label === 'finding') { if (o.correct) tp++; else fn++; } else if (o.verdict === 'finding') fp++; else tn++;
+    if (!o.completed || o.verdict === 'inconclusive' || o.verdict === null) {
+      unfinished++;
+      if (label === 'finding') fn++;
+      continue;
+    }
+    if (label === 'finding') {
+      if (o.correct) tp++;
+      else fn++;
+    } else if (o.verdict === 'finding') fp++;
+    else tn++;
   }
-  const unfinishedCanary = outs.filter(o => o.variant === 'canary' && (!o.completed || o.verdict === 'inconclusive' || o.verdict === null)).length;
+  const unfinishedCanary = outs.filter(
+    (o) => o.variant === 'canary' && (!o.completed || o.verdict === 'inconclusive' || o.verdict === null),
+  ).length;
   const key = (o: EvaluationOutcome) => `${o.caseId}\u0000${o.trial}`;
-  const clean = new Map(outs.filter(o => o.variant === 'clean').map(o => [key(o), o.verdict]));
-  const canaryChanges = outs.filter(o => o.variant === 'canary' && clean.get(key(o)) !== o.verdict).length;
+  const clean = new Map(outs.filter((o) => o.variant === 'clean').map((o) => [key(o), o.verdict]));
+  const canaryChanges = outs.filter((o) => o.variant === 'canary' && clean.get(key(o)) !== o.verdict).length;
   const verdictsByCase = new Map<string, Set<string>>();
-  for (const o of outs.filter(x => x.variant === 'clean')) {
+  for (const o of outs.filter((x) => x.variant === 'clean')) {
     const s = verdictsByCase.get(o.caseId) ?? new Set<string>();
     s.add(String(o.verdict));
     verdictsByCase.set(o.caseId, s);
   }
-  const failedCases = [...new Set(outs.filter(o => o.variant === 'clean' && !o.correct).map(o => o.caseId))].sort();
-  const canaryChangedCases = [...new Set(outs.filter(o => o.variant === 'canary' && clean.get(key(o)) !== o.verdict).map(o => o.caseId))].sort();
-  return Object.freeze({ modelId, callerKind, tp, fp, tn, fn, unfinished: unfinished + unfinishedCanary, unfinishedClean: unfinished, unfinishedCanary, precision: wilson(tp, tp + fp), recall: wilson(tp, tp + fn), canaryChanges,
-    canaryLeaks: outs.filter(o => o.leaked).length, variableCases: [...verdictsByCase].filter(([, s]) => s.size > 1).map(([k]) => k).sort(),
-    failedCases, canaryChangedCases });
+  const failedCases = [...new Set(outs.filter((o) => o.variant === 'clean' && !o.correct).map((o) => o.caseId))].sort();
+  const canaryChangedCases = [
+    ...new Set(outs.filter((o) => o.variant === 'canary' && clean.get(key(o)) !== o.verdict).map((o) => o.caseId)),
+  ].sort();
+  return Object.freeze({
+    modelId,
+    callerKind,
+    tp,
+    fp,
+    tn,
+    fn,
+    unfinished: unfinished + unfinishedCanary,
+    unfinishedClean: unfinished,
+    unfinishedCanary,
+    precision: wilson(tp, tp + fp),
+    recall: wilson(tp, tp + fn),
+    canaryChanges,
+    canaryLeaks: outs.filter((o) => o.leaked).length,
+    variableCases: [...verdictsByCase]
+      .filter(([, s]) => s.size > 1)
+      .map(([k]) => k)
+      .sort(),
+    failedCases,
+    canaryChangedCases,
+  });
 }
 
 export interface AgreementMatrix {
@@ -227,18 +357,21 @@ export function agreementMatrix(run: EvaluationRun): AgreementMatrix {
     verdicts.set(o.modelId, m);
   }
   const models = [...run.plan.models];
-  const pairs = models.map(a => models.map(b => {
-    const va = verdicts.get(a) ?? new Map(); const vb = verdicts.get(b) ?? new Map();
-    const both = [...va.keys()].filter(k => vb.has(k));
-    return wilson(both.filter(k => va.get(k) === vb.get(k)).length, both.length);
-  }));
+  const pairs = models.map((a) =>
+    models.map((b) => {
+      const va = verdicts.get(a) ?? new Map();
+      const vb = verdicts.get(b) ?? new Map();
+      const both = [...va.keys()].filter((k) => vb.has(k));
+      return wilson(both.filter((k) => va.get(k) === vb.get(k)).length, both.length);
+    }),
+  );
   return Object.freeze({ establishes: 'agreement-only', models, pairs });
 }
 
 /** What the E5 gate still needs, and only when nothing is missing, whether the owner's thresholds were met. */
 export function e5Gate(run: EvaluationRun, corpus: EvaluationCorpus, thresholds: Thresholds | null): GateReport {
   const reasons: EvaluationCode[] = [];
-  if (run.metrics.some(m => m.callerKind !== 'provider')) reasons.push('sentinel.review.eval.mockOnly');
+  if (run.metrics.some((m) => m.callerKind !== 'provider')) reasons.push('sentinel.review.eval.mockOnly');
   if (run.plan.models.length < 2) reasons.push('sentinel.review.eval.modelsMissing');
   if (corpus.cases.length < 30 || run.plan.trials < 5) reasons.push('sentinel.review.eval.casesMissing');
   if (!corpus.labelReview) reasons.push('sentinel.review.eval.labelsUnreviewed');
@@ -246,8 +379,15 @@ export function e5Gate(run: EvaluationRun, corpus: EvaluationCorpus, thresholds:
   if (run.outcomes.length !== run.plan.items.length) reasons.push('sentinel.review.eval.incomplete');
   if (reasons.length) return Object.freeze({ status: 'not-ready', reasons: Object.freeze(reasons) });
   const t = thresholds!;
-  const ok = run.metrics.every(m => m.precision.low !== null && m.recall.low !== null && m.precision.low >= t.minPrecision && m.recall.low >= t.minRecall
-    && m.canaryChanges <= t.maxCanaryChanges && m.unfinished <= t.maxUnfinished);
+  const ok = run.metrics.every(
+    (m) =>
+      m.precision.low !== null &&
+      m.recall.low !== null &&
+      m.precision.low >= t.minPrecision &&
+      m.recall.low >= t.minRecall &&
+      m.canaryChanges <= t.maxCanaryChanges &&
+      m.unfinished <= t.maxUnfinished,
+  );
   return Object.freeze({ status: ok ? 'meets-thresholds' : 'below-thresholds', reasons: Object.freeze([]) });
 }
 
@@ -279,13 +419,38 @@ export interface E8Estimate {
 /** Wrapper bytes per step around a tool result or a rejection, beyond the evidence text itself. */
 const STEP_OVERHEAD_BYTES = 4096;
 
-export function estimatePlan(plan: PartitionPlan, budget: SessionBudget, limits: EvidenceLimits, maxReplyBytes = 64 * 1024): E8Estimate {
-  const partitions = plan.partitions.map(p => {
-    const task = Buffer.byteLength(JSON.stringify({ task: 'general review', rules: [], files: p.members.map(m => m.relativePath), pathNodes: [], tools: ['list', 'read', 'paths', 'final'] }));
+export function estimatePlan(
+  plan: PartitionPlan,
+  budget: SessionBudget,
+  limits: EvidenceLimits,
+  maxReplyBytes = 64 * 1024,
+): E8Estimate {
+  const partitions = plan.partitions.map((p) => {
+    const task = Buffer.byteLength(
+      JSON.stringify({
+        task: 'general review',
+        rules: [],
+        files: p.members.map((m) => m.relativePath),
+        pathNodes: [],
+        tools: ['list', 'read', 'paths', 'final'],
+      }),
+    );
     const fixed = 7 * (Buffer.byteLength(GENERAL_PROMPT.text) + task) + 1024;
     const perCall = fixed + 7 * limits.maxServedBytes + budget.maxSteps * (6 * maxReplyBytes + STEP_OVERHEAD_BYTES);
-    return Object.freeze({ partitionId: p.id, files: p.members.length, sourceBytes: p.bytes, perCallBoundBytes: perCall, sessionBoundBytes: perCall * budget.maxSteps });
+    return Object.freeze({
+      partitionId: p.id,
+      files: p.members.length,
+      sourceBytes: p.bytes,
+      perCallBoundBytes: perCall,
+      sessionBoundBytes: perCall * budget.maxSteps,
+    });
   });
-  return Object.freeze({ schema: 'sentinel-e8-model-estimate/draft-1', kind: 'estimate', reasonCode: 'sentinel.review.eval.estimate', planDigest: plan.digest,
-    partitions: Object.freeze(partitions), gaps: plan.gaps.length });
+  return Object.freeze({
+    schema: 'sentinel-e8-model-estimate/draft-1',
+    kind: 'estimate',
+    reasonCode: 'sentinel.review.eval.estimate',
+    planDigest: plan.digest,
+    partitions: Object.freeze(partitions),
+    gaps: plan.gaps.length,
+  });
 }

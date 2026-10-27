@@ -6,13 +6,24 @@ import { canonicalDigest } from '../policy/digest.js';
 import type { EvidenceLimits, PartitionMember, PathFact } from './evidence.js';
 import { reviewFail } from './errors.js';
 import { GUIDED_PROMPT, promptDigest } from './prompts.js';
-import { runSession, type RunSessionOptions, type SessionBudget, type SessionResult, type SessionSpec } from './session.js';
+import {
+  runSession,
+  type RunSessionOptions,
+  type SessionBudget,
+  type SessionResult,
+  type SessionSpec,
+} from './session.js';
 import { REPLY_BOUNDS } from './validator.js';
 
 export const GUIDED_ADAPTER_ID = 'sentinel.review.guided';
 
 /** The adapter digest: prompt, reply grammar bounds and the module revision. */
-export const GUIDED_ADAPTER_DIGEST = canonicalDigest({ adapter: GUIDED_ADAPTER_ID, revision: 1, prompt: promptDigest(GUIDED_PROMPT), reply: REPLY_BOUNDS }) as Digest;
+export const GUIDED_ADAPTER_DIGEST = canonicalDigest({
+  adapter: GUIDED_ADAPTER_ID,
+  revision: 1,
+  prompt: promptDigest(GUIDED_PROMPT),
+  reply: REPLY_BOUNDS,
+}) as Digest;
 
 export interface GuidedCheck {
   readonly checkId: string;
@@ -37,17 +48,31 @@ export interface GuidedRequest {
 export function guidedSpec(req: GuidedRequest): SessionSpec {
   const c = req.check;
   if (!c.files.length) reviewFail('sentinel.review.invalidInput', 'a guided check names its scope files');
-  if (typeof c.ruleText !== 'string' || !c.ruleText || c.ruleText.length > 64 * 1024) reviewFail('sentinel.review.invalidInput', 'a guided check carries its pinned rule text');
+  if (typeof c.ruleText !== 'string' || !c.ruleText || c.ruleText.length > 64 * 1024)
+    reviewFail('sentinel.review.invalidInput', 'a guided check carries its pinned rule text');
   return {
     // One session per run and check, whatever the attempt: a later attempt after a crash resumes its checkpoint.
     sessionId: `rv-g-${canonicalDigest({ run: req.runId, check: c.checkId }).slice(7, 31)}`,
-    kind: 'guided', runId: req.runId, attemptId: req.attemptId, adapterId: GUIDED_ADAPTER_ID, adapterDigest: GUIDED_ADAPTER_DIGEST,
+    kind: 'guided',
+    runId: req.runId,
+    attemptId: req.attemptId,
+    adapterId: GUIDED_ADAPTER_ID,
+    adapterDigest: GUIDED_ADAPTER_DIGEST,
     prompt: GUIDED_PROMPT,
-    scope: { snapshotId: req.snapshotId, sourceId: req.sourceId, files: c.files,
-      rules: [{ familyId: c.familyId, revisionDigest: c.revisionDigest, text: c.ruleText }], paths: c.paths ?? [] },
-    limits: req.limits, budget: req.budget, producerRuleId: c.familyId, rule: { familyId: c.familyId, revisionDigest: c.revisionDigest },
+    scope: {
+      snapshotId: req.snapshotId,
+      sourceId: req.sourceId,
+      files: c.files,
+      rules: [{ familyId: c.familyId, revisionDigest: c.revisionDigest, text: c.ruleText }],
+      paths: c.paths ?? [],
+    },
+    limits: req.limits,
+    budget: req.budget,
+    producerRuleId: c.familyId,
+    rule: { familyId: c.familyId, revisionDigest: c.revisionDigest },
     tools: c.paths?.length ? ['list', 'read', 'rule', 'paths'] : ['list', 'read', 'rule'],
   };
 }
 
-export const guidedReview = (req: GuidedRequest, opts: RunSessionOptions): Promise<SessionResult> => runSession(guidedSpec(req), opts);
+export const guidedReview = (req: GuidedRequest, opts: RunSessionOptions): Promise<SessionResult> =>
+  runSession(guidedSpec(req), opts);

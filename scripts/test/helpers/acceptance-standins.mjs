@@ -64,9 +64,19 @@ export async function openStore(path) {
 }
 `;
 
-export const CAPABILITIES = (overrides = {}) => ['scan-cli', 'reports', 'replay-bundles', 'mcp', 'farsight-host-bridge', 'ledger'].map((id) => ({
-  id, state: overrides[id] ?? (id === 'ledger' ? 'available-draft' : 'unavailable'), plannedIn: { 'scan-cli': 'PR 09', reports: 'PR 19', 'replay-bundles': 'PR 26', mcp: 'PR 23a', 'farsight-host-bridge': 'PR 24', ledger: 'PR 03' }[id],
-}));
+export const CAPABILITIES = (overrides = {}) =>
+  ['scan-cli', 'reports', 'replay-bundles', 'mcp', 'farsight-host-bridge', 'ledger'].map((id) => ({
+    id,
+    state: overrides[id] ?? (id === 'ledger' ? 'available-draft' : 'unavailable'),
+    plannedIn: {
+      'scan-cli': 'PR 09',
+      reports: 'PR 19',
+      'replay-bundles': 'PR 26',
+      mcp: 'PR 23a',
+      'farsight-host-bridge': 'PR 24',
+      ledger: 'PR 03',
+    }[id],
+  }));
 
 function pack(dir, name, version, files, extra = {}) {
   const pkg = join(dir, name);
@@ -77,20 +87,52 @@ function pack(dir, name, version, files, extra = {}) {
     writeFileSync(join(pkg, path), text);
     if (path.startsWith('bin/')) chmodSync(join(pkg, path), 0o755);
   }
-  execFileSync('npm', ['pack', '--pack-destination', dir], { cwd: pkg, stdio: 'ignore', env: { ...process.env, npm_config_dry_run: 'false' } });
+  execFileSync('npm', ['pack', '--pack-destination', dir], {
+    cwd: pkg,
+    stdio: 'ignore',
+    env: { ...process.env, npm_config_dry_run: 'false' },
+  });
   return join(dir, `${name}-${version}.tgz`);
 }
 
-export function standIns({ sentinelCaps = CAPABILITIES(), sentinelVersionLine, sentinelVersion = '0.1.0', stampVersion, postinstallMarker } = {}) {
+export function standIns({
+  sentinelCaps = CAPABILITIES(),
+  sentinelVersionLine,
+  sentinelVersion = '0.1.0',
+  stampVersion,
+  postinstallMarker,
+} = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'acceptance-standins-'));
-  const farsight = pack(dir, 'farsight-cli', '0.4.0', { 'bin/farsight.mjs': FARSIGHT_BIN }, { bin: { farsight: 'bin/farsight.mjs' } });
-  const sentinel = pack(dir, 'farsight-sentinel', sentinelVersion, {
-    'bin/sentinel.mjs': SENTINEL_BIN(sentinelCaps, sentinelVersionLine),
-    'dist/store/index.mjs': SENTINEL_STORE,
-    'dist/build-stamp.json': JSON.stringify({ name: 'farsight-sentinel', version: stampVersion ?? sentinelVersion, built: '2026-10-22T00:00:00Z', commit: 'abc1234' }),
-    // an inert marker: a script file of its own (no shell quoting), proving whether this tarball's install script ran
-    ...(postinstallMarker ? { 'postinstall.cjs': `require('node:fs').writeFileSync(${JSON.stringify(postinstallMarker)}, 'ran');\n` } : {}),
-  }, { bin: { 'farsight-sentinel': 'bin/sentinel.mjs' }, exports: { './store': { import: './dist/store/index.mjs' }, './package.json': './package.json' },
-    ...(postinstallMarker ? { scripts: { postinstall: 'node postinstall.cjs' } } : {}) });
+  const farsight = pack(
+    dir,
+    'farsight-cli',
+    '0.4.0',
+    { 'bin/farsight.mjs': FARSIGHT_BIN },
+    { bin: { farsight: 'bin/farsight.mjs' } },
+  );
+  const sentinel = pack(
+    dir,
+    'farsight-sentinel',
+    sentinelVersion,
+    {
+      'bin/sentinel.mjs': SENTINEL_BIN(sentinelCaps, sentinelVersionLine),
+      'dist/store/index.mjs': SENTINEL_STORE,
+      'dist/build-stamp.json': JSON.stringify({
+        name: 'farsight-sentinel',
+        version: stampVersion ?? sentinelVersion,
+        built: '2026-10-22T00:00:00Z',
+        commit: 'abc1234',
+      }),
+      // an inert marker: a script file of its own (no shell quoting), proving whether this tarball's install script ran
+      ...(postinstallMarker
+        ? { 'postinstall.cjs': `require('node:fs').writeFileSync(${JSON.stringify(postinstallMarker)}, 'ran');\n` }
+        : {}),
+    },
+    {
+      bin: { 'farsight-sentinel': 'bin/sentinel.mjs' },
+      exports: { './store': { import: './dist/store/index.mjs' }, './package.json': './package.json' },
+      ...(postinstallMarker ? { scripts: { postinstall: 'node postinstall.cjs' } } : {}),
+    },
+  );
   return { dir, farsight, sentinel, done: () => rmSync(dir, { recursive: true, force: true }) };
 }

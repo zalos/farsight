@@ -4,8 +4,8 @@ import { acquireStoreOwner } from '../../dist/store/owner.js';
 
 const [storePath, waitMs = '250'] = process.argv.slice(2);
 let owner;
-const send = message => process.send(message);
-process.on('message', async message => {
+const send = (message) => process.send(message);
+process.on('message', async (message) => {
   try {
     if (message.type === 'go') {
       try {
@@ -15,7 +15,12 @@ process.on('message', async message => {
         send({ type: 'refused', code: error.code ?? 'unexpected', message: String(error.message) });
       }
     } else if (message.type === 'assert') {
-      try { owner.assertHeld(); send({ type: 'held' }); } catch (error) { send({ type: 'not-held', code: error.code }); }
+      try {
+        owner.assertHeld();
+        send({ type: 'held' });
+      } catch (error) {
+        send({ type: 'not-held', code: error.code });
+      }
     } else if (message.type === 'release') {
       owner?.close();
       send({ type: 'released' });

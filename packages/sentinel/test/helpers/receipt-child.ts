@@ -11,9 +11,20 @@ import { binding, NOW } from './receipt-fixture.ts';
 const [mode, dir, id] = process.argv.slice(2) as [string, string, string?];
 if (mode === 'issue-killed') {
   const original = fs.linkSync;
-  (fs as any).linkSync = function (...args: unknown[]) { (original as any).apply(this, args); process.kill(process.pid, 'SIGKILL'); };
+  (fs as any).linkSync = function (...args: unknown[]) {
+    (original as any).apply(this, args);
+    process.kill(process.pid, 'SIGKILL');
+  };
   syncBuiltinESMExports();
-  issueReceipt(new ReceiptBook(dir), { channel: 'owner-cli', principal: 'owner' }, binding, { now: NOW, ttlMs: 600_000 });
+  issueReceipt(new ReceiptBook(dir), { channel: 'owner-cli', principal: 'owner' }, binding, {
+    now: NOW,
+    ttlMs: 600_000,
+  });
 } else {
-  try { new ReceiptBook(dir).consume(id!, binding, NOW); process.stdout.write('spent'); } catch (e: any) { process.stdout.write(String(e.code)); }
+  try {
+    new ReceiptBook(dir).consume(id!, binding, NOW);
+    process.stdout.write('spent');
+  } catch (e: any) {
+    process.stdout.write(String(e.code));
+  }
 }

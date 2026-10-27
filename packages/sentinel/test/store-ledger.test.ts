@@ -4,7 +4,15 @@ import { DatabaseSync } from 'node:sqlite';
 import { openLedger, type Ledger } from '../dist/store/ledger.js';
 import { LedgerError, MAX_ARTIFACT_BYTES } from '../dist/store/store-types.js';
 import {
-  FakeObjects, FakeOwner, OBJECTS, attemptEnvelope, identityReceipt, runEnvelope, scratch, sha, unstoredReceipt,
+  FakeObjects,
+  FakeOwner,
+  OBJECTS,
+  attemptEnvelope,
+  identityReceipt,
+  runEnvelope,
+  scratch,
+  sha,
+  unstoredReceipt,
   workEnvelope,
 } from './store-helpers.ts';
 
@@ -27,51 +35,89 @@ function start(ledger: Ledger, epoch: string, id: string, ordinal: number, work 
 }
 
 /** Stage one output (and optionally a linked child), the way a coordinator would before writing bytes. */
-function stageAndPublish(ledger: Ledger, work: typeof W1, attemptId: string, stageId: string, text: string,
-  opts: { child?: string; privacy?: 'metadata' | 'source-derived' | 'source'; idempotency?: { clientId: string; key: string } } = {}) {
+function stageAndPublish(
+  ledger: Ledger,
+  work: typeof W1,
+  attemptId: string,
+  stageId: string,
+  text: string,
+  opts: {
+    child?: string;
+    privacy?: 'metadata' | 'source-derived' | 'source';
+    idempotency?: { clientId: string; key: string };
+  } = {},
+) {
   const out = identityReceipt(text);
-  const staged = [{ id: out.id, schema: 'sentinel-observation/draft-1', privacy: opts.privacy ?? 'source-derived',
-    links: opts.child ? [sha(opts.child)] : [] }];
+  const staged = [
+    {
+      id: out.id,
+      schema: 'sentinel-observation/draft-1',
+      privacy: opts.privacy ?? 'source-derived',
+      links: opts.child ? [sha(opts.child)] : [],
+    },
+  ];
   const receipts = [out];
   if (opts.child) {
     staged.push({ id: sha(opts.child), schema: 'text/plain', privacy: 'source', links: [] });
     receipts.push(identityReceipt(opts.child));
   }
   ledger.registerStaging(stageId, staged, { work, attemptId });
-  return ledger.publish({ work, attemptId, stageId, receipts, outputs: [out.id], endedAt: '2026-10-21T12:01:00Z',
-    idempotency: opts.idempotency });
+  return ledger.publish({
+    work,
+    attemptId,
+    stageId,
+    receipts,
+    outputs: [out.id],
+    endedAt: '2026-10-21T12:01:00Z',
+    idempotency: opts.idempotency,
+  });
 }
 
 function raw(ledger: Ledger) {
   return new DatabaseSync(ledger.path, { timeout: 0 });
 }
 
-test('a publication is accepted once, atomically, with its references and event', async t => {
+test('a publication is accepted once, atomically, with its references and event', async (t) => {
   const { ledger } = await setup(t);
   start(ledger, 'epoch-1', 'att-1', 1);
   const receipt = stageAndPublish(ledger, W1, 'att-1', 'stage-1', 'finding one', { child: 'quoted bytes' });
   assert.match(receipt.resultDigest, /^sha256:[0-9a-f]{64}$/);
   const pub = ledger.getPublication(W1)!;
   assert.equal(pub.attemptId, 'att-1');
-  assert.deepEqual(pub.outputs.map(o => o.id), [sha('finding one')]);
+  assert.deepEqual(
+    pub.outputs.map((o) => o.id),
+    [sha('finding one')],
+  );
   assert.equal(ledger.getWork(W1)!.state, 'published');
   assert.equal(ledger.getAttempt('att-1')!.state, 'succeeded');
   const snap = ledger.gcSnapshot();
   assert.deepEqual(snap.staged, []);
   assert.deepEqual(snap.referenced, [sha('finding one'), sha('quoted bytes')].sort());
   assert.deepEqual(snap.links, [[sha('finding one'), sha('quoted bytes')]]);
-  assert.throws(() => ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1', receipts: [identityReceipt('x')],
-    outputs: [], endedAt: '2026-10-21T12:02:00Z' }), code('sentinel.store.alreadyPublished'));
+  assert.throws(
+    () =>
+      ledger.publish({
+        work: W1,
+        attemptId: 'att-1',
+        stageId: 'stage-1',
+        receipts: [identityReceipt('x')],
+        outputs: [],
+        endedAt: '2026-10-21T12:02:00Z',
+      }),
+    code('sentinel.store.alreadyPublished'),
+  );
   assert.deepEqual(ledger.checkIntegrity(), { integrity: 'ok', foreignKeyViolations: 0 });
 });
 
-test('two revisions of one work ID publish independently; revisions append without gaps', async t => {
+test('two revisions of one work ID publish independently; revisions append without gaps', async (t) => {
   const { ledger } = await setup(t);
   start(ledger, 'epoch-1', 'att-1', 1);
   stageAndPublish(ledger, W1, 'att-1', 'stage-1', 'rev one');
   ledger.createRun(runEnvelope('epoch-1', { id: 'run-2', parentId: 'run-1' }) as never);
-  assert.throws(() => ledger.createWork(workEnvelope('epoch-1', { runId: 'run-2', revision: 3 }) as never),
-    code('sentinel.store.conflict'));
+  assert.throws(
+    () => ledger.createWork(workEnvelope('epoch-1', { runId: 'run-2', revision: 3 }) as never),
+    code('sentinel.store.conflict'),
+  );
   ledger.createWork(workEnvelope('epoch-1', { runId: 'run-2', revision: 2 }) as never);
   start(ledger, 'epoch-1', 'att-2', 1, W2);
   stageAndPublish(ledger, W2, 'att-2', 'stage-2', 'rev two');
@@ -81,21 +127,41 @@ test('two revisions of one work ID publish independently; revisions append witho
   assert.equal(ledger.getWork(W2)!.runId, 'run-2');
 });
 
-test('cross-revision attempt references are refused by the fence and by the database itself', async t => {
+test('cross-revision attempt references are refused by the fence and by the database itself', async (t) => {
   const { ledger } = await setup(t);
   ledger.createWork(workEnvelope('epoch-1', { revision: 2 }) as never);
   start(ledger, 'epoch-1', 'att-1', 1, W1);
   start(ledger, 'epoch-1', 'att-2', 1, W2);
-  ledger.registerStaging('stage-1', [{ id: sha('a'), schema: 'text/plain', privacy: 'metadata' }], { work: W1, attemptId: 'att-1' });
-  assert.throws(() => ledger.publish({ work: W2, attemptId: 'att-1', stageId: 'stage-1', receipts: [identityReceipt('a')],
-    outputs: [sha('a')], endedAt: '2026-10-21T12:01:00Z' }), code('sentinel.store.notActiveAttempt'));
+  ledger.registerStaging('stage-1', [{ id: sha('a'), schema: 'text/plain', privacy: 'metadata' }], {
+    work: W1,
+    attemptId: 'att-1',
+  });
+  assert.throws(
+    () =>
+      ledger.publish({
+        work: W2,
+        attemptId: 'att-1',
+        stageId: 'stage-1',
+        receipts: [identityReceipt('a')],
+        outputs: [sha('a')],
+        endedAt: '2026-10-21T12:01:00Z',
+      }),
+    code('sentinel.store.notActiveAttempt'),
+  );
 
   const db = raw(ledger);
   t.after(() => db.close());
   const ev = Number(Object.values(db.prepare('SELECT max(sequence) FROM events').get()!)[0]);
-  assert.throws(() => db.prepare(`INSERT INTO publications (work_id, work_revision, attempt_id, result_digest,
-    coordinator_epoch, accepted_at, sequence) VALUES ('work-pattern-api', 2, 'att-1', ?, 'epoch-1', 'x', ?)`)
-    .run(sha('r'), ev), /FOREIGN KEY/);
+  assert.throws(
+    () =>
+      db
+        .prepare(
+          `INSERT INTO publications (work_id, work_revision, attempt_id, result_digest,
+    coordinator_epoch, accepted_at, sequence) VALUES ('work-pattern-api', 2, 'att-1', ?, 'epoch-1', 'x', ?)`,
+        )
+        .run(sha('r'), ev),
+    /FOREIGN KEY/,
+  );
   db.exec('BEGIN');
   db.exec("UPDATE work_units SET active_attempt_id = 'att-1' WHERE id = 'work-pattern-api' AND revision = 2");
   assert.throws(() => db.exec('COMMIT'), /FOREIGN KEY/);
@@ -104,7 +170,7 @@ test('cross-revision attempt references are refused by the fence and by the data
   assert.deepEqual(ledger.checkIntegrity(), { integrity: 'ok', foreignKeyViolations: 0 });
 });
 
-test('a duplicate publication is refused by the unique key, including a late second attempt', async t => {
+test('a duplicate publication is refused by the unique key, including a late second attempt', async (t) => {
   const { ledger } = await setup(t);
   start(ledger, 'epoch-1', 'att-1', 1);
   stageAndPublish(ledger, W1, 'att-1', 'stage-1', 'first');
@@ -113,55 +179,122 @@ test('a duplicate publication is refused by the unique key, including a late sec
   t.after(() => db.close());
   // Bypass the fence entirely: the database alone refuses a second accepted publication for the revision.
   db.exec('PRAGMA foreign_keys = OFF');
-  assert.throws(() => db.prepare(`INSERT INTO publications (work_id, work_revision, attempt_id, result_digest,
-    coordinator_epoch, accepted_at, sequence) VALUES ('work-pattern-api', 1, 'att-other', ?, 'epoch-1', 'x', 999)`)
-    .run(sha('r')), /UNIQUE/);
+  assert.throws(
+    () =>
+      db
+        .prepare(
+          `INSERT INTO publications (work_id, work_revision, attempt_id, result_digest,
+    coordinator_epoch, accepted_at, sequence) VALUES ('work-pattern-api', 1, 'att-other', ?, 'epoch-1', 'x', 999)`,
+        )
+        .run(sha('r')),
+    /UNIQUE/,
+  );
   assert.throws(() => db.exec('DELETE FROM publications'), /appendOnly/);
   assert.throws(() => db.exec('DELETE FROM events'), /appendOnly/);
 });
 
-test('a superseded attempt cannot publish in the same epoch', async t => {
+test('a superseded attempt cannot publish in the same epoch', async (t) => {
   const { ledger } = await setup(t);
   start(ledger, 'epoch-1', 'att-1', 1);
-  ledger.registerStaging('stage-old', [{ id: sha('old'), schema: 'text/plain', privacy: 'metadata' }],
-    { work: W1, attemptId: 'att-1' });
+  ledger.registerStaging('stage-old', [{ id: sha('old'), schema: 'text/plain', privacy: 'metadata' }], {
+    work: W1,
+    attemptId: 'att-1',
+  });
   assert.throws(() => start(ledger, 'epoch-1', 'att-2', 2), code('sentinel.store.wrongState'));
   const s = start(ledger, 'epoch-1', 'att-2', 2, W1, true);
   assert.equal(s.superseded, 'att-1');
   assert.equal(ledger.getAttempt('att-1')!.state, 'interrupted');
-  assert.throws(() => ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-old', receipts: [identityReceipt('old')],
-    outputs: [sha('old')], endedAt: '2026-10-21T12:01:00Z' }), code('sentinel.store.notActiveAttempt'));
-  assert.throws(() => ledger.registerStaging('stage-late', [{ id: sha('late'), schema: 'text/plain', privacy: 'metadata' }],
-    { work: W1, attemptId: 'att-1' }), code('sentinel.store.notActiveAttempt'));
+  assert.throws(
+    () =>
+      ledger.publish({
+        work: W1,
+        attemptId: 'att-1',
+        stageId: 'stage-old',
+        receipts: [identityReceipt('old')],
+        outputs: [sha('old')],
+        endedAt: '2026-10-21T12:01:00Z',
+      }),
+    code('sentinel.store.notActiveAttempt'),
+  );
+  assert.throws(
+    () =>
+      ledger.registerStaging('stage-late', [{ id: sha('late'), schema: 'text/plain', privacy: 'metadata' }], {
+        work: W1,
+        attemptId: 'att-1',
+      }),
+    code('sentinel.store.notActiveAttempt'),
+  );
   // The new attempt cannot borrow the superseded attempt's stage either.
-  assert.throws(() => ledger.publish({ work: W1, attemptId: 'att-2', stageId: 'stage-old', receipts: [identityReceipt('old')],
-    outputs: [sha('old')], endedAt: '2026-10-21T12:01:00Z' }), code('sentinel.store.stagingMismatch'));
+  assert.throws(
+    () =>
+      ledger.publish({
+        work: W1,
+        attemptId: 'att-2',
+        stageId: 'stage-old',
+        receipts: [identityReceipt('old')],
+        outputs: [sha('old')],
+        endedAt: '2026-10-21T12:01:00Z',
+      }),
+    code('sentinel.store.stagingMismatch'),
+  );
   stageAndPublish(ledger, W1, 'att-2', 'stage-new', 'winner');
   assert.equal(ledger.getPublication(W1)!.attemptId, 'att-2');
   ledger.abortStaging('stage-old');
   assert.deepEqual(ledger.gcSnapshot().staged, []);
 });
 
-test('a stale epoch and a released owner are refused inside every mutation', async t => {
+test('a stale epoch and a released owner are refused inside every mutation', async (t) => {
   const { dir, owner, ledger } = await setup(t);
   start(ledger, 'epoch-1', 'att-1', 1);
-  ledger.registerStaging('stage-1', [{ id: sha('x'), schema: 'text/plain', privacy: 'metadata' }], { work: W1, attemptId: 'att-1' });
+  ledger.registerStaging('stage-1', [{ id: sha('x'), schema: 'text/plain', privacy: 'metadata' }], {
+    work: W1,
+    attemptId: 'att-1',
+  });
 
   owner.held = false;
-  assert.throws(() => ledger.createRun(runEnvelope('epoch-1', { id: 'run-9' }) as never), code('sentinel.store.ownerNotHeld'));
+  assert.throws(
+    () => ledger.createRun(runEnvelope('epoch-1', { id: 'run-9' }) as never),
+    code('sentinel.store.ownerNotHeld'),
+  );
   owner.held = true;
 
   // A successor coordinator opens the same store under a new epoch: the first ledger is fenced off.
   const next = new FakeOwner(dir, 'epoch-2');
   const successor = await openLedger(next, { objects: OBJECTS });
   t.after(() => successor.close());
-  assert.throws(() => ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1', receipts: [identityReceipt('x')],
-    outputs: [sha('x')], endedAt: '2026-10-21T12:01:00Z' }), code('sentinel.store.staleEpoch'));
-  assert.throws(() => ledger.createRun(runEnvelope('epoch-1', { id: 'run-9' }) as never), code('sentinel.store.staleEpoch'));
+  assert.throws(
+    () =>
+      ledger.publish({
+        work: W1,
+        attemptId: 'att-1',
+        stageId: 'stage-1',
+        receipts: [identityReceipt('x')],
+        outputs: [sha('x')],
+        endedAt: '2026-10-21T12:01:00Z',
+      }),
+    code('sentinel.store.staleEpoch'),
+  );
+  assert.throws(
+    () => ledger.createRun(runEnvelope('epoch-1', { id: 'run-9' }) as never),
+    code('sentinel.store.staleEpoch'),
+  );
   // The successor cannot accept the old epoch's attempt or record work under the old epoch either.
-  assert.throws(() => successor.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1', receipts: [identityReceipt('x')],
-    outputs: [sha('x')], endedAt: '2026-10-21T12:01:00Z' }), code('sentinel.store.staleEpoch'));
-  assert.throws(() => successor.createRun(runEnvelope('epoch-1', { id: 'run-9' }) as never), code('sentinel.store.staleEpoch'));
+  assert.throws(
+    () =>
+      successor.publish({
+        work: W1,
+        attemptId: 'att-1',
+        stageId: 'stage-1',
+        receipts: [identityReceipt('x')],
+        outputs: [sha('x')],
+        endedAt: '2026-10-21T12:01:00Z',
+      }),
+    code('sentinel.store.staleEpoch'),
+  );
+  assert.throws(
+    () => successor.createRun(runEnvelope('epoch-1', { id: 'run-9' }) as never),
+    code('sentinel.store.staleEpoch'),
+  );
   assert.equal(successor.getPublication(W1), null);
 
   await assert.rejects(openLedger(new FakeOwner(dir, 'epoch-1')), code('sentinel.store.staleEpoch'));
@@ -172,15 +305,20 @@ test('a stale epoch and a released owner are refused inside every mutation', asy
   assert.throws(() => successor.readEvents(), code('sentinel.store.closed'));
 });
 
-test('client idempotency replays the same result and refuses a conflicting reuse', async t => {
+test('client idempotency replays the same result and refuses a conflicting reuse', async (t) => {
   const { ledger } = await setup(t);
   const key = { clientId: 'cli-1', key: 'req-1' };
   const env = runEnvelope('epoch-1', { id: 'run-7' }) as never;
   const first = ledger.createRun(env, { idempotency: key });
   assert.deepEqual(ledger.createRun(env, { idempotency: key }), first);
-  assert.throws(() => ledger.createRun(runEnvelope('epoch-1', { id: 'run-8' }) as never, { idempotency: key }),
-    code('sentinel.store.idempotencyConflict'));
-  assert.throws(() => ledger.setRunState('run-7', 'pausing', { idempotency: key }), code('sentinel.store.idempotencyConflict'));
+  assert.throws(
+    () => ledger.createRun(runEnvelope('epoch-1', { id: 'run-8' }) as never, { idempotency: key }),
+    code('sentinel.store.idempotencyConflict'),
+  );
+  assert.throws(
+    () => ledger.setRunState('run-7', 'pausing', { idempotency: key }),
+    code('sentinel.store.idempotencyConflict'),
+  );
   assert.equal(ledger.readEvents({ runId: 'run-7' }).events.length, 1);
 
   start(ledger, 'epoch-1', 'att-1', 1);
@@ -188,12 +326,22 @@ test('client idempotency replays the same result and refuses a conflicting reuse
   const receipt = stageAndPublish(ledger, W1, 'att-1', 'stage-1', 'out', { idempotency: pubKey });
   const before = ledger.readEvents({ limit: 500 }).events.length;
   const out = identityReceipt('out');
-  assert.deepEqual(ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1', receipts: [out], outputs: [out.id],
-    endedAt: '2026-10-21T12:01:00Z', idempotency: pubKey }), receipt);
+  assert.deepEqual(
+    ledger.publish({
+      work: W1,
+      attemptId: 'att-1',
+      stageId: 'stage-1',
+      receipts: [out],
+      outputs: [out.id],
+      endedAt: '2026-10-21T12:01:00Z',
+      idempotency: pubKey,
+    }),
+    receipt,
+  );
   assert.equal(ledger.readEvents({ limit: 500 }).events.length, before);
 });
 
-test('events are ordered, paged by cursor, bounded and filterable by run', async t => {
+test('events are ordered, paged by cursor, bounded and filterable by run', async (t) => {
   const { ledger } = await setup(t);
   ledger.createRun(runEnvelope('epoch-1', { id: 'run-2', parentId: 'run-1' }) as never);
   ledger.setRunState('run-2', 'pausing');
@@ -202,27 +350,37 @@ test('events are ordered, paged by cursor, bounded and filterable by run', async
   let cursor = 0;
   for (;;) {
     const page = ledger.readEvents({ after: cursor, limit: 2 });
-    all.push(...page.events.map(e => e.sequence));
+    all.push(...page.events.map((e) => e.sequence));
     cursor = page.cursor;
     if (!page.more) break;
   }
-  assert.deepEqual(all, [...all].sort((a, b) => a - b));
+  assert.deepEqual(
+    all,
+    [...all].sort((a, b) => a - b),
+  );
   assert.equal(new Set(all).size, all.length);
-  assert.deepEqual(ledger.readEvents().events.map(e => e.kind),
-    ['epoch-opened', 'run-created', 'work-created', 'run-created', 'run-state', 'run-state']);
-  assert.deepEqual(ledger.readEvents({ runId: 'run-2' }).events.map(e => e.payload),
-    [{ state: 'running' }, { from: 'running', to: 'pausing' }, { from: 'pausing', to: 'paused' }]);
+  assert.deepEqual(
+    ledger.readEvents().events.map((e) => e.kind),
+    ['epoch-opened', 'run-created', 'work-created', 'run-created', 'run-state', 'run-state'],
+  );
+  assert.deepEqual(
+    ledger.readEvents({ runId: 'run-2' }).events.map((e) => e.payload),
+    [{ state: 'running' }, { from: 'running', to: 'pausing' }, { from: 'pausing', to: 'paused' }],
+  );
   assert.equal(ledger.readEvents({ after: cursor }).events.length, 0);
   assert.throws(() => ledger.readEvents({ limit: 501 }), code('sentinel.store.invalidInput'));
-  assert.throws(() => ledger.setRunState('run-2', 'completed', { outcome: 'complete-coverage' }), code('sentinel.store.wrongState'));
+  assert.throws(
+    () => ledger.setRunState('run-2', 'completed', { outcome: 'complete-coverage' }),
+    code('sentinel.store.wrongState'),
+  );
 });
 
-test('artifact handoff failures never leave an accepted reference to an absent blob', async t => {
+test('artifact handoff failures never leave an accepted reference to an absent blob', async (t) => {
   let missing = false;
   let failCommit = false;
   const { ledger } = await setup(t, {
-    objects: { verify: r => (missing ? null : OBJECTS.verify(r)) },
-    failpoint: p => {
+    objects: { verify: (r) => (missing ? null : OBJECTS.verify(r)) },
+    failpoint: (p) => {
       if (p === 'staging:before-commit' && failCommit) throw new Error('disk full writing staging');
       if (p === 'publish:before-commit' && failCommit) throw new Error('disk full at commit');
     },
@@ -230,8 +388,15 @@ test('artifact handoff failures never leave an accepted reference to an absent b
   start(ledger, 'epoch-1', 'att-1', 1);
   const out = identityReceipt('payload');
   const staged = [{ id: out.id, schema: 'text/plain', privacy: 'source' as const }];
-  const publish = () => ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1', receipts: [out],
-    outputs: [out.id], endedAt: '2026-10-21T12:01:00Z' });
+  const publish = () =>
+    ledger.publish({
+      work: W1,
+      attemptId: 'att-1',
+      stageId: 'stage-1',
+      receipts: [out],
+      outputs: [out.id],
+      endedAt: '2026-10-21T12:01:00Z',
+    });
 
   failCommit = true;
   assert.throws(() => ledger.registerStaging('stage-1', staged, { work: W1, attemptId: 'att-1' }), /disk full/);
@@ -255,29 +420,58 @@ test('artifact handoff failures never leave an accepted reference to an absent b
   assert.equal(ledger.getPublication(W1), null);
   assert.equal(ledger.getWork(W1)!.state, 'running');
 
-  assert.throws(() => ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1',
-    receipts: [out, identityReceipt('unstaged')], outputs: [out.id], endedAt: '2026-10-21T12:01:00Z' }),
-  code('sentinel.store.stagingMismatch'));
-  assert.throws(() => ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1',
-    receipts: [{ ...out, rawSize: MAX_ARTIFACT_BYTES + 1, storedSize: MAX_ARTIFACT_BYTES + 1 }], outputs: [out.id],
-    endedAt: '2026-10-21T12:01:00Z' }), code('sentinel.store.invalidInput'));
-  assert.throws(() => ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1',
-    receipts: [{ ...out, storedDigest: sha('other') }], outputs: [out.id], endedAt: '2026-10-21T12:01:00Z' }),
-  code('sentinel.store.invalidInput'));
+  assert.throws(
+    () =>
+      ledger.publish({
+        work: W1,
+        attemptId: 'att-1',
+        stageId: 'stage-1',
+        receipts: [out, identityReceipt('unstaged')],
+        outputs: [out.id],
+        endedAt: '2026-10-21T12:01:00Z',
+      }),
+    code('sentinel.store.stagingMismatch'),
+  );
+  assert.throws(
+    () =>
+      ledger.publish({
+        work: W1,
+        attemptId: 'att-1',
+        stageId: 'stage-1',
+        receipts: [{ ...out, rawSize: MAX_ARTIFACT_BYTES + 1, storedSize: MAX_ARTIFACT_BYTES + 1 }],
+        outputs: [out.id],
+        endedAt: '2026-10-21T12:01:00Z',
+      }),
+    code('sentinel.store.invalidInput'),
+  );
+  assert.throws(
+    () =>
+      ledger.publish({
+        work: W1,
+        attemptId: 'att-1',
+        stageId: 'stage-1',
+        receipts: [{ ...out, storedDigest: sha('other') }],
+        outputs: [out.id],
+        endedAt: '2026-10-21T12:01:00Z',
+      }),
+    code('sentinel.store.invalidInput'),
+  );
 
   publish();
   assert.deepEqual(ledger.gcSnapshot().referenced, [out.id]);
   assert.deepEqual(ledger.objectsOf(out.id), [out]);
 });
 
-test('the GC snapshot reports accepted, staged, report and active roots at one sequence', async t => {
+test('the GC snapshot reports accepted, staged, report and active roots at one sequence', async (t) => {
   const { ledger } = await setup(t);
   start(ledger, 'epoch-1', 'att-1', 1);
   stageAndPublish(ledger, W1, 'att-1', 'stage-1', 'parent', { child: 'child' });
   ledger.createWork(workEnvelope('epoch-1', { id: 'work-other', influenceManifest: sha('manifest') }) as never);
   start(ledger, 'epoch-1', 'att-o', 1, { id: 'work-other', revision: 1 });
-  ledger.registerStaging('stage-open', [{ id: sha('in flight'), schema: 'text/plain', privacy: 'metadata' }],
-    { work: { id: 'work-other', revision: 1 }, attemptId: 'att-o' });
+  ledger.registerStaging('stage-open', [{ id: sha('in flight'), schema: 'text/plain', privacy: 'metadata' }], {
+    work: { id: 'work-other', revision: 1 },
+    attemptId: 'att-o',
+  });
   ledger.pinReport('report-1', 'run-1', [sha('parent')]);
   assert.throws(() => ledger.pinReport('report-2', 'run-1', [sha('never stored')]), code('sentinel.store.conflict'));
   const snap = ledger.gcSnapshot();
@@ -286,20 +480,28 @@ test('the GC snapshot reports accepted, staged, report and active roots at one s
   assert.deepEqual(snap.staged, [sha('in flight')]);
   assert.deepEqual(snap.reports, [sha('parent')]);
   assert.ok(snap.active.includes(sha('manifest')), 'unfinished work pins its influence manifest');
-  assert.ok(snap.active.includes('sha256:8888888888888888888888888888888888888888888888888888888888888888'),
-    'a running attempt pins its invocation');
+  assert.ok(
+    snap.active.includes('sha256:8888888888888888888888888888888888888888888888888888888888888888'),
+    'a running attempt pins its invocation',
+  );
   assert.deepEqual(snap.links, [[sha('parent'), sha('child')]]);
   assert.equal(snap.objects.length, 2);
   assert.equal(snap.storeId, 'store-1');
   assert.equal(snap.complete, true);
   ledger.assertSnapshotCurrent(snap);
-  assert.throws(() => ledger.assertSnapshotCurrent({ ...snap, storeId: 'store-other' }), code('sentinel.store.snapshotStale'));
+  assert.throws(
+    () => ledger.assertSnapshotCurrent({ ...snap, storeId: 'store-other' }),
+    code('sentinel.store.snapshotStale'),
+  );
   ledger.abortStaging('stage-open');
-  assert.throws(() => ledger.assertSnapshotCurrent(snap), code('sentinel.store.snapshotStale'),
-    'a root change after the snapshot invalidates it');
+  assert.throws(
+    () => ledger.assertSnapshotCurrent(snap),
+    code('sentinel.store.snapshotStale'),
+    'a root change after the snapshot invalidates it',
+  );
 });
 
-test('an artifact privacy floor rises with a stronger reference and never falls', async t => {
+test('an artifact privacy floor rises with a stronger reference and never falls', async (t) => {
   const { ledger } = await setup(t);
   start(ledger, 'epoch-1', 'att-1', 1);
   stageAndPublish(ledger, W1, 'att-1', 'stage-1', 'shared bytes', { privacy: 'source' });
@@ -309,26 +511,45 @@ test('an artifact privacy floor rises with a stronger reference and never falls'
   assert.equal(ledger.getPublication({ id: 'work-b', revision: 1 })!.outputs[0]!.privacy, 'metadata');
   const db = raw(ledger);
   t.after(() => db.close());
-  const floor = () => Object.values(db.prepare('SELECT privacy_floor FROM artifacts WHERE id = ?').get(sha('shared bytes'))!)[0];
+  const floor = () =>
+    Object.values(db.prepare('SELECT privacy_floor FROM artifacts WHERE id = ?').get(sha('shared bytes'))!)[0];
   assert.equal(floor(), 'source');
-  assert.throws(() => db.prepare("UPDATE artifacts SET privacy_floor = 'metadata' WHERE id = ?").run(sha('shared bytes')),
-    /privacyDowngrade/);
+  assert.throws(
+    () => db.prepare("UPDATE artifacts SET privacy_floor = 'metadata' WHERE id = ?").run(sha('shared bytes')),
+    /privacyDowngrade/,
+  );
 });
 
-test('a revoked run refuses publication, and a restart reads what was committed', async t => {
+test('a revoked run refuses publication, and a restart reads what was committed', async (t) => {
   const { dir, owner, ledger } = await setup(t);
   start(ledger, 'epoch-1', 'att-1', 1);
   stageAndPublish(ledger, W1, 'att-1', 'stage-1', 'kept');
   ledger.createWork(workEnvelope('epoch-1', { id: 'work-c' }) as never);
   start(ledger, 'epoch-1', 'att-c', 1, { id: 'work-c', revision: 1 });
-  ledger.registerStaging('stage-c', [{ id: sha('late'), schema: 'text/plain', privacy: 'metadata' }],
-    { work: { id: 'work-c', revision: 1 }, attemptId: 'att-c' });
+  ledger.registerStaging('stage-c', [{ id: sha('late'), schema: 'text/plain', privacy: 'metadata' }], {
+    work: { id: 'work-c', revision: 1 },
+    attemptId: 'att-c',
+  });
   ledger.setRunState('run-1', 'canceling');
-  assert.throws(() => ledger.publish({ work: { id: 'work-c', revision: 1 }, attemptId: 'att-c', stageId: 'stage-c',
-    receipts: [identityReceipt('late')], outputs: [sha('late')], endedAt: '2026-10-21T12:01:00Z' }),
-  code('sentinel.store.wrongState'));
-  ledger.endAttempt({ work: { id: 'work-c', revision: 1 }, attemptId: 'att-c', state: 'canceled', endedAt: '2026-10-21T12:02:00Z',
-    workState: 'failed' });
+  assert.throws(
+    () =>
+      ledger.publish({
+        work: { id: 'work-c', revision: 1 },
+        attemptId: 'att-c',
+        stageId: 'stage-c',
+        receipts: [identityReceipt('late')],
+        outputs: [sha('late')],
+        endedAt: '2026-10-21T12:01:00Z',
+      }),
+    code('sentinel.store.wrongState'),
+  );
+  ledger.endAttempt({
+    work: { id: 'work-c', revision: 1 },
+    attemptId: 'att-c',
+    state: 'canceled',
+    endedAt: '2026-10-21T12:02:00Z',
+    workState: 'failed',
+  });
   owner.release();
   assert.ok(ledger.closed);
 
@@ -342,7 +563,7 @@ test('a revoked run refuses publication, and a restart reads what was committed'
   assert.ok(!('db' in reopened), 'no connection is exposed');
 });
 
-test('publication fails closed without a verifier and refuses forged, tampered or foreign objects', async t => {
+test('publication fails closed without a verifier and refuses forged, tampered or foreign objects', async (t) => {
   const dir = scratch(t);
   const owner = new FakeOwner(dir, 'epoch-1');
   const bare = await openLedger(owner);
@@ -350,9 +571,19 @@ test('publication fails closed without a verifier and refuses forged, tampered o
   bare.createWork(workEnvelope('epoch-1') as never);
   start(bare, 'epoch-1', 'att-1', 1);
   const forged = unstoredReceipt('never written');
-  bare.registerStaging('stage-1', [{ id: forged.id, schema: 'text/plain', privacy: 'metadata' }], { work: W1, attemptId: 'att-1' });
-  const publish = (l: Ledger, r: typeof forged) => l.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1',
-    receipts: [r], outputs: [r.id], endedAt: '2026-10-21T12:01:00Z' });
+  bare.registerStaging('stage-1', [{ id: forged.id, schema: 'text/plain', privacy: 'metadata' }], {
+    work: W1,
+    attemptId: 'att-1',
+  });
+  const publish = (l: Ledger, r: typeof forged) =>
+    l.publish({
+      work: W1,
+      attemptId: 'att-1',
+      stageId: 'stage-1',
+      receipts: [r],
+      outputs: [r.id],
+      endedAt: '2026-10-21T12:01:00Z',
+    });
   assert.throws(() => publish(bare, forged), code('sentinel.store.objectVerifierUnavailable'));
   owner.release();
 
@@ -360,12 +591,26 @@ test('publication fails closed without a verifier and refuses forged, tampered o
   const check = async (epoch: string, store: FakeObjects, receipt: typeof forged) => {
     const o = new FakeOwner(dir, epoch);
     const l = await openLedger(o, { objects: store });
-    l.startAttempt(attemptEnvelope(epoch, { id: `att-${epoch}`, ordinal: Number(epoch.slice(6)), work: W1 }) as never,
-      { supersede: true });
-    l.registerStaging(`stage-${epoch}`, [{ id: receipt.id, schema: 'text/plain', privacy: 'metadata' }],
-      { work: W1, attemptId: `att-${epoch}` });
-    assert.throws(() => l.publish({ work: W1, attemptId: `att-${epoch}`, stageId: `stage-${epoch}`, receipts: [receipt],
-      outputs: [receipt.id], endedAt: '2026-10-21T12:01:00Z' }), code('sentinel.store.objectMissing'), epoch);
+    l.startAttempt(attemptEnvelope(epoch, { id: `att-${epoch}`, ordinal: Number(epoch.slice(6)), work: W1 }) as never, {
+      supersede: true,
+    });
+    l.registerStaging(`stage-${epoch}`, [{ id: receipt.id, schema: 'text/plain', privacy: 'metadata' }], {
+      work: W1,
+      attemptId: `att-${epoch}`,
+    });
+    assert.throws(
+      () =>
+        l.publish({
+          work: W1,
+          attemptId: `att-${epoch}`,
+          stageId: `stage-${epoch}`,
+          receipts: [receipt],
+          outputs: [receipt.id],
+          endedAt: '2026-10-21T12:01:00Z',
+        }),
+      code('sentinel.store.objectMissing'),
+      epoch,
+    );
     assert.deepEqual(l.gcSnapshot().referenced, [], epoch);
     o.release();
   };
@@ -379,16 +624,36 @@ test('publication fails closed without a verifier and refuses forged, tampered o
   await check('epoch-5', objects, { ...honest, rawSize: honest.rawSize + 1, storedSize: honest.storedSize + 1 }); // the receipt overstates the bytes
 });
 
-test('an attempt ends only with a final envelope consistent with its stored start', async t => {
+test('an attempt ends only with a final envelope consistent with its stored start', async (t) => {
   const { ledger } = await setup(t);
   start(ledger, 'epoch-1', 'att-1', 1); // started 2026-10-21T12:00:00Z with not-applicable usage
-  const end = (over: Record<string, unknown>) => ledger.endAttempt({ work: W1, attemptId: 'att-1', state: 'failed',
-    endedAt: '2026-10-21T12:01:00Z', workState: 'ready', ...over } as never);
-  assert.throws(() => end({ endedAt: '2026-10-20T12:00:00Z' }), code('sentinel.store.invalidInput'), 'ends before it starts');
-  assert.throws(() => end({ state: 'canceled-after-spend' }), code('sentinel.store.invalidInput'),
-    'the stored start usage is not confirmed and none was observed');
-  assert.throws(() => end({ state: 'canceled-after-spend', usage: { certainty: 'unknown' } }), code('sentinel.store.invalidInput'));
-  assert.throws(() => end({ usage: { certainty: 'not-applicable', inputTokens: 3 } }), code('sentinel.store.invalidInput'));
+  const end = (over: Record<string, unknown>) =>
+    ledger.endAttempt({
+      work: W1,
+      attemptId: 'att-1',
+      state: 'failed',
+      endedAt: '2026-10-21T12:01:00Z',
+      workState: 'ready',
+      ...over,
+    } as never);
+  assert.throws(
+    () => end({ endedAt: '2026-10-20T12:00:00Z' }),
+    code('sentinel.store.invalidInput'),
+    'ends before it starts',
+  );
+  assert.throws(
+    () => end({ state: 'canceled-after-spend' }),
+    code('sentinel.store.invalidInput'),
+    'the stored start usage is not confirmed and none was observed',
+  );
+  assert.throws(
+    () => end({ state: 'canceled-after-spend', usage: { certainty: 'unknown' } }),
+    code('sentinel.store.invalidInput'),
+  );
+  assert.throws(
+    () => end({ usage: { certainty: 'not-applicable', inputTokens: 3 } }),
+    code('sentinel.store.invalidInput'),
+  );
   assert.equal(ledger.getAttempt('att-1')!.state, 'running', 'every refusal left the attempt running');
 
   const spent = { certainty: 'confirmed', inputTokens: 10, outputTokens: 2, monetaryCost: '0.001', currency: 'USD' };
@@ -398,43 +663,69 @@ test('an attempt ends only with a final envelope consistent with its stored star
   assert.deepEqual(after.envelope.usage, spent);
   const db = raw(ledger);
   t.after(() => db.close());
-  const row = db.prepare('SELECT usage_certainty, final_usage_certainty FROM attempts WHERE id = ?').get('att-1') as Record<string, unknown>;
-  assert.deepEqual({ ...row }, { usage_certainty: 'not-applicable', final_usage_certainty: 'confirmed' },
-    'the start identity is kept; the observed final usage is recorded beside it');
-  assert.throws(() => db.exec("UPDATE attempts SET final_usage_certainty = 'unknown' WHERE id = 'att-1'"), /appendOnly/);
+  const row = db
+    .prepare('SELECT usage_certainty, final_usage_certainty FROM attempts WHERE id = ?')
+    .get('att-1') as Record<string, unknown>;
+  assert.deepEqual(
+    { ...row },
+    { usage_certainty: 'not-applicable', final_usage_certainty: 'confirmed' },
+    'the start identity is kept; the observed final usage is recorded beside it',
+  );
+  assert.throws(
+    () => db.exec("UPDATE attempts SET final_usage_certainty = 'unknown' WHERE id = 'att-1'"),
+    /appendOnly/,
+  );
 });
 
-test('publication compares end and start at full nanosecond precision', async t => {
+test('publication compares end and start at full nanosecond precision', async (t) => {
   const { ledger } = await setup(t);
-  ledger.startAttempt(attemptEnvelope('epoch-1', { id: 'att-1', ordinal: 1, work: W1,
-    startedAt: '2026-10-21T12:00:00.000000002Z' }) as never);
+  ledger.startAttempt(
+    attemptEnvelope('epoch-1', {
+      id: 'att-1',
+      ordinal: 1,
+      work: W1,
+      startedAt: '2026-10-21T12:00:00.000000002Z',
+    }) as never,
+  );
   const out = identityReceipt('precise');
-  ledger.registerStaging('stage-1', [{ id: out.id, schema: 'text/plain', privacy: 'metadata' }], { work: W1, attemptId: 'att-1' });
-  const publish = (endedAt: string) => ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1', receipts: [out],
-    outputs: [out.id], endedAt });
+  ledger.registerStaging('stage-1', [{ id: out.id, schema: 'text/plain', privacy: 'metadata' }], {
+    work: W1,
+    attemptId: 'att-1',
+  });
+  const publish = (endedAt: string) =>
+    ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-1', receipts: [out], outputs: [out.id], endedAt });
   assert.throws(() => publish('2026-10-21T12:00:00.000000001Z'), code('sentinel.store.invalidInput'));
   assert.equal(ledger.getPublication(W1), null);
   publish('2026-10-21T12:00:00.000000002Z');
   assert.equal(ledger.getAttempt('att-1')!.envelope.state, 'succeeded');
 });
 
-test('a stage removal is visible on its run-filtered event stream', async t => {
+test('a stage removal is visible on its run-filtered event stream', async (t) => {
   const { ledger } = await setup(t);
   start(ledger, 'epoch-1', 'att-1', 1);
-  ledger.registerStaging('stage-1', [{ id: sha('s'), schema: 'text/plain', privacy: 'metadata' }], { work: W1, attemptId: 'att-1' });
+  ledger.registerStaging('stage-1', [{ id: sha('s'), schema: 'text/plain', privacy: 'metadata' }], {
+    work: W1,
+    attemptId: 'att-1',
+  });
   ledger.abortStaging('stage-1');
-  const kinds = ledger.readEvents({ runId: 'run-1', limit: 500 }).events.map(e => e.kind);
+  const kinds = ledger.readEvents({ runId: 'run-1', limit: 500 }).events.map((e) => e.kind);
   assert.deepEqual(kinds.slice(-2), ['staging-registered', 'staging-aborted']);
   const aborted = ledger.readEvents({ runId: 'run-1', limit: 500 }).events.at(-1)!;
   assert.deepEqual(aborted.work, W1);
 });
 
-test('every artifact a retained work or attempt names stays a root after it finishes', async t => {
+test('every artifact a retained work or attempt names stays a root after it finishes', async (t) => {
   const { ledger } = await setup(t);
   const MANIFEST = 'sha256:6666666666666666666666666666666666666666666666666666666666666666';
   const INVOCATION = 'sha256:8888888888888888888888888888888888888888888888888888888888888888';
   start(ledger, 'epoch-1', 'att-1', 1);
-  ledger.endAttempt({ work: W1, attemptId: 'att-1', state: 'failed', endedAt: '2026-10-21T12:01:00Z', workState: 'ready' });
+  ledger.endAttempt({
+    work: W1,
+    attemptId: 'att-1',
+    state: 'failed',
+    endedAt: '2026-10-21T12:01:00Z',
+    workState: 'ready',
+  });
   start(ledger, 'epoch-1', 'att-2', 2);
   stageAndPublish(ledger, W1, 'att-2', 'stage-1', 'published output');
   const done = ledger.gcSnapshot();
@@ -447,28 +738,52 @@ test('every artifact a retained work or attempt names stays a root after it fini
   const db = raw(ledger);
   t.after(() => db.close());
   const VALID = new URL('./contracts/valid/', import.meta.url);
-  const fixture = async (n: string) => JSON.parse(await (await import('node:fs/promises')).readFile(new URL(`${n}.json`, VALID), 'utf8'));
-  const reused = { ...(await fixture('work-reused')), id: 'work-reuse', revision: 1, runId: 'run-1', coordinatorEpoch: 'epoch-1',
-    influenceManifest: sha('reuse manifest'), dependencies: [] };
-  db.prepare(`INSERT INTO work_units (id, revision, run_id, plan_revision, input_fingerprint, influence_manifest,
+  const fixture = async (n: string) =>
+    JSON.parse(await (await import('node:fs/promises')).readFile(new URL(`${n}.json`, VALID), 'utf8'));
+  const reused = {
+    ...(await fixture('work-reused')),
+    id: 'work-reuse',
+    revision: 1,
+    runId: 'run-1',
+    coordinatorEpoch: 'epoch-1',
+    influenceManifest: sha('reuse manifest'),
+    dependencies: [],
+  };
+  db.prepare(
+    `INSERT INTO work_units (id, revision, run_id, plan_revision, input_fingerprint, influence_manifest,
     coordinator_epoch, state, active_attempt_id, envelope) VALUES ('work-reuse', 1, 'run-1', ?, ?, ?, 'epoch-1',
-    'satisfied-by-reuse', NULL, ?)`).run(reused.planRevision, reused.inputFingerprint, reused.influenceManifest, JSON.stringify(reused));
+    'satisfied-by-reuse', NULL, ?)`,
+  ).run(reused.planRevision, reused.inputFingerprint, reused.influenceManifest, JSON.stringify(reused));
   const begun = { ...attemptEnvelope('epoch-1', { id: 'att-diag', ordinal: 9 }) };
-  const ended = { ...(await fixture('attempt-ended')), id: 'att-diag', ordinal: 9, coordinatorEpoch: 'epoch-1',
-    worker: begun.worker, error: { code: 'sentinel.error.timeout', retryable: true, diagnostics: sha('diagnostics') } };
-  db.prepare(`INSERT INTO attempts (id, work_id, work_revision, ordinal, coordinator_epoch, state, usage_certainty, started_at,
+  const ended = {
+    ...(await fixture('attempt-ended')),
+    id: 'att-diag',
+    ordinal: 9,
+    coordinatorEpoch: 'epoch-1',
+    worker: begun.worker,
+    error: { code: 'sentinel.error.timeout', retryable: true, diagnostics: sha('diagnostics') },
+  };
+  db.prepare(
+    `INSERT INTO attempts (id, work_id, work_revision, ordinal, coordinator_epoch, state, usage_certainty, started_at,
     ended_at, envelope, final_usage_certainty, final_envelope) VALUES ('att-diag', 'work-pattern-api', 1, 9, 'epoch-1',
-    'failed', 'not-applicable', ?, ?, ?, 'not-applicable', ?)`).run(ended.startedAt, ended.endedAt, JSON.stringify(begun),
-    JSON.stringify(ended));
+    'failed', 'not-applicable', ?, ?, ?, 'not-applicable', ?)`,
+  ).run(ended.startedAt, ended.endedAt, JSON.stringify(begun), JSON.stringify(ended));
   // A raw write appends no event, so it is invisible to assertSnapshotCurrent: that is why only the ledger writes.
   ledger.assertSnapshotCurrent(done);
   const all = ledger.gcSnapshot();
-  for (const id of [sha('reuse manifest'), 'sha256:7777777777777777777777777777777777777777777777777777777777777777',
-    sha('diagnostics'), 'sha256:9999999999999999999999999999999999999999999999999999999999999999']) {
+  for (const id of [
+    sha('reuse manifest'),
+    'sha256:7777777777777777777777777777777777777777777777777777777777777777',
+    sha('diagnostics'),
+    'sha256:9999999999999999999999999999999999999999999999999999999999999999',
+  ]) {
     assert.ok(all.retained.includes(id), id);
   }
   assert.ok(!all.retained.includes(reused.inputFingerprint), 'a plain fingerprint is not an artifact root');
-  assert.ok(!all.retained.includes(reused.stage.implementationDigest), 'an implementation digest is not an artifact root');
+  assert.ok(
+    !all.retained.includes(reused.stage.implementationDigest),
+    'an implementation digest is not an artifact root',
+  );
 
   ledger.createWork(workEnvelope('epoch-1', { id: 'work-new', influenceManifest: sha('new manifest') }) as never);
   assert.throws(() => ledger.assertSnapshotCurrent(all), code('sentinel.store.snapshotStale'));
@@ -476,45 +791,94 @@ test('every artifact a retained work or attempt names stays a root after it fini
   assert.ok(next.retained.includes(sha('new manifest')) && next.active.includes(sha('new manifest')));
 });
 
-test('an unreadable retained record fails the snapshot closed instead of shrinking its roots', async t => {
+test('an unreadable retained record fails the snapshot closed instead of shrinking its roots', async (t) => {
   const { ledger } = await setup(t);
   const db = raw(ledger);
   t.after(() => db.close());
-  db.prepare(`INSERT INTO work_units (id, revision, run_id, plan_revision, input_fingerprint, influence_manifest,
+  db.prepare(
+    `INSERT INTO work_units (id, revision, run_id, plan_revision, input_fingerprint, influence_manifest,
     coordinator_epoch, state, active_attempt_id, envelope) VALUES ('work-bad', 1, 'run-1', 1, ?, ?, 'epoch-1', 'published',
-    NULL, '{}')`).run(sha('f'), sha('m'));
+    NULL, '{}')`,
+  ).run(sha('f'), sha('m'));
   assert.throws(() => ledger.gcSnapshot(), code('sentinel.store.corruptRecord'));
 });
 
-test('a retained record whose envelopes disagree with its row or with each other fails the snapshot closed', async t => {
+test('a retained record whose envelopes disagree with its row or with each other fails the snapshot closed', async (t) => {
   const VALID = new URL('./contracts/valid/', import.meta.url);
-  const fixture = async (n: string) => JSON.parse(await (await import('node:fs/promises')).readFile(new URL(`${n}.json`, VALID), 'utf8'));
+  const fixture = async (n: string) =>
+    JSON.parse(await (await import('node:fs/promises')).readFile(new URL(`${n}.json`, VALID), 'utf8'));
   const endedFixture = await fixture('attempt-ended');
-  const insertAttempt = (db: DatabaseSync, row: { state: string; envelope: unknown; final: unknown | null; endedAt: string | null }) =>
-    db.prepare(`INSERT INTO attempts (id, work_id, work_revision, ordinal, coordinator_epoch, state, usage_certainty, started_at,
+  const insertAttempt = (
+    db: DatabaseSync,
+    row: { state: string; envelope: unknown; final: unknown | null; endedAt: string | null },
+  ) =>
+    db
+      .prepare(
+        `INSERT INTO attempts (id, work_id, work_revision, ordinal, coordinator_epoch, state, usage_certainty, started_at,
       ended_at, envelope, final_usage_certainty, final_envelope) VALUES ('att-x', 'work-pattern-api', 1, 9, 'epoch-1', ?,
-      'not-applicable', '2026-10-21T12:00:00Z', ?, ?, ?, ?)`).run(row.state, row.endedAt, JSON.stringify(row.envelope),
-      row.final === null ? null : 'not-applicable', row.final === null ? null : JSON.stringify(row.final));
+      'not-applicable', '2026-10-21T12:00:00Z', ?, ?, ?, ?)`,
+      )
+      .run(
+        row.state,
+        row.endedAt,
+        JSON.stringify(row.envelope),
+        row.final === null ? null : 'not-applicable',
+        row.final === null ? null : JSON.stringify(row.final),
+      );
   const begun = attemptEnvelope('epoch-1', { id: 'att-x', ordinal: 9 });
-  const ended = { ...endedFixture, id: 'att-x', ordinal: 9, coordinatorEpoch: 'epoch-1', worker: begun.worker,
-    outputs: [sha('smuggled output')], error: { code: 'sentinel.error.timeout', retryable: false, diagnostics: sha('smuggled diag') } };
+  const ended = {
+    ...endedFixture,
+    id: 'att-x',
+    ordinal: 9,
+    coordinatorEpoch: 'epoch-1',
+    worker: begun.worker,
+    outputs: [sha('smuggled output')],
+    error: { code: 'sentinel.error.timeout', retryable: false, diagnostics: sha('smuggled diag') },
+  };
 
   const cases: Array<[string, (db: DatabaseSync) => void]> = [
-    ['a running row whose start envelope is an ended envelope',
-      db => insertAttempt(db, { state: 'running', envelope: ended, final: null, endedAt: null })],
-    ['an ended row whose final envelope changes the worker',
-      db => insertAttempt(db, { state: 'failed', envelope: begun, endedAt: ended.endedAt,
-        final: { ...ended, worker: { kind: 'owned-child', pid: 1, processStartedAt: '2026-10-21T12:00:00Z' } } })],
-    ['an ended row whose final envelope names another work revision',
-      db => insertAttempt(db, { state: 'failed', envelope: begun, endedAt: ended.endedAt,
-        final: { ...ended, work: { id: 'work-pattern-api', revision: 2 } } })],
-    ['an ended row whose end time differs from its envelope',
-      db => insertAttempt(db, { state: 'failed', envelope: begun, endedAt: '2026-10-21T12:09:00Z', final: ended })],
-    ['a work row whose envelope names another run',
-      db => db.prepare(`INSERT INTO work_units (id, revision, run_id, plan_revision, input_fingerprint, influence_manifest,
-        coordinator_epoch, state, active_attempt_id, envelope) VALUES ('work-x', 1, 'run-1', 2, ?, ?, 'epoch-1', 'ready', NULL, ?)`)
-        .run('sha256:5555555555555555555555555555555555555555555555555555555555555555', sha('m'),
-          JSON.stringify(workEnvelope('epoch-1', { id: 'work-x', runId: 'run-other', influenceManifest: sha('m') })))],
+    [
+      'a running row whose start envelope is an ended envelope',
+      (db) => insertAttempt(db, { state: 'running', envelope: ended, final: null, endedAt: null }),
+    ],
+    [
+      'an ended row whose final envelope changes the worker',
+      (db) =>
+        insertAttempt(db, {
+          state: 'failed',
+          envelope: begun,
+          endedAt: ended.endedAt,
+          final: { ...ended, worker: { kind: 'owned-child', pid: 1, processStartedAt: '2026-10-21T12:00:00Z' } },
+        }),
+    ],
+    [
+      'an ended row whose final envelope names another work revision',
+      (db) =>
+        insertAttempt(db, {
+          state: 'failed',
+          envelope: begun,
+          endedAt: ended.endedAt,
+          final: { ...ended, work: { id: 'work-pattern-api', revision: 2 } },
+        }),
+    ],
+    [
+      'an ended row whose end time differs from its envelope',
+      (db) => insertAttempt(db, { state: 'failed', envelope: begun, endedAt: '2026-10-21T12:09:00Z', final: ended }),
+    ],
+    [
+      'a work row whose envelope names another run',
+      (db) =>
+        db
+          .prepare(
+            `INSERT INTO work_units (id, revision, run_id, plan_revision, input_fingerprint, influence_manifest,
+        coordinator_epoch, state, active_attempt_id, envelope) VALUES ('work-x', 1, 'run-1', 2, ?, ?, 'epoch-1', 'ready', NULL, ?)`,
+          )
+          .run(
+            'sha256:5555555555555555555555555555555555555555555555555555555555555555',
+            sha('m'),
+            JSON.stringify(workEnvelope('epoch-1', { id: 'work-x', runId: 'run-other', influenceManifest: sha('m') })),
+          ),
+    ],
   ];
   for (const [name, corrupt] of cases) {
     const { ledger } = await setup(t);

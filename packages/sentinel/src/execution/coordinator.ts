@@ -13,13 +13,21 @@
 // and inventory units run as the coordinator's own operations (bootstrap.ts); an analysis revision's check units
 // run as workers, and what each covered is recorded as canonical coverage records (coverage.ts) that PR 06's
 // evaluateRequiredCoverage alone turns into the run's outcome.
-import {prepareAdmittedReview,runAdmittedReview,type ReviewRuntime} from '../review/dispatch.js';
+import { prepareAdmittedReview, runAdmittedReview, type ReviewRuntime } from '../review/dispatch.js';
 import { BUILTIN_WORKERS, closureRefusalOf } from './builtin-workers.js';
 import { deepFreeze } from '../policy/immutable.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { driverRefusal, fileDigest, isCheckDriverRegistry, type CheckDriver, type CheckDriverRegistry, type DriverContext, type RuleFiles } from './check-drivers.js';
+import {
+  driverRefusal,
+  fileDigest,
+  isCheckDriverRegistry,
+  type CheckDriver,
+  type CheckDriverRegistry,
+  type DriverContext,
+  type RuleFiles,
+} from './check-drivers.js';
 import { retainedAnalysisFor, retainedBinding, verifyRetainedAuxiliary } from './retained-analysis.js';
 import { resolveLockedRules } from '../rules/resolve.js';
 import type { ValidatedPack } from '../rules/pack.js';
@@ -39,19 +47,42 @@ import type { DockerRunner } from './isolation.js';
 import type { ContainerIntent } from './supervisor.js';
 import { effectiveLimits, TRUSTED_ADAPTERS, type AdapterRegistry } from './registry.js';
 import {
-  checkRetryPolicy, decide, DEFAULT_CAPACITY, DEFAULT_RETRY, orderPlan, ReservationPool, retryable,
-  type Capacity, type CommittedUnit, type RetryPolicy, type UnitDecision,
+  checkRetryPolicy,
+  decide,
+  DEFAULT_CAPACITY,
+  DEFAULT_RETRY,
+  orderPlan,
+  ReservationPool,
+  retryable,
+  type Capacity,
+  type CommittedUnit,
+  type RetryPolicy,
+  type UnitDecision,
 } from './scheduler.js';
 import { createExecutionService, type ExecutionService } from './service.js';
 import { inputFingerprintOf, releaseWorkDir, type InvocationRecord, type WorkerOutcome } from './supervisor.js';
-import { bindingId, bindingMismatch, checkRecordedRun, checkRecordedWork, executablePlan, EXECUTION_BINDING_SCHEMA, type ExecutionBinding, type ValidatedPlan } from './plan.js';
+import {
+  bindingId,
+  bindingMismatch,
+  checkRecordedRun,
+  checkRecordedWork,
+  executablePlan,
+  EXECUTION_BINDING_SCHEMA,
+  type ExecutionBinding,
+  type ValidatedPlan,
+} from './plan.js';
 import { loadPlan } from './plans.js';
 import { publishPrepared, runOperation } from './bootstrap.js';
 import { COVERAGE_SCHEMA, coverageRecords, scopeIndex, type ScopeIndex } from './coverage.js';
 import { evaluateRequiredCoverage, type RequiredCoverage } from '../planner/coverage.js';
 
-export const COORDINATOR_BOUNDARIES = ['before-spawn', 'after-spawn', 'after-attempt-start', ...PUBLICATION_BOUNDARIES] as const;
-export type CoordinatorBoundary = typeof COORDINATOR_BOUNDARIES[number];
+export const COORDINATOR_BOUNDARIES = [
+  'before-spawn',
+  'after-spawn',
+  'after-attempt-start',
+  ...PUBLICATION_BOUNDARIES,
+] as const;
+export type CoordinatorBoundary = (typeof COORDINATOR_BOUNDARIES)[number];
 
 /** Test seam (deterministic crash injection). Production passes none. */
 export interface CoordinatorHooks {
@@ -87,11 +118,16 @@ export interface CoordinatorOptions {
   /** The promoted packs the plan's lock pins, with their files' bytes, for drivers (each verified when used). */
   packs?: ReadonlyArray<{ pack: ValidatedPack; files: ReadonlyMap<string, Uint8Array> }>;
   /** Package-internal test seam for the container runtime (see ContainerBackend.connect). */
-  review?:ReviewRuntime;
+  review?: ReviewRuntime;
   backendOptions?: { wrapRunner?: (runner: DockerRunner) => DockerRunner };
 }
 
-export interface UnitFailure { work: WorkRef; attemptId: Id | null; code: string; detail?: Readonly<Record<string, unknown>> }
+export interface UnitFailure {
+  work: WorkRef;
+  attemptId: Id | null;
+  code: string;
+  detail?: Readonly<Record<string, unknown>>;
+}
 
 export interface RunSummary {
   runId: Id;
@@ -132,7 +168,7 @@ const CPU_SLACK_MS = 100;
 
 export class Coordinator {
   readonly #store: SentinelStore;
-  readonly #review:ReviewRuntime|undefined;
+  readonly #review: ReviewRuntime | undefined;
   readonly #plan: ValidatedPlan;
   readonly #service: ExecutionService;
   readonly #intents: IntentFiles;
@@ -170,16 +206,31 @@ export class Coordinator {
   /** The plan's scope extents, indexed once. */
   readonly #scopes: ScopeIndex;
 
-  private constructor(o: CoordinatorOptions, plan: ValidatedPlan, service: ExecutionService, intents: IntentFiles, workers: WorkerFiles, recovery: RecoveryReport) {
-    this.#store = o.store;this.#review=o.review; this.#plan = plan; this.#service = service; this.#intents = intents; this.#workers = workers;
+  private constructor(
+    o: CoordinatorOptions,
+    plan: ValidatedPlan,
+    service: ExecutionService,
+    intents: IntentFiles,
+    workers: WorkerFiles,
+    recovery: RecoveryReport,
+  ) {
+    this.#store = o.store;
+    this.#review = o.review;
+    this.#plan = plan;
+    this.#service = service;
+    this.#intents = intents;
+    this.#workers = workers;
     this.#scratchRoot = o.scratchRoot;
-    this.#databases = o.databases ? o.databases.map(d => ({ ...d })) : [];
+    this.#databases = o.databases ? o.databases.map((d) => ({ ...d })) : [];
     this.#drivers = o.drivers;
-    this.#packs = o.packs ? o.packs.map(p => ({ pack: p.pack, files: new Map([...p.files].map(([k, v]) => [k, Uint8Array.from(v)])) })) : undefined;
+    this.#packs = o.packs
+      ? o.packs.map((p) => ({ pack: p.pack, files: new Map([...p.files].map(([k, v]) => [k, Uint8Array.from(v)])) }))
+      : undefined;
     this.#scopes = scopeIndex(plan.admitted.plan);
     this.#unknown = new UnknownCleanup(o.store.storePath);
     const wait = o.cleanupWaitMs ?? 30_000;
-    if (!Number.isInteger(wait) || wait < 0 || wait > 600_000) throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'cleanupWaitMs is 0 to 600000' });
+    if (!Number.isInteger(wait) || wait < 0 || wait > 600_000)
+      throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'cleanupWaitMs is 0 to 600000' });
     this.#cleanupWaitMs = wait;
     this.#backendOptions = o.backendOptions;
     this.#pool = new ReservationPool(o.capacity ?? DEFAULT_CAPACITY);
@@ -194,24 +245,44 @@ export class Coordinator {
     o.store.assertHeld();
     const registry = o.registry ?? TRUSTED_ADAPTERS;
     const recorded = o.store.ledger.getRun(o.runId);
-    if (o.run && o.run.id !== o.runId) throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'the run envelope names another run' });
+    if (o.run && o.run.id !== o.runId)
+      throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'the run envelope names another run' });
     if (o.run) checkRecordedRun(o.run, recorded?.envelope);
     const run = recorded?.envelope ?? o.run;
-    if (!run) throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'the run is not recorded and no run envelope was given' });
+    if (!run)
+      throw new ExecutionError('sentinel.execution.planInvalid', {
+        reason: 'the run is not recorded and no run envelope was given',
+      });
     const revision = recorded?.planRevision ?? run.planRevision;
     // Exactly the admitted revision, read back and checked, bound to its adapters and actual inputs.
     const admitted = await loadPlan(o.store, o.runId, revision);
-    if (o.drivers !== undefined && !isCheckDriverRegistry(o.drivers)) throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'drivers come only from createCheckDriverRegistry' });
+    if (o.drivers !== undefined && !isCheckDriverRegistry(o.drivers))
+      throw new ExecutionError('sentinel.execution.adapterInvalid', {
+        reason: 'drivers come only from createCheckDriverRegistry',
+      });
     // Rebind selected drivers here: the caller may have built them against a different registry earlier.
     const refusal = o.drivers ? driverRefusal(admitted.plan, o.drivers, registry) : undefined;
     if (refusal) throw new ExecutionError('sentinel.execution.planInvalid', { reason: refusal });
     const plan = await executablePlan(o.store, admitted, run, revision, registry, o.scratchRoot);
-    for (const w of plan.works) checkRecordedWork(plan, { id: w.id, revision: w.revision }, o.store.ledger.getWork({ id: w.id, revision: w.revision }));
-    const service = await createExecutionService(o.store, { scratchRoot: o.scratchRoot, ...(o.registry ? { registry: o.registry } : {}),
-      ...(o.containers ? { containers: true } : {}), ...(o.backendOptions?.wrapRunner ? { wrapRunner: o.backendOptions.wrapRunner } : {}) });
+    for (const w of plan.works)
+      checkRecordedWork(
+        plan,
+        { id: w.id, revision: w.revision },
+        o.store.ledger.getWork({ id: w.id, revision: w.revision }),
+      );
+    const service = await createExecutionService(o.store, {
+      scratchRoot: o.scratchRoot,
+      ...(o.registry ? { registry: o.registry } : {}),
+      ...(o.containers ? { containers: true } : {}),
+      ...(o.backendOptions?.wrapRunner ? { wrapRunner: o.backendOptions.wrapRunner } : {}),
+    });
     const intents = new IntentFiles(o.store.storePath);
     const workers = new WorkerFiles(o.store.storePath);
-    const recovery = await recoverStore(o.store, { intents, workers, ...(service.backend ? { backend: service.backend } : {}) });
+    const recovery = await recoverStore(o.store, {
+      intents,
+      workers,
+      ...(service.backend ? { backend: service.backend } : {}),
+    });
     const c = new Coordinator(o, plan, service, intents, workers, recovery);
     // What dead owners left in this scratch root that is provably unused now goes; anything uncertain stays.
     c.scratch = reconcileScratch(o.scratchRoot, o.store, recovery, c.#unknown.list());
@@ -228,7 +299,8 @@ export class Coordinator {
   cancel(): void {
     this.#cancelRequested = true;
     const s = this.#runState();
-    if (s && s !== 'canceling' && s !== 'canceled' && s !== 'completed') this.#store.ledger.setRunState(this.#plan.run.id, 'canceling');
+    if (s && s !== 'canceling' && s !== 'canceled' && s !== 'completed')
+      this.#store.ledger.setRunState(this.#plan.run.id, 'canceling');
     this.#cancel.abort();
   }
 
@@ -256,7 +328,9 @@ export class Coordinator {
    */
   run(): Promise<RunSummary> {
     if (this.#active) return this.#active;
-    const drive = this.#run().finally(() => { if (this.#active === drive) this.#active = undefined; });
+    const drive = this.#run().finally(() => {
+      if (this.#active === drive) this.#active = undefined;
+    });
     this.#active = drive;
     return drive;
   }
@@ -270,7 +344,12 @@ export class Coordinator {
     let state = this.#runState();
     if (state === undefined) {
       // Recorded now: the run's time budget runs from here.
-      this.#store.ledger.createRun({ ...structuredClone(this.#plan.run), state: 'running', coordinatorEpoch: this.#store.epoch, createdAt: now() } as RunEnvelope);
+      this.#store.ledger.createRun({
+        ...structuredClone(this.#plan.run),
+        state: 'running',
+        coordinatorEpoch: this.#store.epoch,
+        createdAt: now(),
+      } as RunEnvelope);
       state = 'running';
     } else if (state === 'completed' || state === 'canceled') {
       return this.#summary();
@@ -278,8 +357,14 @@ export class Coordinator {
       this.#cancelRequested = true;
     } else {
       // planned, paused, or a pause an earlier epoch did not finish: run() resumes.
-      if (state === 'pausing') { this.#store.ledger.setRunState(runId, 'paused'); state = 'paused'; }
-      if ((state === 'planned' || state === 'paused') && !pauseFirst && !this.#cancelRequested) { this.#store.ledger.setRunState(runId, 'running'); state = 'running'; }
+      if (state === 'pausing') {
+        this.#store.ledger.setRunState(runId, 'paused');
+        state = 'paused';
+      }
+      if ((state === 'planned' || state === 'paused') && !pauseFirst && !this.#cancelRequested) {
+        this.#store.ledger.setRunState(runId, 'running');
+        state = 'running';
+      }
     }
     if (pauseFirst && !this.#cancelRequested && this.#runState() !== 'canceling') {
       // A prepared linked run already has a planned row. Honor a setup pause through the same legal states as an
@@ -293,19 +378,33 @@ export class Coordinator {
     const recorded = this.#store.ledger.getRun(runId)!;
     this.#runDeadline = Date.parse(recorded.envelope.createdAt) + recorded.envelope.budgets.deadlineMs;
     const remaining = this.#runDeadline - Date.now();
-    const deadlineTimer = setTimeout(() => { this.#deadlinePassed = true; this.#deadline.abort(); }, Math.max(0, Math.min(remaining, 2_147_000_000)));
-    if (remaining <= 0) { this.#deadlinePassed = true; this.#deadline.abort(); }
+    const deadlineTimer = setTimeout(
+      () => {
+        this.#deadlinePassed = true;
+        this.#deadline.abort();
+      },
+      Math.max(0, Math.min(remaining, 2_147_000_000)),
+    );
+    if (remaining <= 0) {
+      this.#deadlinePassed = true;
+      this.#deadline.abort();
+    }
     try {
       // The pinned snapshot is restored for this drive only: attempts copy their inputs from it while it lasts, and
       // the drive returns with nothing in flight, so nothing reads it after.
       const restored = this.#plan.restored;
       if (restored && !existsSync(restored)) await restoreSnapshot(this.#store, this.#plan.run.snapshotId, restored);
-      try { return await this.#drive(runId); } finally { if (restored) removeOwned(restored); }
-    } finally { clearTimeout(deadlineTimer); }
+      try {
+        return await this.#drive(runId);
+      } finally {
+        if (restored) removeOwned(restored);
+      }
+    } finally {
+      clearTimeout(deadlineTimer);
+    }
   }
 
   async #drive(runId: Id): Promise<RunSummary> {
-
     // Unconfirmed cleanup holds admission: a prior worker may still run and hold what a new one would be given.
     const blocked = await this.#awaitCleanup();
     if (blocked.length) return this.#summary(blocked);
@@ -314,7 +413,12 @@ export class Coordinator {
     for (;;) {
       const decisions = this.progress();
       await this.#persistHolds(decisions);
-      const admitting = !this.#pauseRequested && !this.#cancelRequested && !this.#deadlinePassed && this.#runState() === 'running' && this.#pendingNow.length === 0;
+      const admitting =
+        !this.#pauseRequested &&
+        !this.#cancelRequested &&
+        !this.#deadlinePassed &&
+        this.#runState() === 'running' &&
+        this.#pendingNow.length === 0;
       let admitted = 0;
       if (admitting) {
         for (const d of decisions) {
@@ -323,30 +427,46 @@ export class Coordinator {
           const limits = effectiveLimits(this.#plan.unitOf(d.ref).adapter!.limits, work.resources);
           const reservation = this.#pool.tryReserve(key(d.ref), { memoryBytes: limits.memoryBytes, cpus: limits.cpus });
           if (!reservation) break;
-          const task = this.#unit(work).finally(() => { this.#pool.release(reservation); inflight.delete(key(d.ref)); });
+          const task = this.#unit(work).finally(() => {
+            this.#pool.release(reservation);
+            inflight.delete(key(d.ref));
+          });
           inflight.set(key(d.ref), task);
           admitted++;
         }
       }
       if (inflight.size === 0) {
-        if (this.#cancelRequested) { this.#finishRunState('canceled'); break; }
-        if (this.#deadlinePassed && this.#runState() === 'running') { await this.#expire(); break; }
+        if (this.#cancelRequested) {
+          this.#finishRunState('canceled');
+          break;
+        }
+        if (this.#deadlinePassed && this.#runState() === 'running') {
+          await this.#expire();
+          break;
+        }
         if (this.#pendingNow.length) {
           const still = await this.#awaitCleanup();
           if (still.length) return this.#summary(still);
           continue;
         }
-        if (this.#pauseRequested || this.#runState() === 'pausing') { this.#finishRunState('paused'); this.#pauseRequested = false; break; }
+        if (this.#pauseRequested || this.#runState() === 'pausing') {
+          this.#finishRunState('paused');
+          this.#pauseRequested = false;
+          break;
+        }
         const final = this.progress();
-        if (final.every(d => ['published', 'failed', 'blocked', 'disabled'].includes(d.state))) {
+        if (final.every((d) => ['published', 'failed', 'blocked', 'disabled'].includes(d.state))) {
           await this.#persistHolds(final);
-          const failed = !final.every(d => d.state === 'published' || d.state === 'disabled');
+          const failed = !final.every((d) => d.state === 'published' || d.state === 'disabled');
           // A published bootstrap leaves the run running: its analysis revision is planned from what it published.
           if (this.#plan.admitted.plan.kind === 'bootstrap' && !failed) break;
           // Exit codes prove nothing about coverage: the outcome is PR 06's evaluation of the coverage records alone.
           const coverage = this.#plan.admitted.plan.kind === 'analysis' ? this.#requiredCoverage() : null;
-          const outcome: RunOutcome = failed ? 'execution-failure'
-            : final.every(d => d.state === 'published') && coverage?.complete === true ? 'complete-coverage' : 'partial-coverage';
+          const outcome: RunOutcome = failed
+            ? 'execution-failure'
+            : final.every((d) => d.state === 'published') && coverage?.complete === true
+              ? 'complete-coverage'
+              : 'partial-coverage';
           this.#store.ledger.setRunState(runId, 'completed', { outcome });
           break;
         }
@@ -365,10 +485,11 @@ export class Coordinator {
       if (d.state !== 'ready' && d.state !== 'waiting') continue;
       const row = this.#store.ledger.getWork(d.ref);
       const work = this.#work(d.ref);
-      if (!row && work.dependencies.some(dep => !this.#store.ledger.getWork(dep))) continue;
+      if (!row && work.dependencies.some((dep) => !this.#store.ledger.getWork(dep))) continue;
       if (!row) await this.#create(work, 'pending');
       const current = this.#store.ledger.getWork(d.ref)!;
-      if (['pending', 'ready'].includes(current.state)) this.#store.ledger.setWorkState(d.ref, 'blocked', { reasonCode: 'sentinel.execution.runDeadline' });
+      if (['pending', 'ready'].includes(current.state))
+        this.#store.ledger.setWorkState(d.ref, 'blocked', { reasonCode: 'sentinel.execution.runDeadline' });
     }
     this.#store.ledger.setRunState(this.#plan.run.id, 'completed', { outcome: 'execution-failure' });
   }
@@ -377,11 +498,11 @@ export class Coordinator {
   #outstanding(): string[] {
     const r = this.recovery;
     return [
-      ...this.#pendingNow.map(i => `pending container create ${i.name}`),
-      ...r.pendingIntents.map(i => `pending container create ${i.name}`),
-      ...r.uncertain.map(c => `container ${c} not confirmed removed`),
-      ...r.obligations.map(o => `worker ${o.pid || '?'} of attempt ${o.attempt}: ${o.reason}`),
-      ...r.unresolved.map(u => `unreadable ${u.journal} record ${u.file}: ${u.reason}`),
+      ...this.#pendingNow.map((i) => `pending container create ${i.name}`),
+      ...r.pendingIntents.map((i) => `pending container create ${i.name}`),
+      ...r.uncertain.map((c) => `container ${c} not confirmed removed`),
+      ...r.obligations.map((o) => `worker ${o.pid || '?'} of attempt ${o.attempt}: ${o.reason}`),
+      ...r.unresolved.map((u) => `unreadable ${u.journal} record ${u.file}: ${u.reason}`),
     ];
   }
 
@@ -392,11 +513,18 @@ export class Coordinator {
       const left = this.#outstanding();
       if (left.length === 0 || this.#cancelRequested) return left;
       if (Date.now() >= deadline) return left;
-      await new Promise(r => setTimeout(r, Math.min(1_000, Math.max(0, deadline - Date.now()))));
-      this.recovery = await recoverStore(this.#store, { intents: this.#intents, workers: this.#workers, ...(this.#service.backend ? { backend: this.#service.backend } : {}) });
+      await new Promise((r) => setTimeout(r, Math.min(1_000, Math.max(0, deadline - Date.now()))));
+      this.recovery = await recoverStore(this.#store, {
+        intents: this.#intents,
+        workers: this.#workers,
+        ...(this.#service.backend ? { backend: this.#service.backend } : {}),
+      });
       for (const intent of [...this.#pendingNow]) {
         const r = await this.#service.backend?.settleIntent(intent).catch(() => 'uncertain' as const);
-        if (r === 'removed') { this.#intents.settle(intent); this.#pendingNow.splice(this.#pendingNow.indexOf(intent), 1); }
+        if (r === 'removed') {
+          this.#intents.settle(intent);
+          this.#pendingNow.splice(this.#pendingNow.indexOf(intent), 1);
+        }
       }
     }
   }
@@ -412,17 +540,23 @@ export class Coordinator {
       if (row?.state === want) continue;
       const work = this.#work(d.ref);
       // A revision names its dependencies, which must already be in the ledger; a later pass records it then.
-      if (!row && work.dependencies.some(dep => !this.#store.ledger.getWork(dep))) continue;
-      if (!row) { await this.#create(work, 'pending'); row = this.#store.ledger.getWork(d.ref)!; }
-      const reason = planReason(work) ?? (want === 'disabled-by-policy' ? 'sentinel.execution.planInvalid' : DEPENDENCY_FAILED);
-      if (['pending', 'ready', 'blocked'].includes(row.state)) this.#store.ledger.setWorkState(d.ref, want, { reasonCode: reason });
+      if (!row && work.dependencies.some((dep) => !this.#store.ledger.getWork(dep))) continue;
+      if (!row) {
+        await this.#create(work, 'pending');
+        row = this.#store.ledger.getWork(d.ref)!;
+      }
+      const reason =
+        planReason(work) ?? (want === 'disabled-by-policy' ? 'sentinel.execution.planInvalid' : DEPENDENCY_FAILED);
+      if (['pending', 'ready', 'blocked'].includes(row.state))
+        this.#store.ledger.setWorkState(d.ref, want, { reasonCode: reason });
     }
   }
 
   #finishRunState(to: 'paused' | 'canceled'): void {
     const s = this.#runState();
     if (to === 'paused' && s === 'running') this.#store.ledger.setRunState(this.#plan.run.id, 'pausing');
-    if (to === 'canceled' && s !== 'canceling' && s !== 'canceled') this.#store.ledger.setRunState(this.#plan.run.id, 'canceling');
+    if (to === 'canceled' && s !== 'canceling' && s !== 'canceled')
+      this.#store.ledger.setRunState(this.#plan.run.id, 'canceling');
     if (this.#runState() !== to) this.#store.ledger.setRunState(this.#plan.run.id, to);
   }
 
@@ -434,36 +568,89 @@ export class Coordinator {
     const { reasonCode: _held, ...rest } = structuredClone(work) as WorkEnvelope & { reasonCode?: string };
     void _held;
     const manifest = this.#plan.unitOf(work).manifest;
-    const records = await this.#stageRecords(`manifest.${work.id}.${work.revision}`, [{ value: manifest, schema: 'sentinel-influence/draft-1', privacy: 'source-derived' }]);
+    const records = await this.#stageRecords(`manifest.${work.id}.${work.revision}`, [
+      { value: manifest, schema: 'sentinel-influence/draft-1', privacy: 'source-derived' },
+    ]);
     try {
-      this.#store.ledger.createWork({ ...rest, state, activeAttemptId: null, coordinatorEpoch: this.#store.epoch, createdAt: now() } as WorkEnvelope, { records });
-    } catch (error) { this.#abortStage(records.stageId); throw error; }
+      this.#store.ledger.createWork(
+        {
+          ...rest,
+          state,
+          activeAttemptId: null,
+          coordinatorEpoch: this.#store.epoch,
+          createdAt: now(),
+        } as WorkEnvelope,
+        { records },
+      );
+    } catch (error) {
+      this.#abortStage(records.stageId);
+      throw error;
+    }
   }
 
   /** Stage canonical records unbound under this epoch and store their bytes; the first links the rest. */
-  async #stageRecords(tag: string, values: Array<({ value: unknown; schema: string } | { bytes: Uint8Array; schema: string }) & { privacy?: 'metadata' | 'source-derived' | 'source' }>, stillWithin?: () => void): Promise<{ stageId: string; receipts: Awaited<ReturnType<SentinelStore['objects']['putCanonicalJson']>>[] }> {
-    const ids = values.map(v => ('bytes' in v
-      ? { id: `sha256:${createHash('sha256').update(v.bytes).digest('hex')}` as ArtifactId, rawSize: v.bytes.byteLength }
-      : this.#store.objects.identifyCanonicalJson(v.value)));
-    const stageId = `${tag}.${createHash('sha256').update(`${this.#store.epoch}\u0000${tag}\u0000${Date.now()}\u0000${Math.random()}`).digest('hex').slice(0, 16)}`.slice(0, 128);
-    const unique = ids.map((id, i) => ({ id, i })).filter((x, j, all) => all.findIndex(y => y.id.id === x.id.id) === j);
-    this.#store.ledger.registerStaging(stageId, unique.map(({ id, i }) => ({ id: id.id, schema: values[i]!.schema.slice(0, 128), privacy: values[i]!.privacy ?? 'metadata',
-      ...(i === 0 ? { links: unique.filter(u => u.i !== 0).map(u => u.id.id) } : {}) })));
+  async #stageRecords(
+    tag: string,
+    values: Array<
+      ({ value: unknown; schema: string } | { bytes: Uint8Array; schema: string }) & {
+        privacy?: 'metadata' | 'source-derived' | 'source';
+      }
+    >,
+    stillWithin?: () => void,
+  ): Promise<{ stageId: string; receipts: Awaited<ReturnType<SentinelStore['objects']['putCanonicalJson']>>[] }> {
+    const ids = values.map((v) =>
+      'bytes' in v
+        ? {
+            id: `sha256:${createHash('sha256').update(v.bytes).digest('hex')}` as ArtifactId,
+            rawSize: v.bytes.byteLength,
+          }
+        : this.#store.objects.identifyCanonicalJson(v.value),
+    );
+    const stageId =
+      `${tag}.${createHash('sha256').update(`${this.#store.epoch}\u0000${tag}\u0000${Date.now()}\u0000${Math.random()}`).digest('hex').slice(0, 16)}`.slice(
+        0,
+        128,
+      );
+    const unique = ids
+      .map((id, i) => ({ id, i }))
+      .filter((x, j, all) => all.findIndex((y) => y.id.id === x.id.id) === j);
+    this.#store.ledger.registerStaging(
+      stageId,
+      unique.map(({ id, i }) => ({
+        id: id.id,
+        schema: values[i]!.schema.slice(0, 128),
+        privacy: values[i]!.privacy ?? 'metadata',
+        ...(i === 0 ? { links: unique.filter((u) => u.i !== 0).map((u) => u.id.id) } : {}),
+      })),
+    );
     try {
       const receipts = [];
       for (const { id, i } of unique) {
         stillWithin?.();
         const v = values[i]!;
-        receipts.push('bytes' in v ? await this.#store.objects.put(Buffer.from(v.bytes), { expect: { id: id.id as ArtifactId, rawSize: id.rawSize } })
-          : await this.#store.objects.putCanonicalJson(v.value, { expect: id as never }));
+        receipts.push(
+          'bytes' in v
+            ? await this.#store.objects.put(Buffer.from(v.bytes), {
+                expect: { id: id.id as ArtifactId, rawSize: id.rawSize },
+              })
+            : await this.#store.objects.putCanonicalJson(v.value, { expect: id as never }),
+        );
         stillWithin?.();
       }
       return { stageId, receipts };
-    } catch (error) { this.#abortStage(stageId); throw error; }
+    } catch (error) {
+      this.#abortStage(stageId);
+      throw error;
+    }
   }
 
   #abortStage(stageId: string): void {
-    try { this.#store.assertHeld(); this.#store.ledger.abortStaging(stageId); } catch { /* recovery aborts a stage left open */ }
+    try {
+      this.#store.assertHeld();
+      this.#store.ledger.abortStaging(stageId);
+    } catch {
+      /* recovery aborts a stage left open */
+    }
   }
 
   /** One attempt of one unit, from creating its work revision to publishing or ending it. Never throws. */
@@ -480,25 +667,39 @@ export class Coordinator {
       const ordinal = this.#store.ledger.countAttempts(ref) + 1;
       const id = attemptIdFor(ref, ordinal);
       const executable = this.#plan.unitOf(ref);
-      if (executable.adapter!.kind === 'operation') { attemptId = await this.#operation(work, ordinal, id); return; }
+      if (executable.adapter!.kind === 'operation') {
+        attemptId = await this.#operation(work, ordinal, id);
+        return;
+      }
       // One monotonic deadline covers preparation, launch, execution, normalization and durable acceptance.
       // Driver work never earns a fresh grant for the worker or for publication.
       const t0 = performance.now();
       const unitDeadlineAt = t0 + work.resources.deadlineMs;
       const unitDeadline = AbortSignal.timeout(work.resources.deadlineMs);
       const elapsedDeadline = new AbortController();
-      const signal = AbortSignal.any([this.#cancel.signal, this.#deadline.signal, unitDeadline, elapsedDeadline.signal]);
+      const signal = AbortSignal.any([
+        this.#cancel.signal,
+        this.#deadline.signal,
+        unitDeadline,
+        elapsedDeadline.signal,
+      ]);
       stillWithin = () => {
-        if (this.#cancel.signal.aborted) throw new ExecutionError('sentinel.execution.canceled', { reason: 'canceled before acceptance' });
+        if (this.#cancel.signal.aborted)
+          throw new ExecutionError('sentinel.execution.canceled', { reason: 'canceled before acceptance' });
         if (this.#deadlinePassed || Date.now() >= this.#runDeadline) {
           this.#deadlinePassed = true;
           this.#deadline.abort();
-          throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
+          throw new ExecutionError('sentinel.execution.runDeadline', {
+            reason: 'the run deadline passed before acceptance',
+          });
         }
         if (unitDeadline.aborted || performance.now() >= unitDeadlineAt) {
           // The monotonic boundary can precede delivery of the timeout event; notify driver work before refusing.
           elapsedDeadline.abort(new DOMException('unit deadline elapsed', 'TimeoutError'));
-          throw new ExecutionError('sentinel.execution.deadlineExceeded', { deadlineMs: work.resources.deadlineMs, elapsedMs: Math.round(performance.now() - t0) });
+          throw new ExecutionError('sentinel.execution.deadlineExceeded', {
+            deadlineMs: work.resources.deadlineMs,
+            elapsedMs: Math.round(performance.now() - t0),
+          });
         }
       };
       stillWithin();
@@ -510,41 +711,92 @@ export class Coordinator {
       const binding = prepared ? prepared.binding : this.#plan.bindingOf(ref);
       const inputs = prepared ? prepared.inputs : executable.inputs;
       // The attempt's deadline is the work's, cut to what is left of the run's budget.
-      const left = Math.max(1, Math.floor(Math.min(unitDeadlineAt - performance.now(), this.#runDeadline - Date.now())));
+      const left = Math.max(
+        1,
+        Math.floor(Math.min(unitDeadlineAt - performance.now(), this.#runDeadline - Date.now())),
+      );
       const resources = { ...structuredClone(work.resources), deadlineMs: Math.min(work.resources.deadlineMs, left) };
       let invocation: { digest: string; record: InvocationRecord } | undefined;
       outcome = await this.#service.run({
-        adapterId: executable.adapter!.id, attemptId: id, work: ref, inputs,
-        ...(prepared && executable.adapter!.kind === 'built-in' && Object.hasOwn(BUILTIN_WORKERS, executable.adapter!.id) ? { job: prepared.binding.derived!.job } : {}),
-        assignment: { checks: executable.checks.map(c => c.id), scopes: [...executable.unit.scopes], inputScopes: executable.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) },
-        signal, intents: this.#intents, workers: this.#workers, resources,
-        ...(this.#hooks ? { hooks: { at: (b: 'before-spawn' | 'after-spawn') => this.#hooks!.at?.(b, { work: ref, attemptId: id }) } } : {}),
+        adapterId: executable.adapter!.id,
+        attemptId: id,
+        work: ref,
+        inputs,
+        ...(prepared &&
+        executable.adapter!.kind === 'built-in' &&
+        Object.hasOwn(BUILTIN_WORKERS, executable.adapter!.id)
+          ? { job: prepared.binding.derived!.job }
+          : {}),
+        assignment: {
+          checks: executable.checks.map((c) => c.id),
+          scopes: [...executable.unit.scopes],
+          inputScopes: executable.inputScopes.map((x) => ({ input: x.input, scopes: [...x.scopes] })),
+        },
+        signal,
+        intents: this.#intents,
+        workers: this.#workers,
+        resources,
+        ...(this.#hooks
+          ? { hooks: { at: (b: 'before-spawn' | 'after-spawn') => this.#hooks!.at?.(b, { work: ref, attemptId: id }) } }
+          : {}),
         onWorker: async (worker, inv) => {
           stillWithin!();
           invocation = inv;
           // The attempt names its exact invocation record, accepted with its start together with the execution
           // binding it links: a failed, canceled or interrupted attempt keeps both.
-          const records = await this.#stageRecords(`invocation.${id}`, [{ value: inv.record, schema: 'sentinel-invocation/draft-1', privacy: 'source-derived' }, { value: binding, schema: EXECUTION_BINDING_SCHEMA },
-            ...(prepared?.records ?? [])], stillWithin);
-          if (this.#store.objects.identifyCanonicalJson(inv.record).id !== inv.digest || records.receipts.every(r => r.id !== bindingId(binding))) {
+          const records = await this.#stageRecords(
+            `invocation.${id}`,
+            [
+              { value: inv.record, schema: 'sentinel-invocation/draft-1', privacy: 'source-derived' },
+              { value: binding, schema: EXECUTION_BINDING_SCHEMA },
+              ...(prepared?.records ?? []),
+            ],
+            stillWithin,
+          );
+          if (
+            this.#store.objects.identifyCanonicalJson(inv.record).id !== inv.digest ||
+            records.receipts.every((r) => r.id !== bindingId(binding))
+          ) {
             this.#abortStage(records.stageId);
-            throw new ExecutionError('sentinel.execution.resultMismatch', { reason: 'the invocation record is not the one the attempt names' });
+            throw new ExecutionError('sentinel.execution.resultMismatch', {
+              reason: 'the invocation record is not the one the attempt names',
+            });
           }
           try {
-            this.#store.ledger.startAttempt({
-              schema: 'sentinel-attempt/draft-1', id, work: ref, ordinal, coordinatorEpoch: this.#store.epoch, operationId: id,
-              worker, startedAt: now(), usage: { certainty: 'not-applicable' }, state: 'running', invocation: inv.digest,
-            }, { records });
-          } catch (error) { this.#abortStage(records.stageId); throw error; }
+            this.#store.ledger.startAttempt(
+              {
+                schema: 'sentinel-attempt/draft-1',
+                id,
+                work: ref,
+                ordinal,
+                coordinatorEpoch: this.#store.epoch,
+                operationId: id,
+                worker,
+                startedAt: now(),
+                usage: { certainty: 'not-applicable' },
+                state: 'running',
+                invocation: inv.digest,
+              },
+              { records },
+            );
+          } catch (error) {
+            this.#abortStage(records.stageId);
+            throw error;
+          }
           attemptId = id;
           this.#hooks?.at?.('after-attempt-start', { work: ref, attemptId: id });
           stillWithin!();
         },
       });
       stillWithin();
-      const mismatch = outcome.state === 'succeeded' && invocation ? bindingMismatch(binding, invocation.record, outcome.result!) : undefined;
+      const mismatch =
+        outcome.state === 'succeeded' && invocation
+          ? bindingMismatch(binding, invocation.record, outcome.result!)
+          : undefined;
       if (outcome.state === 'succeeded' && attemptId && (mismatch || !invocation)) {
-        this.#end(ref, attemptId, 'failed', 'sentinel.execution.resultMismatch', { reason: mismatch ?? 'no invocation was recorded' });
+        this.#end(ref, attemptId, 'failed', 'sentinel.execution.resultMismatch', {
+          reason: mismatch ?? 'no invocation was recorded',
+        });
       } else if (outcome.state === 'succeeded' && attemptId) {
         try {
           // One canonical coverage record per check the plan assigned this unit, at no finer granularity than the
@@ -552,63 +804,159 @@ export class Coordinator {
           // A driver normalizes the verified result (before the work folder is released) into the coverage view
           // and records published with it; without one, the result's own coverage claims are read.
           const out = deepFreeze(outcome);
-          const normalized = driver ? await driver.normalize(prepared!.context, { outcome: out, result: out.result!, outputs: out.outputs, workDir: out.workDir, job: prepared!.job, binding: deepFreeze(binding),
-            output: (oid: ArtifactId) => {
-              const o = out.outputs.find(x => x.id === oid);
-              if (!o) throw new ExecutionError('sentinel.execution.outputMismatch', { reason: 'not a verified output' });
-              const bytes = readFileSync(o.path);
-              if (bytes.length !== o.bytes || `sha256:${createHash('sha256').update(bytes).digest('hex')}` !== o.id) {
-                throw new ExecutionError('sentinel.execution.outputMismatch', { reason: 'the normalized output is not its verified bytes' });
-              }
-              return bytes;
-            },
-            sealed: (sid: ArtifactId) => { const m = /^sha256:([0-9a-f]{64})$/.exec(sid); if (!m) return undefined; try { return readFileSync(join(out.workDir, 'input', m[1]!)); } catch { return undefined; } } }) : null;
+          const normalized = driver
+            ? await driver.normalize(prepared!.context, {
+                outcome: out,
+                result: out.result!,
+                outputs: out.outputs,
+                workDir: out.workDir,
+                job: prepared!.job,
+                binding: deepFreeze(binding),
+                output: (oid: ArtifactId) => {
+                  const o = out.outputs.find((x) => x.id === oid);
+                  if (!o)
+                    throw new ExecutionError('sentinel.execution.outputMismatch', { reason: 'not a verified output' });
+                  const bytes = readFileSync(o.path);
+                  if (
+                    bytes.length !== o.bytes ||
+                    `sha256:${createHash('sha256').update(bytes).digest('hex')}` !== o.id
+                  ) {
+                    throw new ExecutionError('sentinel.execution.outputMismatch', {
+                      reason: 'the normalized output is not its verified bytes',
+                    });
+                  }
+                  return bytes;
+                },
+                sealed: (sid: ArtifactId) => {
+                  const m = /^sha256:([0-9a-f]{64})$/.exec(sid);
+                  if (!m) return undefined;
+                  try {
+                    return readFileSync(join(out.workDir, 'input', m[1]!));
+                  } catch {
+                    return undefined;
+                  }
+                },
+              })
+            : null;
           stillWithin();
           const view = normalized ? { ...outcome.result!, ...normalized.coverage } : outcome.result!;
           if (normalized?.coverage.actualReadSet !== undefined) {
             const read = normalized.coverage.actualReadSet;
-            const allowed = new Set(executable.inputScopes.flatMap(i => {
-              const source = executable.unit.inputs.find(s => s.content === i.input);
-              if (!source || !executable.inputs.some(s => s.id === i.input)) return [];
-              const path = join(out.workDir, 'input', i.input.slice(7));
-              let bytes: Buffer;
-              try { bytes = readFileSync(path); } catch { throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'a normalized read names no sealed source input' }); }
-              if (`sha256:${createHash('sha256').update(bytes).digest('hex')}` !== i.input) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'a normalized read does not name the sealed source bytes' });
-              return i.scopes.filter(scope => executable.unit.scopes.includes(scope));
-            }));
-            if (new Set(read).size !== read.length || read.some(scope => !allowed.has(scope))
-              || normalized.coverage.scannedSet.some(scope => !read.includes(scope))) {
-              throw new ExecutionError('sentinel.execution.resultMismatch', { reason: 'the normalized read set is outside sealed source scopes or omits a scanned scope' });
+            const allowed = new Set(
+              executable.inputScopes.flatMap((i) => {
+                const source = executable.unit.inputs.find((s) => s.content === i.input);
+                if (!source || !executable.inputs.some((s) => s.id === i.input)) return [];
+                const path = join(out.workDir, 'input', i.input.slice(7));
+                let bytes: Buffer;
+                try {
+                  bytes = readFileSync(path);
+                } catch {
+                  throw new ExecutionError('sentinel.execution.inputMismatch', {
+                    reason: 'a normalized read names no sealed source input',
+                  });
+                }
+                if (`sha256:${createHash('sha256').update(bytes).digest('hex')}` !== i.input)
+                  throw new ExecutionError('sentinel.execution.inputMismatch', {
+                    reason: 'a normalized read does not name the sealed source bytes',
+                  });
+                return i.scopes.filter((scope) => executable.unit.scopes.includes(scope));
+              }),
+            );
+            if (
+              new Set(read).size !== read.length ||
+              read.some((scope) => !allowed.has(scope)) ||
+              normalized.coverage.scannedSet.some((scope) => !read.includes(scope))
+            ) {
+              throw new ExecutionError('sentinel.execution.resultMismatch', {
+                reason: 'the normalized read set is outside sealed source scopes or omits a scanned scope',
+              });
             }
           }
 
-          const coverage = coverageRecords({ runId: this.#plan.run.id, attemptId, work: ref, checks: executable.checks, scopes: this.#scopes,
-            adapterGranularity: executable.adapter!.coverage, result: view, recordedAt: now() });
-          await publishOutcome({ store: this.#store, work: ref, attemptId, result: outcome.result!, outputs: outcome.outputs, endedAt: now(),
-            records: [...coverage.records, ...(normalized?.records ?? [])], ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}),
-            beforeAccept: stillWithin });
+          const coverage = coverageRecords({
+            runId: this.#plan.run.id,
+            attemptId,
+            work: ref,
+            checks: executable.checks,
+            scopes: this.#scopes,
+            adapterGranularity: executable.adapter!.coverage,
+            result: view,
+            recordedAt: now(),
+          });
+          await publishOutcome({
+            store: this.#store,
+            work: ref,
+            attemptId,
+            result: outcome.result!,
+            outputs: outcome.outputs,
+            endedAt: now(),
+            records: [...coverage.records, ...(normalized?.records ?? [])],
+            ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}),
+            beforeAccept: stillWithin,
+          });
           this.#coverage.set(key(ref), coverage.envelopes);
         } catch (error) {
-          try { stillWithin(); } catch (boundary) { error = boundary; }
-          const canceled = (error instanceof LedgerError && error.code === 'sentinel.store.wrongState') || isExecutionError(error, 'sentinel.execution.canceled');
-          this.#end(ref, attemptId, canceled ? 'canceled' : 'failed', canceled ? 'sentinel.execution.canceled' : codeOf(error), detailOf(error));
+          try {
+            stillWithin();
+          } catch (boundary) {
+            error = boundary;
+          }
+          const canceled =
+            (error instanceof LedgerError && error.code === 'sentinel.store.wrongState') ||
+            isExecutionError(error, 'sentinel.execution.canceled');
+          this.#end(
+            ref,
+            attemptId,
+            canceled ? 'canceled' : 'failed',
+            canceled ? 'sentinel.execution.canceled' : codeOf(error),
+            detailOf(error),
+          );
         }
       } else if (attemptId && this.#deadlinePassed && !this.#cancelRequested) {
         this.#end(ref, attemptId, 'failed', 'sentinel.execution.runDeadline', outcome.detail);
       } else if (attemptId) {
         const refusal = closureRefusalOf(executable.adapter, driver, outcome);
-        this.#end(ref, attemptId, outcome.state === 'canceled' ? 'canceled' : 'failed', refusal?.code ?? outcome.code ?? 'sentinel.execution.workerExited', refusal?.detail ?? outcome.detail);
+        this.#end(
+          ref,
+          attemptId,
+          outcome.state === 'canceled' ? 'canceled' : 'failed',
+          refusal?.code ?? outcome.code ?? 'sentinel.execution.workerExited',
+          refusal?.detail ?? outcome.detail,
+        );
       } else {
         this.#unstarted(ref, outcome.code ?? 'sentinel.execution.workerExited', outcome.detail);
       }
     } catch (error) {
       // A late driver error cannot hide the budget or cancellation that already ended this unit.
-      try { stillWithin?.(); } catch (boundary) { error = boundary; }
-      if (attemptId) this.#end(ref, attemptId, isExecutionError(error, 'sentinel.execution.canceled') ? 'canceled' : 'failed', codeOf(error), detailOf(error));
+      try {
+        stillWithin?.();
+      } catch (boundary) {
+        error = boundary;
+      }
+      if (attemptId)
+        this.#end(
+          ref,
+          attemptId,
+          isExecutionError(error, 'sentinel.execution.canceled') ? 'canceled' : 'failed',
+          codeOf(error),
+          detailOf(error),
+        );
       else this.#unstarted(ref, codeOf(error), detailOf(error));
     } finally {
-      if (outcome) { try { releaseWorkDir(outcome.workDir); } catch { /* left for an explicit cleanup */ } }
-      if (prepDir) { try { removeOwned(prepDir); } catch { /* left for an explicit cleanup */ } }
+      if (outcome) {
+        try {
+          releaseWorkDir(outcome.workDir);
+        } catch {
+          /* left for an explicit cleanup */
+        }
+      }
+      if (prepDir) {
+        try {
+          removeOwned(prepDir);
+        } catch {
+          /* left for an explicit cleanup */
+        }
+      }
     }
   }
 
@@ -616,25 +964,69 @@ export class Coordinator {
    * Run a driver's prepare for one attempt: the job as canonical JSON and its auxiliary files become extra inputs,
    * each hashed here, and the execution binding records the plan's exact source inputs apart from them.
    */
-  async #prepare(driver: CheckDriver, executable: ReturnType<ValidatedPlan['unitOf']>, attemptId: Id, signal: AbortSignal, stillWithin: () => void) {
+  async #prepare(
+    driver: CheckDriver,
+    executable: ReturnType<ValidatedPlan['unitOf']>,
+    attemptId: Id,
+    signal: AbortSignal,
+    stillWithin: () => void,
+  ) {
     const dir = join(this.#scratchRoot, `${PREP_PREFIX}${attemptId}.${randomUUID()}`);
     mkdirSync(dir, { mode: 0o700 });
-    try { return await this.#prepareIn(dir, driver, executable, signal, stillWithin); } catch (error) { removeOwned(dir); throw error; }
+    try {
+      return await this.#prepareIn(dir, driver, executable, signal, stillWithin);
+    } catch (error) {
+      removeOwned(dir);
+      throw error;
+    }
   }
 
-  async #prepareIn(dir: string, driver: CheckDriver, executable: ReturnType<ValidatedPlan['unitOf']>, signal: AbortSignal, stillWithin: () => void) {
+  async #prepareIn(
+    dir: string,
+    driver: CheckDriver,
+    executable: ReturnType<ValidatedPlan['unitOf']>,
+    signal: AbortSignal,
+    stillWithin: () => void,
+  ) {
     const context: DriverContext = Object.freeze({
-      signal, analysis: driver.reads?.analysis ? await retainedAnalysisFor(this.#store, this.#plan, executable.unit, this.#plan.admitted.profile, signal, stillWithin) : null,
-      plan: this.#plan.admitted.plan, ...(this.#plan.admitted.pathRequest?{pathRequest:this.#plan.admitted.pathRequest}:{}), unit: executable.unit, checks: executable.checks, profile: this.#plan.admitted.profile,
-      inputs: executable.inputs, inputScopes: executable.inputScopes, rules: this.#rulesOf(executable.checks),
-      tools: this.#plan.admitted.plan.pins.tools.filter(t => t.adapterId === executable.unit.adapterId).map(t => ({ ...t })),
-      databases: this.#plan.admitted.plan.pins.databases.map(pin => {
-        const copy = this.#databases.find(d => d.databaseId === pin.databaseId && d.snapshotDigest === pin.snapshotDigest);
-        if (!copy) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: `no admitted copy of database ${pin.databaseId}` });
-        if (fileDigest(copy.path) !== pin.snapshotDigest) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: `database ${pin.databaseId} is not the pinned snapshot` });
+      signal,
+      analysis: driver.reads?.analysis
+        ? await retainedAnalysisFor(
+            this.#store,
+            this.#plan,
+            executable.unit,
+            this.#plan.admitted.profile,
+            signal,
+            stillWithin,
+          )
+        : null,
+      plan: this.#plan.admitted.plan,
+      ...(this.#plan.admitted.pathRequest ? { pathRequest: this.#plan.admitted.pathRequest } : {}),
+      unit: executable.unit,
+      checks: executable.checks,
+      profile: this.#plan.admitted.profile,
+      inputs: executable.inputs,
+      inputScopes: executable.inputScopes,
+      rules: this.#rulesOf(executable.checks),
+      tools: this.#plan.admitted.plan.pins.tools
+        .filter((t) => t.adapterId === executable.unit.adapterId)
+        .map((t) => ({ ...t })),
+      databases: this.#plan.admitted.plan.pins.databases.map((pin) => {
+        const copy = this.#databases.find(
+          (d) => d.databaseId === pin.databaseId && d.snapshotDigest === pin.snapshotDigest,
+        );
+        if (!copy)
+          throw new ExecutionError('sentinel.execution.inputMismatch', {
+            reason: `no admitted copy of database ${pin.databaseId}`,
+          });
+        if (fileDigest(copy.path) !== pin.snapshotDigest)
+          throw new ExecutionError('sentinel.execution.inputMismatch', {
+            reason: `database ${pin.databaseId} is not the pinned snapshot`,
+          });
         return { databaseId: pin.databaseId, snapshotDigest: pin.snapshotDigest, path: copy.path };
       }),
-      restored: this.#plan.restored, workDir: dir,
+      restored: this.#plan.restored,
+      workDir: dir,
     });
     stillWithin();
     const job = await driver.prepare(context);
@@ -643,20 +1035,38 @@ export class Coordinator {
     const jobPath = join(dir, 'sentinel-job.json');
     writeFileSync(jobPath, jobBytes, { mode: 0o600 });
     const jobId = this.#store.objects.identifyCanonicalJson(job.job).id as ArtifactId;
-    const auxiliary = job.auxiliary.map(a => {
+    const auxiliary = job.auxiliary.map((a) => {
       const s = lstatSync(a.path);
-      if (!s.isFile() || s.isSymbolicLink()) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'a prepared input is not a regular file' });
+      if (!s.isFile() || s.isSymbolicLink())
+        throw new ExecutionError('sentinel.execution.inputMismatch', {
+          reason: 'a prepared input is not a regular file',
+        });
       return { id: fileDigest(a.path) as ArtifactId, path: a.path, role: String(a.role).slice(0, 64) };
     });
     verifyRetainedAuxiliary(context.analysis, auxiliary);
     const base = this.#plan.bindingOf(executable.work);
-    const extra = [{ id: jobId, path: jobPath }, ...auxiliary.map(a => ({ id: a.id, path: a.path }))];
-    const inputs = [...executable.inputs, ...extra].filter((x, i, all) => all.findIndex(y => y.id === x.id) === i);
-    const ids = inputs.map(i => i.id).sort();
-    const binding: ExecutionBinding = { ...base, inputs: ids, protocolFingerprint: inputFingerprintOf(ids), sourceInputs: [...base.inputs],
-      derived: { job: jobId, auxiliary: auxiliary.map(a => ({ id: a.id, role: a.role })), ...(context.analysis ? { analysis: retainedBinding(context.analysis) } : {}) } };
-    const records = [{ value: job.job, schema: 'sentinel-check-job/draft-1', privacy: 'source-derived' as const },
-      ...auxiliary.map(a => ({ bytes: readFileSync(a.path), schema: `sentinel-check-input/${a.role}`.slice(0, 128), privacy: a.role === 'analysis-artifact' ? 'source' as const : 'source-derived' as const }))];
+    const extra = [{ id: jobId, path: jobPath }, ...auxiliary.map((a) => ({ id: a.id, path: a.path }))];
+    const inputs = [...executable.inputs, ...extra].filter((x, i, all) => all.findIndex((y) => y.id === x.id) === i);
+    const ids = inputs.map((i) => i.id).sort();
+    const binding: ExecutionBinding = {
+      ...base,
+      inputs: ids,
+      protocolFingerprint: inputFingerprintOf(ids),
+      sourceInputs: [...base.inputs],
+      derived: {
+        job: jobId,
+        auxiliary: auxiliary.map((a) => ({ id: a.id, role: a.role })),
+        ...(context.analysis ? { analysis: retainedBinding(context.analysis) } : {}),
+      },
+    };
+    const records = [
+      { value: job.job, schema: 'sentinel-check-job/draft-1', privacy: 'source-derived' as const },
+      ...auxiliary.map((a) => ({
+        bytes: readFileSync(a.path),
+        schema: `sentinel-check-input/${a.role}`.slice(0, 128),
+        privacy: a.role === 'analysis-artifact' ? ('source' as const) : ('source-derived' as const),
+      })),
+    ];
     return { dir, context, binding, inputs, records, job: job.job };
   }
 
@@ -665,17 +1075,24 @@ export class Coordinator {
     const lock = this.#plan.admitted.ruleLock;
     const pin = this.#plan.admitted.plan.pins.ruleLockDigest;
     if (!lock || !pin || !this.#packs?.length) return [];
-    const families = [...new Set(checks.map(c => c.familyId))];
-    const resolved = resolveLockedRules(lock, pin, this.#packs.map(p => p.pack), families);
-    return resolved.map(rule => {
-      const pack = this.#packs!.find(p => p.pack.packDigest === rule.packDigest)!;
+    const families = [...new Set(checks.map((c) => c.familyId))];
+    const resolved = resolveLockedRules(
+      lock,
+      pin,
+      this.#packs.map((p) => p.pack),
+      families,
+    );
+    return resolved.map((rule) => {
+      const pack = this.#packs!.find((p) => p.pack.packDigest === rule.packDigest)!;
       const d = rule.definition;
       const named = [d.implementation.rulePath, ...d.fixtures.positive, ...d.fixtures.negative];
-      const files = named.map(path => {
-        const listed = pack.pack.files.find(f => f.path === path);
+      const files = named.map((path) => {
+        const listed = pack.pack.files.find((f) => f.path === path);
         const bytes = pack.files.get(path);
         if (!listed || !bytes || `sha256:${createHash('sha256').update(bytes).digest('hex')}` !== listed.digest) {
-          throw new ExecutionError('sentinel.execution.inputMismatch', { reason: `pack file ${path} is not the bytes the lock pins` });
+          throw new ExecutionError('sentinel.execution.inputMismatch', {
+            reason: `pack file ${path} is not the bytes the lock pins`,
+          });
         }
         return { path, digest: listed.digest, bytes };
       });
@@ -683,16 +1100,32 @@ export class Coordinator {
     });
   }
 
-  #end(ref: WorkRef, attemptId: Id, state: 'failed' | 'canceled', code: string, detail?: Readonly<Record<string, unknown>>): void {
+  #end(
+    ref: WorkRef,
+    attemptId: Id,
+    state: 'failed' | 'canceled',
+    code: string,
+    detail?: Readonly<Record<string, unknown>>,
+  ): void {
     this.#failures.push({ work: ref, attemptId, code, ...(detail ? { detail } : {}) });
     let attempts = 1;
-    try { attempts = this.#store.ledger.countAttempts(ref); } catch { /* the store is gone; the end below fails too */ }
+    try {
+      attempts = this.#store.ledger.countAttempts(ref);
+    } catch {
+      /* the store is gone; the end below fails too */
+    }
     const again = retryable(code, attempts, this.#retry);
     // A canceled attempt leaves its work ready: cancellation is the run's decision, not the work's failure.
     const workState = state === 'canceled' || again ? 'ready' : 'failed';
     try {
-      this.#store.ledger.endAttempt({ work: ref, attemptId, state, endedAt: now(), workState,
-        error: { code: catalogCode(code), retryable: again, ...(detail ? { detail: boundedDetail(detail) } : {}) } });
+      this.#store.ledger.endAttempt({
+        work: ref,
+        attemptId,
+        state,
+        endedAt: now(),
+        workState,
+        error: { code: catalogCode(code), retryable: again, ...(detail ? { detail: boundedDetail(detail) } : {}) },
+      });
     } catch (error) {
       // Fenced off (a newer epoch, or the attempt already ended): that coordinator's recovery owns it now.
       this.#failures.push({ work: ref, attemptId, code: codeOf(error) });
@@ -703,8 +1136,14 @@ export class Coordinator {
     this.#failures.push({ work: ref, attemptId: null, code, ...(detail ? { detail } : {}) });
     // A create that may still commit: hold admission until its container is confirmed absent, then try the unit again.
     if (code === 'sentinel.execution.reconciliationPending' && detail && typeof detail.owner === 'string') {
-      this.#pendingNow.push({ name: String(detail.name), owner: String(detail.owner), store: String(detail.store), attempt: String(detail.attempt),
-        epoch: String(detail.epoch), invocation: String(detail.invocation) });
+      this.#pendingNow.push({
+        name: String(detail.name),
+        owner: String(detail.owner),
+        store: String(detail.store),
+        attempt: String(detail.attempt),
+        epoch: String(detail.epoch),
+        invocation: String(detail.invocation),
+      });
       return;
     }
     // Refused before any worker acted (an unknown adapter, a mismatched input, a pending create): not retried here.
@@ -724,25 +1163,59 @@ export class Coordinator {
     const ref: WorkRef = { id: work.id, revision: work.revision };
     const executable = this.#plan.unitOf(ref);
     const adapter = executable.adapter!;
-    if (adapter.kind !== 'operation') throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'not an operation' });
+    if (adapter.kind !== 'operation')
+      throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'not an operation' });
     const profile = this.#plan.admitted.profile;
-    const review=executable.unit.review?await prepareAdmittedReview(this.#store,this.#plan,ref,this.#review):undefined;
+    const review = executable.unit.review
+      ? await prepareAdmittedReview(this.#store, this.#plan, ref, this.#review)
+      : undefined;
     const record = {
-      format: 'sentinel-operation-invocation/draft-1', store: this.#store.storeId, attemptId: id, work: ref, coordinatorEpoch: this.#store.epoch,
-      adapter: { id: adapter.id, version: adapter.version, digest: adapter.digest }, operation: adapter.operation,
-      plan: { runId: this.#plan.run.id, revision: this.#plan.admitted.plan.revision, digest: this.#plan.admitted.plan.digest },
-      influenceManifest: work.influenceManifest, snapshotId: this.#plan.run.snapshotId, sourceId: executable.unit.sourceId,
-      ...(adapter.operation === 'parse' ? { parse: profile.parse } : {}),...(review?{review:review.review}:{}),
+      format: 'sentinel-operation-invocation/draft-1',
+      store: this.#store.storeId,
+      attemptId: id,
+      work: ref,
+      coordinatorEpoch: this.#store.epoch,
+      adapter: { id: adapter.id, version: adapter.version, digest: adapter.digest },
+      operation: adapter.operation,
+      plan: {
+        runId: this.#plan.run.id,
+        revision: this.#plan.admitted.plan.revision,
+        digest: this.#plan.admitted.plan.digest,
+      },
+      influenceManifest: work.influenceManifest,
+      snapshotId: this.#plan.run.snapshotId,
+      sourceId: executable.unit.sourceId,
+      ...(adapter.operation === 'parse' ? { parse: profile.parse } : {}),
+      ...(review ? { review: review.review } : {}),
     };
     const invocation = this.#store.objects.identifyCanonicalJson(record).id as ArtifactId;
-    const records = await this.#stageRecords(`invocation.${id}`, [{ value: record, schema: 'sentinel-operation-invocation/draft-1',privacy:'source-derived' },...(review?[{value:review.admission,schema:'sentinel-admission/draft-1',privacy:'source-derived' as const}]:[])]);
+    const records = await this.#stageRecords(`invocation.${id}`, [
+      { value: record, schema: 'sentinel-operation-invocation/draft-1', privacy: 'source-derived' },
+      ...(review
+        ? [{ value: review.admission, schema: 'sentinel-admission/draft-1', privacy: 'source-derived' as const }]
+        : []),
+    ]);
     try {
-      this.#store.ledger.startAttempt({
-        schema: 'sentinel-attempt/draft-1', id, work: ref, ordinal, coordinatorEpoch: this.#store.epoch, operationId: id,
-        worker: { kind: 'coordinator-operation', adapterId: adapter.id, adapterDigest: adapter.digest },
-        startedAt: now(), usage: { certainty: review?'unknown':'not-applicable' }, state: 'running', invocation,
-      }, { records });
-    } catch (error) { this.#abortStage(records.stageId); throw error; }
+      this.#store.ledger.startAttempt(
+        {
+          schema: 'sentinel-attempt/draft-1',
+          id,
+          work: ref,
+          ordinal,
+          coordinatorEpoch: this.#store.epoch,
+          operationId: id,
+          worker: { kind: 'coordinator-operation', adapterId: adapter.id, adapterDigest: adapter.digest },
+          startedAt: now(),
+          usage: { certainty: review ? 'unknown' : 'not-applicable' },
+          state: 'running',
+          invocation,
+        },
+        { records },
+      );
+    } catch (error) {
+      this.#abortStage(records.stageId);
+      throw error;
+    }
     this.#hooks?.at?.('after-attempt-start', { work: ref, attemptId: id });
     // The unit's grant holds the operation as it holds a worker: its deadline (cut to what is left of the run's),
     // the process memory it may add and the CPU time it may use. The operation only prepares; nothing is published
@@ -751,7 +1224,7 @@ export class Coordinator {
     // is a separate contract: the store's object cap and the parser's own pinned limits, enforced where they apply.
     const grant = work.resources;
     const deadlineMs = Math.max(1, Math.min(grant.deadlineMs, Math.floor(this.#runDeadline - Date.now())));
-    const deadlineAt=Date.now()+deadlineMs;
+    const deadlineAt = Date.now() + deadlineMs;
     const own = AbortSignal.timeout(deadlineMs);
     const memory = new AbortController();
     const signal = AbortSignal.any([this.#cancel.signal, this.#deadline.signal, own, memory.signal]);
@@ -759,26 +1232,51 @@ export class Coordinator {
     const cpu0 = process.cpuUsage();
     const t0 = performance.now();
     let peak = 0;
-    const sample = () => { peak = Math.max(peak, process.memoryUsage().rss - baseline); if (peak > grant.memoryBytes) memory.abort(); };
+    const sample = () => {
+      peak = Math.max(peak, process.memoryUsage().rss - baseline);
+      if (peak > grant.memoryBytes) memory.abort();
+    };
     const sampler = setInterval(sample, 20);
     let prepared: Awaited<ReturnType<typeof runOperation>> | undefined;
     let failure: unknown;
     try {
-      prepared = review?await runAdmittedReview(this.#store,this.#plan,ref,id,review,signal,deadlineAt):await runOperation(adapter.operation as import('./registry.js').BootstrapOperation, { store: this.#store, run: this.#plan.run, plan: this.#plan.admitted.plan, unit: executable.unit, profile,
-        attemptId: id, scratchRoot: this.#scratchRoot, signal });
-    } catch (error) { failure = error; } finally { clearInterval(sampler); sample(); }
+      prepared = review
+        ? await runAdmittedReview(this.#store, this.#plan, ref, id, review, signal, deadlineAt)
+        : await runOperation(adapter.operation as import('./registry.js').BootstrapOperation, {
+            store: this.#store,
+            run: this.#plan.run,
+            plan: this.#plan.admitted.plan,
+            unit: executable.unit,
+            profile,
+            attemptId: id,
+            scratchRoot: this.#scratchRoot,
+            signal,
+          });
+    } catch (error) {
+      failure = error;
+    } finally {
+      clearInterval(sampler);
+      sample();
+    }
     const wallMs = performance.now() - t0;
     const used = process.cpuUsage(cpu0);
     const cpuMs = (used.user + used.system) / 1000;
     // Checked in this order; the first that applies ends the attempt without a publication.
-    const refusal: [string, Record<string, unknown>] | null =
-      this.#cancel.signal.aborted ? ['sentinel.execution.canceled', {}]
-        : this.#deadlinePassed || this.#deadline.signal.aborted ? ['sentinel.execution.runDeadline', {}]
-          : own.aborted || wallMs > deadlineMs ? ['sentinel.execution.deadlineExceeded', { deadlineMs, elapsedMs: Math.round(wallMs) }]
-            : memory.signal.aborted || peak > grant.memoryBytes ? ['sentinel.execution.resourceExceeded', { resource: 'memory', limit: grant.memoryBytes, observed: peak }]
-              // The process's CPU time over the operation (its own GC and I/O threads included), against the quota.
-              : cpuMs > grant.cpuQuota * wallMs + CPU_SLACK_MS ? ['sentinel.execution.resourceExceeded', { resource: 'cpu', quota: grant.cpuQuota, cpuMs: Math.round(cpuMs), wallMs: Math.round(wallMs) }]
-                : null;
+    const refusal: [string, Record<string, unknown>] | null = this.#cancel.signal.aborted
+      ? ['sentinel.execution.canceled', {}]
+      : this.#deadlinePassed || this.#deadline.signal.aborted
+        ? ['sentinel.execution.runDeadline', {}]
+        : own.aborted || wallMs > deadlineMs
+          ? ['sentinel.execution.deadlineExceeded', { deadlineMs, elapsedMs: Math.round(wallMs) }]
+          : memory.signal.aborted || peak > grant.memoryBytes
+            ? ['sentinel.execution.resourceExceeded', { resource: 'memory', limit: grant.memoryBytes, observed: peak }]
+            : // The process's CPU time over the operation (its own GC and I/O threads included), against the quota.
+              cpuMs > grant.cpuQuota * wallMs + CPU_SLACK_MS
+              ? [
+                  'sentinel.execution.resourceExceeded',
+                  { resource: 'cpu', quota: grant.cpuQuota, cpuMs: Math.round(cpuMs), wallMs: Math.round(wallMs) },
+                ]
+              : null;
     if (refusal) {
       this.#end(ref, id, refusal[0] === 'sentinel.execution.canceled' ? 'canceled' : 'failed', refusal[0], refusal[1]);
       return id;
@@ -791,15 +1289,31 @@ export class Coordinator {
     // whose unit or run deadline passed while its objects were being stored is never published.
     const unitDeadlineAt = t0 + deadlineMs;
     const stillWithin = () => {
-      if (this.#cancel.signal.aborted) throw new ExecutionError('sentinel.execution.canceled', { reason: 'canceled before acceptance' });
-      if (this.#deadlinePassed || Date.now() >= this.#runDeadline) throw new ExecutionError('sentinel.execution.runDeadline', { reason: 'the run deadline passed before acceptance' });
-      if (performance.now() >= unitDeadlineAt) throw new ExecutionError('sentinel.execution.deadlineExceeded', { deadlineMs, elapsedMs: Math.round(performance.now() - t0) });
+      if (this.#cancel.signal.aborted)
+        throw new ExecutionError('sentinel.execution.canceled', { reason: 'canceled before acceptance' });
+      if (this.#deadlinePassed || Date.now() >= this.#runDeadline)
+        throw new ExecutionError('sentinel.execution.runDeadline', {
+          reason: 'the run deadline passed before acceptance',
+        });
+      if (performance.now() >= unitDeadlineAt)
+        throw new ExecutionError('sentinel.execution.deadlineExceeded', {
+          deadlineMs,
+          elapsedMs: Math.round(performance.now() - t0),
+        });
     };
     try {
       await publishPrepared(this.#store, ref, id, prepared!, stillWithin);
     } catch (error) {
-      const canceled = (error instanceof LedgerError && error.code === 'sentinel.store.wrongState') || isExecutionError(error, 'sentinel.execution.canceled');
-      this.#end(ref, id, canceled ? 'canceled' : 'failed', canceled ? 'sentinel.execution.canceled' : codeOf(error), detailOf(error));
+      const canceled =
+        (error instanceof LedgerError && error.code === 'sentinel.store.wrongState') ||
+        isExecutionError(error, 'sentinel.execution.canceled');
+      this.#end(
+        ref,
+        id,
+        canceled ? 'canceled' : 'failed',
+        canceled ? 'sentinel.execution.canceled' : codeOf(error),
+        detailOf(error),
+      );
     }
     return id;
   }
@@ -814,16 +1328,22 @@ export class Coordinator {
     for (const w of this.#plan.works) {
       const ref = { id: w.id, revision: w.revision };
       if (this.#coverage.has(key(ref))) continue;
-      const outs = this.#store.ledger.getPublication(ref)?.outputs.filter(o => o.schema === COVERAGE_SCHEMA);
+      const outs = this.#store.ledger.getPublication(ref)?.outputs.filter((o) => o.schema === COVERAGE_SCHEMA);
       if (!outs) continue;
       const records: CoverageEnvelope[] = [];
-      for (const o of outs) { try { records.push(JSON.parse((await this.#store.readArtifact(o.id)).toString('utf8')) as CoverageEnvelope); } catch { /* missing */ } }
+      for (const o of outs) {
+        try {
+          records.push(JSON.parse((await this.#store.readArtifact(o.id)).toString('utf8')) as CoverageEnvelope);
+        } catch {
+          /* missing */
+        }
+      }
       this.#coverage.set(key(ref), records);
     }
   }
 
   #work(ref: WorkRef): Readonly<WorkEnvelope> {
-    return this.#plan.works.find(w => w.id === ref.id && w.revision === ref.revision)!;
+    return this.#plan.works.find((w) => w.id === ref.id && w.revision === ref.revision)!;
   }
 
   #committed(): Map<string, CommittedUnit> {
@@ -833,9 +1353,15 @@ export class Coordinator {
       const row = this.#store.ledger.getWork(ref);
       const attempts = row ? this.#store.ledger.countAttempts(ref) : 0;
       const unstarted = this.#failedUnstarted.get(key(ref));
-      const planHold = (w.state === 'disabled-by-policy' || w.state === 'blocked') ? w.state : undefined;
-      if (unstarted) { m.set(key(ref), { created: !!row, workState: 'failed', attempts, lastFailure: unstarted }); continue; }
-      if (!row && planHold) { m.set(key(ref), { created: false, workState: planHold, attempts: 0 }); continue; }
+      const planHold = w.state === 'disabled-by-policy' || w.state === 'blocked' ? w.state : undefined;
+      if (unstarted) {
+        m.set(key(ref), { created: !!row, workState: 'failed', attempts, lastFailure: unstarted });
+        continue;
+      }
+      if (!row && planHold) {
+        m.set(key(ref), { created: false, workState: planHold, attempts: 0 });
+        continue;
+      }
       m.set(key(ref), row ? { created: true, workState: row.state, attempts } : { created: false, attempts });
     }
     return m;
@@ -849,24 +1375,43 @@ export class Coordinator {
     const units = this.progress();
     const run = this.#store.ledger.getRun(this.#plan.run.id);
     let published = 0;
-    for (const w of this.#plan.works) if (this.#store.ledger.getPublication({ id: w.id, revision: w.revision })) published++;
+    for (const w of this.#plan.works)
+      if (this.#store.ledger.getPublication({ id: w.id, revision: w.revision })) published++;
     const kind = this.#plan.admitted.plan.kind;
     const coverage = kind === 'analysis' ? this.#requiredCoverage() : null;
-    return { runId: this.#plan.run.id, state: run?.state ?? 'planned', ...(run?.outcome ? { outcome: run.outcome } : {}), units,
-      failures: [...this.#failures], recovery: this.recovery, published, blockedByCleanup, kind, planRevision: this.#plan.admitted.plan.revision,
-      coverage, coverageRecords: [...this.#coverage.values()].reduce((n, r) => n + r.length, 0), unknownCleanup: this.#unknown.list(),
-      clean: this.recovery.clean && this.#unknown.list().length === 0 };
+    return {
+      runId: this.#plan.run.id,
+      state: run?.state ?? 'planned',
+      ...(run?.outcome ? { outcome: run.outcome } : {}),
+      units,
+      failures: [...this.#failures],
+      recovery: this.recovery,
+      published,
+      blockedByCleanup,
+      kind,
+      planRevision: this.#plan.admitted.plan.revision,
+      coverage,
+      coverageRecords: [...this.#coverage.values()].reduce((n, r) => n + r.length, 0),
+      unknownCleanup: this.#unknown.list(),
+      clean: this.recovery.clean && this.#unknown.list().length === 0,
+    };
   }
 }
 
 const CATALOG = /^sentinel\.[a-z][A-Za-z0-9]*(\.[a-z][A-Za-z0-9]*)+$/;
 const catalogCode = (code: string): string => (CATALOG.test(code) ? code : 'sentinel.execution.workerExited');
-const planReason = (w: WorkEnvelope): string | undefined => ('reasonCode' in w && typeof w.reasonCode === 'string' ? w.reasonCode : undefined);
-const codeOf = (e: unknown): string => (isExecutionError(e) || e instanceof LedgerError ? e.code : (e as { code?: string })?.code) ?? 'sentinel.execution.workerExited';
-const detailOf = (e: unknown): Readonly<Record<string, unknown>> | undefined => (isExecutionError(e) ? e.detail : undefined);
+const planReason = (w: WorkEnvelope): string | undefined =>
+  'reasonCode' in w && typeof w.reasonCode === 'string' ? w.reasonCode : undefined;
+const codeOf = (e: unknown): string =>
+  (isExecutionError(e) || e instanceof LedgerError ? e.code : (e as { code?: string })?.code) ??
+  'sentinel.execution.workerExited';
+const detailOf = (e: unknown): Readonly<Record<string, unknown>> | undefined =>
+  isExecutionError(e) ? e.detail : undefined;
 
 /** The detail as recorded: safe structured context only, cut to a bound rather than refused. */
 function boundedDetail(detail: Readonly<Record<string, unknown>>): Record<string, unknown> {
   const plain = JSON.parse(JSON.stringify(detail)) as Record<string, unknown>;
-  return canonicalJsonBytes(plain).byteLength <= MAX_DETAIL_BYTES ? plain : { truncated: true, keys: Object.keys(plain).slice(0, 16) };
+  return canonicalJsonBytes(plain).byteLength <= MAX_DETAIL_BYTES
+    ? plain
+    : { truncated: true, keys: Object.keys(plain).slice(0, 16) };
 }

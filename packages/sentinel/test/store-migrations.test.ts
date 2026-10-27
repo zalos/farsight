@@ -26,7 +26,9 @@ function peek(path: string) {
       runs: Number(one('SELECT count(*) FROM runs')),
       later: Number(one("SELECT count(*) FROM sqlite_schema WHERE name = 'later_projection'")),
     };
-  } finally { db.close(); }
+  } finally {
+    db.close();
+  }
 }
 
 async function seeded(dir: string) {
@@ -37,7 +39,7 @@ async function seeded(dir: string) {
   return ledger.path;
 }
 
-test('a new ledger is created at the newest schema with WAL, FULL sync, foreign keys and no backup', async t => {
+test('a new ledger is created at the newest schema with WAL, FULL sync, foreign keys and no backup', async (t) => {
   const dir = scratch(t);
   const o = owner(dir);
   const ledger = await openLedger(o, { build: 'test-build' });
@@ -49,7 +51,9 @@ test('a new ledger is created at the newest schema with WAL, FULL sync, foreign 
   assert.equal(Number(one('PRAGMA application_id')), LEDGER_APPLICATION_ID);
   assert.equal(Number(one('PRAGMA user_version')), N);
   assert.equal(statSync(ledger.path).mode & 0o777, 0o600);
-  const m = db.prepare('SELECT version, name, checksum, build FROM schema_migrations').all() as Array<Record<string, unknown>>;
+  const m = db.prepare('SELECT version, name, checksum, build FROM schema_migrations').all() as Array<
+    Record<string, unknown>
+  >;
   assert.equal(m.length, N);
   assert.equal(m[0]!.build, 'test-build');
   assert.match(String(m[0]!.checksum), /^sha256:[0-9a-f]{64}$/);
@@ -59,7 +63,7 @@ test('a new ledger is created at the newest schema with WAL, FULL sync, foreign 
   again.close();
 });
 
-test('an upgrade takes a verified backup first, then applies every pending step', async t => {
+test('an upgrade takes a verified backup first, then applies every pending step', async (t) => {
   const dir = scratch(t);
   const path = await seeded(dir);
   const ledger = await openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, V2] });
@@ -73,39 +77,55 @@ test('an upgrade takes a verified backup first, then applies every pending step'
   assert.deepEqual(peek(path), { version: N + 1, appId: LEDGER_APPLICATION_ID, runs: 1, later: 1 });
 });
 
-test('a failing migration rolls back to the prior schema and data', async t => {
+test('a failing migration rolls back to the prior schema and data', async (t) => {
   const dir = scratch(t);
   const path = await seeded(dir);
-  const broken = { version: N + 1, name: 'broken', sql: 'CREATE TABLE later_projection (id TEXT) STRICT; CREATE TABLE runs (x TEXT);' };
-  await assert.rejects(openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, broken] }),
-    code('sentinel.store.migrationFailed'));
+  const broken = {
+    version: N + 1,
+    name: 'broken',
+    sql: 'CREATE TABLE later_projection (id TEXT) STRICT; CREATE TABLE runs (x TEXT);',
+  };
+  await assert.rejects(
+    openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, broken] }),
+    code('sentinel.store.migrationFailed'),
+  );
   assert.deepEqual(peek(path), { version: N, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 });
   // A failure after the step's SQL ran (here: before it is recorded) is rolled back too.
-  await assert.rejects(openLedger(owner(dir), {
-    migrations: [...LEDGER_MIGRATIONS, V2],
-    failpoint: p => { if (p === 'migrate:after-sql') throw new Error('injected'); },
-  }), code('sentinel.store.migrationFailed'));
+  await assert.rejects(
+    openLedger(owner(dir), {
+      migrations: [...LEDGER_MIGRATIONS, V2],
+      failpoint: (p) => {
+        if (p === 'migrate:after-sql') throw new Error('injected');
+      },
+    }),
+    code('sentinel.store.migrationFailed'),
+  );
   assert.deepEqual(peek(path), { version: N, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 });
   const fixed = await openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, V2] });
   assert.equal(fixed.migration.to, N + 1);
   fixed.close();
 });
 
-test('a failed backup refuses the upgrade and leaves no partial copy', async t => {
+test('a failed backup refuses the upgrade and leaves no partial copy', async (t) => {
   for (const point of ['backup:before', 'backup:after-copy'] as const) {
     const dir = scratch(t);
     const path = await seeded(dir);
-    await assert.rejects(openLedger(owner(dir), {
-      migrations: [...LEDGER_MIGRATIONS, V2],
-      failpoint: p => { if (p === point) throw new Error('injected disk failure'); },
-    }), code('sentinel.store.backupFailed'));
+    await assert.rejects(
+      openLedger(owner(dir), {
+        migrations: [...LEDGER_MIGRATIONS, V2],
+        failpoint: (p) => {
+          if (p === point) throw new Error('injected disk failure');
+        },
+      }),
+      code('sentinel.store.backupFailed'),
+    );
     assert.deepEqual(peek(path), { version: N, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 }, point);
     const backups = join(dir, 'backups');
     assert.deepEqual(existsSync(backups) ? readdirSync(backups) : [], [], point);
   }
 });
 
-test('a newer schema is refused without touching the file', async t => {
+test('a newer schema is refused without touching the file', async (t) => {
   const dir = scratch(t);
   const path = await seeded(dir);
   (await openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, V2] })).close();
@@ -113,10 +133,13 @@ test('a newer schema is refused without touching the file', async t => {
   assert.equal(peek(path).version, N + 1);
 });
 
-test('a changed migration, a foreign database and an unsafe path are refused', async t => {
+test('a changed migration, a foreign database and an unsafe path are refused', async (t) => {
   const dir = scratch(t);
   await seeded(dir);
-  const edited = [{ ...LEDGER_MIGRATIONS[0]!, sql: `${LEDGER_MIGRATIONS[0]!.sql}\n-- edited` }, ...LEDGER_MIGRATIONS.slice(1)];
+  const edited = [
+    { ...LEDGER_MIGRATIONS[0]!, sql: `${LEDGER_MIGRATIONS[0]!.sql}\n-- edited` },
+    ...LEDGER_MIGRATIONS.slice(1),
+  ];
   await assert.rejects(openLedger(owner(dir), { migrations: edited }), code('sentinel.store.migrationMismatch'));
   await assert.rejects(openLedger(owner(dir), { migrations: [V2] }), code('sentinel.store.migrationMismatch'));
 
@@ -125,7 +148,11 @@ test('a changed migration, a foreign database and an unsafe path are refused', a
   foreign.exec('CREATE TABLE t (a TEXT)');
   foreign.close();
   chmodSync(join(other, 'ledger.sqlite'), 0o644);
-  await assert.rejects(openLedger(owner(other)), code('sentinel.store.unsafePath'), 'a group-readable ledger is refused');
+  await assert.rejects(
+    openLedger(owner(other)),
+    code('sentinel.store.unsafePath'),
+    'a group-readable ledger is refused',
+  );
   chmodSync(join(other, 'ledger.sqlite'), 0o600);
   await assert.rejects(openLedger(owner(other)), code('sentinel.store.notLedger'));
 
@@ -135,16 +162,17 @@ test('a changed migration, a foreign database and an unsafe path are refused', a
   await assert.rejects(openLedger(owner(linked)), code('sentinel.store.unsafePath'));
 });
 
-test('the ledger CHECK sets equal the pinned contract and store enumerations', async t => {
+test('the ledger CHECK sets equal the pinned contract and store enumerations', async (t) => {
   const dir = scratch(t);
   const ledger = await openLedger(owner(dir));
   ledger.close();
   const db = new DatabaseSync(ledger.path, { readOnly: true });
-  const sqlOf = (name: string) => String((db.prepare('SELECT sql FROM sqlite_schema WHERE name = ?').get(name) as { sql: string }).sql);
+  const sqlOf = (name: string) =>
+    String((db.prepare('SELECT sql FROM sqlite_schema WHERE name = ?').get(name) as { sql: string }).sql);
   const setIn = (table: string, column: string) => {
     const m = new RegExp(`${column} TEXT[^,]*?CHECK \\(${column} IN\\s*\\(([^)]*)\\)`).exec(sqlOf(table));
     assert.ok(m, `${table}.${column} has an IN check`);
-    return m[1]!.split(',').map(s => s.trim().replace(/^'|'$/g, ''));
+    return m[1]!.split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
   };
   assert.deepEqual(setIn('runs', 'state'), [...RUN_STATES]);
   assert.deepEqual(setIn('runs', 'outcome'), [...RUN_OUTCOMES]);
@@ -158,15 +186,21 @@ test('the ledger CHECK sets equal the pinned contract and store enumerations', a
   db.close();
 });
 
-test('losing the owner during an upgrade commits nothing, and a successor can still upgrade', async t => {
+test('losing the owner during an upgrade commits nothing, and a successor can still upgrade', async (t) => {
   for (const point of ['backup:after-copy', 'migrate:after-sql'] as const) {
     const dir = scratch(t);
     const path = await seeded(dir);
     const lost = owner(dir);
-    await assert.rejects(openLedger(lost, {
-      migrations: [...LEDGER_MIGRATIONS, V2],
-      failpoint: p => { if (p === point) lost.release(); },
-    }), code('sentinel.store.ownerNotHeld'), point);
+    await assert.rejects(
+      openLedger(lost, {
+        migrations: [...LEDGER_MIGRATIONS, V2],
+        failpoint: (p) => {
+          if (p === point) lost.release();
+        },
+      }),
+      code('sentinel.store.ownerNotHeld'),
+      point,
+    );
     assert.deepEqual(peek(path), { version: N, appId: LEDGER_APPLICATION_ID, runs: 1, later: 0 }, point);
     const successor = await openLedger(owner(dir), { migrations: [...LEDGER_MIGRATIONS, V2] });
     assert.equal(successor.migration.to, N + 1, point);
@@ -174,14 +208,23 @@ test('losing the owner during an upgrade commits nothing, and a successor can st
   }
   const fresh = scratch(t);
   const lost = owner(fresh);
-  await assert.rejects(openLedger(lost, { failpoint: p => { if (p === 'migrate:after-sql') lost.release(); } }),
-    code('sentinel.store.ownerNotHeld'));
+  await assert.rejects(
+    openLedger(lost, {
+      failpoint: (p) => {
+        if (p === 'migrate:after-sql') lost.release();
+      },
+    }),
+    code('sentinel.store.ownerNotHeld'),
+  );
   const db = new DatabaseSync(join(fresh, 'ledger.sqlite'), { readOnly: true });
-  assert.equal(Number(Object.values(db.prepare("SELECT count(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").get()!)[0]), 0);
+  assert.equal(
+    Number(Object.values(db.prepare("SELECT count(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").get()!)[0]),
+    0,
+  );
   db.close();
 });
 
-test('no ledger path may name the owner lock file, by spelling, case or inode', async t => {
+test('no ledger path may name the owner lock file, by spelling, case or inode', async (t) => {
   const dir = scratch(t);
   const lockPath = join(dir, 'owner.sqlite');
   writeFileSync(lockPath, '', { mode: 0o600 });
@@ -193,7 +236,8 @@ test('no ledger path may name the owner lock file, by spelling, case or inode', 
   };
   await assert.rejects(at(lockPath), code('sentinel.store.unsafePath'));
   await assert.rejects(at(join(dir, '.', 'owner.sqlite')), code('sentinel.store.unsafePath'));
-  if (process.platform === 'darwin') await assert.rejects(at(join(dir, 'OWNER.sqlite')), code('sentinel.store.unsafePath'));
+  if (process.platform === 'darwin')
+    await assert.rejects(at(join(dir, 'OWNER.sqlite')), code('sentinel.store.unsafePath'));
   linkSync(lockPath, join(dir, 'alias.sqlite'));
   await assert.rejects(at(join(dir, 'alias.sqlite')), code('sentinel.store.unsafePath'));
   const after = statSync(lockPath, { bigint: true });

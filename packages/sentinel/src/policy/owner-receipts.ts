@@ -15,8 +15,14 @@ export interface OwnerConfirmation {
 }
 
 /** Issues a receipt for one exact intent into the book's folder. */
-export function issueReceipt(book: ReceiptBook, owner: OwnerConfirmation, binding: ReceiptBinding, options: { now: Date; ttlMs: number }): ReceiptEnvelope {
-  if (owner.channel !== 'owner-cli') policyFail('sentinel.receipt.ownerOnly', 'only the owner’s local CLI flow issues a receipt');
+export function issueReceipt(
+  book: ReceiptBook,
+  owner: OwnerConfirmation,
+  binding: ReceiptBinding,
+  options: { now: Date; ttlMs: number },
+): ReceiptEnvelope {
+  if (owner.channel !== 'owner-cli')
+    policyFail('sentinel.receipt.ownerOnly', 'only the owner’s local CLI flow issues a receipt');
   if (!Number.isInteger(options.ttlMs) || options.ttlMs <= 0 || options.ttlMs > MAX_RECEIPT_TTL_MS) {
     policyFail('sentinel.receipt.ttlInvalid', `a receipt lives between 1 ms and ${MAX_RECEIPT_TTL_MS} ms`);
   }
@@ -32,7 +38,11 @@ export function issueReceipt(book: ReceiptBook, owner: OwnerConfirmation, bindin
     expiresAt: stamp(new Date(options.now.getTime() + options.ttlMs)),
   };
   const checked = validateEnvelope('receipt', receipt);
-  if (!checked.ok) policyFail('sentinel.receipt.ownerOnly', `the receipt does not validate: ${checked.errors[0]?.message ?? 'invalid'}`);
+  if (!checked.ok)
+    policyFail(
+      'sentinel.receipt.ownerOnly',
+      `the receipt does not validate: ${checked.errors[0]?.message ?? 'invalid'}`,
+    );
   if (!createPrivateFileOnce(book.directory, `${receipt.id}.json`, Buffer.from(JSON.stringify(receipt)), STORE)) {
     policyFail(STORE, 'a receipt with this id already exists');
   }

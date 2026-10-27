@@ -25,7 +25,16 @@
 // hashed against what was written (or against the verified winner), with the owner-only mode and single-name rule
 // checked on the same open file.
 import { createHash, randomBytes } from 'node:crypto';
-import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync } from 'node:fs';
+import {
+  closeSync,
+  constants as FS,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readdirSync,
+  readSync,
+  realpathSync,
+} from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -41,18 +50,28 @@ export const MAX_ENCODED_BYTES = MAX_OBJECT_BYTES + 64 * 1024;
 /** The level new gzip files are written at. A winner written at another level is still a valid gzip file. */
 export const GZIP_LEVEL = 6;
 export const OBJECT_CODECS = ['raw', 'gzip'] as const;
-export type ObjectCodec = typeof OBJECT_CODECS[number];
+export type ObjectCodec = (typeof OBJECT_CODECS)[number];
 /** How the raw bytes were produced: preserved verbatim (source), or `canonicalJson()` of a structured value. */
 export type ObjectCanonicalization = 'bytes' | 'canonical-json/1';
 
 export type ObjectStoreErrorCode =
-  | 'sentinel.object.invalidInput' | 'sentinel.object.tooLarge' | 'sentinel.object.digestMismatch'
-  | 'sentinel.object.missing' | 'sentinel.object.corrupt' | 'sentinel.object.corruptExisting'
-  | 'sentinel.object.wrongStore' | 'sentinel.object.unsafePath' | 'sentinel.object.notCanonical'
+  | 'sentinel.object.invalidInput'
+  | 'sentinel.object.tooLarge'
+  | 'sentinel.object.digestMismatch'
+  | 'sentinel.object.missing'
+  | 'sentinel.object.corrupt'
+  | 'sentinel.object.corruptExisting'
+  | 'sentinel.object.wrongStore'
+  | 'sentinel.object.unsafePath'
+  | 'sentinel.object.notCanonical'
   | 'sentinel.object.io';
 
 export class ObjectStoreError extends Error {
-  constructor(readonly code: ObjectStoreErrorCode, message: string, options?: { cause?: unknown }) {
+  constructor(
+    readonly code: ObjectStoreErrorCode,
+    message: string,
+    options?: { cause?: unknown },
+  ) {
     super(message, options);
     this.name = 'ObjectStoreError';
   }
@@ -138,8 +157,15 @@ export interface ObjectFileHandle {
   close(): Promise<void>;
 }
 export interface ObjectStat {
-  isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean;
-  size: number; dev: number; ino: number; nlink: number; uid: number; mode: number;
+  isFile(): boolean;
+  isDirectory(): boolean;
+  isSymbolicLink(): boolean;
+  size: number;
+  dev: number;
+  ino: number;
+  nlink: number;
+  uid: number;
+  mode: number;
 }
 export interface ObjectStoreIo {
   open(path: string, flags: number, mode?: number): Promise<ObjectFileHandle>;
@@ -153,12 +179,14 @@ export interface ObjectStoreIo {
 
 export const NODE_OBJECT_IO: ObjectStoreIo = {
   open: (path, flags, mode) => fsp.open(path, flags, mode) as Promise<ObjectFileHandle>,
-  mkdir: async (path, mode) => { await fsp.mkdir(path, { mode }); },
-  lstat: path => fsp.lstat(path),
+  mkdir: async (path, mode) => {
+    await fsp.mkdir(path, { mode });
+  },
+  lstat: (path) => fsp.lstat(path),
   link: (a, b) => fsp.link(a, b),
-  unlink: path => fsp.unlink(path),
-  readdir: path => fsp.readdir(path),
-  realpath: path => fsp.realpath(path),
+  unlink: (path) => fsp.unlink(path),
+  readdir: (path) => fsp.readdir(path),
+  realpath: (path) => fsp.realpath(path),
 };
 
 const NOFOLLOW = FS.O_NOFOLLOW ?? 0;
@@ -174,12 +202,14 @@ const errno = (e: unknown) => (e as NodeJS.ErrnoException | undefined)?.code;
 const fail = (code: ObjectStoreErrorCode, message: string, cause?: unknown): never => {
   throw new ObjectStoreError(code, message, cause === undefined ? undefined : { cause });
 };
-const ioFail = (what: string, cause: unknown): never => fail('sentinel.object.io', `${what} failed (${errno(cause) ?? 'error'})`, cause);
+const ioFail = (what: string, cause: unknown): never =>
+  fail('sentinel.object.io', `${what} failed (${errno(cause) ?? 'error'})`, cause);
 
 /** The logical id of a byte string. */
 export function identify(bytes: Uint8Array): ObjectIdentity {
   if (!(bytes instanceof Uint8Array)) fail('sentinel.object.invalidInput', 'object bytes must be a Uint8Array');
-  if (bytes.byteLength > MAX_OBJECT_BYTES) fail('sentinel.object.tooLarge', `object is ${bytes.byteLength} bytes; the limit is ${MAX_OBJECT_BYTES}`);
+  if (bytes.byteLength > MAX_OBJECT_BYTES)
+    fail('sentinel.object.tooLarge', `object is ${bytes.byteLength} bytes; the limit is ${MAX_OBJECT_BYTES}`);
   const rawDigest = sha256(bytes);
   return Object.freeze({ artifactId: `sha256:${rawDigest}`, rawDigest, rawSize: bytes.byteLength });
 }
@@ -221,13 +251,14 @@ export function canonicalJson(value: unknown): string {
     seen.add(v);
     let out: string;
     if (Array.isArray(v)) {
-      out = `[${Array.from(v, item => walk(item, depth + 1)).join(',')}]`;
+      out = `[${Array.from(v, (item) => walk(item, depth + 1)).join(',')}]`;
     } else {
       const proto = Object.getPrototypeOf(v);
-      if (proto !== Object.prototype && proto !== null) fail('sentinel.object.notCanonical', 'only plain objects have a canonical form');
+      if (proto !== Object.prototype && proto !== null)
+        fail('sentinel.object.notCanonical', 'only plain objects have a canonical form');
       if (Object.getOwnPropertySymbols(v).length) fail('sentinel.object.notCanonical', 'symbol keys have no JSON form');
       const keys = Object.keys(v).sort();
-      out = `{${keys.map(k => `${JSON.stringify(k)}:${walk((v as Record<string, unknown>)[k], depth + 1)}`).join(',')}}`;
+      out = `{${keys.map((k) => `${JSON.stringify(k)}:${walk((v as Record<string, unknown>)[k], depth + 1)}`).join(',')}}`;
     }
     seen.delete(v);
     return out;
@@ -244,7 +275,12 @@ async function encode(raw: Uint8Array, codec: ObjectCodec): Promise<Buffer> {
 }
 
 /** Decodes with the output bounded before allocation, then checks length and digest. */
-async function decode(encoded: Buffer, codec: ObjectCodec, rawDigest: string, rawSize: number | undefined): Promise<Buffer> {
+async function decode(
+  encoded: Buffer,
+  codec: ObjectCodec,
+  rawDigest: string,
+  rawSize: number | undefined,
+): Promise<Buffer> {
   const limit = Math.min(rawSize ?? MAX_OBJECT_BYTES, MAX_OBJECT_BYTES);
   let decoded: Buffer;
   if (codec === 'raw') {
@@ -255,7 +291,11 @@ async function decode(encoded: Buffer, codec: ObjectCodec, rawDigest: string, ra
       // maxOutputLength stops inflation at the limit: a gzip bomb cannot allocate past it.
       decoded = await gunzipAsync(encoded, { maxOutputLength: Math.max(limit, 1) });
     } catch (e) {
-      return fail('sentinel.object.corrupt', `gzip object does not decode within ${limit} bytes (${errno(e) ?? 'error'})`, e);
+      return fail(
+        'sentinel.object.corrupt',
+        `gzip object does not decode within ${limit} bytes (${errno(e) ?? 'error'})`,
+        e,
+      );
     }
   }
   return checkDecoded(decoded, rawDigest, rawSize);
@@ -271,14 +311,19 @@ function decodeSync(encoded: Buffer, codec: ObjectCodec, rawDigest: string, rawS
     try {
       decoded = zlib.gunzipSync(encoded, { maxOutputLength: Math.max(limit, 1) });
     } catch (e) {
-      return fail('sentinel.object.corrupt', `gzip object does not decode within ${limit} bytes (${errno(e) ?? 'error'})`, e);
+      return fail(
+        'sentinel.object.corrupt',
+        `gzip object does not decode within ${limit} bytes (${errno(e) ?? 'error'})`,
+        e,
+      );
     }
   }
   return checkDecoded(decoded, rawDigest, rawSize);
 }
 
 function checkDecoded(decoded: Buffer, rawDigest: string, rawSize: number | undefined): Buffer {
-  if (rawSize !== undefined && decoded.length !== rawSize) fail('sentinel.object.corrupt', `decoded ${decoded.length} bytes; expected ${rawSize}`);
+  if (rawSize !== undefined && decoded.length !== rawSize)
+    fail('sentinel.object.corrupt', `decoded ${decoded.length} bytes; expected ${rawSize}`);
   if (decoded.length > MAX_OBJECT_BYTES) fail('sentinel.object.corrupt', 'decoded object exceeds the size limit');
   if (sha256(decoded) !== rawDigest) fail('sentinel.object.corrupt', 'decoded bytes do not match the raw digest');
   return decoded;
@@ -294,7 +339,10 @@ export interface PutOptions {
   readonly expect?: ObjectIdentity;
 }
 
-interface Ident { readonly dev: number; readonly ino: number }
+interface Ident {
+  readonly dev: number;
+  readonly ino: number;
+}
 /** Relative directory → identity captured when it was checked. '.' is the store root. */
 type Chain = Map<string, Ident>;
 const sameIdent = (a: Ident | undefined, b: { dev: number; ino: number }) => !!a && a.dev === b.dev && a.ino === b.ino;
@@ -313,7 +361,12 @@ function assertSafeDir(st: ObjectStat, rel: string): void {
 const shardOf = (rawDigest: string) => `objects/sha256/${rawDigest.slice(0, 2)}`;
 const readChain = (rawDigest: string) => ['.', 'objects', 'objects/sha256', shardOf(rawDigest)];
 
-interface Verified { readonly decoded: Buffer; readonly encodedDigest: string; readonly encodedSize: number; readonly ident: Ident }
+interface Verified {
+  readonly decoded: Buffer;
+  readonly encodedDigest: string;
+  readonly encodedSize: number;
+  readonly ident: Ident;
+}
 
 export class ObjectStore {
   readonly #owner: ObjectStoreOwner;
@@ -321,8 +374,14 @@ export class ObjectStore {
   readonly #root: string;
 
   constructor(owner: ObjectStoreOwner, options: ObjectStoreOptions = {}) {
-    if (!owner || typeof owner.storePath !== 'string' || !owner.storePath || typeof owner.storeId !== 'string' || !owner.storeId
-      || typeof owner.assertHeld !== 'function') {
+    if (
+      !owner ||
+      typeof owner.storePath !== 'string' ||
+      !owner.storePath ||
+      typeof owner.storeId !== 'string' ||
+      !owner.storeId ||
+      typeof owner.assertHeld !== 'function'
+    ) {
       fail('sentinel.object.invalidInput', 'an object store needs an owner with storePath, storeId and assertHeld');
     }
     if (!isAbsolute(owner.storePath)) fail('sentinel.object.unsafePath', 'the store path must be absolute');
@@ -331,9 +390,13 @@ export class ObjectStore {
     this.#root = owner.storePath;
   }
 
-  get storeId(): string { return this.#owner.storeId; }
+  get storeId(): string {
+    return this.#owner.storeId;
+  }
 
-  #abs(rel: string): string { return rel === '.' ? this.#root : join(this.#root, ...rel.split('/')); }
+  #abs(rel: string): string {
+    return rel === '.' ? this.#root : join(this.#root, ...rel.split('/'));
+  }
 
   /** Publishes verbatim bytes (source files and other raw evidence). */
   put(bytes: Uint8Array, options: PutOptions = {}): Promise<ObjectReceipt> {
@@ -354,7 +417,8 @@ export class ObjectStore {
     }
     await this.#owner.assertHeld();
     const encoded = await encode(bytes, codec);
-    if (encoded.length > MAX_ENCODED_BYTES) fail('sentinel.object.tooLarge', 'encoded object exceeds the encoded size limit');
+    if (encoded.length > MAX_ENCODED_BYTES)
+      fail('sentinel.object.tooLarge', 'encoded object exceeds the encoded size limit');
     // The encoding we are about to write must itself decode back to the same bytes.
     await decode(encoded, codec, id.rawDigest, id.rawSize);
     const encodedDigest = sha256(encoded);
@@ -392,7 +456,11 @@ export class ObjectStore {
           if (!winner) fail('sentinel.object.io', 'the object name existed and then vanished during publication');
         }
       } finally {
-        try { await this.#io.unlink(tmpPath); } catch { /* an inert staged copy; listObjects() reports it */ }
+        try {
+          await this.#io.unlink(tmpPath);
+        } catch {
+          /* an inert staged copy; listObjects() reports it */
+        }
       }
     }
     if (!winner) return fail('sentinel.object.io', 'publication produced no verified object');
@@ -402,43 +470,79 @@ export class ObjectStore {
     for (const dir of [shardOf(id.rawDigest), 'objects/sha256', 'objects', '.']) await this.#syncDir(dir, chain);
     await this.#recheck(chain);
     let real: string;
-    try { real = await this.#io.realpath(finalPath); } catch (e) { return ioFail('resolving the published object', e); }
-    if (real !== finalPath) fail('sentinel.object.unsafePath', 'the published object no longer resolves inside the store');
+    try {
+      real = await this.#io.realpath(finalPath);
+    } catch (e) {
+      return ioFail('resolving the published object', e);
+    }
+    if (real !== finalPath)
+      fail('sentinel.object.unsafePath', 'the published object no longer resolves inside the store');
     const last = await this.#lstatOrFail(rel);
-    if (!sameIdent(winner.ident, last)) fail('sentinel.object.unsafePath', 'the published name changed before the receipt');
+    if (!sameIdent(winner.ident, last))
+      fail('sentinel.object.unsafePath', 'the published name changed before the receipt');
     // The receipt promises exactly what checkSync() accepts: run that same verification (directories, owner-only
     // modes, no alias outside objects/tmp, sizes and digests) on the final name, and refuse on any difference.
     let final: Verified;
     try {
-      final = this.#readVerifiedSync({ rawDigest: id.rawDigest, codec, rawSize: id.rawSize, encodedDigest: winner.encodedDigest, encodedSize: winner.encodedSize });
+      final = this.#readVerifiedSync({
+        rawDigest: id.rawDigest,
+        codec,
+        rawSize: id.rawSize,
+        encodedDigest: winner.encodedDigest,
+        encodedSize: winner.encodedSize,
+      });
     } catch (e) {
       if (e instanceof ObjectStoreError && e.code !== 'sentinel.object.unsafePath') {
         return fail('sentinel.object.unsafePath', `the published object changed before the receipt: ${e.message}`, e);
       }
       throw e;
     }
-    if (!sameIdent(winner.ident, final.ident)) fail('sentinel.object.unsafePath', 'the published name changed before the receipt');
+    if (!sameIdent(winner.ident, final.ident))
+      fail('sentinel.object.unsafePath', 'the published name changed before the receipt');
     await this.#owner.assertHeld();
     return Object.freeze({
-      kind: 'sentinel-object-receipt', version: 1, storeId: this.#owner.storeId,
-      artifactId: id.artifactId, rawDigest: id.rawDigest, rawSize: id.rawSize,
-      codec, canonicalization, encodedDigest: winner.encodedDigest, encodedSize: winner.encodedSize, relPath: rel, created,
+      kind: 'sentinel-object-receipt',
+      version: 1,
+      storeId: this.#owner.storeId,
+      artifactId: id.artifactId,
+      rawDigest: id.rawDigest,
+      rawSize: id.rawSize,
+      codec,
+      canonicalization,
+      encodedDigest: winner.encodedDigest,
+      encodedSize: winner.encodedSize,
+      relPath: rel,
+      created,
     } satisfies ObjectReceipt);
   }
 
   async #lstatOrFail(rel: string): Promise<ObjectStat> {
-    try { return await this.#io.lstat(this.#abs(rel)); } catch (e) { return ioFail(`inspecting ${rel}`, e); }
+    try {
+      return await this.#io.lstat(this.#abs(rel));
+    } catch (e) {
+      return ioFail(`inspecting ${rel}`, e);
+    }
   }
 
   /** Checks the root, then creates (0700) and checks each directory, recording its identity. */
   async #ensureChain(rels: readonly string[]): Promise<Chain> {
     let real: string;
-    try { real = await this.#io.realpath(this.#root); } catch (e) { return ioFail('resolving the store path', e); }
-    if (real !== this.#root) fail('sentinel.object.unsafePath', 'the store path is not canonical (it passes through a symbolic link or is not its real path)');
+    try {
+      real = await this.#io.realpath(this.#root);
+    } catch (e) {
+      return ioFail('resolving the store path', e);
+    }
+    if (real !== this.#root)
+      fail(
+        'sentinel.object.unsafePath',
+        'the store path is not canonical (it passes through a symbolic link or is not its real path)',
+      );
     const chain: Chain = new Map();
     for (const rel of rels) {
       if (rel !== '.') {
-        try { await this.#io.mkdir(this.#abs(rel), 0o700); } catch (e) {
+        try {
+          await this.#io.mkdir(this.#abs(rel), 0o700);
+        } catch (e) {
           if (errno(e) !== 'EEXIST') ioFail(`creating ${rel}`, e);
         }
       }
@@ -452,10 +556,13 @@ export class ObjectStore {
   async #recheck(chain: Chain): Promise<void> {
     for (const [rel, ident] of chain) {
       let st: ObjectStat;
-      try { st = await this.#io.lstat(this.#abs(rel)); } catch (e) {
+      try {
+        st = await this.#io.lstat(this.#abs(rel));
+      } catch (e) {
         return fail('sentinel.object.unsafePath', `${rel} disappeared during the operation`, e);
       }
-      if (st.isSymbolicLink() || !st.isDirectory() || !sameIdent(ident, st)) fail('sentinel.object.unsafePath', `${rel} was replaced during the operation`);
+      if (st.isSymbolicLink() || !st.isDirectory() || !sameIdent(ident, st))
+        fail('sentinel.object.unsafePath', `${rel} was replaced during the operation`);
     }
   }
 
@@ -463,7 +570,9 @@ export class ObjectStore {
     let fh: ObjectFileHandle;
     try {
       fh = await this.#io.open(path, FS.O_RDWR | FS.O_CREAT | FS.O_EXCL | NOFOLLOW, 0o600);
-    } catch (e) { return ioFail('creating the staged object', e); }
+    } catch (e) {
+      return ioFail('creating the staged object', e);
+    }
     try {
       let off = 0;
       while (off < encoded.length) {
@@ -473,10 +582,12 @@ export class ObjectStore {
       }
       await fh.sync();
       const back = await readAll(fh, encoded.length, MAX_ENCODED_BYTES);
-      if (back.length !== encoded.length || sha256(back) !== encodedDigest) fail('sentinel.object.io', 'the staged object did not read back as written');
+      if (back.length !== encoded.length || sha256(back) !== encodedDigest)
+        fail('sentinel.object.io', 'the staged object did not read back as written');
       const st = await fh.stat();
       assertOwnerOnly(st, 'the staged object');
-      if (!st.isFile() || st.nlink !== 1) fail('sentinel.object.unsafePath', 'the staged object is not a single-link regular file');
+      if (!st.isFile() || st.nlink !== 1)
+        fail('sentinel.object.unsafePath', 'the staged object is not a single-link regular file');
       return { dev: st.dev, ino: st.ino };
     } catch (e) {
       if (e instanceof ObjectStoreError) throw e;
@@ -493,7 +604,11 @@ export class ObjectStore {
     } catch (e) {
       if (e instanceof ObjectStoreError && e.code === 'sentinel.object.missing') return undefined;
       if (e instanceof ObjectStoreError && e.code === 'sentinel.object.corrupt') {
-        fail('sentinel.object.corruptExisting', `an object already published as ${rel} is invalid: ${e.message}; it was left in place`, e);
+        fail(
+          'sentinel.object.corruptExisting',
+          `an object already published as ${rel} is invalid: ${e.message}; it was left in place`,
+          e,
+        );
       }
       throw e;
     }
@@ -501,7 +616,11 @@ export class ObjectStore {
 
   async #syncFile(rel: string, ident: Ident): Promise<void> {
     let fh: ObjectFileHandle;
-    try { fh = await this.#io.open(this.#abs(rel), FS.O_RDONLY | NOFOLLOW); } catch (e) { return ioFail('opening the object for fsync', e); }
+    try {
+      fh = await this.#io.open(this.#abs(rel), FS.O_RDONLY | NOFOLLOW);
+    } catch (e) {
+      return ioFail('opening the object for fsync', e);
+    }
     try {
       const st = await fh.stat();
       if (!sameIdent(ident, st)) fail('sentinel.object.unsafePath', 'the object was replaced before its fsync');
@@ -509,48 +628,73 @@ export class ObjectStore {
     } catch (e) {
       if (e instanceof ObjectStoreError) throw e;
       ioFail('fsync of the object', e);
-    } finally { await fh.close().catch(() => {}); }
+    } finally {
+      await fh.close().catch(() => {});
+    }
   }
 
   async #syncDir(rel: string, chain: Chain): Promise<void> {
     let fh: ObjectFileHandle;
-    try { fh = await this.#io.open(this.#abs(rel), FS.O_RDONLY | DIRECTORY | NOFOLLOW); } catch (e) {
-      if (errno(e) === 'ELOOP' || errno(e) === 'ENOTDIR') return fail('sentinel.object.unsafePath', `${rel} was replaced during the operation`, e);
+    try {
+      fh = await this.#io.open(this.#abs(rel), FS.O_RDONLY | DIRECTORY | NOFOLLOW);
+    } catch (e) {
+      if (errno(e) === 'ELOOP' || errno(e) === 'ENOTDIR')
+        return fail('sentinel.object.unsafePath', `${rel} was replaced during the operation`, e);
       return ioFail(`opening ${rel} for fsync`, e);
     }
     try {
       const st = await fh.stat();
-      if (!sameIdent(chain.get(rel), st)) fail('sentinel.object.unsafePath', `${rel} was replaced during the operation`);
+      if (!sameIdent(chain.get(rel), st))
+        fail('sentinel.object.unsafePath', `${rel} was replaced during the operation`);
       await fh.sync();
     } catch (e) {
       if (e instanceof ObjectStoreError) throw e;
       ioFail(`fsync of ${rel}`, e);
-    } finally { await fh.close().catch(() => {}); }
+    } finally {
+      await fh.close().catch(() => {});
+    }
   }
 
   #checkRef(ref: ObjectRef): void {
-    if (!ref || !HEX64.test(ref.rawDigest) || !OBJECT_CODECS.includes(ref.codec)) fail('sentinel.object.invalidInput', 'an object reference needs a raw digest and a codec');
-    if (ref.storeId !== undefined && ref.storeId !== this.#owner.storeId) fail('sentinel.object.wrongStore', 'the reference names another store');
-    if (ref.rawSize !== undefined && (!Number.isSafeInteger(ref.rawSize) || ref.rawSize < 0 || ref.rawSize > MAX_OBJECT_BYTES)) {
+    if (!ref || !HEX64.test(ref.rawDigest) || !OBJECT_CODECS.includes(ref.codec))
+      fail('sentinel.object.invalidInput', 'an object reference needs a raw digest and a codec');
+    if (ref.storeId !== undefined && ref.storeId !== this.#owner.storeId)
+      fail('sentinel.object.wrongStore', 'the reference names another store');
+    if (
+      ref.rawSize !== undefined &&
+      (!Number.isSafeInteger(ref.rawSize) || ref.rawSize < 0 || ref.rawSize > MAX_OBJECT_BYTES)
+    ) {
       fail('sentinel.object.invalidInput', 'raw size out of range');
     }
-    if (ref.encodedSize !== undefined && (!Number.isSafeInteger(ref.encodedSize) || ref.encodedSize < 0 || ref.encodedSize > MAX_ENCODED_BYTES)) {
+    if (
+      ref.encodedSize !== undefined &&
+      (!Number.isSafeInteger(ref.encodedSize) || ref.encodedSize < 0 || ref.encodedSize > MAX_ENCODED_BYTES)
+    ) {
       fail('sentinel.object.invalidInput', 'encoded size out of range');
     }
-    if (ref.encodedDigest !== undefined && !HEX64.test(ref.encodedDigest)) fail('sentinel.object.invalidInput', 'an encoded digest is 64 lower-case hex characters');
+    if (ref.encodedDigest !== undefined && !HEX64.test(ref.encodedDigest))
+      fail('sentinel.object.invalidInput', 'an encoded digest is 64 lower-case hex characters');
   }
 
   #chainSync(rels: readonly string[]): Chain {
     let real: string;
-    try { real = realpathSync.native(this.#root); } catch (e) {
+    try {
+      real = realpathSync.native(this.#root);
+    } catch (e) {
       if (errno(e) === 'ENOENT') return fail('sentinel.object.missing', 'object not found');
       return ioFail('resolving the store path', e);
     }
-    if (real !== this.#root) fail('sentinel.object.unsafePath', 'the store path is not canonical (it passes through a symbolic link or is not its real path)');
+    if (real !== this.#root)
+      fail(
+        'sentinel.object.unsafePath',
+        'the store path is not canonical (it passes through a symbolic link or is not its real path)',
+      );
     const chain: Chain = new Map();
     for (const rel of rels) {
       let st: ObjectStat;
-      try { st = lstatSync(this.#abs(rel)); } catch (e) {
+      try {
+        st = lstatSync(this.#abs(rel));
+      } catch (e) {
         if (errno(e) === 'ENOENT') return fail('sentinel.object.missing', 'object not found');
         return ioFail(`inspecting ${rel}`, e);
       }
@@ -563,8 +707,13 @@ export class ObjectStore {
   #recheckSync(chain: Chain): void {
     for (const [rel, ident] of chain) {
       let st: ObjectStat;
-      try { st = lstatSync(this.#abs(rel)); } catch (e) { return fail('sentinel.object.unsafePath', `${rel} disappeared during the read`, e); }
-      if (st.isSymbolicLink() || !st.isDirectory() || !sameIdent(ident, st)) fail('sentinel.object.unsafePath', `${rel} was replaced during the read`);
+      try {
+        st = lstatSync(this.#abs(rel));
+      } catch (e) {
+        return fail('sentinel.object.unsafePath', `${rel} disappeared during the read`, e);
+      }
+      if (st.isSymbolicLink() || !st.isDirectory() || !sameIdent(ident, st))
+        fail('sentinel.object.unsafePath', `${rel} was replaced during the read`);
     }
   }
 
@@ -584,10 +733,14 @@ export class ObjectStore {
             try {
               const s = lstatSync(this.#abs(`objects/tmp/${name}`));
               if (s.isFile() && s.dev === st.dev && s.ino === st.ino) staged++;
-            } catch { /* removed meanwhile */ }
+            } catch {
+              /* removed meanwhile */
+            }
           }
         }
-      } catch { /* no staging directory: no allowed aliases */ }
+      } catch {
+        /* no staging directory: no allowed aliases */
+      }
       const again = fstatSync(fd);
       if (again.nlink === st.nlink && 1 + staged === st.nlink) return true;
       st = again;
@@ -602,18 +755,24 @@ export class ObjectStore {
     const chain = this.#chainSync(readChain(ref.rawDigest));
     const path = this.#abs(rel);
     let fd: number;
-    try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW); } catch (e) {
+    try {
+      fd = openSync(path, FS.O_RDONLY | NOFOLLOW);
+    } catch (e) {
       if (errno(e) === 'ENOENT') return fail('sentinel.object.missing', 'object not found');
-      if (errno(e) === 'ELOOP' || errno(e) === 'EMLINK') return fail('sentinel.object.unsafePath', 'object path is a symbolic link');
+      if (errno(e) === 'ELOOP' || errno(e) === 'EMLINK')
+        return fail('sentinel.object.unsafePath', 'object path is a symbolic link');
       return ioFail('opening the object', e);
     }
     try {
       const st = fstatSync(fd);
       if (!st.isFile()) fail('sentinel.object.unsafePath', 'object path is not a regular file');
       assertOwnerOnly(st, 'the object file');
-      if (!this.#aliasesAllowedSync(fd, st)) fail('sentinel.object.unsafePath', 'the object file has another name outside the store');
-      if (st.size > MAX_ENCODED_BYTES) fail('sentinel.object.corrupt', `object file is ${st.size} bytes; the limit is ${MAX_ENCODED_BYTES}`);
-      if (ref.encodedSize !== undefined && st.size !== ref.encodedSize) fail('sentinel.object.corrupt', `object file is ${st.size} bytes; expected ${ref.encodedSize}`);
+      if (!this.#aliasesAllowedSync(fd, st))
+        fail('sentinel.object.unsafePath', 'the object file has another name outside the store');
+      if (st.size > MAX_ENCODED_BYTES)
+        fail('sentinel.object.corrupt', `object file is ${st.size} bytes; the limit is ${MAX_ENCODED_BYTES}`);
+      if (ref.encodedSize !== undefined && st.size !== ref.encodedSize)
+        fail('sentinel.object.corrupt', `object file is ${st.size} bytes; expected ${ref.encodedSize}`);
       const encoded = Buffer.alloc(st.size);
       let off = 0;
       try {
@@ -622,19 +781,26 @@ export class ObjectStore {
           if (n === 0) break;
           off += n;
         }
-        if (off === st.size && readSync(fd, Buffer.alloc(1), 0, 1, st.size) !== 0) fail('sentinel.object.corrupt', 'object file grew while it was read');
+        if (off === st.size && readSync(fd, Buffer.alloc(1), 0, 1, st.size) !== 0)
+          fail('sentinel.object.corrupt', 'object file grew while it was read');
       } catch (e) {
         if (e instanceof ObjectStoreError) throw e;
         return ioFail('reading the object', e);
       }
       if (off !== st.size) fail('sentinel.object.corrupt', 'object file is shorter than it claimed');
       const encodedDigest = sha256(encoded);
-      if (ref.encodedDigest !== undefined && encodedDigest !== ref.encodedDigest) fail('sentinel.object.corrupt', 'encoded bytes do not match the recorded digest');
+      if (ref.encodedDigest !== undefined && encodedDigest !== ref.encodedDigest)
+        fail('sentinel.object.corrupt', 'encoded bytes do not match the recorded digest');
       const decoded = decodeSync(encoded, ref.codec, ref.rawDigest, ref.rawSize);
       // The name must still be this file, in the same directories.
       let named: ObjectStat;
-      try { named = lstatSync(path); } catch (e) { return fail('sentinel.object.unsafePath', 'the object name changed during the read', e); }
-      if (named.isSymbolicLink() || !sameIdent(st, named)) fail('sentinel.object.unsafePath', 'the object name changed during the read');
+      try {
+        named = lstatSync(path);
+      } catch (e) {
+        return fail('sentinel.object.unsafePath', 'the object name changed during the read', e);
+      }
+      if (named.isSymbolicLink() || !sameIdent(st, named))
+        fail('sentinel.object.unsafePath', 'the object name changed during the read');
       this.#recheckSync(chain);
       return { decoded, encodedDigest, encodedSize: st.size, ident: { dev: st.dev, ino: st.ino } };
     } finally {
@@ -651,10 +817,13 @@ export class ObjectStore {
   async readCanonicalJson(ref: ObjectRef): Promise<unknown> {
     const bytes = await this.read(ref);
     let value: unknown;
-    try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch (e) {
+    try {
+      value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    } catch (e) {
       return fail('sentinel.object.notCanonical', 'object is not UTF-8 JSON', e);
     }
-    if (!canonicalJsonBytes(value).equals(bytes)) fail('sentinel.object.notCanonical', 'object is JSON but not in canonical form');
+    if (!canonicalJsonBytes(value).equals(bytes))
+      fail('sentinel.object.notCanonical', 'object is JSON but not in canonical form');
     return value;
   }
 
@@ -688,7 +857,13 @@ export class ObjectStore {
       if (e instanceof ObjectStoreError) return null;
       throw e;
     }
-    return Object.freeze({ rawDigest, codec, rawSize: v.decoded.length, encodedDigest: v.encodedDigest, encodedSize: v.encodedSize });
+    return Object.freeze({
+      rawDigest,
+      codec,
+      rawSize: v.decoded.length,
+      encodedDigest: v.encodedDigest,
+      encodedSize: v.encodedSize,
+    });
   }
 
   async check(ref: ObjectRef): Promise<ObjectCheck> {
@@ -702,35 +877,64 @@ export class ObjectStore {
     const unexpected: string[] = [];
     const entries = async (rel: string): Promise<string[] | undefined> => {
       let st: ObjectStat;
-      try { st = await this.#io.lstat(this.#abs(rel)); } catch (e) {
+      try {
+        st = await this.#io.lstat(this.#abs(rel));
+      } catch (e) {
         if (errno(e) === 'ENOENT') return undefined;
         return ioFail(`inspecting ${rel}`, e);
       }
-      if (st.isSymbolicLink() || !st.isDirectory()) { unexpected.push(rel); return undefined; }
-      try { return (await this.#io.readdir(this.#abs(rel))).sort(); } catch (e) { return ioFail(`listing ${rel}`, e); }
+      if (st.isSymbolicLink() || !st.isDirectory()) {
+        unexpected.push(rel);
+        return undefined;
+      }
+      try {
+        return (await this.#io.readdir(this.#abs(rel))).sort();
+      } catch (e) {
+        return ioFail(`listing ${rel}`, e);
+      }
     };
     const top = await entries('objects');
     for (const name of top ?? []) {
       if (name === 'sha256' || name === 'tmp') continue;
       unexpected.push(`objects/${name}`);
     }
-    if (top?.includes('tmp')) for (const name of await entries('objects/tmp') ?? []) staging.push(`objects/tmp/${name}`);
+    if (top?.includes('tmp'))
+      for (const name of (await entries('objects/tmp')) ?? []) staging.push(`objects/tmp/${name}`);
     if (top?.includes('sha256')) {
-      for (const shard of await entries('objects/sha256') ?? []) {
+      for (const shard of (await entries('objects/sha256')) ?? []) {
         const shardRel = `objects/sha256/${shard}`;
-        if (!SHARD.test(shard)) { unexpected.push(shardRel); continue; }
-        for (const name of await entries(shardRel) ?? []) {
+        if (!SHARD.test(shard)) {
+          unexpected.push(shardRel);
+          continue;
+        }
+        for (const name of (await entries(shardRel)) ?? []) {
           const rel = `${shardRel}/${name}`;
           const m = OBJECT_FILE.exec(name);
-          if (!m || m[1]!.slice(0, 2) !== shard) { unexpected.push(rel); continue; }
+          if (!m || m[1]!.slice(0, 2) !== shard) {
+            unexpected.push(rel);
+            continue;
+          }
           let st: ObjectStat;
-          try { st = await this.#io.lstat(this.#abs(rel)); } catch (e) { return ioFail(`inspecting ${rel}`, e); }
-          if (st.isSymbolicLink() || !st.isFile()) { unexpected.push(rel); continue; }
-          objects.push(Object.freeze({ rawDigest: m[1]!, codec: m[2] as ObjectCodec, relPath: rel, encodedSize: st.size }));
+          try {
+            st = await this.#io.lstat(this.#abs(rel));
+          } catch (e) {
+            return ioFail(`inspecting ${rel}`, e);
+          }
+          if (st.isSymbolicLink() || !st.isFile()) {
+            unexpected.push(rel);
+            continue;
+          }
+          objects.push(
+            Object.freeze({ rawDigest: m[1]!, codec: m[2] as ObjectCodec, relPath: rel, encodedSize: st.size }),
+          );
         }
       }
     }
-    return Object.freeze({ objects: Object.freeze(objects), staging: Object.freeze(staging), unexpected: Object.freeze(unexpected) });
+    return Object.freeze({
+      objects: Object.freeze(objects),
+      staging: Object.freeze(staging),
+      unexpected: Object.freeze(unexpected),
+    });
   }
 }
 

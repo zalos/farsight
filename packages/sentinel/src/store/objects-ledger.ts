@@ -3,7 +3,11 @@
 // (`raw` | `gzip`). Everything the ledger is told about stored bytes is measured here, from the bytes, at the
 // moment it asks; nothing is echoed from a receipt or a caller.
 import {
-  type ObjectCodec, type ObjectReceipt as StoreReceipt, type ObjectRef, type ObjectStore, rawDigestOf,
+  type ObjectCodec,
+  type ObjectReceipt as StoreReceipt,
+  type ObjectRef,
+  type ObjectStore,
+  rawDigestOf,
 } from './objects.js';
 import { type PrunePlan, type ReachabilitySnapshot, planPrune } from './gc.js';
 import type { ArtifactCodec, GcSnapshot, ObjectReceipt, ObjectVerifier, VerifiedObject } from './store-types.js';
@@ -33,7 +37,13 @@ export function refFromLedgerReceipt(receipt: ObjectReceipt): ObjectRef | undefi
   const stored = typeof receipt.storedDigest === 'string' ? DIGEST.exec(receipt.storedDigest) : null;
   if (!codec || !stored || typeof receipt.id !== 'string' || !DIGEST.test(receipt.id)) return undefined;
   if (!Number.isSafeInteger(receipt.rawSize) || !Number.isSafeInteger(receipt.storedSize)) return undefined;
-  return { rawDigest: rawDigestOf(receipt.id), codec, rawSize: receipt.rawSize, encodedDigest: stored[1]!, encodedSize: receipt.storedSize };
+  return {
+    rawDigest: rawDigestOf(receipt.id),
+    codec,
+    rawSize: receipt.rawSize,
+    encodedDigest: stored[1]!,
+    encodedSize: receipt.storedSize,
+  };
 }
 
 /**
@@ -68,17 +78,35 @@ export function ledgerObjectVerifier(store: ObjectStore): ObjectVerifier {
 export function reachabilityFromLedger(snapshot: GcSnapshot): ReachabilitySnapshot {
   const list = <T>(v: readonly T[] | undefined): readonly T[] | undefined => (Array.isArray(v) ? v : undefined);
   const parts = {
-    referenced: list(snapshot?.referenced), retained: list(snapshot?.retained), active: list(snapshot?.active),
+    referenced: list(snapshot?.referenced),
+    retained: list(snapshot?.retained),
+    active: list(snapshot?.active),
     staged: list(snapshot?.staged),
-    report: list(snapshot?.reports), links: list(snapshot?.links), objects: list(snapshot?.objects),
+    report: list(snapshot?.reports),
+    links: list(snapshot?.links),
+    objects: list(snapshot?.objects),
   };
-  const complete = snapshot?.complete === true && Object.values(parts).every(p => p !== undefined);
+  const complete = snapshot?.complete === true && Object.values(parts).every((p) => p !== undefined);
   // Every list is a root kind; a missing one makes the snapshot incomplete, a sparse one makes it invalid.
-  const roots = (['referenced', 'retained', 'active', 'staged', 'report'] as const)
-    .map(kind => ({ kind, id: `ledger:${kind}`, artifacts: [...(parts[kind] ?? [])] }));
-  const links = (parts.links ?? []).map(l => (Array.isArray(l) && l.length === 2 ? { from: l[0], to: l[1] } : { from: '', to: '' }));
-  const recorded = (parts.objects ?? []).map(r => refFromLedgerReceipt(r) ?? { rawDigest: '', codec: 'raw' as const });
-  return { storeId: snapshot?.storeId as string, sequence: snapshot?.sequence as number, complete, roots, links, recorded };
+  const roots = (['referenced', 'retained', 'active', 'staged', 'report'] as const).map((kind) => ({
+    kind,
+    id: `ledger:${kind}`,
+    artifacts: [...(parts[kind] ?? [])],
+  }));
+  const links = (parts.links ?? []).map((l) =>
+    Array.isArray(l) && l.length === 2 ? { from: l[0], to: l[1] } : { from: '', to: '' },
+  );
+  const recorded = (parts.objects ?? []).map(
+    (r) => refFromLedgerReceipt(r) ?? { rawDigest: '', codec: 'raw' as const },
+  );
+  return {
+    storeId: snapshot?.storeId as string,
+    sequence: snapshot?.sequence as number,
+    complete,
+    roots,
+    links,
+    recorded,
+  };
 }
 
 /** The part of the ledger a dry-run prune reads. */

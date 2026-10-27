@@ -29,13 +29,28 @@ export type StoreErrorCode =
 
 /** Every code, in catalog order; a test pins it against the catalog so the two cannot drift. */
 export const STORE_ERROR_CODES: readonly StoreErrorCode[] = Object.freeze([
-  'sentinel.store.runtimeUnavailable', 'sentinel.store.runtimeUnqualified', 'sentinel.store.runtimeBehavior',
-  'sentinel.store.platformUnqualified', 'sentinel.store.pathNotAbsolute', 'sentinel.store.pathNotCanonical',
-  'sentinel.store.pathSymlink', 'sentinel.store.pathNotDirectory', 'sentinel.store.pathWrongOwner',
-  'sentinel.store.pathPermissions', 'sentinel.store.ancestorUnsafe', 'sentinel.store.filesystemUnsupported',
-  'sentinel.store.fileUnsafe', 'sentinel.store.identityChanged', 'sentinel.store.lockFileCorrupt', 'sentinel.store.ownedElsewhere',
-  'sentinel.store.ownershipUncertain', 'sentinel.store.ownerClosed', 'sentinel.store.ownerLost',
-  'sentinel.store.resourceCloseFailed', 'sentinel.store.ioFailure', 'sentinel.store.scratchUnsafe',
+  'sentinel.store.runtimeUnavailable',
+  'sentinel.store.runtimeUnqualified',
+  'sentinel.store.runtimeBehavior',
+  'sentinel.store.platformUnqualified',
+  'sentinel.store.pathNotAbsolute',
+  'sentinel.store.pathNotCanonical',
+  'sentinel.store.pathSymlink',
+  'sentinel.store.pathNotDirectory',
+  'sentinel.store.pathWrongOwner',
+  'sentinel.store.pathPermissions',
+  'sentinel.store.ancestorUnsafe',
+  'sentinel.store.filesystemUnsupported',
+  'sentinel.store.fileUnsafe',
+  'sentinel.store.identityChanged',
+  'sentinel.store.lockFileCorrupt',
+  'sentinel.store.ownedElsewhere',
+  'sentinel.store.ownershipUncertain',
+  'sentinel.store.ownerClosed',
+  'sentinel.store.ownerLost',
+  'sentinel.store.resourceCloseFailed',
+  'sentinel.store.ioFailure',
+  'sentinel.store.scratchUnsafe',
 ] as const);
 
 export type StoreErrorDetail = Record<string, string | number | boolean | null | readonly string[]>;
@@ -76,5 +91,9 @@ export function isSqliteBusy(error: unknown): boolean {
 /** Wrap an OS error with its code only; the message of a foreign error is never surfaced. */
 export function ioFailure(operation: string, error: unknown): StoreError {
   const code = (error as { code?: unknown } | null)?.code;
-  return new StoreError('sentinel.store.ioFailure', { operation, osCode: typeof code === 'string' ? code : null }, { cause: error });
+  return new StoreError(
+    'sentinel.store.ioFailure',
+    { operation, osCode: typeof code === 'string' ? code : null },
+    { cause: error },
+  );
 }

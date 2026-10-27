@@ -20,7 +20,14 @@ import { join } from 'node:path';
 import type { Id } from '../contracts/common.js';
 import { currentHost } from '../store/runtime.js';
 import { ExecutionError } from './errors.js';
-import { runBounded, runBoundedSync, spawnWorker, succeeded, type BoundedResult, type WorkerProcess } from './processes.js';
+import {
+  runBounded,
+  runBoundedSync,
+  spawnWorker,
+  succeeded,
+  type BoundedResult,
+  type WorkerProcess,
+} from './processes.js';
 import { IMAGE_REFERENCE, type AdapterLimits } from './registry.js';
 
 export type ContainerBackendKind = 'docker-desktop' | 'docker-engine';
@@ -34,7 +41,9 @@ export interface QualifiedIsolation {
   readonly evidence: string;
 }
 
-export interface IsolationPolicy { readonly qualified: readonly QualifiedIsolation[] }
+export interface IsolationPolicy {
+  readonly qualified: readonly QualifiedIsolation[];
+}
 
 /**
  * darwin-arm64 with Docker Desktop (linux-arm64 VM): PR 01's runtime matrix and the PR 07 isolation canaries.
@@ -45,22 +54,47 @@ export interface IsolationPolicy { readonly qualified: readonly QualifiedIsolati
  */
 export const ISOLATION_POLICY: IsolationPolicy = Object.freeze({
   qualified: Object.freeze([
-    Object.freeze({ host: 'darwin-arm64', backend: 'docker-desktop' as const, server: 'linux-arm64', status: 'measured' as const,
-      evidence: 'PR 01 runtime matrix (Docker Desktop 4.65.0, Engine 29.2.1) and PR 07 isolation canaries' }),
-    Object.freeze({ host: 'linux-x64', backend: 'docker-engine' as const, server: 'linux-amd64', status: 'measured' as const,
-      evidence: 'PR 07 CI 39728679640/119658477459: Node 24.21.0, Engine 28.0.4, Ubuntu 24.04.5 LTS, cgroup v2; 82 passed, zero skips' }),
+    Object.freeze({
+      host: 'darwin-arm64',
+      backend: 'docker-desktop' as const,
+      server: 'linux-arm64',
+      status: 'measured' as const,
+      evidence: 'PR 01 runtime matrix (Docker Desktop 4.65.0, Engine 29.2.1) and PR 07 isolation canaries',
+    }),
+    Object.freeze({
+      host: 'linux-x64',
+      backend: 'docker-engine' as const,
+      server: 'linux-amd64',
+      status: 'measured' as const,
+      evidence:
+        'PR 07 CI 39728679640/119658477459: Node 24.21.0, Engine 28.0.4, Ubuntu 24.04.5 LTS, cgroup v2; 82 passed, zero skips',
+    }),
   ]),
 });
 
-export function isolationQualification(policy: IsolationPolicy, host: string, backend: ContainerBackendKind, server: string): QualifiedIsolation | undefined {
-  return policy.qualified.find(q => q.host === host && q.backend === backend && q.server === server);
+export function isolationQualification(
+  policy: IsolationPolicy,
+  host: string,
+  backend: ContainerBackendKind,
+  server: string,
+): QualifiedIsolation | undefined {
+  return policy.qualified.find((q) => q.host === host && q.backend === backend && q.server === server);
 }
 
-const DOCKER_CANDIDATES = ['/usr/bin/docker', '/usr/local/bin/docker', '/opt/homebrew/bin/docker', '/Applications/Docker.app/Contents/Resources/bin/docker'];
+const DOCKER_CANDIDATES = [
+  '/usr/bin/docker',
+  '/usr/local/bin/docker',
+  '/opt/homebrew/bin/docker',
+  '/Applications/Docker.app/Contents/Resources/bin/docker',
+];
 const SAFE_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
 const LABEL = 'org.farsight.sentinel';
 export const LABELS = Object.freeze({
-  owner: `${LABEL}.owner`, store: `${LABEL}.store`, attempt: `${LABEL}.attempt`, epoch: `${LABEL}.epoch`, invocation: `${LABEL}.invocation`,
+  owner: `${LABEL}.owner`,
+  store: `${LABEL}.store`,
+  attempt: `${LABEL}.attempt`,
+  epoch: `${LABEL}.epoch`,
+  invocation: `${LABEL}.invocation`,
 });
 export const INPUT_MOUNT = '/input';
 export const OUTPUT_MOUNT = '/output';
@@ -69,7 +103,8 @@ export const OUTPUT_MOUNT = '/output';
  * user and the output folder stays private), otherwise the unprivileged 65534. Never root, never a capability.
  */
 export function containerUser(): string {
-  const uid = process.getuid?.() ?? 0, gid = process.getgid?.() ?? 0;
+  const uid = process.getuid?.() ?? 0,
+    gid = process.getgid?.() ?? 0;
   return uid === 0 ? '65534:65534' : `${uid}:${gid}`;
 }
 const CONTAINER_ID = /^[0-9a-f]{64}$/;
@@ -82,7 +117,11 @@ const unavailable = (reason: string, cause?: unknown): never => {
 export function locateDocker(candidates: readonly string[] = DOCKER_CANDIDATES): string {
   for (const candidate of candidates) {
     let real: string;
-    try { real = realpathSync.native(candidate); } catch { continue; }
+    try {
+      real = realpathSync.native(candidate);
+    } catch {
+      continue;
+    }
     const s = lstatSync(real);
     if (!s.isFile() || (s.mode & 0o022) !== 0 || (s.uid !== 0 && s.uid !== process.getuid?.())) continue;
     return real;
@@ -145,9 +184,14 @@ export interface DockerRunner {
 /** The labels an attempt's container carries; all of them must match before it is stopped or removed. */
 export type OwnershipLabels = ContainerSpec['labels'];
 
-const absentContainer = (r: BoundedResult) => !succeeded(r) && /no such (container|object)/i.test(r.stderr.toString('utf8'));
+const absentContainer = (r: BoundedResult) =>
+  !succeeded(r) && /no such (container|object)/i.test(r.stderr.toString('utf8'));
 
-function labelsMatch(c: { Id?: string; Config?: { Labels?: Record<string, string> } } | null | undefined, id: string | null, expected: Partial<OwnershipLabels>): boolean {
+function labelsMatch(
+  c: { Id?: string; Config?: { Labels?: Record<string, string> } } | null | undefined,
+  id: string | null,
+  expected: Partial<OwnershipLabels>,
+): boolean {
   if (!c || !CONTAINER_ID.test(String(c.Id ?? '')) || (id !== null && c.Id !== id)) return false;
   const labels = c.Config?.Labels ?? {};
   return Object.entries(expected).every(([k, v]) => labels[LABELS[k as keyof typeof LABELS]] === v);
@@ -160,7 +204,9 @@ export class ContainerBackend {
   readonly #serverArch: string;
 
   private constructor(runner: DockerRunner, facts: BackendFacts, serverArch: string) {
-    this.#runner = runner; this.facts = Object.freeze(facts); this.#serverArch = serverArch;
+    this.#runner = runner;
+    this.facts = Object.freeze(facts);
+    this.#serverArch = serverArch;
   }
 
   /**
@@ -168,7 +214,14 @@ export class ContainerBackend {
    * configuration. Refuses a remote endpoint, an unqualified combination or missing resource controllers.
    * `runner` is the package-internal test seam (see DockerRunner); production never passes one.
    */
-  static async connect(options: { privateDir: string; policy?: IsolationPolicy; docker?: string; signal?: AbortSignal; runner?: DockerRunner; wrapRunner?: (runner: DockerRunner) => DockerRunner }): Promise<ContainerBackend> {
+  static async connect(options: {
+    privateDir: string;
+    policy?: IsolationPolicy;
+    docker?: string;
+    signal?: AbortSignal;
+    runner?: DockerRunner;
+    wrapRunner?: (runner: DockerRunner) => DockerRunner;
+  }): Promise<ContainerBackend> {
     let runner = options.runner;
     if (!runner) {
       const docker = options.docker ?? locateDocker();
@@ -186,35 +239,67 @@ export class ContainerBackend {
     const info = await runner.run(['info', '--format', '{{json .}}'], options.signal);
     if (!succeeded(info)) unavailable('docker info unavailable');
     let server: { Os?: string; Arch?: string; Version?: string }, i: Record<string, unknown>;
-    try { server = JSON.parse(version.stdout.toString('utf8')); i = JSON.parse(info.stdout.toString('utf8')); } catch (e) { return unavailable('docker answer unreadable', e); }
-    const arch = ({ aarch64: 'arm64', x86_64: 'amd64' } as Record<string, string>)[server.Arch ?? ''] ?? server.Arch ?? 'unknown';
+    try {
+      server = JSON.parse(version.stdout.toString('utf8'));
+      i = JSON.parse(info.stdout.toString('utf8'));
+    } catch (e) {
+      return unavailable('docker answer unreadable', e);
+    }
+    const arch =
+      ({ aarch64: 'arm64', x86_64: 'amd64' } as Record<string, string>)[server.Arch ?? ''] ?? server.Arch ?? 'unknown';
     const serverId = `${server.Os}-${arch}`;
     const os = String(i.OperatingSystem ?? '');
     const backend: ContainerBackendKind = os.startsWith('Docker Desktop') ? 'docker-desktop' : 'docker-engine';
     const host = currentHost();
     const qualification = isolationQualification(options.policy ?? ISOLATION_POLICY, host, backend, serverId);
-    if (!qualification) throw new ExecutionError('sentinel.execution.backendUnqualified', { backend: `${backend} (${serverId})`, host });
-    if (![i.MemoryLimit, i.SwapLimit, i.CpuCfsQuota, i.PidsLimit].every(v => v === true)) unavailable('required resource controllers missing');
-    return new ContainerBackend(runner, {
-      host, backend, server: serverId, serverVersion: String(server.Version ?? ''), operatingSystem: os,
-      cgroupVersion: String(i.CgroupVersion ?? ''), qualification,
-    }, arch);
+    if (!qualification)
+      throw new ExecutionError('sentinel.execution.backendUnqualified', { backend: `${backend} (${serverId})`, host });
+    if (![i.MemoryLimit, i.SwapLimit, i.CpuCfsQuota, i.PidsLimit].every((v) => v === true))
+      unavailable('required resource controllers missing');
+    return new ContainerBackend(
+      runner,
+      {
+        host,
+        backend,
+        server: serverId,
+        serverVersion: String(server.Version ?? ''),
+        operatingSystem: os,
+        cgroupVersion: String(i.CgroupVersion ?? ''),
+        qualification,
+      },
+      arch,
+    );
   }
 
   /** The installed image for a pin; refuses a missing or mismatched image and never pulls. */
   async inspectImage(reference: string, signal?: AbortSignal): Promise<ImagePin> {
-    if (!IMAGE_REFERENCE.test(reference)) throw new ExecutionError('sentinel.execution.imageMismatch', { image: reference.slice(0, 200) });
+    if (!IMAGE_REFERENCE.test(reference))
+      throw new ExecutionError('sentinel.execution.imageMismatch', { image: reference.slice(0, 200) });
     const r = await this.#runner.run(['image', 'inspect', '--format', '{{json .}}', reference], signal);
     if (!succeeded(r)) {
-      if (/no such image/i.test(r.stderr.toString('utf8'))) throw new ExecutionError('sentinel.execution.imageMissing', { image: reference });
+      if (/no such image/i.test(r.stderr.toString('utf8')))
+        throw new ExecutionError('sentinel.execution.imageMissing', { image: reference });
       throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'image inspect' });
     }
     let v: { Id?: string; Os?: string; Architecture?: string; RepoDigests?: string[]; Config?: { Env?: unknown } };
-    try { v = JSON.parse(r.stdout.toString('utf8')); } catch { throw new ExecutionError('sentinel.execution.imageMismatch', { image: reference }); }
+    try {
+      v = JSON.parse(r.stdout.toString('utf8'));
+    } catch {
+      throw new ExecutionError('sentinel.execution.imageMismatch', { image: reference });
+    }
     const digest = reference.slice(reference.indexOf('@') + 1);
     const repo = reference.slice(0, reference.indexOf('@'));
-    const pinned = v.Id === digest || (v.RepoDigests ?? []).some(d => d === reference || d === `docker.io/${repo}@${digest}` || d === `docker.io/library/${repo}@${digest}`);
-    if (!pinned || !/^sha256:[0-9a-f]{64}$/.test(String(v.Id)) || v.Os !== 'linux' || v.Architecture !== this.#serverArch) {
+    const pinned =
+      v.Id === digest ||
+      (v.RepoDigests ?? []).some(
+        (d) => d === reference || d === `docker.io/${repo}@${digest}` || d === `docker.io/library/${repo}@${digest}`,
+      );
+    if (
+      !pinned ||
+      !/^sha256:[0-9a-f]{64}$/.test(String(v.Id)) ||
+      v.Os !== 'linux' ||
+      v.Architecture !== this.#serverArch
+    ) {
       throw new ExecutionError('sentinel.execution.imageMismatch', { image: reference });
     }
     const env = Array.isArray(v.Config?.Env) ? (v.Config!.Env as unknown[]).map(String) : [];
@@ -238,14 +323,22 @@ export class ContainerBackend {
     if (!id) {
       await this.#reconcileIntent(spec);
       // Found and removed: the request had committed, so nothing is pending.
-      throw new ExecutionError('sentinel.execution.commandFailed', { ...intentDetail(spec), operation: r.timedOut ? 'create timed out' : 'create' });
+      throw new ExecutionError('sentinel.execution.commandFailed', {
+        ...intentDetail(spec),
+        operation: r.timedOut ? 'create timed out' : 'create',
+      });
     }
     try {
       if (signal?.aborted) throw new ExecutionError('sentinel.execution.canceled', {});
       validateContainer(await this.#container(id), spec);
     } catch (error) {
       const removed = await this.remove(id, spec.labels).catch(() => 'cleanup-failed' as const);
-      if (removed === 'cleanup-failed') throw new ExecutionError('sentinel.execution.cleanupFailed', { container: id, owner: spec.labels.owner }, { cause: error });
+      if (removed === 'cleanup-failed')
+        throw new ExecutionError(
+          'sentinel.execution.cleanupFailed',
+          { container: id, owner: spec.labels.owner },
+          { cause: error },
+        );
       throw error;
     }
     return id;
@@ -264,20 +357,26 @@ export class ContainerBackend {
     const uncertain = new Set<string>();
     let removed = false;
     for (let pass = 0; pass < 3 && !removed; pass++) {
-      if (pass) await new Promise(resolve => setTimeout(resolve, 500));
+      if (pass) await new Promise((resolve) => setTimeout(resolve, 500));
       const byName = await this.#runner.run(['inspect', '--type', 'container', '--format', '{{json .}}', name]);
       if (succeeded(byName)) {
         let c: { Id?: string } | undefined;
-        try { c = JSON.parse(byName.stdout.toString('utf8')); } catch { /* unreadable: the label pass decides */ }
+        try {
+          c = JSON.parse(byName.stdout.toString('utf8'));
+        } catch {
+          /* unreadable: the label pass decides */
+        }
         if (c && labelsMatch(c as never, null, spec.labels)) {
-          if (await this.remove(String(c.Id), spec.labels) === 'removed-owned-container') removed = true; else uncertain.add(String(c.Id));
+          if ((await this.remove(String(c.Id), spec.labels)) === 'removed-owned-container') removed = true;
+          else uncertain.add(String(c.Id));
         } else uncertain.add(name);
       } else if (!absentContainer(byName)) uncertain.add(name);
       const leftover = await this.reconcileOwned(spec.labels);
-      leftover.uncertain.forEach(u => uncertain.add(u));
+      leftover.uncertain.forEach((u) => uncertain.add(u));
       if (leftover.removed.length) removed = true;
     }
-    if (uncertain.size) throw new ExecutionError('sentinel.execution.cleanupFailed', { ...intent, container: [...uncertain].join(', ') });
+    if (uncertain.size)
+      throw new ExecutionError('sentinel.execution.cleanupFailed', { ...intent, container: [...uncertain].join(', ') });
     if (!removed) throw new ExecutionError('sentinel.execution.reconciliationPending', intent);
   }
 
@@ -286,15 +385,31 @@ export class ContainerBackend {
    * (by the generated name and by the labels, exact ID only). `not-found` is not proof of absence; the caller keeps
    * the intent.
    */
-  async settleIntent(intent: { name: string; owner: string; store: Id; attempt: Id; epoch: Id; invocation: string }, signal?: AbortSignal): Promise<'removed' | 'not-found' | 'uncertain'> {
-    const labels = { owner: intent.owner, store: intent.store, attempt: intent.attempt, epoch: intent.epoch, invocation: intent.invocation };
+  async settleIntent(
+    intent: { name: string; owner: string; store: Id; attempt: Id; epoch: Id; invocation: string },
+    signal?: AbortSignal,
+  ): Promise<'removed' | 'not-found' | 'uncertain'> {
+    const labels = {
+      owner: intent.owner,
+      store: intent.store,
+      attempt: intent.attempt,
+      epoch: intent.epoch,
+      invocation: intent.invocation,
+    };
     let removed = false;
-    const byName = await this.#runner.run(['inspect', '--type', 'container', '--format', '{{json .}}', intent.name], signal);
+    const byName = await this.#runner.run(
+      ['inspect', '--type', 'container', '--format', '{{json .}}', intent.name],
+      signal,
+    );
     if (succeeded(byName)) {
       let c: { Id?: string } | undefined;
-      try { c = JSON.parse(byName.stdout.toString('utf8')); } catch { return 'uncertain'; }
+      try {
+        c = JSON.parse(byName.stdout.toString('utf8'));
+      } catch {
+        return 'uncertain';
+      }
       if (!c || !labelsMatch(c as never, null, labels)) return 'uncertain';
-      if (await this.remove(String(c.Id), labels, signal) !== 'removed-owned-container') return 'uncertain';
+      if ((await this.remove(String(c.Id), labels, signal)) !== 'removed-owned-container') return 'uncertain';
       removed = true;
     } else if (!absentContainer(byName)) return 'uncertain';
     const swept = await this.reconcileOwned(labels, signal);
@@ -310,56 +425,106 @@ export class ContainerBackend {
 
   /** Private positive-only kernel support; Desktop and other namespaces keep daemon evidence only. */
   get supportsLocalMemoryWitness(): boolean {
-    return process.platform === 'linux' && this.facts.host === 'linux-x64' && this.facts.backend === 'docker-engine'
-      && this.facts.server === 'linux-amd64' && this.facts.cgroupVersion === '2';
+    return (
+      process.platform === 'linux' &&
+      this.facts.host === 'linux-x64' &&
+      this.facts.backend === 'docker-engine' &&
+      this.facts.server === 'linux-amd64' &&
+      this.facts.cgroupVersion === '2'
+    );
   }
 
   /** Exactly one owned inspect within200ms; no guessed PID/path or fallback to parent/kernel-wide counters. */
-  async prepareMemoryWitness(id: string, owner: OwnershipLabels, memoryBytes: number, signal: AbortSignal): Promise<CgroupMemoryWatch | undefined> {
-    if (!this.supportsLocalMemoryWitness || signal.aborted
-      || !['owner', 'store', 'attempt', 'epoch'].every(key => typeof owner[key as keyof OwnershipLabels] === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(owner[key as keyof OwnershipLabels]))
-      || !/^sha256:[0-9a-f]{64}$/.test(owner.invocation)) return;
+  async prepareMemoryWitness(
+    id: string,
+    owner: OwnershipLabels,
+    memoryBytes: number,
+    signal: AbortSignal,
+  ): Promise<CgroupMemoryWatch | undefined> {
+    if (
+      !this.supportsLocalMemoryWitness ||
+      signal.aborted ||
+      !['owner', 'store', 'attempt', 'epoch'].every(
+        (key) =>
+          typeof owner[key as keyof OwnershipLabels] === 'string' &&
+          /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(owner[key as keyof OwnershipLabels]),
+      ) ||
+      !/^sha256:[0-9a-f]{64}$/.test(owner.invocation)
+    )
+      return;
     const until = performance.now() + 200;
-    const timeout = new AbortController(), timer = setTimeout(() => timeout.abort(), 200);
+    const timeout = new AbortController(),
+      timer = setTimeout(() => timeout.abort(), 200);
     const stopped = AbortSignal.any([signal, timeout.signal]);
     try {
-      const c = await Promise.race([this.#owned(id, owner, stopped), new Promise<undefined>(resolve => { if (stopped.aborted) resolve(undefined); else stopped.addEventListener('abort', () => resolve(undefined), { once: true }); })]);
+      const c = await Promise.race([
+        this.#owned(id, owner, stopped),
+        new Promise<undefined>((resolve) => {
+          if (stopped.aborted) resolve(undefined);
+          else stopped.addEventListener('abort', () => resolve(undefined), { once: true });
+        }),
+      ]);
       if (stopped.aborted || performance.now() >= until || !c) return;
       const state = c.State as { Running?: boolean; Pid?: number } | undefined;
       if (state?.Running !== true || !Number.isSafeInteger(state.Pid) || state.Pid! <= 0) return;
       const observation = watchOwnedCgroupMemory(id, state.Pid!, memoryBytes);
-      if (stopped.aborted || performance.now() >= until) { observation.close(); return; }
+      if (stopped.aborted || performance.now() >= until) {
+        observation.close();
+        return;
+      }
       return observation;
-    } catch { return undefined; } finally { clearTimeout(timer); timeout.abort(); }
+    } catch {
+      return undefined;
+    } finally {
+      clearTimeout(timer);
+      timeout.abort();
+    }
   }
 
   async state(id: string, owner: Partial<OwnershipLabels>, signal?: AbortSignal): Promise<ContainerState | null> {
     const until = performance.now() + 500;
     const controller = new AbortController();
     let stop!: () => void;
-    const stopped = new Promise<null>(resolve => { stop = () => { controller.abort(); resolve(null); }; });
+    const stopped = new Promise<null>((resolve) => {
+      stop = () => {
+        controller.abort();
+        resolve(null);
+      };
+    });
     const timer = setTimeout(stop, 500);
     signal?.addEventListener('abort', stop, { once: true });
     try {
-      if (signal?.aborted) { stop(); return null; }
+      if (signal?.aborted) {
+        stop();
+        return null;
+      }
       // Attach completion and the daemon's TaskOOM notification are separate observations. Give only an exited
       // SIGKILL-shaped result a short settling window; exit 137 itself never establishes a memory-limit failure.
       // Every reread checks exact ownership. A missing container or abort ends observation immediately; neither
       // a late inspect reply nor a stuck client may extend the 500 ms window or resurrect a result.
-      return await Promise.race([stopped, (async () => {
-        for (let pass = 0; pass < 4; pass++) {
-          if (controller.signal.aborted || performance.now() >= until) return null;
-          const c = await this.#owned(id, owner, controller.signal);
-          if (!c || controller.signal.aborted || performance.now() >= until) return null;
-          const s = (c.State ?? {}) as { Status?: string; ExitCode?: number; OOMKilled?: boolean };
-          const state = { status: String(s.Status ?? ''), exitCode: typeof s.ExitCode === 'number' ? s.ExitCode : null, oomKilled: s.OOMKilled === true };
-          if (pass === 3 || s.Status !== 'exited' || s.ExitCode !== 137 || state.oomKilled) return state;
-          await Promise.race([stopped, new Promise(resolve => setTimeout(resolve, 50))]);
-        }
-        return null;
-      })()]);
+      return await Promise.race([
+        stopped,
+        (async () => {
+          for (let pass = 0; pass < 4; pass++) {
+            if (controller.signal.aborted || performance.now() >= until) return null;
+            const c = await this.#owned(id, owner, controller.signal);
+            if (!c || controller.signal.aborted || performance.now() >= until) return null;
+            const s = (c.State ?? {}) as { Status?: string; ExitCode?: number; OOMKilled?: boolean };
+            const state = {
+              status: String(s.Status ?? ''),
+              exitCode: typeof s.ExitCode === 'number' ? s.ExitCode : null,
+              oomKilled: s.OOMKilled === true,
+            };
+            if (pass === 3 || s.Status !== 'exited' || s.ExitCode !== 137 || state.oomKilled) return state;
+            await Promise.race([stopped, new Promise((resolve) => setTimeout(resolve, 50))]);
+          }
+          return null;
+        })(),
+      ]);
     } finally {
-      clearTimeout(timer); signal?.removeEventListener('abort', stop); controller.abort();
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', stop);
+      controller.abort();
     }
   }
 
@@ -368,7 +533,8 @@ export class ContainerBackend {
    * nothing about the container, so this asks the daemon. Returns false when the stop cannot be confirmed.
    */
   async kill(id: string, owner: Partial<OwnershipLabels>, signal?: AbortSignal): Promise<boolean> {
-    const running = (c: Record<string, unknown> | null) => (c?.State as { Running?: boolean } | undefined)?.Running === true;
+    const running = (c: Record<string, unknown> | null) =>
+      (c?.State as { Running?: boolean } | undefined)?.Running === true;
     let c = await this.#owned(id, owner, signal);
     for (let attempt = 0; attempt < 3 && running(c); attempt++) {
       await this.#runner.run(['kill', id], signal);
@@ -381,12 +547,26 @@ export class ContainerBackend {
    * Remove every container carrying these labels (at least the random owner nonce), each checked by exact
    * identity and every label before removal. Containers whose removal cannot be confirmed come back uncertain.
    */
-  async reconcileOwned(owner: Partial<OwnershipLabels> & { owner: string }, signal?: AbortSignal): Promise<{ removed: string[]; uncertain: string[] }> {
-    const r = await this.#runner.run(['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.owner}=${owner.owner}`], signal);
+  async reconcileOwned(
+    owner: Partial<OwnershipLabels> & { owner: string },
+    signal?: AbortSignal,
+  ): Promise<{ removed: string[]; uncertain: string[] }> {
+    const r = await this.#runner.run(
+      ['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.owner}=${owner.owner}`],
+      signal,
+    );
     if (!succeeded(r)) return { removed: [], uncertain: [`label ${owner.owner}`] };
-    const removed: string[] = [], uncertain: string[] = [];
-    for (const id of r.stdout.toString('utf8').split('\n').map(l => l.trim()).filter(Boolean)) {
-      if (!CONTAINER_ID.test(id)) { uncertain.push(id.slice(0, 64)); continue; }
+    const removed: string[] = [],
+      uncertain: string[] = [];
+    for (const id of r.stdout
+      .toString('utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)) {
+      if (!CONTAINER_ID.test(id)) {
+        uncertain.push(id.slice(0, 64));
+        continue;
+      }
       const state = await this.remove(id, owner, signal);
       (state === 'cleanup-failed' ? uncertain : removed).push(id);
     }
@@ -410,18 +590,36 @@ export class ContainerBackend {
     const r = this.#runner.runSync(['inspect', '--type', 'container', '--format', '{{json .}}', id]);
     if (!succeeded(r)) return absentContainer(r) ? 'already-absent' : 'cleanup-failed';
     let c;
-    try { c = JSON.parse(r.stdout.toString('utf8')); } catch { return 'cleanup-failed'; }
+    try {
+      c = JSON.parse(r.stdout.toString('utf8'));
+    } catch {
+      return 'cleanup-failed';
+    }
     if (!labelsMatch(c, id, owner)) return 'cleanup-failed';
     if (!succeeded(this.#runner.runSync(['rm', '--force', '--volumes', id]))) return 'cleanup-failed';
-    return absentContainer(this.#runner.runSync(['inspect', '--type', 'container', id])) ? 'removed-owned-container' : 'cleanup-failed';
+    return absentContainer(this.#runner.runSync(['inspect', '--type', 'container', id]))
+      ? 'removed-owned-container'
+      : 'cleanup-failed';
   }
 
   /** Synchronous reconcile by owner nonce and labels, for the store owner's close path. */
   reconcileOwnedSync(owner: Partial<OwnershipLabels> & { owner: string }): { removed: string[]; uncertain: string[] } {
-    const r = this.#runner.runSync(['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.owner}=${owner.owner}`]);
+    const r = this.#runner.runSync([
+      'ps',
+      '--all',
+      '--no-trunc',
+      '--quiet',
+      '--filter',
+      `label=${LABELS.owner}=${owner.owner}`,
+    ]);
     if (!succeeded(r)) return { removed: [], uncertain: [`label ${owner.owner}`] };
-    const removed: string[] = [], uncertain: string[] = [];
-    for (const id of r.stdout.toString('utf8').split('\n').map(l => l.trim()).filter(Boolean)) {
+    const removed: string[] = [],
+      uncertain: string[] = [];
+    for (const id of r.stdout
+      .toString('utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)) {
       (this.removeSync(id, owner) === 'cleanup-failed' ? uncertain : removed).push(id);
     }
     return { removed, uncertain };
@@ -431,31 +629,60 @@ export class ContainerBackend {
    * Read-only, for recovery (PR 08): every container labelled with this store, with its attempt, epoch and owner
    * nonce. Nothing is stopped or removed here; recovery decides, by those labels, under its own owner.
    */
-  async listStoreContainers(store: Id, signal?: AbortSignal): Promise<Array<{ id: string; attempt: string; epoch: string; owner: string; running: boolean }>> {
-    const r = await this.#runner.run(['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.store}=${store}`], signal);
+  async listStoreContainers(
+    store: Id,
+    signal?: AbortSignal,
+  ): Promise<Array<{ id: string; attempt: string; epoch: string; owner: string; running: boolean }>> {
+    const r = await this.#runner.run(
+      ['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.store}=${store}`],
+      signal,
+    );
     if (!succeeded(r)) throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'list' });
     const out = [];
-    for (const id of r.stdout.toString('utf8').split('\n').map(l => l.trim()).filter(l => CONTAINER_ID.test(l))) {
-      const c = await this.#container(id, signal).catch(() => null) as { Config?: { Labels?: Record<string, string> }; State?: { Running?: boolean } } | null;
+    for (const id of r.stdout
+      .toString('utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => CONTAINER_ID.test(l))) {
+      const c = (await this.#container(id, signal).catch(() => null)) as {
+        Config?: { Labels?: Record<string, string> };
+        State?: { Running?: boolean };
+      } | null;
       const labels = c?.Config?.Labels ?? {};
       if (labels[LABELS.store] !== store) continue;
-      out.push({ id, attempt: labels[LABELS.attempt] ?? '', epoch: labels[LABELS.epoch] ?? '', owner: labels[LABELS.owner] ?? '', running: c?.State?.Running === true });
+      out.push({
+        id,
+        attempt: labels[LABELS.attempt] ?? '',
+        epoch: labels[LABELS.epoch] ?? '',
+        owner: labels[LABELS.owner] ?? '',
+        running: c?.State?.Running === true,
+      });
     }
     return out;
   }
 
   /** The exact container if it carries every given label; null when the daemon says it is absent; throws otherwise. */
-  async #owned(id: string, owner: Partial<OwnershipLabels>, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
+  async #owned(
+    id: string,
+    owner: Partial<OwnershipLabels>,
+    signal?: AbortSignal,
+  ): Promise<Record<string, unknown> | null> {
     if (!CONTAINER_ID.test(id)) throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'identity' });
-    if (!owner.owner) throw new ExecutionError('sentinel.execution.cleanupFailed', { container: id, reason: 'no owner nonce' });
+    if (!owner.owner)
+      throw new ExecutionError('sentinel.execution.cleanupFailed', { container: id, reason: 'no owner nonce' });
     const r = await this.#runner.run(['inspect', '--type', 'container', '--format', '{{json .}}', id], signal);
     if (!succeeded(r)) {
       if (absentContainer(r)) return null;
       throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'inspect' });
     }
     let c;
-    try { c = JSON.parse(r.stdout.toString('utf8')); } catch { throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'inspect' }); }
-    if (!labelsMatch(c, id, owner)) throw new ExecutionError('sentinel.execution.cleanupFailed', { container: id, reason: 'ownership mismatch' });
+    try {
+      c = JSON.parse(r.stdout.toString('utf8'));
+    } catch {
+      throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'inspect' });
+    }
+    if (!labelsMatch(c, id, owner))
+      throw new ExecutionError('sentinel.execution.cleanupFailed', { container: id, reason: 'ownership mismatch' });
     return c as Record<string, unknown>;
   }
 
@@ -465,7 +692,9 @@ export class ContainerBackend {
     try {
       const v = JSON.parse(r.stdout.toString('utf8'));
       if (v && typeof v === 'object') return v as Record<string, unknown>;
-    } catch { /* below */ }
+    } catch {
+      /* below */
+    }
     throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'inspect' });
   }
 }
@@ -484,7 +713,8 @@ export function clientConfigOf(runner: DockerRunner): { readonly path: string; r
 function clientRunner(docker: string, env: Record<string, string>): DockerRunner {
   const bounds = { env, timeoutMs: 30_000, maxStdoutBytes: 4 * 1024 * 1024, maxStderrBytes: 65_536 };
   return Object.freeze({
-    run: (args: readonly string[], signal?: AbortSignal) => runBounded(docker, args, { ...bounds, ...(signal ? { signal } : {}) }),
+    run: (args: readonly string[], signal?: AbortSignal) =>
+      runBounded(docker, args, { ...bounds, ...(signal ? { signal } : {}) }),
     runSync: (args: readonly string[]) => runBoundedSync(docker, args, bounds),
     start: (id: string) => spawnWorker(docker, ['start', '--attach', '--interactive', id], { env }),
   });
@@ -494,8 +724,12 @@ export const containerName = (owner: string): string => `sentinel-${owner}`;
 
 /** A create's whole intent, kept in every failure so recovery can find the container without its ID. */
 export const intentDetail = (spec: Pick<ContainerSpec, 'labels'>) => ({
-  name: containerName(spec.labels.owner), owner: spec.labels.owner, store: spec.labels.store, attempt: spec.labels.attempt,
-  epoch: spec.labels.epoch, invocation: spec.labels.invocation,
+  name: containerName(spec.labels.owner),
+  owner: spec.labels.owner,
+  store: spec.labels.store,
+  attempt: spec.labels.attempt,
+  epoch: spec.labels.epoch,
+  invocation: spec.labels.invocation,
 });
 
 /** The local unix socket the client should talk to. A tcp/ssh endpoint is a remote daemon and is refused. */
@@ -507,12 +741,21 @@ async function resolveEndpoint(docker: string, signal?: AbortSignal): Promise<st
     const env: Record<string, string> = { PATH: SAFE_PATH, HOME: homedir() };
     for (const name of ['DOCKER_CONFIG', 'DOCKER_CONTEXT']) if (process.env[name]) env[name] = process.env[name]!;
     const r = await runBounded(docker, ['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}'], {
-      env, timeoutMs: 10_000, maxStdoutBytes: 16_384, maxStderrBytes: 16_384, signal,
+      env,
+      timeoutMs: 10_000,
+      maxStdoutBytes: 16_384,
+      maxStderrBytes: 16_384,
+      signal,
     });
     if (!succeeded(r)) unavailable('docker context unreadable');
-    try { endpoint = JSON.parse(r.stdout.toString('utf8')) as string; } catch (e) { unavailable('docker context unreadable', e); }
+    try {
+      endpoint = JSON.parse(r.stdout.toString('utf8')) as string;
+    } catch (e) {
+      unavailable('docker context unreadable', e);
+    }
   }
-  if (typeof endpoint !== 'string' || !/^unix:\/\/\/[^\0]+$/.test(endpoint)) return unavailable('only a local unix socket endpoint is used');
+  if (typeof endpoint !== 'string' || !/^unix:\/\/\/[^\0]+$/.test(endpoint))
+    return unavailable('only a local unix socket endpoint is used');
   return endpoint;
 }
 
@@ -521,39 +764,92 @@ export function createArgs(spec: ContainerSpec, serverArch: string): string[] {
   const l = spec.limits;
   const name = containerName(spec.labels.owner);
   return [
-    'create', '--pull', 'never', '--interactive', '--init', '--name', name,
-    '--label', `${LABELS.owner}=${spec.labels.owner}`, '--label', `${LABELS.store}=${spec.labels.store}`,
-    '--label', `${LABELS.attempt}=${spec.labels.attempt}`, '--label', `${LABELS.epoch}=${spec.labels.epoch}`,
-    '--label', `${LABELS.invocation}=${spec.labels.invocation}`,
-    '--platform', `linux/${serverArch}`,
-    '--network', 'none', '--read-only', '--user', spec.user, '--cap-drop', 'ALL',
-    '--security-opt', 'no-new-privileges:true', '--ipc', 'none',
-    '--memory', String(l.memoryBytes), '--memory-swap', String(l.memoryBytes), '--cpus', String(l.cpus), '--pids-limit', String(l.pids),
-    '--ulimit', `fsize=${Math.max(l.outputBytes, 1)}`, '--ulimit', 'core=0',
-    '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${l.tmpfsBytes},mode=1777`,
-    '--mount', `type=bind,source=${spec.inputDir},target=${INPUT_MOUNT},readonly`,
-    '--mount', `type=bind,source=${spec.outputDir},target=${OUTPUT_MOUNT}`,
-    '--log-driver', 'none', '--workdir', '/tmp',
-    ...expectedEnv(spec).flatMap(e => ['--env', e]),
-    '--entrypoint', spec.command[0]!, spec.image.reference, ...spec.command.slice(1),
+    'create',
+    '--pull',
+    'never',
+    '--interactive',
+    '--init',
+    '--name',
+    name,
+    '--label',
+    `${LABELS.owner}=${spec.labels.owner}`,
+    '--label',
+    `${LABELS.store}=${spec.labels.store}`,
+    '--label',
+    `${LABELS.attempt}=${spec.labels.attempt}`,
+    '--label',
+    `${LABELS.epoch}=${spec.labels.epoch}`,
+    '--label',
+    `${LABELS.invocation}=${spec.labels.invocation}`,
+    '--platform',
+    `linux/${serverArch}`,
+    '--network',
+    'none',
+    '--read-only',
+    '--user',
+    spec.user,
+    '--cap-drop',
+    'ALL',
+    '--security-opt',
+    'no-new-privileges:true',
+    '--ipc',
+    'none',
+    '--memory',
+    String(l.memoryBytes),
+    '--memory-swap',
+    String(l.memoryBytes),
+    '--cpus',
+    String(l.cpus),
+    '--pids-limit',
+    String(l.pids),
+    '--ulimit',
+    `fsize=${Math.max(l.outputBytes, 1)}`,
+    '--ulimit',
+    'core=0',
+    '--tmpfs',
+    `/tmp:rw,noexec,nosuid,nodev,size=${l.tmpfsBytes},mode=1777`,
+    '--mount',
+    `type=bind,source=${spec.inputDir},target=${INPUT_MOUNT},readonly`,
+    '--mount',
+    `type=bind,source=${spec.outputDir},target=${OUTPUT_MOUNT}`,
+    '--log-driver',
+    'none',
+    '--workdir',
+    '/tmp',
+    ...expectedEnv(spec).flatMap((e) => ['--env', e]),
+    '--entrypoint',
+    spec.command[0]!,
+    spec.image.reference,
+    ...spec.command.slice(1),
   ];
 }
 
 /** The whole environment Sentinel gives a container, on top of the image's own. */
 export const expectedEnv = (spec: Pick<ContainerSpec, 'adapter'>): string[] => [
-  'HOME=/tmp', `SENTINEL_INPUT=${INPUT_MOUNT}`, `SENTINEL_OUTPUT=${OUTPUT_MOUNT}`,
-  `SENTINEL_ADAPTER_ID=${spec.adapter.id}`, `SENTINEL_ADAPTER_DIGEST=${spec.adapter.digest}`,
+  'HOME=/tmp',
+  `SENTINEL_INPUT=${INPUT_MOUNT}`,
+  `SENTINEL_OUTPUT=${OUTPUT_MOUNT}`,
+  `SENTINEL_ADAPTER_ID=${spec.adapter.id}`,
+  `SENTINEL_ADAPTER_DIGEST=${spec.adapter.digest}`,
 ];
 
 /** Compare a created container against its spec. Any difference is an isolationMismatch naming the setting. */
 export function validateContainer(c: Record<string, unknown>, spec: ContainerSpec): void {
-  const fail = (setting: string): never => { throw new ExecutionError('sentinel.execution.isolationMismatch', { setting }); };
+  const fail = (setting: string): never => {
+    throw new ExecutionError('sentinel.execution.isolationMismatch', { setting });
+  };
   const config = (c.Config ?? {}) as Record<string, any>;
   const host = (c.HostConfig ?? {}) as Record<string, any>;
   const l = spec.limits;
   if (!CONTAINER_ID.test(String(c.Id ?? ''))) fail('id');
   const labels = config.Labels ?? {};
-  for (const [key, value] of Object.entries({ owner: spec.labels.owner, store: spec.labels.store, attempt: spec.labels.attempt, epoch: spec.labels.epoch, invocation: spec.labels.invocation })) {
+  for (const [key, value] of Object.entries({
+    owner: spec.labels.owner,
+    store: spec.labels.store,
+    attempt: spec.labels.attempt,
+    epoch: spec.labels.epoch,
+    invocation: spec.labels.invocation,
+  })) {
     if (labels[LABELS[key as keyof typeof LABELS]] !== value) fail(`label ${key}`);
   }
   if (config.Image !== spec.image.reference) fail('image');
@@ -573,26 +869,47 @@ export function validateContainer(c: Record<string, unknown>, spec: ContainerSpe
   if (host.PidsLimit !== l.pids) fail('pids');
   if ((host.Devices ?? []).length || (host.DeviceRequests ?? []).length) fail('devices');
   if (Object.keys(host.PortBindings ?? {}).length || host.PublishAllPorts === true) fail('ports');
-  if ((host.ExtraHosts ?? []).length || (host.Links ?? []).length || (host.VolumesFrom ?? []).length || (host.Binds ?? []).length) fail('host links');
+  if (
+    (host.ExtraHosts ?? []).length ||
+    (host.Links ?? []).length ||
+    (host.VolumesFrom ?? []).length ||
+    (host.Binds ?? []).length
+  )
+    fail('host links');
   if (host.LogConfig?.Type !== 'none') fail('logs');
   if (host.Init !== true) fail('init');
   const tmpfs = host.Tmpfs ?? {};
   const expectedTmpfs = ['rw', 'noexec', 'nosuid', 'nodev', `size=${l.tmpfsBytes}`, 'mode=1777'].sort().join(',');
-  if (Object.keys(tmpfs).length !== 1 || String(tmpfs['/tmp'] ?? '').split(',').sort().join(',') !== expectedTmpfs) fail('tmpfs');
+  if (
+    Object.keys(tmpfs).length !== 1 ||
+    String(tmpfs['/tmp'] ?? '')
+      .split(',')
+      .sort()
+      .join(',') !== expectedTmpfs
+  )
+    fail('tmpfs');
   const mounts = (c.Mounts ?? []) as Array<{ Type?: string; Source?: string; Destination?: string; RW?: boolean }>;
-  const byTarget = new Map(mounts.map(m => [m.Destination, m]));
-  if (mounts.length !== 2 || byTarget.get(INPUT_MOUNT)?.RW !== false || byTarget.get(OUTPUT_MOUNT)?.RW !== true
-    || mounts.some(m => m.Type !== 'bind')) fail('mounts');
+  const byTarget = new Map(mounts.map((m) => [m.Destination, m]));
+  if (
+    mounts.length !== 2 ||
+    byTarget.get(INPUT_MOUNT)?.RW !== false ||
+    byTarget.get(OUTPUT_MOUNT)?.RW !== true ||
+    mounts.some((m) => m.Type !== 'bind')
+  )
+    fail('mounts');
   // The exact canonical folders of this attempt (the supervisor also re-checks their inode identity).
-  if (byTarget.get(INPUT_MOUNT)?.Source !== spec.inputDir || byTarget.get(OUTPUT_MOUNT)?.Source !== spec.outputDir) fail('mount source');
+  if (byTarget.get(INPUT_MOUNT)?.Source !== spec.inputDir || byTarget.get(OUTPUT_MOUNT)?.Source !== spec.outputDir)
+    fail('mount source');
   const ulimits = ((host.Ulimits ?? []) as Array<{ Name?: string; Soft?: number; Hard?: number }>)
-    .map(u => `${u.Name}=${u.Soft}:${u.Hard}`).sort().join(',');
+    .map((u) => `${u.Name}=${u.Soft}:${u.Hard}`)
+    .sort()
+    .join(',');
   const fsize = Math.max(l.outputBytes, 1);
   if (ulimits !== [`core=0:0`, `fsize=${fsize}:${fsize}`].sort().join(',')) fail('ulimits');
   const env = (config.Env ?? []) as string[];
   const expected = expectedEnv(spec);
   const allowed = new Set([...spec.image.env, ...expected]);
-  if (expected.some(e => !env.includes(e)) || env.some(e => !allowed.has(e))) fail('environment');
+  if (expected.some((e) => !env.includes(e)) || env.some((e) => !allowed.has(e))) fail('environment');
 }
 
 /** A fresh owner nonce for one container. */

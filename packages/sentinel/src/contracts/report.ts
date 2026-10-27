@@ -1,7 +1,19 @@
 import type { PathEvidenceEnvelope } from './paths.js';
 import type {
-  ArtifactId, BoundedText, CatalogKey, Count, Digest, Id, NodeId, Ordinal, RegisterText, RelativePath, SharedCatalogKey, ShortText,
-  Timestamp, WorkRef,
+  ArtifactId,
+  BoundedText,
+  CatalogKey,
+  Count,
+  Digest,
+  Id,
+  NodeId,
+  Ordinal,
+  RegisterText,
+  RelativePath,
+  SharedCatalogKey,
+  ShortText,
+  Timestamp,
+  WorkRef,
 } from './common.js';
 import type { CoverageStatus } from './coverage.js';
 
@@ -73,11 +85,22 @@ export interface FindingPlace {
    */
   nodeIds: NodeId[];
   /** @maxItems 512 */
-  screens: Array<{ id: NodeId; label: PlaceLabel; via: 'direct-use' | 'potential-impact'; evidenceArtifact: ArtifactId }>;
+  screens: Array<{
+    id: NodeId;
+    label: PlaceLabel;
+    via: 'direct-use' | 'potential-impact';
+    evidenceArtifact: ArtifactId;
+  }>;
   /** @maxItems 512 */
   journeys: Array<{ id: NodeId; label: PlaceLabel; screenIds: ScreenIds }>;
   /** @maxItems 64 */
-  personas: Array<{ id: NodeId; label: PlaceLabel; screenIds: ScreenIds; declared: boolean; evidenceArtifact: ArtifactId }>;
+  personas: Array<{
+    id: NodeId;
+    label: PlaceLabel;
+    screenIds: ScreenIds;
+    declared: boolean;
+    evidenceArtifact: ArtifactId;
+  }>;
   counts: { screens: ReportCount; journeys: ReportCount; personas: ReportCount };
   /** @maxItems 32 */
   limitationKeys: CatalogKey[];
@@ -146,7 +169,13 @@ export interface ReportHistoricalFinding {
   ruleFamilyId: string;
   severity: ReportFinding['severity'];
   title: RegisterText;
-  label: 'resolved-by-comparable-check' | 'removed-surface' | 'unassessed-in-current-scope' | 'changed-detection' | 'incomparable-conditions' | 'changed-evidence';
+  label:
+    | 'resolved-by-comparable-check'
+    | 'removed-surface'
+    | 'unassessed-in-current-scope'
+    | 'changed-detection'
+    | 'incomparable-conditions'
+    | 'changed-evidence';
   reasonCode: CatalogKey;
   match?: FindingMatch;
   place: FindingPlace;
@@ -190,11 +219,11 @@ export interface ReportDecision {
   findingId: Id;
   /** Source-only owner adjudication; earlier unbound records are never upgraded to this evaluator. */
   evaluator?: 'sentinel-decision-evaluation/2';
-  state?: 'open'|'accepted-risk'|'false-positive';
+  state?: 'open' | 'accepted-risk' | 'false-positive';
   reasonCode?: CatalogKey;
-  basisDigest?: Digest|null;
+  basisDigest?: Digest | null;
   journalHead?: Digest;
-  rationale?: BoundedText|null;
+  rationale?: BoundedText | null;
   /** Validity as of the report's evaluation time; opening an old report never recalculates it. */
   validity: 'valid' | 'expired' | 'invalidated';
   expiresAt: Timestamp | null;
@@ -219,8 +248,7 @@ export interface ReportControlInspection {
     /** @maxItems 10000 */
     versions: Array<ShortText | null>;
     envelopes: Count;
-    supportedScope: { versions: { [key: string]: ShortText }; /** @maxItems 7 */
-      properties: ShortText[] };
+    supportedScope: { versions: { [key: string]: ShortText }; /** @maxItems 7 */ properties: ShortText[] };
   }>;
   /** @maxItems 300000 */
   rows: Array<{
@@ -230,11 +258,19 @@ export interface ReportControlInspection {
     verdict: 'applies' | 'does-not-apply' | null;
     reasonCode: CatalogKey | null;
     /** @maxItems 10000 */
-    claims: Array<{ framework: 'next' | 'express' | 'nest' | 'spring'; verdict: 'applies' | 'does-not-apply' | 'unknown'; factId: Id }>;
+    claims: Array<{
+      framework: 'next' | 'express' | 'nest' | 'spring';
+      verdict: 'applies' | 'does-not-apply' | 'unknown';
+      factId: Id;
+    }>;
   }>;
   /** @maxItems 3 */
-  checks: Array<{ checkId: Id; familyId: ShortText; state: 'complete' | 'partial' | 'not-run'; /** @maxItems 10000 */
-    reasons: CatalogKey[] }>;
+  checks: Array<{
+    checkId: Id;
+    familyId: ShortText;
+    state: 'complete' | 'partial' | 'not-run'; /** @maxItems 10000 */
+    reasons: CatalogKey[];
+  }>;
   /** @maxItems 40000 */
   frontiers: Array<{ scopeId: NodeId; reasonCode: CatalogKey }>;
   limitationKey: 'sentinel.controls.limitation.inspectionOnly';
@@ -284,7 +320,14 @@ export interface ReportEnvelope {
   /** @maxItems 25000 */
   decisions: ReportDecision[];
   /** Availability of optional source-only owner adjudication, never scanner coverage. */
-  decisionEvaluation?: { status:'complete'|'partial'|'unavailable'; reasonCode:'sentinel.decision.section.complete'|'sentinel.decision.section.partial'|'sentinel.decision.section.unavailable'|'sentinel.decision.section.limit' };
+  decisionEvaluation?: {
+    status: 'complete' | 'partial' | 'unavailable';
+    reasonCode:
+      | 'sentinel.decision.section.complete'
+      | 'sentinel.decision.section.partial'
+      | 'sentinel.decision.section.unavailable'
+      | 'sentinel.decision.section.limit';
+  };
   /** @maxItems 25000 */
   historical?: ReportHistoricalFinding[];
   /** @maxItems 2048 */

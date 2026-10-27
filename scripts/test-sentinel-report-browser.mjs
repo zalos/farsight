@@ -10,7 +10,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
 
-const files = process.argv.slice(2).map(f => resolve(f));
+const files = process.argv.slice(2).map((f) => resolve(f));
 assert.ok(files.length, 'name at least one HTML report');
 const browser = await chromium.launch();
 try {
@@ -21,14 +21,20 @@ try {
     const page = await context.newPage();
     const errors = [];
     const requests = [];
-    page.on('pageerror', e => errors.push(String(e)));
-    page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-    page.on('request', r => requests.push(r.url()));
+    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('console', (m) => {
+      if (m.type() === 'error') errors.push(m.text());
+    });
+    page.on('request', (r) => requests.push(r.url()));
     await page.goto(url, { waitUntil: 'load' });
     const text = await page.locator('body').innerText();
     assert.match(text, /finding|issue/i, `${file}: the report's findings are readable`);
-    assert.ok(await page.locator('h1').count() >= 1, `${file}: a heading`);
-    assert.deepEqual(requests.filter(r => r !== url), [], `${file}: loads nothing but itself`);
+    assert.ok((await page.locator('h1').count()) >= 1, `${file}: a heading`);
+    assert.deepEqual(
+      requests.filter((r) => r !== url),
+      [],
+      `${file}: loads nothing but itself`,
+    );
     assert.deepEqual(errors, [], `${file}: no page or console error`);
     await page.screenshot({ path: `${file}.screen.png`, fullPage: true });
     await page.emulateMedia({ media: 'print' });
@@ -41,4 +47,6 @@ try {
 } finally {
   await browser.close();
 }
-console.log(`sentinel report browser ok: ${files.length} file(s) viewed offline with no request, no error, and printed`);
+console.log(
+  `sentinel report browser ok: ${files.length} file(s) viewed offline with no request, no error, and printed`,
+);

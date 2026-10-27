@@ -28,7 +28,13 @@ import { enumerateCommit, trackedBlobs, type SubmoduleRequest } from './committe
 import { SnapshotError } from './errors.js';
 import { GitReadBudget, GitReadError, GitRepository } from './git.js';
 import { CaptureChanged, Inventory } from './inventory.js';
-import { MATERIALIZATION_SCHEMA, inventoryDigestOf, materializationSources, type Materialization, type MaterializedSource } from './materialization.js';
+import {
+  MATERIALIZATION_SCHEMA,
+  inventoryDigestOf,
+  materializationSources,
+  type Materialization,
+  type MaterializedSource,
+} from './materialization.js';
 import { digestOf, isRecordablePath, resolvePolicy, type CapturePolicy } from './policy.js';
 import { enumerateWorktree } from './worktree.js';
 
@@ -85,23 +91,33 @@ const CAPTURE_IMPLEMENTATION = 'sentinel-capture/1';
 const canonical = (path: string, what: string): string => {
   if (typeof path !== 'string' || !isAbsolute(path)) throw new SnapshotError('sentinel.capture.rootNotCanonical', what);
   let real: string;
-  try { real = realpathSync.native(path); } catch { throw new SnapshotError('sentinel.capture.rootUnreadable', what); }
+  try {
+    real = realpathSync.native(path);
+  } catch {
+    throw new SnapshotError('sentinel.capture.rootUnreadable', what);
+  }
   if (real !== path) throw new SnapshotError('sentinel.capture.rootNotCanonical', what);
   return real;
 };
 
 function checkRequest(request: CaptureRequest): CapturePolicy {
-  const bad = (detail: string): never => { throw new SnapshotError('sentinel.capture.invalidRequest', detail); };
+  const bad = (detail: string): never => {
+    throw new SnapshotError('sentinel.capture.invalidRequest', detail);
+  };
   if (!request || typeof request !== 'object') bad('no request');
-  if (request.mode !== 'committed-tree' && request.mode !== 'working-copy') bad('mode must be committed-tree or working-copy');
-  if (!Array.isArray(request.sources) || request.sources.length < 1 || request.sources.length > 64) bad('1..64 sources');
+  if (request.mode !== 'committed-tree' && request.mode !== 'working-copy')
+    bad('mode must be committed-tree or working-copy');
+  if (!Array.isArray(request.sources) || request.sources.length < 1 || request.sources.length > 64)
+    bad('1..64 sources');
   if (request.onStaged !== undefined && typeof request.onStaged !== 'function') bad('onStaged must be a function');
   const ids = new Set<string>();
   for (const s of request.sources) {
-    if (!s || typeof s.sourceId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(s.sourceId)) bad('a source id is not a valid id');
+    if (!s || typeof s.sourceId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(s.sourceId))
+      bad('a source id is not a valid id');
     if (ids.has(s.sourceId)) bad(`source ${s.sourceId} is listed twice`);
     ids.add(s.sourceId);
-    if (typeof s.repositoryId !== 'string' || s.repositoryId.length < 1 || s.repositoryId.length > 512) bad(`${s.sourceId}: repositoryId`);
+    if (typeof s.repositoryId !== 'string' || s.repositoryId.length < 1 || s.repositoryId.length > 512)
+      bad(`${s.sourceId}: repositoryId`);
     canonical(s.root, s.sourceId);
     if (s.lfsObjects !== undefined) canonical(s.lfsObjects, `${s.sourceId} lfsObjects`);
     if (s.gitDir !== undefined) canonical(s.gitDir, `${s.sourceId} gitDir`);
@@ -112,11 +128,14 @@ function checkRequest(request: CaptureRequest): CapturePolicy {
     const paths = new Set<string>();
     for (const sub of s.submodules ?? []) {
       // The same checks a primary source gets, all before anything is read.
-      if (!sub || typeof sub.sourceId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(sub.sourceId)) bad(`${s.sourceId}: a submodule source id is not a valid id`);
+      if (!sub || typeof sub.sourceId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(sub.sourceId))
+        bad(`${s.sourceId}: a submodule source id is not a valid id`);
       if (ids.has(sub.sourceId)) bad(`source ${sub.sourceId} is listed twice`);
       ids.add(sub.sourceId);
-      if (typeof sub.repositoryId !== 'string' || sub.repositoryId.length < 1 || sub.repositoryId.length > 512) bad(`${sub.sourceId}: repositoryId`);
-      if (typeof sub.path !== 'string' || !isRecordablePath(sub.path) || paths.has(sub.path)) bad(`${sub.sourceId}: the submodule path is not a safe, unique path`);
+      if (typeof sub.repositoryId !== 'string' || sub.repositoryId.length < 1 || sub.repositoryId.length > 512)
+        bad(`${sub.sourceId}: repositoryId`);
+      if (typeof sub.path !== 'string' || !isRecordablePath(sub.path) || paths.has(sub.path))
+        bad(`${sub.sourceId}: the submodule path is not a safe, unique path`);
       paths.add(sub.path);
       canonical(sub.root, sub.sourceId);
       if (sub.lfsObjects !== undefined) canonical(sub.lfsObjects, `${sub.sourceId} lfsObjects`);
@@ -124,10 +143,17 @@ function checkRequest(request: CaptureRequest): CapturePolicy {
       if (sub.commonDir !== undefined) canonical(sub.commonDir, `${sub.sourceId} commonDir`);
     }
   }
-  if (request.stageSize !== undefined && (!Number.isSafeInteger(request.stageSize) || request.stageSize < 1 || request.stageSize > STAGE_LIMIT)) {
+  if (
+    request.stageSize !== undefined &&
+    (!Number.isSafeInteger(request.stageSize) || request.stageSize < 1 || request.stageSize > STAGE_LIMIT)
+  ) {
     bad(`stageSize must be 1..${STAGE_LIMIT}`);
   }
-  try { return resolvePolicy(request.policy); } catch (e) { return bad((e as Error).message); }
+  try {
+    return resolvePolicy(request.policy);
+  } catch (e) {
+    return bad((e as Error).message);
+  }
 }
 
 /**
@@ -140,17 +166,23 @@ function storeBoundary(root: string, held: HeldStoreRoot | undefined): HeldStore
   if (root === held.path || root.startsWith(held.path + sep)) {
     throw new SnapshotError('sentinel.capture.invalidRequest', 'a source root cannot be the store or lie inside it');
   }
-  if (hasIdentity(root, held.identity)) throw new SnapshotError('sentinel.capture.storeAliased', 'the source root is the store under another name');
+  if (hasIdentity(root, held.identity))
+    throw new SnapshotError('sentinel.capture.storeAliased', 'the source root is the store under another name');
   return held;
 }
 
 /** The Git directories a source explicitly permits outside its root, as the reader's options. */
-const gitGrants = (s: { gitDir?: string; commonDir?: string }) =>
-  ({ ...(s.gitDir === undefined ? {} : { gitDir: s.gitDir }), ...(s.commonDir === undefined ? {} : { commonDir: s.commonDir }) });
+const gitGrants = (s: { gitDir?: string; commonDir?: string }) => ({
+  ...(s.gitDir === undefined ? {} : { gitDir: s.gitDir }),
+  ...(s.commonDir === undefined ? {} : { commonDir: s.commonDir }),
+});
 
 function openRepo(root: string, grants: { gitDir?: string; commonDir?: string }, budget: GitReadBudget): GitRepository {
-  try { return GitRepository.open(root, { ...grants, budget }); } catch (e) {
-    if (e instanceof GitReadError && e.code === 'unsupported') throw new SnapshotError('sentinel.capture.gitUnsupported', e.message);
+  try {
+    return GitRepository.open(root, { ...grants, budget });
+  } catch (e) {
+    if (e instanceof GitReadError && e.code === 'unsupported')
+      throw new SnapshotError('sentinel.capture.gitUnsupported', e.message);
     throw new SnapshotError('sentinel.capture.notRepository', e instanceof Error ? e.message : '');
   }
 }
@@ -164,18 +196,34 @@ function gitFailure(e: unknown): never {
 }
 
 /** `repos` stay open while their read closures may still run; the caller closes them. */
-interface Enumerated { readonly inv: Inventory; readonly sources: SnapshotSource[]; readonly repos: GitRepository[] }
+interface Enumerated {
+  readonly inv: Inventory;
+  readonly sources: SnapshotSource[];
+  readonly repos: GitRepository[];
+}
 
 /** What a stability recheck compares: entries, sources (without times) and the sidecar facts. */
 function fingerprint(e: Enumerated): string {
   const entries = [...e.inv.entries].sort(compareEntries);
   return JSON.stringify({
-    entries, sources: e.sources.map(({ capturedAt: _t, ...r }) => r),
-    materialization: materializationSources(e.inv, e.sources.map(s => s.sourceId), entries),
+    entries,
+    sources: e.sources.map(({ capturedAt: _t, ...r }) => r),
+    materialization: materializationSources(
+      e.inv,
+      e.sources.map((s) => s.sourceId),
+      entries,
+    ),
   });
 }
 
-function enumerate(request: CaptureRequest, policy: CapturePolicy, store: CaptureStore, now: () => string, budget: GitReadBudget, stillWithin: () => void): Enumerated {
+function enumerate(
+  request: CaptureRequest,
+  policy: CapturePolicy,
+  store: CaptureStore,
+  now: () => string,
+  budget: GitReadBudget,
+  stillWithin: () => void,
+): Enumerated {
   stillWithin();
   const inv = new Inventory(policy);
   const sources: SnapshotSource[] = [];
@@ -196,38 +244,89 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
         let found;
         try {
           commit = repo.resolveCommit(s.revision ?? 'HEAD');
-          found = enumerateCommit(inv, { sourceId: s.sourceId, repo, commit, lfsObjects: s.lfsObjects, submodules: s.submodules ?? [], stillWithin });
-        } catch (e) { if (e instanceof CaptureChanged || e instanceof SnapshotError) throw e; return gitFailure(e); }
+          found = enumerateCommit(inv, {
+            sourceId: s.sourceId,
+            repo,
+            commit,
+            lfsObjects: s.lfsObjects,
+            submodules: s.submodules ?? [],
+            stillWithin,
+          });
+        } catch (e) {
+          if (e instanceof CaptureChanged || e instanceof SnapshotError) throw e;
+          return gitFailure(e);
+        }
         sources.push({ sourceId: s.sourceId, repositoryId: s.repositoryId, commit, dirty: false, capturedAt: now() });
         for (const sub of found) {
           const subRoot = canonical(sub.request.root, sub.request.sourceId);
           const subRepo = openRepo(subRoot, gitGrants(sub.request), budget);
           repos.push(subRepo);
           let present = false;
-          try { present = subRepo.readObject(sub.commit, 64 * 1024 * 1024)?.type === 'commit'; } catch { present = false; }
-          const marker = inv.entries.findIndex(e => e.sourceId === s.sourceId && e.relativePath === sub.request.path && e.kind === 'directory-boundary');
+          try {
+            present = subRepo.readObject(sub.commit, 64 * 1024 * 1024)?.type === 'commit';
+          } catch {
+            present = false;
+          }
+          const marker = inv.entries.findIndex(
+            (e) => e.sourceId === s.sourceId && e.relativePath === sub.request.path && e.kind === 'directory-boundary',
+          );
           if (!present) {
-            if (marker >= 0) inv.entries[marker] = { sourceId: s.sourceId, relativePath: sub.request.path, kind: 'directory-boundary',
-              disposition: 'unreadable', reasonCode: 'sentinel.capture.submoduleCommitMissing', knownDescendants: null };
+            if (marker >= 0)
+              inv.entries[marker] = {
+                sourceId: s.sourceId,
+                relativePath: sub.request.path,
+                kind: 'directory-boundary',
+                disposition: 'unreadable',
+                reasonCode: 'sentinel.capture.submoduleCommitMissing',
+                knownDescendants: null,
+              };
             continue;
           }
           try {
-            enumerateCommit(inv, { sourceId: sub.request.sourceId, repo: subRepo, commit: sub.commit, lfsObjects: sub.request.lfsObjects,
-              submodules: [], stillWithin });
-          } catch (e) { if (e instanceof CaptureChanged || e instanceof SnapshotError) throw e; return gitFailure(e); }
-          sources.push({ sourceId: sub.request.sourceId, repositoryId: sub.request.repositoryId, commit: sub.commit, dirty: false, capturedAt: now() });
+            enumerateCommit(inv, {
+              sourceId: sub.request.sourceId,
+              repo: subRepo,
+              commit: sub.commit,
+              lfsObjects: sub.request.lfsObjects,
+              submodules: [],
+              stillWithin,
+            });
+          } catch (e) {
+            if (e instanceof CaptureChanged || e instanceof SnapshotError) throw e;
+            return gitFailure(e);
+          }
+          sources.push({
+            sourceId: sub.request.sourceId,
+            repositoryId: sub.request.repositoryId,
+            commit: sub.commit,
+            dirty: false,
+            capturedAt: now(),
+          });
         }
       } else {
         let repo: GitRepository | undefined;
         // A repository the reader refuses (unsafe layout, unsupported format, over budget) names no commit: the copy
         // is then recorded with commit null and dirty true, never claimed clean.
-        try { repo = GitRepository.open(root, { ...gitGrants(s), budget }); } catch { repo = undefined; }
+        try {
+          repo = GitRepository.open(root, { ...gitGrants(s), budget });
+        } catch {
+          repo = undefined;
+        }
         if (repo) repos.push(repo);
         let commit: string | null = null;
-        if (repo) { try { commit = repo.resolveCommit('HEAD'); } catch { commit = null; } }
+        if (repo) {
+          try {
+            commit = repo.resolveCommit('HEAD');
+          } catch {
+            commit = null;
+          }
+        }
         const start = inv.entries.length;
         enumerateWorktree(inv, { sourceId: s.sourceId, root, store: storeHeld, lfsObjects: s.lfsObjects, stillWithin });
-        const dirty = commit === null || repo === undefined ? true : differsFromCommit(repo, commit, s.sourceId, inv.entries.slice(start), inv, stillWithin);
+        const dirty =
+          commit === null || repo === undefined
+            ? true
+            : differsFromCommit(repo, commit, s.sourceId, inv.entries.slice(start), inv, stillWithin);
         sources.push({ sourceId: s.sourceId, repositoryId: s.repositoryId, commit, dirty, capturedAt: now() });
       }
     }
@@ -245,11 +344,18 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
  * nothing else was captured. Anything that cannot be compared (a tracked file excluded, too large or unreadable; a
  * link target not recorded) counts as a difference.
  */
-function differsFromCommit(repo: GitRepository, commit: string, sourceId: string, entries: readonly CaptureEntry[], inv: Inventory, stillWithin: () => void): boolean {
+function differsFromCommit(
+  repo: GitRepository,
+  commit: string,
+  sourceId: string,
+  entries: readonly CaptureEntry[],
+  inv: Inventory,
+  stillWithin: () => void,
+): boolean {
   const tracked = trackedBlobs(repo, commit, stillWithin);
   if (!tracked) return true;
   const gitlinks = [...tracked].filter(([, v]) => v.startsWith('160000:')).map(([p]) => p);
-  const underGitlink = (p: string) => gitlinks.some(g => p === g || p.startsWith(`${g}/`));
+  const underGitlink = (p: string) => gitlinks.some((g) => p === g || p.startsWith(`${g}/`));
   const captured = new Map<string, CaptureEntry>();
   for (const e of entries) {
     if ((e.kind === 'file' && e.disposition === 'included') || e.kind === 'symlink') {
@@ -279,20 +385,49 @@ function differsFromCommit(repo: GitRepository, commit: string, sourceId: string
 }
 
 const compareEntries = (a: CaptureEntry, b: CaptureEntry) =>
-  (a.sourceId < b.sourceId ? -1 : a.sourceId > b.sourceId ? 1 : a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0);
+  a.sourceId < b.sourceId
+    ? -1
+    : a.sourceId > b.sourceId
+      ? 1
+      : a.relativePath < b.relativePath
+        ? -1
+        : a.relativePath > b.relativePath
+          ? 1
+          : 0;
 
-function buildEnvelope(mode: CaptureModeRequest, policy: CapturePolicy, e: Enumerated, createdAt: string, attempt: number): SnapshotEnvelope {
+function buildEnvelope(
+  mode: CaptureModeRequest,
+  policy: CapturePolicy,
+  e: Enumerated,
+  createdAt: string,
+  attempt: number,
+): SnapshotEnvelope {
   const captureMode = mode === 'committed-tree' ? 'committed-tree' : 'working-copy-stability-checked';
   const policyDigest = digestOf({ mode: captureMode, policy });
   const entries = [...e.inv.entries].sort(compareEntries);
-  const facts = materializationSources(e.inv, e.sources.map(s => s.sourceId), entries);
+  const facts = materializationSources(
+    e.inv,
+    e.sources.map((s) => s.sourceId),
+    entries,
+  );
   const inventoryDigest = inventoryDigestOf(captureMode, policyDigest, e.sources, entries, facts);
   const id = `snap-${createHash('sha256').update(`${inventoryDigest}|${createdAt}|${attempt}`).digest('hex').slice(0, 32)}`;
   return {
-    schema: 'sentinel-snapshot/draft-1', id, inventoryDigest, createdAt,
+    schema: 'sentinel-snapshot/draft-1',
+    id,
+    inventoryDigest,
+    createdAt,
     capture: { mode: captureMode, policyDigest },
-    environmentProfileDigest: digestOf({ capture: CAPTURE_IMPLEMENTATION, node: process.version, platform: process.platform, arch: process.arch }),
-    sources: e.sources, entries, frameworkVersions: [], artifacts: { parser: [], diagnostics: [] },
+    environmentProfileDigest: digestOf({
+      capture: CAPTURE_IMPLEMENTATION,
+      node: process.version,
+      platform: process.platform,
+      arch: process.arch,
+    }),
+    sources: e.sources,
+    entries,
+    frameworkVersions: [],
+    artifacts: { parser: [], diagnostics: [] },
   };
 }
 
@@ -306,10 +441,20 @@ export function captureSnapshot(store: CaptureStore, request: CaptureRequest): P
  * every repository the capture opens (sources, submodules, both working-copy enumerations, every retry); each is
  * closed when its capture attempt ends, which releases what it reserved.
  */
-export async function captureWithBudget(store: CaptureStore, request: CaptureRequest, budget: GitReadBudget,
-  stillWithin?: () => void, beforeAdmission?: () => void): Promise<CaptureResult> {
+export async function captureWithBudget(
+  store: CaptureStore,
+  request: CaptureRequest,
+  budget: GitReadBudget,
+  stillWithin?: () => void,
+  beforeAdmission?: () => void,
+): Promise<CaptureResult> {
   // Internal only: callers retain their original owner/deadline/signal. Never a CaptureRequest/JSON field.
-  const checkpoint = stillWithin ? () => { store.assertHeld(); stillWithin(); } : () => {};
+  const checkpoint = stillWithin
+    ? () => {
+        store.assertHeld();
+        stillWithin();
+      }
+    : () => {};
   checkpoint();
   const policy = checkRequest(request);
   const now = request.now ?? (() => new Date().toISOString());
@@ -317,7 +462,17 @@ export async function captureWithBudget(store: CaptureStore, request: CaptureReq
   for (let attempt = 1; attempt <= policy.stabilityAttempts; attempt++) {
     try {
       checkpoint();
-      return await captureOnce(store, request, policy, now, attempt, budget, checkpoint, stillWithin !== undefined, beforeAdmission);
+      return await captureOnce(
+        store,
+        request,
+        policy,
+        now,
+        attempt,
+        budget,
+        checkpoint,
+        stillWithin !== undefined,
+        beforeAdmission,
+      );
     } catch (e) {
       // A Git read refused after enumeration (a re-read reloading an index over the budget) is explicit too.
       if (e instanceof GitReadError) gitFailure(e);
@@ -328,34 +483,83 @@ export async function captureWithBudget(store: CaptureStore, request: CaptureReq
   throw new SnapshotError('sentinel.capture.unstable');
 }
 
-async function captureOnce(store: CaptureStore, request: CaptureRequest, policy: CapturePolicy, now: () => string, attempt: number,
-  budget: GitReadBudget, stillWithin: () => void, admissionFence: boolean, beforeAdmission?: () => void): Promise<CaptureResult> {
+async function captureOnce(
+  store: CaptureStore,
+  request: CaptureRequest,
+  policy: CapturePolicy,
+  now: () => string,
+  attempt: number,
+  budget: GitReadBudget,
+  stillWithin: () => void,
+  admissionFence: boolean,
+  beforeAdmission?: () => void,
+): Promise<CaptureResult> {
   const first = enumerate(request, policy, store, now, budget, stillWithin);
   let second: Enumerated | undefined;
   try {
     stillWithin();
-    return await captureEnumerated(store, request, policy, now, attempt, first, budget, e => { second = e; }, stillWithin, admissionFence, beforeAdmission);
+    return await captureEnumerated(
+      store,
+      request,
+      policy,
+      now,
+      attempt,
+      first,
+      budget,
+      (e) => {
+        second = e;
+      },
+      stillWithin,
+      admissionFence,
+      beforeAdmission,
+    );
   } finally {
     // The committed-tree read closures reopen pack files on demand; every handle is closed here, once nothing reads.
     for (const r of [...first.repos, ...(second?.repos ?? [])]) r.close();
   }
 }
 
-async function captureEnumerated(store: CaptureStore, request: CaptureRequest, policy: CapturePolicy, now: () => string,
-  attempt: number, first: Enumerated, budget: GitReadBudget, keep: (e: Enumerated) => void, stillWithin: () => void, admissionFence: boolean, beforeAdmission?: () => void): Promise<CaptureResult> {
+async function captureEnumerated(
+  store: CaptureStore,
+  request: CaptureRequest,
+  policy: CapturePolicy,
+  now: () => string,
+  attempt: number,
+  first: Enumerated,
+  budget: GitReadBudget,
+  keep: (e: Enumerated) => void,
+  stillWithin: () => void,
+  admissionFence: boolean,
+  beforeAdmission?: () => void,
+): Promise<CaptureResult> {
   stillWithin();
   const envelope = buildEnvelope(request.mode, policy, first, now(), attempt);
   const valid = validateEnvelope('snapshot', envelope);
-  if (!valid.ok) throw new SnapshotError('sentinel.capture.contractInvalid', valid.errors.slice(0, 3).map(x => `${x.path} ${x.message}`).join('; '));
+  if (!valid.ok)
+    throw new SnapshotError(
+      'sentinel.capture.contractInvalid',
+      valid.errors
+        .slice(0, 3)
+        .map((x) => `${x.path} ${x.message}`)
+        .join('; '),
+    );
   const manifest = canonicalJsonBytes(envelope);
-  if (manifest.length > MAX_ENVELOPE_BYTES) throw new SnapshotError('sentinel.capture.manifestTooLarge', `${manifest.length} bytes`);
+  if (manifest.length > MAX_ENVELOPE_BYTES)
+    throw new SnapshotError('sentinel.capture.manifestTooLarge', `${manifest.length} bytes`);
   const manifestId = store.objects.identify(manifest);
   const materialization: Materialization = {
-    schema: MATERIALIZATION_SCHEMA, snapshotId: envelope.id, inventoryDigest: envelope.inventoryDigest,
-    sources: materializationSources(first.inv, envelope.sources.map(s => s.sourceId), envelope.entries) as MaterializedSource[],
+    schema: MATERIALIZATION_SCHEMA,
+    snapshotId: envelope.id,
+    inventoryDigest: envelope.inventoryDigest,
+    sources: materializationSources(
+      first.inv,
+      envelope.sources.map((s) => s.sourceId),
+      envelope.entries,
+    ) as MaterializedSource[],
   };
   const sidecar = canonicalJsonBytes(materialization);
-  if (sidecar.length > MAX_ARTIFACT_BYTES) throw new SnapshotError('sentinel.capture.manifestTooLarge', `materialization ${sidecar.length} bytes`);
+  if (sidecar.length > MAX_ARTIFACT_BYTES)
+    throw new SnapshotError('sentinel.capture.manifestTooLarge', `materialization ${sidecar.length} bytes`);
   const sidecarId = store.objects.identify(sidecar);
 
   const contentIds = [...first.inv.contents.keys()].sort();
@@ -372,7 +576,10 @@ async function captureEnumerated(store: CaptureStore, request: CaptureRequest, p
     //    to content held by the other (unbound) stages.
     batches.forEach((ids, i) => {
       stillWithin();
-      store.ledger.registerStaging(stageId(i), ids.map(id => ({ id, schema: 'application/octet-stream', privacy: 'source' as const })));
+      store.ledger.registerStaging(
+        stageId(i),
+        ids.map((id) => ({ id, schema: 'application/octet-stream', privacy: 'source' as const })),
+      );
       open.push(stageId(i));
     });
     stillWithin();
@@ -396,7 +603,8 @@ async function captureEnumerated(store: CaptureStore, request: CaptureRequest, p
       const second = enumerate(request, policy, store, now, budget, stillWithin);
       keep(second);
       stillWithin();
-      if (fingerprint(first) !== fingerprint(second)) throw new CaptureChanged('the working copy changed during capture');
+      if (fingerprint(first) !== fingerprint(second))
+        throw new CaptureChanged('the working copy changed during capture');
     }
     // 6. The roots, then one admission that verifies every object again and releases every stage.
     stillWithin();
@@ -405,15 +613,27 @@ async function captureEnumerated(store: CaptureStore, request: CaptureRequest, p
     receipts.push(manifestReceipt, await store.objects.put(sidecar, { expect: sidecarId }));
     stillWithin();
     store.assertHeld();
-    beforeAdmission?.(); stillWithin();
-    const admit = () => store.ledger.admitSnapshot({ snapshotId: envelope.id, stageIds: [...open], manifest: manifestId.id,
-      materialization: sidecarId.id, inventoryDigest: envelope.inventoryDigest, receipts });
+    beforeAdmission?.();
+    stillWithin();
+    const admit = () =>
+      store.ledger.admitSnapshot({
+        snapshotId: envelope.id,
+        stageIds: [...open],
+        manifest: manifestId.id,
+        materialization: sidecarId.id,
+        inventoryDigest: envelope.inventoryDigest,
+        receipts,
+      });
     const record = admissionFence ? withAdmissionFence(store, stillWithin, admit) : admit();
     open.length = 0;
     return Object.freeze({ snapshot: envelope, record, artifact: manifestReceipt, materialization, attempts: attempt });
   } catch (e) {
     for (const stage of open) {
-      try { store.ledger.abortStaging(stage); } catch { /* the original failure is the one reported */ }
+      try {
+        store.ledger.abortStaging(stage);
+      } catch {
+        /* the original failure is the one reported */
+      }
     }
     throw e;
   }

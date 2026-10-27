@@ -24,11 +24,16 @@ export interface ScannerOptions {
 }
 
 /** Each production external adapter with its driver: registry definition and driver share one id. */
-export function scannerKernels(options: ScannerOptions): ReadonlyMap<string, { definition: ExternalAdapterDefinition; driver: CheckDriver }> {
+export function scannerKernels(
+  options: ScannerOptions,
+): ReadonlyMap<string, { definition: ExternalAdapterDefinition; driver: CheckDriver }> {
   const entries: [ExternalAdapterDefinition, CheckDriver][] = [
-    [PATTERN_ADAPTER, patternDriver()], [OSV_ADAPTER, osvDriver({ maxDatabaseAgeMs: options.maxAdvisoryAgeMs })],
-    [TRIVY_ADAPTER, trivyDriver()], [ZIZMOR_ADAPTER, zizmorDriver()],
+    [PATTERN_ADAPTER, patternDriver()],
+    [OSV_ADAPTER, osvDriver({ maxDatabaseAgeMs: options.maxAdvisoryAgeMs })],
+    [TRIVY_ADAPTER, trivyDriver()],
+    [ZIZMOR_ADAPTER, zizmorDriver()],
   ];
-  for (const [d, k] of entries) if (d.id !== k.adapterId) throw new Error(`the driver for ${d.id} names ${k.adapterId}`);
+  for (const [d, k] of entries)
+    if (d.id !== k.adapterId) throw new Error(`the driver for ${d.id} names ${k.adapterId}`);
   return new Map(entries.map(([definition, driver]) => [definition.id, Object.freeze({ definition, driver })]));
 }

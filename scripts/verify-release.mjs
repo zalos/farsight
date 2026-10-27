@@ -40,23 +40,41 @@ async function download(url, fetchImpl) {
  * their integrity pinned), so a server that answers a later request with other bytes cannot change what is tested.
  */
 export async function checkPublished({ tag, repoUrl, fetchImpl = fetch, loopback = false }) {
-  const manifest = checkManifest(JSON.parse((await download(assetUrl(repoUrl, tag, MANIFEST_ASSET), fetchImpl)).toString('utf8')), { assets: true, loopback });
+  const manifest = checkManifest(
+    JSON.parse((await download(assetUrl(repoUrl, tag, MANIFEST_ASSET), fetchImpl)).toString('utf8')),
+    { assets: true, loopback },
+  );
   if (manifest.tag !== tag) throw new Error(`the published manifest names ${manifest.tag}, not ${tag}`);
-  if (manifest.repoUrl !== repoUrl.replace(/\/+$/, '')) throw new Error(`the published manifest names ${manifest.repoUrl}, not ${repoUrl}`);
+  if (manifest.repoUrl !== repoUrl.replace(/\/+$/, ''))
+    throw new Error(`the published manifest names ${manifest.repoUrl}, not ${repoUrl}`);
   const verified = {};
   for (const [key, entry] of Object.entries(manifest.packages)) {
     const bytes = await download(entry.url, fetchImpl);
     const sha256 = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
-    if (bytes.length !== entry.bytes || sha256 !== entry.sha256) throw new Error(`${entry.file}: the published bytes (${bytes.length}, ${sha256}) are not the manifest's (${entry.bytes}, ${entry.sha256})`);
+    if (bytes.length !== entry.bytes || sha256 !== entry.sha256)
+      throw new Error(
+        `${entry.file}: the published bytes (${bytes.length}, ${sha256}) are not the manifest's (${entry.bytes}, ${entry.sha256})`,
+      );
     verified[key] = bytes;
   }
   return Object.assign(manifest, { verified });
 }
 
-export async function verifyRelease({ tag, repoUrl = defaultRepoUrl(), fetchImpl = fetch, loopback = false, modes, log = console.log }) {
+export async function verifyRelease({
+  tag,
+  repoUrl = defaultRepoUrl(),
+  fetchImpl = fetch,
+  loopback = false,
+  modes,
+  log = console.log,
+}) {
   if (!repoUrl) throw new Error('no repository URL: pass --repo-url');
   const { verified, ...manifest } = await checkPublished({ tag, repoUrl, fetchImpl, loopback });
-  log(`release ${tag}: ${Object.values(manifest.packages).map((p) => `${p.name} ${p.version}`).join(', ')}; commit ${manifest.commit}; bytes and digests match`);
+  log(
+    `release ${tag}: ${Object.values(manifest.packages)
+      .map((p) => `${p.name} ${p.version}`)
+      .join(', ')}; commit ${manifest.commit}; bytes and digests match`,
+  );
   const held = mkdtempSync(join(tmpdir(), 'farsight-verify-'));
   try {
     chmodSync(held, 0o700);
@@ -68,28 +86,54 @@ export async function verifyRelease({ tag, repoUrl = defaultRepoUrl(), fetchImpl
       return { url: entry.url, file, sha256: entry.sha256 };
     };
     const report = await runAcceptance({
-      farsight: source('farsight'), sentinel: source('sentinel'), ...(modes ? { modes } : {}), log,
-      expect: { farsight: manifest.packages.farsight.version, sentinel: manifest.packages.sentinel?.version, commit: manifest.commit },
+      farsight: source('farsight'),
+      sentinel: source('sentinel'),
+      ...(modes ? { modes } : {}),
+      log,
+      expect: {
+        farsight: manifest.packages.farsight.version,
+        sentinel: manifest.packages.sentinel?.version,
+        commit: manifest.commit,
+      },
     });
     return { manifest, ...report };
-  } finally { rmSync(held, { recursive: true, force: true }); }
+  } finally {
+    rmSync(held, { recursive: true, force: true });
+  }
 }
 
 async function main(argv) {
-  const { values } = parseArgs({ args: argv, options: {
-    tag: { type: 'string' }, 'repo-url': { type: 'string' }, diagnostic: { type: 'boolean', default: false }, report: { type: 'string' },
-  } });
+  const { values } = parseArgs({
+    args: argv,
+    options: {
+      tag: { type: 'string' },
+      'repo-url': { type: 'string' },
+      diagnostic: { type: 'boolean', default: false },
+      report: { type: 'string' },
+    },
+  });
   if (!values.tag) throw new Error('--tag is required');
   const result = await verifyRelease({ tag: values.tag, repoUrl: values['repo-url'] ?? defaultRepoUrl() });
   if (values.report) writeFileSync(values.report, JSON.stringify(result, null, 2) + '\n');
   const s = result.summary;
-  console.log(`\nverify-release ${values.tag}: ${s.passed} passed, ${s.failed} failed, ${s.pending} pending${s.pending ? ` (blocked by ${s.blockedBy.join(', ')})` : ''}`);
+  console.log(
+    `\nverify-release ${values.tag}: ${s.passed} passed, ${s.failed} failed, ${s.pending} pending${s.pending ? ` (blocked by ${s.blockedBy.join(', ')})` : ''}`,
+  );
   if (s.failed) return 1;
-  if (s.pending && !values.diagnostic) { console.log('pending gates: this release does not pass verification'); return 2; }
+  if (s.pending && !values.diagnostic) {
+    console.log('pending gates: this release does not pass verification');
+    return 2;
+  }
   if (s.pending) console.log('--diagnostic: pending gates reported; this is not a release verification');
   return 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv.slice(2)).then((code) => process.exit(code), (e) => { console.error(`verify-release: ${e.message}`); process.exit(1); });
+  main(process.argv.slice(2)).then(
+    (code) => process.exit(code),
+    (e) => {
+      console.error(`verify-release: ${e.message}`);
+      process.exit(1);
+    },
+  );
 }

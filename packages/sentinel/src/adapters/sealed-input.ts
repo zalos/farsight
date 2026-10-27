@@ -10,13 +10,23 @@ export function readSealedInput(workDir: string, artifact: ArtifactId): Uint8Arr
   const m = /^sha256:([0-9a-f]{64})$/.exec(artifact);
   if (!m) return undefined;
   let fd: number;
-  try { fd = openSync(join(workDir, 'input', m[1]!), FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0)); } catch { return undefined; }
+  try {
+    fd = openSync(join(workDir, 'input', m[1]!), FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0));
+  } catch {
+    return undefined;
+  }
   try {
     const st = fstatSync(fd);
     if (!st.isFile()) return undefined;
     const buf = Buffer.alloc(st.size);
     let off = 0;
-    while (off < st.size) { const n = readSync(fd, buf, off, st.size - off, off); if (n === 0) break; off += n; }
+    while (off < st.size) {
+      const n = readSync(fd, buf, off, st.size - off, off);
+      if (n === 0) break;
+      off += n;
+    }
     return off === st.size ? buf : undefined;
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
 }

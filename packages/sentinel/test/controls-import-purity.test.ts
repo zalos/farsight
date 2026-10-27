@@ -4,7 +4,13 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 
-for (const target of ['frameworks/controls/definitions.js', 'service/inspection-report.js', 'service/full-report.js', 'index.js', 'cli.js']) {
+for (const target of [
+  'frameworks/controls/definitions.js',
+  'service/inspection-report.js',
+  'service/full-report.js',
+  'index.js',
+  'cli.js',
+]) {
   test(`${target} import never loads the worker, asset lookup or oxc`, () => {
     const script = `
       import assert from 'node:assert/strict';
@@ -22,7 +28,10 @@ for (const target of ['frameworks/controls/definitions.js', 'service/inspection-
       assert.ok(!loaded.some(u => /frameworks\\/controls\\/worker\\.js|oxc-parser/.test(u)), JSON.stringify(loaded));
       assert.ok(!reads.some(p => /frameworks\\/controls\\/worker|execution\\/launch-gate|sentinel\\/package\\.json$/.test(p)), JSON.stringify(reads));
     `;
-    const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', timeout: 30_000 });
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
     assert.equal(child.status, 0, child.stderr || child.stdout);
   });
 }

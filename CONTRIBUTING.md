@@ -11,6 +11,8 @@ Thanks for helping. This page is the short version; the project contract (princi
   dependency tree is still resolved by the workspace install, but other dependencies' build scripts are not
   approved. Echo's pinned engine is installed only by its explicit `install-runtime` command.
 - Install Git LFS once per machine (see [Git LFS](#git-lfs) below).
+- Keep `.npmrc`'s `uri-js` hoist exclusion: ESLint's Ajv 6 resolves its own dependency, while Sentinel's pinned
+  runtime closure must not pick up fast-uri's unrelated benchmark import through pnpm's shared hoist directory.
 
 ## Branches, commits, pull requests
 
@@ -27,24 +29,45 @@ Thanks for helping. This page is the short version; the project contract (princi
   release deps viewer skills agents`); a new scope is added to `SCOPES` in `scripts/lint-commits.mjs` in the same change. `!`
   after the scope or a `BREAKING CHANGE:` footer marks a breaking change. No full stop, under 120 characters.
 - **Commits on the branch** are conventional too, but they are working notes — commit often, don't polish, the squash
-  folds them. `pnpm install` installs a `commit-msg` hook that checks the shape (`scripts/install-hooks.mjs`, copied
-  into `.git/hooks`; Git LFS's hooks stay) and sets `.gitmessage` as the commit template; `pnpm lint:commits
+  folds them. `pnpm install` installs lefthook's pre-commit and commit-msg hooks (`scripts/install-hooks.mjs`);
+  on branches with `lefthook.yml`, pre-commit rejects main and formats/re-stages eligible JS/TS before ESLint,
+  while commit-msg checks the shape. See [hook rollout and existing installs](docs/CI.md#git-hooks-and-existing-installs).
+  Git LFS's hooks stay, and `.gitmessage` is the commit template; `pnpm lint:commits
   --message 'fix(cli): …'` tries a subject by hand.
 - Open the pull request against `main`. **CI must be green** before it is merged (`ci.yml`, see
   [docs/CI.md](docs/CI.md)): `validate`, `e2e`, `secrets`, and `commits` — the PR title against the type and scope
   lists, every branch commit for shape. Then `gh pr merge <n> --squash` (the branch is deleted on merge; keep the
   title the PR carries). A merge refused as "not up to date" wants `gh pr update-branch <n>`, never `--admin`.
+- The other existing required checks are `affected checks` and `echo-package`. The lead adds the new `lint` check
+  after its first green run, bringing the total to seven; selected runtime checks run it alongside them.
 - Commit messages carry no session links or private names; `Co-Authored-By:` lines are fine.
 
 ## Run what CI runs
 
 ```sh
+pnpm format            # write formatter output for areas already removed from the temporary ignore block
+pnpm format:check      # JS/TS; existing areas remain ignored until their style PR
+pnpm lint             # fail on new ESLint errors; existing counts are frozen
+pnpm lint:report      # include structure warnings; pnpm lint --prune-suppressions removes fixed debt
 pnpm build
 pnpm -r typecheck
 pnpm -r test
 pnpm lint:strings      # every user-facing string goes through the catalog with both registers; glyphs via sym()
 pnpm e2e               # Playwright against a real `farsight serve` on a fixture graph
 ```
+
+Per-PR checklist:
+
+- [ ] `pnpm format:check` and `pnpm lint` pass.
+- [ ] Affected checks in [docs/CI.md](docs/CI.md) pass; lint the exact Conventional Commit PR title.
+- [ ] A `style:` PR contains only formatter output and its area's temporary ignore-line removal; generated files,
+  pinned inputs and string catalogs stay excluded.
+- [ ] For a `style:` PR, `pnpm verify:format -- <merge-base> <head>` reports no changed programs or
+  added/deleted/renamed JS/TS files. Review comment warnings (`--strict-comments` makes them fail).
+
+Linked worktrees share one hooks directory: never add Git LFS hook names (`pre-push`, `post-checkout`, `post-commit`,
+`post-merge`) to `lefthook.yml`; keep `no_auto_install: true` so a commit cannot rewrite everyone's hooks.
+Never pop a `lefthook auto backup` stash entry. Run `pnpm install` in a new worktree before committing.
 
 ## Where things live
 
@@ -68,6 +91,10 @@ Initech; Ada Okafor, Ben Lindqvist, Pat Reviewer) and reserved names (`example.c
 `keychain:farsight/<provider>-<instance>`, never as a value in a file or an environment variable.
 
 ## Local config
+
+After pulling this change into an existing worktree, run `pnpm install --config.confirm-modules-purge=false` once.
+The `.npmrc` hoist settings require pnpm 9 to purge `node_modules`; in a non-TTY shell its confirmation can silently
+exit 0 without installing. The flag allows that purge and completes the install. CI's fresh install is unaffected.
 
 Local configuration stays on your disk and is gitignored; the repository carries a scrubbed example twin of each
 file. **Copy `X.example` to `X`, edit `X`, and never commit a value from it.**

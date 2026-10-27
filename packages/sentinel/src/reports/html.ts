@@ -9,14 +9,20 @@ import { inspectionText } from './inspection.js';
 import { COUNT_ORDER, countText, defineOf, wordOf, labelKey } from './words.js';
 
 export function esc(text: string): string {
-  return text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  return text
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 const anchor = (prefix: string, id: string) => `${prefix}-${id.replace(/[^A-Za-z0-9_-]/g, '-')}`;
 
 // Only directives a <meta> policy honours: frame-ancestors, report-uri and sandbox are ignored there and make the
 // browser log an error on every open, which a recipient would read as a broken file.
-const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; script-src 'none'; form-action 'none'; base-uri 'none'";
+const CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; script-src 'none'; form-action 'none'; base-uri 'none'";
 
 const STYLE = `
 :root{--ink:#14181f;--muted:#5b6473;--line:#d7dce4;--panel:#f5f7fa;--accent:#0b6e8a;--warn:#9a5b00}
@@ -36,25 +42,46 @@ ul.counts{padding-left:18px}table{border-collapse:collapse;width:100%}td,th{bord
 `;
 
 function placeHtml(doc: ReportEnvelope, p: FindingPlace): string {
-  const limits = p.limitationKeys.map(k => `<li>${esc(wordOf(doc, k, 'business'))} <span class="code">${esc(k)}</span></li>`).join('');
+  const limits = p.limitationKeys
+    .map((k) => `<li>${esc(wordOf(doc, k, 'business'))} <span class="code">${esc(k)}</span></li>`)
+    .join('');
   const rows = [
-    ...p.screens.map(s => `<li>Screen: ${esc(s.label.business)} <span class="code">${esc(s.label.code)}</span> — ${s.via === 'direct-use' ? 'uses it directly' : 'may be affected'}</li>`),
-    ...p.journeys.map(j => `<li>Journey: ${esc(j.label.business)} <span class="code">${esc(j.label.code)}</span></li>`),
-    ...p.personas.map(r => `<li>Person: ${esc(r.label.business)}${r.declared ? '' : ' (not declared)'}</li>`),
+    ...p.screens.map(
+      (s) =>
+        `<li>Screen: ${esc(s.label.business)} <span class="code">${esc(s.label.code)}</span> — ${s.via === 'direct-use' ? 'uses it directly' : 'may be affected'}</li>`,
+    ),
+    ...p.journeys.map(
+      (j) => `<li>Journey: ${esc(j.label.business)} <span class="code">${esc(j.label.code)}</span></li>`,
+    ),
+    ...p.personas.map((r) => `<li>Person: ${esc(r.label.business)}${r.declared ? '' : ' (not declared)'}</li>`),
   ].join('');
-  return `<dt>Placement</dt><dd>${esc(p.binding)}${rows ? `<ul>${rows}</ul>` : ''}${limits ? `<ul class="meta">${limits}</ul>` : ''}`
-    + `<div class="meta">${esc(countText(doc, p.counts.screens, 'business'))}; ${esc(countText(doc, p.counts.journeys, 'business'))}; ${esc(countText(doc, p.counts.personas, 'business'))}</div></dd>`;
+  return (
+    `<dt>Placement</dt><dd>${esc(p.binding)}${rows ? `<ul>${rows}</ul>` : ''}${limits ? `<ul class="meta">${limits}</ul>` : ''}` +
+    `<div class="meta">${esc(countText(doc, p.counts.screens, 'business'))}; ${esc(countText(doc, p.counts.journeys, 'business'))}; ${esc(countText(doc, p.counts.personas, 'business'))}</div></dd>`
+  );
 }
 
 function evidenceHtml(doc: ReportEnvelope, e: ReportEvidence): string {
-  const where = e.location ? `${esc(e.location.relativePath)}:${e.location.startLine}${e.location.endLine !== e.location.startLine ? `–${e.location.endLine}` : ''}` : 'location withheld';
-  if (e.state === 'withheld') return `<div class="withheld" id="${anchor('evidence', e.id)}">Evidence <span class="code">${esc(e.id)}</span> at <span class="code">${where}</span> is withheld: ${esc(wordOf(doc, e.reasonCode, 'business'))}</div>`;
+  const where = e.location
+    ? `${esc(e.location.relativePath)}:${e.location.startLine}${e.location.endLine !== e.location.startLine ? `–${e.location.endLine}` : ''}`
+    : 'location withheld';
+  if (e.state === 'withheld')
+    return `<div class="withheld" id="${anchor('evidence', e.id)}">Evidence <span class="code">${esc(e.id)}</span> at <span class="code">${where}</span> is withheld: ${esc(wordOf(doc, e.reasonCode, 'business'))}</div>`;
   return `<div id="${anchor('evidence', e.id)}"><div class="meta">Evidence <span class="code">${esc(e.id)}</span> at <span class="code">${where}</span></div><pre>${esc(e.excerpt)}</pre></div>`;
 }
 
 export function renderHtml(doc: ReportEnvelope): string {
-  const counts = COUNT_ORDER.map(k => doc.counts[k]).filter(c => !!c).map(c => { const b = countText(doc, c!, 'business'), k = countText(doc, c!, 'code'); return `<li>${esc(b)}${k !== b ? `<div class="code">${esc(k)}</div>` : ''}</li>`; }).join('');
-  const findings = doc.findings.map(f => `
+  const counts = COUNT_ORDER.map((k) => doc.counts[k])
+    .filter((c) => !!c)
+    .map((c) => {
+      const b = countText(doc, c!, 'business'),
+        k = countText(doc, c!, 'code');
+      return `<li>${esc(b)}${k !== b ? `<div class="code">${esc(k)}</div>` : ''}</li>`;
+    })
+    .join('');
+  const findings = doc.findings
+    .map(
+      (f) => `
 <section class="card" id="${anchor('finding', f.id)}">
 <h3><span class="sev sev-${esc(f.severity)}">${esc(wordOf(doc, `sentinel.report.severity.${f.severity}`, 'business'))}</span> ${esc(f.title.business)}</h3>
 <div class="code">${esc(f.title.code)}</div>
@@ -66,19 +93,36 @@ ${f.comparison ? `<dt>Against the baseline</dt><dd>${esc(wordOf(doc, labelKey(f.
 <dt>Observations</dt><dd class="code">${f.observationIds.map(esc).join(', ')}</dd>
 ${placeHtml(doc, f.place)}
 </dl>
-${f.evidence.map(e => evidenceHtml(doc, e)).join('\n')}
-</section>`).join('\n');
-  const historical = doc.historical ? `<h2 id="historical">Baseline findings not continued</h2>${doc.historical.length ? '' : '<p>Every baseline finding is continued by a current finding.</p>'}${doc.historical.map(h => `
+${f.evidence.map((e) => evidenceHtml(doc, e)).join('\n')}
+</section>`,
+    )
+    .join('\n');
+  const historical = doc.historical
+    ? `<h2 id="historical">Baseline findings not continued</h2>${doc.historical.length ? '' : '<p>Every baseline finding is continued by a current finding.</p>'}${doc.historical
+        .map(
+          (h) => `
 <section class="card" id="${anchor('historical', h.baselineFindingId)}">
 <h3><span class="sev sev-${esc(h.severity)}">${esc(wordOf(doc, `sentinel.report.severity.${h.severity}`, 'business'))}</span> ${esc(h.title.business)}</h3>
 <div class="code">${esc(h.title.code)}</div>
 <dl><dt>Outcome</dt><dd>${esc(wordOf(doc, labelKey(h.label), 'business'))} — ${esc(wordOf(doc, h.reasonCode, 'business'))}</dd>
-<dt>Rule family</dt><dd class="code">${esc(h.ruleFamilyId)}</dd>${placeHtml(doc, h.place)}</dl></section>`).join('\n')}` : '';
+<dt>Rule family</dt><dd class="code">${esc(h.ruleFamilyId)}</dd>${placeHtml(doc, h.place)}</dl></section>`,
+        )
+        .join('\n')}`
+    : '';
   const gaps = doc.gaps.length
-    ? `<table><thead><tr><th>Check</th><th>Status</th><th>Why</th></tr></thead><tbody>${doc.gaps.map(g => `<tr id="${anchor('gap', g.checkId)}"><td class="code">${esc(g.checkId)}</td><td>${esc(g.status)}</td><td>${esc(g.explanation.business)}<div class="code">${esc(g.explanation.code)}</div></td></tr>`).join('')}</tbody></table>`
-    : doc.completeness === 'complete' ? '<p>Every planned check covered its scope.</p>' : '<p>Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.</p>';
-  const toc = doc.findings.map(f => `<li><a href="#${anchor('finding', f.id)}">${esc(f.title.business)}</a></li>`).join('');
-  const definitions = (doc.definitions ?? []).map(d => `<tr id="${anchor('word', d.key)}"><td>${esc(d.text.business.replace('{n}', 'n').replace('{m}', 'm'))}<div class="code">${esc(d.key)}</div></td><td>${esc(defineOf(doc, d.key) ?? '')}</td></tr>`).join('');
+    ? `<table><thead><tr><th>Check</th><th>Status</th><th>Why</th></tr></thead><tbody>${doc.gaps.map((g) => `<tr id="${anchor('gap', g.checkId)}"><td class="code">${esc(g.checkId)}</td><td>${esc(g.status)}</td><td>${esc(g.explanation.business)}<div class="code">${esc(g.explanation.code)}</div></td></tr>`).join('')}</tbody></table>`
+    : doc.completeness === 'complete'
+      ? '<p>Every planned check covered its scope.</p>'
+      : '<p>Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.</p>';
+  const toc = doc.findings
+    .map((f) => `<li><a href="#${anchor('finding', f.id)}">${esc(f.title.business)}</a></li>`)
+    .join('');
+  const definitions = (doc.definitions ?? [])
+    .map(
+      (d) =>
+        `<tr id="${anchor('word', d.key)}"><td>${esc(d.text.business.replace('{n}', 'n').replace('{m}', 'm'))}<div class="code">${esc(d.key)}</div></td><td>${esc(defineOf(doc, d.key) ?? '')}</td></tr>`,
+    )
+    .join('');
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -102,9 +146,55 @@ ${f.evidence.map(e => evidenceHtml(doc, e)).join('\n')}
 <h2 id="findings">Findings</h2>
 ${doc.findings.length ? `<ul>${toc}</ul>${findings}` : '<p>No findings. Read the counts and gaps: no finding is not proof that nothing was missed.</p>'}
 ${historical}
-${(doc.decisionEvaluation||doc.decisions.some(d=>d.evaluator==='sentinel-decision-evaluation/2'))?'<h2 id="decisions">'+esc(wordOf(doc,'sentinel.decision.reportHeading','business'))+'</h2><p>'+esc(wordOf(doc,'sentinel.decision.sourceOnly','business'))+'</p>'+(doc.decisionEvaluation?'<p>'+esc(wordOf(doc,doc.decisionEvaluation.reasonCode,'business'))+'</p>':'')+'<ul>'+doc.decisions.filter(d=>d.evaluator).map(d=>'<li>'+esc(d.dispositionId)+': '+esc(wordOf(doc,d.reasonCode!,'business'))+' ('+esc(d.validity)+')'+(d.rationale!==null&&d.rationale!==undefined?' — '+esc(d.rationale):'')+'</li>').join('')+'</ul>':''}
-${doc.structuralPaths?.length?`<h2 id="structural-paths">${esc(wordOf(doc,'sentinel.paths.report.heading','business'))}</h2>${structuralText(doc).map(p=>`<section class="card"><h3>${esc(p.source)}</h3><ul>${p.lines.map(l=>`<li>${esc(l)}</li>`).join('')}</ul></section>`).join('')}`:''}
-${doc.inspections?.length ? `<h2 id="inspections">${esc(wordOf(doc,'sentinel.controls.reportHeading','business'))}</h2>${inspectionText(doc).map(i=>`<section class="card"><h3>${esc(i.source)}</h3><ul>${i.lines.map(l=>`<li>${esc(l)}</li>`).join('')}</ul></section>`).join('')}` : ''}
+${
+  doc.decisionEvaluation || doc.decisions.some((d) => d.evaluator === 'sentinel-decision-evaluation/2')
+    ? '<h2 id="decisions">' +
+      esc(wordOf(doc, 'sentinel.decision.reportHeading', 'business')) +
+      '</h2><p>' +
+      esc(wordOf(doc, 'sentinel.decision.sourceOnly', 'business')) +
+      '</p>' +
+      (doc.decisionEvaluation ? '<p>' + esc(wordOf(doc, doc.decisionEvaluation.reasonCode, 'business')) + '</p>' : '') +
+      '<ul>' +
+      doc.decisions
+        .filter((d) => d.evaluator)
+        .map(
+          (d) =>
+            '<li>' +
+            esc(d.dispositionId) +
+            ': ' +
+            esc(wordOf(doc, d.reasonCode!, 'business')) +
+            ' (' +
+            esc(d.validity) +
+            ')' +
+            (d.rationale !== null && d.rationale !== undefined ? ' — ' + esc(d.rationale) : '') +
+            '</li>',
+        )
+        .join('') +
+      '</ul>'
+    : ''
+}
+${
+  doc.structuralPaths?.length
+    ? `<h2 id="structural-paths">${esc(wordOf(doc, 'sentinel.paths.report.heading', 'business'))}</h2>${structuralText(
+        doc,
+      )
+        .map(
+          (p) =>
+            `<section class="card"><h3>${esc(p.source)}</h3><ul>${p.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></section>`,
+        )
+        .join('')}`
+    : ''
+}
+${
+  doc.inspections?.length
+    ? `<h2 id="inspections">${esc(wordOf(doc, 'sentinel.controls.reportHeading', 'business'))}</h2>${inspectionText(doc)
+        .map(
+          (i) =>
+            `<section class="card"><h3>${esc(i.source)}</h3><ul>${i.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></section>`,
+        )
+        .join('')}`
+    : ''
+}
 <h2 id="gaps">Gaps in the checks</h2>
 ${gaps}
 <h2 id="words">Words used in this report</h2>

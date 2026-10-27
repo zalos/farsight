@@ -1,19 +1,39 @@
 // Trusted policy (PR 06): the owner's settings, the repository's requests, the effective policy that results, the
 // owner's adoption of a settings file, the human receipt that confirms one exact action, and the admission record
 // with its three ANDed verdicts. The repository requests; only adopted settings grant.
-import type { BoundedText, CatalogKey, Count, DecimalAmount, Digest, Id, ScopeId, ShortText, Timestamp } from './common.js';
+import type {
+  BoundedText,
+  CatalogKey,
+  Count,
+  DecimalAmount,
+  Digest,
+  Id,
+  ScopeId,
+  ShortText,
+  Timestamp,
+} from './common.js';
 import type { DecisionChannel } from './disposition.js';
 import type { RuleCapability, RuleFamilyId, Severity } from './rules.js';
 import type { ReviewModelsSettings } from './review-providers.js';
 
 /** Every action the Sentinel gate decides. */
 export type SentinelAction =
-  | 'run.start' | 'capture.source' | 'disposition.propose' | 'disposition.approve' | 'rule.promote'
-  | 'tool.acquire' | 'paid.admit' | 'disclosure.send' | 'settings.adopt' | 'evidence.import' | 'evidence.abandon'
+  | 'run.start'
+  | 'capture.source'
+  | 'disposition.propose'
+  | 'disposition.approve'
+  | 'rule.promote'
+  | 'tool.acquire'
+  | 'paid.admit'
+  | 'disclosure.send'
+  | 'settings.adopt'
+  | 'evidence.import'
+  | 'evidence.abandon'
   /** Stop starting new work in a run; work in flight may finish. A write: decided like any other action. */
   | 'run.pause'
   /** Stop a run's workers; the ledger then refuses its publications. */
-  | 'run.cancel' | 'context.pin';
+  | 'run.cancel'
+  | 'context.pin';
 
 /** What an admitted action may do beyond reading captured artifacts. */
 export type ActionEffect = 'local-artifacts' | 'source-disclosure' | 'paid-inference' | 'network' | 'tool-execution';
@@ -292,9 +312,19 @@ export interface EffectivePolicyEnvelope {
   thresholds: PolicyThresholds;
   agentActions: 'confirm' | 'allow';
   /** @maxItems 64 */
-  grants: { actions: SentinelAction[]; principals: Principal[]; confirm: 'always' | 'agent' | 'never' | 'default'; scoped: boolean }[];
+  grants: {
+    actions: SentinelAction[];
+    principals: Principal[];
+    confirm: 'always' | 'agent' | 'never' | 'default';
+    scoped: boolean;
+  }[];
   /** @maxItems 16 */
-  providers: { id: Id; kind: 'ollama' | 'openai-compatible' | 'claude-cli' | 'copilot-cli'; disclosure: 'local-only' | 'hosted'; credential: 'keychain' | 'none' }[];
+  providers: {
+    id: Id;
+    kind: 'ollama' | 'openai-compatible' | 'claude-cli' | 'copilot-cli';
+    disclosure: 'local-only' | 'hosted';
+    credential: 'keychain' | 'none';
+  }[];
   /** @maxItems 4096 */
   refused: RefusedRequest[];
 }

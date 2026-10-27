@@ -1,4 +1,14 @@
-import type { ArtifactId, CatalogKey, Count, DecimalAmount, Digest, Id, Ordinal, Timestamp, WorkRef } from './common.js';
+import type {
+  ArtifactId,
+  CatalogKey,
+  Count,
+  DecimalAmount,
+  Digest,
+  Id,
+  Ordinal,
+  Timestamp,
+  WorkRef,
+} from './common.js';
 
 export type AttemptState = 'running' | 'succeeded' | 'failed' | 'interrupted' | 'canceled' | 'canceled-after-spend';
 
@@ -6,7 +16,8 @@ export type AttemptState = 'running' | 'succeeded' | 'failed' | 'interrupted' | 
 export type UsageCertainty = 'confirmed' | 'unknown' | 'not-applicable';
 
 /** How a worker's identity is known. Host-reported identity is not provider attestation. */
-export type IdentitySource = 'provider-response' | 'local-weight-digest' | 'host-reported' | 'self-reported' | 'unknown';
+export type IdentitySource =
+  'provider-response' | 'local-weight-digest' | 'host-reported' | 'self-reported' | 'unknown';
 
 /** @discriminator kind */
 export type AttemptWorker =

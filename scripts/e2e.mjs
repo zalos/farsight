@@ -25,24 +25,39 @@ if (!existsSync(cli)) {
 }
 
 const playwright = createRequire(join(root, 'package.json')).resolve('@playwright/test/cli');
-const run = spawnSync(process.execPath, [playwright, 'test', '-c', join(root, 'e2e', 'playwright.config.ts'), ...process.argv.slice(2)], {
-  cwd: root, stdio: 'inherit',
-});
+const run = spawnSync(
+  process.execPath,
+  [playwright, 'test', '-c', join(root, 'e2e', 'playwright.config.ts'), ...process.argv.slice(2)],
+  {
+    cwd: root,
+    stdio: 'inherit',
+  },
+);
 
 const results = join(root, 'e2e', 'test-results', 'results.json');
 if (existsSync(results)) {
-  const digest = spawnSync(process.execPath, [cli, 'digest', '--repo', 'farsight', root], { cwd: root, encoding: 'utf8' });
+  const digest = spawnSync(process.execPath, [cli, 'digest', '--repo', 'farsight', root], {
+    cwd: root,
+    encoding: 'utf8',
+  });
   const sourceDigest = digest.stdout.trim();
   if (digest.status === 0 && /^[0-9a-f]{6,}$/.test(sourceDigest)) {
     const doc = JSON.parse(readFileSync(results, 'utf8'));
     // the commit beside the digest: a later mismatch on the same commit is the working tree, not a new commit
     const head = spawnSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
     const commit = head.status === 0 ? head.stdout.trim() : '';
-    doc.farsight = { sourceDigest, stampedAt: new Date().toISOString(), repo: 'farsight', ...(commit ? { commit } : {}) };
+    doc.farsight = {
+      sourceDigest,
+      stampedAt: new Date().toISOString(),
+      repo: 'farsight',
+      ...(commit ? { commit } : {}),
+    };
     writeFileSync(results, JSON.stringify(doc, null, 2));
     console.log(`e2e report stamped with content digest ${sourceDigest} → ${results}`);
   } else {
-    console.error(`could not compute the content digest — the report stays unstamped (freshness: unknown)\n${digest.stderr}`);
+    console.error(
+      `could not compute the content digest — the report stays unstamped (freshness: unknown)\n${digest.stderr}`,
+    );
   }
 }
 process.exit(run.status ?? 1);

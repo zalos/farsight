@@ -1,4 +1,9 @@
-import { cgroupMemoryFailure, type CgroupMemoryEvidence, type CgroupMemoryWatch, type MemoryObservation } from './cgroup-memory.js';
+import {
+  cgroupMemoryFailure,
+  type CgroupMemoryEvidence,
+  type CgroupMemoryWatch,
+  type MemoryObservation,
+} from './cgroup-memory.js';
 import { BUILTIN_WORKERS } from './builtin-workers.js';
 // The supervisor runs one attempt of one work revision under the current store owner, and returns a checked
 // outcome. It never publishes: PR 08's scheduler records the outcome in the ledger.
@@ -23,7 +28,19 @@ import { BUILTIN_WORKERS } from './builtin-workers.js';
 // or framing error, an output or stdout budget, or the worker exiting. Every path stops the worker, removes its
 // container by exact identity and confirms the removal; the owner's close path does the same synchronously.
 import { createHash, randomUUID } from 'node:crypto';
-import { chmodSync, closeSync, constants, copyFileSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, rmSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  constants,
+  copyFileSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readSync,
+  realpathSync,
+  rmSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import type { ArtifactId, Digest, Id, ScopeId, WorkRef } from '../contracts/common.js';
 import type { AttemptWorker } from '../contracts/attempt.js';
@@ -36,7 +53,15 @@ import { syncDirectory } from './durability.js';
 import type { OwnedResource } from '../store/owner.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError, isExecutionError, type ExecutionErrorCode } from './errors.js';
-import { ContainerBackend, containerUser, intentDetail, ownerNonce, type BackendFacts, type CleanupState, type ImagePin } from './isolation.js';
+import {
+  ContainerBackend,
+  containerUser,
+  intentDetail,
+  ownerNonce,
+  type BackendFacts,
+  type CleanupState,
+  type ImagePin,
+} from './isolation.js';
 import { BoundedCapture, spawnWorker, type WorkerProcess } from './processes.js';
 import { encodeFrame, FrameDecoder, WorkerSession } from './protocol.js';
 import { effectiveLimits, moduleDigestOf, type AdapterRegistry, type TrustedAdapter } from './registry.js';
@@ -170,21 +195,28 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   owner.assertHeld();
   const adapter = registry.get(request.adapterId);
   // A bootstrap operation is the coordinator's own work over the store; nothing is started for it.
-  if (adapter.kind === 'operation') throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'an operation is not a worker' });
+  if (adapter.kind === 'operation')
+    throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'an operation is not a worker' });
   const hasJob = Object.hasOwn(request, 'job');
   const job = hasJob ? request.job : undefined;
   if (hasJob && (adapter.kind !== 'built-in' || !Object.hasOwn(BUILTIN_WORKERS, adapter.id))) {
-    throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'a job role requires a closed built-in worker' });
+    throw new ExecutionError('sentinel.execution.adapterInvalid', {
+      reason: 'a job role requires a closed built-in worker',
+    });
   }
-  if (hasJob && (typeof job !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(job) || !request.inputs.some(input => input.id === job))) {
+  if (
+    hasJob &&
+    (typeof job !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(job) || !request.inputs.some((input) => input.id === job))
+  ) {
     throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'the job is not a sealed input' });
   }
   if (adapter.kind === 'external' && !request.backend) {
     // No backend means no isolation, and there is no host fallback.
     throw new ExecutionError('sentinel.execution.isolationUnavailable', { reason: 'no container backend' });
   }
-  const inputs = [...new Set(request.inputs.map(i => i.id))];
-  if (inputs.length !== request.inputs.length) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'duplicate input' });
+  const inputs = [...new Set(request.inputs.map((i) => i.id))];
+  if (inputs.length !== request.inputs.length)
+    throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'duplicate input' });
   const workDir = prepareWorkDir(request.scratchRoot, request.attemptId);
   const folders = { input: identityOfDir(join(workDir, 'input')), output: identityOfDir(join(workDir, 'output')) };
   const inputDir = join(workDir, 'input');
@@ -201,30 +233,69 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   if (adapter.kind === 'built-in' && moduleDigestOf(adapter.module) !== adapter.moduleDigest) {
     throw new ExecutionError('sentinel.execution.adapterIdentityMismatch', { adapter: adapter.id });
   }
-  const builtInArgs = adapter.kind === 'built-in' ? [process.execPath, '--import', launchGateUrl(), adapter.module, inputDir, outputDir, tokenArgument(token)] : [];
+  const builtInArgs =
+    adapter.kind === 'built-in'
+      ? [process.execPath, '--import', launchGateUrl(), adapter.module, inputDir, outputDir, tokenArgument(token)]
+      : [];
   const argv = adapter.kind === 'external' ? [...adapter.command] : builtInArgs;
-  const environmentNames = adapter.kind === 'external'
-    ? ['HOME', 'SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST']
-    : ['SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST'];
+  const environmentNames =
+    adapter.kind === 'external'
+      ? ['HOME', 'SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST']
+      : ['SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST'];
   const record: InvocationRecord = {
-    format: 'sentinel-invocation/draft-1', store: owner.storeId, attemptId: request.attemptId, work: { ...request.work },
-    coordinatorEpoch: owner.epoch, adapter: { id: adapter.id, version: adapter.version, digest: adapter.digest },
-    isolation: adapter.isolation, ...(image ? { image: { reference: image.reference, id: image.id, architecture: image.architecture } } : {}),
-    argv, environmentNames, limits, inputFingerprint, inputs: [...inputs].sort(), deadlineAt,
+    format: 'sentinel-invocation/draft-1',
+    store: owner.storeId,
+    attemptId: request.attemptId,
+    work: { ...request.work },
+    coordinatorEpoch: owner.epoch,
+    adapter: { id: adapter.id, version: adapter.version, digest: adapter.digest },
+    isolation: adapter.isolation,
+    ...(image ? { image: { reference: image.reference, id: image.id, architecture: image.architecture } } : {}),
+    argv,
+    environmentNames,
+    limits,
+    inputFingerprint,
+    inputs: [...inputs].sort(),
+    deadlineAt,
     ...(hasJob ? { job: job! } : {}),
-    ...(request.assignment ? { assignment: { checks: [...request.assignment.checks], scopes: [...request.assignment.scopes],
-      ...(request.assignment.inputScopes ? { inputScopes: request.assignment.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) } : {}) } } : {}),
+    ...(request.assignment
+      ? {
+          assignment: {
+            checks: [...request.assignment.checks],
+            scopes: [...request.assignment.scopes],
+            ...(request.assignment.inputScopes
+              ? { inputScopes: request.assignment.inputScopes.map((x) => ({ input: x.input, scopes: [...x.scopes] })) }
+              : {}),
+          },
+        }
+      : {}),
   };
   const invocationDigest = sha256(canonicalJsonBytes(record));
   const session = new WorkerSession({
-    attemptId: request.attemptId, work: request.work, coordinatorEpoch: owner.epoch, adapterId: adapter.id,
-    adapterDigest: adapter.digest, inputFingerprint, inputs, deadlineAt, ...(hasJob ? { job: job! } : {}), ...(request.assignment ? { assignment: request.assignment } : {}),
+    attemptId: request.attemptId,
+    work: request.work,
+    coordinatorEpoch: owner.epoch,
+    adapterId: adapter.id,
+    adapterDigest: adapter.digest,
+    inputFingerprint,
+    inputs,
+    deadlineAt,
+    ...(hasJob ? { job: job! } : {}),
+    ...(request.assignment ? { assignment: request.assignment } : {}),
   });
   const outcome: WorkerOutcome = {
-    state: 'failed', attemptId: request.attemptId, work: { ...request.work }, coordinatorEpoch: owner.epoch,
-    adapter: { id: adapter.id, digest: adapter.digest }, invocation: { digest: invocationDigest, record },
-    outputs: [], diagnostics: { bytes: 0, truncated: false, text: '' }, protocol: { frames: 0, bytes: 0 },
-    cleanup: 'not-applicable', workDir, ...(request.backend ? { backend: request.backend.facts } : {}),
+    state: 'failed',
+    attemptId: request.attemptId,
+    work: { ...request.work },
+    coordinatorEpoch: owner.epoch,
+    adapter: { id: adapter.id, digest: adapter.digest },
+    invocation: { digest: invocationDigest, record },
+    outputs: [],
+    diagnostics: { bytes: 0, truncated: false, text: '' },
+    protocol: { frames: 0, bytes: 0 },
+    cleanup: 'not-applicable',
+    workDir,
+    ...(request.backend ? { backend: request.backend.facts } : {}),
   };
 
   // Start the worker: a verified container, or a built-in child with no inherited environment. The cleanup guard
@@ -233,29 +304,45 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   // guard throws with the container and its owner nonce, and the owner's close reports it rather than staying
   // silent; the labels let recovery (PR 08) find it later by store, attempt and epoch.
   const nonce = ownerNonce();
-  const labels = { owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch, invocation: invocationDigest };
+  const labels = {
+    owner: nonce,
+    store: owner.storeId,
+    attempt: request.attemptId,
+    epoch: owner.epoch,
+    invocation: invocationDigest,
+  };
   let containerId: string | undefined;
   let memoryWatch: CgroupMemoryWatch | undefined, memoryEvidence: Readonly<CgroupMemoryEvidence> | undefined;
   const memorySetup = new AbortController();
   const finishMemory = () => {
     memorySetup.abort();
-    if (memoryWatch) { memoryEvidence = memoryWatch.finish(); outcome.memoryObservation = memoryWatch.observation(); }
+    if (memoryWatch) {
+      memoryEvidence = memoryWatch.finish();
+      outcome.memoryObservation = memoryWatch.observation();
+    }
   };
   let proc: WorkerProcess;
   let identity: WorkerIdentity | undefined;
-  const guard: { ownerClosed: boolean; createPending: boolean; id?: string; proc?: WorkerProcess } = { ownerClosed: false, createPending: false };
+  const guard: { ownerClosed: boolean; createPending: boolean; id?: string; proc?: WorkerProcess } = {
+    ownerClosed: false,
+    createPending: false,
+  };
   const backend = request.backend;
   const unregister = owner.registerResource({
     name: `worker ${request.attemptId}${backend ? ` (container owner ${nonce})` : ''}`,
     close: () => {
       guard.ownerClosed = true;
-      memorySetup.abort(); memoryWatch?.close();
+      memorySetup.abort();
+      memoryWatch?.close();
       guard.proc?.kill();
       if (!backend) return;
       const direct = guard.id ? backend.removeSync(guard.id, labels) : 'already-absent';
       const swept = backend.reconcileOwnedSync(labels);
       if (direct === 'cleanup-failed' || swept.uncertain.length) {
-        throw new ExecutionError('sentinel.execution.cleanupFailed', { ...intentDetail({ labels }), container: guard.id ?? swept.uncertain.join(', ') });
+        throw new ExecutionError('sentinel.execution.cleanupFailed', {
+          ...intentDetail({ labels }),
+          container: guard.id ?? swept.uncertain.join(', '),
+        });
       }
       // A create still in flight may commit after this sweep; an empty sweep proves nothing then.
       if (guard.createPending && !guard.id && swept.removed.length === 0) {
@@ -265,7 +352,12 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   });
   const releaseStopped = () => {
     // No outcome returns a refused pre-start folder to the coordinator. A fenced owner leaves recovery in charge.
-    try { owner.assertHeld(); releaseWorkDir(workDir); } catch { /* recovery owns a lost epoch or failed cleanup */ }
+    try {
+      owner.assertHeld();
+      releaseWorkDir(workDir);
+    } catch {
+      /* recovery owns a lost epoch or failed cleanup */
+    }
   };
   if (adapter.kind === 'external') {
     const b = backend!;
@@ -274,34 +366,65 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       request.intents?.record(intent);
       request.hooks?.at?.('before-spawn');
       guard.createPending = true;
-      containerId = await b.create({
-        image: image!, command: adapter.command, limits, inputDir, outputDir, adapter: { id: adapter.id, digest: adapter.digest }, user: containerUser(), labels,
-      }, request.signal).finally(() => { guard.createPending = false; });
+      containerId = await b
+        .create(
+          {
+            image: image!,
+            command: adapter.command,
+            limits,
+            inputDir,
+            outputDir,
+            adapter: { id: adapter.id, digest: adapter.digest },
+            user: containerUser(),
+            labels,
+          },
+          request.signal,
+        )
+        .finally(() => {
+          guard.createPending = false;
+        });
       guard.id = containerId;
       if (guard.ownerClosed) {
         // The owner closed while the create was in flight; the guard swept what existed then. Remove this one too.
         const late = await b.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
-        if (late === 'cleanup-failed') throw new ExecutionError('sentinel.execution.cleanupFailed', { container: containerId, owner: nonce });
+        if (late === 'cleanup-failed')
+          throw new ExecutionError('sentinel.execution.cleanupFailed', { container: containerId, owner: nonce });
         owner.assertHeld();
       }
       // The mounts were read back by path; the paths must still be the folders this attempt created.
       if (!sameIdentity(inputDir, folders.input) || !sameIdentity(outputDir, folders.output)) {
         const gone = await b.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
-        throw new ExecutionError(gone === 'cleanup-failed' ? 'sentinel.execution.cleanupFailed' : 'sentinel.execution.isolationMismatch',
-          gone === 'cleanup-failed' ? { container: containerId, owner: nonce } : { setting: 'mount identity' });
+        throw new ExecutionError(
+          gone === 'cleanup-failed' ? 'sentinel.execution.cleanupFailed' : 'sentinel.execution.isolationMismatch',
+          gone === 'cleanup-failed' ? { container: containerId, owner: nonce } : { setting: 'mount identity' },
+        );
       }
       outcome.container = { id: containerId, image: image! };
-      outcome.worker = { kind: 'owned-container', containerId, ownershipLabels: { store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch } };
+      outcome.worker = {
+        kind: 'owned-container',
+        containerId,
+        ownershipLabels: { store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch },
+      };
       request.hooks?.at?.('after-spawn');
       await request.onWorker?.(outcome.worker, outcome.invocation);
     } catch (error) {
       // A container that exists is removed before the error leaves; its intent is settled only when that is confirmed.
       if (containerId) {
         const gone = await b.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
-        if (gone !== 'cleanup-failed') { request.intents?.settle(intent); releaseStopped(); }
-      } else if (!isExecutionError(error, 'sentinel.execution.reconciliationPending') && !isExecutionError(error, 'sentinel.execution.cleanupFailed')) {
+        if (gone !== 'cleanup-failed') {
+          request.intents?.settle(intent);
+          releaseStopped();
+        }
+      } else if (
+        !isExecutionError(error, 'sentinel.execution.reconciliationPending') &&
+        !isExecutionError(error, 'sentinel.execution.cleanupFailed')
+      ) {
         // The create was refused or reconciled (found and removed); nothing remains under this intent.
-        if (isExecutionError(error, 'sentinel.execution.commandFailed') || isExecutionError(error, 'sentinel.execution.canceled')) request.intents?.settle(intent);
+        if (
+          isExecutionError(error, 'sentinel.execution.commandFailed') ||
+          isExecutionError(error, 'sentinel.execution.canceled')
+        )
+          request.intents?.settle(intent);
       }
       unregister();
       throw error;
@@ -316,24 +439,41 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     request.hooks?.at?.('before-spawn');
     // A built-in worker inherits nothing: its environment is exactly these four names.
     // The launch gate runs first and loads the adapter only once it reads its authorization (launch-gate.ts).
-    proc = spawnWorker(process.execPath, builtInArgs.slice(1), { cwd: workDir, env: {
-      SENTINEL_INPUT: inputDir, SENTINEL_OUTPUT: outputDir, SENTINEL_ADAPTER_ID: adapter.id, SENTINEL_ADAPTER_DIGEST: adapter.digest,
-    } });
+    proc = spawnWorker(process.execPath, builtInArgs.slice(1), {
+      cwd: workDir,
+      env: {
+        SENTINEL_INPUT: inputDir,
+        SENTINEL_OUTPUT: outputDir,
+        SENTINEL_ADAPTER_ID: adapter.id,
+        SENTINEL_ADAPTER_DIGEST: adapter.digest,
+      },
+    });
     // The owner's guard holds the process from the instant it exists, so closing the store at any later moment
     // (including from the callback below) stops exactly this process.
     guard.proc = proc;
     const pid = proc.child.pid;
     if (pid) outcome.worker = { kind: 'owned-child', pid, processStartedAt: proc.startedAt.toISOString() };
     try {
-      if (!outcome.worker || !pid) throw new ExecutionError('sentinel.execution.workerExited', { reason: 'no process id' });
+      if (!outcome.worker || !pid)
+        throw new ExecutionError('sentinel.execution.workerExited', { reason: 'no process id' });
       // Now with its process id and, on Linux, its exact kernel start; still before the attempt is recorded.
-      identity = { attempt: request.attemptId, store: owner.storeId, epoch: owner.epoch, pid, token, kernelStart: kernelStartOf(pid) ?? '' };
+      identity = {
+        attempt: request.attemptId,
+        store: owner.storeId,
+        epoch: owner.epoch,
+        pid,
+        token,
+        kernelStart: kernelStartOf(pid) ?? '',
+      };
       request.workers?.record(identity);
       // Durable with its pid, so recovery can find and verify it: only now may it load the adapter.
       proc.child.stdin.write(launchAuthorization(token));
       request.hooks?.at?.('after-spawn');
       await request.onWorker?.(outcome.worker, outcome.invocation);
-      if (guard.ownerClosed) throw new ExecutionError('sentinel.execution.canceled', { reason: 'the store closed while the attempt was being recorded' });
+      if (guard.ownerClosed)
+        throw new ExecutionError('sentinel.execution.canceled', {
+          reason: 'the store closed while the attempt was being recorded',
+        });
     } catch (error) {
       proc.kill();
       await proc.exited;
@@ -347,18 +487,43 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   guard.proc = proc;
 
   try {
-    const memoryGate = containerId && backend?.supportsLocalMemoryWitness ? {
-      prepare: async () => {
-        const candidate = await backend.prepareMemoryWitness(containerId!, labels, limits.memoryBytes, memorySetup.signal);
-        if (memorySetup.signal.aborted || guard.ownerClosed) { candidate?.close(); return; }
-        memoryWatch = candidate;
+    const memoryGate =
+      containerId && backend?.supportsLocalMemoryWitness
+        ? {
+            prepare: async () => {
+              const candidate = await backend.prepareMemoryWitness(
+                containerId!,
+                labels,
+                limits.memoryBytes,
+                memorySetup.signal,
+              );
+              if (memorySetup.signal.aborted || guard.ownerClosed) {
+                candidate?.close();
+                return;
+              }
+              memoryWatch = candidate;
+            },
+            start: () => {
+              owner.assertHeld();
+              if (guard.ownerClosed || request.signal?.aborted) throw new Error('owner-or-signal-lost');
+              memoryWatch?.arm();
+            },
+          }
+        : undefined;
+    await drive(
+      proc,
+      session,
+      limits,
+      outputDir,
+      outcome,
+      request.signal,
+      async () => {
+        if (containerId) outcome.stopConfirmed = await request.backend!.kill(containerId, labels).catch(() => false);
+        proc.kill();
       },
-      start: () => { owner.assertHeld(); if (guard.ownerClosed || request.signal?.aborted) throw new Error('owner-or-signal-lost'); memoryWatch?.arm(); },
-    } : undefined;
-    await drive(proc, session, limits, outputDir, outcome, request.signal, async () => {
-      if (containerId) outcome.stopConfirmed = await request.backend!.kill(containerId, labels).catch(() => false);
-      proc.kill();
-    }, memoryGate, finishMemory);
+      memoryGate,
+      finishMemory,
+    );
   } finally {
     finishMemory();
     proc.kill();
@@ -370,11 +535,30 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       const backend = request.backend!;
       const state = await backend.state(containerId, labels, request.signal).catch(() => null);
       if (state) outcome.container!.state = { exitCode: state.exitCode, oomKilled: state.oomKilled };
-      if (state?.oomKilled && outcome.state === 'failed') setFailure(outcome, 'sentinel.execution.resourceExceeded', { resource: 'memory', witness: 'runtime', detailKey: 'sentinel.execution.memoryWitness.runtime' }, true);
+      if (state?.oomKilled && outcome.state === 'failed')
+        setFailure(
+          outcome,
+          'sentinel.execution.resourceExceeded',
+          { resource: 'memory', witness: 'runtime', detailKey: 'sentinel.execution.memoryWitness.runtime' },
+          true,
+        );
       // A kernel witness never rewrites daemon state, promotes success, or takes precedence over another failure.
-      let held = false; try { owner.assertHeld(); held = !guard.ownerClosed; } catch { /* owner failure wins */ }
-      const kernelFailure = cgroupMemoryFailure(memoryEvidence, { ownerHeld: held, aborted: request.signal?.aborted === true,
-        state: outcome.state, code: outcome.code, containerExit: state?.exitCode, clientExit: exit.exitCode, clientSignal: exit.exitSignal });
+      let held = false;
+      try {
+        owner.assertHeld();
+        held = !guard.ownerClosed;
+      } catch {
+        /* owner failure wins */
+      }
+      const kernelFailure = cgroupMemoryFailure(memoryEvidence, {
+        ownerHeld: held,
+        aborted: request.signal?.aborted === true,
+        state: outcome.state,
+        code: outcome.code,
+        containerExit: state?.exitCode,
+        clientExit: exit.exitCode,
+        clientSignal: exit.exitSignal,
+      });
       if (kernelFailure) setFailure(outcome, 'sentinel.execution.resourceExceeded', { ...kernelFailure }, true);
       outcome.cleanup = await backend.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
       if (outcome.cleanup !== 'cleanup-failed') request.intents?.settle(intentDetail({ labels }));
@@ -383,7 +567,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   }
 
   // The final daemon observation/cleanup is awaited too: cancellation there voids a provisional result.
-  if (outcome.state === 'succeeded' && request.signal?.aborted) setFailure(outcome, 'sentinel.execution.canceled', {}, true);
+  if (outcome.state === 'succeeded' && request.signal?.aborted)
+    setFailure(outcome, 'sentinel.execution.canceled', {}, true);
 
   // Exit facts first: a worker that delivered a result must also have exited cleanly.
   if (outcome.state === 'succeeded') {
@@ -392,38 +577,67 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     if (exitCode !== 0) setFailure(outcome, 'sentinel.execution.workerExited', { exitCode: exitCode ?? -1 }, true);
   }
   if (outcome.state === 'succeeded') {
-    try { outcome.outputs = verifyOutputs(outputDir, outcome.result!, limits.outputBytes); }
-    catch (error) {
+    try {
+      outcome.outputs = verifyOutputs(outputDir, outcome.result!, limits.outputBytes);
+    } catch (error) {
       if (error instanceof ExecutionError) setFailure(outcome, error.code, error.detail, true);
       else setFailure(outcome, 'sentinel.execution.outputMismatch', { reason: 'output unreadable' }, true);
     }
   }
-  if (outcome.cleanup === 'cleanup-failed') setFailure(outcome, 'sentinel.execution.cleanupFailed', { container: containerId ?? '' }, true);
+  if (outcome.cleanup === 'cleanup-failed')
+    setFailure(outcome, 'sentinel.execution.cleanupFailed', { container: containerId ?? '' }, true);
   if (outcome.state === 'succeeded') {
-    try { owner.assertHeld(); } catch (error) { setFailure(outcome, 'sentinel.execution.protocolViolation', { rule: 'owner-lost', cause: (error as { code?: string }).code ?? 'unknown' }, true); }
+    try {
+      owner.assertHeld();
+    } catch (error) {
+      setFailure(
+        outcome,
+        'sentinel.execution.protocolViolation',
+        { rule: 'owner-lost', cause: (error as { code?: string }).code ?? 'unknown' },
+        true,
+      );
+    }
   }
   if (outcome.state !== 'succeeded') delete outcome.result;
   return outcome;
 }
 
-
-function setFailure(outcome: WorkerOutcome, code: ExecutionErrorCode, detail: Record<string, unknown>, override = false): void {
+function setFailure(
+  outcome: WorkerOutcome,
+  code: ExecutionErrorCode,
+  detail: Record<string, unknown>,
+  override = false,
+): void {
   if (outcome.code && !override) return;
-  outcome.state = code === 'sentinel.execution.canceled' ? 'canceled' : code === 'sentinel.execution.deadlineExceeded' ? 'timed-out' : 'failed';
+  outcome.state =
+    code === 'sentinel.execution.canceled'
+      ? 'canceled'
+      : code === 'sentinel.execution.deadlineExceeded'
+        ? 'timed-out'
+        : 'failed';
   outcome.code = code;
   outcome.detail = Object.freeze({ ...detail });
   outcome.outputs = [];
 }
 
 /** Run the protocol until the worker ends one way or another. Never throws for worker behaviour. */
-function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapter['limits'], outputDir: string,
-  outcome: WorkerOutcome, signal: AbortSignal | undefined, stop: () => Promise<void>,
-  startGate?: { prepare(): Promise<void>; start(): void }, finishObservation: () => void = () => {}): Promise<void> {
-  return new Promise<void>(resolve => {
+function drive(
+  proc: WorkerProcess,
+  session: WorkerSession,
+  limits: TrustedAdapter['limits'],
+  outputDir: string,
+  outcome: WorkerOutcome,
+  signal: AbortSignal | undefined,
+  stop: () => Promise<void>,
+  startGate?: { prepare(): Promise<void>; start(): void },
+  finishObservation: () => void = () => {},
+): Promise<void> {
+  return new Promise<void>((resolve) => {
     const decoder = new FrameDecoder({ maxFrameBytes: limits.maxFrameBytes, maxTotalBytes: limits.stdoutBytes });
     const stderr = new BoundedCapture(limits.stderrBytes);
     const timers: NodeJS.Timeout[] = [];
-    let settled = false, preparingStart = false;
+    let settled = false,
+      preparingStart = false;
     const finish = (code?: ExecutionErrorCode, detail: Record<string, unknown> = {}) => {
       if (settled) return;
       settled = true;
@@ -434,11 +648,20 @@ function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapt
       if (code) setFailure(outcome, code, detail);
       outcome.diagnostics = { bytes: stderr.bytes, truncated: stderr.truncated, text: stderr.text() };
       outcome.protocol = { frames: decoder.frames, bytes: decoder.bytes };
-      try { proc.child.stdin.end(); } catch { /* closed */ }
-      if (code) void stop().finally(resolve); else resolve();
+      try {
+        proc.child.stdin.end();
+      } catch {
+        /* closed */
+      }
+      if (code) void stop().finally(resolve);
+      else resolve();
     };
     const send = (m: ProtocolMessage) => {
-      try { proc.child.stdin.write(encodeFrame(m, limits.maxFrameBytes)); } catch { /* the worker closed stdin; exit decides */ }
+      try {
+        proc.child.stdin.write(encodeFrame(m, limits.maxFrameBytes));
+      } catch {
+        /* the worker closed stdin; exit decides */
+      }
     };
     // Each stream has an emitted-byte ceiling, and the two together have the combined one: past any of them the
     // worker is stopped. Only a bounded copy of stderr is kept for diagnostics.
@@ -449,7 +672,8 @@ function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapt
       if (settled) return;
       stderr.push(b);
       outcome.diagnostics = { bytes: stderr.bytes, truncated: stderr.truncated, text: '' };
-      if (stderr.bytes > limits.stderrBytes || overCombined()) finish('sentinel.execution.stderrBudget', { bytes: limits.stderrBytes, combined: combinedLimit });
+      if (stderr.bytes > limits.stderrBytes || overCombined())
+        finish('sentinel.execution.stderrBudget', { bytes: limits.stderrBytes, combined: combinedLimit });
     });
     proc.child.stdout.on('data', (b: Buffer) => {
       if (settled) return;
@@ -457,25 +681,41 @@ function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapt
       if (overCombined()) return finish('sentinel.execution.stdoutBudget', { combined: combinedLimit });
       if (preparingStart) return finish('sentinel.execution.protocolViolation', { rule: 'worker-data-before-start' });
       let messages: ProtocolMessage[];
-      try { messages = decoder.push(b); } catch (e) { return finish((e as ExecutionError).code, (e as ExecutionError).detail); }
+      try {
+        messages = decoder.push(b);
+      } catch (e) {
+        return finish((e as ExecutionError).code, (e as ExecutionError).detail);
+      }
       for (const m of messages) {
         if (settled) return;
         if (preparingStart) return finish('sentinel.execution.protocolViolation', { rule: 'worker-data-before-start' });
         let step;
-        try { step = session.receive(m); } catch (e) { return finish((e as ExecutionError).code, (e as ExecutionError).detail); }
-        if (startGate && step.send.some(out => out.type === 'start')) {
+        try {
+          step = session.receive(m);
+        } catch (e) {
+          return finish((e as ExecutionError).code, (e as ExecutionError).detail);
+        }
+        if (startGate && step.send.some((out) => out.type === 'start')) {
           // Keep draining stdout with the same byte/frame ceilings while the bounded native setup is pending.
           // A genuine worker waits for start; any extra bytes or coalesced messages before it are refused.
           preparingStart = true;
-          if (b.at(-1) !== 0x0a) return finish('sentinel.execution.protocolViolation', { rule: 'worker-data-before-start' });
-          void startGate.prepare().catch(() => {}).then(() => {
-            if (settled) return;
-            if (signal?.aborted) return finish('sentinel.execution.canceled');
-            try { startGate.start(); } catch { return finish('sentinel.execution.protocolViolation', { rule: 'owner-lost-before-start' }); }
-            if (settled || signal?.aborted) return finish('sentinel.execution.canceled');
-            preparingStart = false;
-            for (const out of step.send) send(out); // Byte-identical welcome/start, with no late dispatch.
-          });
+          if (b.at(-1) !== 0x0a)
+            return finish('sentinel.execution.protocolViolation', { rule: 'worker-data-before-start' });
+          void startGate
+            .prepare()
+            .catch(() => {})
+            .then(() => {
+              if (settled) return;
+              if (signal?.aborted) return finish('sentinel.execution.canceled');
+              try {
+                startGate.start();
+              } catch {
+                return finish('sentinel.execution.protocolViolation', { rule: 'owner-lost-before-start' });
+              }
+              if (settled || signal?.aborted) return finish('sentinel.execution.canceled');
+              preparingStart = false;
+              for (const out of step.send) send(out); // Byte-identical welcome/start, with no late dispatch.
+            });
         } else for (const out of step.send) send(out);
         if (step.canceled) return finish('sentinel.execution.canceled');
         if (step.result) {
@@ -484,28 +724,42 @@ function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapt
           outcome.state = 'succeeded';
           // The worker should now exit on its own; give it the cancel grace to do so.
           proc.child.stdin.end();
-          timers.push(setTimeout(() => finish('sentinel.execution.workerExited', { reason: 'no exit after result' }), limits.cancelGraceMs));
+          timers.push(
+            setTimeout(
+              () => finish('sentinel.execution.workerExited', { reason: 'no exit after result' }),
+              limits.cancelGraceMs,
+            ),
+          );
           // Keep reading: any frame after the result, even in this same chunk, is a violation that voids it.
           continue;
         }
       }
       if (session.phase === 'failed') finish('sentinel.execution.versionRefused');
     });
-    void proc.exited.then(exit => {
+    void proc.exited.then((exit) => {
       if (settled) return;
       if (exit.spawnError) return finish('sentinel.execution.workerExited', { reason: exit.spawnError });
       // A result is only provisional until stdout has closed: 'close' fires after every stdout byte has been
       // delivered, and a partial trailing frame, even after a result, voids it.
-      try { decoder.end(); } catch (e) { return finish((e as ExecutionError).code, (e as ExecutionError).detail); }
+      try {
+        decoder.end();
+      } catch (e) {
+        return finish((e as ExecutionError).code, (e as ExecutionError).detail);
+      }
       if (outcome.state === 'succeeded') return finish();
       if (session.phase === 'canceling') return finish('sentinel.execution.canceled');
       return finish('sentinel.execution.workerExited', { exitCode: exit.exitCode ?? -1 });
     });
-    timers.push(setTimeout(() => { if (session.phase === 'awaiting-hello') finish('sentinel.execution.protocolViolation', { rule: 'no-hello' }); }, limits.helloTimeoutMs));
+    timers.push(
+      setTimeout(() => {
+        if (session.phase === 'awaiting-hello') finish('sentinel.execution.protocolViolation', { rule: 'no-hello' });
+      }, limits.helloTimeoutMs),
+    );
     timers.push(setTimeout(() => finish('sentinel.execution.deadlineExceeded'), limits.timeoutMs));
     // The output folder is measured while the worker runs, so filling the disk is stopped, not just noticed.
     const poll = setInterval(() => {
-      if (outputBytesOver(outputDir, limits.outputBytes)) finish('sentinel.execution.outputTooLarge', { bytes: limits.outputBytes });
+      if (outputBytesOver(outputDir, limits.outputBytes))
+        finish('sentinel.execution.outputTooLarge', { bytes: limits.outputBytes });
     }, 200);
     const onAbort = () => {
       if (preparingStart) return finish('sentinel.execution.canceled');
@@ -519,14 +773,34 @@ function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapt
   });
 }
 
-const identityOfDir = (path: string): string => { const s = lstatSync(path, { bigint: true }); return `${s.dev}:${s.ino}`; };
-const sameIdentity = (path: string, identity: string): boolean => { try { return identityOfDir(path) === identity; } catch { return false; } };
+const identityOfDir = (path: string): string => {
+  const s = lstatSync(path, { bigint: true });
+  return `${s.dev}:${s.ino}`;
+};
+const sameIdentity = (path: string, identity: string): boolean => {
+  try {
+    return identityOfDir(path) === identity;
+  } catch {
+    return false;
+  }
+};
 
 function prepareWorkDir(scratchRoot: string, attemptId: Id): string {
   let s, real;
-  try { s = lstatSync(scratchRoot); real = realpathSync.native(scratchRoot); } catch { throw new ExecutionError('sentinel.execution.scratchUnsafe', {}); }
+  try {
+    s = lstatSync(scratchRoot);
+    real = realpathSync.native(scratchRoot);
+  } catch {
+    throw new ExecutionError('sentinel.execution.scratchUnsafe', {});
+  }
   // Canonical, so the mount sources the daemon reports can be compared with the folders as created.
-  if (real !== scratchRoot || !s.isDirectory() || s.isSymbolicLink() || s.uid !== process.getuid?.() || (s.mode & 0o077) !== 0) {
+  if (
+    real !== scratchRoot ||
+    !s.isDirectory() ||
+    s.isSymbolicLink() ||
+    s.uid !== process.getuid?.() ||
+    (s.mode & 0o077) !== 0
+  ) {
     throw new ExecutionError('sentinel.execution.scratchUnsafe', {});
   }
   const dir = join(scratchRoot, `${attemptId.replace(/[^A-Za-z0-9._-]/g, '_')}-${randomUUID()}`);
@@ -542,7 +816,11 @@ function prepareWorkDir(scratchRoot: string, attemptId: Id): string {
 /** Copy one input into the attempt, hashing the bytes actually written. */
 function copyVerified(input: CapturedInput, target: string): void {
   let s;
-  try { s = lstatSync(input.path); } catch { throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'unreadable' }); }
+  try {
+    s = lstatSync(input.path);
+  } catch {
+    throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'unreadable' });
+  }
   if (!s.isFile()) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'not a regular file' });
   copyFileSync(input.path, target, constants.COPYFILE_EXCL);
   if (digestFile(target) !== input.id) {
@@ -562,19 +840,30 @@ function digestFile(path: string): Digest {
   try {
     const buf = Buffer.allocUnsafe(1024 * 1024);
     for (let n; (n = readSync(fd, buf, 0, buf.length, null)) > 0;) hash.update(buf.subarray(0, n));
-  } finally { closeSync(fd); }
+  } finally {
+    closeSync(fd);
+  }
   return `sha256:${hash.digest('hex')}`;
 }
 
 function outputBytesOver(dir: string, limit: number): boolean {
-  let total = 0, entries = 0;
+  let total = 0,
+    entries = 0;
   const walk = (d: string): boolean => {
     let names: string[];
-    try { names = readdirSync(d); } catch { return false; }
+    try {
+      names = readdirSync(d);
+    } catch {
+      return false;
+    }
     for (const name of names) {
       if (++entries > 100_000) return true;
       let s;
-      try { s = lstatSync(join(d, name)); } catch { continue; }
+      try {
+        s = lstatSync(join(d, name));
+      } catch {
+        continue;
+      }
       total += s.isDirectory() ? 4096 : s.size;
       if (total > limit) return true;
       if (s.isDirectory() && walk(join(d, name))) return true;
@@ -586,23 +875,29 @@ function outputBytesOver(dir: string, limit: number): boolean {
 
 /** Re-read every listed artifact; refuse anything missing, extra, linked, resized, changed or over budget. */
 export function verifyOutputs(dir: string, result: ResultMessage, limit: number): VerifiedOutput[] {
-  const mismatch = (reason: string): never => { throw new ExecutionError('sentinel.execution.outputMismatch', { reason }); };
+  const mismatch = (reason: string): never => {
+    throw new ExecutionError('sentinel.execution.outputMismatch', { reason });
+  };
   const listed = new Map<string, ResultMessage['artifacts'][number]>();
   for (const a of result.artifacts) {
     if (listed.has(hexOf(a.id))) mismatch('duplicate artifact');
     listed.set(hexOf(a.id), a);
   }
-  const produced = new Set(result.artifacts.map(a => a.id));
-  const refs = [...result.observations, ...result.coveredChecks.map(c => c.coverage)];
-  if (refs.some(id => !produced.has(id))) mismatch('reference to an output that was not produced');
+  const produced = new Set(result.artifacts.map((a) => a.id));
+  const refs = [...result.observations, ...result.coveredChecks.map((c) => c.coverage)];
+  if (refs.some((id) => !produced.has(id))) mismatch('reference to an output that was not produced');
   const names = readdirSync(dir);
-  if (names.some(n => !listed.has(n))) mismatch('unlisted output');
+  if (names.some((n) => !listed.has(n))) mismatch('unlisted output');
   let total = 0;
   const outputs: VerifiedOutput[] = [];
   for (const [hex, a] of listed) {
     const path = join(dir, hex);
     let s;
-    try { s = lstatSync(path); } catch { return mismatch('missing output'); }
+    try {
+      s = lstatSync(path);
+    } catch {
+      return mismatch('missing output');
+    }
     if (!s.isFile() || s.nlink !== 1) mismatch('output is not a single regular file');
     if (s.size !== a.bytes) mismatch('output size differs');
     total += s.size;
@@ -620,7 +915,11 @@ export function verifyOutputs(dir: string, result: ResultMessage, limit: number)
  */
 export function releaseWorkDir(workDir: string): void {
   const input = join(workDir, 'input');
-  try { if (lstatSync(input).isDirectory()) chmodSync(input, 0o700); } catch { /* absent */ }
+  try {
+    if (lstatSync(input).isDirectory()) chmodSync(input, 0o700);
+  } catch {
+    /* absent */
+  }
   rmSync(workDir, { recursive: true, force: true });
 }
 

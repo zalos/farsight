@@ -1,5 +1,5 @@
-import {assertNativeClaudeReviewEnabled} from '../review/providers/selection.js';
-import {ProviderError} from '../review/providers/errors.js';
+import { assertNativeClaudeReviewEnabled } from '../review/providers/selection.js';
+import { ProviderError } from '../review/providers/errors.js';
 // The owner's background service: one process that holds a workspace's store, answers its private local socket and
 // runs plans in the background, so a run survives the command that started it. It is started by the owner (`serve`,
 // or `run --detach` starting it on demand) and runs as the owner's own account, but it grants nothing to the
@@ -15,10 +15,10 @@ import {ProviderError} from '../review/providers/errors.js';
 // One run executes at a time. A second start for the plan being run joins it (one run, never two); a start for a run
 // that already finished prints its result again without executing anything. A run interrupted by the service
 // stopping, however it stopped, is recovered by the coordinator when it is resumed.
-import {OwnerUiOperations,ownerUiPolicy} from '../owner-ui/operations.js';
-import {activeOwnerUiProof,assertOwnerUiProof} from '../owner-ui/authority.js';
-import {OwnerUiReceiptBook} from '../owner-ui/receipts.js';
-import {admitOwnerUi} from '../policy/admission.js';
+import { OwnerUiOperations, ownerUiPolicy } from '../owner-ui/operations.js';
+import { activeOwnerUiProof, assertOwnerUiProof } from '../owner-ui/authority.js';
+import { OwnerUiReceiptBook } from '../owner-ui/receipts.js';
+import { admitOwnerUi } from '../policy/admission.js';
 import { unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -32,12 +32,27 @@ import { openStore, type SentinelStore } from '../store/index.js';
 import type { RequestedBy } from '../cli/actor.js';
 import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome.js';
 import {
-  checkAddress, connectOwnerSocket, IpcError, listenOwnerSocket, newOwnerNonce, runtimeAddress,
-  type RuntimeAddress, type ServiceClient,
+  checkAddress,
+  connectOwnerSocket,
+  IpcError,
+  listenOwnerSocket,
+  newOwnerNonce,
+  runtimeAddress,
+  type RuntimeAddress,
+  type ServiceClient,
 } from '../transport/ipc.js';
 import {
-  adoptedPolicy, isFinalRunState, runWriteBinding, printed, receiptBook, reportIn, retainedFact,
-  runStateIn, statusIn, checkWorkspaceLayout, type Workspace,
+  adoptedPolicy,
+  isFinalRunState,
+  runWriteBinding,
+  printed,
+  receiptBook,
+  reportIn,
+  retainedFact,
+  runStateIn,
+  statusIn,
+  checkWorkspaceLayout,
+  type Workspace,
 } from './local.js';
 import { assertSupportedRules, canonicalResult, currentPlan, rerunEnvelopeOf } from './canonical.js';
 import { loadPlan } from '../execution/plans.js';
@@ -49,14 +64,28 @@ import { PreparationError } from './preparation-clock.js';
 import { recordRunFailure, runFailureCode } from './run-failure.js';
 
 export type ServiceErrorCode =
-  | 'sentinel.service.unknownOperation' | 'sentinel.service.requestInvalid' | 'sentinel.service.planUnknown'
-  | 'sentinel.service.planChanged' | 'sentinel.service.alreadyServing' | 'sentinel.service.startFailed'
-  | 'sentinel.service.recordUnsafe' | 'sentinel.service.lockChanged' | 'sentinel.service.packUnavailable'
-  | 'sentinel.service.noRuleLock' | 'sentinel.service.bootstrapFailed' | 'sentinel.service.ruleUnsupported'
+  | 'sentinel.service.unknownOperation'
+  | 'sentinel.service.requestInvalid'
+  | 'sentinel.service.planUnknown'
+  | 'sentinel.service.planChanged'
+  | 'sentinel.service.alreadyServing'
+  | 'sentinel.service.startFailed'
+  | 'sentinel.service.recordUnsafe'
+  | 'sentinel.service.lockChanged'
+  | 'sentinel.service.packUnavailable'
+  | 'sentinel.service.noRuleLock'
+  | 'sentinel.service.bootstrapFailed'
+  | 'sentinel.service.ruleUnsupported'
   | 'sentinel.service.runNotExecutable';
 
 export class ServiceError extends Error {
-  constructor(readonly code: ServiceErrorCode, readonly facts: Readonly<Record<string, unknown>> = {}) { super(code); this.name = 'ServiceError'; }
+  constructor(
+    readonly code: ServiceErrorCode,
+    readonly facts: Readonly<Record<string, unknown>> = {},
+  ) {
+    super(code);
+    this.name = 'ServiceError';
+  }
 }
 
 interface ActiveRun {
@@ -84,13 +113,18 @@ const failureOf = (e: unknown): { error: string; reason?: string } => {
 };
 
 /** Reads one request body: an object with exactly the named fields, each an id (or a bounded integer). */
-function fields(body: unknown, required: readonly string[], optional: readonly string[] = []): Record<string, string | number> {
+function fields(
+  body: unknown,
+  required: readonly string[],
+  optional: readonly string[] = [],
+): Record<string, string | number> {
   if (!isRecord(body)) throw new ServiceError('sentinel.service.requestInvalid');
   const allowed = new Set([...required, ...optional]);
   const out: Record<string, string | number> = {};
   for (const [k, v] of Object.entries(body)) {
     if (!allowed.has(k)) throw new ServiceError('sentinel.service.requestInvalid');
-    if (typeof v === 'string' ? !ID.test(v) : !(typeof v === 'number' && Number.isSafeInteger(v) && v >= 0)) throw new ServiceError('sentinel.service.requestInvalid');
+    if (typeof v === 'string' ? !ID.test(v) : !(typeof v === 'number' && Number.isSafeInteger(v) && v >= 0))
+      throw new ServiceError('sentinel.service.requestInvalid');
     out[k] = v as string | number;
   }
   for (const k of required) if (typeof out[k] !== 'string') throw new ServiceError('sentinel.service.requestInvalid');
@@ -140,39 +174,81 @@ export class OwnerService {
     this.#runEnvelope = options.runEnvelope ?? (() => undefined);
     this.#now = options.now ?? (() => new Date());
     this.#reads = new ReadonlyViews(store, ws, this.#now);
-    this.#ownerUi = new OwnerUiOperations(store,ws,(op,body,by,context)=>this.handle(op,body,by,context),(kind,body,by)=>this.#preparations.ownerUiConfirmation(kind,body,by));
-    this.#preparations = new PreparationController(store, ws, this.#registry, () => this.#active.size > 0, () => { this.#idleSince = Date.now(); });
+    this.#ownerUi = new OwnerUiOperations(
+      store,
+      ws,
+      (op, body, by, context) => this.handle(op, body, by, context),
+      (kind, body, by) => this.#preparations.ownerUiConfirmation(kind, body, by),
+    );
+    this.#preparations = new PreparationController(
+      store,
+      ws,
+      this.#registry,
+      () => this.#active.size > 0,
+      () => {
+        this.#idleSince = Date.now();
+      },
+    );
   }
 
   /** True while a run executes. */
-  get busy(): boolean { return this.#active.size > 0 || this.#preparations.busy; }
+  get busy(): boolean {
+    return this.#active.size > 0 || this.#preparations.busy;
+  }
   /** Bounded unexpired buffers keep a detached owner alive, without renewing their absolute TTLs. */
-  get retainingReads(): boolean { return this.#reads.retaining || this.#ownerUi.retaining; }
+  get retainingReads(): boolean {
+    return this.#reads.retaining || this.#ownerUi.retaining;
+  }
   /** When the last run ended (or the service started), for the idle stop. */
-  get idleSince(): number { return this.#idleSince; }
+  get idleSince(): number {
+    return this.#idleSince;
+  }
 
   /** One request, from a connection whose requester the transport fixed. Returns a typed command result. */
-  async handle(op: string, body: unknown, by: RequestedBy, context: { readonly signal?: AbortSignal } = {}): Promise<unknown> {
+  async handle(
+    op: string,
+    body: unknown,
+    by: RequestedBy,
+    context: { readonly signal?: AbortSignal } = {},
+  ): Promise<unknown> {
     // The owner's channel never arrives here: every connection is a service client (transport/ipc.ts).
     if (by.channel === 'owner-cli') throw new ServiceError('sentinel.service.requestInvalid');
-    if(op==='service.review-capabilities')return this.#ownerUi.handle('owner-ui.review-capabilities',body,by,context);
-    if(op==='service.owner-ui-capabilities'){fields(body,[]);return this.#ownerUi.capabilities();}
-    if(op.startsWith('owner-ui.')){if(this.#stopping)throw new ServiceError('sentinel.service.requestInvalid');return this.#ownerUi.handle(op,body,by,context);}
+    if (op === 'service.review-capabilities')
+      return this.#ownerUi.handle('owner-ui.review-capabilities', body, by, context);
+    if (op === 'service.owner-ui-capabilities') {
+      fields(body, []);
+      return this.#ownerUi.capabilities();
+    }
+    if (op.startsWith('owner-ui.')) {
+      if (this.#stopping) throw new ServiceError('sentinel.service.requestInvalid');
+      return this.#ownerUi.handle(op, body, by, context);
+    }
     if ((READONLY_OPERATIONS as readonly string[]).includes(op)) {
       if (this.#stopping) throw new ServiceError('sentinel.service.requestInvalid');
       switch (op) {
-        case 'service.capabilities': fields(body, []); return this.#reads.capabilities();
-        case 'run.inspect': return this.#reads.inspect(body, by.channel, context.signal);
-        case 'view.page': return this.#reads.page(body, by.channel);
-        case 'report.open': return this.#reads.report(body, by.channel, context.signal);
-        case 'delivery.read': return this.#reads.read(body, by.channel);
+        case 'service.capabilities':
+          fields(body, []);
+          return this.#reads.capabilities();
+        case 'run.inspect':
+          return this.#reads.inspect(body, by.channel, context.signal);
+        case 'view.page':
+          return this.#reads.page(body, by.channel);
+        case 'report.open':
+          return this.#reads.report(body, by.channel, context.signal);
+        case 'delivery.read':
+          return this.#reads.read(body, by.channel);
       }
     }
     switch (op) {
-      case 'service.preparation-capabilities': fields(body, []); return this.#preparations.capabilities();
-      case 'configuration.preview': return this.#preparations.preview(body, by);
-      case 'prepare.status': return this.#preparations.status(body, by);
-      case 'prepare.cancel': return this.#preparations.cancel(body, by);
+      case 'service.preparation-capabilities':
+        fields(body, []);
+        return this.#preparations.capabilities();
+      case 'configuration.preview':
+        return this.#preparations.preview(body, by);
+      case 'prepare.status':
+        return this.#preparations.status(body, by);
+      case 'prepare.cancel':
+        return this.#preparations.cancel(body, by);
       case 'prepare.resume': {
         if (context.signal?.aborted) throw new PreparationError('sentinel.preparation.canceled');
         return this.#preparations.resume(body, by, context.signal);
@@ -187,8 +263,13 @@ export class OwnerService {
       }
       case 'service.info': {
         fields(body, []);
-        return { storeId: this.#store.storeId, epoch: this.#store.epoch, pid: process.pid, active: [...this.#active.keys()],
-          ...(this.#scratchRetained.size ? { scratchRetained: Object.fromEntries(this.#scratchRetained) } : {}) };
+        return {
+          storeId: this.#store.storeId,
+          epoch: this.#store.epoch,
+          pid: process.pid,
+          active: [...this.#active.keys()],
+          ...(this.#scratchRetained.size ? { scratchRetained: Object.fromEntries(this.#scratchRetained) } : {}),
+        };
       }
       case 'run.start': {
         const f = fields(body, ['planId'], ['receiptId']);
@@ -196,11 +277,20 @@ export class OwnerService {
       }
       case 'run.status': {
         const f = fields(body, ['runId'], ['after', 'limit']);
-        return statusIn(this.#store, { runId: f.runId as string, executing: this.#active.has(f.runId as string), registry: this.#registry, ...(f.after === undefined ? {} : { after: f.after as number }), ...(f.limit === undefined ? {} : { limit: f.limit as number }) });
+        return statusIn(this.#store, {
+          runId: f.runId as string,
+          executing: this.#active.has(f.runId as string),
+          registry: this.#registry,
+          ...(f.after === undefined ? {} : { after: f.after as number }),
+          ...(f.limit === undefined ? {} : { limit: f.limit as number }),
+        });
       }
       case 'run.wait': {
         const f = fields(body, ['runId'], ['timeoutMs']);
-        return this.#wait(f.runId as string, Math.min(typeof f.timeoutMs === 'number' ? f.timeoutMs : MAX_WAIT_MS, MAX_WAIT_MS));
+        return this.#wait(
+          f.runId as string,
+          Math.min(typeof f.timeoutMs === 'number' ? f.timeoutMs : MAX_WAIT_MS, MAX_WAIT_MS),
+        );
       }
       case 'run.pause': {
         const f = fields(body, ['runId'], ['receiptId']);
@@ -215,8 +305,10 @@ export class OwnerService {
         const f = fields(body, ['runId']);
         return (await currentPlan(this.#store, f.runId as string)) ?? null;
       }
-      case 'report': return reportIn(this.#store, this.#ws, { runId: fields(body, ['runId']).runId as string, now: this.#now() });
-      default: throw new ServiceError('sentinel.service.unknownOperation');
+      case 'report':
+        return reportIn(this.#store, this.#ws, { runId: fields(body, ['runId']).runId as string, now: this.#now() });
+      default:
+        throw new ServiceError('sentinel.service.unknownOperation');
     }
   }
 
@@ -225,41 +317,90 @@ export class OwnerService {
    * spent once, or else admission with the connection's own requester under the adopted grants. Being connected
    * grants nothing; there is no service bypass.
    */
-  async #authorize(command: string, action: 'run.start' | 'run.pause' | 'run.cancel', planId: string, receiptId: string | undefined, by: RequestedBy):
-    Promise<{ verdicts: PrintedVerdicts; facts: Record<string, unknown> } | { refusal: CommandResult }> {
+  async #authorize(
+    command: string,
+    action: 'run.start' | 'run.pause' | 'run.cancel',
+    planId: string,
+    receiptId: string | undefined,
+    by: RequestedBy,
+  ): Promise<{ verdicts: PrintedVerdicts; facts: Record<string, unknown> } | { refusal: CommandResult }> {
     const facts: Record<string, unknown> = { planId };
     // The run's current admitted analysis revision, read back from the ledger and verified: what the write acts on.
     const record = await currentPlan(this.#store, planId);
-    if (!record || record.kind !== 'analysis') return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts }) };
-    const uiProof=by.channel==='owner-ui'?activeOwnerUiProof():null;
-    const adopted = uiProof?ownerUiPolicy(this.#ws):adoptedPolicy(this.#ws);
+    if (!record || record.kind !== 'analysis')
+      return {
+        refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts }),
+      };
+    const uiProof = by.channel === 'owner-ui' ? activeOwnerUiProof() : null;
+    const adopted = uiProof ? ownerUiPolicy(this.#ws) : adoptedPolicy(this.#ws);
     if ('refusal' in adopted) return { refusal: adopted.refusal };
     const { policy } = adopted;
-    if (policy.revision !== record.policyRevision) return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts }) };
-    if(action==='run.start'){
-      const admitted=await loadPlan(this.#store,planId,record.revision);
-      try{for(const unit of admitted.plan.units)if(unit.review)assertNativeClaudeReviewEnabled(policy,unit.review.selection.providerId);}
-      catch(error){if(!(error instanceof ProviderError))throw error;return{refusal:result(command,'configuration-failure',{reasonCode:error.code,facts})};}
+    if (policy.revision !== record.policyRevision)
+      return {
+        refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts }),
+      };
+    if (action === 'run.start') {
+      const admitted = await loadPlan(this.#store, planId, record.revision);
+      try {
+        for (const unit of admitted.plan.units)
+          if (unit.review) assertNativeClaudeReviewEnabled(policy, unit.review.selection.providerId);
+      } catch (error) {
+        if (!(error instanceof ProviderError)) throw error;
+        return { refusal: result(command, 'configuration-failure', { reasonCode: error.code, facts }) };
+      }
     }
-    if(action==='run.start'&&record.effects.includes('paid-inference')&&!['completed','canceled'].includes(this.#store.ledger.getRun(planId)?.state??''))return {refusal:result(command,'configuration-failure',{reasonCode:'sentinel.review.foregroundRequired',facts})};
+    if (
+      action === 'run.start' &&
+      record.effects.includes('paid-inference') &&
+      !['completed', 'canceled'].includes(this.#store.ledger.getRun(planId)?.state ?? '')
+    )
+      return {
+        refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.review.foregroundRequired', facts }),
+      };
     // The write is on this workspace's store and this run: a receipt confirmed for another instance does not match.
-    const { intent, stateDigest } = runWriteBinding(this.#ws, action, record, { storeId: this.#store.storeId, runId: planId });
+    const { intent, stateDigest } = runWriteBinding(this.#ws, action, record, {
+      storeId: this.#store.storeId,
+      runId: planId,
+    });
     facts.effects = intent.effects;
     const now = this.#now();
-    if(receiptId!==undefined&&uiProof){
-      assertOwnerUiProof(uiProof,action);
-      const decision=admitOwnerUi({intent,stateDigest,policy,requestedBy:uiProof.requestedBy,now,
-        capability:()=>({available:true,detail:'implemented deterministic service control; excludes model authority'}),
-        credential:()=>({basis:'local-only',detail:'no provider/model admission is included'}),
-        receipt:{book:new OwnerUiReceiptBook(join(this.#ws.trustDir,'receipts'),uiProof),id:receiptId}},uiProof,true);
-      if(decision.record.outcome!=='admitted')return{refusal:result(command,'configuration-failure',{verdicts:printed(decision.record),reasonCode:decision.record.verdicts.policy.reasonCode})};
-      return{verdicts:printed(decision.record),facts:{...facts,receipt:decision.receipt?.digest}};
+    if (receiptId !== undefined && uiProof) {
+      assertOwnerUiProof(uiProof, action);
+      const decision = admitOwnerUi(
+        {
+          intent,
+          stateDigest,
+          policy,
+          requestedBy: uiProof.requestedBy,
+          now,
+          capability: () => ({
+            available: true,
+            detail: 'implemented deterministic service control; excludes model authority',
+          }),
+          credential: () => ({ basis: 'local-only', detail: 'no provider/model admission is included' }),
+          receipt: { book: new OwnerUiReceiptBook(join(this.#ws.trustDir, 'receipts'), uiProof), id: receiptId },
+        },
+        uiProof,
+        true,
+      );
+      if (decision.record.outcome !== 'admitted')
+        return {
+          refusal: result(command, 'configuration-failure', {
+            verdicts: printed(decision.record),
+            reasonCode: decision.record.verdicts.policy.reasonCode,
+          }),
+        };
+      return { verdicts: printed(decision.record), facts: { ...facts, receipt: decision.receipt?.digest } };
     }
     if (receiptId !== undefined) {
       // The owner's receipt: checked against exactly this action, plan digest and policy revision, and spent once.
       // What the connection said about itself plays no part; an unknown, spent, expired or mismatched one refuses.
       try {
-        const spent = receiptBook(this.#ws).consume(receiptId, { intent, stateDigest, policyRevision: policy.revision }, now);
+        const spent = receiptBook(this.#ws).consume(
+          receiptId,
+          { intent, stateDigest, policyRevision: policy.revision },
+          now,
+        );
         return { verdicts: RECEIPT_VERDICTS, facts: { ...facts, receipt: spent.digest } };
       } catch (e) {
         if (!(e instanceof PolicyError)) throw e;
@@ -267,15 +408,30 @@ export class OwnerService {
       }
     }
     const decision = admit({
-      intent, requestedBy: by, policy, stateDigest, now,
+      intent,
+      requestedBy: by,
+      policy,
+      stateDigest,
+      now,
       capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
       credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
     }).record;
     const verdicts = printed(decision);
-    if (decision.outcome === 'awaiting-confirmation') return { refusal: result(command, 'awaiting-confirmation', { verdicts, facts }) };
+    if (decision.outcome === 'awaiting-confirmation')
+      return { refusal: result(command, 'awaiting-confirmation', { verdicts, facts }) };
     if (decision.outcome !== 'admitted') {
       const v = decision.verdicts;
-      return { refusal: result(command, 'configuration-failure', { verdicts, facts, reasonCode: v.policy.allowed ? (v.capability.allowed ? v.credential.reasonCode : v.capability.reasonCode) : v.policy.reasonCode }) };
+      return {
+        refusal: result(command, 'configuration-failure', {
+          verdicts,
+          facts,
+          reasonCode: v.policy.allowed
+            ? v.capability.allowed
+              ? v.credential.reasonCode
+              : v.capability.reasonCode
+            : v.policy.reasonCode,
+        }),
+      };
     }
     return { verdicts, facts };
   }
@@ -289,25 +445,59 @@ export class OwnerService {
     if (active) {
       const failed = await active.opened;
       if (failed) return this.#notAccepted('run', planId, failed, verdicts, facts);
-      return result('run', 'submitted', { verdicts, facts: { ...facts, runId: planId, joined: true, state: runStateIn(this.#store, planId) } });
+      return result('run', 'submitted', {
+        verdicts,
+        facts: { ...facts, runId: planId, joined: true, state: runStateIn(this.#store, planId) },
+      });
     }
-    if (this.#stopping || this.#active.size > 0 || this.#preparations.busy) return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.anotherRunActive' });
-    if (isFinalRunState(runStateIn(this.#store, planId))) return canonicalResult(this.#store, 'run', planId, { executing: false, verdicts, facts, registry: this.#registry, trustDir:this.#ws.trustDir });
+    if (this.#stopping || this.#active.size > 0 || this.#preparations.busy)
+      return result('run', 'configuration-failure', {
+        verdicts,
+        facts,
+        reasonCode: 'sentinel.service.anotherRunActive',
+      });
+    if (isFinalRunState(runStateIn(this.#store, planId)))
+      return canonicalResult(this.#store, 'run', planId, {
+        executing: false,
+        verdicts,
+        facts,
+        registry: this.#registry,
+        trustDir: this.#ws.trustDir,
+      });
     // Accepted only once the coordinator has opened the admitted revision under this installation's registry: a plan
     // this installation cannot execute is refused here, with why, never answered `submitted` and left looking queued.
     const failed = await this.#launch(planId, { pause: false, cancel: false }).opened;
     if (failed) return this.#notAccepted('run', planId, failed, verdicts, facts);
-    return result('run', 'submitted', { verdicts, facts: { ...facts, runId: planId, joined: false, state: runStateIn(this.#store, planId) } });
+    return result('run', 'submitted', {
+      verdicts,
+      facts: { ...facts, runId: planId, joined: false, state: runStateIn(this.#store, planId) },
+    });
   }
 
-  #notAccepted(command: string, runId: string, failed: { error: string; reason?: string }, verdicts: PrintedVerdicts, facts: Record<string, unknown>): CommandResult {
-    return result(command, 'configuration-failure', { verdicts, reasonCode: 'sentinel.service.runNotExecutable',
-      facts: { ...facts, runId, ...failed, state: runStateIn(this.#store, runId) } });
+  #notAccepted(
+    command: string,
+    runId: string,
+    failed: { error: string; reason?: string },
+    verdicts: PrintedVerdicts,
+    facts: Record<string, unknown>,
+  ): CommandResult {
+    return result(command, 'configuration-failure', {
+      verdicts,
+      reasonCode: 'sentinel.service.runNotExecutable',
+      facts: { ...facts, runId, ...failed, state: runStateIn(this.#store, runId) },
+    });
   }
 
   #launch(planId: string, flags: { pause: boolean; cancel: boolean }): ActiveRun {
     let settle!: (v: { error: string; reason?: string } | undefined) => void;
-    const run: ActiveRun = { planId, ...flags, task: Promise.resolve(), opened: new Promise(r => { settle = r; }) };
+    const run: ActiveRun = {
+      planId,
+      ...flags,
+      task: Promise.resolve(),
+      opened: new Promise((r) => {
+        settle = r;
+      }),
+    };
     this.#active.set(planId, run);
     run.task = (async () => {
       let lease: ScratchLease | undefined;
@@ -315,12 +505,23 @@ export class OwnerService {
         lease = openScratchLease(this.#store);
         const scratch = lease.path;
         // The coordinator executes the run's current admitted revision, under this service's trusted registry.
-        const first = this.#store.ledger.getRun(planId) ? undefined : (this.#runEnvelope(planId) ?? await rerunEnvelopeOf(this.#store, planId));
+        const first = this.#store.ledger.getRun(planId)
+          ? undefined
+          : (this.#runEnvelope(planId) ?? (await rerunEnvelopeOf(this.#store, planId)));
         const admitted = await currentPlan(this.#store, planId);
         if (admitted) assertSupportedRules((await loadPlan(this.#store, planId, admitted.revision)).plan);
-        const assets = this.#drivers ? { drivers: this.#drivers } : await scannerExecution(this.#store, planId, this.#ws.trustDir, scratch, this.#registry, lease.wrapRunner);
-        const coordinator = await Coordinator.open({ ...assets, store: this.#store, runId: planId, scratchRoot: scratch, registry: this.#registry,
-          backendOptions: { wrapRunner: lease.wrapRunner }, ...(first ? { run: first } : {}) });
+        const assets = this.#drivers
+          ? { drivers: this.#drivers }
+          : await scannerExecution(this.#store, planId, this.#ws.trustDir, scratch, this.#registry, lease.wrapRunner);
+        const coordinator = await Coordinator.open({
+          ...assets,
+          store: this.#store,
+          runId: planId,
+          scratchRoot: scratch,
+          registry: this.#registry,
+          backendOptions: { wrapRunner: lease.wrapRunner },
+          ...(first ? { run: first } : {}),
+        });
         run.coordinator = coordinator;
         settle(undefined);
         if (run.cancel) coordinator.cancel();
@@ -332,7 +533,11 @@ export class OwnerService {
           run.error = runFailureCode(e);
           // The coordinator accepted the run. Keep its fatal runtime code after this process exits, even if the
           // failed operation (for example finalization) could not update the ledger. Never retain raw error text.
-          try { run.error = recordRunFailure(this.#store, planId, e, this.#now()).code; } catch { /* the store itself may no longer be writable; retain the in-memory error */ }
+          try {
+            run.error = recordRunFailure(this.#store, planId, e, this.#now()).code;
+          } catch {
+            /* the store itself may no longer be writable; retain the in-memory error */
+          }
         }
         // Before the coordinator opened, nothing was accepted: the start (and any joiner) is refused with this.
         settle(failureOf(e));
@@ -340,10 +545,14 @@ export class OwnerService {
         // Removed only when every consumer is proven stopped; otherwise retained, and the service says so.
         try {
           const released = lease ? releaseScratchLease(this.#store, lease) : { removed: true as const };
-          if (released.removed) this.#scratchRetained.delete(planId); else this.#scratchRetained.set(planId, retainedFact(released));
-        } catch { /* left in place for recovery; nothing outside the lease is touched */ }
+          if (released.removed) this.#scratchRetained.delete(planId);
+          else this.#scratchRetained.set(planId, retainedFact(released));
+        } catch {
+          /* left in place for recovery; nothing outside the lease is touched */
+        }
         this.#active.delete(planId);
-        if (run.error) this.#lastError.set(planId, run.error); else this.#lastError.delete(planId);
+        if (run.error) this.#lastError.set(planId, run.error);
+        else this.#lastError.delete(planId);
         if (this.#active.size === 0) this.#idleSince = Date.now();
       }
     })();
@@ -354,14 +563,24 @@ export class OwnerService {
     const run = this.#active.get(runId);
     if (run) {
       let timer: NodeJS.Timeout | undefined;
-      await Promise.race([run.task, new Promise<void>(r => { timer = setTimeout(r, timeoutMs); })]);
+      await Promise.race([
+        run.task,
+        new Promise<void>((r) => {
+          timer = setTimeout(r, timeoutMs);
+        }),
+      ]);
       clearTimeout(timer);
     }
     const executing = this.#active.has(runId);
     // An error this service met executing it is a fact for its lifetime; what the store and this installation say
     // (canonicalResult, including whether this installation can execute it at all) holds after any restart too.
     const error = run?.error ?? this.#lastError.get(runId);
-    const r = await canonicalResult(this.#store, 'wait', runId, { executing, registry: this.#registry, trustDir:this.#ws.trustDir, ...(error ? { facts: { error } } : {}) });
+    const r = await canonicalResult(this.#store, 'wait', runId, {
+      executing,
+      registry: this.#registry,
+      trustDir: this.#ws.trustDir,
+      ...(error ? { facts: { error } } : {}),
+    });
     return executing ? result('wait', 'submitted', { facts: r.facts, reasonCode: 'sentinel.service.waitTimedOut' }) : r;
   }
 
@@ -370,10 +589,18 @@ export class OwnerService {
     if ('refusal' in decided) return decided.refusal;
     const { verdicts, facts } = decided;
     const run = this.#active.get(runId);
-    if (!run) return result('pause', 'refused', { verdicts, reasonCode: 'sentinel.service.runNotActive', facts: { ...facts, runId, state: runStateIn(this.#store, runId) } });
+    if (!run)
+      return result('pause', 'refused', {
+        verdicts,
+        reasonCode: 'sentinel.service.runNotActive',
+        facts: { ...facts, runId, state: runStateIn(this.#store, runId) },
+      });
     run.pause = true;
     run.coordinator?.pause();
-    return result('pause', 'requested', { verdicts, facts: { ...facts, runId, state: runStateIn(this.#store, runId) } });
+    return result('pause', 'requested', {
+      verdicts,
+      facts: { ...facts, runId, state: runStateIn(this.#store, runId) },
+    });
   }
 
   async #cancel(runId: string, receiptId: string | undefined, by: RequestedBy): Promise<CommandResult> {
@@ -381,19 +608,37 @@ export class OwnerService {
     if ('refusal' in decided) return decided.refusal;
     const { verdicts } = decided;
     const state = runStateIn(this.#store, runId);
-    if (state === null) return result('cancel', 'configuration-failure', { verdicts, reasonCode: 'sentinel.service.runUnknown', facts: { runId } });
-    if (isFinalRunState(state)) return result('cancel', 'refused', { verdicts, reasonCode: 'sentinel.service.runNotActive', facts: { runId, state } });
+    if (state === null)
+      return result('cancel', 'configuration-failure', {
+        verdicts,
+        reasonCode: 'sentinel.service.runUnknown',
+        facts: { runId },
+      });
+    if (isFinalRunState(state))
+      return result('cancel', 'refused', {
+        verdicts,
+        reasonCode: 'sentinel.service.runNotActive',
+        facts: { runId, state },
+      });
     const run = this.#active.get(runId);
     if (run) {
       run.cancel = true;
       run.coordinator?.cancel();
     } else {
       // A paused or interrupted run: canceled through a coordinator so its ledger fences any late publication.
-      if (this.#stopping || this.#active.size > 0) return result('cancel', 'configuration-failure', { verdicts, reasonCode: 'sentinel.service.anotherRunActive', facts: { runId } });
+      if (this.#stopping || this.#active.size > 0)
+        return result('cancel', 'configuration-failure', {
+          verdicts,
+          reasonCode: 'sentinel.service.anotherRunActive',
+          facts: { runId },
+        });
       const failed = await this.#launch(runId, { pause: false, cancel: true }).opened;
       if (failed) return this.#notAccepted('cancel', runId, failed, verdicts, decided.facts);
     }
-    return result('cancel', 'requested', { verdicts, facts: { ...decided.facts, runId, state: runStateIn(this.#store, runId) } });
+    return result('cancel', 'requested', {
+      verdicts,
+      facts: { ...decided.facts, runId, state: runStateIn(this.#store, runId) },
+    });
   }
 
   /** Pauses every executing run and waits for its work in flight to end. Starts nothing afterwards. */
@@ -402,8 +647,11 @@ export class OwnerService {
     this.#ownerUi.close();
     this.#reads.close();
     const preparation = this.#preparations.stop();
-    for (const run of this.#active.values()) { run.pause = true; run.coordinator?.pause(); }
-    await Promise.all([preparation, ...[...this.#active.values()].map(r => r.task)]);
+    for (const run of this.#active.values()) {
+      run.pause = true;
+      run.coordinator?.pause();
+    }
+    await Promise.all([preparation, ...[...this.#active.values()].map((r) => r.task)]);
   }
 }
 
@@ -426,25 +674,41 @@ export interface ServiceDescriptor {
 
 const MAX_DESCRIPTOR_BYTES = 8 * 1024;
 const servicesDir = (ws: Workspace) => join(ws.trustDir, 'services');
-const descriptorName = (ws: Workspace) => `${createHash('sha256').update(ws.storePath).digest('hex').slice(0, 32)}.json`;
+const descriptorName = (ws: Workspace) =>
+  `${createHash('sha256').update(ws.storePath).digest('hex').slice(0, 32)}.json`;
 
 /** The owner-private files below: any unsafe one (a link, another account's, open to others) is this one error. */
 function recordSafely<T>(fn: () => T): T {
-  try { return fn(); } catch (e) {
+  try {
+    return fn();
+  } catch (e) {
     if (e instanceof PolicyError) throw new ServiceError('sentinel.service.recordUnsafe');
     throw e;
   }
 }
 
 export function readServiceDescriptor(ws: Workspace): ServiceDescriptor | undefined {
-  const bytes = recordSafely(() => readPrivateFile(join(servicesDir(ws), descriptorName(ws)), MAX_DESCRIPTOR_BYTES, 'sentinel.receipt.storeUnsafe'));
+  const bytes = recordSafely(() =>
+    readPrivateFile(join(servicesDir(ws), descriptorName(ws)), MAX_DESCRIPTOR_BYTES, 'sentinel.receipt.storeUnsafe'),
+  );
   if (!bytes) return undefined;
   let v: unknown;
-  try { v = JSON.parse(bytes.toString('utf8')); } catch { return undefined; }
+  try {
+    v = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    return undefined;
+  }
   if (!isRecord(v) || v.schema !== 'sentinel-service/draft-1' || v.storePath !== ws.storePath) return undefined;
   const a = v.address;
-  if (typeof v.storeId !== 'string' || typeof v.ownerNonce !== 'string' || !Number.isSafeInteger(v.pid)
-    || !isRecord(a) || typeof a.dir !== 'string' || typeof a.socket !== 'string') return undefined;
+  if (
+    typeof v.storeId !== 'string' ||
+    typeof v.ownerNonce !== 'string' ||
+    !Number.isSafeInteger(v.pid) ||
+    !isRecord(a) ||
+    typeof a.dir !== 'string' ||
+    typeof a.socket !== 'string'
+  )
+    return undefined;
   return v as unknown as ServiceDescriptor;
 }
 
@@ -452,11 +716,18 @@ function removeServiceDescriptor(ws: Workspace, ownerNonce: string): void {
   // Only our own record, by this process and this acquisition's nonce: a later service may already have replaced it.
   const d = readServiceDescriptor(ws);
   if (d?.ownerNonce !== ownerNonce || d.pid !== process.pid) return;
-  try { unlinkSync(join(servicesDir(ws), descriptorName(ws))); } catch { /* already gone */ }
+  try {
+    unlinkSync(join(servicesDir(ws), descriptorName(ws)));
+  } catch {
+    /* already gone */
+  }
 }
 
 /** A connection to the workspace's running service, or undefined when none answers at its recorded address. */
-export async function connectService(ws: Workspace, kind: import('../transport/ipc.js').ClientKind = 'cli'): Promise<ServiceClient | undefined> {
+export async function connectService(
+  ws: Workspace,
+  kind: import('../transport/ipc.js').ClientKind = 'cli',
+): Promise<ServiceClient | undefined> {
   const d = readServiceDescriptor(ws);
   if (!d) return undefined;
   try {
@@ -465,7 +736,11 @@ export async function connectService(ws: Workspace, kind: import('../transport/i
   } catch (e) {
     // Nothing listening, or something else answering: no service for this workspace. An unsafe folder or socket is
     // not a missing service and refuses.
-    if (e instanceof IpcError && (e.code === 'sentinel.ipc.notListening' || e.code === 'sentinel.ipc.handshakeMismatch')) return undefined;
+    if (
+      e instanceof IpcError &&
+      (e.code === 'sentinel.ipc.notListening' || e.code === 'sentinel.ipc.handshakeMismatch')
+    )
+      return undefined;
     throw e;
   }
 }
@@ -485,8 +760,11 @@ export async function serveWorkspace(ws: Workspace, options: ServeOptions): Prom
   // Before the store, the framework entry or the socket: trust state and the runtime folder stay out of the source.
   checkWorkspaceLayout(ws);
   let store: SentinelStore;
-  try { store = await openStore(ws.storePath); } catch (e) {
-    if ((e as { code?: unknown }).code === 'sentinel.store.ownedElsewhere') throw new ServiceError('sentinel.service.alreadyServing');
+  try {
+    store = await openStore(ws.storePath);
+  } catch (e) {
+    if ((e as { code?: unknown }).code === 'sentinel.store.ownedElsewhere')
+      throw new ServiceError('sentinel.service.alreadyServing');
     throw e;
   }
   const service = new OwnerService(store, ws, options.service ?? {});
@@ -495,24 +773,59 @@ export async function serveWorkspace(ws: Workspace, options: ServeOptions): Prom
   let lastRequest = Date.now();
   try {
     const address = runtimeAddress({ storePath: store.storePath, ownerNonce, sources: [ws.path] });
-    const socket = await listenOwnerSocket(address, { storeId: store.storeId, ownerNonce }, async (op, body, by, context) => {
-      inflight++;
-      try { return await service.handle(op, body, by, context); } finally { inflight--; lastRequest = Date.now(); }
-    });
+    const socket = await listenOwnerSocket(
+      address,
+      { storeId: store.storeId, ownerNonce },
+      async (op, body, by, context) => {
+        inflight++;
+        try {
+          return await service.handle(op, body, by, context);
+        } finally {
+          inflight--;
+          lastRequest = Date.now();
+        }
+      },
+    );
     try {
       const descriptor: ServiceDescriptor = Object.freeze({
-        schema: 'sentinel-service/draft-1', storePath: ws.storePath, storeId: store.storeId, ownerNonce, address,
-        pid: process.pid, startedAt: new Date().toISOString(),
+        schema: 'sentinel-service/draft-1',
+        storePath: ws.storePath,
+        storeId: store.storeId,
+        ownerNonce,
+        address,
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
       });
-      recordSafely(() => writePrivateFileAtomic(servicesDir(ws), descriptorName(ws), Buffer.from(JSON.stringify(descriptor)), 'sentinel.receipt.storeUnsafe'));
+      recordSafely(() =>
+        writePrivateFileAtomic(
+          servicesDir(ws),
+          descriptorName(ws),
+          Buffer.from(JSON.stringify(descriptor)),
+          'sentinel.receipt.storeUnsafe',
+        ),
+      );
       options.onListening?.(descriptor);
-      await new Promise<void>(resolve => {
-        if (options.signal?.aborted) { resolve(); return; }
+      await new Promise<void>((resolve) => {
+        if (options.signal?.aborted) {
+          resolve();
+          return;
+        }
         const timer = setInterval(() => {
           const quiet = Date.now() - Math.max(lastRequest, service.idleSince);
-          if (options.idleMs > 0 && inflight === 0 && !service.busy && !service.retainingReads && quiet >= options.idleMs) done();
+          if (
+            options.idleMs > 0 &&
+            inflight === 0 &&
+            !service.busy &&
+            !service.retainingReads &&
+            quiet >= options.idleMs
+          )
+            done();
         }, 100);
-        const done = () => { clearInterval(timer); options.signal?.removeEventListener('abort', done); resolve(); };
+        const done = () => {
+          clearInterval(timer);
+          options.signal?.removeEventListener('abort', done);
+          resolve();
+        };
         options.signal?.addEventListener('abort', done, { once: true });
       });
       await service.stop();

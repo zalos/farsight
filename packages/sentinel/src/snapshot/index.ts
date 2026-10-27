@@ -3,7 +3,13 @@
 // facade (`openStore()`) and never opens the ledger database or the owner lock. Importing it opens nothing and
 // starts no process.
 export { captureSnapshot } from './capture.js';
-export type { CaptureRequest, CaptureSourceRequest, CaptureModeRequest, CaptureResult, CaptureStore } from './capture.js';
+export type {
+  CaptureRequest,
+  CaptureSourceRequest,
+  CaptureModeRequest,
+  CaptureResult,
+  CaptureStore,
+} from './capture.js';
 export type { SubmoduleRequest } from './committed.js';
 export { openSnapshot, restoreSnapshot, readSnapshot } from './materialize.js';
 export type { OpenedSnapshot, RestoreOptions, RestoredSnapshot, RestoredSource, RestoreStore } from './materialize.js';

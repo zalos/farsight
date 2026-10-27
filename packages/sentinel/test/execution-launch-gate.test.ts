@@ -8,7 +8,13 @@ import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { IntentFiles, launchAuthorization, recoverStore, tokenArgument, WorkerFiles } from '../dist/execution/recovery.js';
+import {
+  IntentFiles,
+  launchAuthorization,
+  recoverStore,
+  tokenArgument,
+  WorkerFiles,
+} from '../dist/execution/recovery.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
 
 const GATE = new URL('../dist/execution/launch-gate.js', import.meta.url).href;
@@ -24,7 +30,11 @@ function markerAdapter() {
   return { root: s.root, marker, module };
 }
 const launch = (module: string, token: string, input?: string) =>
-  spawnSync(process.execPath, ['--import', GATE, module, tokenArgument(token)], { input: input ?? '', env: {}, timeout: 20_000 });
+  spawnSync(process.execPath, ['--import', GATE, module, tokenArgument(token)], {
+    input: input ?? '',
+    env: {},
+    timeout: 20_000,
+  });
 
 test('the exact authorization line loads the adapter', () => {
   const a = markerAdapter();
@@ -49,7 +59,11 @@ test('end of stdin, a wrong token, a partial line or no token argument: refused 
     assert.equal(r.stdout.byteLength, 0, `${what}: nothing written to the protocol stream`);
   }
   const a = markerAdapter();
-  const r = spawnSync(process.execPath, ['--import', GATE, a.module], { input: launchAuthorization(token), env: {}, timeout: 20_000 });
+  const r = spawnSync(process.execPath, ['--import', GATE, a.module], {
+    input: launchAuthorization(token),
+    env: {},
+    timeout: 20_000,
+  });
   assert.equal(r.status, 78, 'no token argument: refused');
   assert.equal(existsSync(a.marker), false);
 });
@@ -57,11 +71,14 @@ test('end of stdin, a wrong token, a partial line or no token argument: refused 
 test('a write end held open but never written (a stopped sibling): the process waits in the gate, adapter never loaded', async () => {
   const a = markerAdapter();
   const token = randomUUID();
-  const child = spawn(process.execPath, ['--import', GATE, a.module, tokenArgument(token)], { stdio: ['pipe', 'ignore', 'ignore'], env: {} });
-  const exited = new Promise(r => child.on('close', r));
+  const child = spawn(process.execPath, ['--import', GATE, a.module, tokenArgument(token)], {
+    stdio: ['pipe', 'ignore', 'ignore'],
+    env: {},
+  });
+  const exited = new Promise((r) => child.on('close', r));
   // The bytes before the line, and a line for another token, do not open the gate either.
   child.stdin.write('sentinel-launch ');
-  await new Promise(r => setTimeout(r, 300));
+  await new Promise((r) => setTimeout(r, 300));
   assert.equal(child.exitCode, null, 'still waiting in the gate');
   assert.equal(existsSync(a.marker), false, 'the adapter has not loaded');
   child.kill('SIGKILL');
@@ -75,11 +92,23 @@ test('review case: recovery settles a pid-less record, then a late child for it 
   const token = randomUUID();
   try {
     // Journaled before spawn and never given its pid; its coordinator (another epoch) is gone.
-    new WorkerFiles(store.storePath).record({ attempt: 'att-prespawn', store: store.storeId, epoch: 'epoch-earlier', pid: 0, token, kernelStart: '' });
-    const report = await recoverStore(store, { intents: new IntentFiles(store.storePath), workers: new WorkerFiles(store.storePath) });
+    new WorkerFiles(store.storePath).record({
+      attempt: 'att-prespawn',
+      store: store.storeId,
+      epoch: 'epoch-earlier',
+      pid: 0,
+      token,
+      kernelStart: '',
+    });
+    const report = await recoverStore(store, {
+      intents: new IntentFiles(store.storePath),
+      workers: new WorkerFiles(store.storePath),
+    });
     assert.equal(report.clean, true);
     assert.deepEqual(new WorkerFiles(store.storePath).list().records, [], 'settled: no process carried the token');
-  } finally { store.close(); }
+  } finally {
+    store.close();
+  }
   // Only now does the delayed child exec, carrying the token. Nobody alive can write its authorization.
   const r = launch(a.module, token);
   assert.equal(r.status, 78);

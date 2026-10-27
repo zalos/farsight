@@ -5,12 +5,17 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { boundOwner } from './owner-binding.js';
 import type { LedgerOwner } from './store-types.js';
 import { LedgerError } from './store-types.js';
-interface Fence { readonly owner: LedgerOwner; readonly veto: () => void; closed: boolean; failure?: unknown }
+interface Fence {
+  readonly owner: LedgerOwner;
+  readonly veto: () => void;
+  closed: boolean;
+  failure?: unknown;
+}
 const active = new AsyncLocalStorage<readonly Fence[]>();
 export function admissionFenceCheckpoint(owner: LedgerOwner): void {
-  const fences = (active.getStore() ?? []).filter(f => f.owner === owner);
+  const fences = (active.getStore() ?? []).filter((f) => f.owner === owner);
   if (!fences.length) return;
-  const first = fences.find(f => f.failure !== undefined);
+  const first = fences.find((f) => f.failure !== undefined);
   if (first) throw first.failure;
   try {
     owner.assertHeld();
@@ -25,7 +30,8 @@ export function admissionFenceCheckpoint(owner: LedgerOwner): void {
 }
 /** Synchronous ledger call only. Nested scopes add vetoes; unrelated stores/async contexts are untouched. */
 export function withAdmissionFence<T>(store: object, veto: () => void, body: () => T): T {
-  const owner = boundOwner(store); owner.assertHeld();
+  const owner = boundOwner(store);
+  owner.assertHeld();
   const fence: Fence = { owner, veto, closed: false };
   return active.run([...(active.getStore() ?? []), fence], () => {
     try {
@@ -40,14 +46,17 @@ export function withAdmissionFence<T>(store: object, veto: () => void, body: () 
     } catch (error) {
       if (fence.failure !== undefined) throw fence.failure;
       throw error;
-    } finally { fence.closed = true; }
+    } finally {
+      fence.closed = true;
+    }
   });
 }
 
 /** Preparation's asynchronous bootstrap context. Only accepted snapshot/plan/publication effects use its veto;
  * terminal failure records and cleanup remain writable after expiry. Detached callbacks lose this scope on close. */
 export async function withAsyncAdmissionFence<T>(store: object, veto: () => void, body: () => Promise<T>): Promise<T> {
-  const owner = boundOwner(store); owner.assertHeld();
+  const owner = boundOwner(store);
+  owner.assertHeld();
   const fence: Fence = { owner, veto, closed: false };
   return active.run([...(active.getStore() ?? []), fence], async () => {
     try {
@@ -58,6 +67,8 @@ export async function withAsyncAdmissionFence<T>(store: object, veto: () => void
     } catch (error) {
       if (fence.failure !== undefined) throw fence.failure;
       throw error;
-    } finally { fence.closed = true; }
+    } finally {
+      fence.closed = true;
+    }
   });
 }

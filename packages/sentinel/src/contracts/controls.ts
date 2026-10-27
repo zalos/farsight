@@ -8,7 +8,7 @@ import type { FrameworkId } from './rules.js';
 
 /** The security property a control fact is about. There is no catch-all property. */
 export type ControlProperty =
-  | 'authentication' | 'authorization' | 'csrf' | 'input-validation' | 'rate-limit' | 'security-headers' | 'cors';
+  'authentication' | 'authorization' | 'csrf' | 'input-validation' | 'rate-limit' | 'security-headers' | 'cors';
 
 /** Whether the control takes effect for the surface. `unknown` is never rounded to either side. */
 export type ControlVerdict = 'applies' | 'does-not-apply' | 'unknown';

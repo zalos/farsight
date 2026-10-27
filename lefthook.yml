@@ -1,0 +1,30 @@
+# Git hooks for this clone: `pnpm install` runs scripts/install-hooks.mjs, which runs `lefthook install`.
+# Every linked worktree of this repository shares one hooks directory, so:
+#  - never add a Git LFS hook here (pre-push, post-checkout, post-commit, post-merge): lefthook would take it over
+#    and run `git lfs` itself, but only in worktrees whose branch has this file — the others would skip LFS;
+#  - no_auto_install: a commit in one worktree must not rewrite the hooks that every other worktree runs.
+# Skip once with LEFTHOOK=0; CI checks the same things on every pull request.
+min_version: 2.2.2
+no_auto_install: true
+glob_matcher: doublestar
+
+pre-commit:
+  jobs:
+    - name: no commits on main
+      run: |
+        if [ "$(git symbolic-ref --short -q HEAD)" = main ] && [ -z "$FARSIGHT_ALLOW_MAIN_COMMIT" ]; then
+          echo "pre-commit: main takes no direct commits; create a branch and open a PR" >&2
+          exit 1
+        fi
+    - name: prettier
+      glob: '**/*.{js,mjs,cjs,ts,mts,cts}'
+      run: node_modules/.bin/prettier --write --ignore-unknown --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    - name: eslint
+      glob: '**/*.{js,mjs,cjs,ts,mts,cts}'
+      run: node_modules/.bin/eslint --quiet --no-warn-ignored --pass-on-unpruned-suppressions {staged_files}
+
+commit-msg:
+  jobs:
+    - name: conventional commit
+      run: node scripts/lint-commits.mjs --file {1} --any-scope

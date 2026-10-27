@@ -20,20 +20,37 @@ export const ZIZMOR_ENGINE = Object.freeze({
 
 /** Platforms of the pinned index. Only a measured one's results are trusted. */
 export const ZIZMOR_IMAGE_PLATFORMS = Object.freeze([
-  Object.freeze({ platform: 'linux/arm64', architecture: 'arm64', state: 'measured' as const,
+  Object.freeze({
+    platform: 'linux/arm64',
+    architecture: 'arm64',
+    state: 'measured' as const,
     manifest: 'sha256:15ce5a6ce0484be46752fb293617cf9c8107c309429e8fab9265eafa83404da1',
-    evidence: 'darwin-arm64 host, Docker Desktop with Engine 29.2.1; zizmor conformance 2026-10-22' }),
-  Object.freeze({ platform: 'linux/amd64', architecture: 'amd64', state: 'measured' as 'measured' | 'unmeasured',
+    evidence: 'darwin-arm64 host, Docker Desktop with Engine 29.2.1; zizmor conformance 2026-10-22',
+  }),
+  Object.freeze({
+    platform: 'linux/amd64',
+    architecture: 'amd64',
+    state: 'measured' as 'measured' | 'unmeasured',
     manifest: 'sha256:cfc533b8fa781c51c6fb4085057945bc3eebb6b6e8a25ab7daa85c885f071269',
-    evidence: 'native Ubuntu 24.04.5 x86_64, Docker Engine 28.0.4 linux/amd64; 2026-10-22; https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627; tested merge 0d6daa8cd369835fe6ec8ec5a89b4d25cb23edc5' }),
+    evidence:
+      'native Ubuntu 24.04.5 x86_64, Docker Engine 28.0.4 linux/amd64; 2026-10-22; https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627; tested merge 0d6daa8cd369835fe6ec8ec5a89b4d25cb23edc5',
+  }),
 ]);
-export const ZIZMOR_MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(ZIZMOR_IMAGE_PLATFORMS.filter(p => p.state === 'measured').map(p => p.architecture));
+export const ZIZMOR_MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(
+  ZIZMOR_IMAGE_PLATFORMS.filter((p) => p.state === 'measured').map((p) => p.architecture),
+);
 
 /**
  * Audits that need the GitHub API and are skipped offline, as zizmor 1.31.1 registers them (each refuses to load
  * without a client; the worker reports the engine's own "skipping" lines and the coordinator requires exactly these).
  */
-export const ZIZMOR_ONLINE_AUDITS = Object.freeze(['impostor-commit', 'known-vulnerable-actions', 'ref-confusion', 'ref-version-mismatch', 'stale-action-refs'] as const);
+export const ZIZMOR_ONLINE_AUDITS = Object.freeze([
+  'impostor-commit',
+  'known-vulnerable-actions',
+  'ref-confusion',
+  'ref-version-mismatch',
+  'stale-action-refs',
+] as const);
 /**
  * Audits that run offline with less information: artipacked cannot resolve a commit-pinned checkout's version,
  * typosquat-uses cannot confirm a repository exists, unpinned-uses cannot resolve refs.
@@ -47,8 +64,15 @@ export const ZIZMOR_OFFLINE_DEGRADED_AUDITS = Object.freeze(['artipacked', 'typo
  * were collected and audited and which audits were skipped. The log itself never leaves the container.
  */
 export const ZIZMOR_ENGINE_ARGS: readonly string[] = Object.freeze([
-  '--offline', '--no-config', '--no-ignores', '--collect=workflows,actions,dependabot', '--format=json', '--no-progress',
-  '--color=never', '--persona=regular', '-vv',
+  '--offline',
+  '--no-config',
+  '--no-ignores',
+  '--collect=workflows,actions,dependabot',
+  '--format=json',
+  '--no-progress',
+  '--color=never',
+  '--persona=regular',
+  '-vv',
 ]);
 export const ZIZMOR_MAX_OUTPUT_BYTES = 8_388_608;
 export const ZIZMOR_ENGINE_TIMEOUT_SECONDS = 100;
@@ -60,14 +84,33 @@ export interface ZizmorAdapterBuild {
 }
 
 /** Builds the adapter around the shim; a test variant (other id or arguments) gets its own digests. */
-export function buildZizmorAdapter(options: { id?: string; engineArgs?: readonly string[]; maxOutputBytes?: number } = {}): ZizmorAdapterBuild {
+export function buildZizmorAdapter(
+  options: { id?: string; engineArgs?: readonly string[]; maxOutputBytes?: number } = {},
+): ZizmorAdapterBuild {
   const args = options.engineArgs ?? ZIZMOR_ENGINE_ARGS;
-  if (options.maxOutputBytes !== undefined && (!Number.isSafeInteger(options.maxOutputBytes) || options.maxOutputBytes < 0 || options.maxOutputBytes > ZIZMOR_MAX_OUTPUT_BYTES)) throw new Error('sentinel.zizmor: the output bound is an integer up to the default');
-  for (const a of args) if (!/^[A-Za-z0-9=.,_/-]+$/.test(a)) throw new Error('sentinel.zizmor: engine arguments are fixed plain tokens');
-  const workerBytes = Buffer.from(ZIZMOR_WORKER_SOURCE.replace('[MAX_OUT]', String(options.maxOutputBytes ?? ZIZMOR_MAX_OUTPUT_BYTES)).replace('[ENGINE_ARGS]', args.join(' ')), 'utf8');
+  if (
+    options.maxOutputBytes !== undefined &&
+    (!Number.isSafeInteger(options.maxOutputBytes) ||
+      options.maxOutputBytes < 0 ||
+      options.maxOutputBytes > ZIZMOR_MAX_OUTPUT_BYTES)
+  )
+    throw new Error('sentinel.zizmor: the output bound is an integer up to the default');
+  for (const a of args)
+    if (!/^[A-Za-z0-9=.,_/-]+$/.test(a)) throw new Error('sentinel.zizmor: engine arguments are fixed plain tokens');
+  const workerBytes = Buffer.from(
+    ZIZMOR_WORKER_SOURCE.replace('[MAX_OUT]', String(options.maxOutputBytes ?? ZIZMOR_MAX_OUTPUT_BYTES)).replace(
+      '[ENGINE_ARGS]',
+      args.join(' '),
+    ),
+    'utf8',
+  );
   const workerDigest = `sha256:${createHash('sha256').update(workerBytes).digest('hex')}`;
   const definition = Object.freeze({
-    id: options.id ?? 'ci-zizmor', version: ZIZMOR_ENGINE.version, kind: 'external', isolation: 'container', image: ZIZMOR_ENGINE.image,
+    id: options.id ?? 'ci-zizmor',
+    version: ZIZMOR_ENGINE.version,
+    kind: 'external',
+    isolation: 'container',
+    image: ZIZMOR_ENGINE.image,
     command: Object.freeze(['/bin/sh', `/input/${workerDigest.slice('sha256:'.length)}`]),
   }) as ExternalAdapterDefinition;
   return Object.freeze({ definition, workerBytes, workerDigest });
@@ -92,7 +135,12 @@ export const ZIZMOR_SUPPORT = Object.freeze({
   }),
   onlineAuditsSkipped: ZIZMOR_ONLINE_AUDITS,
   offlineDegradedAudits: ZIZMOR_OFFLINE_DEGRADED_AUDITS,
-  notSupported: Object.freeze(['pre-commit configuration', 'remote repositories', 'other CI systems', 'repository zizmor configuration and ignore comments']),
+  notSupported: Object.freeze([
+    'pre-commit configuration',
+    'remote repositories',
+    'other CI systems',
+    'repository zizmor configuration and ignore comments',
+  ]),
   granularity: 'per-file' as const,
   graph: 'paths-only' as const,
 });

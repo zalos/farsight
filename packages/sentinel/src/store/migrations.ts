@@ -14,7 +14,8 @@ export const LEDGER_APPLICATION_ID = 0x53544e4c;
 // test/store-migrations.test.ts asserts each enumerated set equals the contract's own pinned list.
 const DIGEST = (col: string) =>
   `length(${col}) = 71 AND substr(${col}, 1, 7) = 'sha256:' AND substr(${col}, 8) NOT GLOB '*[^0-9a-f]*'`;
-const PRIVACY_RANK = (v: string) => `(CASE ${v} WHEN 'metadata' THEN 0 WHEN 'source-derived' THEN 1 WHEN 'source' THEN 2 END)`;
+const PRIVACY_RANK = (v: string) =>
+  `(CASE ${v} WHEN 'metadata' THEN 0 WHEN 'source-derived' THEN 1 WHEN 'source' THEN 2 END)`;
 const APPEND_ONLY = (table: string, what: 'UPDATE' | 'DELETE') =>
   `CREATE TRIGGER ${table}_no_${what.toLowerCase()} BEFORE ${what} ON ${table}
      BEGIN SELECT RAISE(ABORT, 'sentinel.store.appendOnly: ${table}'); END;`;
@@ -235,12 +236,43 @@ CREATE TABLE idempotency_keys (
 ) STRICT;
 
 -- Append-only history: rows are never deleted, and identity columns never change in place.
-${['epochs', 'runs', 'work_units', 'work_dependencies', 'attempts', 'artifacts', 'artifact_objects', 'artifact_links',
-  'publications', 'artifact_refs', 'reports', 'report_artifacts', 'events', 'idempotency_keys', 'schema_migrations',
-  'ledger_store'].map(t => APPEND_ONLY(t, 'DELETE')).join('\n')}
-${['epochs', 'work_dependencies', 'artifact_objects', 'artifact_links', 'publications', 'artifact_refs', 'reports',
-  'report_artifacts', 'events', 'idempotency_keys', 'schema_migrations', 'staging_artifacts', 'staging_links']
-  .map(t => APPEND_ONLY(t, 'UPDATE')).join('\n')}
+${[
+  'epochs',
+  'runs',
+  'work_units',
+  'work_dependencies',
+  'attempts',
+  'artifacts',
+  'artifact_objects',
+  'artifact_links',
+  'publications',
+  'artifact_refs',
+  'reports',
+  'report_artifacts',
+  'events',
+  'idempotency_keys',
+  'schema_migrations',
+  'ledger_store',
+]
+  .map((t) => APPEND_ONLY(t, 'DELETE'))
+  .join('\n')}
+${[
+  'epochs',
+  'work_dependencies',
+  'artifact_objects',
+  'artifact_links',
+  'publications',
+  'artifact_refs',
+  'reports',
+  'report_artifacts',
+  'events',
+  'idempotency_keys',
+  'schema_migrations',
+  'staging_artifacts',
+  'staging_links',
+]
+  .map((t) => APPEND_ONLY(t, 'UPDATE'))
+  .join('\n')}
 
 CREATE TRIGGER ledger_store_identity BEFORE UPDATE OF singleton, store_id, created_at ON ledger_store
   BEGIN SELECT RAISE(ABORT, 'sentinel.store.appendOnly: ledger_store identity'); END;
@@ -523,11 +555,16 @@ export function checkLedgerFile(db: DatabaseSync, migrations: readonly Migration
     throw new LedgerError('sentinel.store.notLedger', 'the database is not a Sentinel ledger');
   }
   if (state.version > migrations.length) {
-    throw new LedgerError('sentinel.store.newerSchema',
-      `the ledger is at schema ${state.version}; this build reads up to ${migrations.length}`);
+    throw new LedgerError(
+      'sentinel.store.newerSchema',
+      `the ledger is at schema ${state.version}; this build reads up to ${migrations.length}`,
+    );
   }
-  const recorded = db.prepare('SELECT version, name, checksum FROM schema_migrations ORDER BY version').all() as
-    Array<{ version: number; name: string; checksum: string }>;
+  const recorded = db.prepare('SELECT version, name, checksum FROM schema_migrations ORDER BY version').all() as Array<{
+    version: number;
+    name: string;
+    checksum: string;
+  }>;
   if (recorded.length !== state.version) {
     throw new LedgerError('sentinel.store.migrationMismatch', 'recorded migrations do not match the schema version');
   }
@@ -542,7 +579,11 @@ export function checkLedgerFile(db: DatabaseSync, migrations: readonly Migration
 
 function fsyncPath(path: string): void {
   const fd = openSync(path, 'r');
-  try { fsyncSync(fd); } finally { closeSync(fd); }
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**
@@ -550,8 +591,13 @@ function fsyncPath(path: string): void {
  * any schema change. Returns its path. On failure nothing is left at the final path.
  */
 async function takeBackup(
-  sqlite: typeof import('node:sqlite'), db: DatabaseSync, path: string, from: number, tag: string,
-  failpoint: (p: LedgerFailpoint) => void, guard: LedgerGuard,
+  sqlite: typeof import('node:sqlite'),
+  db: DatabaseSync,
+  path: string,
+  from: number,
+  tag: string,
+  failpoint: (p: LedgerFailpoint) => void,
+  guard: LedgerGuard,
 ): Promise<string> {
   const { backup, DatabaseSync: Db } = sqlite;
   const dir = join(dirname(path), 'backups');
@@ -559,7 +605,11 @@ async function takeBackup(
   const temp = `${final}.partial`;
   try {
     failpoint('backup:before');
-    try { mkdirSync(dir, { mode: 0o700 }); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+    try {
+      mkdirSync(dir, { mode: 0o700 });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+    }
     const d = lstatSync(dir);
     if (!d.isDirectory() || (d.mode & 0o077) !== 0) throw new Error('the backup directory is not private');
     rmSync(temp, { force: true });
@@ -576,7 +626,9 @@ async function takeBackup(
       if (integrity !== 'ok' || state.version !== from || state.applicationId !== LEDGER_APPLICATION_ID) {
         throw new Error('backup verification failed');
       }
-    } finally { copy.close(); }
+    } finally {
+      copy.close();
+    }
     fsyncPath(temp);
     guard.notOwnerFile(final);
     guard.assertHeld();
@@ -584,10 +636,16 @@ async function takeBackup(
     fsyncPath(dir);
     return final;
   } catch (error) {
-    try { guard.notOwnerFile(temp); rmSync(temp, { force: true }); } catch { /* never touch an owner alias */ }
+    try {
+      guard.notOwnerFile(temp);
+      rmSync(temp, { force: true });
+    } catch {
+      /* never touch an owner alias */
+    }
     if (error instanceof LedgerError) throw error;
-    throw new LedgerError('sentinel.store.backupFailed', 'could not take a verified backup before the upgrade',
-      { cause: error });
+    throw new LedgerError('sentinel.store.backupFailed', 'could not take a verified backup before the upgrade', {
+      cause: error,
+    });
   }
 }
 
@@ -605,22 +663,29 @@ export interface LedgerGuard {
  * re-checked after every await, after BEGIN, after each step and immediately before COMMIT; a loss at any point
  * rolls the whole upgrade back.
  */
-export async function migrateLedger(db: DatabaseSync, path: string, options: {
-  migrations: readonly Migration[];
-  build: string;
-  now: () => string;
-  backupTag: string;
-  sqlite: typeof import('node:sqlite');
-  failpoint: (p: LedgerFailpoint) => void;
-  guard: LedgerGuard;
-}): Promise<MigrationReport> {
+export async function migrateLedger(
+  db: DatabaseSync,
+  path: string,
+  options: {
+    migrations: readonly Migration[];
+    build: string;
+    now: () => string;
+    backupTag: string;
+    sqlite: typeof import('node:sqlite');
+    failpoint: (p: LedgerFailpoint) => void;
+    guard: LedgerGuard;
+  },
+): Promise<MigrationReport> {
   const { guard } = options;
   guard.assertHeld();
   const { migrations, build, now, failpoint } = options;
   const state = checkLedgerFile(db, migrations);
   const to = migrations.length;
   if (state.version === to) return { from: state.version, to, backupPath: null };
-  const backupPath = state.version > 0 ? await takeBackup(options.sqlite, db, path, state.version, options.backupTag, failpoint, guard) : null;
+  const backupPath =
+    state.version > 0
+      ? await takeBackup(options.sqlite, db, path, state.version, options.backupTag, failpoint, guard)
+      : null;
   guard.assertHeld();
   checkLedgerFile(db, migrations);
   // Foreign keys are switched off for the upgrade, as SQLite's table-rebuild procedure requires (the pragma is a
@@ -631,8 +696,8 @@ export async function migrateLedger(db: DatabaseSync, path: string, options: {
     try {
       guard.assertHeld();
       if (state.version === 0) db.exec(`PRAGMA application_id = ${LEDGER_APPLICATION_ID}`);
-      const record = () => db.prepare(
-        'INSERT INTO schema_migrations (version, name, checksum, build, applied_at) VALUES (?, ?, ?, ?, ?)');
+      const record = () =>
+        db.prepare('INSERT INTO schema_migrations (version, name, checksum, build, applied_at) VALUES (?, ?, ?, ?, ?)');
       for (const m of migrations.slice(state.version)) {
         db.exec(m.sql);
         failpoint('migrate:after-sql');
@@ -646,14 +711,20 @@ export async function migrateLedger(db: DatabaseSync, path: string, options: {
     } catch (error) {
       if (db.isTransaction) db.exec('ROLLBACK');
       if (error instanceof LedgerError && error.code === 'sentinel.store.ownerNotHeld') throw error;
-      throw new LedgerError('sentinel.store.migrationFailed',
-        `upgrade from schema ${state.version} to ${to} was rolled back`, { cause: error });
+      throw new LedgerError(
+        'sentinel.store.migrationFailed',
+        `upgrade from schema ${state.version} to ${to} was rolled back`,
+        { cause: error },
+      );
     }
   } finally {
     db.exec('PRAGMA foreign_keys = ON');
   }
   if (Number(Object.values(db.prepare('PRAGMA foreign_keys').get() ?? {})[0]) !== 1) {
-    throw new LedgerError('sentinel.store.migrationFailed', 'foreign key enforcement did not come back on after the upgrade');
+    throw new LedgerError(
+      'sentinel.store.migrationFailed',
+      'foreign key enforcement did not come back on after the upgrade',
+    );
   }
   return { from: state.version, to, backupPath };
 }

@@ -12,7 +12,14 @@
 // exactly and its sequence number is the next one; a worker cannot supply or change its own authority.
 import { MAX_ENVELOPE_BYTES } from '../contracts/index.js';
 import type {
-  AttemptBinding, CancelMessage, HelloMessage, ProtocolMessage, RefuseMessage, ResultMessage, StartMessage, WelcomeMessage,
+  AttemptBinding,
+  CancelMessage,
+  HelloMessage,
+  ProtocolMessage,
+  RefuseMessage,
+  ResultMessage,
+  StartMessage,
+  WelcomeMessage,
 } from '../contracts/protocol.js';
 import type { ArtifactId, Digest, Id, ScopeId, Timestamp, WorkRef } from '../contracts/common.js';
 import { negotiateProtocol, validateEnvelope } from '../validate.js';
@@ -66,11 +73,13 @@ export class FrameDecoder {
         const nl = buf.indexOf(NEWLINE);
         if (nl < 0) {
           // The size check happens before any decode: a line that cannot fit fails here, unread.
-          if (this.#pendingBytes + buf.byteLength > this.#maxFrame) this.#fail('sentinel.execution.frameTooLarge', { bytes: this.#maxFrame });
+          if (this.#pendingBytes + buf.byteLength > this.#maxFrame)
+            this.#fail('sentinel.execution.frameTooLarge', { bytes: this.#maxFrame });
           this.#append(buf);
           return out;
         }
-        if (this.#pendingBytes + nl > this.#maxFrame) this.#fail('sentinel.execution.frameTooLarge', { bytes: this.#maxFrame });
+        if (this.#pendingBytes + nl > this.#maxFrame)
+          this.#fail('sentinel.execution.frameTooLarge', { bytes: this.#maxFrame });
         let frame: Buffer;
         if (this.#pendingBytes === 0) {
           frame = buf.subarray(0, nl); // the whole line is in this chunk: no copy
@@ -81,11 +90,15 @@ export class FrameDecoder {
         // Decoding copies the bytes into a string, so the buffer can be reused for the next line straight away.
         this.#pendingBytes = 0;
         buf = buf.subarray(nl + 1);
-        if (++this.#frames > this.#maxFrames) this.#fail('sentinel.execution.stdoutBudget', { frames: this.#maxFrames });
+        if (++this.#frames > this.#maxFrames)
+          this.#fail('sentinel.execution.stdoutBudget', { frames: this.#maxFrames });
         out.push(this.#decode(frame));
       }
     } catch (error) {
-      this.#failed = error instanceof ExecutionError ? error : new ExecutionError('sentinel.execution.frameMalformed', {}, { cause: error });
+      this.#failed =
+        error instanceof ExecutionError
+          ? error
+          : new ExecutionError('sentinel.execution.frameMalformed', {}, { cause: error });
       throw this.#failed;
     }
   }
@@ -114,8 +127,12 @@ export class FrameDecoder {
     this.#pendingBytes = needed;
   }
 
-  get frames(): number { return this.#frames; }
-  get bytes(): number { return this.#total; }
+  get frames(): number {
+    return this.#frames;
+  }
+  get bytes(): number {
+    return this.#total;
+  }
 
   #decode(frame: Buffer): ProtocolMessage {
     let text: string;
@@ -127,7 +144,10 @@ export class FrameDecoder {
       throw new ExecutionError('sentinel.execution.frameMalformed', {}, { cause });
     }
     const checked = validateEnvelope('protocol', value);
-    if (!checked.ok) throw new ExecutionError('sentinel.execution.messageInvalid', { errors: checked.errors.slice(0, 4).map(e => `${e.code} ${e.path}`) });
+    if (!checked.ok)
+      throw new ExecutionError('sentinel.execution.messageInvalid', {
+        errors: checked.errors.slice(0, 4).map((e) => `${e.code} ${e.path}`),
+      });
     return checked.value;
   }
 
@@ -137,16 +157,21 @@ export class FrameDecoder {
 }
 
 function bounded(n: number, min: number, max: number, name: string): number {
-  if (!Number.isSafeInteger(n) || n < min || n > max) throw new RangeError(`${name} must be an integer from ${min} to ${max}`);
+  if (!Number.isSafeInteger(n) || n < min || n > max)
+    throw new RangeError(`${name} must be an integer from ${min} to ${max}`);
   return n;
 }
 
 /** Serialise one coordinator message, validated and size-checked, as one frame. */
 export function encodeFrame(message: ProtocolMessage, maxFrameBytes = DEFAULT_MAX_FRAME_BYTES): Buffer {
   const checked = validateEnvelope('protocol', message);
-  if (!checked.ok) throw new ExecutionError('sentinel.execution.messageInvalid', { errors: checked.errors.slice(0, 4).map(e => `${e.code} ${e.path}`) });
+  if (!checked.ok)
+    throw new ExecutionError('sentinel.execution.messageInvalid', {
+      errors: checked.errors.slice(0, 4).map((e) => `${e.code} ${e.path}`),
+    });
   const bytes = Buffer.from(`${JSON.stringify(message)}\n`, 'utf8');
-  if (bytes.byteLength - 1 > maxFrameBytes) throw new ExecutionError('sentinel.execution.frameTooLarge', { bytes: maxFrameBytes });
+  if (bytes.byteLength - 1 > maxFrameBytes)
+    throw new ExecutionError('sentinel.execution.frameTooLarge', { bytes: maxFrameBytes });
   return bytes;
 }
 
@@ -187,12 +212,29 @@ export class WorkerSession {
   #failure: ExecutionError | undefined;
 
   constructor(binding: SessionBinding) {
-    this.binding = Object.freeze({ ...binding, work: Object.freeze({ ...binding.work }), inputs: Object.freeze([...binding.inputs]) as ArtifactId[],
-      ...(binding.assignment ? { assignment: Object.freeze({ checks: [...binding.assignment.checks], scopes: [...binding.assignment.scopes],
-        ...(binding.assignment.inputScopes ? { inputScopes: binding.assignment.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) } : {}) }) } : {}) });
+    this.binding = Object.freeze({
+      ...binding,
+      work: Object.freeze({ ...binding.work }),
+      inputs: Object.freeze([...binding.inputs]) as ArtifactId[],
+      ...(binding.assignment
+        ? {
+            assignment: Object.freeze({
+              checks: [...binding.assignment.checks],
+              scopes: [...binding.assignment.scopes],
+              ...(binding.assignment.inputScopes
+                ? {
+                    inputScopes: binding.assignment.inputScopes.map((x) => ({ input: x.input, scopes: [...x.scopes] })),
+                  }
+                : {}),
+            }),
+          }
+        : {}),
+    });
   }
 
-  get phase(): SessionPhase { return this.#phase; }
+  get phase(): SessionPhase {
+    return this.#phase;
+  }
 
   receive(message: ProtocolMessage): SessionStep {
     if (this.#failure) throw this.#failure;
@@ -200,7 +242,10 @@ export class WorkerSession {
       return this.#receive(message);
     } catch (error) {
       this.#phase = 'failed';
-      this.#failure = error instanceof ExecutionError ? error : new ExecutionError('sentinel.execution.protocolViolation', { rule: 'internal' }, { cause: error });
+      this.#failure =
+        error instanceof ExecutionError
+          ? error
+          : new ExecutionError('sentinel.execution.protocolViolation', { rule: 'internal' }, { cause: error });
       throw this.#failure;
     }
   }
@@ -259,25 +304,48 @@ export class WorkerSession {
     }
     this.#phase = 'running';
     const start: StartMessage = {
-      protocol: PROTOCOL, type: 'start', ...this.#nextBinding(),
-      inputFingerprint: this.binding.inputFingerprint, inputs: [...this.binding.inputs], deadlineAt: this.binding.deadlineAt,
+      protocol: PROTOCOL,
+      type: 'start',
+      ...this.#nextBinding(),
+      inputFingerprint: this.binding.inputFingerprint,
+      inputs: [...this.binding.inputs],
+      deadlineAt: this.binding.deadlineAt,
       ...(this.binding.job !== undefined ? { job: this.binding.job } : {}),
-      ...(this.binding.assignment ? { checks: [...this.binding.assignment.checks], scopes: [...this.binding.assignment.scopes],
-        ...(this.binding.assignment.inputScopes ? { inputScopes: this.binding.assignment.inputScopes.map(x => ({ input: x.input, scopes: [...x.scopes] })) } : {}) } : {}),
+      ...(this.binding.assignment
+        ? {
+            checks: [...this.binding.assignment.checks],
+            scopes: [...this.binding.assignment.scopes],
+            ...(this.binding.assignment.inputScopes
+              ? {
+                  inputScopes: this.binding.assignment.inputScopes.map((x) => ({
+                    input: x.input,
+                    scopes: [...x.scopes],
+                  })),
+                }
+              : {}),
+          }
+        : {}),
     };
     return { send: [answer, start] };
   }
 
   #nextBinding(): AttemptBinding {
-    return { attemptId: this.binding.attemptId, work: { ...this.binding.work }, coordinatorEpoch: this.binding.coordinatorEpoch, seq: this.#sentSeq++ };
+    return {
+      attemptId: this.binding.attemptId,
+      work: { ...this.binding.work },
+      coordinatorEpoch: this.binding.coordinatorEpoch,
+      seq: this.#sentSeq++,
+    };
   }
 
   #checkBinding(message: AttemptBinding): void {
     if (message.attemptId !== this.binding.attemptId) violation('attempt');
-    if (message.work.id !== this.binding.work.id || message.work.revision !== this.binding.work.revision) violation('work-revision');
+    if (message.work.id !== this.binding.work.id || message.work.revision !== this.binding.work.revision)
+      violation('work-revision');
     if (message.coordinatorEpoch !== this.binding.coordinatorEpoch) violation('coordinator-epoch');
     if (message.fencingGeneration !== undefined) violation('fencing-on-owned-worker');
-    if (message.seq !== this.#receivedSeq) violation(message.seq < this.#receivedSeq ? 'sequence-repeat' : 'sequence-gap');
+    if (message.seq !== this.#receivedSeq)
+      violation(message.seq < this.#receivedSeq ? 'sequence-repeat' : 'sequence-gap');
     this.#receivedSeq++;
   }
 }

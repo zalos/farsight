@@ -34,13 +34,20 @@ export async function runTrivyAttempt(service: ExecutionService, attempt: TrivyA
     const adapterId = attempt.adapterId ?? attempt.adapter?.definition.id ?? TRIVY_ADAPTER.id;
     if (!built.jobDigest) return notRunResult(built.job, adapterId);
     const outcome = await service.run({
-      adapterId, attemptId: attempt.attemptId, work: attempt.work, inputs: built.inputs, ...(attempt.signal ? { signal: attempt.signal } : {}),
+      adapterId,
+      attemptId: attempt.attemptId,
+      work: attempt.work,
+      inputs: built.inputs,
+      ...(attempt.signal ? { signal: attempt.signal } : {}),
     });
     try {
-      const byId = new Map(outcome.outputs.map(o => [o.id, o.path]));
+      const byId = new Map(outcome.outputs.map((o) => [o.id, o.path]));
       return normalizeTrivyRun({
-        job: built.job, jobDigest: built.jobDigest, outcome,
-        outputBytes: id => readFileSync(byId.get(id)!), targetBytes: a => readSealedInput(outcome.workDir, a),
+        job: built.job,
+        jobDigest: built.jobDigest,
+        outcome,
+        outputBytes: (id) => readFileSync(byId.get(id)!),
+        targetBytes: (a) => readSealedInput(outcome.workDir, a),
         ...(attempt.qualifyingArchitecture ? { qualifyingArchitecture: attempt.qualifyingArchitecture } : {}),
       });
     } finally {

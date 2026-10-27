@@ -7,23 +7,51 @@
 // is evidence of a conditional refusal only, and a name is evidence of nothing.
 import { ModuleIndex, type Binding } from './modules.js';
 import {
-  identifierName, isFunction, memberPath, numberValue, stringValue, unwrap, walk, type JsFile, type JsNode,
+  identifierName,
+  isFunction,
+  memberPath,
+  numberValue,
+  stringValue,
+  unwrap,
+  walk,
+  type JsFile,
+  type JsNode,
 } from './syntax.js';
 
 export const EXPRESS_REASON_CODES = Object.freeze([
-  'sentinel.express.versionUnresolved', 'sentinel.express.versionUnsupported', 'sentinel.express.sourceIncomplete',
-  'sentinel.express.sourceNotUtf8', 'sentinel.express.scanLimit', 'sentinel.express.syntaxError',
-  'sentinel.express.registrationDynamic', 'sentinel.express.registrationUnsupported', 'sentinel.express.pathUnsupported',
-  'sentinel.express.layerMatchUnknown', 'sentinel.express.routingSettingUnsupported', 'sentinel.express.subAppUnsupported',
-  'sentinel.express.paramCallback', 'sentinel.express.middlewareUnresolved', 'sentinel.express.middlewareThirdParty',
-  'sentinel.express.middlewareEffectUnknown', 'sentinel.express.nextSkip', 'sentinel.express.routeNotMounted',
-  'sentinel.express.routeObjectUnresolved', 'sentinel.express.surfaceAmbiguous', 'sentinel.express.mountsDisagree',
-  'sentinel.express.routeNotIndexed', 'sentinel.express.mountCycle', 'sentinel.express.errorPathResumes',
-  'sentinel.express.refusalUnproven', 'sentinel.express.routeNotInGraph',
+  'sentinel.express.versionUnresolved',
+  'sentinel.express.versionUnsupported',
+  'sentinel.express.sourceIncomplete',
+  'sentinel.express.sourceNotUtf8',
+  'sentinel.express.scanLimit',
+  'sentinel.express.syntaxError',
+  'sentinel.express.registrationDynamic',
+  'sentinel.express.registrationUnsupported',
+  'sentinel.express.pathUnsupported',
+  'sentinel.express.layerMatchUnknown',
+  'sentinel.express.routingSettingUnsupported',
+  'sentinel.express.subAppUnsupported',
+  'sentinel.express.paramCallback',
+  'sentinel.express.middlewareUnresolved',
+  'sentinel.express.middlewareThirdParty',
+  'sentinel.express.middlewareEffectUnknown',
+  'sentinel.express.nextSkip',
+  'sentinel.express.routeNotMounted',
+  'sentinel.express.routeObjectUnresolved',
+  'sentinel.express.surfaceAmbiguous',
+  'sentinel.express.mountsDisagree',
+  'sentinel.express.routeNotIndexed',
+  'sentinel.express.mountCycle',
+  'sentinel.express.errorPathResumes',
+  'sentinel.express.refusalUnproven',
+  'sentinel.express.routeNotInGraph',
 ] as const);
-export type ExpressReason = typeof EXPRESS_REASON_CODES[number];
+export type ExpressReason = (typeof EXPRESS_REASON_CODES)[number];
 
-export interface At { readonly file: JsFile; readonly node: JsNode }
+export interface At {
+  readonly file: JsFile;
+  readonly node: JsNode;
+}
 
 export interface ExpressObject {
   readonly id: string;
@@ -43,8 +71,15 @@ export interface ExpressObject {
 export type Layer =
   | { readonly kind: 'middleware'; readonly path: string; readonly fn: JsNode; readonly file: JsFile; readonly at: At }
   | { readonly kind: 'mount'; readonly path: string; readonly target: ExpressObject; readonly at: At }
-  | { readonly kind: 'route'; readonly path: string; readonly methods: readonly string[] | 'all'; readonly handlers: readonly JsNode[]; readonly file: JsFile; readonly at: At;
-      /** Handlers registered through `route(path).<method>()` chains: one stack per method, not read. */ readonly chained?: boolean }
+  | {
+      readonly kind: 'route';
+      readonly path: string;
+      readonly methods: readonly string[] | 'all';
+      readonly handlers: readonly JsNode[];
+      readonly file: JsFile;
+      readonly at: At;
+      /** Handlers registered through `route(path).<method>()` chains: one stack per method, not read. */ readonly chained?: boolean;
+    }
   | { readonly kind: 'param'; readonly at: At }
   | { readonly kind: 'unknown'; readonly reason: ExpressReason; readonly at: At };
 
@@ -56,7 +91,13 @@ export type Value =
   | { readonly kind: 'namespace'; readonly file: JsFile }
   | { readonly kind: 'string'; readonly value: string }
   | { readonly kind: 'builtin'; readonly name: string; readonly at: At; readonly inert: boolean }
-  | { readonly kind: 'function'; readonly file: JsFile; readonly node: JsNode; readonly bound: ReadonlyMap<string, BoundArg>; readonly via: At[] }
+  | {
+      readonly kind: 'function';
+      readonly file: JsFile;
+      readonly node: JsNode;
+      readonly bound: ReadonlyMap<string, BoundArg>;
+      readonly via: At[];
+    }
   | { readonly kind: 'foreign'; readonly from: string; readonly at: At }
   | { readonly kind: 'unknown'; readonly at: At };
 
@@ -67,11 +108,28 @@ const NODE_HTTP = new Set(['http', 'https', 'node:http', 'node:https']);
 const VERBS = new Set(['get', 'post', 'put', 'delete', 'patch', 'options', 'head', 'all']);
 const BUILTINS = new Set(['json', 'urlencoded', 'text', 'raw', 'static']);
 const ROUTING_SETTINGS = new Set(['case sensitive routing', 'strict routing']);
-const OPTION_INERT_KEYS = new Set(['limit', 'extended', 'type', 'strict', 'inflate', 'parameterLimit', 'defaultCharset',
-  'index', 'dotfiles', 'etag', 'extensions', 'fallthrough', 'immutable', 'lastModified', 'maxAge', 'redirect']);
+const OPTION_INERT_KEYS = new Set([
+  'limit',
+  'extended',
+  'type',
+  'strict',
+  'inflate',
+  'parameterLimit',
+  'defaultCharset',
+  'index',
+  'dotfiles',
+  'etag',
+  'extensions',
+  'fallthrough',
+  'immutable',
+  'lastModified',
+  'maxAge',
+  'redirect',
+]);
 
 /** Test sources are not the application: an object created there does not mount or serve production routes. */
-export const isTestPath = (p: string) => /(^|\/)(__tests__|tests?|e2e)\//.test(p) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(p);
+export const isTestPath = (p: string) =>
+  /(^|\/)(__tests__|tests?|e2e)\//.test(p) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(p);
 
 export interface ExpressModel {
   readonly index: ModuleIndex;
@@ -80,13 +138,16 @@ export interface ExpressModel {
   readonly frontiers: { readonly reason: ExpressReason; readonly at: At }[];
   resolveValue(file: JsFile, node: JsNode): Value;
   /** The route layers registered at a source line of a file. */
-  routesAt(path: string, line: number): { obj: ExpressObject; index: number; layer: Extract<Layer, { kind: 'route' }> }[];
+  routesAt(
+    path: string,
+    line: number,
+  ): { obj: ExpressObject; index: number; layer: Extract<Layer, { kind: 'route' }> }[];
   /** Whether an expression's root binds to something that is certainly not Express (another package's object). */
   foreignObject(file: JsFile, node: JsNode): boolean;
 }
 
 export function buildModel(files: readonly JsFile[]): ExpressModel {
-  const app = files.filter(f => !isTestPath(f.path));
+  const app = files.filter((f) => !isTestPath(f.path));
   const index = new ModuleIndex(app);
   const objects: ExpressObject[] = [];
   const objectByDecl = new Map<JsNode, ExpressObject>();
@@ -98,21 +159,25 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
 
   function resolveBinding(b: Binding, at: JsNode): Value {
     switch (b.kind) {
-      case 'function': return { kind: 'function', file: b.file, node: b.node, bound: new Map(), via: [] };
+      case 'function':
+        return { kind: 'function', file: b.file, node: b.node, bound: new Map(), via: [] };
       case 'declared': {
         const obj = objectByDecl.get(b.declarator);
         if (obj) return { kind: 'object', obj };
         return b.init ? resolveValue(b.file, b.init) : unknown(b.file, b.declarator);
       }
-      case 'import': return resolveImport(b);
-      default: return unknown(b.file, at);
+      case 'import':
+        return resolveImport(b);
+      default:
+        return unknown(b.file, at);
     }
   }
 
   function resolveImport(b: Extract<Binding, { kind: 'import' }>): Value {
     const t = index.resolve(b.file, b.specifier);
     if (t.kind === 'package') {
-      if (t.name !== 'express' || b.specifier !== 'express') return { kind: 'foreign', from: t.name, at: { file: b.file, node: b.at } };
+      if (t.name !== 'express' || b.specifier !== 'express')
+        return { kind: 'foreign', from: t.name, at: { file: b.file, node: b.at } };
       if (b.imported === 'default' || b.imported === 'require') return { kind: 'express' };
       if (b.imported === 'Router') return { kind: 'router-factory' };
       if (BUILTINS.has(b.imported)) return { kind: 'express-member', name: b.imported };
@@ -123,7 +188,10 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
     if (b.imported === 'require' && !index.isCommonJs(t.file)) return unknown(b.file, b.at);
     const e = index.exportOf(t.file, b.imported === 'require' ? 'default' : b.imported);
     if (!e) return unknown(b.file, b.at);
-    if (e.local) { const lb = index.binding(e.file, e.local); if (lb) return resolveBinding(lb, e.value); }
+    if (e.local) {
+      const lb = index.binding(e.file, e.local);
+      if (lb) return resolveBinding(lb, e.value);
+    }
     return resolveValue(e.file, e.value);
   }
 
@@ -133,7 +201,9 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
     resolving.add(node);
     try {
       return resolveInner(file, node);
-    } finally { resolving.delete(node); }
+    } finally {
+      resolving.delete(node);
+    }
   }
 
   function resolveInner(file: JsFile, node: JsNode): Value {
@@ -156,7 +226,10 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
       if (base.kind === 'namespace') {
         const e = index.exportOf(base.file, prop);
         if (!e) return unknown(file, node);
-        if (e.local) { const lb = index.binding(e.file, e.local); if (lb) return resolveBinding(lb, e.value); }
+        if (e.local) {
+          const lb = index.binding(e.file, e.local);
+          if (lb) return resolveBinding(lb, e.value);
+        }
         return resolveValue(e.file, e.value);
       }
       if (base.kind === 'foreign') return { kind: 'foreign', from: base.from, at: { file, node } };
@@ -172,7 +245,15 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
       }
       const c = resolveValue(file, callee);
       if (c.kind === 'express-member') {
-        return { kind: 'builtin', name: c.name, at: { file, node }, inert: args.length <= (c.name === 'static' ? 2 : 1) && inertOptions(c.name === 'static' ? args[1] : args[0]) && (c.name !== 'static' || stringValue(args[0]) !== undefined) };
+        return {
+          kind: 'builtin',
+          name: c.name,
+          at: { file, node },
+          inert:
+            args.length <= (c.name === 'static' ? 2 : 1) &&
+            inertOptions(c.name === 'static' ? args[1] : args[0]) &&
+            (c.name !== 'static' || stringValue(args[0]) !== undefined),
+        };
       }
       if (c.kind === 'function') return factoryResult(c, file, node, args);
       if (c.kind === 'foreign') return { kind: 'foreign', from: c.from, at: { file, node } };
@@ -193,20 +274,35 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
     } else returned = unwrap(body);
     if (!returned || !isFunction(returned)) return unknown(file, call);
     const params = fn.params as JsNode[];
-    if (params.some(p => p.type !== 'Identifier') || args.some(a => a.type === 'SpreadElement')) return unknown(file, call);
+    if (params.some((p) => p.type !== 'Identifier') || args.some((a) => a.type === 'SpreadElement'))
+      return unknown(file, call);
     const bound = new Map<string, BoundArg>();
     params.forEach((p, i) => {
       const a = args[i];
       const lit = a ? literalOf(a) : { literal: undefined };
       bound.set(p.name as string, lit);
     });
-    return { kind: 'function', file: f.file, node: returned, bound, via: [{ file, node: call }, { file: f.file, node: fn }] };
+    return {
+      kind: 'function',
+      file: f.file,
+      node: returned,
+      bound,
+      via: [
+        { file, node: call },
+        { file: f.file, node: fn },
+      ],
+    };
   }
 
   // ---- objects ----
   for (const file of app) {
     for (const s of file.program.body as JsNode[]) {
-      const decl = s.type === 'VariableDeclaration' ? s : s.type === 'ExportNamedDeclaration' && (s.declaration as JsNode | undefined)?.type === 'VariableDeclaration' ? s.declaration as JsNode : undefined;
+      const decl =
+        s.type === 'VariableDeclaration'
+          ? s
+          : s.type === 'ExportNamedDeclaration' && (s.declaration as JsNode | undefined)?.type === 'VariableDeclaration'
+            ? (s.declaration as JsNode)
+            : undefined;
       if (!decl) continue;
       for (const d of decl.declarations as JsNode[]) {
         const init = unwrap(d.init as JsNode | undefined);
@@ -214,15 +310,28 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
         if (!name || init?.type !== 'CallExpression') continue;
         const c = resolveValue(file, init.callee as JsNode);
         if (c.kind !== 'express' && c.kind !== 'router-factory') continue;
-        const obj: ExpressObject = { id: `${file.path}#${name}`, kind: c.kind === 'express' ? 'app' : 'router', at: { file, node: d }, layers: [], mounts: [] };
+        const obj: ExpressObject = {
+          id: `${file.path}#${name}`,
+          kind: c.kind === 'express' ? 'app' : 'router',
+          at: { file, node: d },
+          layers: [],
+          mounts: [],
+        };
         if (decl.kind !== 'const') obj.open = { file, node: d };
         const args = init.arguments as JsNode[];
         if (obj.kind === 'app' && args.length) obj.open = { file, node: init };
         if (obj.kind === 'router' && args.length) {
           const opts = unwrap(args[0]);
-          const readable = args.length === 1 && opts?.type === 'ObjectExpression' && (opts.properties as JsNode[]).every(p => p.type === 'Property' && !p.computed && literalOf(p.value as JsNode).literal !== undefined);
-          const keys = readable ? (opts!.properties as JsNode[]).map(p => identifierName(p.key as JsNode) ?? stringValue(p.key as JsNode)) : [];
-          if (!readable || keys.some(k => k !== 'mergeParams')) obj.matching = { file, node: init };
+          const readable =
+            args.length === 1 &&
+            opts?.type === 'ObjectExpression' &&
+            (opts.properties as JsNode[]).every(
+              (p) => p.type === 'Property' && !p.computed && literalOf(p.value as JsNode).literal !== undefined,
+            );
+          const keys = readable
+            ? (opts!.properties as JsNode[]).map((p) => identifierName(p.key as JsNode) ?? stringValue(p.key as JsNode))
+            : [];
+          if (!readable || keys.some((k) => k !== 'mergeParams')) obj.matching = { file, node: init };
         }
         objects.push(obj);
         objectByDecl.set(d, obj);
@@ -232,16 +341,26 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
 
   // ---- registrations: top-level statements, in order ----
   const consumed = new Set<JsNode>();
-  const routeLines = new Map<string, { obj: ExpressObject; index: number; layer: Extract<Layer, { kind: 'route' }> }[]>();
-  const lineOf = (file: JsFile, node: JsNode) => { let l = 1; for (let i = 0; i < node.start; i++) if (file.text.charCodeAt(i) === 10) l++; return l; };
+  const routeLines = new Map<
+    string,
+    { obj: ExpressObject; index: number; layer: Extract<Layer, { kind: 'route' }> }[]
+  >();
+  const lineOf = (file: JsFile, node: JsNode) => {
+    let l = 1;
+    for (let i = 0; i < node.start; i++) if (file.text.charCodeAt(i) === 10) l++;
+    return l;
+  };
 
   const flatten = (args: JsNode[]): JsNode[] | undefined => {
     const out: JsNode[] = [];
     for (const a of args) {
       const u = unwrap(a)!;
       if (u.type === 'SpreadElement') return undefined;
-      if (u.type === 'ArrayExpression') { const inner = flatten((u.elements as (JsNode | null)[]).filter((e): e is JsNode => !!e)); if (!inner) return undefined; out.push(...inner); }
-      else out.push(a);
+      if (u.type === 'ArrayExpression') {
+        const inner = flatten((u.elements as (JsNode | null)[]).filter((e): e is JsNode => !!e));
+        if (!inner) return undefined;
+        out.push(...inner);
+      } else out.push(a);
     }
     return out;
   };
@@ -250,8 +369,17 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
     const v = resolveValue(file, a);
     if (v.kind === 'string') return v.value;
     const u = unwrap(a)!;
-    if (u.type === 'ArrayExpression' || u.type === 'TemplateLiteral' || u.type === 'Literal' || u.type === 'BinaryExpression' || u.type === 'NewExpression') return 'unreadable';
-    return v.kind === 'unknown' && u.type === 'Identifier' && !index.binding(file, u.name as string) ? 'unreadable' : undefined;
+    if (
+      u.type === 'ArrayExpression' ||
+      u.type === 'TemplateLiteral' ||
+      u.type === 'Literal' ||
+      u.type === 'BinaryExpression' ||
+      u.type === 'NewExpression'
+    )
+      return 'unreadable';
+    return v.kind === 'unknown' && u.type === 'Identifier' && !index.binding(file, u.name as string)
+      ? 'unreadable'
+      : undefined;
   };
 
   function addUse(obj: ExpressObject, file: JsFile, call: JsNode, args: JsNode[]) {
@@ -259,10 +387,19 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
     let rest = args;
     let path = '/';
     const p = pathArg(file, args[0]);
-    if (p === 'unreadable') { obj.layers.push({ kind: 'unknown', reason: 'sentinel.express.pathUnsupported', at }); return; }
-    if (p !== undefined) { path = p; rest = args.slice(1); }
+    if (p === 'unreadable') {
+      obj.layers.push({ kind: 'unknown', reason: 'sentinel.express.pathUnsupported', at });
+      return;
+    }
+    if (p !== undefined) {
+      path = p;
+      rest = args.slice(1);
+    }
     const fns = flatten(rest);
-    if (!fns || !fns.length) { obj.layers.push({ kind: 'unknown', reason: 'sentinel.express.registrationUnsupported', at }); return; }
+    if (!fns || !fns.length) {
+      obj.layers.push({ kind: 'unknown', reason: 'sentinel.express.registrationUnsupported', at });
+      return;
+    }
     for (const fn of fns) {
       const v = resolveValue(file, fn);
       if (v.kind === 'object') {
@@ -282,15 +419,31 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
     const at = { file, node: call };
     const p = pathArg(file, args[0]);
     const handlers = flatten(args.slice(1));
-    if (p === undefined || p === 'unreadable') { obj.layers.push({ kind: 'unknown', reason: 'sentinel.express.pathUnsupported', at }); return; }
-    if (!handlers || !handlers.length) { obj.layers.push({ kind: 'unknown', reason: 'sentinel.express.registrationUnsupported', at }); return; }
-    const layer = { kind: 'route' as const, path: p, methods: method === 'all' ? 'all' as const : [method], handlers, file, at };
+    if (p === undefined || p === 'unreadable') {
+      obj.layers.push({ kind: 'unknown', reason: 'sentinel.express.pathUnsupported', at });
+      return;
+    }
+    if (!handlers || !handlers.length) {
+      obj.layers.push({ kind: 'unknown', reason: 'sentinel.express.registrationUnsupported', at });
+      return;
+    }
+    const layer = {
+      kind: 'route' as const,
+      path: p,
+      methods: method === 'all' ? ('all' as const) : [method],
+      handlers,
+      file,
+      at,
+    };
     const key = `${file.path}:${lineOf(file, call)}`;
-    routeLines.set(key, [...routeLines.get(key) ?? [], { obj, index: obj.layers.length, layer }]);
+    routeLines.set(key, [...(routeLines.get(key) ?? []), { obj, index: obj.layers.length, layer }]);
     obj.layers.push(layer);
   }
 
-  const markConsumed = (n: JsNode) => { const u = unwrap(n); if (u?.type === 'Identifier') consumed.add(u); };
+  const markConsumed = (n: JsNode) => {
+    const u = unwrap(n);
+    if (u?.type === 'Identifier') consumed.add(u);
+  };
 
   for (const file of app) {
     for (const s of file.program.body as JsNode[]) {
@@ -316,7 +469,10 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
       let route: { path: string | undefined; at: At; methods: string[] } | undefined;
       for (const c of calls) {
         if (route) {
-          if (VERBS.has(c.name)) { route.methods.push(c.name); continue; }
+          if (VERBS.has(c.name)) {
+            route.methods.push(c.name);
+            continue;
+          }
           obj.open ??= { file, node: c.node };
           break;
         }
@@ -327,19 +483,36 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
           addRoute(obj, file, c.node, c.name, c.args);
         } else if (c.name === 'route') {
           const p = pathArg(file, c.args[0]);
-          route = { path: typeof p === 'string' && p !== 'unreadable' ? p : undefined, at: { file, node: c.node }, methods: [] };
+          route = {
+            path: typeof p === 'string' && p !== 'unreadable' ? p : undefined,
+            at: { file, node: c.node },
+            methods: [],
+          };
         } else if (c.name === 'param') obj.layers.push({ kind: 'param', at: { file, node: c.node } });
         else if (c.name === 'set' || c.name === 'enable' || c.name === 'disable') {
           const key = stringValue(c.args[0]);
           if (key === undefined || ROUTING_SETTINGS.has(key)) obj.matching ??= { file, node: c.node };
         } else if (c.name === 'engine') continue;
         else if (c.name === 'listen') break;
-        else { obj.open ??= { file, node: c.node }; break; }
+        else {
+          obj.open ??= { file, node: c.node };
+          break;
+        }
       }
       if (route) {
         // `route(path).<method>(…)`: one route layer whose stacks are not read here.
-        if (route.path === undefined) obj.layers.push({ kind: 'unknown', reason: 'sentinel.express.pathUnsupported', at: route.at });
-        else obj.layers.push({ kind: 'route', path: route.path, methods: route.methods.includes('all') ? 'all' : route.methods, handlers: [], file, at: route.at, chained: true });
+        if (route.path === undefined)
+          obj.layers.push({ kind: 'unknown', reason: 'sentinel.express.pathUnsupported', at: route.at });
+        else
+          obj.layers.push({
+            kind: 'route',
+            path: route.path,
+            methods: route.methods.includes('all') ? 'all' : route.methods,
+            handlers: [],
+            file,
+            at: route.at,
+            chained: true,
+          });
       }
     }
   }
@@ -349,7 +522,9 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
     const names = new Map<string, ExpressObject>();
     for (const s of file.program.body as JsNode[]) void s;
     const candidates = new Set<string>();
-    walk(file.program, n => { if (n.type === 'Identifier') candidates.add(n.name as string); });
+    walk(file.program, (n) => {
+      if (n.type === 'Identifier') candidates.add(n.name as string);
+    });
     for (const name of candidates) {
       const b = index.binding(file, name);
       if (!b) continue;
@@ -364,8 +539,20 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
       const p = parents[parents.length - 1];
       const gp = parents[parents.length - 2];
       if (!p || !isReference(n, p)) return;
-      if (p.type === 'MemberExpression' && p.object === n && identifierName(p.property as JsNode) === 'listen' && gp?.type === 'CallExpression' && gp.callee === p) return;
-      if (p.type === 'CallExpression' && (p.arguments as JsNode[]).includes(n) && nodeCreateServer(file, p.callee as JsNode)) return;
+      if (
+        p.type === 'MemberExpression' &&
+        p.object === n &&
+        identifierName(p.property as JsNode) === 'listen' &&
+        gp?.type === 'CallExpression' &&
+        gp.callee === p
+      )
+        return;
+      if (
+        p.type === 'CallExpression' &&
+        (p.arguments as JsNode[]).includes(n) &&
+        nodeCreateServer(file, p.callee as JsNode)
+      )
+        return;
       if (isExportPosition(n, parents)) return;
       obj.open ??= { file, node: n };
     });
@@ -377,7 +564,9 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
     if (!path || path[path.length - 1] !== 'createServer' || path.length > 2) return false;
     const b = index.binding(file, path[0]!);
     if (b?.kind !== 'import' || !NODE_HTTP.has(b.specifier)) return false;
-    return path.length === 1 ? b.imported === 'createServer' : b.imported === 'default' || b.imported === '*' || b.imported === 'require';
+    return path.length === 1
+      ? b.imported === 'createServer'
+      : b.imported === 'default' || b.imported === '*' || b.imported === 'require';
   }
 
   for (const o of objects) {
@@ -388,14 +577,20 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
   }
 
   return {
-    index, objects, frontiers, resolveValue,
+    index,
+    objects,
+    frontiers,
+    resolveValue,
     routesAt: (path, line) => routeLines.get(`${path}:${line}`) ?? [],
     foreignObject(file, node) {
       const root = unwrap(node);
       if (root?.type !== 'Identifier') return false;
       const b = index.binding(file, root.name as string);
       if (!b) return false;
-      if (b.kind === 'import') { const t = index.resolve(b.file, b.specifier); return t.kind === 'package' && t.name !== 'express'; }
+      if (b.kind === 'import') {
+        const t = index.resolve(b.file, b.specifier);
+        return t.kind === 'package' && t.name !== 'express';
+      }
       if (b.kind === 'declared') {
         const init = unwrap(b.init);
         if (init?.type !== 'CallExpression') return false;
@@ -410,18 +605,39 @@ export function buildModel(files: readonly JsFile[]): ExpressModel {
 /** Whether an identifier is a reference to a binding (not a declaration, property name, label or type). */
 function isReference(n: JsNode, p: JsNode): boolean {
   switch (p.type) {
-    case 'VariableDeclarator': return p.init === n;
-    case 'MemberExpression': return p.object === n || !!p.computed;
-    case 'Property': return p.value === n || (!!p.computed && p.key === n);
-    case 'MethodDefinition': case 'PropertyDefinition': return !!p.computed && p.key === n;
-    case 'ImportSpecifier': case 'ImportDefaultSpecifier': case 'ImportNamespaceSpecifier':
-    case 'ExportSpecifier': case 'LabeledStatement': case 'BreakStatement': case 'ContinueStatement':
+    case 'VariableDeclarator':
+      return p.init === n;
+    case 'MemberExpression':
+      return p.object === n || !!p.computed;
+    case 'Property':
+      return p.value === n || (!!p.computed && p.key === n);
+    case 'MethodDefinition':
+    case 'PropertyDefinition':
+      return !!p.computed && p.key === n;
+    case 'ImportSpecifier':
+    case 'ImportDefaultSpecifier':
+    case 'ImportNamespaceSpecifier':
+    case 'ExportSpecifier':
+    case 'LabeledStatement':
+    case 'BreakStatement':
+    case 'ContinueStatement':
       return false;
-    case 'FunctionDeclaration': case 'FunctionExpression': case 'ArrowFunctionExpression':
+    case 'FunctionDeclaration':
+    case 'FunctionExpression':
+    case 'ArrowFunctionExpression':
       return p.body === n;
-    case 'ClassDeclaration': case 'ClassExpression': return p.superClass === n;
-    case 'CatchClause': return false;
-    default: return !p.type.startsWith('TS') || p.type === 'TSAsExpression' || p.type === 'TSSatisfiesExpression' || p.type === 'TSNonNullExpression';
+    case 'ClassDeclaration':
+    case 'ClassExpression':
+      return p.superClass === n;
+    case 'CatchClause':
+      return false;
+    default:
+      return (
+        !p.type.startsWith('TS') ||
+        p.type === 'TSAsExpression' ||
+        p.type === 'TSSatisfiesExpression' ||
+        p.type === 'TSNonNullExpression'
+      );
   }
 }
 
@@ -451,7 +667,8 @@ export function literalOf(node: JsNode): BoundArg {
   if (s !== undefined) return { literal: s };
   const num = numberValue(n);
   if (num !== undefined) return { literal: num };
-  if (n.type === 'Literal' && (typeof n.value === 'boolean' || n.value === null)) return { literal: n.value as boolean | null };
+  if (n.type === 'Literal' && (typeof n.value === 'boolean' || n.value === null))
+    return { literal: n.value as boolean | null };
   return {};
 }
 
@@ -460,12 +677,15 @@ function inertOptions(node: JsNode | undefined): boolean {
   const n = unwrap(node);
   if (!n) return true;
   if (n.type !== 'ObjectExpression') return false;
-  return (n.properties as JsNode[]).every(p => {
+  return (n.properties as JsNode[]).every((p) => {
     if (p.type !== 'Property' || p.computed) return false;
     const key = identifierName(p.key as JsNode) ?? stringValue(p.key as JsNode);
     if (!key || !OPTION_INERT_KEYS.has(key)) return false;
     const v = unwrap(p.value as JsNode)!;
     if (literalOf(v).literal !== undefined) return true;
-    return v.type === 'ArrayExpression' && (v.elements as (JsNode | null)[]).every(e => !!e && literalOf(e).literal !== undefined);
+    return (
+      v.type === 'ArrayExpression' &&
+      (v.elements as (JsNode | null)[]).every((e) => !!e && literalOf(e).literal !== undefined)
+    );
   });
 }

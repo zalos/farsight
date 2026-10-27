@@ -45,43 +45,70 @@ export interface RequiredCoverage {
 }
 
 export function evaluateRequiredCoverage(plan: PlanRevision, records: readonly CoverageEnvelope[]): RequiredCoverage {
-  if (!validateEnvelope('plan', plan).ok || !verifyPlanRevision(plan)) throw new PlanError('sentinel.plan.pinMismatch', 'the plan revision does not validate or match its digest');
+  if (!validateEnvelope('plan', plan).ok || !verifyPlanRevision(plan))
+    throw new PlanError('sentinel.plan.pinMismatch', 'the plan revision does not validate or match its digest');
   const byCheck = new Map<string, CoverageEnvelope[]>();
-  const known = new Set(plan.checks.map(c => c.id));
+  const known = new Set(plan.checks.map((c) => c.id));
   const unknownRecords: Id[] = [];
   for (const r of records) {
-    if (!validateEnvelope('coverage', r).ok) throw new PlanError('sentinel.plan.invalidInput', 'a coverage record does not validate');
+    if (!validateEnvelope('coverage', r).ok)
+      throw new PlanError('sentinel.plan.invalidInput', 'a coverage record does not validate');
     if (r.runId !== plan.runId) continue;
-    if (!known.has(r.checkId)) { unknownRecords.push(r.id); continue; }
+    if (!known.has(r.checkId)) {
+      unknownRecords.push(r.id);
+      continue;
+    }
     (byCheck.get(r.checkId) ?? byCheck.set(r.checkId, []).get(r.checkId)!).push(r);
   }
-  const checks: CheckCoverage[] = plan.checks.map(c => {
+  const checks: CheckCoverage[] = plan.checks.map((c) => {
     const base = { checkId: c.id, required: c.required, planState: c.state };
     if (c.state !== 'planned') return { ...base, status: null, complete: false, reasonCode: c.reasonCode! };
     const counting: CoverageEnvelope[] = [];
     let refused: CatalogKey | undefined;
     for (const r of byCheck.get(c.id) ?? []) {
-      if (r.workId !== c.unit!.id || r.workRevision !== c.unit!.revision) { refused = 'sentinel.plan.coverageWrongUnit'; continue; }
-      if (r.basis.kind === 'imported') { refused = 'sentinel.plan.coverageImported'; continue; }
-      if (r.basis.kind === 'reused') { refused = 'sentinel.plan.coverageReuseUnproven'; continue; }
-      if (r.basis.kind !== 'executed') { refused = 'sentinel.plan.coverageMissing'; continue; }
+      if (r.workId !== c.unit!.id || r.workRevision !== c.unit!.revision) {
+        refused = 'sentinel.plan.coverageWrongUnit';
+        continue;
+      }
+      if (r.basis.kind === 'imported') {
+        refused = 'sentinel.plan.coverageImported';
+        continue;
+      }
+      if (r.basis.kind === 'reused') {
+        refused = 'sentinel.plan.coverageReuseUnproven';
+        continue;
+      }
+      if (r.basis.kind !== 'executed') {
+        refused = 'sentinel.plan.coverageMissing';
+        continue;
+      }
       if (r.granularity !== 'per-file-per-rule' && !(c.scopeKind === 'repository' && r.granularity === 'aggregate')) {
-        refused = 'sentinel.plan.coverageTooCoarse'; continue;
+        refused = 'sentinel.plan.coverageTooCoarse';
+        continue;
       }
       counting.push(r);
     }
-    if (counting.length === 0) return { ...base, status: null, complete: false, reasonCode: refused ?? 'sentinel.plan.coverageMissing' };
-    if (counting.length > 1 && new Set(counting.map(r => r.status)).size > 1) {
+    if (counting.length === 0)
+      return { ...base, status: null, complete: false, reasonCode: refused ?? 'sentinel.plan.coverageMissing' };
+    if (counting.length > 1 && new Set(counting.map((r) => r.status)).size > 1) {
       return { ...base, status: null, complete: false, reasonCode: 'sentinel.plan.coverageConflict' };
     }
     const status = counting[0]!.status;
-    return status === 'complete' ? { ...base, status, complete: true } : { ...base, status, complete: false, reasonCode: 'sentinel.plan.coverageNotComplete' };
+    return status === 'complete'
+      ? { ...base, status, complete: true }
+      : { ...base, status, complete: false, reasonCode: 'sentinel.plan.coverageNotComplete' };
   });
-  const required = checks.filter(c => c.required);
-  const requiredComplete = required.filter(c => c.complete).length;
-  const ruleGaps = plan.ruleGaps.filter(g => g.required);
-  return deepFreeze(structuredClone({
-    complete: requiredComplete === required.length && ruleGaps.length === 0,
-    required: required.length, requiredComplete, checks, ruleGaps, unknownRecords,
-  }));
+  const required = checks.filter((c) => c.required);
+  const requiredComplete = required.filter((c) => c.complete).length;
+  const ruleGaps = plan.ruleGaps.filter((g) => g.required);
+  return deepFreeze(
+    structuredClone({
+      complete: requiredComplete === required.length && ruleGaps.length === 0,
+      required: required.length,
+      requiredComplete,
+      checks,
+      ruleGaps,
+      unknownRecords,
+    }),
+  );
 }

@@ -39,22 +39,32 @@ export interface PathsOutput {
 }
 
 const hash = (b: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(b).digest('hex')}`;
-const fail = (): never => { throw new PathRequestError('unbound'); };
+const fail = (): never => {
+  throw new PathRequestError('unbound');
+};
 const object = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 function keys(v: unknown, names: readonly string[]): v is Record<string, unknown> {
-  return object(v) && Object.keys(v).length === names.length && names.every(k => Object.hasOwn(v, k));
+  return object(v) && Object.keys(v).length === names.length && names.every((k) => Object.hasOwn(v, k));
 }
 function json(bytes: Uint8Array): unknown {
-  try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch { return fail(); }
+  try {
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch {
+    return fail();
+  }
 }
 
 /** Fixed closed protocol: no worker path, function, profile, authorization, or caller-selected file read. */
 export function parsePathsJob(bytes: Uint8Array): PathsJob {
   if (bytes.byteLength > MAX_JOB_BYTES) return fail();
   const value = json(bytes);
-  if (!keys(value, ['schema', 'request', 'snapshot', 'analysis']) || value.schema !== PATHS_JOB_SCHEMA
-    || !keys(value.analysis, ['artifact', 'result', 'index'])
-    || [value.request, value.snapshot, ...Object.values(value.analysis)].some(v => typeof v !== 'string' || !ID.test(v))) return fail();
+  if (
+    !keys(value, ['schema', 'request', 'snapshot', 'analysis']) ||
+    value.schema !== PATHS_JOB_SCHEMA ||
+    !keys(value.analysis, ['artifact', 'result', 'index']) ||
+    [value.request, value.snapshot, ...Object.values(value.analysis)].some((v) => typeof v !== 'string' || !ID.test(v))
+  )
+    return fail();
   return value as unknown as PathsJob;
 }
 
@@ -62,10 +72,20 @@ export function parsePathsJob(bytes: Uint8Array): PathsJob {
  * Inspects one job using only its attempt's sealed input IDs. The callback is an object-byte reader, never a path
  * reader. Canonical admission/producer authority is deliberately not reconstructed from these structural objects.
  */
-export async function inspectPathInputs(jobBytes: Uint8Array, inputs: readonly string[], read: (id: ArtifactId) => Promise<Uint8Array>, budget = new PathExecutionBudget()): Promise<PathsOutput> {
+export async function inspectPathInputs(
+  jobBytes: Uint8Array,
+  inputs: readonly string[],
+  read: (id: ArtifactId) => Promise<Uint8Array>,
+  budget = new PathExecutionBudget(),
+): Promise<PathsOutput> {
   budget.boundary();
   const job = parsePathsJob(jobBytes);
-  if (!Array.isArray(inputs) || inputs.length > MAX_INPUTS || inputs.some(id => typeof id !== 'string' || !ID.test(id))) return fail();
+  if (
+    !Array.isArray(inputs) ||
+    inputs.length > MAX_INPUTS ||
+    inputs.some((id) => typeof id !== 'string' || !ID.test(id))
+  )
+    return fail();
   const allowed = new Set(inputs);
   const jobId = hash(jobBytes);
   if (!allowed.has(jobId)) return fail();
@@ -102,21 +122,47 @@ export async function inspectPathInputs(jobBytes: Uint8Array, inputs: readonly s
   const result = json(await get(job.analysis.result)) as ParserResult & { artifact: ArtifactId; index: ArtifactId };
   const index = json(await get(job.analysis.index)) as ParserIndex;
   const { snapshotId, sourceId, ancestor, queries, bounds } = request.value;
-  if (snapshot.id !== snapshotId || !snapshot.sources.some(s => s.sourceId === sourceId)
-    || result?.schema !== 'sentinel-parser-result/draft-1' || index?.schema !== 'sentinel-parser-index/draft-1'
-    || result.snapshotId !== snapshotId || result.sourceId !== sourceId
-    || result.artifact !== job.analysis.artifact || result.index !== job.analysis.index
-    || result.analysisFingerprint !== index.analysisFingerprint || artifact?.analysis?.fingerprint !== result.analysisFingerprint) return fail();
-  const captured = new Set(snapshot.entries.filter(e => e.sourceId === sourceId && e.kind === 'file' && e.disposition === 'included').map(e => 'content' in e ? e.content : ''));
-  const evidence = await controlledCallPaths({
-    snapshot, analysis: { sourceId, artifact, index }, queries, bounds,
-    readContent: id => captured.has(id as ArtifactId) ? get(id as ArtifactId) : Promise.reject(new PathRequestError('unbound')),
-  },budget);
+  if (
+    snapshot.id !== snapshotId ||
+    !snapshot.sources.some((s) => s.sourceId === sourceId) ||
+    result?.schema !== 'sentinel-parser-result/draft-1' ||
+    index?.schema !== 'sentinel-parser-index/draft-1' ||
+    result.snapshotId !== snapshotId ||
+    result.sourceId !== sourceId ||
+    result.artifact !== job.analysis.artifact ||
+    result.index !== job.analysis.index ||
+    result.analysisFingerprint !== index.analysisFingerprint ||
+    artifact?.analysis?.fingerprint !== result.analysisFingerprint
+  )
+    return fail();
+  const captured = new Set(
+    snapshot.entries
+      .filter((e) => e.sourceId === sourceId && e.kind === 'file' && e.disposition === 'included')
+      .map((e) => ('content' in e ? e.content : '')),
+  );
+  const evidence = await controlledCallPaths(
+    {
+      snapshot,
+      analysis: { sourceId, artifact, index },
+      queries,
+      bounds,
+      readContent: (id) =>
+        captured.has(id as ArtifactId) ? get(id as ArtifactId) : Promise.reject(new PathRequestError('unbound')),
+    },
+    budget,
+  );
   const output: PathsOutput = {
-    schema: PATHS_OUTPUT_SCHEMA, job: jobId, request: request.id, ancestor: { ...ancestor }, snapshotId, sourceId,
-    evidence, actualReadSet: [...actual].sort(), usage:budget.usage(),
+    schema: PATHS_OUTPUT_SCHEMA,
+    job: jobId,
+    request: request.id,
+    ancestor: { ...ancestor },
+    snapshotId,
+    sourceId,
+    evidence,
+    actualReadSet: [...actual].sort(),
+    usage: budget.usage(),
   };
-  const outputBytes=Buffer.byteLength(JSON.stringify(output));
+  const outputBytes = Buffer.byteLength(JSON.stringify(output));
   budget.output(outputBytes);
   if (outputBytes > MAX_OBJECT_BYTES) return fail();
   return output;

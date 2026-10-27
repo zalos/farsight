@@ -14,14 +14,27 @@ if (!file || !/^v\d+\.\d+\.\d+$/.test(tag ?? '') || !/^[0-9a-f]{40}$/.test(commi
 const toml = readFileSync(file, 'utf8');
 const sha = createHash('sha256').update(toml).digest('hex');
 const lines = toml.split('\n');
-const ids = lines.filter((l) => /^id = "/.test(l)).map((l) => /^id = "([a-z0-9][a-z0-9-]*)"$/.exec(l)?.[1] ?? (() => { throw new Error(`rule id: ${l}`); })());
+const ids = lines
+  .filter((l) => /^id = "/.test(l))
+  .map(
+    (l) =>
+      /^id = "([a-z0-9][a-z0-9-]*)"$/.exec(l)?.[1] ??
+      (() => {
+        throw new Error(`rule id: ${l}`);
+      })(),
+  );
 if (new Set(ids).size !== ids.length) throw new Error('duplicate rule id');
 const a = lines.indexOf('[allowlist]');
 const p0 = lines.findIndex((l, i) => i > a && l === 'paths = [');
 const p1 = lines.findIndex((l, i) => i > p0 && l === ']');
 const firstRule = lines.indexOf('[[rules]]');
-if (!(a >= 0 && a < p0 && p1 < firstRule)) throw new Error('unexpected layout: the global allowlist paths must precede the rules');
-const paths = lines.slice(p0 + 1, p1).map((l) => { const m = /^\s*'''(.*)''',?$/.exec(l); if (!m) throw new Error(`path: ${l}`); return m[1]; });
+if (!(a >= 0 && a < p0 && p1 < firstRule))
+  throw new Error('unexpected layout: the global allowlist paths must precede the rules');
+const paths = lines.slice(p0 + 1, p1).map((l) => {
+  const m = /^\s*'''(.*)''',?$/.exec(l);
+  if (!m) throw new Error(`path: ${l}`);
+  return m[1];
+});
 const regexes = paths.map((p) => {
   const ci = p.startsWith('(?i)');
   const src = ci ? p.slice(4) : p;
