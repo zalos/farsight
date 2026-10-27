@@ -204,7 +204,7 @@ test(
   needsStore,
   async (t) => {
     const s = await acceptFixture(t);
-    let operationId = '';
+    let operationId: string;
     const previous = evidenceIo.after;
     evidenceIo.after = (point) => {
       if (point === 'after-stage') throw Error('original interrupted operation');

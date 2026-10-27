@@ -183,7 +183,7 @@ function initOnce(options: { workspace: string; profile?: string }): InitResult 
       closeSync(fd);
     }
     // Recognised when policy itself would read it: PR 06's parser (schema, bounds, no credential values).
-    let recognised = false;
+    let recognised: boolean;
     try {
       parseSettings(bytes);
       recognised = true;

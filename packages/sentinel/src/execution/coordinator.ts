@@ -347,7 +347,6 @@ export class Coordinator {
         coordinatorEpoch: this.#store.epoch,
         createdAt: now(),
       } as RunEnvelope);
-      state = 'running';
     } else if (state === 'completed' || state === 'canceled') {
       return this.#summary();
     } else if (state === 'canceling') {
@@ -360,7 +359,6 @@ export class Coordinator {
       }
       if ((state === 'planned' || state === 'paused') && !pauseFirst && !this.#cancelRequested) {
         this.#store.ledger.setRunState(runId, 'running');
-        state = 'running';
       }
     }
     if (pauseFirst && !this.#cancelRequested && this.#runState() !== 'canceling') {
@@ -892,7 +890,8 @@ export class Coordinator {
             beforeAccept: stillWithin,
           });
           this.#coverage.set(key(ref), coverage.envelopes);
-        } catch (error) {
+        } catch (caught) {
+          let error = caught;
           try {
             stillWithin();
           } catch (boundary) {
@@ -923,7 +922,8 @@ export class Coordinator {
       } else {
         this.#unstarted(ref, outcome.code ?? 'sentinel.execution.workerExited', outcome.detail);
       }
-    } catch (error) {
+    } catch (caught) {
+      let error = caught;
       // A late driver error cannot hide the budget or cancellation that already ended this unit.
       try {
         stillWithin?.();

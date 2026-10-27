@@ -157,14 +157,14 @@ test('plan admission refuses a broken chain, a missing snapshot, wrong pins, unr
   );
   ledger.admitPlan(stagePlan(ledger, 'd', 1, 'bootstrap', null));
   admitSnapshot(ledger, 'snap-d');
-  let n = before();
+  const n = before();
   assert.throws(
     () => ledger.admitPlan(stagePlan(ledger, 'd', 2, 'analysis', sha('not the digest'), 'snap-d')),
     code('sentinel.store.conflict'),
   );
   assert.equal(ledger.getPlan('run-d', 2), undefined);
   assert.ok(before() > n, 'only the staging was recorded');
-  n = before();
+  before();
   assert.throws(
     () => ledger.admitPlan({ ...stagePlan(ledger, 'e', 1, 'bootstrap', null), runId: 'run-d', stageIds: ['e.plan-1'] }),
     code('sentinel.store.conflict'),

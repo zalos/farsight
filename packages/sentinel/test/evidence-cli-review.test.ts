@@ -116,8 +116,7 @@ test(
   async (t) => {
     const s = await acceptFixture(t),
       prior = evidenceIo.after;
-    let oldId = '',
-      candidate = '';
+    let oldId: string, candidate: string;
     evidenceIo.after = (point) => {
       if (point === 'after-stage') throw Error('original controlled interruption');
     };

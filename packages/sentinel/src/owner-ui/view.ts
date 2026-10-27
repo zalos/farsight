@@ -736,6 +736,7 @@ function browserMain(layout: typeof processLayout) {
     const active = await call('/session', { kind, secret, view: initial });
     cap = active.capability;
     launchCode = null;
+    // eslint-disable-next-line no-useless-assignment -- Clear the bootstrap secret from the startup scope captured by later event handlers.
     secret = null;
     readOnly = active.readOnly;
     processSupported = active.processInspection === true;
