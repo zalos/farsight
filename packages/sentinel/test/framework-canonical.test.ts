@@ -80,7 +80,6 @@ test(
 
 test('ordinary public imports and help do not load the native inspection parser', async () => {
   const { spawnSync } = await import('node:child_process');
-  await import('node:url');
   const source = `import{registerHooks}from'node:module';registerHooks({resolve(s,c,n){if(s==='oxc-parser')throw new Error('native parser loaded during import');return n(s,c)}});await import(${JSON.stringify(new URL('../dist/index.js', import.meta.url).href)});await import(${JSON.stringify(new URL('../dist/store/index.js', import.meta.url).href)});process.argv=[process.execPath,'farsight-sentinel','--help'];await import(${JSON.stringify(new URL('../dist/cli.js', import.meta.url).href)});`;
   const r = spawnSync(process.execPath, ['--input-type=module', '--eval', source], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);

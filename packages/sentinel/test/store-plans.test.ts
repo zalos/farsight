@@ -164,7 +164,6 @@ test('plan admission refuses a broken chain, a missing snapshot, wrong pins, unr
   );
   assert.equal(ledger.getPlan('run-d', 2), undefined);
   assert.ok(before() > n, 'only the staging was recorded');
-  before();
   assert.throws(
     () => ledger.admitPlan({ ...stagePlan(ledger, 'e', 1, 'bootstrap', null), runId: 'run-d', stageIds: ['e.plan-1'] }),
     code('sentinel.store.conflict'),
