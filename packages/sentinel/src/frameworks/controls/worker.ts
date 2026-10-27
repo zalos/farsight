@@ -23,7 +23,6 @@ import { analyzeSpring } from '../spring/index.js';
 import { FRAMEWORKS, type FrameworkName, type LibraryOutcome } from './facts.js';
 
 import {
-  FRAMEWORK_CONTROLS_ADAPTER_ID,
   CONTROLS_JOB_SCHEMA,
   CONTROLS_OUTPUT_SCHEMA,
   CONTROLS_OUTPUT_MEDIA,

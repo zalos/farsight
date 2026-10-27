@@ -24,7 +24,6 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
@@ -37,7 +36,6 @@ if ((!flag('--acquire') && !flag('--scan-only')) || !dir || !isAbsolute(dir)) {
   process.exit(2);
 }
 const ecosystems = values('--ecosystem').length ? values('--ecosystem') : ['npm', 'Maven'];
-const pkg = fileURLToPath(new URL('../', import.meta.url));
 const imp = (p) => import(new URL(`../dist/${p}`, import.meta.url).href);
 const { acquireAdvisorySnapshots, acquisitionIntent, loadAdvisorySnapshot, runOsvAttempt, OSV_ADAPTER } =
   await imp('adapters/osv/index.js');

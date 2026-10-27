@@ -51,7 +51,6 @@ import {
   decide,
   DEFAULT_CAPACITY,
   DEFAULT_RETRY,
-  orderPlan,
   ReservationPool,
   retryable,
   type Capacity,
@@ -182,7 +181,6 @@ export class Coordinator {
   readonly #failedUnstarted = new Map<string, string>();
   readonly #unknown: UnknownCleanup;
   readonly #cleanupWaitMs: number;
-  readonly #backendOptions: CoordinatorOptions['backendOptions'];
   /** The latest recovery; replaced each time unconfirmed cleanup is re-checked. */
   recovery: RecoveryReport;
   /** What open removed from, and kept in, the scratch root. */
@@ -232,7 +230,6 @@ export class Coordinator {
     if (!Number.isInteger(wait) || wait < 0 || wait > 600_000)
       throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'cleanupWaitMs is 0 to 600000' });
     this.#cleanupWaitMs = wait;
-    this.#backendOptions = o.backendOptions;
     this.#pool = new ReservationPool(o.capacity ?? DEFAULT_CAPACITY);
     // Copied and frozen: changing the caller's policy object after open changes nothing.
     this.#retry = Object.freeze(checkRetryPolicy({ ...(o.retry ?? DEFAULT_RETRY) }));

@@ -53,8 +53,6 @@ const FULL_REPORT: Record<string, FlagKind> = {
   '--out': 'value',
   '--confirm': 'boolean',
 };
-const RUN_REF: CommandSpec = { flags: { ...COMMON, ...STORE }, positional: ['runId'], min: 1 };
-
 const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   help: { flags: COMMON, positional: [], min: 0 },
   version: { flags: COMMON, positional: [], min: 0 },
