@@ -47,6 +47,7 @@ function pathValue(value: unknown): string {
     !value ||
     value !== value.trim() ||
     value.length > 4096 ||
+    // eslint-disable-next-line no-control-regex -- Installation paths must reject ASCII control bytes.
     /[\x00-\x1f\x7f]/.test(value)
   )
     fail();

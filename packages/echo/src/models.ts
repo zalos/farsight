@@ -122,6 +122,7 @@ export async function listModels(profile: EchoProfile, options: { signal?: Abort
   if (!Array.isArray(payload.models)) fail('echo.model.response');
   const names = payload.models.map((model) => {
     const value = object(model).name;
+    // eslint-disable-next-line no-control-regex -- Model names from the backend must reject ASCII control bytes.
     if (typeof value !== 'string' || !value.trim() || value.length > 256 || /[\x00-\x1f\x7f]/.test(value))
       fail('echo.model.response');
     return value;

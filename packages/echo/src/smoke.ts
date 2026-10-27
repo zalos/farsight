@@ -103,6 +103,7 @@ export async function smoke(ctx: EchoContext, withModel = false): Promise<CheckR
   } catch (error) {
     throw new Error(
       `${error instanceof Error ? error.message : word('failed')} ${word('smokeDiagnostics', { directory })}`,
+      { cause: error },
     );
   } finally {
     await connection?.close();

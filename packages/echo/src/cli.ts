@@ -586,7 +586,6 @@ async function main(): Promise<void> {
   });
   print({ url: web.url, profile: ctx.profileId, scope: ctx.profile.identity, phase: 'setup' });
   let stopping = false;
-  let starting: Promise<void>;
   const close = async () => {
     if (stopping) return;
     stopping = true;
@@ -603,7 +602,7 @@ async function main(): Promise<void> {
   process.once('SIGTERM', () => {
     void close();
   });
-  starting = startBackend(ctx)
+  const starting = startBackend(ctx)
     .then(async (result) => {
       try {
         if (!stopping) memory = await startMemoryBridge(ctx, result);
