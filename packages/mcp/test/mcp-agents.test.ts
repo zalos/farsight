@@ -29,11 +29,31 @@ describe('tiers', () => {
     assert.deepEqual(resolveTier('everything', undefined), { tier: 'core', from: 'default', ignored: 'everything' });
   });
   test('the core tier is the nine plus affected, ask, roles and decisions; tools and expand are in both', () => {
-    assert.deepEqual([...CORE_TOOLS].sort(), ['affected', 'ask', 'decisions', 'describe_node', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'roles', 'search_graph', 'test_coverage', 'trace_flow']);
-    for (const n of ['tools', 'expand']) { assert.ok(inTier(n, 'core')); assert.equal(tierOf(n), 'core'); }
+    assert.deepEqual([...CORE_TOOLS].sort(), [
+      'affected',
+      'ask',
+      'decisions',
+      'describe_node',
+      'gate',
+      'graph_overview',
+      'impact_of',
+      'journey',
+      'journeys',
+      'roles',
+      'search_graph',
+      'test_coverage',
+      'trace_flow',
+    ]);
+    for (const n of ['tools', 'expand']) {
+      assert.ok(inTier(n, 'core'));
+      assert.equal(tierOf(n), 'core');
+    }
     assert.ok(!inTier('refresh_graph', 'core'));
     assert.ok(inTier('refresh_graph', 'all'));
-    assert.match(tierLine({ tier: 'core', from: 'default', on: 11, registered: 28 }), /core tier is on \(11 of 28 tools, from the default\).*FARSIGHT_TOOLS=all/);
+    assert.match(
+      tierLine({ tier: 'core', from: 'default', on: 11, registered: 28 }),
+      /core tier is on \(11 of 28 tools, from the default\).*FARSIGHT_TOOLS=all/,
+    );
   });
 });
 
@@ -92,18 +112,30 @@ describe('context — settings read', () => {
     const dir = mkdtempSync(join(tmpdir(), 'farsight-ctx-'));
     try {
       mkdirSync(join(dir, '.farsight'));
-      writeFileSync(join(dir, '.farsight', 'settings.json'), JSON.stringify({
-        sources: [{ id: 'j', type: 'work', auth: { secret: 'keychain:farsight/jira-example', user: 'dev@example.com' } }],
-        mcp: { tools: 'all', budget: 4000 },
-        lessons: [{ text: 'pinned one', pinned: true, date: '2026-10-10T08:00:00Z' }, { text: '  ' }, { text: 'loose' }, 'junk'],
-      }));
+      writeFileSync(
+        join(dir, '.farsight', 'settings.json'),
+        JSON.stringify({
+          sources: [
+            { id: 'j', type: 'work', auth: { secret: 'keychain:farsight/jira-example', user: 'dev@example.com' } },
+          ],
+          mcp: { tools: 'all', budget: 4000 },
+          lessons: [
+            { text: 'pinned one', pinned: true, date: '2026-10-10T08:00:00Z' },
+            { text: '  ' },
+            { text: 'loose' },
+            'junk',
+          ],
+        }),
+      );
       const a = readAgentSettings(dir);
       assert.deepEqual(Object.keys(a).sort(), ['budget', 'lessons', 'tools']);
       assert.ok(!JSON.stringify(a).includes('keychain'));
       assert.deepEqual(a.lessons, [{ text: 'pinned one', pinned: true, date: '2026-10-10' }, { text: 'loose' }]);
       assert.deepEqual(readAgentSettings(join(dir, 'nowhere')), { lessons: [] });
       assert.equal(lessonsOf([{ text: 'z'.repeat(900) }])[0]!.text.length, 400);
-    } finally { rmSync(dir, { recursive: true, force: true }); }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
   test('since: an ISO time the agent passes, else the last 24 hours', () => {
     const now = new Date('2026-10-10T12:00:00Z');
@@ -125,13 +157,34 @@ describe('the server: the core tier by default, the context, expand', () => {
     work = realpathSync(mkdtempSync(join(tmpdir(), 'farsight-mcp-agents-')));
     process.env.MODELHUB_DIR = join(work, 'modelhub');
     cpSync(join(repoRoot, 'examples/invoice-app'), join(work, 'invoice-app'), { recursive: true });
-    const r = spawnSync(process.execPath, [cli, 'ingest', join(work, 'invoice-app'), '--repo', 'invoice-app', '--out', join(work, 'graph.json')], { cwd: work, encoding: 'utf8' });
+    const r = spawnSync(
+      process.execPath,
+      [cli, 'ingest', join(work, 'invoice-app'), '--repo', 'invoice-app', '--out', join(work, 'graph.json')],
+      { cwd: work, encoding: 'utf8' },
+    );
     assert.equal(r.status, 0, r.stderr);
-    writeFileSync(join(work, '.farsight', 'settings.json'), JSON.stringify({
-      defaultLens: 'hybrid', collections: [],
-      sources: [{ id: 'jira-example', name: 'Jira', type: 'work', provider: 'jira', path: '', enabled: false, auth: { kind: 'api-token', user: 'dev@example.com', secret: 'keychain:farsight/jira-example' } }],
-      lessons: [{ text: 'The e2e card is Playwright; the unit card is node:test.', pinned: true, date: '2026-10-10' }, { text: 'an unpinned note', pinned: false }],
-    }));
+    writeFileSync(
+      join(work, '.farsight', 'settings.json'),
+      JSON.stringify({
+        defaultLens: 'hybrid',
+        collections: [],
+        sources: [
+          {
+            id: 'jira-example',
+            name: 'Jira',
+            type: 'work',
+            provider: 'jira',
+            path: '',
+            enabled: false,
+            auth: { kind: 'api-token', user: 'dev@example.com', secret: 'keychain:farsight/jira-example' },
+          },
+        ],
+        lessons: [
+          { text: 'The e2e card is Playwright; the unit card is node:test.', pinned: true, date: '2026-10-10' },
+          { text: 'an unpinned note', pinned: false },
+        ],
+      }),
+    );
     delete process.env.FARSIGHT_TOOLS;
     const { server, tier } = createMcpServer(join(work, 'graph.json'));
     assert.equal(tier, 'core');
@@ -141,14 +194,37 @@ describe('the server: the core tier by default, the context, expand', () => {
     await client.connect(c);
   });
   after(async () => {
-    try { await client?.close(); } catch { /* closed */ }
+    try {
+      await client?.close();
+    } catch {
+      /* closed */
+    }
     rmSync(work, { recursive: true, force: true });
   });
 
   test('tools/list is the core tier: nine, ask, roles and decisions (no code-host source, so no affected) plus tools and expand', async () => {
     const { tools } = await client.listTools();
-    assert.deepEqual(tools.map((t) => t.name).sort(), ['ask', 'decisions', 'describe_node', 'expand', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'roles', 'search_graph', 'test_coverage', 'tools', 'trace_flow']);
-    for (const t of tools) assert.ok(Object.keys((t.inputSchema as { properties?: object }).properties ?? {}).includes('budget'), `${t.name} takes budget`);
+    assert.deepEqual(tools.map((t) => t.name).sort(), [
+      'ask',
+      'decisions',
+      'describe_node',
+      'expand',
+      'gate',
+      'graph_overview',
+      'impact_of',
+      'journey',
+      'journeys',
+      'roles',
+      'search_graph',
+      'test_coverage',
+      'tools',
+      'trace_flow',
+    ]);
+    for (const t of tools)
+      assert.ok(
+        Object.keys((t.inputSchema as { properties?: object }).properties ?? {}).includes('budget'),
+        `${t.name} takes budget`,
+      );
     assert.ok((await call('refresh_graph')).isError, 'a tool outside the tier is off');
   });
 
@@ -168,10 +244,14 @@ describe('the server: the core tier by default, the context, expand', () => {
     assert.match(text, /\nvalidated: /);
     assert.match(text, /\nopen: /);
     assert.match(text, /since your last session \(since .*the last 24 hours/);
-    assert.match(text, /lessons pinned by the owner \(1 of 2\): "The e2e card is Playwright; the unit card is node:test\." \(2026-10-10\)/);
+    assert.match(
+      text,
+      /lessons pinned by the owner \(1 of 2\): "The e2e card is Playwright; the unit card is node:test\." \(2026-10-10\)/,
+    );
     assert.ok(!text.includes('unpinned'));
     assert.match(text, /\n<\/farsight-context>$/);
-    for (const leak of ['keychain:', 'dev@example.com', 'jira-example', 'api-token', 'session_']) assert.ok(!text.includes(leak), `the context carries ${leak}`);
+    for (const leak of ['keychain:', 'dev@example.com', 'jira-example', 'api-token', 'session_'])
+      assert.ok(!text.includes(leak), `the context carries ${leak}`);
     const brief = (await call('graph_overview', { brief: true, since: '2026-01-01' })).text;
     assert.match(brief, /since your last session \(since 2026-01-01 00:00\): /);
     assert.ok(estimateTokens(brief) < 2000);

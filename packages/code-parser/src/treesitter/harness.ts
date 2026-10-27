@@ -66,7 +66,13 @@ export async function grammarParser(name: string): Promise<((source: string) => 
       return null; // unparsable file: the adapter skips it, never fails the ingest
     }
   };
-  return Object.assign(parse, { dispose() { tree?.delete(); tree = null; parser.delete(); } });
+  return Object.assign(parse, {
+    dispose() {
+      tree?.delete();
+      tree = null;
+      parser.delete();
+    },
+  });
 }
 
 /**
@@ -91,7 +97,10 @@ export function findFirst(node: TSNode | null, type: string): TSNode | null {
   let hit: TSNode | null = null;
   walkTS(node, (n) => {
     if (hit) return false;
-    if (n.type === type) { hit = n; return false; }
+    if (n.type === type) {
+      hit = n;
+      return false;
+    }
   });
   return hit;
 }
