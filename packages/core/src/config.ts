@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import type {
   GraphNode,
   GraphEdge,
-  ExternalKind,
   StoreKind,
   StoreEngine,
   TagDimension,
