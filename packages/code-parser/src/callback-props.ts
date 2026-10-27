@@ -56,16 +56,20 @@ const isFn = (n: unknown): boolean =>
   isNode(n) && (n.type === 'ArrowFunctionExpression' || n.type === 'FunctionExpression');
 
 function paramsOfDecl(n: AstNode): AstNode[] {
-  const fn = n.type === 'VariableDeclarator' ? (n.init as AstNode | undefined)
-    : n.type === 'MethodDefinition' ? (n.value as AstNode | undefined)
-    : n;
+  const fn =
+    n.type === 'VariableDeclarator'
+      ? (n.init as AstNode | undefined)
+      : n.type === 'MethodDefinition'
+        ? (n.value as AstNode | undefined)
+        : n;
   return isNode(fn) && Array.isArray(fn.params) ? (fn.params as AstNode[]).filter(isNode) : [];
 }
 
 function namesOf(p: unknown): string[] {
   if (!isNode(p)) return [];
   if (p.type === 'Identifier') return [String(p.name)];
-  if (p.type === 'ObjectPattern') return ((p.properties as AstNode[]) ?? []).flatMap((q) => namesOf(q.type === 'RestElement' ? q.argument : q.value));
+  if (p.type === 'ObjectPattern')
+    return ((p.properties as AstNode[]) ?? []).flatMap((q) => namesOf(q.type === 'RestElement' ? q.argument : q.value));
   if (p.type === 'ArrayPattern') return ((p.elements as AstNode[]) ?? []).flatMap((q) => namesOf(q));
   if (p.type === 'AssignmentPattern') return namesOf(p.left);
   if (p.type === 'RestElement') return namesOf(p.argument);
@@ -78,7 +82,11 @@ function jsxTag(opening: AstNode | undefined): string | null {
 }
 
 /** The facts of one declared function's body; undefined when it has none worth keeping. */
-export function propFactsOf(decl: AstNode, body: AstNode | null, line: (offset: number) => number): PropFacts | undefined {
+export function propFactsOf(
+  decl: AstNode,
+  body: AstNode | null,
+  line: (offset: number) => number,
+): PropFacts | undefined {
   if (!body) return undefined;
   // the first parameter is the props: `{ onConfirm, busy: isBusy }` or `props`
   const first = paramsOfDecl(decl)[0];
@@ -120,7 +128,12 @@ export function propFactsOf(decl: AstNode, body: AstNode | null, line: (offset: 
   const branched = new Map<string, number>();
   const noteBranch = (test: unknown): void => {
     walk(test, (t) => {
-      const p = t.type === 'Identifier' ? locals.get(String(t.name)) : (t.type === 'MemberExpression' || t.type === 'StaticMemberExpression') ? propOf(t) : undefined;
+      const p =
+        t.type === 'Identifier'
+          ? locals.get(String(t.name))
+          : t.type === 'MemberExpression' || t.type === 'StaticMemberExpression'
+            ? propOf(t)
+            : undefined;
       if (p && !branched.has(p)) branched.set(p, line(t.start ?? 0));
     });
   };
@@ -137,24 +150,39 @@ export function propFactsOf(decl: AstNode, body: AstNode | null, line: (offset: 
     const tag = jsxTag(n);
     const isComponent = !!tag && /^[A-Z]/.test(tag);
     for (const a of (n.attributes as AstNode[]) ?? []) {
-      if (a.type !== 'JSXAttribute') { walk(a, visit); continue; }
+      if (a.type !== 'JSXAttribute') {
+        walk(a, visit);
+        continue;
+      }
       const an = a.name as AstNode | undefined;
       const attr = an && an.type === 'JSXIdentifier' ? String(an.name) : undefined;
       const val = a.value as AstNode | undefined;
       const expr = val?.type === 'JSXExpressionContainer' ? (val.expression as AstNode | undefined) : undefined;
-      if (!attr || !isNode(expr)) { walk(val, visit); continue; }
+      if (!attr || !isNode(expr)) {
+        walk(val, visit);
+        continue;
+      }
       const at = line(a.start ?? 0);
       const prop = propOf(expr);
-      if (prop) { uses.push(isComponent ? { prop, line: at, via: { tag: tag!, attr } } : { prop, line: at }); continue; }
+      if (prop) {
+        uses.push(isComponent ? { prop, line: at, via: { tag: tag!, attr } } : { prop, line: at });
+        continue;
+      }
       // an arrow on a DOM element runs here: its calls are this component's own uses
-      if (!isComponent) { walk(expr, visit); continue; }
+      if (!isComponent) {
+        walk(expr, visit);
+        continue;
+      }
       if (isFn(expr)) {
         const own = new Set((((expr as AstNode).params as AstNode[]) ?? []).flatMap(namesOf));
         const callees: { name: string; line: number }[] = [];
         walk((expr as AstNode).body, (b) => {
           if (b.type !== 'CallExpression') return;
           const p = calleeProp(b);
-          if (p) { uses.push({ prop: p, line: line(b.start ?? 0), via: { tag: tag!, attr } }); return; }
+          if (p) {
+            uses.push({ prop: p, line: line(b.start ?? 0), via: { tag: tag!, attr } });
+            return;
+          }
           const c = memberChain(b.callee);
           if (c.length === 1 && !own.has(c[0]!)) callees.push({ name: c[0]!, line: line(b.start ?? 0) });
         });
@@ -163,7 +191,13 @@ export function propFactsOf(decl: AstNode, body: AstNode | null, line: (offset: 
       }
       if (expr.type === 'Identifier') {
         const name = String(expr.name);
-        handoffs.push({ tag: tag!, attr, line: at, ident: name, ...(boundCalls.has(name) ? { boundCall: boundCalls.get(name)! } : {}) });
+        handoffs.push({
+          tag: tag!,
+          attr,
+          line: at,
+          ident: name,
+          ...(boundCalls.has(name) ? { boundCall: boundCalls.get(name)! } : {}),
+        });
         continue;
       }
       walk(expr, visit);

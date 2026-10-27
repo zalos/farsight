@@ -12,7 +12,11 @@ export function isNode(v: unknown): v is AstNode {
 }
 
 /** Depth-first walk; return false from visit to skip a subtree. */
-export function walk(node: unknown, visit: (n: AstNode, parents: AstNode[]) => boolean | void, parents: AstNode[] = []): void {
+export function walk(
+  node: unknown,
+  visit: (n: AstNode, parents: AstNode[]) => boolean | void,
+  parents: AstNode[] = [],
+): void {
   if (Array.isArray(node)) {
     for (const child of node) walk(child, visit, parents);
     return;
@@ -33,7 +37,8 @@ export function lineIndex(source: string): (offset: number) => number {
     if (source[i] === '\n') starts.push(i + 1);
   }
   return (offset: number) => {
-    let lo = 0, hi = starts.length - 1;
+    let lo = 0,
+      hi = starts.length - 1;
     while (lo < hi) {
       const mid = (lo + hi + 1) >> 1;
       if (starts[mid]! <= offset) lo = mid;
@@ -49,7 +54,7 @@ export function stringValue(n: unknown): string | null {
   if ((n.type === 'Literal' || n.type === 'StringLiteral') && typeof n.value === 'string') return n.value;
   if (n.type === 'TemplateLiteral') {
     const quasis = (n.quasis as AstNode[]) ?? [];
-    const parts = quasis.map((q) => ((q.value as { cooked?: string })?.cooked ?? ''));
+    const parts = quasis.map((q) => (q.value as { cooked?: string })?.cooked ?? '');
     return parts.join(':param').replace(/:param$/, ':param');
   }
   return null;

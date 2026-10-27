@@ -22,20 +22,25 @@ export interface ConfigTools {
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
 
 export function registerConfigTools(ctx: ConfigToolsContext): ConfigTools {
-  ctx.server.registerTool('config_files', {
-    title: 'Config files — every farsight.config.json per source',
-    description: 'Every farsight.config.json each source holds: the root file, which speaks for the whole source, and any file in a folder below it, which speaks only for the code under that folder and names paths relative to it. One line per file — its path, root or the folder it is scoped to, the fields it gives and any it ignored (projects and tooling are root-only) — then the conflicts between files (two glossary words for one name: the nearer file\'s stands under its folder; a function one file already made a guard; a second declaration of the same external import, or a store name declared again as another kind: the first is kept; a table two files list under different stores: the nearer file stands) and the notes (unreadable files, paths that leave the source). json: true returns the ConfigMeta per source. Read only: edit the files with your own tools, then call refresh_graph. Use to find where a word, a tag or a declaration came from, or why a nested config did not apply.',
-    inputSchema: {
-      repo: z.string().optional().describe('limit to one source/repo name (see graph_overview)'),
-      json: z.boolean().optional().describe('true = the ConfigMeta per source as JSON ({ files, conflicts, notes })'),
+  ctx.server.registerTool(
+    'config_files',
+    {
+      title: 'Config files — every farsight.config.json per source',
+      description:
+        "Every farsight.config.json each source holds: the root file, which speaks for the whole source, and any file in a folder below it, which speaks only for the code under that folder and names paths relative to it. One line per file — its path, root or the folder it is scoped to, the fields it gives and any it ignored (projects and tooling are root-only) — then the conflicts between files (two glossary words for one name: the nearer file's stands under its folder; a function one file already made a guard; a second declaration of the same external import, or a store name declared again as another kind: the first is kept; a table two files list under different stores: the nearer file stands) and the notes (unreadable files, paths that leave the source). json: true returns the ConfigMeta per source. Read only: edit the files with your own tools, then call refresh_graph. Use to find where a word, a tag or a declaration came from, or why a nested config did not apply.",
+      inputSchema: {
+        repo: z.string().optional().describe('limit to one source/repo name (see graph_overview)'),
+        json: z.boolean().optional().describe('true = the ConfigMeta per source as JSON ({ files, conflicts, notes })'),
+      },
     },
-  }, async ({ repo, json }) => {
-    const metas = ctx.meta().config ?? {};
-    if (json) {
-      const picked = Object.fromEntries(Object.entries(metas).filter(([r]) => !repo || r === repo));
-      return text(JSON.stringify(picked, null, 2));
-    }
-    return text(configFilesText(metas, repo).join('\n'));
-  });
+    async ({ repo, json }) => {
+      const metas = ctx.meta().config ?? {};
+      if (json) {
+        const picked = Object.fromEntries(Object.entries(metas).filter(([r]) => !repo || r === repo));
+        return text(JSON.stringify(picked, null, 2));
+      }
+      return text(configFilesText(metas, repo).join('\n'));
+    },
+  );
   return { overviewLines: () => configOverviewLines(ctx.meta().config) };
 }

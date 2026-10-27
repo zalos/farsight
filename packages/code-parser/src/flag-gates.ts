@@ -25,7 +25,14 @@ import { isNode, type AstNode } from './walk.js';
 /** strip `( … )`, `as const`, `satisfies T` */
 function bare(n: AstNode | undefined): AstNode | undefined {
   let x = n;
-  while (x && (x.type === 'ParenthesizedExpression' || x.type === 'TSAsExpression' || x.type === 'TSSatisfiesExpression' || x.type === 'TSNonNullExpression')) x = x.expression as AstNode;
+  while (
+    x &&
+    (x.type === 'ParenthesizedExpression' ||
+      x.type === 'TSAsExpression' ||
+      x.type === 'TSSatisfiesExpression' ||
+      x.type === 'TSNonNullExpression')
+  )
+    x = x.expression as AstNode;
   return x;
 }
 
@@ -33,7 +40,10 @@ function bare(n: AstNode | undefined): AstNode | undefined {
 function identTest(test: AstNode | undefined): string | undefined {
   let t = bare(test);
   let neg = false;
-  while (t && t.type === 'UnaryExpression' && t.operator === '!') { neg = !neg; t = bare(t.argument as AstNode); }
+  while (t && t.type === 'UnaryExpression' && t.operator === '!') {
+    neg = !neg;
+    t = bare(t.argument as AstNode);
+  }
   if (!t || t.type !== 'Identifier' || typeof t.name !== 'string') return undefined;
   if (t.name === 'undefined') return undefined;
   return `${neg ? '!' : ''}${t.name}`;
@@ -59,7 +69,11 @@ export function flagRefAt(parent: AstNode, child: AstNode): string | undefined {
     if (parent.alternate === child) return flip(r);
     return undefined;
   }
-  if (parent.type === 'LogicalExpression' && parent.right === child && (parent.operator === '&&' || parent.operator === '||')) {
+  if (
+    parent.type === 'LogicalExpression' &&
+    parent.right === child &&
+    (parent.operator === '&&' || parent.operator === '||')
+  ) {
     const r = identTest(parent.left as AstNode);
     if (!r) return undefined;
     return parent.operator === '&&' ? r : flip(r);
@@ -68,7 +82,10 @@ export function flagRefAt(parent: AstNode, child: AstNode): string | undefined {
 }
 
 /** Every top-level `const X = true|false` (exported or not, through `as const`) in a module. */
-export function moduleBoolConsts(program: AstNode, line: (o: number) => number): Map<string, { value: boolean; line: number }> {
+export function moduleBoolConsts(
+  program: AstNode,
+  line: (o: number) => number,
+): Map<string, { value: boolean; line: number }> {
   const out = new Map<string, { value: boolean; line: number }>();
   for (const st of (program.body as AstNode[]) ?? []) {
     const decl = st.type === 'ExportNamedDeclaration' && isNode(st.declaration) ? (st.declaration as AstNode) : st;
@@ -77,7 +94,8 @@ export function moduleBoolConsts(program: AstNode, line: (o: number) => number):
       const id = d.id as AstNode | undefined;
       const init = bare(d.init as AstNode | undefined);
       if (id?.type !== 'Identifier' || typeof id.name !== 'string' || !init) continue;
-      if ((init.type === 'Literal' || init.type === 'BooleanLiteral') && typeof init.value === 'boolean') out.set(id.name, { value: init.value, line: line(d.start ?? 0) });
+      if ((init.type === 'Literal' || init.type === 'BooleanLiteral') && typeof init.value === 'boolean')
+        out.set(id.name, { value: init.value, line: line(d.start ?? 0) });
     }
   }
   return out;
@@ -92,22 +110,42 @@ type Reexports = Map<string, { stars: string[]; named: Map<string, { file: strin
  * made both under a switched-off flag and outside it is one live edge: the switched-off twin is dropped.
  * Mutates `edges` in place.
  */
-export function resolveFlagGates(edges: GraphEdge[], consts: Map<string, Map<string, { value: boolean; line: number }>>, imports: Imports, reexports?: Reexports): void {
+export function resolveFlagGates(
+  edges: GraphEdge[],
+  consts: Map<string, Map<string, { value: boolean; line: number }>>,
+  imports: Imports,
+  reexports?: Reexports,
+): void {
   // Resolve each site's flag independently before folding relationship-level twins.
-  for (const edge of edges) for (const site of edge.occurrences ?? []) {
-    const single: GraphEdge = { id: site.id, kind: edge.kind, from: edge.from, to: edge.to, meta: site.meta, resolution: site.resolution };
-    resolveFlagGates([single], consts, imports, reexports);
-    site.meta = single.meta;
-    site.resolution = single.resolution;
-  }
-  const lookup = (file: string, name: string, depth = 0): { file: string; value: boolean; line: number } | undefined => {
+  for (const edge of edges)
+    for (const site of edge.occurrences ?? []) {
+      const single: GraphEdge = {
+        id: site.id,
+        kind: edge.kind,
+        from: edge.from,
+        to: edge.to,
+        meta: site.meta,
+        resolution: site.resolution,
+      };
+      resolveFlagGates([single], consts, imports, reexports);
+      site.meta = single.meta;
+      site.resolution = single.resolution;
+    }
+  const lookup = (
+    file: string,
+    name: string,
+    depth = 0,
+  ): { file: string; value: boolean; line: number } | undefined => {
     if (depth > 4) return undefined;
     const here = consts.get(file)?.get(name);
     if (here) return { file, ...here };
     const re = reexports?.get(file);
     const named = re?.named.get(name);
     if (named) return lookup(named.file, named.name, depth + 1);
-    for (const star of re?.stars ?? []) { const hit = lookup(star, name, depth + 1); if (hit) return hit; }
+    for (const star of re?.stars ?? []) {
+      const hit = lookup(star, name, depth + 1);
+      if (hit) return hit;
+    }
     return undefined;
   };
   const resolve = (file: string, name: string) => {
@@ -136,7 +174,10 @@ export function resolveFlagGates(edges: GraphEdge[], consts: Map<string, Map<str
       if (!hit) continue;
       const runs = neg ? !hit.value : hit.value;
       const fact = { flag: name, value: hit.value, at: `${hit.file}:${hit.line}`, runs };
-      if (!runs) { pick = fact; break; }
+      if (!runs) {
+        pick = fact;
+        break;
+      }
       pick ??= fact;
     }
     if (pick) {
@@ -147,12 +188,15 @@ export function resolveFlagGates(edges: GraphEdge[], consts: Map<string, Map<str
         meta.inactive = true;
         const was = e.resolution;
         e.resolution = {
-          status: was?.status ?? 'resolved', technique: 'flag-gate', confidence: was?.confidence ?? 'HIGH',
+          status: was?.status ?? 'resolved',
+          technique: 'flag-gate',
+          confidence: was?.confidence ?? 'HIGH',
           note: `switched off: ${pick.flag} = ${pick.value} (${pick.at})${was ? ` · resolved by ${was.technique}${was.note ? ` — ${was.note}` : ''}` : ''}`,
         };
       }
     }
-    if (Object.keys(meta).length) e.meta = meta; else delete e.meta;
+    if (Object.keys(meta).length) e.meta = meta;
+    else delete e.meta;
   }
   if (!split.size) return;
   // back to one edge per caller · callee where pass 1 split them: the first live one when the callee is reached
@@ -163,13 +207,20 @@ export function resolveFlagGates(edges: GraphEdge[], consts: Map<string, Map<str
   for (const e of edges) {
     const k = keyOf(e);
     if (!split.has(k)) continue;
-    if (e.meta?.inactive) { if (!off.has(k)) off.set(k, e); continue; }
+    if (e.meta?.inactive) {
+      if (!off.has(k)) off.set(k, e);
+      continue;
+    }
     const had = live.get(k);
     if (!had || (had.meta?.whenFlag !== undefined && e.meta?.whenFlag === undefined)) live.set(k, e);
   }
   const keep = new Set<GraphEdge>();
   const winners = new Map<string, GraphEdge>();
-  for (const k of split) { const winner = live.get(k) ?? off.get(k)!; keep.add(winner); winners.set(k, winner); }
+  for (const k of split) {
+    const winner = live.get(k) ?? off.get(k)!;
+    keep.add(winner);
+    winners.set(k, winner);
+  }
   for (const e of edges) {
     const winner = winners.get(keyOf(e));
     if (winner && winner !== e) {

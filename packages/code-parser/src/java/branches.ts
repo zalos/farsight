@@ -43,7 +43,10 @@ function containsFlow(n: TSNode | null): boolean {
   let found = false;
   walkTS(n, (b) => {
     if (found) return false;
-    if (b.type === 'method_invocation' || b.type === 'object_creation_expression' || b.type === 'throw_statement') { found = true; return false; }
+    if (b.type === 'method_invocation' || b.type === 'object_creation_expression' || b.type === 'throw_statement') {
+      found = true;
+      return false;
+    }
   });
   return found;
 }
@@ -60,19 +63,24 @@ const span = (n: TSNode) => ({ line: n.startPosition.row + 1, endLine: n.endPosi
 export function extractJavaBranches(body: TSNode | null, source: string): BranchPoint[] {
   const out: BranchPoint[] = [];
   const bpBiz = (stmtOffset: number, testOffset?: number): { business?: string } => {
-    const b = leadingBranchLabel(source, stmtOffset)
-      ?? (testOffset != null ? trailingBranchLabel(source, testOffset) : undefined);
+    const b =
+      leadingBranchLabel(source, stmtOffset) ??
+      (testOffset != null ? trailingBranchLabel(source, testOffset) : undefined);
     return b ? { business: b } : {};
   };
   const armBiz = (offset: number, leadingToo = false): { business?: string } => {
-    const b = trailingBranchLabel(source, offset)
-      ?? (leadingToo ? leadingBranchLabel(source, offset) : undefined);
+    const b = trailingBranchLabel(source, offset) ?? (leadingToo ? leadingBranchLabel(source, offset) : undefined);
     return b ? { business: b } : {};
   };
 
   walkTS(body, (n) => {
     if (out.length >= MAX_BRANCH_POINTS) {
-      currentRead()?.report({ code: 'resource-limit', severity: 'warning', adapter: 'java', message: 'Branch inspection reached its per-declaration limit.' });
+      currentRead()?.report({
+        code: 'resource-limit',
+        severity: 'warning',
+        adapter: 'java',
+        message: 'Branch inspection reached its per-declaration limit.',
+      });
       return false;
     }
     // nested types own their branches — a method body walk stops at their door
@@ -83,14 +91,21 @@ export function extractJavaBranches(body: TSNode | null, source: string): Branch
       const consequence = n.childForFieldName('consequence');
       if (!cond || !consequence) return;
       const alternative = n.childForFieldName('alternative');
-      const arms: BranchArm[] = [{ label: 'then', requires: condText(cond), ...span(consequence), ...armBiz(consequence.startIndex) }];
+      const arms: BranchArm[] = [
+        { label: 'then', requires: condText(cond), ...span(consequence), ...armBiz(consequence.startIndex) },
+      ];
       // else-if chains need no special case: this `else` arm spans the whole
       // alternate, so the nested if's own BranchPoint + containment give the conjunction
-      if (alternative) arms.push({ label: 'else', requires: negate(cond), ...span(alternative), ...armBiz(alternative.startIndex) });
+      if (alternative)
+        arms.push({ label: 'else', requires: negate(cond), ...span(alternative), ...armBiz(alternative.startIndex) });
       const exits = armExits(consequence) || (!!alternative && armExits(alternative));
       out.push({
-        kind: 'if', line: cond.startPosition.row + 1, condition: condText(cond),
-        ...(exits ? { exits: true as const } : {}), ...bpBiz(n.startIndex, cond.startIndex), arms,
+        kind: 'if',
+        line: cond.startPosition.row + 1,
+        condition: condText(cond),
+        ...(exits ? { exits: true as const } : {}),
+        ...bpBiz(n.startIndex, cond.startIndex),
+        arms,
       });
       return;
     }
@@ -103,15 +118,18 @@ export function extractJavaBranches(body: TSNode | null, source: string): Branch
       const arms: BranchArm[] = [];
       let exits = false;
       // classic groups (labels + statements, fall-through folded) and arrow rules alike
-      for (const arm of blk.namedChildren.filter((c): c is TSNode => !!c && (c.type === 'switch_block_statement_group' || c.type === 'switch_rule'))) {
+      for (const arm of blk.namedChildren.filter(
+        (c): c is TSNode => !!c && (c.type === 'switch_block_statement_group' || c.type === 'switch_rule'),
+      )) {
         const labels = childrenOfType(arm, 'switch_label');
         if (!labels.length) continue;
-        const caseVals = labels.flatMap((l) => l.namedChildren.filter((c): c is TSNode => !!c).map((c) => capLabel(c.text)));
+        const caseVals = labels.flatMap((l) =>
+          l.namedChildren.filter((c): c is TSNode => !!c).map((c) => capLabel(c.text)),
+        );
         const isDefault = labels.some((l) => l.text.trim().startsWith('default'));
-        const requires = [
-          ...caseVals.map((v) => `${disc} == ${v}`),
-          ...(isDefault ? ['no case matched'] : []),
-        ].join(' || ').slice(0, 120);
+        const requires = [...caseVals.map((v) => `${disc} == ${v}`), ...(isDefault ? ['no case matched'] : [])]
+          .join(' || ')
+          .slice(0, 120);
         arms.push({
           label: caseVals.length ? `case ${caseVals.join(', ')}${isDefault ? ', default' : ''}` : 'default',
           requires: requires || 'no case matched',
@@ -120,10 +138,15 @@ export function extractJavaBranches(body: TSNode | null, source: string): Branch
         });
         if (armExits(arm.type === 'switch_rule' ? (arm.namedChildren.at(-1) ?? arm) : arm)) exits = true;
       }
-      if (arms.length) out.push({
-        kind: 'switch', line: cond.startPosition.row + 1, condition: disc,
-        ...(exits ? { exits: true as const } : {}), ...bpBiz(n.startIndex, cond.startIndex), arms,
-      });
+      if (arms.length)
+        out.push({
+          kind: 'switch',
+          line: cond.startPosition.row + 1,
+          condition: disc,
+          ...(exits ? { exits: true as const } : {}),
+          ...bpBiz(n.startIndex, cond.startIndex),
+          arms,
+        });
       return;
     }
 
@@ -134,7 +157,9 @@ export function extractJavaBranches(body: TSNode | null, source: string): Branch
       if (!cond || !consequence || !alternative) return;
       if (!containsFlow(consequence) && !containsFlow(alternative)) return;
       out.push({
-        kind: 'ternary', line: cond.startPosition.row + 1, condition: condText(cond),
+        kind: 'ternary',
+        line: cond.startPosition.row + 1,
+        condition: condText(cond),
         ...bpBiz(n.startIndex, cond.startIndex),
         arms: [
           { label: 'then', requires: condText(cond), ...span(consequence), ...armBiz(consequence.startIndex) },
@@ -151,7 +176,9 @@ export function extractJavaBranches(body: TSNode | null, source: string): Branch
       const catchBody = handler.childForFieldName('body') ?? handler;
       const exits = armExits(blk) || armExits(catchBody);
       out.push({
-        kind: 'catch', line: n.startPosition.row + 1, condition: 'exception in try',
+        kind: 'catch',
+        line: n.startPosition.row + 1,
+        condition: 'exception in try',
         ...(exits ? { exits: true as const } : {}),
         ...bpBiz(n.startIndex), // try has no discriminant line — leading comment only
         arms: [

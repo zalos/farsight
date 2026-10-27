@@ -28,8 +28,19 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
-  buildIndex, impactOf, journey, journeySummary, resolveEntry, screensFor, countedLine, SnapshotDb, journeyTree, journeyTreeLines,
-  type GraphEdge, type GraphIndex, type GraphNode,
+  buildIndex,
+  impactOf,
+  journey,
+  journeySummary,
+  resolveEntry,
+  screensFor,
+  countedLine,
+  SnapshotDb,
+  journeyTree,
+  journeyTreeLines,
+  type GraphEdge,
+  type GraphIndex,
+  type GraphNode,
 } from '@farsight/core';
 import { WorkCache, workDbPath } from '@farsight/work';
 import { INVOICE_APP_FIXTURE } from '@farsight/work-fixture';
@@ -41,24 +52,44 @@ const cli = join(repoRoot, 'packages/cli/dist/cli.js');
 const schema = (name: string) => JSON.parse(readFileSync(join(repoRoot, 'schemas', name), 'utf8'));
 
 const TOOLS = [
-  'api_drift', 'api_spec', 'api_surface',
+  'api_drift',
+  'api_spec',
+  'api_surface',
   // walk me through it, and ask (round 2026-10-10, proposal 8)
-  'ask', 'tour',
+  'ask',
+  'tour',
   'config_files',
   // what the team decided or left open (the 2026-10-13 outsider round, F8)
   'decisions',
   'describe_node',
-  'design_drift', 'design_guide', 'design_surface',
+  'design_drift',
+  'design_guide',
+  'design_surface',
   'gate',
-  'graph_changes', 'graph_overview',
-  'impact_of', 'journey', 'journeys', 'list_rules', 'model_hub_state', 'refresh_graph',
+  'graph_changes',
+  'graph_overview',
+  'impact_of',
+  'journey',
+  'journeys',
+  'list_rules',
+  'model_hub_state',
+  'refresh_graph',
   // who may do what (outsider round 2026-10-13, F4)
   'roles',
-  'search_graph', 'stories', 'storyline_diff', 'test_coverage', 'trace_flow',
+  'search_graph',
+  'stories',
+  'storyline_diff',
+  'test_coverage',
+  'trace_flow',
   // in both tiers: the menu, and what a budget left out (round 2026-10-10, proposal 9)
-  'expand', 'tools',
+  'expand',
+  'tools',
   // work items: always registered
-  'work_changes', 'work_item', 'work_items', 'work_links', 'work_sync',
+  'work_changes',
+  'work_item',
+  'work_items',
+  'work_links',
+  'work_sync',
 ];
 // registered only because the test workspace's edit-mode source grants agents these actions
 const WORK_WRITE = ['work_assign', 'work_comment'];
@@ -72,7 +103,12 @@ const ALL_TOOLS = [...TOOLS, ...WORK_WRITE].sort();
  * an agent assigning an open story is denied by the policy.
  */
 const WORK_SOURCE = (mode: 'edit' | 'read-only') => ({
-  id: 'invoice-jira', type: 'work', provider: 'fixture', path: 'work-fixture/invoice-app', scope: { projects: ['INV'] }, mode,
+  id: 'invoice-jira',
+  type: 'work',
+  provider: 'fixture',
+  path: 'work-fixture/invoice-app',
+  scope: { projects: ['INV'] },
+  mode,
   permissions: {
     agentWrites: 'allow',
     grants: [
@@ -85,10 +121,17 @@ const WORK_SOURCE = (mode: 'edit' | 'read-only') => ({
 function writeWorkspace(dir: string, mode: 'edit' | 'read-only'): void {
   mkdirSync(join(dir, '.farsight'), { recursive: true });
   cpSync(INVOICE_APP_FIXTURE, join(dir, 'work-fixture/invoice-app'), { recursive: true });
-  writeFileSync(join(dir, '.farsight', 'settings.json'), JSON.stringify({ defaultLens: 'hybrid', sources: [WORK_SOURCE(mode)], collections: [] }, null, 2));
+  writeFileSync(
+    join(dir, '.farsight', 'settings.json'),
+    JSON.stringify({ defaultLens: 'hybrid', sources: [WORK_SOURCE(mode)], collections: [] }, null, 2),
+  );
 }
 const git = (cwd: string, ...args: string[]) => {
-  const r = spawnSync('git', ['-c', 'user.name=Ada Okafor', '-c', 'user.email=ada@invoice-app.test', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' });
+  const r = spawnSync(
+    'git',
+    ['-c', 'user.name=Ada Okafor', '-c', 'user.email=ada@invoice-app.test', '-c', 'commit.gpgsign=false', ...args],
+    { cwd, encoding: 'utf8' },
+  );
   assert.equal(r.status, 0, r.stderr);
 };
 
@@ -102,7 +145,11 @@ let index: GraphIndex;
 let client: Client;
 
 function ingest(): void {
-  const r = spawnSync(process.execPath, [cli, 'ingest', join(work, 'invoice-app'), '--repo', 'invoice-app', '--out', graph], { cwd: work, encoding: 'utf8' });
+  const r = spawnSync(
+    process.execPath,
+    [cli, 'ingest', join(work, 'invoice-app'), '--repo', 'invoice-app', '--out', graph],
+    { cwd: work, encoding: 'utf8' },
+  );
   assert.equal(r.status, 0, r.stderr);
 }
 
@@ -125,7 +172,13 @@ before(async () => {
   git(app, 'add', '-A');
   git(app, 'commit', '-q', '-m', 'chore: the invoice app');
   const svc = join(app, 'src/server/invoiceService.ts');
-  writeFileSync(svc, readFileSync(svc, 'utf8').replace('export async function finalizeInvoice(id: string) {', 'export async function finalizeInvoice(id: string) { // approval comes first'));
+  writeFileSync(
+    svc,
+    readFileSync(svc, 'utf8').replace(
+      'export async function finalizeInvoice(id: string) {',
+      'export async function finalizeInvoice(id: string) { // approval comes first',
+    ),
+  );
   git(app, 'commit', '-q', '-am', 'INV-5: an invoice is approved before it is finalized');
   // the work source is configured before ingest, so ingest reads the keys each commit names
   writeWorkspace(work, 'edit');
@@ -148,8 +201,16 @@ before(async () => {
 });
 
 after(async () => {
-  try { await client?.close(); } catch { /* closing a closed transport is not a failure */ }
-  try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ }
+  try {
+    await client?.close();
+  } catch {
+    /* closing a closed transport is not a failure */
+  }
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
 });
 
 describe('presence', () => {
@@ -168,12 +229,14 @@ describe('presence', () => {
 
   test('input shapes the e2e lane and existing agents rely on are still accepted', async () => {
     const { tools } = await client.listTools();
-    const props = (name: string) => Object.keys((tools.find((t) => t.name === name)!.inputSchema as { properties?: object }).properties ?? {});
+    const props = (name: string) =>
+      Object.keys((tools.find((t) => t.name === name)!.inputSchema as { properties?: object }).properties ?? {});
     assert.ok(props('search_graph').includes('query'));
     assert.ok(props('describe_node').includes('node_id'));
     assert.ok(props('impact_of').includes('node_id'));
     assert.ok(props('list_rules').includes('query'));
-    for (const k of ['flow', 'node', 'test', 'gaps', 'raw', 'matrix']) assert.ok(props('test_coverage').includes(k), `test_coverage.${k}`);
+    for (const k of ['flow', 'node', 'test', 'gaps', 'raw', 'matrix'])
+      assert.ok(props('test_coverage').includes(k), `test_coverage.${k}`);
     assert.ok(props('journey').includes('view'));
   });
 });
@@ -183,14 +246,17 @@ describe('tour and ask — assembled from the graph, every line cited (round 202
     const out = await call('tour', { target: 'invoice' });
     assert.match(out, /stop 1 of \d+ on this walk · screen · New invoice/);
     assert.match(out, /hand-off · The invoice becomes open/);
-    assert.match(out, /Not checked by the code: nothing compares the status the invoice is in before finalizeInvoice moves it/);
+    assert.match(
+      out,
+      /Not checked by the code: nothing compares the status the invoice is in before finalizeInvoice moves it/,
+    );
     assert.match(out, /every sentence is read from the graph · nothing is inferred by a model/);
     const ids = [...out.matchAll(/`([^`]*::[^`]*)`/g)].map((m) => m[1]!);
     assert.ok(ids.length > 10, 'the lines cite what they were read from');
     for (const id of ids) assert.ok(index.byId.has(id), `${id} is a node of the graph`);
     const biz = await call('tour', { target: 'invoice', business: true });
     assert.equal(/`|::/.test(biz), false, 'the business register prints no ids');
-    assert.match(biz, /The invoice becomes Sent/, 'a status in the persona\'s words');
+    assert.match(biz, /The invoice becomes Sent/, "a status in the persona's words");
     const doc = JSON.parse(await call('tour', { target: 'invoice', json: true }));
     assert.equal(doc.derived, true);
     assert.equal(doc.counted.stops.n, doc.stops.length);
@@ -206,7 +272,7 @@ describe('tour and ask — assembled from the graph, every line cited (round 202
     assert.match(none, /no action behind a role check matches/);
   });
 
-  test('decisions prints the team\'s words, the document quoted, where the code names each, and the notes', async () => {
+  test("decisions prints the team's words, the document quoted, where the code names each, and the notes", async () => {
     const out = await call('decisions');
     assert.match(out, /2 decisions across every source in scope: 1 open · 0 decided · 1 named in code, not declared/);
     assert.match(out, /## D1 · "Does an invoice above a limit need a second approver\?" — open — not decided yet/);
@@ -280,9 +346,15 @@ describe('gate — one gate answered (swarm-fixes 2026-10-05, finding 4)', () =>
     const id = 'invoice-app::precondition::src/server/invoiceService.ts::finalizeInvoice::invoices.lines#present';
     const out = await call('gate', { node_id: id });
     assert.match(out, /tier: business · nothing required is missing · tier from the kind of check/);
-    assert.match(out, /precondition: invoices\.lines not empty — the record the action writes · otherwise 409 conflict/);
+    assert.match(
+      out,
+      /precondition: invoices\.lines not empty — the record the action writes · otherwise 409 conflict/,
+    );
     assert.match(out, /its words \(the @business label\): An invoice must have at least one line item/);
-    assert.match(await call('gate', { node_id: 'invoice-app::guard::requireScope(billing:write)' }), /tier: business · what they may do/);
+    assert.match(
+      await call('gate', { node_id: 'invoice-app::guard::requireScope(billing:write)' }),
+      /tier: business · what they may do/,
+    );
   });
 
   test('the journey prints what each action needs, and a move the code never checks', async () => {
@@ -291,7 +363,7 @@ describe('gate — one gate answered (swarm-fixes 2026-10-05, finding 4)', () =>
     const biz = await call('journey', { entry: 'draft-and-send', view: 'business' });
     assert.match(biz, /needs: .*An invoice must have at least one line item/);
     // a record created in its first status has nothing to move from: never "not checked"
-    assert.ok(!/moves invoices to draft/.test(biz), "a creation is not an unchecked move");
+    assert.ok(!/moves invoices to draft/.test(biz), 'a creation is not an unchecked move');
     assert.match(biz, /moves invoices to open — the status it moves from is not checked by the code/);
   });
 });
@@ -330,7 +402,10 @@ describe('dependencies — packages as nodes', () => {
     assert.match(out, /4 files import it for this package · 3 journeys reach it for this package — /);
     assert.match(out, /farsight deps where react/);
     const ws = await call('describe_node', { node_id: 'invoice-app::package::@invoice/plumbing' });
-    assert.match(ws, /package: workspace · project @invoice\/plumbing · src\/server\/plumbing · resolved by alias or workspace name/);
+    assert.match(
+      ws,
+      /package: workspace · project @invoice\/plumbing · src\/server\/plumbing · resolved by alias or workspace name/,
+    );
     const sdk = await call('describe_node', { node_id: 'invoice-app::package::@azure-rest/ai-document-intelligence' });
     assert.match(sdk, /the SDK of Azure Document Intelligence/);
   });
@@ -339,7 +414,10 @@ describe('dependencies — packages as nodes', () => {
     const out = await call('search_graph', { query: 'date-fns' });
     assert.match(out.split('\n')[0]!, /^\[package\] date-fns/);
     const pk = await call('search_graph', { query: 'react', kind: 'package' });
-    assert.ok(pk.split('\n').every((l) => l.startsWith('[package]')), pk);
+    assert.ok(
+      pk.split('\n').every((l) => l.startsWith('[package]')),
+      pk,
+    );
     const overview = await call('graph_overview');
     assert.match(overview, /dependencies: 8 packages \(7 third-party · 1 from this workspace\)/);
   });
@@ -349,13 +427,17 @@ describe('stories — read from the story files, drawn by a Storybook nobody her
   const FORM = 'invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm';
   // the fixture's config names http://127.0.0.1:4539; nothing in this suite listens there, and the
   // e2e lane's fake Storybook may — so the line is matched for either state, never assumed
-  const BOOK = /Storybook Invoice app UI at http:\/\/127\.0\.0\.1:4539: (not reached \(\w+\) — start it with `npm run storybook`; Farsight never starts it|running — )/;
+  const BOOK =
+    /Storybook Invoice app UI at http:\/\/127\.0\.0\.1:4539: (not reached \(\w+\) — start it with `npm run storybook`; Farsight never starts it|running — )/;
 
-  test('describe_node lists a component\'s stories by id and name, and the Storybook\'s state', async () => {
+  test("describe_node lists a component's stories by id and name, and the Storybook's state", async () => {
     const out = await call('describe_node', { node_id: FORM, context: false });
     assert.match(out, /## stories \(3\)/);
     assert.match(out, BOOK);
-    assert.match(out, /story With line items `invoices-createinvoiceform--with-line-items` \(Invoices\/CreateInvoiceForm\) — src\/ui\/CreateInvoiceForm\.stories\.tsx:\d+/);
+    assert.match(
+      out,
+      /story With line items `invoices-createinvoiceform--with-line-items` \(Invoices\/CreateInvoiceForm\) — src\/ui\/CreateInvoiceForm\.stories\.tsx:\d+/,
+    );
     assert.match(out, /A customer picked and one line item filled in, ready to save\./);
   });
 
@@ -368,14 +450,20 @@ describe('stories — read from the story files, drawn by a Storybook nobody her
     const out = await call('stories', {});
     assert.match(out, /invoice-app: 3 stories over 1 components from 1 story file\(s\)/);
     assert.match(out, BOOK);
-    assert.match(out, new RegExp(`Invoices/CreateInvoiceForm — 3 stories.*\`${FORM.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\``));
+    assert.match(
+      out,
+      new RegExp(`Invoices/CreateInvoiceForm — 3 stories.*\`${FORM.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\``),
+    );
     const one = await call('stories', { node: FORM });
     assert.match(one, /## stories \(3\)/);
   });
 
   test('graph_overview carries one stories line per repo', async () => {
     const out = await call('graph_overview');
-    assert.match(out, /stories: invoice-app — 3 stories over 1 components from 1 story file\(s\) · Storybook http:\/\/127\.0\.0\.1:4539/);
+    assert.match(
+      out,
+      /stories: invoice-app — 3 stories over 1 components from 1 story file\(s\) · Storybook http:\/\/127\.0\.0\.1:4539/,
+    );
   });
 });
 
@@ -402,7 +490,7 @@ describe('list_rules — gates and rules as separate lists', () => {
 });
 
 describe('journey', () => {
-  test('the header counts are journeySummary\'s', async () => {
+  test("the header counts are journeySummary's", async () => {
     const seed = resolveEntry(index, 'new-invoice')!;
     const sum = journeySummary(index, journey(index, seed.id), screensFor(index, seed.id));
     const k = sum.counts;
@@ -411,8 +499,27 @@ describe('journey', () => {
     // numbers, under the same words, the HUD prints; nothing counted twice or recounted here
     const q = sum.counted!;
     // the gates, then the same gates split by who they matter to (gates lane 2026-10-10)
-    const line = countedLine([q.screens, q.built, q.gates, q.gatesBusiness, q.gatesTechnical, q.checks, q.decisions, q.notInWords, q.actions, q.again, q.declaredNotCalled, q.actionStops], { lens: 'code' });
-    assert.ok(out.includes(`${line} · ${k.records} record(s) · ${k.messages} message(s)`), out.split('\n').slice(0, 4).join('\n'));
+    const line = countedLine(
+      [
+        q.screens,
+        q.built,
+        q.gates,
+        q.gatesBusiness,
+        q.gatesTechnical,
+        q.checks,
+        q.decisions,
+        q.notInWords,
+        q.actions,
+        q.again,
+        q.declaredNotCalled,
+        q.actionStops,
+      ],
+      { lens: 'code' },
+    );
+    assert.ok(
+      out.includes(`${line} · ${k.records} record(s) · ${k.messages} message(s)`),
+      out.split('\n').slice(0, 4).join('\n'),
+    );
     assert.match(line, /^across this journey: /, 'the scope is printed, once, before the numbers it scopes');
     if (k.gates) assert.ok(line.includes(`${k.gates} gate`), 'the gates number is summary.counts.gates');
     assert.match(out, /## what the system does/);
@@ -443,11 +550,20 @@ describe('journeys', () => {
     assert.match(out, /^## Billing — 3 journeys/m);
     assert.match(out, /^### Invoices — 2 journeys/m);
     // the example's discard screen names the operator (screens[].persona): the billing cycle is drawn with them
-    assert.match(out, /^- Billing cycle — partly built · 2 of 3 · start here · with Operations \(1 of 3 screens\) · `invoice-app::flow::billing-cycle` \(open with journey\)$/m);
+    assert.match(
+      out,
+      /^- Billing cycle — partly built · 2 of 3 · start here · with Operations \(1 of 3 screens\) · `invoice-app::flow::billing-cycle` \(open with journey\)$/m,
+    );
     // the fixture's config moves draft-and-send into Review and send; it is under both personas
-    assert.match(out, /^- Draft and send an invoice — .* · also under Operations · with Operations \(1 of 2 screens\) · placed by farsight\.config\.json · /m);
+    assert.match(
+      out,
+      /^- Draft and send an invoice — .* · also under Operations · with Operations \(1 of 2 screens\) · placed by farsight\.config\.json · /m,
+    );
     // who uses each screen, and what placed it: the screen row, Billing's routes, the journey
-    assert.match(out, /^4 screens across every source in scope \(1 named by its screen row · 1 by its address · 2 by their journey\)$/m);
+    assert.match(
+      out,
+      /^4 screens across every source in scope \(1 named by its screen row · 1 by its address · 2 by their journey\)$/m,
+    );
     assert.ok(out.indexOf('## Billing') < out.indexOf('## Operations'), 'declared order, not alphabetical');
   });
 
@@ -459,46 +575,98 @@ describe('journeys', () => {
     assert.match(none, /no journey under group "nope"/);
     const json = JSON.parse(await call('journeys', { json: true }));
     assert.deepEqual(json, JSON.parse(JSON.stringify(fold())));
-    assert.deepEqual(json.personas.map((p: { id: string }) => p.id), ['billing', 'ops']);
+    assert.deepEqual(
+      json.personas.map((p: { id: string }) => p.id),
+      ['billing', 'ops'],
+    );
   });
 
   test('design_guide says how to organise them: personas, groups, persona lists, order, the config block, nested configs', async () => {
     const guide = await call('design_guide');
-    for (const words of ['personas[] { id, name, description?, routes?, signsInWith? }', 'screens[].persona', 'personas[].routes', '"For A · with B"', 'personaFrom (screen · routes · guard · journey)', 'groups[] { id, name, description?, persona? }', 'flows[].persona', 'flows[].group', 'flows[].order',
-      'flows[].owner', 'flows[].work', 'surfaces[]', '{ "journeys": {', 'storylines[] { id, name, description?, journeys }', '"storylines"', '{ id, branchOf,\n  when, rejoins? }', 'below the source root applies to its', '"projects" and "tooling" are read from the root file only']) {
+    for (const words of [
+      'personas[] { id, name, description?, routes?, signsInWith? }',
+      'screens[].persona',
+      'personas[].routes',
+      '"For A · with B"',
+      'personaFrom (screen · routes · guard · journey)',
+      'groups[] { id, name, description?, persona? }',
+      'flows[].persona',
+      'flows[].group',
+      'flows[].order',
+      'flows[].owner',
+      'flows[].work',
+      'surfaces[]',
+      '{ "journeys": {',
+      'storylines[] { id, name, description?, journeys }',
+      '"storylines"',
+      '{ id, branchOf,\n  when, rejoins? }',
+      'below the source root applies to its',
+      '"projects" and "tooling" are read from the root file only',
+    ]) {
       assert.ok(guide.includes(words), `design_guide does not say ${words}`);
     }
   });
 
   test('graph_overview has the journeys line and journey names where a flow sits', async () => {
     const overview = await call('graph_overview');
-    assert.match(overview, /^journeys: 4 journeys · 1 storyline · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them by storyline, then persona and group/m);
+    assert.match(
+      overview,
+      /^journeys: 4 journeys · 1 storyline · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them by storyline, then persona and group/m,
+    );
     const j = await call('journey', { entry: 'draft-and-send' });
     assert.match(j, /^shown under: Billing › Review and send · Operations › Review and send \(start here\)$/m);
     // the fixture declares this journey a branch: what it leaves from, when, and where it comes back
-    assert.match(j, /^in storyline: An invoice, end to end · branch of Start a new invoice \(`invoice-app::flow::new-invoice`\) · when Operations reviews the draft before it is sent · back to Billing cycle \(`invoice-app::flow::billing-cycle`\)$/m);
+    assert.match(
+      j,
+      /^in storyline: An invoice, end to end · branch of Start a new invoice \(`invoice-app::flow::new-invoice`\) · when Operations reviews the draft before it is sent · back to Billing cycle \(`invoice-app::flow::billing-cycle`\)$/m,
+    );
     const step = await call('journey', { entry: 'billing-cycle' });
-    assert.match(step, /^in storyline: An invoice, end to end · step 2 of 2 · before: `invoice-app::flow::new-invoice`$/m);
+    assert.match(
+      step,
+      /^in storyline: An invoice, end to end · step 2 of 2 · before: `invoice-app::flow::new-invoice`$/m,
+    );
   });
 
-  test('storyline: one storyline\'s steps and only its journeys; an unknown one says so', async () => {
+  test("storyline: one storyline's steps and only its journeys; an unknown one says so", async () => {
     const out = await call('journeys', { storyline: 'invoice' });
     assert.match(out, /^3 journeys · 1 storyline · /m);
     assert.match(out, /^### An invoice, end to end \(`invoice`\) — 3 journeys \(2 on the main path · 1 branch\) · /m);
     assert.match(out, /^2\. Billing cycle — /m);
     // the branch, indented under the step it leaves from, with its condition and its way back
-    assert.match(out, /^1\. Start a new invoice — .*\n   ↳ Draft and send an invoice · branch of Start a new invoice · when Operations reviews the draft before it is sent · back to Billing cycle — .*`invoice-app::flow::draft-and-send`/m);
-    assert.equal(await call('journeys', { storyline: 'nope' }), 'No storyline called “nope” is declared here. Storylines declared here: invoice (An invoice, end to end)');
+    assert.match(
+      out,
+      /^1\. Start a new invoice — .*\n   ↳ Draft and send an invoice · branch of Start a new invoice · when Operations reviews the draft before it is sent · back to Billing cycle — .*`invoice-app::flow::draft-and-send`/m,
+    );
+    assert.equal(
+      await call('journeys', { storyline: 'nope' }),
+      'No storyline called “nope” is declared here. Storylines declared here: invoice (An invoice, end to end)',
+    );
     const json = JSON.parse(await call('journeys', { storyline: 'invoice', json: true }));
-    assert.deepEqual(json.storylines[0].journeys.map((j: { id: string }) => j.id), ['new-invoice', 'billing-cycle']);
-    assert.deepEqual(json.storylines[0].branches.map((b: any) => [b.id, b.branchOf, b.when, b.rejoins]),
-      [['draft-and-send', 'invoice-app::flow::new-invoice', 'Operations reviews the draft before it is sent', 'invoice-app::flow::billing-cycle']]);
-    assert.ok(json.personas.every((p: any) => p.groups.every((g: any) => g.journeys.every((j: any) => j.storylines.includes('invoice')))));
+    assert.deepEqual(
+      json.storylines[0].journeys.map((j: { id: string }) => j.id),
+      ['new-invoice', 'billing-cycle'],
+    );
+    assert.deepEqual(
+      json.storylines[0].branches.map((b: any) => [b.id, b.branchOf, b.when, b.rejoins]),
+      [
+        [
+          'draft-and-send',
+          'invoice-app::flow::new-invoice',
+          'Operations reviews the draft before it is sent',
+          'invoice-app::flow::billing-cycle',
+        ],
+      ],
+    );
+    assert.ok(
+      json.personas.every((p: any) =>
+        p.groups.every((g: any) => g.journeys.every((j: any) => j.storylines.includes('invoice'))),
+      ),
+    );
   });
 });
 
 describe('impact_of', () => {
-  test('text: every hop count is the fold\'s, and the checkout currency is said', async () => {
+  test("text: every hop count is the fold's, and the checkout currency is said", async () => {
     const report = impactOf(index, TABLE, { hops: 2 });
     const out = await call('impact_of', { node_id: TABLE });
     assert.match(out, new RegExp(`${report.hops[0]!.found} thing\\(s\\) use it directly`));
@@ -514,9 +682,16 @@ describe('impact_of', () => {
   });
 
   test('changed: a file range resolves to the nodes defined in it', async () => {
-    const fn = [...index.byId.values()].find((n) => n.kind === 'function' && n.loc?.path === 'src/server/invoiceService.ts')!;
-    const doc = JSON.parse(await call('impact_of', { changed: [`src/server/invoiceService.ts:${fn.loc!.line}`], format: 'impact-tests' }));
-    assert.ok(doc.seeds.some((s: { id: string; from: string }) => s.id === fn.id && s.from === 'hunk'), JSON.stringify(doc.seeds));
+    const fn = [...index.byId.values()].find(
+      (n) => n.kind === 'function' && n.loc?.path === 'src/server/invoiceService.ts',
+    )!;
+    const doc = JSON.parse(
+      await call('impact_of', { changed: [`src/server/invoiceService.ts:${fn.loc!.line}`], format: 'impact-tests' }),
+    );
+    assert.ok(
+      doc.seeds.some((s: { id: string; from: string }) => s.id === fn.id && s.from === 'hunk'),
+      JSON.stringify(doc.seeds),
+    );
     const none = await call('impact_of', { changed: ['no/such/file.ts:1-2'] });
     assert.match(none, /no node in the graph is defined in no\/such\/file\.ts:1-2/);
   });
@@ -540,7 +715,9 @@ describe('test_coverage — unit and e2e', () => {
   });
 
   test('node: prints the step fold beside the covering tests', async () => {
-    const covered = [...index.byId.values()].find((n) => n.kind === 'function' && (index.in.get(n.id) ?? []).some((e) => e.kind === 'covers'))!;
+    const covered = [...index.byId.values()].find(
+      (n) => n.kind === 'function' && (index.in.get(n.id) ?? []).some((e) => e.kind === 'covers'),
+    )!;
     const out = await call('test_coverage', { node: covered.id });
     assert.match(out, /verified by \d+ test\(s\) — e2e \d+ · unit\/integration \d+/);
   });
@@ -625,7 +802,8 @@ describe('the rest of the surface answers', () => {
 
 describe('work items — read from the local copy, written only where granted', () => {
   const INV5 = 'work::invoice-jira::INV-5';
-  const spineKnowsKeys = typeof (SnapshotDb.prototype as unknown as { commitsForKey?: unknown }).commitsForKey === 'function';
+  const spineKnowsKeys =
+    typeof (SnapshotDb.prototype as unknown as { commitsForKey?: unknown }).commitsForKey === 'function';
 
   test('graph_overview names the source, its freshness, the items by state, and the granted write tools', async () => {
     const out = await call('graph_overview');
@@ -696,17 +874,28 @@ describe('work items — read from the local copy, written only where granted', 
     assert.match(out, /outcome: denied — nothing was written/);
   });
 
-  test('work_changes: the commits that name a to-do story, what they touched, and the impact per hop', { skip: spineKnowsKeys ? false : 'the commit spine in this build records no work keys (Lane D, feat/work-graph, not merged)' }, async (t) => {
-    const out = await call('work_changes', { key: 'INV-5' });
-    if (/history not indexed/.test(out)) { t.skip(`CLI ingest wrote no commit keys in this build: ${out.split('\n').at(-1)}`); return; }
-    assert.match(out, /INV-5: an invoice is approved before it is finalized/);
-    assert.match(out, /touched: .*function/);
-    assert.match(out, /hop 1: \d+/);
-    const sha = /## ([0-9a-f]{10}) /.exec(out)![1]!;
-    const diff = await call('work_changes', { sha });
-    assert.match(diff, /approval comes first/);
-    assert.match(await call('work_item', { key: 'INV-5' }), /todo-but-committed/);
-  });
+  test(
+    'work_changes: the commits that name a to-do story, what they touched, and the impact per hop',
+    {
+      skip: spineKnowsKeys
+        ? false
+        : 'the commit spine in this build records no work keys (Lane D, feat/work-graph, not merged)',
+    },
+    async (t) => {
+      const out = await call('work_changes', { key: 'INV-5' });
+      if (/history not indexed/.test(out)) {
+        t.skip(`CLI ingest wrote no commit keys in this build: ${out.split('\n').at(-1)}`);
+        return;
+      }
+      assert.match(out, /INV-5: an invoice is approved before it is finalized/);
+      assert.match(out, /touched: .*function/);
+      assert.match(out, /hop 1: \d+/);
+      const sha = /## ([0-9a-f]{10}) /.exec(out)![1]!;
+      const diff = await call('work_changes', { sha });
+      assert.match(diff, /approval comes first/);
+      assert.match(await call('work_item', { key: 'INV-5' }), /todo-but-committed/);
+    },
+  );
 
   test('work_changes without the spine says so, and a sha is still readable', async () => {
     const out = await call('work_changes', { key: 'INV-2' });

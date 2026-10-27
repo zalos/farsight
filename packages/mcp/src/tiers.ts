@@ -19,8 +19,19 @@ export type ToolTier = 'core' | 'all';
  * and in the all tier), and `roles` — who may do what, the first question an outsider asks. Read-only, every one.
  */
 export const CORE_TOOLS: readonly string[] = [
-  'graph_overview', 'journeys', 'journey', 'describe_node', 'search_graph', 'trace_flow', 'impact_of', 'gate', 'test_coverage',
-  'affected', 'ask', 'roles', 'decisions',
+  'graph_overview',
+  'journeys',
+  'journey',
+  'describe_node',
+  'search_graph',
+  'trace_flow',
+  'impact_of',
+  'gate',
+  'test_coverage',
+  'affected',
+  'ask',
+  'roles',
+  'decisions',
 ];
 
 /** In both tiers: the menu itself, and the call that returns what a budget left out. */
@@ -44,7 +55,10 @@ export type TierFrom = 'settings' | 'env' | 'default';
  * (`FARSIGHT_TOOLS`), and core is the default. Anything else in either place is ignored with its word kept,
  * so `tools` can say what it did not understand.
  */
-export function resolveTier(settings: unknown, env: string | undefined): { tier: ToolTier; from: TierFrom; ignored?: string } {
+export function resolveTier(
+  settings: unknown,
+  env: string | undefined,
+): { tier: ToolTier; from: TierFrom; ignored?: string } {
   const norm = (v: unknown): ToolTier | null => (v === 'core' || v === 'all' ? v : null);
   const s = norm(settings);
   if (s) return { tier: s, from: 'settings' };
@@ -56,7 +70,8 @@ export function resolveTier(settings: unknown, env: string | undefined): { tier:
 
 /** The one line `graph_overview` ends with: which tier is on, how many tools, and how to get the other. */
 export function tierLine(o: { tier: ToolTier; from: TierFrom; on: number; registered: number }): string {
-  const from = o.from === 'settings' ? '.farsight/settings.json → mcp.tools' : o.from === 'env' ? 'FARSIGHT_TOOLS' : 'the default';
+  const from =
+    o.from === 'settings' ? '.farsight/settings.json → mcp.tools' : o.from === 'env' ? 'FARSIGHT_TOOLS' : 'the default';
   return o.tier === 'core'
     ? `tools: the core tier is on (${o.on} of ${o.registered} tools, from ${from}) — for every tool set "mcp": { "tools": "all" } in .farsight/settings.json or FARSIGHT_TOOLS=all and restart this server; the tools tool lists them all`
     : `tools: every tool is on (${o.on} of ${o.registered}, from ${from}) — "mcp": { "tools": "core" } (or FARSIGHT_TOOLS=core when settings name none) keeps the core tools plus tools and expand; the tools tool lists each with its tier`;

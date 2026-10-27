@@ -43,8 +43,3 @@
 *.yaml
 *.html
 *.css
-
-# Not formatted yet: each style PR deletes its line; delete the block when it is empty
-# PR #121 edits code-parser and MCP; format these after it lands.
-/packages/code-parser/
-/packages/mcp/

@@ -7,15 +7,20 @@ import { canonicalJson } from '@farsight/graph';
 import type { Diagnostic, FileAnalysis, InputFingerprint, ParserLimits } from './types.js';
 
 export const DEFAULT_LIMITS: Required<ParserLimits> = {
-  maxFiles: 10_000, maxFileBytes: 4 * 1024 * 1024, maxTotalBytes: 128 * 1024 * 1024,
-  maxEntries: 100_000, maxDurationMs: 60_000,
+  maxFiles: 10_000,
+  maxFileBytes: 4 * 1024 * 1024,
+  maxTotalBytes: 128 * 1024 * 1024,
+  maxEntries: 100_000,
+  maxDurationMs: 60_000,
 };
 const context = new AsyncLocalStorage<RepositoryRead>();
 export const sha256 = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex');
 
 /** This failure already has a structured diagnostic; callers must not relabel it as an IO failure. */
 export class ReportedReadError extends Error {
-  constructor(readonly reason: string) { super(reason); }
+  constructor(readonly reason: string) {
+    super(reason);
+  }
 }
 
 export class RepositoryRead {
@@ -37,16 +42,25 @@ export class RepositoryRead {
   private entries = 0;
   private halted = false;
   stopReason?: 'cancelled' | 'resource-limit';
-  get stopped(): boolean { return this.halted; }
+  get stopped(): boolean {
+    return this.halted;
+  }
 
-  constructor(root: string, readonly signal?: AbortSignal, limits: ParserLimits = {}) {
+  constructor(
+    root: string,
+    readonly signal?: AbortSignal,
+    limits: ParserLimits = {},
+  ) {
     this.root = fs.realpathSync(root);
     if (!fs.statSync(this.root).isDirectory()) throw new TypeError('root must be a directory');
     this.limits = { ...DEFAULT_LIMITS, ...limits };
-    for (const [name, value] of Object.entries(this.limits)) if (!Number.isSafeInteger(value) || value < 1) throw new RangeError(`${name} must be a positive integer`);
+    for (const [name, value] of Object.entries(this.limits))
+      if (!Number.isSafeInteger(value) || value < 1) throw new RangeError(`${name} must be a positive integer`);
   }
 
-  run<T>(action: () => T): T { return context.run(this, action); }
+  run<T>(action: () => T): T {
+    return context.run(this, action);
+  }
 
   path(file: string): string {
     const path = relative(this.root, resolve(file)).split(sep).join('/');
@@ -59,7 +73,10 @@ export class RepositoryRead {
 
   report(diagnostic: Diagnostic): void {
     const key = canonicalJson(diagnostic);
-    if (!this.diagnosticKeys.has(key)) { this.diagnosticKeys.add(key); this.diagnostics.push(diagnostic); }
+    if (!this.diagnosticKeys.has(key)) {
+      this.diagnosticKeys.add(key);
+      this.diagnostics.push(diagnostic);
+    }
   }
 
   checkpoint(): void {
@@ -83,7 +100,13 @@ export class RepositoryRead {
     for (const part of path === '.' ? [] : path.split('/')) {
       current = resolve(current, part);
       if (fs.lstatSync(current).isSymbolicLink()) {
-        this.report({ code: 'read-boundary', severity: 'warning', path, reason: 'symlink', message: 'Symbolic links are not followed.' });
+        this.report({
+          code: 'read-boundary',
+          severity: 'warning',
+          path,
+          reason: 'symlink',
+          message: 'Symbolic links are not followed.',
+        });
         throw new ReportedReadError('symlink');
       }
     }
@@ -136,7 +159,12 @@ export class RepositoryRead {
     const stat = this.stat(file);
     if (!stat.isFile()) throw new Error('Input is not a regular file');
     if (stat.size > this.limits.maxFileBytes || this.bytes + stat.size > this.limits.maxTotalBytes) {
-      this.report({ code: 'resource-limit', severity: 'warning', path, message: 'Input exceeds maxFileBytes or maxTotalBytes.' });
+      this.report({
+        code: 'resource-limit',
+        severity: 'warning',
+        path,
+        message: 'Input exceeds maxFileBytes or maxTotalBytes.',
+      });
       throw new ReportedReadError('resource-limit');
     }
     this.guard(file);
@@ -152,7 +180,12 @@ export class RepositoryRead {
         if (!count) break;
         length += count;
         if (length > cap) {
-          this.report({ code: 'resource-limit', severity: 'warning', path, message: 'Input grew beyond the byte limit.' });
+          this.report({
+            code: 'resource-limit',
+            severity: 'warning',
+            path,
+            message: 'Input grew beyond the byte limit.',
+          });
           throw new ReportedReadError('resource-limit');
         }
         chunks.push(chunk.subarray(0, count));
@@ -162,7 +195,9 @@ export class RepositoryRead {
       this.bodies.set(path, body);
       this.record(path, 'content', body);
       return body;
-    } finally { fs.closeSync(fd); }
+    } finally {
+      fs.closeSync(fd);
+    }
   }
 
   private record(path: string, kind: InputFingerprint['kind'], bytes: string | Buffer): void {
@@ -186,7 +221,13 @@ export function fileReadError(file: string, adapter: string, error: unknown): bo
   const reason = scope?.stopReason ?? (error instanceof ReportedReadError ? error.reason : 'read-error');
   fileStatus(file, scope?.stopped || error instanceof ReportedReadError ? 'skipped' : 'failed', adapter, reason);
   if (scope && !scope.stopped && !(error instanceof ReportedReadError)) {
-    scope.report({ code: 'read-error', severity: 'error', path: scope.path(file), adapter, message: 'Source bytes could not be read.' });
+    scope.report({
+      code: 'read-error',
+      severity: 'error',
+      path: scope.path(file),
+      adapter,
+      message: 'Source bytes could not be read.',
+    });
   }
   return scope?.stopped ?? false;
 }
@@ -194,12 +235,24 @@ export function fileStatus(file: string, status: FileAnalysis['status'], adapter
   const scope = context.getStore();
   if (!scope) return;
   const path = scope.path(file);
-  scope.files.set(path, { path, status, adapter, ...(reason ? { reason } : {}),
-    ...(scope.inputs.get(`content:${path}`) ? { digest: scope.inputs.get(`content:${path}`)!.digest } : {}) });
+  scope.files.set(path, {
+    path,
+    status,
+    adapter,
+    ...(reason ? { reason } : {}),
+    ...(scope.inputs.get(`content:${path}`) ? { digest: scope.inputs.get(`content:${path}`)!.digest } : {}),
+  });
 }
 export function parseError(file: string, adapter: string, message: string, line?: number): void {
   const scope = context.getStore();
   if (!scope) return;
-  scope.report({ code: 'parse-error', severity: 'error', path: scope.path(file), adapter, message, ...(line ? { line } : {}) });
+  scope.report({
+    code: 'parse-error',
+    severity: 'error',
+    path: scope.path(file),
+    adapter,
+    message,
+    ...(line ? { line } : {}),
+  });
   fileStatus(file, 'failed', adapter, 'parse-error');
 }

@@ -8,7 +8,23 @@ import { configCheckOf, paramsText, CONFIG_CHECK_TAG } from '@farsight/graph/sem
 
 /** A parameter typed as a fetch `Response`: the function reads what a server answered. */
 const READS_RESPONSE = /:\s*Response\b/;
-import type { GraphFragment, GraphNode, GraphEdge, NodeKind, BranchPoint, BranchArm, ExternalDecl, ExternalKind, ExternalRef, StoreKind, StoreRef, PackageRef, PackageDeclaration, PackagesMeta, RouteGap } from '@farsight/graph';
+import type {
+  GraphFragment,
+  GraphNode,
+  GraphEdge,
+  NodeKind,
+  BranchPoint,
+  BranchArm,
+  ExternalDecl,
+  ExternalKind,
+  ExternalRef,
+  StoreKind,
+  StoreRef,
+  PackageRef,
+  PackageDeclaration,
+  PackagesMeta,
+  RouteGap,
+} from '@farsight/graph';
 import { walk, isNode, lineIndex, stringValue, memberChain, type AstNode } from './walk.js';
 import { createAliasClassifier, resolveFileish } from './aliases.js';
 import { isBuiltin, packageOf, workspacePackageOf, PackageJsonIndex } from './shared/packages.js';
@@ -17,13 +33,31 @@ import { collectFiles, freshnessMeta } from './shared/files.js';
 import { parseDoc, docCommentAbove, docLinkFields } from './shared/docs.js';
 import { capLabel, leadingBranchLabel, trailingBranchLabel, NEGATE_FLIP } from './shared/labels.js';
 import { autoTags, joinPaths, normalizePath, snippetRange } from './shared/tags.js';
-import { readNestFile, controllerOf, methodRoutes, useGuardsOf, bodySchemasOf, delegateOf, entrypointRouteKey, nestSetupGaps, type ControllerDecl, type GuardRef } from './nest.js';
+import {
+  readNestFile,
+  controllerOf,
+  methodRoutes,
+  useGuardsOf,
+  bodySchemasOf,
+  delegateOf,
+  entrypointRouteKey,
+  nestSetupGaps,
+  type ControllerDecl,
+  type GuardRef,
+} from './nest.js';
 import { isTestFile } from './shared/file-kinds.js';
 import { isStoryFile } from './shared/file-kinds.js';
 import { sqlTables, sqlOps, looksLikeSql } from './shared/sql.js';
 import { propFactsOf, type PropFacts } from './callback-props.js';
 import { flagRefAt, moduleBoolConsts, resolveFlagGates } from './flag-gates.js';
-import { collectEnums, collectStatusFacts, linkLifecycles, constTables, constLists, type LifecycleFacts } from './lifecycle.js';
+import {
+  collectEnums,
+  collectStatusFacts,
+  linkLifecycles,
+  constTables,
+  constLists,
+  type LifecycleFacts,
+} from './lifecycle.js';
 import { collectPreconditionFacts, emptyPreconditionFacts, linkPreconditions } from './preconditions.js';
 
 const relative = (from: string, to: string): string => platformRelative(from, to).replaceAll('\\', '/');
@@ -88,18 +122,129 @@ const HOST_CONST = /^[A-Z][A-Z0-9_]*$/;
 // HIGH because no name was guessed and no candidate was picked, `heuristic` because a string that is
 // assembled elsewhere, or handed to another function to run, is the way it can be wrong.
 // A fresh object per edge, never a shared one: an edge's resolution belongs to that edge.
-const DB_BUILDER = (): GraphEdge['resolution'] =>
-  ({ status: 'resolved', technique: 'db-builder', confidence: 'HIGH', note: 'a builder chain names the table' });
-const RAW_SQL = (): GraphEdge['resolution'] =>
-  ({ status: 'heuristic', technique: 'raw-sql', confidence: 'HIGH', note: 'the table name was read out of the statement on this edge' });
+const DB_BUILDER = (): GraphEdge['resolution'] => ({
+  status: 'resolved',
+  technique: 'db-builder',
+  confidence: 'HIGH',
+  note: 'a builder chain names the table',
+});
+const RAW_SQL = (): GraphEdge['resolution'] => ({
+  status: 'heuristic',
+  technique: 'raw-sql',
+  confidence: 'HIGH',
+  note: 'the table name was read out of the statement on this edge',
+});
 // member calls on these names are the runtime's, never a class of the repo — no method-name resolution
-const BUILTIN_METHODS = new Set(['push', 'pop', 'shift', 'unshift', 'map', 'filter', 'forEach', 'reduce', 'find', 'findIndex', 'some', 'every', 'join', 'split',
-  'slice', 'splice', 'concat', 'includes', 'indexOf', 'keys', 'values', 'entries', 'get', 'set', 'has', 'delete', 'add', 'clear', 'then', 'catch', 'finally',
-  'toString', 'toJSON', 'json', 'text', 'trim', 'replace', 'match', 'test', 'exec', 'startsWith', 'endsWith', 'toLowerCase', 'toUpperCase', 'sort', 'flat',
-  'flatMap', 'fill', 'at', 'from', 'of', 'assign', 'freeze', 'parse', 'safeParse', 'stringify', 'log', 'warn', 'error', 'info', 'debug', 'query', 'connect',
-  'release', 'end', 'on', 'off', 'once', 'emit', 'next', 'return', 'throw', 'bind', 'call', 'apply', 'append', 'getTime', 'toISOString', 'now', 'resolve',
-  'reject', 'all', 'race', 'padStart', 'padEnd', 'charAt', 'substring', 'substr', 'toFixed', 'localeCompare', 'reverse', 'length', 'size', 'close', 'open',
-  'write', 'read', 'send', 'status', 'header', 'headers', 'redirect', 'cookies', 'nextUrl', 'formData', 'arrayBuffer', 'blob', 'clone']);
+const BUILTIN_METHODS = new Set([
+  'push',
+  'pop',
+  'shift',
+  'unshift',
+  'map',
+  'filter',
+  'forEach',
+  'reduce',
+  'find',
+  'findIndex',
+  'some',
+  'every',
+  'join',
+  'split',
+  'slice',
+  'splice',
+  'concat',
+  'includes',
+  'indexOf',
+  'keys',
+  'values',
+  'entries',
+  'get',
+  'set',
+  'has',
+  'delete',
+  'add',
+  'clear',
+  'then',
+  'catch',
+  'finally',
+  'toString',
+  'toJSON',
+  'json',
+  'text',
+  'trim',
+  'replace',
+  'match',
+  'test',
+  'exec',
+  'startsWith',
+  'endsWith',
+  'toLowerCase',
+  'toUpperCase',
+  'sort',
+  'flat',
+  'flatMap',
+  'fill',
+  'at',
+  'from',
+  'of',
+  'assign',
+  'freeze',
+  'parse',
+  'safeParse',
+  'stringify',
+  'log',
+  'warn',
+  'error',
+  'info',
+  'debug',
+  'query',
+  'connect',
+  'release',
+  'end',
+  'on',
+  'off',
+  'once',
+  'emit',
+  'next',
+  'return',
+  'throw',
+  'bind',
+  'call',
+  'apply',
+  'append',
+  'getTime',
+  'toISOString',
+  'now',
+  'resolve',
+  'reject',
+  'all',
+  'race',
+  'padStart',
+  'padEnd',
+  'charAt',
+  'substring',
+  'substr',
+  'toFixed',
+  'localeCompare',
+  'reverse',
+  'length',
+  'size',
+  'close',
+  'open',
+  'write',
+  'read',
+  'send',
+  'status',
+  'header',
+  'headers',
+  'redirect',
+  'cookies',
+  'nextUrl',
+  'formData',
+  'arrayBuffer',
+  'blob',
+  'clone',
+]);
 // a class or file named like a stand-in: the production twin wins a method-name resolution
 const TEST_DOUBLE = /(^|[\/\-_.])(in-?memory|mock|fake|stub|noop|dummy)/i;
 // a callback handed to one of these runs inside the caller's transaction — the
@@ -160,7 +305,8 @@ interface HttpCallSite {
   fromId: string;
   method?: string;
   path: string;
-  line?: number; site?: SyntaxSite;
+  line?: number;
+  site?: SyntaxSite;
   /** the fetch wrapper this call goes through, when the caller is not the one that runs `fetch` */
   wrapper?: string;
   deferred: boolean;
@@ -194,45 +340,133 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   // file -> its re-exports, so lookups can follow barrel files (`export * from './x'`)
   const reexportsByFile = new Map<string, { stars: string[]; named: Map<string, { file: string; name: string }> }>();
   const classifyAlias = createAliasClassifier(repoRoot);
-  const resolveAlias = (importerAbs: string, spec: string): string | null => classifyAlias(importerAbs, spec)?.path ?? null;
+  const resolveAlias = (importerAbs: string, spec: string): string | null =>
+    classifyAlias(importerAbs, spec)?.path ?? null;
   // ── dependencies (docs/proposals/dependencies-and-nx.md §2.1) ──
   // every bare specifier a file imports, requires or re-exports; classified into package
   // nodes once pass 1 is done (a builtin, an app alias and an alias miss are set aside)
-  const pkgFacts: { file: string; abs: string; spec: string; line: number; form: 'import' | 'reexport' | 'require' | 'dynamic'; typeOnly: boolean; names: string[] }[] = [];
+  const pkgFacts: {
+    file: string;
+    abs: string;
+    spec: string;
+    line: number;
+    form: 'import' | 'reexport' | 'require' | 'dynamic';
+    typeOnly: boolean;
+    names: string[];
+  }[] = [];
   // a function whose body uses an imported package binding (or requires/imports one itself)
   const pkgUses: { fromId: string; file: string; abs: string; spec: string; line: number }[] = [];
   // call-site `line` (1-based, in the caller's file) orders callees so a
   // journey can replay them in the order the code runs
-  const pendingCalls: { fromId: string; file: string; callee: string; line?: number; site?: SyntaxSite; deferred: boolean; tx: boolean; when?: string; argsKey?: string }[] = [];
-  const pendingRenders: { fromId: string; file: string; callee: string; line?: number; site?: SyntaxSite; jsx?: true; deferred: boolean; tx: boolean; when?: string }[] = [];
+  const pendingCalls: {
+    fromId: string;
+    file: string;
+    callee: string;
+    line?: number;
+    site?: SyntaxSite;
+    deferred: boolean;
+    tx: boolean;
+    when?: string;
+    argsKey?: string;
+  }[] = [];
+  const pendingRenders: {
+    fromId: string;
+    file: string;
+    callee: string;
+    line?: number;
+    site?: SyntaxSite;
+    jsx?: true;
+    deferred: boolean;
+    tx: boolean;
+    when?: string;
+  }[] = [];
   const httpCalls: HttpCallSite[] = [];
   // functions whose `fetch` takes its URL from a parameter (see FetchWrapper), by node id
   const fetchWrappers = new Map<string, FetchWrapper>();
   // calls with their arguments summarised, resolved in pass 2 — wrapper callers become fetch sites
   const wrapperCallArgs = new Map<string, (ArgInfo | undefined)[]>();
-  const resolvedCalls: { fromId: string; toId: string; key: string; line?: number; site?: SyntaxSite; deferred: boolean; tx: boolean; when?: string }[] = [];
+  const resolvedCalls: {
+    fromId: string;
+    toId: string;
+    key: string;
+    line?: number;
+    site?: SyntaxSite;
+    deferred: boolean;
+    tx: boolean;
+    when?: string;
+  }[] = [];
   // SQL driver specifier → the files that import it (the `sdk` store rule)
   const sqlDrivers = new Map<string, string[]>();
   // Drizzle-style ops name the table via an identifier argument — resolution
   // (imports, barrels, pgTable declarations) has to wait for pass 2
-  const pendingDbOps: { fromId: string; file: string; tableName: string; op: string; write: boolean; code: string; line?: number; site?: SyntaxSite; sql?: boolean; deferred: boolean; tx: boolean; when?: string }[] = [];
+  const pendingDbOps: {
+    fromId: string;
+    file: string;
+    tableName: string;
+    op: string;
+    write: boolean;
+    code: string;
+    line?: number;
+    site?: SyntaxSite;
+    sql?: boolean;
+    deferred: boolean;
+    tx: boolean;
+    when?: string;
+  }[] = [];
   // a.b.method(…) — resolved in pass 2 to the one class method of that name (DI by name, not by type)
-  const pendingMethodCalls: { fromId: string; file: string; method: string; receiver: string; line?: number; site?: SyntaxSite; deferred: boolean; tx: boolean; when?: string; argsKey?: string }[] = [];
+  const pendingMethodCalls: {
+    fromId: string;
+    file: string;
+    method: string;
+    receiver: string;
+    line?: number;
+    site?: SyntaxSite;
+    deferred: boolean;
+    tx: boolean;
+    when?: string;
+    argsKey?: string;
+  }[] = [];
   const methodIndex = new Map<string, { nodeId: string; cls: string; file: string }[]>();
   // `this.<field>.<…>.<fn>()` inside a class — a callback the constructor was handed;
   // pass 2 matches it against the object literal of a `new Class({ … })` somewhere else
-  const pendingHookCalls: { fromId: string; file: string; cls: string; path: string[]; line?: number; site?: SyntaxSite; deferred: boolean; tx: boolean; when?: string; tagIfUnbound?: boolean }[] = [];
+  const pendingHookCalls: {
+    fromId: string;
+    file: string;
+    cls: string;
+    path: string[];
+    line?: number;
+    site?: SyntaxSite;
+    deferred: boolean;
+    tx: boolean;
+    when?: string;
+    tagIfUnbound?: boolean;
+  }[] = [];
   // file -> the interfaces, classes and object-literal aliases it declares (01 §2.3.5)
   const typesByFile = new Map<string, Map<string, TypeDecl>>();
   // a member call whose receiver has a declared type: pass 2 follows the type to the
   // classes that implement it, instead of guessing by method name. `fallback` is the
   // record the call would have been had the type turned out to name nothing.
   const pendingTypedCalls: {
-    fromId: string; file: string; root: TypeRef; path: string[]; method: string; line?: number; site?: SyntaxSite;
-    deferred: boolean; tx: boolean; when?: string;
+    fromId: string;
+    file: string;
+    root: TypeRef;
+    path: string[];
+    method: string;
+    line?: number;
+    site?: SyntaxSite;
+    deferred: boolean;
+    tx: boolean;
+    when?: string;
     fallback: { kind: 'method'; receiver: string } | { kind: 'hook'; cls: string; path: string[] };
   }[] = [];
-  const hookBindings: { file: string; className: string; classRef: { file: string; name: string }; path: string; fnId: string; line: number }[] = [];
+  const hookBindings: {
+    file: string;
+    className: string;
+    classRef: { file: string; name: string };
+    path: string;
+    fnId: string;
+    line: number;
+  }[] = [];
   // `${file}::${ClassName}` for every class declared in the repo — hook bindings resolve through it
   const classDecls = new Set<string>();
   // node ids of builders found by the `??=` singleton heuristic: the callee may be declared
@@ -241,15 +475,44 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   // `const NAME = 'literal'` per file — queue names and the like travel through imports as constants
   const constStrings = new Map<string, string>();
   // queue SDK calls (Azure Storage Queue today): the bound client's name → publishes / consumes
-  const pendingQueueOps: { fromId: string; file: string; queue: { literal?: string; ref?: string }; kind: 'publishes' | 'consumes'; line?: number; site?: SyntaxSite; deferred: boolean; tx: boolean; when?: string }[] = [];
+  const pendingQueueOps: {
+    fromId: string;
+    file: string;
+    queue: { literal?: string; ref?: string };
+    kind: 'publishes' | 'consumes';
+    line?: number;
+    site?: SyntaxSite;
+    deferred: boolean;
+    tx: boolean;
+    when?: string;
+  }[] = [];
   // ── externals, three sources (01 §2.3.4) ──
   // a function that used an imported SDK binding: pass 3 turns the first use into one
   // `http` edge to that SDK's system. The node is only ever made because an edge
   // reaches it, so a recognised import nothing uses leaves nothing behind.
-  const sdkUses: { fromId: string; file: string; via?: string; specifier: string; name: string; kind: ExternalKind; line?: number }[] = [];
+  const sdkUses: {
+    fromId: string;
+    file: string;
+    via?: string;
+    specifier: string;
+    name: string;
+    kind: ExternalKind;
+    line?: number;
+  }[] = [];
   const markedSdk = new Set<string>(); // `${fromId}|${name}` — the first reference marks the function
   // a non-literal `fetch` inside a class whose base URL starts with a constant host
-  const pendingHostCalls: { fromId: string; file: string; cls: string; constName: string; method?: string; line?: number; site?: SyntaxSite; deferred: boolean; tx: boolean; when?: string }[] = [];
+  const pendingHostCalls: {
+    fromId: string;
+    file: string;
+    cls: string;
+    constName: string;
+    method?: string;
+    line?: number;
+    site?: SyntaxSite;
+    deferred: boolean;
+    tx: boolean;
+    when?: string;
+  }[] = [];
   // every `fetch(` site inside a class method, keyed `${file}::${Class}` — what a
   // `<path>::<Class>` declaration attaches its edges to when nothing was detected
   const classFetchSites = new Map<string, { fromId: string; method?: string; line?: number }[]>();
@@ -258,7 +521,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   const classMethods = new Map<string, { name: string; id: string; private: boolean }[]>();
   // `this.helper(…)` calls inside a class's methods, with the `method:` literal of an
   // object-literal first argument (`request({ method: 'PATCH', … })`): null = no such key
-  const classThisCalls = new Map<string, { fromId: string; callee: string; method: string | undefined | null; line: number }[]>();
+  const classThisCalls = new Map<
+    string,
+    { fromId: string; callee: string; method: string | undefined | null; line: number }[]
+  >();
   // Next.js App Router bookkeeping (file conventions are the router)
   const appPages: { nodeId: string; appRoot: string; dir: string }[] = [];
   const appApiRoutes: { nodeId: string; appRoot: string; dir: string }[] = [];
@@ -283,8 +549,19 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   let curFile = '';
   let curSource = '';
   const occurrences = new OccurrenceCollector(options.occurrences !== false);
-  const recordSite = (kind: GraphEdge['kind'], from: string, to: string, call: { file?: string; line?: number; site?: SyntaxSite } & SiteFlags) => {
-    occurrences.record({ kind, from, to, meta: withFlags(undefined, call) }, repo, call.file ?? nodes.get(from)?.loc?.path ?? '', call.line, call.site);
+  const recordSite = (
+    kind: GraphEdge['kind'],
+    from: string,
+    to: string,
+    call: { file?: string; line?: number; site?: SyntaxSite } & SiteFlags,
+  ) => {
+    occurrences.record(
+      { kind, from, to, meta: withFlags(undefined, call) },
+      repo,
+      call.file ?? nodes.get(from)?.loc?.path ?? '',
+      call.line,
+      call.site,
+    );
   };
   const boolConstsByFile = new Map<string, Map<string, { value: boolean; line: number }>>();
   let edgeSeq = 0;
@@ -293,8 +570,21 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     if (!nodes.has(n.id)) nodes.set(n.id, n);
     return nodes.get(n.id)!;
   };
-  const addEdge = (kind: GraphEdge['kind'], from: string, to: string, meta?: GraphEdge['meta'], resolution?: GraphEdge['resolution']) => {
-    edges.push({ id: `e${edgeSeq++}`, kind, from, to, ...(meta ? { meta } : {}), ...(resolution ? { resolution } : {}) });
+  const addEdge = (
+    kind: GraphEdge['kind'],
+    from: string,
+    to: string,
+    meta?: GraphEdge['meta'],
+    resolution?: GraphEdge['resolution'],
+  ) => {
+    edges.push({
+      id: `e${edgeSeq++}`,
+      kind,
+      from,
+      to,
+      ...(meta ? { meta } : {}),
+      ...(resolution ? { resolution } : {}),
+    });
   };
   /**
    * A route declaration recognised and not read (nest.ts): on the fragment's `meta.routes` for every
@@ -304,8 +594,16 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   const routeGap = (gap: RouteGap, nodeId?: string) => {
     routeGaps.push(gap);
     if (gap.kind === 'entrypoint-mismatch') return;
-    currentRead()?.report({ code: 'unsupported', severity: 'warning', adapter: 'ts-js', path: gap.path, line: gap.line,
-      ...(nodeId ? { nodeId } : {}), reason: gap.kind, message: gap.text });
+    currentRead()?.report({
+      code: 'unsupported',
+      severity: 'warning',
+      adapter: 'ts-js',
+      path: gap.path,
+      line: gap.line,
+      ...(nodeId ? { nodeId } : {}),
+      reason: gap.kind,
+      message: gap.text,
+    });
   };
   /**
    * How a symbol reference was resolved, as an EdgeResolution. `same-file` and
@@ -315,7 +613,9 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
    * see the call sites; the route is kept in the note so nothing is lost.
    */
   const bySymbol = (via: 'same-file' | 'static-import'): GraphEdge['resolution'] => ({
-    status: 'resolved', technique: via, confidence: 'HIGH',
+    status: 'resolved',
+    technique: via,
+    confidence: 'HIGH',
     note: via === 'same-file' ? 'declared in the same file' : 'the import resolved on disk',
   });
   const symbolId = (file: string, name: string) => `${repo}::${file}::${name}`;
@@ -330,7 +630,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     // a party (`kind: 'party'`) has no import: no code reaches it, so this parser has nothing to match (decisions.ts applyParties)
     if (typeof decl.import !== 'string' || decl.kind === 'party') continue;
     if (decl.import.includes('::')) declaredClassExternals.set(decl.import.replace(/^\.\//, ''), decl);
-    else { sdkTable.set(decl.import, { name: decl.name, kind: decl.kind, node: true }); sdkDecls.set(decl.import, decl); }
+    else {
+      sdkTable.set(decl.import, { name: decl.name, kind: decl.kind, node: true });
+      sdkDecls.set(decl.import, decl);
+    }
   }
   /** The table row an import specifier names — exactly, or as the root of a subpath import. */
   const sdkEntry = (spec: string) => {
@@ -365,7 +668,8 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           if (text) conditions.push(f.alternate === child ? `!(${text})` : text);
         } else if (f.type === 'LogicalExpression' && f.right === child && isNode(f.left)) {
           const text = curSource.slice(f.left.start ?? 0, f.left.end ?? 0);
-          if (text) conditions.push(f.operator === '||' ? `!(${text})` : f.operator === '??' ? `${text} == null` : text);
+          if (text)
+            conditions.push(f.operator === '||' ? `!(${text})` : f.operator === '??' ? `${text} == null` : text);
         }
         const ref = flagRefAt(f, parents[i + 1] ?? site);
         if (ref) refs.push(ref);
@@ -374,17 +678,39 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       const up = i > 0 ? parents[i - 1]! : undefined;
       if (!up) continue;
       if (up.type === 'Property' && up.value === f) deferred = true;
-      else if (up.type === 'CallExpression' && Array.isArray(up.arguments)
-        && (up.arguments as AstNode[]).includes(f) && TX_CALLEES.has(memberChain(up.callee).pop() ?? '')) tx = true;
+      else if (
+        up.type === 'CallExpression' &&
+        Array.isArray(up.arguments) &&
+        (up.arguments as AstNode[]).includes(f) &&
+        TX_CALLEES.has(memberChain(up.callee).pop() ?? '')
+      )
+        tx = true;
     }
-    return { deferred, tx, ...(refs.length ? { when: `${curFile}|${refs.join(',')}` } : {}),
-      ...(site?.start != null && site.end != null ? { site: { start: site.start, end: site.end,
-        col: site.start - curSource.lastIndexOf('\n', site.start - 1), ...(conditions.length ? { conditions: conditions.reverse() } : {}) } } : {}) };
+    return {
+      deferred,
+      tx,
+      ...(refs.length ? { when: `${curFile}|${refs.join(',')}` } : {}),
+      ...(site?.start != null && site.end != null
+        ? {
+            site: {
+              start: site.start,
+              end: site.end,
+              col: site.start - curSource.lastIndexOf('\n', site.start - 1),
+              ...(conditions.length ? { conditions: conditions.reverse() } : {}),
+            },
+          }
+        : {}),
+    };
   };
   /** Stamp `deferred` / `tx` on an edge's meta — only when set, never `false`; a flag reference waits for `resolveFlagGates`. */
   const withFlags = (base: GraphEdge['meta'] | undefined, f: SiteFlags): GraphEdge['meta'] | undefined => {
     if (!f.deferred && !f.tx && !f.when) return base;
-    return { ...(base ?? {}), ...(f.deferred ? { deferred: true } : {}), ...(f.tx ? { tx: true } : {}), ...(f.when ? { whenRef: f.when } : {}) };
+    return {
+      ...(base ?? {}),
+      ...(f.deferred ? { deferred: true } : {}),
+      ...(f.tx ? { tx: true } : {}),
+      ...(f.when ? { whenRef: f.when } : {}),
+    };
   };
   /** the dedupe key's flag part: a call under a flag and the same call outside it are two facts until resolved */
   const flagKey = (f: { when?: string }): string => (f.when ? `|${f.when}` : '');
@@ -395,14 +721,23 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const file = relative(repoRoot, abs);
     curFile = file;
     let source: string;
-    try { checkpoint(); source = readFileSync(abs, 'utf8'); } catch (error) { if (fileReadError(abs, 'ts-js', error)) break; continue; }
-    if (claimsTests && isTestFile(file, source, options.testGlobs ?? {})) { fileStatus(abs, 'skipped', 'ts-js', 'test-file'); continue; }
+    try {
+      checkpoint();
+      source = readFileSync(abs, 'utf8');
+    } catch (error) {
+      if (fileReadError(abs, 'ts-js', error)) break;
+      continue;
+    }
+    if (claimsTests && isTestFile(file, source, options.testGlobs ?? {})) {
+      fileStatus(abs, 'skipped', 'ts-js', 'test-file');
+      continue;
+    }
     const line = lineIndex(source);
     let program: AstNode;
     try {
       const result = parseSync(abs, source);
       if (result.errors.length) {
-        parseError(abs, 'ts-js', result.errors.map(error => error.message).join('; '));
+        parseError(abs, 'ts-js', result.errors.map((error) => error.message).join('; '));
         if (currentRead()) continue;
       }
       program = (typeof result.program === 'string' ? JSON.parse(result.program) : result.program) as AstNode;
@@ -416,7 +751,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     // the `??=` builder heuristic needs before it calls anything start-up
     const singletonFile = SINGLETON_MARKERS.some((m) => source.includes(m));
     // the module-level `const X = true|false` this file declares: the decision switches a branch can test
-    { const bc = moduleBoolConsts(program, line); if (bc.size) boolConstsByFile.set(file, bc); }
+    {
+      const bc = moduleBoolConsts(program, line);
+      if (bc.size) boolConstsByFile.set(file, bc);
+    }
     const envSchemaFile = ENV_SCHEMA_BASENAME.test(file.split('/').pop() ?? '');
 
     // relative imports resolve on the filesystem; bare specifiers go through
@@ -434,7 +772,13 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     // a story file belongs to the stories pass (ADR 9) the way a spec file belongs to the tests pass:
     // its imports (Storybook's own types, mostly) are not the application's dependencies
     const storyFile = isStoryFile(file);
-    const notePkg = (src: string, at: number, form: 'import' | 'reexport' | 'require' | 'dynamic', typeOnly: boolean, names: string[]) => {
+    const notePkg = (
+      src: string,
+      at: number,
+      form: 'import' | 'reexport' | 'require' | 'dynamic',
+      typeOnly: boolean,
+      names: string[],
+    ) => {
       if (isBare(src) && !storyFile) pkgFacts.push({ file, abs, spec: src, line: line(at), form, typeOnly, names });
     };
     /** A module-level declaration (a schema, a table) that uses an imported package binding depends on the package. */
@@ -443,7 +787,13 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       walk(ast, (b, ps) => {
         if (b.type !== 'Identifier') return;
         const up = ps[ps.length - 1];
-        if (up && !up.computed && (((up.type === 'MemberExpression' || up.type === 'StaticMemberExpression') && up.property === b) || (up.type === 'Property' && up.key === b))) return;
+        if (
+          up &&
+          !up.computed &&
+          (((up.type === 'MemberExpression' || up.type === 'StaticMemberExpression') && up.property === b) ||
+            (up.type === 'Property' && up.key === b))
+        )
+          return;
         const src = pkgLocals.get(String(b.name));
         if (src) pkgUses.push({ fromId, file, abs, spec: src, line: line(b.start ?? 0) });
       });
@@ -460,8 +810,14 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     typesByFile.set(file, types);
     walk(program, (n, parents) => {
       // require('x') · import('x') · import x = require('x') — packages only; the symbol tables stay ESM
-      if (n.type === 'ImportExpression' || (n.type === 'CallExpression' && isNode(n.callee) && (n.callee as AstNode).type === 'Identifier'
-        && (n.callee as AstNode).name === 'require' && ((n.arguments as AstNode[]) ?? []).length === 1)) {
+      if (
+        n.type === 'ImportExpression' ||
+        (n.type === 'CallExpression' &&
+          isNode(n.callee) &&
+          (n.callee as AstNode).type === 'Identifier' &&
+          (n.callee as AstNode).name === 'require' &&
+          ((n.arguments as AstNode[]) ?? []).length === 1)
+      ) {
         const src = stringValue(n.type === 'ImportExpression' ? n.source : (n.arguments as AstNode[])[0]);
         if (src && isBare(src)) {
           const up = parents[parents.length - 1];
@@ -471,7 +827,11 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         }
         return;
       }
-      if (n.type === 'TSImportEqualsDeclaration' && isNode(n.moduleReference) && (n.moduleReference as AstNode).type === 'TSExternalModuleReference') {
+      if (
+        n.type === 'TSImportEqualsDeclaration' &&
+        isNode(n.moduleReference) &&
+        (n.moduleReference as AstNode).type === 'TSExternalModuleReference'
+      ) {
         const src = stringValue((n.moduleReference as AstNode).expression);
         const local = isNode(n.id) ? String((n.id as AstNode).name) : '';
         if (src && isBare(src)) {
@@ -529,8 +889,16 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       // export { a, b as c } from './x'
       if (n.type === 'ExportNamedDeclaration' && isNode(n.source)) {
         const src = stringValue(n.source);
-        if (src) notePkg(src, n.start ?? 0, 'reexport', n.exportKind === 'type',
-          ((n.specifiers as AstNode[]) ?? []).map((sp) => (sp.exported as AstNode | undefined)?.name).filter((x): x is string => typeof x === 'string'));
+        if (src)
+          notePkg(
+            src,
+            n.start ?? 0,
+            'reexport',
+            n.exportKind === 'type',
+            ((n.specifiers as AstNode[]) ?? [])
+              .map((sp) => (sp.exported as AstNode | undefined)?.name)
+              .filter((x): x is string => typeof x === 'string'),
+          );
         const target = src ? resolveSpec(src) : null;
         if (!target) return false;
         for (const spec of (n.specifiers as AstNode[]) ?? []) {
@@ -544,13 +912,18 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       }
     });
 
-    { const en = collectEnums(program, file, line); lifeFacts.decls.push(...en.decls); lifeFacts.uses.push(...en.uses); }
+    {
+      const en = collectEnums(program, file, line);
+      lifeFacts.decls.push(...en.decls);
+      lifeFacts.uses.push(...en.uses);
+    }
     preFacts.tables.push(...constTables(program, file, line));
     (preFacts.namedLists ??= []).push(...constLists(program, file, line));
     // NestJS (nest.ts): the file's `@nestjs/common` bindings, read once; the boot-time prefixes and
     // versions this reader does not fold into the routes are recorded as gaps with a name
     const nestFile = readNestFile(program);
-    for (const g of nestSetupGaps(program, nestFile)) routeGap({ kind: g.kind, path: file, line: line(g.at.start ?? 0), name: g.name, text: g.text });
+    for (const g of nestSetupGaps(program, nestFile))
+      routeGap({ kind: g.kind, path: file, line: line(g.at.start ?? 0), name: g.name, text: g.text });
     /**
      * One controller method: a `route` node per prefix × path with the id App Router gives the same
      * endpoint (`app/api/v1/orders/[orderId]/approve/route.ts` exporting POST ≡ `@Controller('api/v1/orders')`
@@ -560,16 +933,33 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
      * guards and rules onto the route through `routeHandlers` (one hop, as today). `@UseGuards` on the
      * class or the method is a guard node per argument. Anything not read is a gap, never a guess.
      */
-    const readNestMethod = (m: AstNode, cls: string, mname: string, controller: ControllerDecl, classGuards: (GuardRef & { on: string })[]): void => {
+    const readNestMethod = (
+      m: AstNode,
+      cls: string,
+      mname: string,
+      controller: ControllerDecl,
+      classGuards: (GuardRef & { on: string })[],
+    ): void => {
       const full = `${cls}.${mname}`;
       const fnId = symbolId(file, full);
       const at = line(m.start ?? 0);
       const { routes, gaps } = methodRoutes(m, nestFile);
       for (const g of gaps) {
-        routeGap({ kind: g.kind, path: file, line: line(g.at.start ?? 0), name: full, text:
-          g.kind === 'all-verb' ? `@All on ${full} answers every verb; no route is read for it`
-          : g.kind === 'versioning' ? `@Version on ${full} is not applied; its routes are recorded without a version segment`
-          : `@${g.decorator} on ${full} takes a path that is not a literal; that route is not read` }, fnId);
+        routeGap(
+          {
+            kind: g.kind,
+            path: file,
+            line: line(g.at.start ?? 0),
+            name: full,
+            text:
+              g.kind === 'all-verb'
+                ? `@All on ${full} answers every verb; no route is read for it`
+                : g.kind === 'versioning'
+                  ? `@Version on ${full} is not applied; its routes are recorded without a version segment`
+                  : `@${g.decorator} on ${full} takes a path that is not a literal; that route is not read`,
+          },
+          fnId,
+        );
       }
       if (!controller.prefixes || !routes.length) return;
       for (const schema of bodySchemasOf(m, nestFile)) {
@@ -577,8 +967,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       }
       const candidate = delegateOf(m);
       const params = ((m.value as AstNode).params as AstNode[]) ?? [];
-      const delegate = candidate && importMap.has(candidate) && !params.flatMap(bindingNames).includes(candidate)
-        ? candidate : undefined;
+      const delegate =
+        candidate && importMap.has(candidate) && !params.flatMap(bindingNames).includes(candidate)
+          ? candidate
+          : undefined;
       const guards = [...useGuardsOf(m.decorators, nestFile).map((g) => ({ ...g, on: full })), ...classGuards];
       const made: string[] = [];
       for (const prefix of controller.prefixes) {
@@ -588,19 +980,39 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           const routeId = `${repo}::route::${key}`;
           made.push(key);
           addNode({
-            id: routeId, kind: 'route', name: key, lang: langOf(file),
+            id: routeId,
+            kind: 'route',
+            name: key,
+            lang: langOf(file),
             loc: { repo, path: file, line: at },
             tags: autoTags(file, path, 'route'),
           });
-          addEdge('calls', routeId, fnId, undefined, { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `the @${r.decorator} decorator on ${full}` });
+          addEdge('calls', routeId, fnId, undefined, {
+            status: 'resolved',
+            technique: 'annotation-scan',
+            confidence: 'HIGH',
+            note: `the @${r.decorator} decorator on ${full}`,
+          });
           routeHandlers.push({ routeId, file, handler: full });
           if (delegate) routeHandlers.push({ routeId, file, handler: delegate });
           for (const g of guards) {
             // The decorator's declaration owns the gate. Equal labels in other modules (or factory
             // calls with different arguments) must not combine unrelated canActivate bodies.
             const guardId = `${repo}::${file}::guard::UseGuards(${g.label})@${g.on}:${g.at.start}:${g.argument}`;
-            addNode({ id: guardId, kind: 'guard', name: `UseGuards: ${g.label}`, lang: langOf(file), tags: ['auth'], loc: { repo, path: file, line: line(g.at.start ?? 0) } });
-            addEdge('guards', guardId, routeId, undefined, { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `@UseGuards(${g.label}) on ${g.on}` });
+            addNode({
+              id: guardId,
+              kind: 'guard',
+              name: `UseGuards: ${g.label}`,
+              lang: langOf(file),
+              tags: ['auth'],
+              loc: { repo, path: file, line: line(g.at.start ?? 0) },
+            });
+            addEdge('guards', guardId, routeId, undefined, {
+              status: 'resolved',
+              technique: 'annotation-scan',
+              confidence: 'HIGH',
+              note: `@UseGuards(${g.label}) on ${g.on}`,
+            });
             if (g.className) nestGuards.push({ guardId, routeId, file, className: g.className });
           }
         }
@@ -610,12 +1022,27 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       // disagree the route keeps the decorators' id and the disagreement is recorded with a name
       const claimed = entrypointRouteKey(parseDoc(leadingComment(source, m.start ?? 0)).entrypoint);
       if (claimed && !made.includes(claimed)) {
-        routeGap({ kind: 'entrypoint-mismatch', path: file, line: at, name: full,
-          text: `@entrypoint on ${full} names ${claimed}; its decorators declare ${made.join(', ')} — the decorators win` }, fnId);
+        routeGap(
+          {
+            kind: 'entrypoint-mismatch',
+            path: file,
+            line: at,
+            name: full,
+            text: `@entrypoint on ${full} names ${claimed}; its decorators declare ${made.join(', ')} — the decorators win`,
+          },
+          fnId,
+        );
       }
     };
     // declared functions & components & zod schemas
-    const declared: { name: string; node: AstNode; body: AstNode | null; kind: NodeKind; cls?: string; clsGroup?: string }[] = [];
+    const declared: {
+      name: string;
+      node: AstNode;
+      body: AstNode | null;
+      kind: NodeKind;
+      cls?: string;
+      clsGroup?: string;
+    }[] = [];
     walk(program, (n, parents) => {
       // class methods are functions named Class.method, grouped under their class (or the class doc's @group)
       if (n.type === 'ClassDeclaration' && isNode(n.id)) {
@@ -625,37 +1052,64 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         // before `export class`), the `export`, or the `class` keyword; oxc starts the ClassDeclaration
         // at `class`, after decorators that precede `export`, so reading from there would miss it
         const exportDecl = parents[parents.length - 1];
-        const clsStart = Math.min(n.start ?? 0,
-          exportDecl && (exportDecl.type === 'ExportNamedDeclaration' || exportDecl.type === 'ExportDefaultDeclaration') && exportDecl.declaration === n ? (exportDecl.start ?? Infinity) : Infinity,
-          ...((n.decorators as AstNode[]) ?? []).map((d) => (isNode(d) ? d.start ?? Infinity : Infinity)));
+        const clsStart = Math.min(
+          n.start ?? 0,
+          exportDecl &&
+            (exportDecl.type === 'ExportNamedDeclaration' || exportDecl.type === 'ExportDefaultDeclaration') &&
+            exportDecl.declaration === n
+            ? (exportDecl.start ?? Infinity)
+            : Infinity,
+          ...((n.decorators as AstNode[]) ?? []).map((d) => (isNode(d) ? (d.start ?? Infinity) : Infinity)),
+        );
         const clsDoc = parseDoc(leadingComment(source, clsStart));
         // a class decorated with `@nestjs/common`'s `@Controller` is a controller: each `@Get`/`@Post`…
         // method is a route per prefix × path (nest.ts; readNestMethod below)
         const controller = nestFile.bindings.size ? controllerOf(n, nestFile) : undefined;
         const classGuards = controller ? useGuardsOf(n.decorators, nestFile).map((g) => ({ ...g, on: cls })) : [];
         if (controller?.versioned) {
-          routeGap({ kind: 'versioning', path: file, line: line(controller.at.start ?? 0), name: cls,
-            text: `@Controller on ${cls} declares a version that is not applied; its routes are recorded without a version segment` });
+          routeGap({
+            kind: 'versioning',
+            path: file,
+            line: line(controller.at.start ?? 0),
+            name: cls,
+            text: `@Controller on ${cls} declares a version that is not applied; its routes are recorded without a version segment`,
+          });
         }
         if (controller && !controller.prefixes) {
-          routeGap({ kind: 'non-literal-path', path: file, line: line(controller.at.start ?? 0), name: cls,
-            text: `@Controller on ${cls} takes a path that is not a literal; none of its routes is read` });
+          routeGap({
+            kind: 'non-literal-path',
+            path: file,
+            line: line(controller.at.start ?? 0),
+            name: cls,
+            text: `@Controller on ${cls} takes a path that is not a literal; none of its routes is read`,
+          });
         }
-        for (const m of (((n.body as AstNode | undefined)?.body as AstNode[]) ?? [])) {
+        for (const m of ((n.body as AstNode | undefined)?.body as AstNode[]) ?? []) {
           if (m.type !== 'MethodDefinition' || m.kind === 'constructor' || !isNode(m.key) || !isNode(m.value)) continue;
           const key = m.key as AstNode;
           const mname = typeof key.name === 'string' ? key.name : typeof key.value === 'string' ? key.value : '';
           if (!mname) continue;
-          declared.push({ name: `${cls}.${mname}`, node: m, body: ((m.value as AstNode).body as AstNode) ?? null, kind: 'function', cls, clsGroup: clsDoc.group ?? cls });
-          const isPrivate = m.accessibility === 'private' || m.accessibility === 'protected' || key.type === 'PrivateIdentifier';
+          declared.push({
+            name: `${cls}.${mname}`,
+            node: m,
+            body: ((m.value as AstNode).body as AstNode) ?? null,
+            kind: 'function',
+            cls,
+            clsGroup: clsDoc.group ?? cls,
+          });
+          const isPrivate =
+            m.accessibility === 'private' || m.accessibility === 'protected' || key.type === 'PrivateIdentifier';
           const ck = `${file}::${cls}`;
-          classMethods.set(ck, [...(classMethods.get(ck) ?? []), { name: mname, id: symbolId(file, `${cls}.${mname}`), private: isPrivate }]);
+          classMethods.set(ck, [
+            ...(classMethods.get(ck) ?? []),
+            { name: mname, id: symbolId(file, `${cls}.${mname}`), private: isPrivate },
+          ]);
           if (controller) readNestMethod(m, cls, mname, controller, classGuards);
         }
         // the class's own base URL — `this.baseUrl = `${BC_API_HOST}/v2.0`` in the
         // constructor, or the same shape as a field initializer. A `fetch` in one of its
         // methods whose URL is built elsewhere still reaches that host (01 §2.3.4 R4b).
-        for (const m of (((n.body as AstNode | undefined)?.body as AstNode[]) ?? [])) {
+        for (const m of ((n.body as AstNode | undefined)?.body as AstNode[]) ?? []) {
           if (m.type === 'PropertyDefinition') {
             const c = hostConstOf(m.value);
             if (c) classHosts.set(cls, { constName: c });
@@ -671,7 +1125,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         // the class as a *type*: what it implements and the declared type of every
         // field — a `this.<field>.<method>()` starts here (01 §2.3.5)
         const props = new Map<string, TypeRef>();
-        for (const m of (((n.body as AstNode | undefined)?.body as AstNode[]) ?? [])) {
+        for (const m of ((n.body as AstNode | undefined)?.body as AstNode[]) ?? []) {
           if (!isNode(m) || m.computed) continue;
           // `private readonly transport: EmailTransport` as a field …
           if (m.type === 'PropertyDefinition') {
@@ -681,7 +1135,12 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
             if (mname && ref) props.set(mname, ref);
             const annotation = (m.typeAnnotation as AstNode | undefined)?.typeAnnotation as AstNode | undefined;
             const queried = annotation?.exprName as AstNode | undefined;
-            if (mname && annotation?.type === 'TSTypeQuery' && queried?.type === 'Identifier' && queried.name === 'fetch') {
+            if (
+              mname &&
+              annotation?.type === 'TSTypeQuery' &&
+              queried?.type === 'Identifier' &&
+              queried.name === 'fetch'
+            ) {
               const fields = classFetchFields.get(cls) ?? new Set<string>();
               fields.add(mname);
               classFetchFields.set(cls, fields);
@@ -691,7 +1150,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           // … or declared by the constructor: oxc wraps exactly those parameters that
           // carry `accessibility` / `readonly` in a TSParameterProperty
           if (m.type !== 'MethodDefinition' || m.kind !== 'constructor' || !isNode(m.value)) continue;
-          for (const p of (((m.value as AstNode).params as AstNode[]) ?? [])) {
+          for (const p of ((m.value as AstNode).params as AstNode[]) ?? []) {
             if (!isNode(p) || p.type !== 'TSParameterProperty' || !isNode(p.parameter)) continue;
             const param = p.parameter as AstNode;
             const ref = param.type === 'Identifier' ? typeRefOf(param.typeAnnotation) : undefined;
@@ -709,21 +1168,31 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       // declares it wants; pass 2 looks for the classes that promise to be it
       if (n.type === 'TSInterfaceDeclaration' && isNode(n.id)) {
         const name = String((n.id as AstNode).name);
-        const members = (((n.body as AstNode | undefined)?.body as AstNode[]) ?? []);
+        const members = ((n.body as AstNode | undefined)?.body as AstNode[]) ?? [];
         types.set(name, { kind: 'interface', file, name, props: typeMembers(members), implements: [] });
         return false;
       }
       // `type Deps = { repo: AuditRepository }` — a named shape a path can be walked through
-      if (n.type === 'TSTypeAliasDeclaration' && isNode(n.id) && isNode(n.typeAnnotation)
-        && (n.typeAnnotation as AstNode).type === 'TSTypeLiteral') {
+      if (
+        n.type === 'TSTypeAliasDeclaration' &&
+        isNode(n.id) &&
+        isNode(n.typeAnnotation) &&
+        (n.typeAnnotation as AstNode).type === 'TSTypeLiteral'
+      ) {
         const name = String((n.id as AstNode).name);
-        const members = (((n.typeAnnotation as AstNode).members as AstNode[]) ?? []);
+        const members = ((n.typeAnnotation as AstNode).members as AstNode[]) ?? [];
         types.set(name, { kind: 'alias', file, name, props: typeMembers(members), implements: [] });
         return false;
       }
       // string constants: `export const QUEUE_DOCUMENTS = 'q-documents'`
-      if (n.type === 'VariableDeclarator' && isNode(n.id) && (n.id as AstNode).type === 'Identifier' && isNode(n.init)
-        && ((n.init as AstNode).type === 'Literal' || (n.init as AstNode).type === 'StringLiteral') && typeof (n.init as AstNode).value === 'string') {
+      if (
+        n.type === 'VariableDeclarator' &&
+        isNode(n.id) &&
+        (n.id as AstNode).type === 'Identifier' &&
+        isNode(n.init) &&
+        ((n.init as AstNode).type === 'Literal' || (n.init as AstNode).type === 'StringLiteral') &&
+        typeof (n.init as AstNode).value === 'string'
+      ) {
         constStrings.set(`${file}::${String((n.id as AstNode).name)}`, String((n.init as AstNode).value));
       }
       // function declarations
@@ -733,20 +1202,32 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         return;
       }
       // const foo = () => {} / function expression
-      if (n.type === 'VariableDeclarator' && isNode(n.id) && (n.id as AstNode).type === 'Identifier' && isNode(n.init)) {
+      if (
+        n.type === 'VariableDeclarator' &&
+        isNode(n.id) &&
+        (n.id as AstNode).type === 'Identifier' &&
+        isNode(n.init)
+      ) {
         const init = n.init as AstNode;
         const name = String((n.id as AstNode).name);
         if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') {
           // only top-level-ish declarations (not deeply nested helpers)
-          if (parents.length <= 4) declared.push({ name, node: n, body: (init.body as AstNode) ?? null, kind: 'function' });
+          if (parents.length <= 4)
+            declared.push({ name, node: n, body: (init.body as AstNode) ?? null, kind: 'function' });
         } else if (init.type === 'CallExpression' && memberChain(init.callee)[0] === 'z') {
           const id = symbolId(file, name);
           addNode({
-            id, kind: 'rule', name, lang: 'ts',
+            id,
+            kind: 'rule',
+            name,
+            lang: 'ts',
             loc: { repo, path: file, line: line(n.start ?? 0), endLine: line(n.end ?? 0) },
             // an env/config schema checks the process's own settings: it is a rule of the
             // code (list_rules keeps it) but never a gate a person passes (01 §2.3.6 a)
-            tags: [...autoTags(file, name, 'rule'), ...(envSchemaFile || ENV_SCHEMA_NAME.test(name) ? ['env-schema'] : [])],
+            tags: [
+              ...autoTags(file, name, 'rule'),
+              ...(envSchemaFile || ENV_SCHEMA_NAME.test(name) ? ['env-schema'] : []),
+            ],
             signature: sourceSlice(source, init).slice(0, 200),
           });
           // `z.object(…)` uses zod: the schema depends on the package it is written in
@@ -759,7 +1240,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           const tableId = `${repo}::table::${tableName}`;
           const cols: string[] = [];
           if (isNode(initArgs[1]) && initArgs[1].type === 'ObjectExpression') {
-            for (const prop of ((initArgs[1].properties as AstNode[]) ?? [])) {
+            for (const prop of (initArgs[1].properties as AstNode[]) ?? []) {
               const key = prop.key as AstNode | undefined;
               const keyName = key && (key.name ?? key.value);
               if (typeof keyName === 'string') cols.push(keyName);
@@ -767,7 +1248,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           }
           const factory = memberChain(init.callee).pop()!;
           addNode({
-            id: tableId, kind: 'table', name: tableName, lang: 'ts',
+            id: tableId,
+            kind: 'table',
+            name: tableName,
+            lang: 'ts',
             loc: { repo, path: file, line: line(n.start ?? 0) },
             tags: autoTags(file, tableName, 'table'),
             ...(cols.length ? { signature: `columns: ${cols.join(', ')}` } : {}),
@@ -795,7 +1279,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         if (existing && existing.loc) continue;
         if (tbl.checks.length) lifeFacts.checks.set(tableId, tbl.checks);
         nodes.set(tableId, {
-          id: tableId, kind: 'table', name: tbl.name, lang: 'sql',
+          id: tableId,
+          kind: 'table',
+          name: tbl.name,
+          lang: 'sql',
           loc: { repo, path: file, line: at },
           tags: autoTags(file, tbl.name, 'table'),
           ...(tbl.columns.length ? { signature: `columns: ${tbl.columns.join(', ')}` } : {}),
@@ -812,12 +1299,22 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       let kind: NodeKind = d.kind;
       let hasJsx = false;
       walk(d.body, (b) => {
-        if (b.type === 'JSXElement' || b.type === 'JSXFragment') { hasJsx = true; return false; }
+        if (b.type === 'JSXElement' || b.type === 'JSXFragment') {
+          hasJsx = true;
+          return false;
+        }
       });
       if (hasJsx && /^[A-Z]/.test(d.name)) kind = 'component';
       const id = symbolId(file, d.name);
-      if (hasJsx) { const pf = propFactsOf(d.node, d.body, line); if (pf) propFacts.set(id, { file, ...pf }); }
-      { const sf = collectStatusFacts(d.body, id, line, source); lifeFacts.writes.push(...sf.writes); lifeFacts.compares.push(...sf.compares); }
+      if (hasJsx) {
+        const pf = propFactsOf(d.node, d.body, line);
+        if (pf) propFacts.set(id, { file, ...pf });
+      }
+      {
+        const sf = collectStatusFacts(d.body, id, line, source);
+        lifeFacts.writes.push(...sf.writes);
+        lifeFacts.compares.push(...sf.compares);
+      }
       collectPreconditionFacts(d.body, id, file, source, line, preFacts);
       const doc = parseDoc(leadingComment(source, d.node.start ?? 0));
       // @guard — declared auth wrapper (withTenant(clientId, fn)…): a guard
@@ -828,16 +1325,23 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       // surface them as routes so trace_flow/overview treat them as entry points
       const isServerAction = kind === 'function' && (fileUseServer || hasDirective(d.body, 'use server'));
       if (isServerAction) kind = 'route';
-      const branches = kind === 'guard' ? [] : extractBranches(d.body, source, line, { path: file, nodeId: id, line: line(d.node.start ?? 0) });
+      const branches =
+        kind === 'guard'
+          ? []
+          : extractBranches(d.body, source, line, { path: file, nodeId: id, line: line(d.node.start ?? 0) });
       addNode({
-        id, kind, name: isGuard && doc.guard ? `${d.name}: ${doc.guard}` : d.name, lang: langOf(file),
+        id,
+        kind,
+        name: isGuard && doc.guard ? `${d.name}: ${doc.guard}` : d.name,
+        lang: langOf(file),
         loc: { repo, path: file, line: line(d.node.start ?? 0), endLine: line(d.node.end ?? 0) },
         docs: doc.docs,
         snippet: snippetOf(source, d.node),
         ...(branches.length ? { branches } : {}),
         group: doc.group ?? d.clsGroup,
         tags: [
-          ...autoTags(file, d.name, kind), ...doc.tags,
+          ...autoTags(file, d.name, kind),
+          ...doc.tags,
           ...(isServerAction ? ['server-action'] : []),
           ...(isGuard && !doc.tags.includes('auth') ? ['auth'] : []),
           // a guard that checks the process — its settings — rather than a request (core config-check.ts)
@@ -877,7 +1381,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         // a call's arguments, summarised once and kept under a key the pass-2 resolution carries back
         const keepArgs = (b: AstNode): string => {
           const key = `${fromId}@${b.start ?? 0}`;
-          wrapperCallArgs.set(key, ((b.arguments as AstNode[]) ?? []).map((a) => argInfoOf(a, pm)));
+          wrapperCallArgs.set(
+            key,
+            ((b.arguments as AstNode[]) ?? []).map((a) => argInfoOf(a, pm)),
+          );
           return key;
         };
         // queue clients bound inside this body: `const q = svc.getQueueClient(NAME)` → q → NAME
@@ -888,7 +1395,13 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           // walk, so its work is its own and the host only gets a `deferred` edge to it.
           if (b.type === 'ArrowFunctionExpression' || b.type === 'FunctionExpression') {
             const up = bodyParents[bodyParents.length - 1];
-            if (up && up.type === 'Property' && up.value === b && hoistCallback(b, up, bodyParents, fromId, hostPath, hostGroup)) return false;
+            if (
+              up &&
+              up.type === 'Property' &&
+              up.value === b &&
+              hoistCallback(b, up, bodyParents, fromId, hostPath, hostGroup)
+            )
+              return false;
             return;
           }
           // an imported SDK binding used here: this function reaches that third-party
@@ -896,14 +1409,22 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           // that happens to spell the local is not a use of it.
           // a package binding used here, or a package required / imported in place: this
           // function depends on that package (the edge an impact walk from the package follows)
-          if (b.type === 'ImportExpression' || (b.type === 'CallExpression' && isNode(b.callee) && (b.callee as AstNode).type === 'Identifier'
-            && (b.callee as AstNode).name === 'require')) {
+          if (
+            b.type === 'ImportExpression' ||
+            (b.type === 'CallExpression' &&
+              isNode(b.callee) &&
+              (b.callee as AstNode).type === 'Identifier' &&
+              (b.callee as AstNode).name === 'require')
+          ) {
             const src = stringValue(b.type === 'ImportExpression' ? b.source : ((b.arguments as AstNode[]) ?? [])[0]);
             if (src && isBare(src)) pkgUses.push({ fromId, file, abs, spec: src, line: line(b.start ?? 0) });
           }
           if (b.type === 'JSXIdentifier' && pkgLocals.size) {
             const up = bodyParents[bodyParents.length - 1];
-            const isName = !!up && ((up.type === 'JSXMemberExpression' && up.property === b) || (up.type === 'JSXAttribute' && up.name === b));
+            const isName =
+              !!up &&
+              ((up.type === 'JSXMemberExpression' && up.property === b) ||
+                (up.type === 'JSXAttribute' && up.name === b));
             const src = isName ? undefined : pkgLocals.get(String(b.name));
             if (src) pkgUses.push({ fromId, file, abs, spec: src, line: line(b.start ?? 0) });
             return;
@@ -911,13 +1432,24 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           if (b.type === 'Identifier' && (sdkImports.size || pkgLocals.size)) {
             const sdk = sdkImports.get(String(b.name));
             const up = bodyParents[bodyParents.length - 1];
-            const isName = !!up && !up.computed
-              && (((up.type === 'MemberExpression' || up.type === 'StaticMemberExpression') && up.property === b) || (up.type === 'Property' && up.key === b));
+            const isName =
+              !!up &&
+              !up.computed &&
+              (((up.type === 'MemberExpression' || up.type === 'StaticMemberExpression') && up.property === b) ||
+                (up.type === 'Property' && up.key === b));
             const pkgSrc = isName ? undefined : pkgLocals.get(String(b.name));
             if (pkgSrc) pkgUses.push({ fromId, file, abs, spec: pkgSrc, line: line(b.start ?? 0) });
             if (sdk && !isName && !markedSdk.has(`${fromId}|${sdk.name}`)) {
               markedSdk.add(`${fromId}|${sdk.name}`);
-              sdkUses.push({ fromId, file, ...(d.cls ? { via: d.cls } : {}), specifier: sdk.spec, name: sdk.name, kind: sdk.kind, line: line(b.start ?? 0) });
+              sdkUses.push({
+                fromId,
+                file,
+                ...(d.cls ? { via: d.cls } : {}),
+                specifier: sdk.spec,
+                name: sdk.name,
+                kind: sdk.kind,
+                line: line(b.start ?? 0),
+              });
             }
             return;
           }
@@ -929,21 +1461,47 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
               const ops = sqlOps(sqlText);
               const code = sqlText.replace(/\s+/g, ' ').trim().slice(0, 200);
               const sf = scanAncestors(bodyParents, b);
-              for (const o of ops) pendingDbOps.push({ fromId, file, tableName: o.table, op: o.op, write: o.write, code, line: line(b.start ?? 0), sql: true, ...sf });
+              for (const o of ops)
+                pendingDbOps.push({
+                  fromId,
+                  file,
+                  tableName: o.table,
+                  op: o.op,
+                  write: o.write,
+                  code,
+                  line: line(b.start ?? 0),
+                  sql: true,
+                  ...sf,
+                });
             }
             return false;
           }
-          if (b.type === 'VariableDeclarator' && isNode(b.id) && (b.id as AstNode).type === 'Identifier' && isNode(b.init)
-            && (b.init as AstNode).type === 'CallExpression' && memberChain((b.init as AstNode).callee).pop() === 'getQueueClient') {
+          if (
+            b.type === 'VariableDeclarator' &&
+            isNode(b.id) &&
+            (b.id as AstNode).type === 'Identifier' &&
+            isNode(b.init) &&
+            (b.init as AstNode).type === 'CallExpression' &&
+            memberChain((b.init as AstNode).callee).pop() === 'getQueueClient'
+          ) {
             const arg = (((b.init as AstNode).arguments as AstNode[]) ?? [])[0];
             const literal = stringValue(arg);
             if (literal) queueVars.set(String((b.id as AstNode).name), { literal });
-            else if (isNode(arg) && arg.type === 'Identifier') queueVars.set(String((b.id as AstNode).name), { ref: String(arg.name) });
+            else if (isNode(arg) && arg.type === 'Identifier')
+              queueVars.set(String((b.id as AstNode).name), { ref: String(arg.name) });
           }
           // <ChildComponent …/> → renders edge (embedded components)
           if (b.type === 'JSXElement') {
             const tag = jsxName(b);
-            if (tag && /^[A-Z]/.test(tag) && tag !== d.name) pendingRenders.push({ fromId, file, callee: tag, line: line(b.start ?? 0), jsx: true, ...scanAncestors(bodyParents, b) });
+            if (tag && /^[A-Z]/.test(tag) && tag !== d.name)
+              pendingRenders.push({
+                fromId,
+                file,
+                callee: tag,
+                line: line(b.start ?? 0),
+                jsx: true,
+                ...scanAncestors(bodyParents, b),
+              });
             return;
           }
           // `h.promise ??= build().catch(…)` in a file that parks a process-wide
@@ -962,18 +1520,29 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           // query code for the edge: the whole enclosing statement, so builder
           // chains (db.insert(t).values(…)) show up complete
           const queryCode = () => {
-            const stmt = [...bodyParents].reverse().find((p) =>
-              p.type === 'ExpressionStatement' || p.type === 'VariableDeclarator' || p.type === 'ReturnStatement') ?? b;
+            const stmt =
+              [...bodyParents]
+                .reverse()
+                .find(
+                  (p) =>
+                    p.type === 'ExpressionStatement' || p.type === 'VariableDeclarator' || p.type === 'ReturnStatement',
+                ) ?? b;
             return sourceSlice(source, stmt).replace(/\s+/g, ' ').slice(0, 200);
           };
 
           // fetch('/x', {method:'POST'})
           // A declared external can inject its transport for tests. Require the actual `typeof fetch`
           // field contract, not a method/property name that happens to sound like HTTP.
-          const declaredFetch = d.cls && declaredClassExternals.has(`${file}::${d.cls}`)
-            && chain.length === 2 && chain[0] === 'this' && classFetchFields.get(d.cls)?.has(chain[1]!)
-            && !declaredHere.has('fetch') && !importMap.has('fetch') && !pkgLocals.has('fetch');
-          if (chain.length === 1 && chain[0] === 'fetch' || declaredFetch) {
+          const declaredFetch =
+            d.cls &&
+            declaredClassExternals.has(`${file}::${d.cls}`) &&
+            chain.length === 2 &&
+            chain[0] === 'this' &&
+            classFetchFields.get(d.cls)?.has(chain[1]!) &&
+            !declaredHere.has('fetch') &&
+            !importMap.has('fetch') &&
+            !pkgLocals.has('fetch');
+          if ((chain.length === 1 && chain[0] === 'fetch') || declaredFetch) {
             const url = stringValue(args[0]);
             const at = line(b.start ?? 0);
             const verb = fetchMethod(args[1]);
@@ -983,15 +1552,29 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
             // declared system keeps the externals path below.
             const hostBound = !!d.cls && (classHosts.has(d.cls) || declaredClassExternals.has(`${file}::${d.cls}`));
             if (urlInfo?.url && isWrapperUrl(urlInfo.url, url) && !hostBound) {
-              if (!fetchWrappers.has(fromId)) fetchWrappers.set(fromId, { url: urlInfo.url, method: isNode(args[1]) && args[1].type === 'CallExpression' ? initCallSpec(args[1], pm) : fetchMethodSpec(argInfoOf(args[1], pm), args.length > 1) });
-            }
-            else if (url && !(declaredFetch && url.startsWith(':param'))) {
+              if (!fetchWrappers.has(fromId))
+                fetchWrappers.set(fromId, {
+                  url: urlInfo.url,
+                  method:
+                    isNode(args[1]) && args[1].type === 'CallExpression'
+                      ? initCallSpec(args[1], pm)
+                      : fetchMethodSpec(argInfoOf(args[1], pm), args.length > 1),
+                });
+            } else if (url && !(declaredFetch && url.startsWith(':param'))) {
               httpCalls.push({ fromId, method: verb, path: normalizePath(url), line: at, ...f });
             }
             // a class that keeps its base URL in a constant is talking to that host even
             // when the URL itself is assembled somewhere else (01 §2.3.4 R4b)
             else if (d.cls && classHosts.has(d.cls)) {
-              pendingHostCalls.push({ fromId, file, cls: d.cls, constName: classHosts.get(d.cls)!.constName, method: verb, line: at, ...f });
+              pendingHostCalls.push({
+                fromId,
+                file,
+                cls: d.cls,
+                constName: classHosts.get(d.cls)!.constName,
+                method: verb,
+                line: at,
+                ...f,
+              });
             }
             // every fetch site of a class, host constant or not: a `<path>::<Class>`
             // declaration hangs its edges on these when nothing was detected
@@ -1008,15 +1591,26 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
             addNode({ id: tableId, kind: 'table', name: table!, tags: autoTags('', table!, 'table') });
             const code = sourceSlice(source, b).replace(/\s+/g, ' ').slice(0, 200);
             const at = line(b.start ?? 0);
-            if (WRITE_OPS.has(op!)) addEdge('writes', fromId, tableId, withFlags({ op: op!, code, line: at }, f), DB_BUILDER());
-            else if (READ_OPS.has(op!)) addEdge('reads', fromId, tableId, withFlags({ op: op!, code, line: at }, f), DB_BUILDER());
+            if (WRITE_OPS.has(op!))
+              addEdge('writes', fromId, tableId, withFlags({ op: op!, code, line: at }, f), DB_BUILDER());
+            else if (READ_OPS.has(op!))
+              addEdge('reads', fromId, tableId, withFlags({ op: op!, code, line: at }, f), DB_BUILDER());
             return;
           }
           // db.query.<table>.<op>() — Drizzle relational API
           if (chain.length === 4 && chain[0] === 'db' && chain[1] === 'query') {
             const [, , table, op] = chain;
             if (READ_OPS.has(op!) || WRITE_OPS.has(op!)) {
-              pendingDbOps.push({ fromId, file, tableName: table!, op: op!, write: WRITE_OPS.has(op!), code: queryCode(), line: line(b.start ?? 0), ...f });
+              pendingDbOps.push({
+                fromId,
+                file,
+                tableName: table!,
+                op: op!,
+                write: WRITE_OPS.has(op!),
+                code: queryCode(),
+                line: line(b.start ?? 0),
+                ...f,
+              });
             }
             return;
           }
@@ -1025,18 +1619,44 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           if (chain.length === 2 && chain[0] === 'db' && WRITE_OPS.has(chain[1]!)) {
             const t = args[0];
             if (isNode(t) && t.type === 'Identifier') {
-              pendingDbOps.push({ fromId, file, tableName: String(t.name), op: chain[1]!, write: true, code: queryCode(), line: line(b.start ?? 0), ...f });
+              pendingDbOps.push({
+                fromId,
+                file,
+                tableName: String(t.name),
+                op: chain[1]!,
+                write: true,
+                code: queryCode(),
+                line: line(b.start ?? 0),
+                ...f,
+              });
             }
             return;
           }
           // db.select(…).from(claims) — reads via the builder
-          if (isNode(b.callee) && (b.callee.type === 'MemberExpression' || b.callee.type === 'StaticMemberExpression')) {
+          if (
+            isNode(b.callee) &&
+            (b.callee.type === 'MemberExpression' || b.callee.type === 'StaticMemberExpression')
+          ) {
             const prop = b.callee.property as AstNode | undefined;
             const obj = b.callee.object as AstNode | undefined;
-            if (prop?.name === 'from' && isNode(obj) && obj.type === 'CallExpression' && memberChain(obj.callee)[0] === 'db') {
+            if (
+              prop?.name === 'from' &&
+              isNode(obj) &&
+              obj.type === 'CallExpression' &&
+              memberChain(obj.callee)[0] === 'db'
+            ) {
               const t = args[0];
               if (isNode(t) && t.type === 'Identifier') {
-                pendingDbOps.push({ fromId, file, tableName: String(t.name), op: 'select', write: false, code: queryCode(), line: line(b.start ?? 0), ...f });
+                pendingDbOps.push({
+                  fromId,
+                  file,
+                  tableName: String(t.name),
+                  op: 'select',
+                  write: false,
+                  code: queryCode(),
+                  line: line(b.start ?? 0),
+                  ...f,
+                });
                 return;
               }
             }
@@ -1052,15 +1672,36 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
             return;
           }
           // queue.sendMessage(…) / queue.receiveMessages(…) on a client bound above
-          if (chain.length === 2 && queueVars.has(chain[0]!) && (chain[1] === 'sendMessage' || chain[1] === 'receiveMessages')) {
-            pendingQueueOps.push({ fromId, file, queue: queueVars.get(chain[0]!)!, kind: chain[1] === 'sendMessage' ? 'publishes' : 'consumes', line: line(b.start ?? 0), ...f });
+          if (
+            chain.length === 2 &&
+            queueVars.has(chain[0]!) &&
+            (chain[1] === 'sendMessage' || chain[1] === 'receiveMessages')
+          ) {
+            pendingQueueOps.push({
+              fromId,
+              file,
+              queue: queueVars.get(chain[0]!)!,
+              kind: chain[1] === 'sendMessage' ? 'publishes' : 'consumes',
+              line: line(b.start ?? 0),
+              ...f,
+            });
             return;
           }
           // this.method() inside a class — the sibling method in the same file
           if (chain.length === 2 && chain[0] === 'this' && d.cls) {
-            pendingCalls.push({ fromId, file, callee: `${d.cls}.${chain[1]}`, line: line(b.start ?? 0), argsKey: keepArgs(b), ...f });
+            pendingCalls.push({
+              fromId,
+              file,
+              callee: `${d.cls}.${chain[1]}`,
+              line: line(b.start ?? 0),
+              argsKey: keepArgs(b),
+              ...f,
+            });
             const ck = `${file}::${d.cls}`;
-            classThisCalls.set(ck, [...(classThisCalls.get(ck) ?? []), { fromId, callee: chain[1]!, method: methodLiteral(args[0]), line: line(b.start ?? 0) }]);
+            classThisCalls.set(ck, [
+              ...(classThisCalls.get(ck) ?? []),
+              { fromId, callee: chain[1]!, method: methodLiteral(args[0]), line: line(b.start ?? 0) },
+            ]);
             return;
           }
           // this.<field>.<…>.<fn>() inside a class — a field whose type is declared is
@@ -1072,14 +1713,29 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
             const hook = { fromId, file, cls: d.cls, path: chain.slice(1), line: line(b.start ?? 0), ...f };
             const rootType = fieldTypes.get(d.cls)?.get(chain[1]!);
             if (rootType) {
-              pendingTypedCalls.push({ fromId, file, root: rootType, path: chain.slice(2, -1), method: chain[chain.length - 1]!,
-                line: line(b.start ?? 0), ...f, fallback: { kind: 'hook', cls: d.cls, path: chain.slice(1) } });
+              pendingTypedCalls.push({
+                fromId,
+                file,
+                root: rootType,
+                path: chain.slice(2, -1),
+                method: chain[chain.length - 1]!,
+                line: line(b.start ?? 0),
+                ...f,
+                fallback: { kind: 'hook', cls: d.cls, path: chain.slice(1) },
+              });
             } else pendingHookCalls.push(hook);
             return;
           }
           // plain calls to local/imported symbols
           if (chain.length === 1 && /^[a-zA-Z_$]/.test(chain[0]!)) {
-            pendingCalls.push({ fromId, file, callee: chain[0]!, line: line(b.start ?? 0), argsKey: keepArgs(b), ...f });
+            pendingCalls.push({
+              fromId,
+              file,
+              callee: chain[0]!,
+              line: line(b.start ?? 0),
+              argsKey: keepArgs(b),
+              ...f,
+            });
           }
           // a.b.method(…) — when the receiver's type is declared, pass 2 follows the type
           // to its production implementers, whatever the method is called: a typed receiver
@@ -1091,10 +1747,26 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           if (chain.length >= 2 && chain[0] !== 'this' && chain[0] !== 'db' && tail && /^[a-zA-Z_$]/.test(tail)) {
             const rootType = paramTypes.get(chain[0]!);
             if (rootType) {
-              pendingTypedCalls.push({ fromId, file, root: rootType, path: chain.slice(1, -1), method: tail, line: line(b.start ?? 0), ...f,
-                fallback: { kind: 'method', receiver: chain[chain.length - 2]! } });
+              pendingTypedCalls.push({
+                fromId,
+                file,
+                root: rootType,
+                path: chain.slice(1, -1),
+                method: tail,
+                line: line(b.start ?? 0),
+                ...f,
+                fallback: { kind: 'method', receiver: chain[chain.length - 2]! },
+              });
             } else if (!BUILTIN_METHODS.has(tail)) {
-              pendingMethodCalls.push({ fromId, file, method: tail, receiver: chain[chain.length - 2]!, line: line(b.start ?? 0), argsKey: keepArgs(b), ...f });
+              pendingMethodCalls.push({
+                fromId,
+                file,
+                method: tail,
+                receiver: chain[chain.length - 2]!,
+                line: line(b.start ?? 0),
+                argsKey: keepArgs(b),
+                ...f,
+              });
             }
           }
           // schema.parse / schema.safeParse → validates
@@ -1112,7 +1784,14 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
        * plain (a computed key, an array in the way) — the site then stays the host's
        * with `deferred` from the ancestor scan.
        */
-      function hoistCallback(fn: AstNode, prop: AstNode, parents: AstNode[], fromId: string, hostPath: string, hostGroup?: string): boolean {
+      function hoistCallback(
+        fn: AstNode,
+        prop: AstNode,
+        parents: AstNode[],
+        fromId: string,
+        hostPath: string,
+        hostGroup?: string,
+      ): boolean {
         const keys: string[] = [];
         let i = parents.length - 1;
         let obj: AstNode | undefined;
@@ -1127,8 +1806,12 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           const o = parents[i - 1];
           if (!o || o.type !== 'ObjectExpression') return false;
           const up = parents[i - 2];
-          if (up && up.type === 'Property' && up.value === o) { i -= 2; continue; }
-          obj = o; objIdx = i - 1;
+          if (up && up.type === 'Property' && up.value === o) {
+            i -= 2;
+            continue;
+          }
+          obj = o;
+          objIdx = i - 1;
           break;
         }
         const cbPath = `${hostPath}.${keys.join('.')}`;
@@ -1137,17 +1820,36 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         const cbBody = (fn.body as AstNode) ?? null;
         // the binding is recorded even when the node already exists (two `new K({…})` of the same shape)
         const outer = objIdx > 0 ? parents[objIdx - 1] : undefined;
-        if (outer && outer.type === 'NewExpression' && isNode(outer.callee) && (outer.callee as AstNode).type === 'Identifier'
-          && (((outer.arguments as AstNode[]) ?? [])[0] === obj)) {
+        if (
+          outer &&
+          outer.type === 'NewExpression' &&
+          isNode(outer.callee) &&
+          (outer.callee as AstNode).type === 'Identifier' &&
+          ((outer.arguments as AstNode[]) ?? [])[0] === obj
+        ) {
           const cn = String((outer.callee as AstNode).name);
-          hookBindings.push({ file, className: cn, classRef: importMap.get(cn) ?? { file, name: cn }, path: keys.join('.'), fnId: cbId, line: line(outer.start ?? 0) });
+          hookBindings.push({
+            file,
+            className: cn,
+            classRef: importMap.get(cn) ?? { file, name: cn },
+            path: keys.join('.'),
+            fnId: cbId,
+            line: line(outer.start ?? 0),
+          });
         }
         if (walkedCallbacks.has(cbId)) return true;
         walkedCallbacks.add(cbId);
         const cbDoc = parseDoc(leadingComment(source, prop.start ?? 0));
-        const cbBranches = extractBranches(cbBody, source, line, { path: file, nodeId: cbId, line: line(fn.start ?? 0) });
+        const cbBranches = extractBranches(cbBody, source, line, {
+          path: file,
+          nodeId: cbId,
+          line: line(fn.start ?? 0),
+        });
         addNode({
-          id: cbId, kind: 'function', name: cbName, lang: langOf(file),
+          id: cbId,
+          kind: 'function',
+          name: cbName,
+          lang: langOf(file),
           loc: { repo, path: file, line: line(fn.start ?? 0), endLine: line(fn.end ?? 0) },
           docs: cbDoc.docs,
           snippet: snippetOf(source, fn),
@@ -1187,7 +1889,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       if (/^page\.(tsx|jsx|ts|js)$/.test(base)) {
         const pageId = `${repo}::page::${routePath}`;
         addNode({
-          id: pageId, kind: 'page', name: routePath, lang: langOf(file),
+          id: pageId,
+          kind: 'page',
+          name: routePath,
+          lang: langOf(file),
           loc: { repo, path: file, line: 1 },
           tags: autoTags(file, routePath, 'page'),
         });
@@ -1200,7 +1905,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           if (!ROUTE_FILE_METHODS.has(d.name)) continue;
           const routeId = `${repo}::route::${d.name} ${routePath}`;
           addNode({
-            id: routeId, kind: 'route', name: `${d.name} ${routePath}`, lang: langOf(file),
+            id: routeId,
+            kind: 'route',
+            name: `${d.name} ${routePath}`,
+            lang: langOf(file),
             loc: { repo, path: file, line: line(d.node.start ?? 0) },
             tags: autoTags(file, routePath, 'route'),
           });
@@ -1249,7 +1957,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           if (typeof attrName === 'string' && isNode(attr.value)) attrs[attrName] = attr.value as AstNode;
         }
         const pathVal = attrs.path ? stringValue(attrs.path) : null;
-        const container = attrs.element && attrs.element.type === 'JSXExpressionContainer' ? (attrs.element.expression as AstNode) : attrs.element;
+        const container =
+          attrs.element && attrs.element.type === 'JSXExpressionContainer'
+            ? (attrs.element.expression as AstNode)
+            : attrs.element;
         const target = container ? jsxName(container) : null;
         if (pathVal !== null && target) addPage(pathVal, target, line(n.start ?? 0));
         return;
@@ -1260,7 +1971,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       const name = pagePath.startsWith('/') ? pagePath : '/' + pagePath;
       const pageId = `${repo}::page::${name}`;
       addNode({
-        id: pageId, kind: 'page', name, lang: langOf(file),
+        id: pageId,
+        kind: 'page',
+        name,
+        lang: langOf(file),
         loc: { repo, path: file, line: atLine },
         tags: [...autoTags(file, name, 'page'), ...(pagePath === '*' || pagePath.endsWith('/*') ? ['fallback'] : [])],
       });
@@ -1279,12 +1993,15 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       if (n.type !== 'CallExpression' || memberChain(n.callee).pop() !== 'createServer') return;
       // Test support servers are source code, but are not application endpoints.
       if (/(^|\/)testing\//.test(file) || /\.test-server\.[^/]+$/.test(file)) return false;
-      const cb = ((n.arguments as AstNode[]) ?? []).find((a) => a.type === 'ArrowFunctionExpression' || a.type === 'FunctionExpression');
+      const cb = ((n.arguments as AstNode[]) ?? []).find(
+        (a) => a.type === 'ArrowFunctionExpression' || a.type === 'FunctionExpression',
+      );
       if (!cb) return false;
       walk(cb.body, (b, parents) => {
         let path: string | null = null;
         if (b.type === 'BinaryExpression' && (b.operator === '===' || b.operator === '==')) {
-          const l = b.left as AstNode, r = b.right as AstNode;
+          const l = b.left as AstNode,
+            r = b.right as AstNode;
           const lit = stringValue(r) ?? stringValue(l);
           const other = stringValue(r) != null ? l : r;
           if (lit && lit.startsWith('/') && urlish(memberChain(other))) path = lit;
@@ -1298,24 +2015,37 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         if (!path) return;
         const ifStmt = [...parents].reverse().find((p) => p.type === 'IfStatement');
         let method = 'GET';
-        if (ifStmt) walk(ifStmt.test, (m) => {
-          if (m.type !== 'BinaryExpression') return;
-          const v = stringValue(m.right) ?? stringValue(m.left);
-          const side = stringValue(m.right) != null ? m.left : m.right;
-          if (v && memberChain(side).pop() === 'method' && ROUTE_FILE_METHODS.has(v.toUpperCase())) method = v.toUpperCase();
-        });
+        if (ifStmt)
+          walk(ifStmt.test, (m) => {
+            if (m.type !== 'BinaryExpression') return;
+            const v = stringValue(m.right) ?? stringValue(m.left);
+            const side = stringValue(m.right) != null ? m.left : m.right;
+            if (v && memberChain(side).pop() === 'method' && ROUTE_FILE_METHODS.has(v.toUpperCase()))
+              method = v.toUpperCase();
+          });
         const routeId = `${repo}::route::${method} ${path}`;
         if (nodes.has(routeId)) return false;
         addNode({
-          id: routeId, kind: 'route', name: `${method} ${path}`, lang: langOf(file),
+          id: routeId,
+          kind: 'route',
+          name: `${method} ${path}`,
+          lang: langOf(file),
           loc: { repo, path: file, line: line(b.start ?? 0) },
           tags: [...autoTags(file, path, 'route'), 'http-server'],
         });
-        if (ifStmt) walk(ifStmt.consequent, (c, cps) => {
-          if (c.type !== 'CallExpression') return;
-          const cc = memberChain(c.callee);
-          if (cc.length === 1 && /^[a-z_$]/i.test(cc[0]!)) pendingCalls.push({ fromId: routeId, file, callee: cc[0]!, line: line(c.start ?? 0), ...scanAncestors(cps, c) });
-        });
+        if (ifStmt)
+          walk(ifStmt.consequent, (c, cps) => {
+            if (c.type !== 'CallExpression') return;
+            const cc = memberChain(c.callee);
+            if (cc.length === 1 && /^[a-z_$]/i.test(cc[0]!))
+              pendingCalls.push({
+                fromId: routeId,
+                file,
+                callee: cc[0]!,
+                line: line(c.start ?? 0),
+                ...scanAncestors(cps, c),
+              });
+          });
         return false;
       });
       return false;
@@ -1332,7 +2062,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       const method = chain[1]!.toUpperCase();
       const routeId = `${repo}::route::${method} ${path}`;
       addNode({
-        id: routeId, kind: 'route', name: `${method} ${path}`, lang: langOf(file),
+        id: routeId,
+        kind: 'route',
+        name: `${method} ${path}`,
+        lang: langOf(file),
         loc: { repo, path: file, line: line(n.start ?? 0) },
         tags: autoTags(file, path, 'route'),
       });
@@ -1345,11 +2078,16 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           if (mwChain.length === 1 && /^(require|ensure|check|assert)/i.test(mwChain[0]!)) {
             const guardId = `${repo}::guard::${mwChain[0]}(${mwArg ?? ''})`;
             addNode({
-              id: guardId, kind: 'guard', name: mwArg ? `${mwChain[0]}: ${mwArg}` : mwChain[0]!,
-              tags: ['auth'], loc: { repo, path: file, line: line(arg.start ?? 0) },
+              id: guardId,
+              kind: 'guard',
+              name: mwArg ? `${mwChain[0]}: ${mwArg}` : mwChain[0]!,
+              tags: ['auth'],
+              loc: { repo, path: file, line: line(arg.start ?? 0) },
             });
             addEdge('guards', guardId, routeId, undefined, {
-              status: 'heuristic', technique: 'detected', confidence: 'MEDIUM',
+              status: 'heuristic',
+              technique: 'detected',
+              confidence: 'MEDIUM',
               note: `a route argument named ${mwChain[0]} — nobody declared it a guard`,
             });
           }
@@ -1372,15 +2110,23 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
             if (b.type !== 'CallExpression') return;
             const c = memberChain(b.callee);
             const hf = scanAncestors(hps, b);
-            if (c.length === 1 && /^[a-z_$]/i.test(c[0]!)) pendingCalls.push({ fromId: routeId, file, callee: c[0]!, line: line(b.start ?? 0), ...hf });
-            if (c.length === 2 && (c[1] === 'parse' || c[1] === 'safeParse')) pendingCalls.push({ fromId: routeId, file, callee: c[0]!, line: line(b.start ?? 0), ...hf });
+            if (c.length === 1 && /^[a-z_$]/i.test(c[0]!))
+              pendingCalls.push({ fromId: routeId, file, callee: c[0]!, line: line(b.start ?? 0), ...hf });
+            if (c.length === 2 && (c[1] === 'parse' || c[1] === 'safeParse'))
+              pendingCalls.push({ fromId: routeId, file, callee: c[0]!, line: line(b.start ?? 0), ...hf });
           });
         }
         // a bare identifier: middleware (requireAuth) or a named handler (createSession) —
         // pass 2's kind mapping tells them apart by what the name resolves to; recording it
         // as a route handler too lets a named handler's own guards/validates mirror onto the route
         if (arg.type === 'Identifier') {
-          pendingCalls.push({ fromId: routeId, file, callee: String(arg.name), line: line(arg.start ?? 0), ...NO_FLAGS });
+          pendingCalls.push({
+            fromId: routeId,
+            file,
+            callee: String(arg.name),
+            line: line(arg.start ?? 0),
+            ...NO_FLAGS,
+          });
           routeHandlers.push({ routeId, file, handler: String(arg.name) });
         }
       }
@@ -1413,13 +2159,19 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     if (!targets.length) continue;
     const guardId = `${repo}::guard::middleware:${mw.file}`;
     addNode({
-      id: guardId, kind: 'guard', name: 'middleware', tags: ['auth'],
+      id: guardId,
+      kind: 'guard',
+      name: 'middleware',
+      tags: ['auth'],
       loc: { repo, path: mw.file, line: 1 },
     });
-    for (const t of targets) addEdge('guards', guardId, t.nodeId, undefined, {
-      status: 'heuristic', technique: 'detected', confidence: 'MEDIUM',
-      note: `middleware.ts under ${mw.prefix || 'the repo root'}; the file's own matcher is not read, so this is every entry beneath it`,
-    });
+    for (const t of targets)
+      addEdge('guards', guardId, t.nodeId, undefined, {
+        status: 'heuristic',
+        technique: 'detected',
+        confidence: 'MEDIUM',
+        note: `middleware.ts under ${mw.prefix || 'the repo root'}; the file's own matcher is not read, so this is every entry beneath it`,
+      });
   }
 
   // ── pass 2: resolve calls via same-file symbols then imports ────
@@ -1463,7 +2215,17 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const targetId = hit?.id;
     if (!targetId || targetId === call.fromId) continue;
     const target = nodes.get(targetId);
-    if (call.argsKey) resolvedCalls.push({ fromId: call.fromId, toId: targetId, key: call.argsKey, line: call.line, site: call.site, deferred: call.deferred, tx: call.tx, ...(call.when ? { when: call.when } : {}) });
+    if (call.argsKey)
+      resolvedCalls.push({
+        fromId: call.fromId,
+        toId: targetId,
+        key: call.argsKey,
+        line: call.line,
+        site: call.site,
+        deferred: call.deferred,
+        tx: call.tx,
+        ...(call.when ? { when: call.when } : {}),
+      });
     const kind: GraphEdge['kind'] =
       target?.kind === 'rule' ? 'validates' : target?.kind === 'guard' ? 'guards' : 'calls';
     // a schema read over a response the server already sent (`toProblem(res: Response)` parsing an
@@ -1480,19 +2242,35 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     // that turned a function into a gate — both facts are HIGH, and the route the
     // name took is kept in the note so neither is lost.
     const byName = bySymbol(hit.via);
-    const res: GraphEdge['resolution'] = kind === 'guards'
-      ? { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH',
-          note: `@guard on ${target?.name ?? call.callee}, ${hit.via === 'same-file' ? 'declared in the same file' : 'imported here'}` }
-      : byName;
+    const res: GraphEdge['resolution'] =
+      kind === 'guards'
+        ? {
+            status: 'resolved',
+            technique: 'annotation-scan',
+            confidence: 'HIGH',
+            note: `@guard on ${target?.name ?? call.callee}, ${hit.via === 'same-file' ? 'declared in the same file' : 'imported here'}`,
+          }
+        : byName;
     // rules validate and guards guard their caller — the edge points back at it
-    if (kind === 'validates' || kind === 'guards') addEdge(kind, targetId, call.fromId, withFlags(undefined, call), res);
-    else addEdge(kind, call.fromId, targetId, withFlags(call.line != null ? { line: call.line } : undefined, call), res);
+    if (kind === 'validates' || kind === 'guards')
+      addEdge(kind, targetId, call.fromId, withFlags(undefined, call), res);
+    else
+      addEdge(kind, call.fromId, targetId, withFlags(call.line != null ? { line: call.line } : undefined, call), res);
     // a @guard function with a body of its own is also RUN by its caller: the gate is a badge on the
     // route, the transaction inside it (submitDraftInvoice writes lines, mints the token, enqueues
     // the ERP draft) is a step — keep the calls edge so journeys descend into it
     if (kind === 'guards' && target?.loc && target.snippet) {
       const ck = `calls|${call.fromId}|${targetId}`;
-      if (!seenEdge.has(ck)) { seenEdge.add(ck); addEdge('calls', call.fromId, targetId, withFlags({ via: 'guard', ...(call.line != null ? { line: call.line } : {}) }, call), byName); }
+      if (!seenEdge.has(ck)) {
+        seenEdge.add(ck);
+        addEdge(
+          'calls',
+          call.fromId,
+          targetId,
+          withFlags({ via: 'guard', ...(call.line != null ? { line: call.line } : {}) }, call),
+          byName,
+        );
+      }
     }
   }
   // Resolve named body schemas before route-handler mirroring; the edge retains its declaration evidence.
@@ -1502,10 +2280,18 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const key = `validates|${body.fnId}|${hit.id}`;
     if (seenEdge.has(key)) continue;
     seenEdge.add(key);
-    addEdge('validates', hit.id, body.fnId, { via: 'body-schema', line: body.line }, {
-      status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH',
-      note: `@Body declares schema ${body.name}, resolved by ${hit.via}; runtime validation-pipe registration is not verified`,
-    });
+    addEdge(
+      'validates',
+      hit.id,
+      body.fnId,
+      { via: 'body-schema', line: body.line },
+      {
+        status: 'resolved',
+        technique: 'annotation-scan',
+        confidence: 'HIGH',
+        note: `@Body declares schema ${body.name}, resolved by ${hit.via}; runtime validation-pipe registration is not verified`,
+      },
+    );
   }
   // a route that delegates to a named handler inherits the handler's gates and rules —
   // exactly one hop, so a guard two calls deep inside a shared service stays off the route
@@ -1516,8 +2302,13 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       const key = `${e.kind}|${e.from}|${rh.routeId}`;
       if (seenEdge.has(key)) continue;
       seenEdge.add(key);
-      addEdge(e.kind, e.from, rh.routeId, { via: 'handler', handler: handlerId },
-        e.meta?.via === 'body-schema' ? e.resolution : undefined);
+      addEdge(
+        e.kind,
+        e.from,
+        rh.routeId,
+        { via: 'handler', handler: handlerId },
+        e.meta?.via === 'body-schema' ? e.resolution : undefined,
+      );
     }
   }
   for (const r of pendingRenders) {
@@ -1527,8 +2318,20 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const key = `renders|${r.fromId}|${targetId}`;
     if (seenEdge.has(key)) continue;
     seenEdge.add(key);
-    addEdge('renders', r.fromId, targetId, withFlags(r.line != null ? { line: r.line } : undefined, r),
-      r.jsx ? { status: 'resolved', technique: 'jsx-render', confidence: 'HIGH', note: `<${r.callee}> is written in this body` } : undefined);
+    addEdge(
+      'renders',
+      r.fromId,
+      targetId,
+      withFlags(r.line != null ? { line: r.line } : undefined, r),
+      r.jsx
+        ? {
+            status: 'resolved',
+            technique: 'jsx-render',
+            confidence: 'HIGH',
+            note: `<${r.callee}> is written in this body`,
+          }
+        : undefined,
+    );
   }
 
   // Drizzle ops: resolve the table identifier through imports/barrels to the
@@ -1543,8 +2346,13 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const key = `${dop.write ? 'writes' : 'reads'}|${dop.fromId}|${tableId}|${dop.op}${flagKey(dop)}`;
     if (seenEdge.has(key)) continue;
     seenEdge.add(key);
-    addEdge(dop.write ? 'writes' : 'reads', dop.fromId, tableId, withFlags({ op: dop.op, code: dop.code, ...(dop.line != null ? { line: dop.line } : {}) }, dop),
-      dop.sql ? RAW_SQL() : DB_BUILDER());
+    addEdge(
+      dop.write ? 'writes' : 'reads',
+      dop.fromId,
+      tableId,
+      withFlags({ op: dop.op, code: dop.code, ...(dop.line != null ? { line: dop.line } : {}) }, dop),
+      dop.sql ? RAW_SQL() : DB_BUILDER(),
+    );
   }
 
   // ── typed dispatch: the receiver's declared type, not its name (01 §2.3.5) ───────
@@ -1559,12 +2367,21 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const direct = typesByFile.get(file)?.get(name);
     if (direct) return direct;
     const imp = importsByFile.get(file)?.get(name);
-    if (imp) { const hit = lookupType(imp.file, imp.name, seen); if (hit) return hit; }
+    if (imp) {
+      const hit = lookupType(imp.file, imp.name, seen);
+      if (hit) return hit;
+    }
     const re = reexportsByFile.get(file);
     if (!re) return undefined;
     const named = re.named.get(name);
-    if (named) { const hit = lookupType(named.file, named.name, seen); if (hit) return hit; }
-    for (const star of re.stars) { const hit = lookupType(star, name, seen); if (hit) return hit; }
+    if (named) {
+      const hit = lookupType(named.file, named.name, seen);
+      if (hit) return hit;
+    }
+    for (const star of re.stars) {
+      const hit = lookupType(star, name, seen);
+      if (hit) return hit;
+    }
     return undefined;
   };
   /**
@@ -1609,9 +2426,28 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       // the annotation named no declaration this ingest saw, or it ended in an anonymous
       // shape: the call goes back to the rule it would have followed without a type
       if (tc.fallback.kind === 'hook') {
-        pendingHookCalls.push({ fromId: tc.fromId, file: tc.file, cls: tc.fallback.cls, path: tc.fallback.path, line: tc.line, site: tc.site, deferred: tc.deferred, tx: tc.tx });
+        pendingHookCalls.push({
+          fromId: tc.fromId,
+          file: tc.file,
+          cls: tc.fallback.cls,
+          path: tc.fallback.path,
+          line: tc.line,
+          site: tc.site,
+          deferred: tc.deferred,
+          tx: tc.tx,
+        });
       } else if (!BUILTIN_METHODS.has(tc.method)) {
-        pendingMethodCalls.push({ fromId: tc.fromId, file: tc.file, method: tc.method, receiver: tc.fallback.receiver, line: tc.line, site: tc.site, deferred: tc.deferred, tx: tc.tx, ...(tc.when ? { when: tc.when } : {}) });
+        pendingMethodCalls.push({
+          fromId: tc.fromId,
+          file: tc.file,
+          method: tc.method,
+          receiver: tc.fallback.receiver,
+          line: tc.line,
+          site: tc.site,
+          deferred: tc.deferred,
+          tx: tc.tx,
+          ...(tc.when ? { when: tc.when } : {}),
+        });
       }
       continue;
     }
@@ -1634,7 +2470,17 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       // `new K({ hooks: { fn } })` is the fact to follow, and only when none exists is the
       // absence tagged on the caller
       if (tc.fallback.kind === 'hook') {
-        pendingHookCalls.push({ fromId: tc.fromId, file: tc.file, cls: tc.fallback.cls, path: tc.fallback.path, line: tc.line, site: tc.site, deferred: tc.deferred, tx: tc.tx, tagIfUnbound: true });
+        pendingHookCalls.push({
+          fromId: tc.fromId,
+          file: tc.file,
+          cls: tc.fallback.cls,
+          path: tc.fallback.path,
+          line: tc.line,
+          site: tc.site,
+          deferred: tc.deferred,
+          tx: tc.tx,
+          tagIfUnbound: true,
+        });
         continue;
       }
       // nothing implements the type this build can see: the caller says so, and no edge
@@ -1645,11 +2491,12 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     }
     const production = all.filter((m) => !TEST_DOUBLE.test(m.cls) && !TEST_DOUBLE.test(m.file));
     const pool = production.length ? production : all;
-    const note = T.kind === 'class' && all.length === 1
-      ? `the receiver is declared as the class ${T.name}`
-      : all.length === 1
-        ? `the only implementer of ${T.name} that declares ${tc.method}`
-        : `${all.length} classes implement ${T.name}; ${production.length < all.length ? 'in-memory / mock twins set aside' : 'every production implementer is drawn'}`;
+    const note =
+      T.kind === 'class' && all.length === 1
+        ? `the receiver is declared as the class ${T.name}`
+        : all.length === 1
+          ? `the only implementer of ${T.name} that declares ${tc.method}`
+          : `${all.length} classes implement ${T.name}; ${production.length < all.length ? 'in-memory / mock twins set aside' : 'every production implementer is drawn'}`;
     for (const target of pool) {
       if (target.nodeId === tc.fromId) continue;
       recordSite('calls', tc.fromId, target.nodeId, tc);
@@ -1658,11 +2505,17 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       seenEdge.add(key);
       const alternatives = all.filter((m) => m.nodeId !== target.nodeId).map((m) => m.nodeId);
       edges.push({
-        id: `e${edgeSeq++}`, kind: 'calls', from: tc.fromId, to: target.nodeId,
+        id: `e${edgeSeq++}`,
+        kind: 'calls',
+        from: tc.fromId,
+        to: target.nodeId,
         meta: withFlags({ line: tc.line ?? 0, via: 'interface', iface: T.name }, tc),
         resolution: {
-          status: 'heuristic', technique: 'interface', confidence: 'MEDIUM',
-          ...(alternatives.length ? { alternatives } : {}), note,
+          status: 'heuristic',
+          technique: 'interface',
+          confidence: 'MEDIUM',
+          ...(alternatives.length ? { alternatives } : {}),
+          note,
         },
       });
     }
@@ -1684,16 +2537,33 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     }
     if (pool.length !== 1) continue;
     const target = pool[0]!;
-    if (mc.argsKey) resolvedCalls.push({ fromId: mc.fromId, toId: target.nodeId, key: mc.argsKey, line: mc.line, site: mc.site, deferred: mc.deferred, tx: mc.tx, ...(mc.when ? { when: mc.when } : {}) });
+    if (mc.argsKey)
+      resolvedCalls.push({
+        fromId: mc.fromId,
+        toId: target.nodeId,
+        key: mc.argsKey,
+        line: mc.line,
+        site: mc.site,
+        deferred: mc.deferred,
+        tx: mc.tx,
+        ...(mc.when ? { when: mc.when } : {}),
+      });
     recordSite('calls', mc.fromId, target.nodeId, mc);
     const key = `calls|${mc.fromId}|${target.nodeId}${flagKey(mc)}`;
     if (seenEdge.has(key)) continue;
     seenEdge.add(key);
-    const note = cands.length === 1
-      ? `the only class method named ${mc.method}`
-      : `${cands.length} classes declare ${mc.method}; ${real.length < cands.length ? 'in-memory / mock twins set aside' : `${mc.receiver} picked ${target.cls}`}`;
-    edges.push({ id: `e${edgeSeq++}`, kind: 'calls', from: mc.fromId, to: target.nodeId, meta: withFlags({ line: mc.line ?? 0, via: 'method-name' }, mc),
-      resolution: { status: 'heuristic', technique: 'method-name', confidence: 'MEDIUM', note } });
+    const note =
+      cands.length === 1
+        ? `the only class method named ${mc.method}`
+        : `${cands.length} classes declare ${mc.method}; ${real.length < cands.length ? 'in-memory / mock twins set aside' : `${mc.receiver} picked ${target.cls}`}`;
+    edges.push({
+      id: `e${edgeSeq++}`,
+      kind: 'calls',
+      from: mc.fromId,
+      to: target.nodeId,
+      meta: withFlags({ line: mc.line ?? 0, via: 'method-name' }, mc),
+      resolution: { status: 'heuristic', technique: 'method-name', confidence: 'MEDIUM', note },
+    });
   }
 
   // callbacks handed to a constructor: `this.deps.hooks?.invoiceCreated?.()` in a class
@@ -1708,12 +2578,17 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     if (!re) return undefined;
     const named = re.named.get(name);
     if (named) return lookupClass(named.file, named.name, seen);
-    for (const star of re.stars) { const hit = lookupClass(star, name, seen); if (hit) return hit; }
+    for (const star of re.stars) {
+      const hit = lookupClass(star, name, seen);
+      if (hit) return hit;
+    }
     return undefined;
   };
   // a controller method whose body is one `return handler(…)` (nest.ts): the call it makes to the handler
   // is the delegation, stamped so core reads route, method and handler as one place (coverage.ts)
-  const delegateCalls = new Map(nestDelegates.length ? edges.filter(e => e.kind === 'calls').map(e => [`${e.from}|${e.to}`, e]) : []);
+  const delegateCalls = new Map(
+    nestDelegates.length ? edges.filter((e) => e.kind === 'calls').map((e) => [`${e.from}|${e.to}`, e]) : [],
+  );
   for (const d of nestDelegates) {
     const delegateId = resolveTarget(d.file, d.callee);
     if (!delegateId || delegateId === d.fnId) continue;
@@ -1726,13 +2601,38 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   for (const g of nestGuards) {
     const imp = importsByFile.get(g.file)?.get(g.className) ?? { file: g.file, name: g.className };
     const cls = lookupClass(imp.file, imp.name, new Set());
-    const method = cls ? classMethods.get(`${cls.file}::${cls.name}`)?.find((m) => m.name === 'canActivate') : undefined;
+    const method = cls
+      ? classMethods.get(`${cls.file}::${cls.name}`)?.find((m) => m.name === 'canActivate')
+      : undefined;
     if (!method) continue;
-    const res = (note: string): GraphEdge['resolution'] => ({ status: 'resolved', technique: imp.file === g.file ? 'same-file' : 'static-import', confidence: 'HIGH', note });
+    const res = (note: string): GraphEdge['resolution'] => ({
+      status: 'resolved',
+      technique: imp.file === g.file ? 'same-file' : 'static-import',
+      confidence: 'HIGH',
+      note,
+    });
     const toGuard = `calls|${g.routeId}|${g.guardId}`;
-    if (!seenEdge.has(toGuard)) { seenEdge.add(toGuard); addEdge('calls', g.routeId, g.guardId, { via: 'guard' }, res(`@UseGuards(${g.className}) runs ${g.className}.canActivate before the handler`)); }
+    if (!seenEdge.has(toGuard)) {
+      seenEdge.add(toGuard);
+      addEdge(
+        'calls',
+        g.routeId,
+        g.guardId,
+        { via: 'guard' },
+        res(`@UseGuards(${g.className}) runs ${g.className}.canActivate before the handler`),
+      );
+    }
     const toCheck = `calls|${g.guardId}|${method.id}`;
-    if (!seenEdge.has(toCheck)) { seenEdge.add(toCheck); addEdge('calls', g.guardId, method.id, undefined, res(`${g.className}.canActivate is the check @UseGuards names`)); }
+    if (!seenEdge.has(toCheck)) {
+      seenEdge.add(toCheck);
+      addEdge(
+        'calls',
+        g.guardId,
+        method.id,
+        undefined,
+        res(`${g.className}.canActivate is the check @UseGuards names`),
+      );
+    }
   }
   for (const hk of pendingHookCalls) {
     let bound = false;
@@ -1747,10 +2647,19 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       const key = `calls|${hk.fromId}|${b.fnId}`;
       if (seenEdge.has(key)) continue;
       seenEdge.add(key);
-      edges.push({ id: `e${edgeSeq++}`, kind: 'calls', from: hk.fromId, to: b.fnId,
+      edges.push({
+        id: `e${edgeSeq++}`,
+        kind: 'calls',
+        from: hk.fromId,
+        to: b.fnId,
         meta: { line: hk.line ?? 0, via: 'hook', deferred: true, ...(hk.tx ? { tx: true } : {}) },
-        resolution: { status: 'heuristic', technique: 'hook-binding', confidence: 'MEDIUM',
-          note: `bound at ${b.file}:${b.line} of new ${b.className}({…})` } });
+        resolution: {
+          status: 'heuristic',
+          technique: 'hook-binding',
+          confidence: 'MEDIUM',
+          note: `bound at ${b.file}:${b.line} of new ${b.className}({…})`,
+        },
+      });
       bound = true;
     }
     if (!bound && hk.tagIfUnbound) {
@@ -1766,16 +2675,23 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const direct = constStrings.get(`${file}::${name}`);
     if (direct) return direct;
     const imp = importsByFile.get(file)?.get(name);
-    if (imp) { const hit = lookupConst(imp.file, imp.name, seen); if (hit) return hit; }
+    if (imp) {
+      const hit = lookupConst(imp.file, imp.name, seen);
+      if (hit) return hit;
+    }
     const re = reexportsByFile.get(file);
     if (!re) return undefined;
     const named = re.named.get(name);
     if (named) return lookupConst(named.file, named.name, seen);
-    for (const star of re.stars) { const hit = lookupConst(star, name, seen); if (hit) return hit; }
+    for (const star of re.stars) {
+      const hit = lookupConst(star, name, seen);
+      if (hit) return hit;
+    }
     return undefined;
   };
   for (const qo of pendingQueueOps) {
-    const name = qo.queue.literal ?? (qo.queue.ref ? lookupConst(qo.file, qo.queue.ref, new Set()) ?? qo.queue.ref : undefined);
+    const name =
+      qo.queue.literal ?? (qo.queue.ref ? (lookupConst(qo.file, qo.queue.ref, new Set()) ?? qo.queue.ref) : undefined);
     if (!name) continue;
     const qId = `${repo}::queue::${name}`;
     addNode({ id: qId, kind: 'queue', name, tags: autoTags('', name, 'queue') });
@@ -1802,13 +2718,26 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         done.add(siteKey);
         const seen = throughWrapper(fetchWrappers.get(rc.toId)!, wrapperCallArgs.get(rc.key) ?? []);
         if (hasParam(seen.url)) {
-          if (!fetchWrappers.has(rc.fromId)) { fetchWrappers.set(rc.fromId, seen); next.add(rc.fromId); }
+          if (!fetchWrappers.has(rc.fromId)) {
+            fetchWrappers.set(rc.fromId, seen);
+            next.add(rc.fromId);
+          }
           continue;
         }
         const path = normalizePath(renderUrl(seen.url));
         // a URL that is nothing but holes says nothing about where the call goes
         if (!/[A-Za-z0-9]/.test(path.replace(/:param/g, ''))) continue;
-        httpCalls.push({ fromId: rc.fromId, ...('lit' in seen.method ? { method: seen.method.lit } : {}), path, line: rc.line, site: rc.site, deferred: rc.deferred, tx: rc.tx, ...(rc.when ? { when: rc.when } : {}), wrapper: rc.toId });
+        httpCalls.push({
+          fromId: rc.fromId,
+          ...('lit' in seen.method ? { method: seen.method.lit } : {}),
+          path,
+          line: rc.line,
+          site: rc.site,
+          deferred: rc.deferred,
+          tx: rc.tx,
+          ...(rc.when ? { when: rc.when } : {}),
+          wrapper: rc.toId,
+        });
       }
       frontier = next;
     }
@@ -1821,15 +2750,29 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   // declares the route. Every http edge carries its resolution.
   const routes = [...nodes.values()].filter((n) => n.kind === 'route');
   for (const hc of httpCalls) {
-    const meta = withFlags({ ...(hc.method ? { method: hc.method } : {}), path: hc.path, ...(hc.line != null ? { line: hc.line } : {}), ...(hc.wrapper ? { wrapper: hc.wrapper } : {}) }, hc)!;
+    const meta = withFlags(
+      {
+        ...(hc.method ? { method: hc.method } : {}),
+        path: hc.path,
+        ...(hc.line != null ? { line: hc.line } : {}),
+        ...(hc.wrapper ? { wrapper: hc.wrapper } : {}),
+      },
+      hc,
+    )!;
     const abs = hc.path.match(/^(https?:\/\/[^/]+)(\/.*)?$/);
     if (abs) {
       const host = abs[1]!.replace(/^https?:\/\//, '');
       const extId = `${repo}::external::${host}`;
       addNode({ id: extId, kind: 'external', name: host, tags: ['http', 'external'] });
       recordSite('http', hc.fromId, extId, hc);
-      edges.push({ id: `e${edgeSeq++}`, kind: 'http', from: hc.fromId, to: extId, meta: { ...meta, path: abs[2] ?? '/' },
-        resolution: { status: 'resolved', technique: 'fetch→route', confidence: 'HIGH', note: 'call to another host' } });
+      edges.push({
+        id: `e${edgeSeq++}`,
+        kind: 'http',
+        from: hc.fromId,
+        to: extId,
+        meta: { ...meta, path: abs[2] ?? '/' },
+        resolution: { status: 'resolved', technique: 'fetch→route', confidence: 'HIGH', note: 'call to another host' },
+      });
       continue;
     }
     // a templated host (`${base}/x`) normalizes to a leading `:param` — match it as a host wildcard
@@ -1844,14 +2787,31 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const match = hc.method ? atPath.find((r) => r.name.split(' ')[0] === hc.method) : undefined;
     if (match) {
       recordSite('http', hc.fromId, match.id, hc);
-      edges.push({ id: `e${edgeSeq++}`, kind: 'http', from: hc.fromId, to: match.id, meta,
-        resolution: { status: 'resolved', technique: 'fetch→route', confidence: 'HIGH' } });
+      edges.push({
+        id: `e${edgeSeq++}`,
+        kind: 'http',
+        from: hc.fromId,
+        to: match.id,
+        meta,
+        resolution: { status: 'resolved', technique: 'fetch→route', confidence: 'HIGH' },
+      });
       continue;
     }
     // the method is not a literal: the path alone decides, and only when one route serves it
     if (!hc.method && atPath.length === 1) {
-      edges.push({ id: `e${edgeSeq++}`, kind: 'http', from: hc.fromId, to: atPath[0]!.id, meta,
-        resolution: { status: 'heuristic', technique: 'fetch→route', confidence: 'MEDIUM', note: 'the method is not a literal; the only route at this path' } });
+      edges.push({
+        id: `e${edgeSeq++}`,
+        kind: 'http',
+        from: hc.fromId,
+        to: atPath[0]!.id,
+        meta,
+        resolution: {
+          status: 'heuristic',
+          technique: 'fetch→route',
+          confidence: 'MEDIUM',
+          note: 'the method is not a literal; the only route at this path',
+        },
+      });
       continue;
     }
     // several routes at the path and no method the code names: the GET route is assumed — fetch's
@@ -1860,9 +2820,20 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     if (assumed) {
       const others = atPath.filter((r) => r !== assumed).map((r) => r.id);
       recordSite('http', hc.fromId, assumed.id, hc);
-      edges.push({ id: `e${edgeSeq++}`, kind: 'http', from: hc.fromId, to: assumed.id, meta: { ...meta, methodAssumed: 'GET', candidates: others.join(', ') },
-        resolution: { status: 'heuristic', technique: 'fetch→route', confidence: 'MEDIUM', candidates: others,
-          note: `the method is not a literal; ${atPath.length} routes serve this path and the GET one is assumed` } });
+      edges.push({
+        id: `e${edgeSeq++}`,
+        kind: 'http',
+        from: hc.fromId,
+        to: assumed.id,
+        meta: { ...meta, methodAssumed: 'GET', candidates: others.join(', ') },
+        resolution: {
+          status: 'heuristic',
+          technique: 'fetch→route',
+          confidence: 'MEDIUM',
+          candidates: others,
+          note: `the method is not a literal; ${atPath.length} routes serve this path and the GET one is assumed`,
+        },
+      });
       continue;
     }
     // an unknown method stays unknown in the stub's name (`? /x`) — stitching needs a method to match on
@@ -1870,8 +2841,20 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const stubId = `${repo}::unknown::${stubName}`;
     addNode({ id: stubId, kind: 'unknown', name: stubName, tags: ['http', 'unresolved'] });
     recordSite('http', hc.fromId, stubId, hc);
-    edges.push({ id: `e${edgeSeq++}`, kind: 'http', from: hc.fromId, to: stubId, meta,
-      resolution: { status: 'unresolved', technique: 'fetch→route', confidence: 'LOW', candidates: [], note: 'no indexed route serves this path' } });
+    edges.push({
+      id: `e${edgeSeq++}`,
+      kind: 'http',
+      from: hc.fromId,
+      to: stubId,
+      meta,
+      resolution: {
+        status: 'unresolved',
+        technique: 'fetch→route',
+        confidence: 'LOW',
+        candidates: [],
+        note: 'no indexed route serves this path',
+      },
+    });
   }
 
   // ── externals: three sources, one node (01 §2.3.4) ───────────────
@@ -1894,11 +2877,23 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     addNode({ id, kind: 'external', name, tags: ['external', ref.kind], external: ref, ...(store ? { store } : {}) });
     return id;
   };
-  const externalEdge = (fromId: string, extId: string, meta: GraphEdge['meta'], resolution: GraphEdge['resolution']) => {
+  const externalEdge = (
+    fromId: string,
+    extId: string,
+    meta: GraphEdge['meta'],
+    resolution: GraphEdge['resolution'],
+  ) => {
     const key = `http|${fromId}|${extId}`;
     if (seenEdge.has(key)) return;
     seenEdge.add(key);
-    edges.push({ id: `e${edgeSeq++}`, kind: 'http', from: fromId, to: extId, meta, ...(resolution ? { resolution } : {}) });
+    edges.push({
+      id: `e${edgeSeq++}`,
+      kind: 'http',
+      from: fromId,
+      to: extId,
+      meta,
+      ...(resolution ? { resolution } : {}),
+    });
   };
   // a `<path>::<Class>` declaration renames and re-kinds what was detected through that class
   const declaredFor = (file: string, cls?: string) => (cls ? declaredClassExternals.get(`${file}::${cls}`) : undefined);
@@ -1907,11 +2902,30 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   for (const use of sdkUses) {
     const decl = declaredFor(use.file, use.via);
     if (decl && use.via) usedDeclarations.add(`${use.file}::${use.via}`);
-    const extId = externalNodeFor(decl?.name ?? use.name, storeLike({
-      kind: decl?.kind ?? use.kind, source: decl ? 'config' : 'sdk', ...(use.via ? { via: use.via } : {}), ref: use.specifier,
-    }, decl ?? sdkDecls.get(use.specifier)), decl ?? sdkDecls.get(use.specifier));
-    externalEdge(use.fromId, extId, { via: 'sdk', ...(use.line != null ? { line: use.line } : {}) },
-      { status: 'heuristic', technique: 'sdk-import', confidence: 'MEDIUM', note: `uses ${use.specifier} in ${use.file}` });
+    const extId = externalNodeFor(
+      decl?.name ?? use.name,
+      storeLike(
+        {
+          kind: decl?.kind ?? use.kind,
+          source: decl ? 'config' : 'sdk',
+          ...(use.via ? { via: use.via } : {}),
+          ref: use.specifier,
+        },
+        decl ?? sdkDecls.get(use.specifier),
+      ),
+      decl ?? sdkDecls.get(use.specifier),
+    );
+    externalEdge(
+      use.fromId,
+      extId,
+      { via: 'sdk', ...(use.line != null ? { line: use.line } : {}) },
+      {
+        status: 'heuristic',
+        technique: 'sdk-import',
+        confidence: 'MEDIUM',
+        note: `uses ${use.specifier} in ${use.file}`,
+      },
+    );
   }
 
   /**
@@ -1922,7 +2936,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
    * sibling's `fetch` literal; none → no method. Only one hop is followed. A site no public
    * method reaches this way (a private helper nobody public calls) stays where it is.
    */
-  const perMethodSites = <S extends { fromId: string; method?: string; line?: number }>(key: string, sites: S[]): S[] => {
+  const perMethodSites = <S extends { fromId: string; method?: string; line?: number }>(
+    key: string,
+    sites: S[],
+  ): S[] => {
     const methods = classMethods.get(key) ?? [];
     const siteOf = new Map<string, S>();
     for (const site of sites) if (!siteOf.has(site.fromId)) siteOf.set(site.fromId, site);
@@ -1932,7 +2949,11 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     for (const m of methods) {
       if (m.private) continue;
       const own = siteOf.get(m.id);
-      if (own) { out.push(own); covered.add(own.fromId); continue; }
+      if (own) {
+        out.push(own);
+        covered.add(own.fromId);
+        continue;
+      }
       for (const c of calls) {
         if (c.fromId !== m.id) continue;
         const helper = methods.find((h) => h.name === c.callee);
@@ -1963,18 +2984,52 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       continue;
     }
     const extId = externalNodeFor(host, { kind: 'http', source: 'host', via: hostCall.cls, ref: hostCall.constName });
-    externalEdge(hostCall.fromId, extId,
-      withFlags({ ...(hostCall.method ? { method: hostCall.method } : {}), via: 'host', ...(hostCall.line != null ? { line: hostCall.line } : {}) }, hostCall),
-      { status: 'heuristic', technique: 'constant-host', confidence: 'MEDIUM', note: `base URL from ${hostCall.constName}` });
+    externalEdge(
+      hostCall.fromId,
+      extId,
+      withFlags(
+        {
+          ...(hostCall.method ? { method: hostCall.method } : {}),
+          via: 'host',
+          ...(hostCall.line != null ? { line: hostCall.line } : {}),
+        },
+        hostCall,
+      ),
+      {
+        status: 'heuristic',
+        technique: 'constant-host',
+        confidence: 'MEDIUM',
+        note: `base URL from ${hostCall.constName}`,
+      },
+    );
   }
   for (const [key, calls] of declaredHostCalls) {
     const decl = declaredClassExternals.get(key)!;
     const first = calls[0]!;
-    const extId = externalNodeFor(decl.name, storeLike({ kind: decl.kind, source: 'config', via: first.cls, ref: first.constName }, decl), decl);
+    const extId = externalNodeFor(
+      decl.name,
+      storeLike({ kind: decl.kind, source: 'config', via: first.cls, ref: first.constName }, decl),
+      decl,
+    );
     for (const hostCall of perMethodSites(key, calls)) {
-      externalEdge(hostCall.fromId, extId,
-        withFlags({ ...(hostCall.method ? { method: hostCall.method } : {}), via: 'host', ...(hostCall.line != null ? { line: hostCall.line } : {}) }, hostCall),
-        { status: 'heuristic', technique: 'constant-host', confidence: 'MEDIUM', note: `base URL from ${hostCall.constName}` });
+      externalEdge(
+        hostCall.fromId,
+        extId,
+        withFlags(
+          {
+            ...(hostCall.method ? { method: hostCall.method } : {}),
+            via: 'host',
+            ...(hostCall.line != null ? { line: hostCall.line } : {}),
+          },
+          hostCall,
+        ),
+        {
+          status: 'heuristic',
+          technique: 'constant-host',
+          confidence: 'MEDIUM',
+          note: `base URL from ${hostCall.constName}`,
+        },
+      );
     }
   }
 
@@ -1986,10 +3041,27 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const sites = classFetchSites.get(key);
     if (!sites?.length) continue;
     const cls = key.slice(key.indexOf('::') + 2);
-    const extId = externalNodeFor(decl.name, storeLike({ kind: decl.kind, source: 'config', via: cls, ref: decl.import }, decl), decl);
+    const extId = externalNodeFor(
+      decl.name,
+      storeLike({ kind: decl.kind, source: 'config', via: cls, ref: decl.import }, decl),
+      decl,
+    );
     for (const site of perMethodSites(key, sites)) {
-      externalEdge(site.fromId, extId, { ...(site.method ? { method: site.method } : {}), via: 'config', ...(site.line != null ? { line: site.line } : {}) },
-        { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `declared in farsight.config.json → externals as ${decl.import}` });
+      externalEdge(
+        site.fromId,
+        extId,
+        {
+          ...(site.method ? { method: site.method } : {}),
+          via: 'config',
+          ...(site.line != null ? { line: site.line } : {}),
+        },
+        {
+          status: 'resolved',
+          technique: 'annotation-scan',
+          confidence: 'HIGH',
+          note: `declared in farsight.config.json → externals as ${decl.import}`,
+        },
+      );
     }
   }
 
@@ -2003,7 +3075,11 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       const t = resolveTarget(r.file, r.callee);
       if (t) sites.set(t, (sites.get(t) ?? 0) + 1);
     }
-    const ioFrom = new Set(edges.filter((e) => e.kind === 'http' || e.kind === 'reads' || e.kind === 'writes' || e.kind === 'publishes').map((e) => e.from));
+    const ioFrom = new Set(
+      edges
+        .filter((e) => e.kind === 'http' || e.kind === 'reads' || e.kind === 'writes' || e.kind === 'publishes')
+        .map((e) => e.from),
+    );
     const componentAt = (file: string, tag: string): string | undefined => {
       const t = resolveTarget(file, tag);
       return t && nodes.get(t)?.kind === 'component' && sites.get(t) === 1 ? t : undefined;
@@ -2011,27 +3087,50 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     /** a hand-on can go one component further when that child is single-site and does something with the prop */
     const canTake = (childId: string | undefined, attr: string): childId is string =>
       !!childId && !!propFacts.get(childId)?.uses.some((u) => u.prop === attr);
-    const credit = (runner: string, targets: string[], useLine: number, attr: string, handedBy: string, tag: string, via: 'callback-prop' | 'prop-value'): void => {
+    const credit = (
+      runner: string,
+      targets: string[],
+      useLine: number,
+      attr: string,
+      handedBy: string,
+      tag: string,
+      via: 'callback-prop' | 'prop-value',
+    ): void => {
       const runnerName = nodes.get(runner)?.name ?? tag;
       const parentName = nodes.get(handedBy)?.name ?? handedBy;
       for (const t of targets) {
         const target = nodes.get(t);
         if (!target || t === runner || target.kind === 'component' || target.kind === 'page') continue;
-        const kind: GraphEdge['kind'] = target.kind === 'rule' ? 'validates' : target.kind === 'guard' ? 'guards' : 'calls';
+        const kind: GraphEdge['kind'] =
+          target.kind === 'rule' ? 'validates' : target.kind === 'guard' ? 'guards' : 'calls';
         const key = `${kind}|${kind === 'calls' ? runner : t}|${kind === 'calls' ? t : runner}`;
         if (seenEdge.has(key)) continue;
         seenEdge.add(key);
-        const note = via === 'callback-prop'
-          ? `${parentName} hands <${runnerName}> the function that runs this as ${attr}; <${runnerName}> is its only renderer's child and runs it`
-          : `${parentName} computes ${attr} with ${target.name}() and hands the answer to <${runnerName}>, which decides on it`;
-        const res: GraphEdge['resolution'] = { status: 'heuristic', technique: 'callback-prop', confidence: 'MEDIUM', note };
+        const note =
+          via === 'callback-prop'
+            ? `${parentName} hands <${runnerName}> the function that runs this as ${attr}; <${runnerName}> is its only renderer's child and runs it`
+            : `${parentName} computes ${attr} with ${target.name}() and hands the answer to <${runnerName}>, which decides on it`;
+        const res: GraphEdge['resolution'] = {
+          status: 'heuristic',
+          technique: 'callback-prop',
+          confidence: 'MEDIUM',
+          note,
+        };
         const meta = { line: useLine, via, prop: attr, handedBy };
         if (kind === 'calls') addEdge('calls', runner, t, meta, res);
         else addEdge(kind, t, runner, meta, res);
       }
     };
     /** follow one handoff down the hand-on chain to the component(s) that run it */
-    const deliver = (childId: string, attr: string, targets: string[], handedBy: string, tag: string, depth: number, seen: Set<string>): void => {
+    const deliver = (
+      childId: string,
+      attr: string,
+      targets: string[],
+      handedBy: string,
+      tag: string,
+      depth: number,
+      seen: Set<string>,
+    ): void => {
       const k = `${childId}|${attr}`;
       if (depth > 6 || seen.has(k)) return;
       seen.add(k);
@@ -2053,14 +3152,16 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           const t = resolveTarget(facts.file, h.boundCall);
           // a function that does I/O (fetches, reads or writes a table, publishes) is the parent's
           // data load, not an answer the child shows: the walk already has it under the parent
-          if (t && (ioFrom.has(t))) continue;
+          if (t && ioFrom.has(t)) continue;
           if (line0 != null && t) credit(childId, [t], line0, h.attr, fromId, h.tag, 'prop-value');
           continue;
         }
         if (!canTake(childId, h.attr)) continue;
         const targets = h.callees
           ? h.callees.map((c) => resolveTarget(facts.file, c.name)).filter((t): t is string => !!t && t !== fromId)
-          : h.ident ? [resolveTarget(facts.file, h.ident)].filter((t): t is string => !!t && t !== fromId) : [];
+          : h.ident
+            ? [resolveTarget(facts.file, h.ident)].filter((t): t is string => !!t && t !== fromId)
+            : [];
         if (targets.length) deliver(childId, h.attr, [...new Set(targets)], fromId, h.tag, 0, new Set());
       }
     }
@@ -2076,11 +3177,17 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
 
   // the SQL drivers this repo imports — the `sdk` store rule runs in ingestRepo's store pass,
   // over every adapter's tables at once (parsers/src/stores.ts)
-  const drivers = [...sqlDrivers].sort(([a], [b]) => a.localeCompare(b)).map(([spec, files]) => ({ spec, files: files.length }));
+  const drivers = [...sqlDrivers]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([spec, files]) => ({ spec, files: files.length }));
   return {
-    repo, nodes: [...nodes.values()], edges,
+    repo,
+    nodes: [...nodes.values()],
+    edges,
     meta: {
-      ...meta, ...(drivers.length ? { stores: { drivers } } : {}), ...(packagesMeta ? { packages: packagesMeta } : {}),
+      ...meta,
+      ...(drivers.length ? { stores: { drivers } } : {}),
+      ...(packagesMeta ? { packages: packagesMeta } : {}),
       ...(routeGaps.length ? { routes: { gaps: routeGaps } } : {}),
     },
   };
@@ -2099,11 +3206,25 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const pji = new PackageJsonIndex(repoRoot);
     const builtinFiles = new Map<string, Set<string>>();
     let unresolvedAliases = 0;
-    interface Agg { name: string; scope: PackageRef['scope']; project?: string; root?: string; decls: Map<string, PackageDeclaration>; undeclared: Set<string>; importers: Set<string> }
+    interface Agg {
+      name: string;
+      scope: PackageRef['scope'];
+      project?: string;
+      root?: string;
+      decls: Map<string, PackageDeclaration>;
+      undeclared: Set<string>;
+      importers: Set<string>;
+    }
     const pkgs = new Map<string, Agg>();
-    const classified = new Map<string, { name: string; subpath?: string; scope: PackageRef['scope']; root?: string } | null>();
+    const classified = new Map<
+      string,
+      { name: string; subpath?: string; scope: PackageRef['scope']; root?: string } | null
+    >();
     /** One specifier from one file → its package, or null (set aside). Cached per directory + specifier. */
-    const classify = (abs: string, spec: string): { name: string; subpath?: string; scope: PackageRef['scope']; root?: string } | null => {
+    const classify = (
+      abs: string,
+      spec: string,
+    ): { name: string; subpath?: string; scope: PackageRef['scope']; root?: string } | null => {
       const key = `${dirname(abs)}\u0000${spec}`;
       if (classified.has(key)) return classified.get(key)!;
       let out: { name: string; subpath?: string; scope: PackageRef['scope']; root?: string } | null = null;
@@ -2112,8 +3233,16 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         if (hit) {
           const ws = hit.path ? workspacePackageOf(hit, repoRoot) : null;
           if (ws) {
-            const sub = spec.length > ws.name.length && spec.startsWith(ws.name + '/') ? spec.slice(ws.name.length + 1) : undefined;
-            out = { name: ws.name, scope: 'workspace', ...(sub ? { subpath: sub } : {}), ...(ws.root ? { root: ws.root } : {}) };
+            const sub =
+              spec.length > ws.name.length && spec.startsWith(ws.name + '/')
+                ? spec.slice(ws.name.length + 1)
+                : undefined;
+            out = {
+              name: ws.name,
+              scope: 'workspace',
+              ...(sub ? { subpath: sub } : {}),
+              ...(ws.root ? { root: ws.root } : {}),
+            };
           } else if (!hit.path) out = null; // an alias miss — counted by the caller
         } else {
           const p = packageOf(spec);
@@ -2126,13 +3255,33 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const aggOf = (c: { name: string; scope: PackageRef['scope']; root?: string }): Agg => {
       let a = pkgs.get(c.name);
       if (!a) {
-        a = { name: c.name, scope: c.scope, ...(c.scope === 'workspace' ? { project: c.name } : {}), ...(c.root ? { root: c.root } : {}), decls: new Map(), undeclared: new Set(), importers: new Set() };
+        a = {
+          name: c.name,
+          scope: c.scope,
+          ...(c.scope === 'workspace' ? { project: c.name } : {}),
+          ...(c.root ? { root: c.root } : {}),
+          decls: new Map(),
+          undeclared: new Set(),
+          importers: new Set(),
+        };
         pkgs.set(c.name, a);
       }
       return a;
     };
     const idOf = (name: string) => `${repo}::package::${name}`;
-    const moduleEdges = new Map<string, { file: string; pkg: string; spec: string; subpath?: string; line: number; form: string; typeOnly: boolean; names: Set<string> }>();
+    const moduleEdges = new Map<
+      string,
+      {
+        file: string;
+        pkg: string;
+        spec: string;
+        subpath?: string;
+        line: number;
+        form: string;
+        typeOnly: boolean;
+        names: Set<string>;
+      }
+    >();
     for (const f of pkgFacts) {
       if (isBuiltin(f.spec)) {
         const root = f.spec.replace(/^node:/, '').split('/')[0]!;
@@ -2157,7 +3306,16 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         for (const nm of f.names) have.names.add(nm);
         have.typeOnly &&= f.typeOnly;
       } else {
-        moduleEdges.set(k, { file: f.file, pkg: c.name, spec: f.spec, ...(c.subpath ? { subpath: c.subpath } : {}), line: f.line, form: f.form, typeOnly: f.typeOnly, names: new Set(f.names) });
+        moduleEdges.set(k, {
+          file: f.file,
+          pkg: c.name,
+          spec: f.spec,
+          ...(c.subpath ? { subpath: c.subpath } : {}),
+          line: f.line,
+          form: f.form,
+          typeOnly: f.typeOnly,
+          names: new Set(f.names),
+        });
       }
     }
     if (!pkgs.size && !builtinFiles.size && !unresolvedAliases) return undefined;
@@ -2167,7 +3325,9 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       const declarations = [...a.decls.values()].sort((x, y) => x.path.localeCompare(y.path));
       const ranges = new Set(declarations.map((d) => d.range));
       // two package.json files that disagree: the one nearest the source root speaks for the node, `declarations` keeps both
-      const rootMost = declarations.slice().sort((x, y) => x.path.split('/').length - y.path.split('/').length || x.path.localeCompare(y.path))[0];
+      const rootMost = declarations
+        .slice()
+        .sort((x, y) => x.path.split('/').length - y.path.split('/').length || x.path.localeCompare(y.path))[0];
       const version = ranges.size === 1 ? declarations[0]!.range : rootMost?.range;
       const dev = declarations.length > 0 && declarations.every((d) => d.field === 'devDependencies');
       let note: string | undefined;
@@ -2194,17 +3354,35 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       };
       addNode({ id: idOf(a.name), kind: 'package', name: a.name, tags: [], package: ref });
     }
-    const IMPORT_RES = (): GraphEdge['resolution'] => ({ status: 'resolved', technique: 'static-import', confidence: 'HIGH', note: 'the import names the package' });
-    const USE_RES = (): GraphEdge['resolution'] => ({ status: 'resolved', technique: 'static-import', confidence: 'HIGH', note: 'the body uses a binding imported from the package' });
+    const IMPORT_RES = (): GraphEdge['resolution'] => ({
+      status: 'resolved',
+      technique: 'static-import',
+      confidence: 'HIGH',
+      note: 'the import names the package',
+    });
+    const USE_RES = (): GraphEdge['resolution'] => ({
+      status: 'resolved',
+      technique: 'static-import',
+      confidence: 'HIGH',
+      note: 'the body uses a binding imported from the package',
+    });
     for (const m of [...moduleEdges.values()].sort((x, y) => x.file.localeCompare(y.file) || x.line - y.line)) {
       const modId = `${repo}::module::${m.file}`;
       addNode({ id: modId, kind: 'module', name: m.file, loc: { repo, path: m.file, line: 1 }, tags: [] });
-      addEdge('imports', modId, idOf(m.pkg), {
-        specifier: m.spec, line: m.line, form: m.form,
-        ...(m.subpath ? { subpath: m.subpath } : {}),
-        ...(m.names.size ? { names: [...m.names].join(',') } : {}),
-        ...(m.typeOnly ? { typeOnly: true } : {}),
-      }, IMPORT_RES());
+      addEdge(
+        'imports',
+        modId,
+        idOf(m.pkg),
+        {
+          specifier: m.spec,
+          line: m.line,
+          form: m.form,
+          ...(m.subpath ? { subpath: m.subpath } : {}),
+          ...(m.names.size ? { names: [...m.names].join(',') } : {}),
+          ...(m.typeOnly ? { typeOnly: true } : {}),
+        },
+        IMPORT_RES(),
+      );
     }
     const usedOnce = new Set<string>();
     for (const u of pkgUses) {
@@ -2214,9 +3392,17 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       const k = `${u.fromId}|${c.name}`;
       if (usedOnce.has(k)) continue;
       usedOnce.add(k);
-      addEdge('imports', u.fromId, idOf(c.name), { specifier: u.spec, line: u.line, use: true, ...(c.subpath ? { subpath: c.subpath } : {}) }, USE_RES());
+      addEdge(
+        'imports',
+        u.fromId,
+        idOf(c.name),
+        { specifier: u.spec, line: u.line, use: true, ...(c.subpath ? { subpath: c.subpath } : {}) },
+        USE_RES(),
+      );
     }
-    const builtins = [...builtinFiles].sort(([x], [y]) => x.localeCompare(y)).map(([spec, files]) => ({ spec, files: files.size }));
+    const builtins = [...builtinFiles]
+      .sort(([x], [y]) => x.localeCompare(y))
+      .map(([spec, files]) => ({ spec, files: files.size }));
     if (!builtins.length && !unresolvedAliases && !undeclared) return undefined;
     return {
       ...(builtins.length ? { builtins } : {}),
@@ -2268,7 +3454,10 @@ function typeMembers(members: AstNode[]): Map<string, TypeRef> {
 function bindingNames(p: unknown): string[] {
   if (!isNode(p)) return [];
   if (p.type === 'Identifier') return [String(p.name)];
-  if (p.type === 'ObjectPattern') return ((p.properties as AstNode[]) ?? []).flatMap((q) => bindingNames(q.type === 'RestElement' ? q.argument : q.value));
+  if (p.type === 'ObjectPattern')
+    return ((p.properties as AstNode[]) ?? []).flatMap((q) =>
+      bindingNames(q.type === 'RestElement' ? q.argument : q.value),
+    );
   if (p.type === 'ArrayPattern') return ((p.elements as AstNode[]) ?? []).flatMap((q) => bindingNames(q));
   if (p.type === 'AssignmentPattern') return bindingNames(p.left);
   if (p.type === 'RestElement') return bindingNames(p.argument);
@@ -2277,9 +3466,12 @@ function bindingNames(p: unknown): string[] {
 
 /** The parameter list of whatever kind of declaration a node is. */
 function paramsOf(n: AstNode): AstNode[] {
-  const fn = n.type === 'VariableDeclarator' ? (n.init as AstNode | undefined)
-    : n.type === 'MethodDefinition' ? (n.value as AstNode | undefined)
-    : n;
+  const fn =
+    n.type === 'VariableDeclarator'
+      ? (n.init as AstNode | undefined)
+      : n.type === 'MethodDefinition'
+        ? (n.value as AstNode | undefined)
+        : n;
   return isNode(fn) && Array.isArray(fn.params) ? (fn.params as AstNode[]).filter(isNode) : [];
 }
 
@@ -2366,7 +3558,10 @@ function hasDirective(node: AstNode | null | undefined, directive: string): bool
 // fetch sites: the path comes from the caller's argument, the method from the caller's literal.
 
 /** A parameter of the function being walked, or one property of a destructured / object parameter. */
-interface ParamRef { index: number; prop?: string }
+interface ParamRef {
+  index: number;
+  prop?: string;
+}
 /** A URL as the code builds it: literal text, a parameter, or something else (`:param`). */
 type UrlPart = string | ParamRef | null;
 /** What a call argument is, as far as wrapper propagation needs to know. */
@@ -2381,7 +3576,10 @@ interface ArgInfo {
 }
 /** Where a wrapper's method comes from: a literal it writes, a parameter, or nowhere it can say. */
 type MethodSpec = { lit: string } | { unknown: true } | { from: ParamRef; how: 'obj' | 'value' };
-interface FetchWrapper { url: UrlPart[]; method: MethodSpec }
+interface FetchWrapper {
+  url: UrlPart[];
+  method: MethodSpec;
+}
 
 /** name → the parameter it is: plain, defaulted, a TS parameter property, or a destructured field. */
 function paramMapOf(decl: AstNode): Map<string, ParamRef> {
@@ -2391,7 +3589,7 @@ function paramMapOf(decl: AstNode): Map<string, ParamRef> {
     if (p.type === 'AssignmentPattern' && isNode(p.left)) p = p.left as AstNode;
     if (p.type === 'Identifier' && typeof p.name === 'string') out.set(p.name, { index });
     else if (p.type === 'ObjectPattern') {
-      for (const prop of ((p.properties as AstNode[]) ?? [])) {
+      for (const prop of (p.properties as AstNode[]) ?? []) {
         const key = prop.key as AstNode | undefined;
         const keyName = key && typeof (key.name ?? key.value) === 'string' ? String(key.name ?? key.value) : undefined;
         let val = prop.value as AstNode | undefined;
@@ -2407,11 +3605,17 @@ function paramMapOf(decl: AstNode): Map<string, ParamRef> {
 function paramRefOf(n: unknown, pm: Map<string, ParamRef>): ParamRef | undefined {
   if (!isNode(n)) return undefined;
   if (n.type === 'Identifier') return pm.get(String(n.name));
-  if ((n.type === 'MemberExpression' || n.type === 'StaticMemberExpression') && !n.computed && isNode(n.object) && isNode(n.property)) {
+  if (
+    (n.type === 'MemberExpression' || n.type === 'StaticMemberExpression') &&
+    !n.computed &&
+    isNode(n.object) &&
+    isNode(n.property)
+  ) {
     const base = paramRefOf(n.object, pm);
     if (base && !base.prop) return { index: base.index, prop: String((n.property as AstNode).name) };
   }
-  if (n.type === 'ChainExpression' || n.type === 'TSAsExpression' || n.type === 'TSNonNullExpression') return paramRefOf(n.expression, pm);
+  if (n.type === 'ChainExpression' || n.type === 'TSAsExpression' || n.type === 'TSNonNullExpression')
+    return paramRefOf(n.expression, pm);
   return undefined;
 }
 
@@ -2439,8 +3643,12 @@ function argInfoOf(n: unknown, pm: Map<string, ParamRef>, depth = 0): ArgInfo | 
   if (n.type === 'ObjectExpression') {
     const props: Record<string, ArgInfo> = {};
     const spreads: ParamRef[] = [];
-    for (const p of ((n.properties as AstNode[]) ?? [])) {
-      if (p.type === 'SpreadElement') { const r = paramRefOf(p.argument, pm); if (r) spreads.push(r); continue; }
+    for (const p of (n.properties as AstNode[]) ?? []) {
+      if (p.type === 'SpreadElement') {
+        const r = paramRefOf(p.argument, pm);
+        if (r) spreads.push(r);
+        continue;
+      }
       if (p.type !== 'Property' && p.type !== 'ObjectProperty') continue;
       const key = p.key as AstNode | undefined;
       const keyName = key && !p.computed ? String(key.name ?? key.value) : undefined;
@@ -2466,7 +3674,10 @@ function argInfoOf(n: unknown, pm: Map<string, ParamRef>, depth = 0): ArgInfo | 
 const hasParam = (url: UrlPart[]): boolean => {
   for (const x of url) {
     if (x === null) continue;
-    if (typeof x === 'string') { if (x) return false; continue; }
+    if (typeof x === 'string') {
+      if (x) return false;
+      continue;
+    }
     return true;
   }
   return false;
@@ -2518,7 +3729,8 @@ function methodOfObject(obj: ArgInfo): MethodSpec | undefined {
 function argAt(args: (ArgInfo | undefined)[], ref: ParamRef): ArgInfo | undefined {
   const a = args[ref.index];
   if (!a || !ref.prop) return a;
-  if (a.param && !a.param.prop) return { param: { index: a.param.index, prop: ref.prop }, url: [{ index: a.param.index, prop: ref.prop }] };
+  if (a.param && !a.param.prop)
+    return { param: { index: a.param.index, prop: ref.prop }, url: [{ index: a.param.index, prop: ref.prop }] };
   return a.props?.[ref.prop];
 }
 
@@ -2530,7 +3742,10 @@ function argAt(args: (ArgInfo | undefined)[], ref: ParamRef): ArgInfo | undefine
 function throughWrapper(w: FetchWrapper, args: (ArgInfo | undefined)[]): FetchWrapper {
   const url: UrlPart[] = [];
   for (const part of w.url) {
-    if (part === null || typeof part === 'string') { url.push(part); continue; }
+    if (part === null || typeof part === 'string') {
+      url.push(part);
+      continue;
+    }
     const a = argAt(args, part);
     if (a?.url) url.push(...a.url);
     else url.push(null);
@@ -2593,14 +3808,21 @@ function fetchMethod(optionsArg: AstNode | undefined): string | undefined {
 }
 
 /** Helper names that say the verb themselves: `fetch(url, post(ctx, body))`. */
-const VERB_HELPERS: Record<string, string> = { post: 'POST', put: 'PUT', patch: 'PATCH', del: 'DELETE', delete: 'DELETE' };
+const VERB_HELPERS: Record<string, string> = {
+  post: 'POST',
+  put: 'PUT',
+  patch: 'PATCH',
+  del: 'DELETE',
+  delete: 'DELETE',
+};
 
 /** The plain name a call's callee ends in: `post` for `post(…)` and `http.post(…)`. */
 function calleeTail(call: AstNode): string | undefined {
   const c = call.callee as AstNode | undefined;
   if (!isNode(c)) return undefined;
   if (c.type === 'Identifier') return String(c.name);
-  if ((c.type === 'MemberExpression' || c.type === 'StaticMemberExpression') && !c.computed && isNode(c.property)) return String((c.property as AstNode).name);
+  if ((c.type === 'MemberExpression' || c.type === 'StaticMemberExpression') && !c.computed && isNode(c.property))
+    return String((c.property as AstNode).name);
   return undefined;
 }
 
@@ -2611,7 +3833,7 @@ function calleeTail(call: AstNode): string | undefined {
  * name when it is a verb (`post`, `put`, `patch`, `del`). Undefined when none says — never a guess.
  */
 function initCallMethod(call: AstNode, depth = 0): string | undefined {
-  for (const a of ((call.arguments as AstNode[]) ?? [])) {
+  for (const a of (call.arguments as AstNode[]) ?? []) {
     if (!isNode(a)) continue;
     if (a.type === 'ObjectExpression') {
       const lit = methodLiteral(a);
@@ -2633,7 +3855,7 @@ function initCallMethod(call: AstNode, depth = 0): string | undefined {
 function initCallSpec(call: AstNode, pm: Map<string, ParamRef>): MethodSpec {
   const lit = initCallMethod(call);
   if (lit) return { lit };
-  for (const a of ((call.arguments as AstNode[]) ?? [])) {
+  for (const a of (call.arguments as AstNode[]) ?? []) {
     if (!isNode(a) || a.type !== 'ObjectExpression') continue;
     const m = methodOfObject(argInfoOf(a, pm) ?? {});
     if (m && !('lit' in m)) return m;
@@ -2647,7 +3869,7 @@ function initCallSpec(call: AstNode, pm: Map<string, ParamRef>): MethodSpec {
  */
 function methodLiteral(obj: AstNode | undefined): string | undefined | null {
   if (!isNode(obj) || obj.type !== 'ObjectExpression') return null;
-  for (const p of ((obj.properties as AstNode[]) ?? [])) {
+  for (const p of (obj.properties as AstNode[]) ?? []) {
     if (p.type !== 'Property' && p.type !== 'ObjectProperty') continue;
     const key = p.key as AstNode | undefined;
     if (!key || String(key.name ?? key.value) !== 'method') continue;
@@ -2662,7 +3884,7 @@ function sqlLiteralText(n: AstNode): string | null {
   if ((n.type === 'Literal' || n.type === 'StringLiteral') && typeof n.value === 'string') return n.value;
   if (n.type === 'TemplateLiteral') {
     const quasis = (n.quasis as AstNode[]) ?? [];
-    return quasis.map((q) => ((q.value as { cooked?: string })?.cooked ?? '')).join(' ? ');
+    return quasis.map((q) => (q.value as { cooked?: string })?.cooked ?? '').join(' ? ');
   }
   return null;
 }
@@ -2681,7 +3903,10 @@ function innermostCallee(n: unknown): string | null {
   let cur: AstNode | null = isNode(n) ? n : null;
   while (cur) {
     // oxc wraps `?.` in a ChainExpression around an ordinary CallExpression
-    if (cur.type === 'ChainExpression' && isNode(cur.expression)) { cur = cur.expression as AstNode; continue; }
+    if (cur.type === 'ChainExpression' && isNode(cur.expression)) {
+      cur = cur.expression as AstNode;
+      continue;
+    }
     if (cur.type !== 'CallExpression') return null;
     const callee = cur.callee as AstNode | undefined;
     if (!isNode(callee)) return null;
@@ -2689,7 +3914,10 @@ function innermostCallee(n: unknown): string | null {
     if (callee.type === 'MemberExpression' || callee.type === 'StaticMemberExpression') {
       const prop = callee.property as AstNode | undefined;
       const tail = prop && typeof prop.name === 'string' ? prop.name : null;
-      if (tail && PROMISE_TAILS.has(tail) && isNode(callee.object)) { cur = callee.object as AstNode; continue; }
+      if (tail && PROMISE_TAILS.has(tail) && isNode(callee.object)) {
+        cur = callee.object as AstNode;
+        continue;
+      }
     }
     return null;
   }
@@ -2708,7 +3936,6 @@ function jsxName(n: unknown): string | null {
 function leadingComment(source: string, start: number): string | null {
   return docCommentAbove(source, start, /^\s*(?:export\s+)?(?:async\s+)?(?:const\s+)?\s*$/);
 }
-
 
 // ── branch extraction (Journey forks) ────────────────────────────
 
@@ -2730,8 +3957,17 @@ function negate(source: string, test: AstNode): string {
   if (t.type === 'UnaryExpression' && t.operator === '!' && isNode(t.argument)) {
     return condText(source, t.argument as AstNode);
   }
-  if (t.type === 'BinaryExpression' && typeof t.operator === 'string' && NEGATE_FLIP[t.operator] && isNode(t.left) && isNode(t.right)) {
-    return `${condText(source, t.left as AstNode)} ${NEGATE_FLIP[t.operator]} ${condText(source, t.right as AstNode)}`.slice(0, 120);
+  if (
+    t.type === 'BinaryExpression' &&
+    typeof t.operator === 'string' &&
+    NEGATE_FLIP[t.operator] &&
+    isNode(t.left) &&
+    isNode(t.right)
+  ) {
+    return `${condText(source, t.left as AstNode)} ${NEGATE_FLIP[t.operator]} ${condText(source, t.right as AstNode)}`.slice(
+      0,
+      120,
+    );
   }
   return `!(${condText(source, t)})`.slice(0, 120);
 }
@@ -2741,16 +3977,18 @@ function containsFlow(n: unknown): boolean {
   let found = false;
   walk(n, (b) => {
     if (found) return false;
-    if (b.type === 'CallExpression' || b.type === 'JSXElement') { found = true; return false; }
+    if (b.type === 'CallExpression' || b.type === 'JSXElement') {
+      found = true;
+      return false;
+    }
   });
   return found;
 }
 
 /** Does an arm end in return/throw (its last top-level statement)? Guard-clause signal. */
 function armExits(arm: AstNode): boolean {
-  const last = arm.type === 'BlockStatement' && Array.isArray(arm.body)
-    ? (arm.body as AstNode[]).filter(isNode).at(-1)
-    : arm;
+  const last =
+    arm.type === 'BlockStatement' && Array.isArray(arm.body) ? (arm.body as AstNode[]).filter(isNode).at(-1) : arm;
   return !!last && (last.type === 'ReturnStatement' || last.type === 'ThrowStatement');
 }
 
@@ -2760,23 +3998,33 @@ function armExits(arm: AstNode): boolean {
  * to the right call sites downstream. Static conditions only.
  */
 function reportBranchLimit(context: { path: string; nodeId: string; line: number }): void {
-  currentRead()?.report({ code: 'resource-limit', severity: 'warning', adapter: 'ts-js', ...context,
-    reason: 'branch-points', message: 'Branch inspection omitted points beyond this declaration’s limit.' });
+  currentRead()?.report({
+    code: 'resource-limit',
+    severity: 'warning',
+    adapter: 'ts-js',
+    ...context,
+    reason: 'branch-points',
+    message: 'Branch inspection omitted points beyond this declaration’s limit.',
+  });
 }
 
-function extractBranches(body: AstNode | null, source: string, line: (offset: number) => number,
-  context: { path: string; nodeId: string; line: number }): BranchPoint[] {
+function extractBranches(
+  body: AstNode | null,
+  source: string,
+  line: (offset: number) => number,
+  context: { path: string; nodeId: string; line: number },
+): BranchPoint[] {
   const out: BranchPoint[] = [];
   const span = (n: AstNode) => ({ line: line(n.start ?? 0), endLine: line(n.end ?? 0) });
   // fork/arm labels from `// @business …` directives — only present the key when found
   const bpBiz = (stmtOffset: number, testOffset?: number): { business?: string } => {
-    const b = leadingBranchLabel(source, stmtOffset)
-      ?? (testOffset != null ? trailingBranchLabel(source, testOffset) : undefined);
+    const b =
+      leadingBranchLabel(source, stmtOffset) ??
+      (testOffset != null ? trailingBranchLabel(source, testOffset) : undefined);
     return b ? { business: b } : {};
   };
   const armBiz = (offset: number, leadingToo = false): { business?: string } => {
-    const b = trailingBranchLabel(source, offset)
-      ?? (leadingToo ? leadingBranchLabel(source, offset) : undefined);
+    const b = trailingBranchLabel(source, offset) ?? (leadingToo ? leadingBranchLabel(source, offset) : undefined);
     return b ? { business: b } : {};
   };
   walk(body, (n) => {
@@ -2787,12 +4035,27 @@ function extractBranches(body: AstNode | null, source: string, line: (offset: nu
       const test = n.test as AstNode;
       const consequent = n.consequent as AstNode;
       const alternate = isNode(n.alternate) ? (n.alternate as AstNode) : null;
-      const arms: BranchArm[] = [{ label: 'then', requires: condText(source, test), ...span(consequent), ...armBiz(consequent.start ?? 0) }];
+      const arms: BranchArm[] = [
+        { label: 'then', requires: condText(source, test), ...span(consequent), ...armBiz(consequent.start ?? 0) },
+      ];
       // else-if chains need no special case: this `else` arm spans the whole
       // alternate, so the nested if's own BranchPoint + containment give the conjunction
-      if (alternate) arms.push({ label: 'else', requires: negate(source, test), ...span(alternate), ...armBiz(alternate.start ?? 0) });
+      if (alternate)
+        arms.push({
+          label: 'else',
+          requires: negate(source, test),
+          ...span(alternate),
+          ...armBiz(alternate.start ?? 0),
+        });
       const exits = armExits(consequent) || (!!alternate && armExits(alternate));
-      out.push({ kind: 'if', line: line(test.start ?? n.start ?? 0), condition: condText(source, test), ...(exits ? { exits: true as const } : {}), ...bpBiz(n.start ?? 0, test.start ?? 0), arms });
+      out.push({
+        kind: 'if',
+        line: line(test.start ?? n.start ?? 0),
+        condition: condText(source, test),
+        ...(exits ? { exits: true as const } : {}),
+        ...bpBiz(n.start ?? 0, test.start ?? 0),
+        arms,
+      });
       return;
     }
 
@@ -2811,7 +4074,15 @@ function extractBranches(body: AstNode | null, source: string, line: (offset: nu
         const lastStmt = ((c.consequent as AstNode[]) ?? []).filter(isNode).at(-1);
         if (lastStmt && (lastStmt.type === 'ReturnStatement' || lastStmt.type === 'ThrowStatement')) exits = true;
       }
-      if (arms.length) out.push({ kind: 'switch', line: line((n.discriminant as AstNode).start ?? n.start ?? 0), condition: disc, ...(exits ? { exits: true as const } : {}), ...bpBiz(n.start ?? 0, (n.discriminant as AstNode).start ?? 0), arms });
+      if (arms.length)
+        out.push({
+          kind: 'switch',
+          line: line((n.discriminant as AstNode).start ?? n.start ?? 0),
+          condition: disc,
+          ...(exits ? { exits: true as const } : {}),
+          ...bpBiz(n.start ?? 0, (n.discriminant as AstNode).start ?? 0),
+          arms,
+        });
       return;
     }
 
@@ -2819,11 +4090,23 @@ function extractBranches(body: AstNode | null, source: string, line: (offset: nu
       if (!containsFlow(n.consequent) && !containsFlow(n.alternate)) return;
       const test = n.test as AstNode;
       out.push({
-        kind: 'ternary', line: line(test.start ?? n.start ?? 0), condition: condText(source, test),
+        kind: 'ternary',
+        line: line(test.start ?? n.start ?? 0),
+        condition: condText(source, test),
         ...bpBiz(n.start ?? 0, test.start ?? 0),
         arms: [
-          { label: 'then', requires: condText(source, test), ...span(n.consequent as AstNode), ...armBiz((n.consequent as AstNode).start ?? 0) },
-          { label: 'else', requires: negate(source, test), ...span(n.alternate as AstNode), ...armBiz((n.alternate as AstNode).start ?? 0) },
+          {
+            label: 'then',
+            requires: condText(source, test),
+            ...span(n.consequent as AstNode),
+            ...armBiz((n.consequent as AstNode).start ?? 0),
+          },
+          {
+            label: 'else',
+            requires: negate(source, test),
+            ...span(n.alternate as AstNode),
+            ...armBiz((n.alternate as AstNode).start ?? 0),
+          },
         ],
       });
       return;
@@ -2834,11 +4117,15 @@ function extractBranches(body: AstNode | null, source: string, line: (offset: nu
       const op = String(n.operator);
       const lhs = n.left as AstNode;
       const requires =
-        op === '&&' ? condText(source, lhs)
-        : op === '||' ? negate(source, lhs)
-        : `${condText(source, lhs)} == null`.slice(0, 120); // ??
+        op === '&&'
+          ? condText(source, lhs)
+          : op === '||'
+            ? negate(source, lhs)
+            : `${condText(source, lhs)} == null`.slice(0, 120); // ??
       out.push({
-        kind: 'logical', line: line(lhs.start ?? n.start ?? 0), condition: condText(source, n),
+        kind: 'logical',
+        line: line(lhs.start ?? n.start ?? 0),
+        condition: condText(source, n),
         ...bpBiz(n.start ?? 0, lhs.start ?? 0),
         arms: [{ label: 'taken', requires, ...span(n.right as AstNode), ...armBiz((n.right as AstNode).start ?? 0) }],
       });
@@ -2851,11 +4138,18 @@ function extractBranches(body: AstNode | null, source: string, line: (offset: nu
       const catchBody = isNode(handler.body) ? (handler.body as AstNode) : handler;
       const exits = armExits(n.block as AstNode) || armExits(catchBody);
       out.push({
-        kind: 'catch', line: line(n.start ?? 0), condition: 'exception in try',
+        kind: 'catch',
+        line: line(n.start ?? 0),
+        condition: 'exception in try',
         ...(exits ? { exits: true as const } : {}),
         ...bpBiz(n.start ?? 0), // try has no discriminant line — leading comment only
         arms: [
-          { label: 'try', requires: 'no exception thrown', ...span(n.block as AstNode), ...armBiz((n.block as AstNode).start ?? 0) },
+          {
+            label: 'try',
+            requires: 'no exception thrown',
+            ...span(n.block as AstNode),
+            ...armBiz((n.block as AstNode).start ?? 0),
+          },
           { label: 'catch', requires: 'exception thrown', ...span(handler), ...armBiz(handler.start ?? 0) },
         ],
       });
@@ -2882,7 +4176,10 @@ export const tsJsAdapter: LanguageAdapter = {
   async ingest(repoPath, options) {
     const extraction = extractTsJs(repoPath, options ?? {});
     let step = extraction.next();
-    while (!step.done) { await yieldToEventLoop(); step = extraction.next(); }
+    while (!step.done) {
+      await yieldToEventLoop();
+      step = extraction.next();
+    }
     return step.value;
   },
 };

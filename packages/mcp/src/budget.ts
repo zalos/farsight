@@ -53,7 +53,7 @@ export interface BudgetCut {
 interface Block {
   heading: string | null;
   level: number;
-  lines: string[];        // the heading line (if any) and its loose rows, before any child heading
+  lines: string[]; // the heading line (if any) and its loose rows, before any child heading
   children: Block[];
 }
 
@@ -68,7 +68,10 @@ export function idsIn(text: string): string[] {
   ID_IN_TICKS.lastIndex = 0;
   for (let m = ID_IN_TICKS.exec(text); m; m = ID_IN_TICKS.exec(text)) {
     const id = m[1]!;
-    if (!seen.has(id)) { seen.add(id); out.push(id); }
+    if (!seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
   }
   return out;
 }
@@ -102,7 +105,8 @@ function outline(lines: string[]): { head: string[]; blocks: Block[] } {
   return { head, blocks: root.children };
 }
 
-const blockText = (b: Block): string => [b.lines.join('\n'), ...b.children.map(blockText)].filter((x) => x !== '').join('\n');
+const blockText = (b: Block): string =>
+  [b.lines.join('\n'), ...b.children.map(blockText)].filter((x) => x !== '').join('\n');
 const blockSize = (b: Block): number => blockText(b).length + 1;
 
 /**
@@ -129,9 +133,17 @@ export function cutToBudget(
   let result = cutOnce(head, blocks, budget * CHARS_PER_TOKEN - reserve);
   for (let tries = 0; tries < 4; tries++) {
     const excluded = [...new Set(result.leftOut.flatMap((p) => p.ids))];
-    const section = leftOutSection({ budget, tokens, leftOut: result.leftOut, excluded, call, ...(handle ? { handle } : {}) });
+    const section = leftOutSection({
+      budget,
+      tokens,
+      leftOut: result.leftOut,
+      excluded,
+      call,
+      ...(handle ? { handle } : {}),
+    });
     const out = [...result.kept, '', ...section].join('\n');
-    if (estimateTokens(out) <= budget || tries === 3) return { text: out, cut: true, budget, tokens, leftOut: result.leftOut, excluded };
+    if (estimateTokens(out) <= budget || tries === 3)
+      return { text: out, cut: true, budget, tokens, leftOut: result.leftOut, excluded };
     reserve += out.length - budget * CHARS_PER_TOKEN + 200;
     result = cutOnce(head, blocks, budget * CHARS_PER_TOKEN - reserve);
   }
@@ -154,27 +166,51 @@ function cutOnce(head: string[], blocks: Block[], room: number): { kept: string[
   };
   // the head is kept row by row: its first line always, so the answer still says what it is
   for (const [i, line] of head.entries()) {
-    if (i === 0 || line.length + 1 <= room) { kept.push(line); room -= line.length + 1; }
-    else { full = true; leave([], null, head.slice(i).join('\n')); break; }
+    if (i === 0 || line.length + 1 <= room) {
+      kept.push(line);
+      room -= line.length + 1;
+    } else {
+      full = true;
+      leave([], null, head.slice(i).join('\n'));
+      break;
+    }
   }
   const walk = (bs: Block[], where: string[]) => {
     let keptHere = 0;
     for (const b of bs) {
-      if (full) { leave(where, b.heading, blockText(b)); continue; }
+      if (full) {
+        leave(where, b.heading, blockText(b));
+        continue;
+      }
       const size = blockSize(b);
-      if (size <= room) { kept.push(blockText(b)); room -= size; keptHere++; continue; }
+      if (size <= room) {
+        kept.push(blockText(b));
+        room -= size;
+        keptHere++;
+        continue;
+      }
       const openable = b.level <= 2 || keptHere === 0;
       const headLine = b.lines[0]!;
-      if (!openable || headLine.length + 1 > room) { full = true; leave(where, b.heading, blockText(b)); continue; }
-      kept.push(headLine); room -= headLine.length + 1; keptHere++;
+      if (!openable || headLine.length + 1 > room) {
+        full = true;
+        leave(where, b.heading, blockText(b));
+        continue;
+      }
+      kept.push(headLine);
+      room -= headLine.length + 1;
+      keptHere++;
       const inner = [...where, b.heading ?? ''];
       let r = 1;
       for (; r < b.lines.length; r++) {
         const line = b.lines[r]!;
         if (line.length + 1 > room) break;
-        kept.push(line); room -= line.length + 1;
+        kept.push(line);
+        room -= line.length + 1;
       }
-      if (r < b.lines.length) { full = true; leave(inner, null, b.lines.slice(r).join('\n')); }
+      if (r < b.lines.length) {
+        full = true;
+        leave(inner, null, b.lines.slice(r).join('\n'));
+      }
       walk(b.children, inner);
     }
   };
@@ -193,8 +229,12 @@ const PARTS_SHOWN = 12;
  * Then the same facts as one JSON line, `excluded_by_budget` and `expand`, for an agent that parses.
  */
 export function leftOutSection(o: {
-  budget: number; tokens: number; leftOut: LeftOutPart[]; excluded: string[];
-  call: { tool: string; args?: Record<string, unknown> }; handle?: string;
+  budget: number;
+  tokens: number;
+  leftOut: LeftOutPart[];
+  excluded: string[];
+  call: { tool: string; args?: Record<string, unknown> };
+  handle?: string;
 }): string[] {
   const parts = o.leftOut;
   const rows = parts.reduce((s, p) => s + p.lines, 0);
@@ -203,22 +243,33 @@ export function leftOutSection(o: {
     `cut to stay under the budget of ${o.budget} tokens (a rough count: characters ÷ 4; the whole answer is about ${o.tokens}) — ${rows} line(s) in ${parts.length} part(s), naming ${o.excluded.length} id(s):`,
   ];
   for (const p of parts.slice(0, PARTS_SHOWN)) {
-    const where = [...p.where.filter(Boolean), ...(p.heading ? [p.heading] : [])].map(shortHeading).join(' › ') || 'the head of the answer';
+    const where =
+      [...p.where.filter(Boolean), ...(p.heading ? [p.heading] : [])].map(shortHeading).join(' › ') ||
+      'the head of the answer';
     out.push(`- ${where} — ${p.lines} line(s)${p.ids.length ? `, ${p.ids.length} id(s)` : ''}`);
   }
   if (parts.length > PARTS_SHOWN) out.push(`- … +${parts.length - PARTS_SHOWN} more part(s)`);
   if (o.excluded.length) {
-    out.push(`ids: ${o.excluded.slice(0, IDS_SHOWN).map((id) => `\`${id}\``).join(' · ')}${o.excluded.length > IDS_SHOWN ? ` · … +${o.excluded.length - IDS_SHOWN} more` : ''}`);
+    out.push(
+      `ids: ${o.excluded
+        .slice(0, IDS_SHOWN)
+        .map((id) => `\`${id}\``)
+        .join(' · ')}${o.excluded.length > IDS_SHOWN ? ` · … +${o.excluded.length - IDS_SHOWN} more` : ''}`,
+    );
   }
   const expandIds = o.handle ? [o.handle] : o.excluded.slice(0, IDS_SHOWN);
   const again = { ...(o.call.args ?? {}), budget: Math.ceil(o.tokens * 1.1) };
-  out.push(`expand them: expand ${JSON.stringify({ ids: expandIds })}${o.handle ? ` (${o.handle} returns every part left out of this answer; ids return the parts that name them)` : ''} — or the whole answer: ${o.call.tool} ${JSON.stringify(again)}`);
+  out.push(
+    `expand them: expand ${JSON.stringify({ ids: expandIds })}${o.handle ? ` (${o.handle} returns every part left out of this answer; ids return the parts that name them)` : ''} — or the whole answer: ${o.call.tool} ${JSON.stringify(again)}`,
+  );
   // the JSON line names the same ids, as many as the text does; `excluded_total` says how many there are in all
-  out.push(JSON.stringify({
-    excluded_by_budget: o.excluded.slice(0, IDS_SHOWN),
-    ...(o.excluded.length > IDS_SHOWN ? { excluded_total: o.excluded.length } : {}),
-    expand: { tool: 'expand', args: { ids: expandIds } },
-  }));
+  out.push(
+    JSON.stringify({
+      excluded_by_budget: o.excluded.slice(0, IDS_SHOWN),
+      ...(o.excluded.length > IDS_SHOWN ? { excluded_total: o.excluded.length } : {}),
+      expand: { tool: 'expand', args: { ids: expandIds } },
+    }),
+  );
   return out;
 }
 
@@ -232,7 +283,12 @@ export function shortHeading(h: string): string {
 export function isJson(text: string): boolean {
   const s = text.trimStart();
   if (!(s.startsWith('{') || s.startsWith('['))) return false;
-  try { JSON.parse(text); return true; } catch { return false; }
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The budget a call runs under: its own, else the workspace's, else the default; never under the floor. */

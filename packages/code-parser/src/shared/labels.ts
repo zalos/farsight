@@ -34,14 +34,21 @@ export function leadingBranchLabel(source: string, startOffset: number): string 
   if (above.endsWith('*/')) {
     const open = above.lastIndexOf('/*');
     if (open < 0) return undefined;
-    const inner = above.slice(open).replace(/^\/\*+/, '').replace(/\*\/$/, '').replace(/^\s*\*\s?/gm, ' ');
+    const inner = above
+      .slice(open)
+      .replace(/^\/\*+/, '')
+      .replace(/\*\/$/, '')
+      .replace(/^\s*\*\s?/gm, ' ');
     return businessDirective(inner);
   }
   // stacked `//` line comments
   const collected: string[] = [];
   for (const raw of above.split('\n').reverse()) {
     const t = raw.trim();
-    if (t.startsWith('//')) { collected.unshift(t.replace(/^\/\/+/, '').trim()); continue; }
+    if (t.startsWith('//')) {
+      collected.unshift(t.replace(/^\/\/+/, '').trim());
+      continue;
+    }
     break;
   }
   return collected.length ? businessDirective(collected.join(' ')) : undefined;
@@ -61,6 +68,12 @@ export function trailingBranchLabel(source: string, startOffset: number): string
 
 /** Comparison flips for AST-aware `else`-arm negation — shared across languages. */
 export const NEGATE_FLIP: Record<string, string> = {
-  '===': '!==', '!==': '===', '==': '!=', '!=': '==',
-  '<': '>=', '>=': '<', '>': '<=', '<=': '>',
+  '===': '!==',
+  '!==': '===',
+  '==': '!=',
+  '!=': '==',
+  '<': '>=',
+  '>=': '<',
+  '>': '<=',
+  '<=': '>',
 };

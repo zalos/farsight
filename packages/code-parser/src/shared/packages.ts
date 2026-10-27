@@ -64,7 +64,8 @@ export function workspacePackageOf(hit: AliasHit, repoRoot: string): { name: str
     const r = relative(repoRoot, abs);
     return r.startsWith('..') ? undefined : r || '.';
   };
-  if (hit.via === 'workspace' && hit.workspace) return { name: hit.workspace.name, ...(rel(hit.workspace.dir) ? { root: rel(hit.workspace.dir) } : {}) };
+  if (hit.via === 'workspace' && hit.workspace)
+    return { name: hit.workspace.name, ...(rel(hit.workspace.dir) ? { root: rel(hit.workspace.dir) } : {}) };
   if (hit.via !== 'paths' || !hit.pattern) return null;
   if (!hit.pattern.includes('*')) {
     const root = hit.target && hit.baseDir ? rel(dirname(resolvePath(hit.baseDir, hit.target))) : undefined;
@@ -75,11 +76,19 @@ export function workspacePackageOf(hit: AliasHit, repoRoot: string): { name: str
   const first = hit.star.split('/')[0]!;
   if (!first) return null;
   const tpl = hit.target ?? '';
-  const root = hit.baseDir && tpl.includes('*') ? rel(resolvePath(hit.baseDir, tpl.slice(0, tpl.indexOf('*')) + first)) : undefined;
+  const root =
+    hit.baseDir && tpl.includes('*')
+      ? rel(resolvePath(hit.baseDir, tpl.slice(0, tpl.indexOf('*')) + first))
+      : undefined;
   return { name: `${scoped[1]}${first}`, ...(root ? { root } : {}) };
 }
 
-const FIELDS: PackageDeclaration['field'][] = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+const FIELDS: PackageDeclaration['field'][] = [
+  'dependencies',
+  'devDependencies',
+  'peerDependencies',
+  'optionalDependencies',
+];
 
 /**
  * Where packages are declared: the nearest `package.json` above an importing file that names
@@ -99,7 +108,8 @@ export class PackageJsonIndex {
       if (fields) {
         for (let i = 0; i < FIELDS.length; i++) {
           const range = fields[i]![name];
-          if (typeof range === 'string') return { path: relative(root, join(dir, 'package.json')) || 'package.json', range, field: FIELDS[i]! };
+          if (typeof range === 'string')
+            return { path: relative(root, join(dir, 'package.json')) || 'package.json', range, field: FIELDS[i]! };
         }
       }
       if (dir === root || relative(root, dir).startsWith('..')) return null;
@@ -116,7 +126,9 @@ export class PackageJsonIndex {
         const pkg = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
         out = FIELDS.map((f) => (pkg[f] && typeof pkg[f] === 'object' ? (pkg[f] as Record<string, string>) : {}));
       }
-    } catch { /* no package.json here, or one that does not parse: nothing declared */ }
+    } catch {
+      /* no package.json here, or one that does not parse: nothing declared */
+    }
     this.byDir.set(dir, out);
     return out;
   }

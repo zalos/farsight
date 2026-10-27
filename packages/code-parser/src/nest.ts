@@ -17,7 +17,13 @@ export const NEST_COMMON = '@nestjs/common';
 
 /** Method decorators → HTTP verb. `@All` is deliberately absent: it is a gap, not a verb. */
 export const NEST_VERBS: Record<string, string> = {
-  Get: 'GET', Post: 'POST', Put: 'PUT', Patch: 'PATCH', Delete: 'DELETE', Head: 'HEAD', Options: 'OPTIONS',
+  Get: 'GET',
+  Post: 'POST',
+  Put: 'PUT',
+  Patch: 'PATCH',
+  Delete: 'DELETE',
+  Head: 'HEAD',
+  Options: 'OPTIONS',
 };
 
 /** What one file imports from Nest: its `@nestjs/common` bindings, and whether it imports any `@nestjs/*` package at all. */
@@ -38,20 +44,21 @@ export function readNestFile(program: AstNode): NestFile {
   const bindings = new Map<string, string>();
   const coreBindings = new Map<string, string>();
   let nest = false;
-  for (const stmt of ((program.body as AstNode[]) ?? [])) {
+  for (const stmt of (program.body as AstNode[]) ?? []) {
     if (!isNode(stmt) || stmt.type !== 'ImportDeclaration' || stmt.importKind === 'type') continue;
     const src = (stmt.source as AstNode | undefined)?.value;
     if (typeof src !== 'string' || !src.startsWith('@nestjs/')) continue;
     nest = true;
     const target = src === NEST_COMMON ? bindings : src === '@nestjs/core' ? coreBindings : undefined;
     if (!target) continue;
-    for (const spec of ((stmt.specifiers as AstNode[]) ?? [])) {
+    for (const spec of (stmt.specifiers as AstNode[]) ?? []) {
       if (!isNode(spec) || spec.importKind === 'type') continue;
       const local = (spec.local as AstNode | undefined)?.name;
       if (typeof local !== 'string') continue;
       if (spec.type === 'ImportSpecifier') {
         const imp = spec.imported as AstNode | undefined;
-        const imported = imp && (typeof imp.name === 'string' ? imp.name : typeof imp.value === 'string' ? imp.value : undefined);
+        const imported =
+          imp && (typeof imp.name === 'string' ? imp.name : typeof imp.value === 'string' ? imp.value : undefined);
         target.set(local, imported ?? local);
       } else if (spec.type === 'ImportNamespaceSpecifier') {
         target.set(local, '*');
@@ -62,7 +69,11 @@ export function readNestFile(program: AstNode): NestFile {
 }
 
 /** A decorator read as `@Name(args)` or `@ns.Name(args)`, where the name is a `@nestjs/common` binding of this file. */
-export interface NestDecorator { name: string; args: AstNode[]; at: AstNode }
+export interface NestDecorator {
+  name: string;
+  args: AstNode[];
+  at: AstNode;
+}
 
 export function nestDecorator(dec: AstNode, file: NestFile): NestDecorator | undefined {
   const expr = dec.expression as AstNode | undefined;
@@ -84,7 +95,9 @@ export function literalString(n: unknown): string | undefined {
   if (!isNode(n)) return undefined;
   if ((n.type === 'Literal' || n.type === 'StringLiteral') && typeof n.value === 'string') return n.value;
   if (n.type === 'TemplateLiteral' && !((n.expressions as unknown[]) ?? []).length) {
-    return ((n.quasis as AstNode[]) ?? []).map((q) => (q.value as { cooked?: string } | undefined)?.cooked ?? '').join('');
+    return ((n.quasis as AstNode[]) ?? [])
+      .map((q) => (q.value as { cooked?: string } | undefined)?.cooked ?? '')
+      .join('');
   }
   return undefined;
 }
@@ -93,7 +106,7 @@ export function literalString(n: unknown): string | undefined {
 function pathList(n: AstNode): string[] | undefined {
   if (n.type === 'ArrayExpression') {
     const out: string[] = [];
-    for (const el of ((n.elements as AstNode[]) ?? [])) {
+    for (const el of (n.elements as AstNode[]) ?? []) {
       const s = literalString(el);
       if (s === undefined) return undefined;
       out.push(s);
@@ -116,72 +129,113 @@ export function pathsOf(args: AstNode[]): string[] | undefined {
   if (arg.type === 'ObjectExpression') {
     const props = ((arg.properties as AstNode[]) ?? []).filter(isNode);
     if (props.some((p) => p.type === 'SpreadElement' || p.computed)) return undefined;
-    const path = [...props].reverse().find((p) => (p.type === 'Property' || p.type === 'ObjectProperty') && !p.computed
-      && String((p.key as AstNode | undefined)?.name ?? (p.key as AstNode | undefined)?.value) === 'path');
+    const path = [...props]
+      .reverse()
+      .find(
+        (p) =>
+          (p.type === 'Property' || p.type === 'ObjectProperty') &&
+          !p.computed &&
+          String((p.key as AstNode | undefined)?.name ?? (p.key as AstNode | undefined)?.value) === 'path',
+      );
     return path && isNode(path.value) ? pathList(path.value as AstNode) : [''];
   }
   return pathList(arg);
 }
 
 /** `@Controller(…)` on a class: its prefixes (undefined = not literal, a gap) and the decorator node. */
-export interface ControllerDecl { prefixes: string[] | undefined; versioned: boolean; at: AstNode }
+export interface ControllerDecl {
+  prefixes: string[] | undefined;
+  versioned: boolean;
+  at: AstNode;
+}
 
 export function controllerOf(cls: AstNode, file: NestFile): ControllerDecl | undefined {
-  for (const dec of ((cls.decorators as AstNode[]) ?? [])) {
+  for (const dec of (cls.decorators as AstNode[]) ?? []) {
     if (!isNode(dec)) continue;
     const d = nestDecorator(dec, file);
     if (d?.name === 'Controller') {
       const arg = d.args[0];
-      const versioned = arg?.type === 'ObjectExpression' && ((arg.properties as AstNode[]) ?? []).some(p =>
-        isNode(p) && !p.computed && String((p.key as AstNode | undefined)?.name ?? (p.key as AstNode | undefined)?.value) === 'version');
+      const versioned =
+        arg?.type === 'ObjectExpression' &&
+        ((arg.properties as AstNode[]) ?? []).some(
+          (p) =>
+            isNode(p) &&
+            !p.computed &&
+            String((p.key as AstNode | undefined)?.name ?? (p.key as AstNode | undefined)?.value) === 'version',
+        );
       return { prefixes: pathsOf(d.args), versioned, at: dec };
     }
   }
   return undefined;
 }
 
-export interface MethodRoute { verb: string; path: string; decorator: string; at: AstNode }
-export interface MethodGap { kind: RouteGap['kind']; decorator: string; at: AstNode }
+export interface MethodRoute {
+  verb: string;
+  path: string;
+  decorator: string;
+  at: AstNode;
+}
+export interface MethodGap {
+  kind: RouteGap['kind'];
+  decorator: string;
+  at: AstNode;
+}
 
 /** The routes a method's verb decorators declare (one per path), and the decorators that could not become one. */
 export function methodRoutes(m: AstNode, file: NestFile): { routes: MethodRoute[]; gaps: MethodGap[] } {
   const routes: MethodRoute[] = [];
   const gaps: MethodGap[] = [];
-  for (const dec of ((m.decorators as AstNode[]) ?? [])) {
+  for (const dec of (m.decorators as AstNode[]) ?? []) {
     if (!isNode(dec)) continue;
     const d = nestDecorator(dec, file);
     if (!d) continue;
-    if (d.name === 'All') { gaps.push({ kind: 'all-verb', decorator: d.name, at: dec }); continue; }
-    if (d.name === 'Version') { gaps.push({ kind: 'versioning', decorator: d.name, at: dec }); continue; }
+    if (d.name === 'All') {
+      gaps.push({ kind: 'all-verb', decorator: d.name, at: dec });
+      continue;
+    }
+    if (d.name === 'Version') {
+      gaps.push({ kind: 'versioning', decorator: d.name, at: dec });
+      continue;
+    }
     const verb = NEST_VERBS[d.name];
     if (!verb) continue;
     const paths = pathsOf(d.args);
-    if (!paths) { gaps.push({ kind: 'non-literal-path', decorator: d.name, at: dec }); continue; }
+    if (!paths) {
+      gaps.push({ kind: 'non-literal-path', decorator: d.name, at: dec });
+      continue;
+    }
     for (const path of paths) routes.push({ verb, path, decorator: d.name, at: dec });
   }
   return { routes, gaps };
 }
 
 /** One argument of `@UseGuards(…)`: the word for it, and the class it names when it is a plain class reference. */
-export interface GuardRef { label: string; className?: string; argument: number; at: AstNode }
+export interface GuardRef {
+  label: string;
+  className?: string;
+  argument: number;
+  at: AstNode;
+}
 
 /** Named schemas on Nest's body parameters; type annotations and other decorators are not schemas. */
 export function bodySchemasOf(method: AstNode, file: NestFile): { name: string; at: AstNode }[] {
   const fn = method.value as AstNode | undefined;
   const out: { name: string; at: AstNode }[] = [];
-  for (const parameter of ((fn?.params as AstNode[]) ?? [])) {
-    for (const dec of ((parameter.decorators as AstNode[]) ?? [])) {
+  for (const parameter of (fn?.params as AstNode[]) ?? []) {
+    for (const dec of (parameter.decorators as AstNode[]) ?? []) {
       const decorator = nestDecorator(dec, file);
       if (decorator?.name !== 'Body') continue;
       const options = decorator.args[0];
       if (options?.type !== 'ObjectExpression') continue;
       const props = (options.properties as AstNode[]) ?? [];
       // A spread or computed key could replace schema; do not credit an uncertain binding.
-      if (props.some(p => p.type !== 'Property' || p.computed)) continue;
-      const schema = props.filter(p => {
-        const key = p.key as AstNode;
-        return (key.name ?? key.value) === 'schema';
-      }).at(-1)?.value as AstNode | undefined;
+      if (props.some((p) => p.type !== 'Property' || p.computed)) continue;
+      const schema = props
+        .filter((p) => {
+          const key = p.key as AstNode;
+          return (key.name ?? key.value) === 'schema';
+        })
+        .at(-1)?.value as AstNode | undefined;
       if (schema?.type === 'Identifier' && typeof schema.name === 'string') out.push({ name: schema.name, at: dec });
     }
   }
@@ -190,13 +244,16 @@ export function bodySchemasOf(method: AstNode, file: NestFile): { name: string; 
 
 export function useGuardsOf(decorators: unknown, file: NestFile): GuardRef[] {
   const out: GuardRef[] = [];
-  for (const dec of ((decorators as AstNode[]) ?? [])) {
+  for (const dec of (decorators as AstNode[]) ?? []) {
     if (!isNode(dec)) continue;
     const d = nestDecorator(dec, file);
     if (d?.name !== 'UseGuards') continue;
     for (const [argument, arg] of d.args.entries()) {
       if (!isNode(arg)) continue;
-      if (arg.type === 'Identifier' && typeof arg.name === 'string') { out.push({ label: arg.name, className: arg.name, argument, at: dec }); continue; }
+      if (arg.type === 'Identifier' && typeof arg.name === 'string') {
+        out.push({ label: arg.name, className: arg.name, argument, at: dec });
+        continue;
+      }
       // `new RolesGuard()` — the class, constructed here
       if (arg.type === 'NewExpression' && isNode(arg.callee) && (arg.callee as AstNode).type === 'Identifier') {
         const name = String((arg.callee as AstNode).name);
@@ -207,7 +264,9 @@ export function useGuardsOf(decorators: unknown, file: NestFile): GuardRef[] {
       if (arg.type === 'CallExpression') {
         const chain = memberChain(arg.callee);
         if (!chain.length) continue;
-        const lits = ((arg.arguments as AstNode[]) ?? []).map(literalString).filter((s): s is string => s !== undefined);
+        const lits = ((arg.arguments as AstNode[]) ?? [])
+          .map(literalString)
+          .filter((s): s is string => s !== undefined);
         out.push({ label: `${chain.join('.')}(${lits.join(', ')})`, argument, at: dec });
         continue;
       }
@@ -255,7 +314,10 @@ export function entrypointRouteKey(parts: string[] | undefined): string | undefi
  * that imports from `@nestjs/*`. Each is a gap with a name — the routes read from the controllers
  * are recorded without it, and the gap says so.
  */
-export function nestSetupGaps(program: AstNode, file: NestFile): { kind: RouteGap['kind']; name: string; text: string; at: AstNode }[] {
+export function nestSetupGaps(
+  program: AstNode,
+  file: NestFile,
+): { kind: RouteGap['kind']; name: string; text: string; at: AstNode }[] {
   if (!file.nest) return [];
   const out: { kind: RouteGap['kind']; name: string; text: string; at: AstNode }[] = [];
   walk(program, (n) => {
@@ -264,14 +326,30 @@ export function nestSetupGaps(program: AstNode, file: NestFile): { kind: RouteGa
     const tail = chain[chain.length - 1];
     const arg = literalString(((n.arguments as AstNode[]) ?? [])[0]);
     if (tail === 'setGlobalPrefix' && chain.length === 2) {
-      out.push({ kind: 'global-prefix', name: chain.join('.'), at: n, text: `${chain.join('.')}(${arg !== undefined ? `'${arg}'` : '…'}) is not applied: the routes read from controllers are recorded without the global prefix` });
+      out.push({
+        kind: 'global-prefix',
+        name: chain.join('.'),
+        at: n,
+        text: `${chain.join('.')}(${arg !== undefined ? `'${arg}'` : '…'}) is not applied: the routes read from controllers are recorded without the global prefix`,
+      });
     } else if (tail === 'enableVersioning' && chain.length === 2) {
-      out.push({ kind: 'versioning', name: chain.join('.'), at: n, text: `${chain.join('.')}(…) is not applied: the routes read from controllers are recorded without a version segment` });
-    } else if (tail === 'register' && (
-      chain.length === 2 && file.coreBindings.get(chain[0]!) === 'RouterModule'
-      || chain.length === 3 && file.coreBindings.get(chain[0]!) === '*' && chain[1] === 'RouterModule'
-    )) {
-      out.push({ kind: 'router-module', name: 'RouterModule.register', at: n, text: 'RouterModule.register(…) is not read: a module path it mounts controllers under is missing from their routes' });
+      out.push({
+        kind: 'versioning',
+        name: chain.join('.'),
+        at: n,
+        text: `${chain.join('.')}(…) is not applied: the routes read from controllers are recorded without a version segment`,
+      });
+    } else if (
+      tail === 'register' &&
+      ((chain.length === 2 && file.coreBindings.get(chain[0]!) === 'RouterModule') ||
+        (chain.length === 3 && file.coreBindings.get(chain[0]!) === '*' && chain[1] === 'RouterModule'))
+    ) {
+      out.push({
+        kind: 'router-module',
+        name: 'RouterModule.register',
+        at: n,
+        text: 'RouterModule.register(…) is not read: a module path it mounts controllers under is missing from their routes',
+      });
     }
   });
   return out;
