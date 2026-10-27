@@ -1,14 +1,16 @@
 // Actual npm public APIs and genuine capture, with a mock model only. Not public stage/CLI inference qualification.
 import assert from 'node:assert/strict';
-import {readFileSync,writeFileSync,realpathSync} from 'node:fs';
-import {resolve,join} from 'node:path';
-import {createHash} from 'node:crypto';
-import {npmConsumer} from './npm-consumer.mjs';
-const artifact=resolve(process.argv[2]??'build/sentinel/farsight-sentinel-0.0.0-draft.1.tgz');
-const consumer=await npmConsumer('sentinel-instructions-consumer-',[artifact]);
-try{
- const script=join(consumer.dir,'instructions.mjs');
- writeFileSync(script,`
+import { readFileSync, writeFileSync, realpathSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { npmConsumer } from './npm-consumer.mjs';
+const artifact = resolve(process.argv[2] ?? 'build/sentinel/farsight-sentinel-0.0.0-draft.1.tgz');
+const consumer = await npmConsumer('sentinel-instructions-consumer-', [artifact]);
+try {
+  const script = join(consumer.dir, 'instructions.mjs');
+  writeFileSync(
+    script,
+    `
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync,rmSync} from 'node:fs';import {createHash} from 'node:crypto';import {join} from 'node:path';
 import {openStore} from 'farsight-sentinel/store';import {captureSnapshot} from 'farsight-sentinel/snapshot';
@@ -26,6 +28,14 @@ let store=await openStore(storePath);try{
  const changed={...spec,instructions:prepareInstructions({prompt:GUIDED_PROMPT,skills:[{id:'owner.original',revision:3,text:'New instruction requires a new binding.'}]})};assert.notEqual(specDigest(changed),specDigest(spec));await assert.rejects(runSession(changed,{caller,checkpoints,read:id=>store.readArtifact(id)}));
  console.log(JSON.stringify({schema:'sentinel-instructions-consumer/draft-1',npmOnlyRuntime:true,mockModel:true,realInferenceQualified:false,capturedSource:true,exactRenderedBytes:true,retainedRequests:2,sourceRemoved:true,ownerReopened:true,noReplay:true,changedBindingRefused:true,privateArtifactsReturned:true,acceptedPublicationInConsumer:false}));
 }finally{if(store.held)store.close()}
-`);
- const {stdout}=await consumer.exec(process.execPath,[script,realpathSync.native(consumer.scratch)],{cwd:consumer.dir,timeout:120000});process.stdout.write(stdout);console.log(JSON.stringify({artifactSha256:createHash('sha256').update(readFileSync(artifact)).digest('hex')}));
-}finally{consumer.cleanup()}
+`,
+  );
+  const { stdout } = await consumer.exec(process.execPath, [script, realpathSync.native(consumer.scratch)], {
+    cwd: consumer.dir,
+    timeout: 120000,
+  });
+  process.stdout.write(stdout);
+  console.log(JSON.stringify({ artifactSha256: createHash('sha256').update(readFileSync(artifact)).digest('hex') }));
+} finally {
+  consumer.cleanup();
+}

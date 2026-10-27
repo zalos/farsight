@@ -31,13 +31,17 @@ export function workspacePackages(root) {
  */
 export function buildClosure(root, entry) {
   const packages = workspacePackages(root);
-  const closure = [], missing = [];
+  const closure = [],
+    missing = [];
   const seen = new Set();
   const visit = (name, fields) => {
     if (seen.has(name)) return;
     seen.add(name);
     const pkg = packages.get(name);
-    if (!pkg) { missing.push(name); return; }
+    if (!pkg) {
+      missing.push(name);
+      return;
+    }
     closure.push({ name, ...pkg });
     for (const field of fields) {
       for (const [dep, spec] of Object.entries(pkg.manifest[field] ?? {})) {
@@ -69,6 +73,11 @@ export function npmPackEnv(base = process.env) {
 /** Throws unless `npm pack` really produced `path`: a regular, non-empty file. Checked before publishing. */
 export function assertTarball(path) {
   let stat;
-  try { stat = statSync(path); } catch { throw new Error(`npm pack exited 0 but wrote no ${basename(path)}`); }
-  if (!stat.isFile() || stat.size === 0) throw new Error(`npm pack wrote ${basename(path)}, but it is not a non-empty file`);
+  try {
+    stat = statSync(path);
+  } catch {
+    throw new Error(`npm pack exited 0 but wrote no ${basename(path)}`);
+  }
+  if (!stat.isFile() || stat.size === 0)
+    throw new Error(`npm pack wrote ${basename(path)}, but it is not a non-empty file`);
 }

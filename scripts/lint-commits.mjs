@@ -17,8 +17,28 @@ import { pathToFileURL } from 'node:url';
 export const TYPES = ['feat', 'fix', 'docs', 'test', 'chore', 'build', 'ci', 'refactor', 'perf', 'style', 'revert'];
 /** The scopes a reader expects: the packages, the surfaces that are not a package, and the release. */
 export const SCOPES = [
-  'core', 'parsers', 'server', 'mcp', 'cli', 'echo', 'sentinel', 'work', 'work-jira', 'work-azdo', 'work-fixture',
-  'e2e', 'scripts', 'ci', 'docs', 'proposals', 'examples', 'release', 'deps', 'viewer', 'skills', 'agents',
+  'core',
+  'parsers',
+  'server',
+  'mcp',
+  'cli',
+  'echo',
+  'sentinel',
+  'work',
+  'work-jira',
+  'work-azdo',
+  'work-fixture',
+  'e2e',
+  'scripts',
+  'ci',
+  'docs',
+  'proposals',
+  'examples',
+  'release',
+  'deps',
+  'viewer',
+  'skills',
+  'agents',
 ];
 export const MAX_SUBJECT = 120;
 
@@ -38,27 +58,41 @@ export function lintSubject(line, { scopes = SCOPES, types = TYPES, maxLength = 
   const problems = [];
   const m = SUBJECT.exec(subject);
   if (!m) {
-    problems.push(`not a conventional commit — write \`type(scope): subject\`, e.g. \`fix(cli): …\`; types: ${types.join(', ')}`);
+    problems.push(
+      `not a conventional commit — write \`type(scope): subject\`, e.g. \`fix(cli): …\`; types: ${types.join(', ')}`,
+    );
     if (/^[A-Z][a-z]+(\([^)]*\))?!?:/.test(subject)) problems.push('the type is lower-case (`fix:`, not `Fix:`)');
     if (/^[a-z]+(\([^)]*\))?!?:\S/.test(subject)) problems.push('one space after the colon');
     return problems;
   }
   const { type, scope, subject: text } = m.groups;
   if (!types.includes(type)) problems.push(`unknown type \`${type}\` — one of ${types.join(', ')}`);
-  if (scope !== undefined && scopes && !scopes.includes(scope)) problems.push(`unknown scope \`${scope}\` — one of ${scopes.join(', ')} (add a new one to scripts/lint-commits.mjs SCOPES in the same change)`);
+  if (scope !== undefined && scopes && !scopes.includes(scope))
+    problems.push(
+      `unknown scope \`${scope}\` — one of ${scopes.join(', ')} (add a new one to scripts/lint-commits.mjs SCOPES in the same change)`,
+    );
   if (/[.!?]$/.test(text.replace(PR_SUFFIX, ''))) problems.push('no full stop at the end of the subject');
-  if (subject.replace(PR_SUFFIX, '').length > maxLength) problems.push(`subject is ${subject.length} characters; keep it under ${maxLength}`);
-  if (/^(wip|tmp|temp|fixes?|updates?|changes?|misc|stuff)$/i.test(text.trim())) problems.push(`\`${text.trim()}\` says nothing — name what changed`);
+  if (subject.replace(PR_SUFFIX, '').length > maxLength)
+    problems.push(`subject is ${subject.length} characters; keep it under ${maxLength}`);
+  if (/^(wip|tmp|temp|fixes?|updates?|changes?|misc|stuff)$/i.test(text.trim()))
+    problems.push(`\`${text.trim()}\` says nothing — name what changed`);
   return problems;
 }
 
 /** Lint every commit subject in a git range; `[{ sha, subject, problems }]` for the ones that fail. */
 export function lintRange(cwd, range, opts) {
-  const raw = execFileSync('git', ['log', '--no-merges', '--format=%h%x1f%s', range], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
-  return raw.split('\n').filter(Boolean).map((r) => {
-    const [sha, subject] = r.split('\x1f');
-    return { sha, subject, problems: lintSubject(subject, opts) };
-  }).filter((c) => c.problems.length);
+  const raw = execFileSync('git', ['log', '--no-merges', '--format=%h%x1f%s', range], {
+    cwd,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).toString();
+  return raw
+    .split('\n')
+    .filter(Boolean)
+    .map((r) => {
+      const [sha, subject] = r.split('\x1f');
+      return { sha, subject, problems: lintSubject(subject, opts) };
+    })
+    .filter((c) => c.problems.length);
 }
 
 export function report(label, problems) {
@@ -77,24 +111,42 @@ function main(argv) {
     },
   });
   if (values.help || (!values.message && !values.file && !values.range)) {
-    console.log('usage: node scripts/lint-commits.mjs (--message <subject> | --file <path> | --range <a..b>) [--any-scope]');
+    console.log(
+      'usage: node scripts/lint-commits.mjs (--message <subject> | --file <path> | --range <a..b>) [--any-scope]',
+    );
     return values.help ? 0 : 2;
   }
   const opts = values['any-scope'] ? { scopes: null } : {};
   if (values.range) {
     const bad = lintRange(process.cwd(), values.range, opts);
-    if (!bad.length) { console.log(`commits ok: ${values.range}`); return 0; }
+    if (!bad.length) {
+      console.log(`commits ok: ${values.range}`);
+      return 0;
+    }
     for (const c of bad) console.error(report(`${c.sha} ${c.subject}`, c.problems));
     return 1;
   }
-  const text = values.message ?? readFileSync(values.file, 'utf8').split('\n').filter((l) => !l.startsWith('#')).join('\n').trim();
+  const text =
+    values.message ??
+    readFileSync(values.file, 'utf8')
+      .split('\n')
+      .filter((l) => !l.startsWith('#'))
+      .join('\n')
+      .trim();
   const problems = lintSubject(text, opts);
   if (!problems.length) return 0;
   console.error(report(text.split('\n')[0], problems));
-  console.error('\nConventional Commits: https://www.conventionalcommits.org — the rules this repo uses: CONTRIBUTING.md § Branches, commits, pull requests');
+  console.error(
+    '\nConventional Commits: https://www.conventionalcommits.org — the rules this repo uses: CONTRIBUTING.md § Branches, commits, pull requests',
+  );
   return 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try { process.exit(main(process.argv.slice(2))); } catch (e) { console.error(`lint-commits: ${e.message}`); process.exit(2); }
+  try {
+    process.exit(main(process.argv.slice(2)));
+  } catch (e) {
+    console.error(`lint-commits: ${e.message}`);
+    process.exit(2);
+  }
 }

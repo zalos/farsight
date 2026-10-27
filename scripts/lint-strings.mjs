@@ -60,32 +60,58 @@ const { STRINGS } = await import(join(root, 'packages/core/dist/strings.js')).ca
 });
 
 const CHROME_FILES = [
-  'shell.js', 'strings.js', 'keymap.js', 'share.js', 'impact.js', 'provenance.js',
-  'surfaces/portfolio.js', 'surfaces/codemap.js', 'surfaces/changes.js',
-  'surfaces/stewardship.js', 'surfaces/journeys.js', 'surfaces/journey-drill.js', 'surfaces/apis.js',
-  'surfaces/tests.js', 'surfaces/work.js', 'work-chips.js', 'stories.js', 'lib/tooltip.js',
+  'shell.js',
+  'strings.js',
+  'keymap.js',
+  'share.js',
+  'impact.js',
+  'provenance.js',
+  'surfaces/portfolio.js',
+  'surfaces/codemap.js',
+  'surfaces/changes.js',
+  'surfaces/stewardship.js',
+  'surfaces/journeys.js',
+  'surfaces/journey-drill.js',
+  'surfaces/apis.js',
+  'surfaces/tests.js',
+  'surfaces/work.js',
+  'work-chips.js',
+  'stories.js',
+  'lib/tooltip.js',
   // the MAP surface (docs/proposals/map-view.md): lane A's three modules
-  'surfaces/map.js', 'lib/map-canvas.js', 'lib/map-model.js',
+  'surfaces/map.js',
+  'lib/map-canvas.js',
+  'lib/map-model.js',
   // lane B's two
-  'surfaces/map-property.js', 'lib/map-property-model.js',
+  'surfaces/map-property.js',
+  'lib/map-property-model.js',
   // lane I's Affected mode
-  'surfaces/map-affected.js', 'lib/map-affected-model.js',
+  'surfaces/map-affected.js',
+  'lib/map-affected-model.js',
   // lane C (code map by project and package)
-  'surfaces/codemap-projects.js', 'lib/codemap-model.js',
+  'surfaces/codemap-projects.js',
+  'lib/codemap-model.js',
   // the Config files list on the Settings page (round 2026-10-05 §6)
   'surfaces/settings-config.js',
   // the lessons for agents and the empty states (round 2026-10-10, proposal 9)
-  'surfaces/settings-lessons.js', 'lib/empty-state.js', 'lib/copy-doors.js',
+  'surfaces/settings-lessons.js',
+  'lib/empty-state.js',
+  'lib/copy-doors.js',
   // the project picker (one searchable list wherever a project, a tag value or a package is picked)
-  'lib/multi-pick.js', 'lib/multi-pick-model.js',
+  'lib/multi-pick.js',
+  'lib/multi-pick-model.js',
   // export: the Save control, its menu and the saved picture's footer (round 2026-10-05, lane E)
-  'lib/export.js', 'lib/export-model.js',
+  'lib/export.js',
+  'lib/export-model.js',
   // compare two syncs on a storyline (round 2026-10-10, proposal 7)
-  'surfaces/map-compare.js', 'lib/compare-model.js',
+  'surfaces/map-compare.js',
+  'lib/compare-model.js',
   // the storyline as swimlanes (round 2026-10-10 §2)
-  'surfaces/map-lanes.js', 'lib/map-lanes-model.js',
+  'surfaces/map-lanes.js',
+  'lib/map-lanes-model.js',
   // walk me through it, and ask (round 2026-10-10, proposal 8)
-  'lib/tour.js', 'lib/ask.js',
+  'lib/tour.js',
+  'lib/ask.js',
 ];
 // journeys.js: only its NEW surface chrome is expected to use t(); its legacy
 // overlay strings are grandfathered line-by-line below.
@@ -118,10 +144,20 @@ const PROSE = /[A-Za-z][a-z’']* +[a-z][a-z’']* +[a-z]/;
 // so it could not stay outside the book.
 const LEGACY_JOURNEY_LINES = [
   'fork — click for arms',
-  'flow ends here', 'no tracked steps', 'no tracked calls', 'may exit',
-  'exits (return/throw)', 'end of tracked flow', 'continues below',
-  'recursion — traversal stopped', 'already shown', 'code truncated',
-  'Copy mock-state recipe', 'crosses into', 'async via', 'more — narrow the scope',
+  'flow ends here',
+  'no tracked steps',
+  'no tracked calls',
+  'may exit',
+  'exits (return/throw)',
+  'end of tracked flow',
+  'continues below',
+  'recursion — traversal stopped',
+  'already shown',
+  'code truncated',
+  'Copy mock-state recipe',
+  'crosses into',
+  'async via',
+  'more — narrow the scope',
 ];
 
 for (const file of appFiles) {
@@ -166,7 +202,9 @@ for (const file of appFiles) {
     if (entry.hud !== entry.professional && !entry.define) undefinedJargon++;
   }
   if (undefinedJargon > JARGON_BUDGET) {
-    failures.push(`RULE3 ${rel}: ${undefinedJargon} undefined jargon terms (budget ${JARGON_BUDGET}) — add define: to their catalog entries`);
+    failures.push(
+      `RULE3 ${rel}: ${undefinedJargon} undefined jargon terms (budget ${JARGON_BUDGET}) — add define: to their catalog entries`,
+    );
   }
 }
 
@@ -189,17 +227,29 @@ for (const id of referenced) {
   if (!spriteIds.has(id)) failures.push(`RULE4 symbol "${id}" referenced but missing from viewer.html sprite`);
 }
 for (const id of spriteIds) {
-  if (!referenced.has(id)) failures.push(`RULE4 sprite symbol "${id}" is dead — nothing references it and sym.js's tables don't declare it`);
+  if (!referenced.has(id))
+    failures.push(`RULE4 sprite symbol "${id}" is dead — nothing references it and sym.js's tables don't declare it`);
 }
 
 // ── RULE 5: no developer's unit in the business register ────────────────────
 const BIZ_BANNED = /\b(steps?|cuts?|seams?|beats?|moments?|truncated|helpers?|hops?)\b/i;
-const BIZ_PREFIXES = ['journey.biz.', 'impact.biz.', 'count.', 'map.biz.', 'tour.biz.', 'ask.biz.', 'sentinel.term.biz.'];
+const BIZ_PREFIXES = [
+  'journey.biz.',
+  'impact.biz.',
+  'count.',
+  'map.biz.',
+  'tour.biz.',
+  'ask.biz.',
+  'sentinel.term.biz.',
+];
 for (const [key, entry] of Object.entries(STRINGS)) {
   if (!BIZ_PREFIXES.some((p) => key.startsWith(p))) continue;
   for (const register of ['hud', 'professional']) {
     const m = BIZ_BANNED.exec(entry[register] || '');
-    if (m) failures.push(`RULE5 ${key} (${register}): "${m[0]}" is a developer's unit — the business register does not count in it`);
+    if (m)
+      failures.push(
+        `RULE5 ${key} (${register}): "${m[0]}" is a developer's unit — the business register does not count in it`,
+      );
   }
 }
 
@@ -209,4 +259,6 @@ if (failures.length) {
   for (const f of failures) console.error('  ' + f);
   process.exit(1);
 }
-console.log(`lint-strings: ok — ${Object.keys(STRINGS).length} catalog entries, ${spriteIds.size} sprite symbols, ${appFiles.length} modules checked`);
+console.log(
+  `lint-strings: ok — ${Object.keys(STRINGS).length} catalog entries, ${spriteIds.size} sprite symbols, ${appFiles.length} modules checked`,
+);

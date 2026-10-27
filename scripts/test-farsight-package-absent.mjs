@@ -13,8 +13,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
-  .split('\0').filter(Boolean);
+const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
+  cwd: root,
+  encoding: 'utf8',
+  maxBuffer: 64 * 1024 * 1024,
+})
+  .split('\0')
+  .filter(Boolean);
 const scratch = mkdtempSync(join(tmpdir(), 'farsight-absent-sentinel-'));
 const copy = join(scratch, 'workspace');
 let status = 1;
@@ -37,7 +42,8 @@ try {
   };
   step('pnpm', ['install', '--no-frozen-lockfile', '--prefer-offline']);
   step('pnpm', ['pack:cli']);
-  if (existsSync(join(copy, 'packages/sentinel'))) throw new Error('packages/sentinel appeared during install or build');
+  if (existsSync(join(copy, 'packages/sentinel')))
+    throw new Error('packages/sentinel appeared during install or build');
   step(process.execPath, ['scripts/test-farsight-package.mjs']);
   console.log('farsight package ok with Sentinel absent from the workspace');
   status = 0;

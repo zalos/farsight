@@ -1,23 +1,188 @@
 #!/usr/bin/env node
 // Genuine installed public executables and browser. Playwright is only this verifier's browser dependency.
-import assert from'node:assert/strict';import{spawn}from'node:child_process';import{createHash}from'node:crypto';import{createServer}from'node:net';import{mkdirSync,readFileSync,writeFileSync,rmSync,realpathSync,readdirSync}from'node:fs';import{join,resolve,dirname}from'node:path';import{fileURLToPath}from'node:url';import{chromium}from'@playwright/test';import{npmConsumer}from'./npm-consumer.mjs';
-const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),version=JSON.parse(readFileSync(join(root,'packages/sentinel/package.json'))).version;
-const c=await npmConsumer('sentinel-owner-ui-',[resolve(process.argv[2]??join(root,'build/sentinel',`farsight-sentinel-${version}.tgz`)),resolve(process.argv[3]??join(root,'build',`farsight-cli-${JSON.parse(readFileSync(join(root,'package.json'))).version}.tgz`))]);
-const children=new Set(),wait=ms=>new Promise(r=>setTimeout(r,ms));let browser;
-const evidence=process.env.SENTINEL_OWNER_UI_EVIDENCE;
-try{
- const ws=join(realpathSync.native(c.scratch),'workspace'),source=join(ws,'src');mkdirSync(source,{recursive:true});writeFileSync(join(source,'invoice.ts'),'export const lookup = id => db.query("SELECT * FROM invoices WHERE id="+id);\n');const env={...c.env,XDG_STATE_HOME:join(realpathSync.native(c.scratch),'owner-state'),XDG_CONFIG_HOME:join(realpathSync.native(c.scratch),'owner-config'),NODE_PATH:'',NODE_OPTIONS:''},bin=c.bin('farsight-sentinel');
- const owner=async(...args)=>{try{return JSON.parse((await c.exec(bin,[...args,'--json'],{cwd:ws,env,timeout:30000})).stdout);}catch(e){if(typeof e.code==='number'&&e.stdout)return JSON.parse(e.stdout);throw e;}};
- for(const args of [['init'],['settings','adopt','--confirm'],['rules','promote',join(c.dir,'node_modules/farsight-sentinel/rules/foundation-preview'),'--confirm']]){const value=await owner(...args);assert.equal(value.outcome,'prepared',JSON.stringify({step:args[0],value}));}
- let log='';const launch=(file,args)=>{const child=spawn(process.execPath,[file,...args],{cwd:ws,env,stdio:['ignore','pipe','pipe']});children.add(child);child.stdout.on('data',b=>log=(log+b).slice(-16000));child.stderr.on('data',b=>log=(log+b).slice(-16000));return child;};
- launch(bin,['serve','--workspace',ws,'--idle-ms','0']);const services=join(env.XDG_STATE_HOME,'farsight/sentinel/trust/services');for(let i=0;i<200;i++){try{if(readdirSync(services).some(n=>n.endsWith('.json')))break;}catch{}assert.ok(i<199,log);await wait(20);}
- const socket=createServer();await new Promise(r=>socket.listen(0,'127.0.0.1',r));const port=socket.address().port;await new Promise(r=>socket.close(r));const origin=`http://127.0.0.1:${port}`,graph=join(ws,'owner-graph.json');await c.exec(c.bin('farsight'),['ingest',source,'--repo','original-owner-fixture','--out',graph],{cwd:ws,env});launch(c.bin('farsight'),['serve',graph,'--port',String(port)]);
- for(let i=0;i<200;i++){try{const v=await(await fetch(origin+'/api/version')).json();if(v.session?.instance)break;}catch{}assert.ok(i<199,log);await wait(20);}
- assert.equal((await(await fetch(origin+'/api/sentinel/companion')).json()).available,false);launch(bin,['owner-ui','--workspace',ws,'--farsight-origin',origin]);for(let i=0;i<200;i++){const v=await(await fetch(origin+'/api/sentinel/companion')).json();if(v.available){assert.deepEqual(Object.keys(v).sort(),['available','ownerOrigin']);break;}assert.ok(i<199,log);await wait(20);}
- browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage(),errors=[],requests=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});page.on('response',r=>{if(r.status()>=400)requests.push({status:r.status(),url:r.url()});});
- await page.goto(origin+'/#/sentinel');const frame=page.frameLocator('iframe[title="Sentinel"]');await frame.getByRole('button',{name:'Preview fresh capture',exact:true}).waitFor({timeout:15000});await frame.getByRole('button',{name:'Preview fresh capture',exact:true}).click();await frame.getByRole('button',{name:'Confirm preparation',exact:true}).click();await frame.locator('#status').getByText('prepared',{exact:true}).waitFor({timeout:30000});
- rmSync(source,{recursive:true});await frame.getByRole('button',{name:'Retained inputs',exact:true}).click();await frame.locator('#rows tbody tr').first().waitFor();await frame.getByRole('button',{name:'Preview start or resume',exact:true}).click();await frame.getByRole('button',{name:'Confirm this run action',exact:true}).click();await frame.locator('#status').getByText('completed',{exact:true}).waitFor({timeout:30000});await frame.getByRole('button',{name:'Read shareable report',exact:true}).click();await frame.locator('#report-text[data-format-digest]').waitFor({timeout:30000});const report=await frame.locator('#report-text').textContent(),digest=await frame.locator('#report-text').getAttribute('data-format-digest');assert.ok(report.length>100);assert.equal(digest,'sha256:'+createHash('sha256').update(report).digest('hex'));assert.equal(await frame.getByRole('button',{name:'Preview start or resume',exact:true}).isDisabled(),true);
- await frame.getByRole('button',{name:'Refresh run list',exact:true}).click();await frame.locator('#run-choice option').nth(1).waitFor({state:'attached'});const runKeys=await frame.locator('#run-choice option').evaluateAll(options=>options.map(o=>o.value));assert.ok(runKeys.length>1);assert.ok(runKeys.slice(1).every(key=>/^h[a-f0-9]{32}$/.test(key)));await frame.locator('#run-choice').selectOption(runKeys[1]);await frame.getByRole('button',{name:'Refresh process graph',exact:true}).click();await frame.locator('#process-graph .process-card').last().waitFor();await frame.locator('#process-graph .process-links path').first().waitFor({state:'attached'});await frame.locator('#process-graph .process-card summary').last().click();await frame.locator('#process-graph .process-card[open] details summary').filter({hasText:'Retained inputs'}).first().click();await frame.locator('#process-graph .process-card[open] table tbody tr').first().waitFor();await frame.getByRole('button',{name:'Read shareable report',exact:true}).click();await frame.locator('#report-text[data-format-digest]').waitFor({timeout:30000});
- if(evidence){mkdirSync(evidence,{recursive:true});writeFileSync(join(evidence,'report.md'),report);await page.screenshot({path:join(evidence,'installed-completed.png'),fullPage:true});}
- await page.reload();await frame.locator('#status').getByText('completed',{exact:true}).waitFor({timeout:15000});assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);const result={installedNpmOnly:true,noCheckoutRuntimeImports:true,sourceGone:true,prepare:true,separateUiConfirmation:true,checksStartedSeparately:true,reportFormatDigest:digest,retainedRunSelection:true,processDag:true,expandedWorkIo:true,reconnect:true,errors,requests};if(evidence)writeFileSync(join(evidence,'result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
-}finally{await browser?.close();for(const child of [...children].reverse()){if(child.exitCode!==null||child.signalCode!==null)continue;child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),wait(4000)]);if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');}c.cleanup();}
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { createServer } from 'node:net';
+import { mkdirSync, readFileSync, writeFileSync, rmSync, realpathSync, readdirSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from '@playwright/test';
+import { npmConsumer } from './npm-consumer.mjs';
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..'),
+  version = JSON.parse(readFileSync(join(root, 'packages/sentinel/package.json'))).version;
+const c = await npmConsumer('sentinel-owner-ui-', [
+  resolve(process.argv[2] ?? join(root, 'build/sentinel', `farsight-sentinel-${version}.tgz`)),
+  resolve(
+    process.argv[3] ??
+      join(root, 'build', `farsight-cli-${JSON.parse(readFileSync(join(root, 'package.json'))).version}.tgz`),
+  ),
+]);
+const children = new Set(),
+  wait = (ms) => new Promise((r) => setTimeout(r, ms));
+let browser;
+const evidence = process.env.SENTINEL_OWNER_UI_EVIDENCE;
+try {
+  const ws = join(realpathSync.native(c.scratch), 'workspace'),
+    source = join(ws, 'src');
+  mkdirSync(source, { recursive: true });
+  writeFileSync(
+    join(source, 'invoice.ts'),
+    'export const lookup = id => db.query("SELECT * FROM invoices WHERE id="+id);\n',
+  );
+  const env = {
+      ...c.env,
+      XDG_STATE_HOME: join(realpathSync.native(c.scratch), 'owner-state'),
+      XDG_CONFIG_HOME: join(realpathSync.native(c.scratch), 'owner-config'),
+      NODE_PATH: '',
+      NODE_OPTIONS: '',
+    },
+    bin = c.bin('farsight-sentinel');
+  const owner = async (...args) => {
+    try {
+      return JSON.parse((await c.exec(bin, [...args, '--json'], { cwd: ws, env, timeout: 30000 })).stdout);
+    } catch (e) {
+      if (typeof e.code === 'number' && e.stdout) return JSON.parse(e.stdout);
+      throw e;
+    }
+  };
+  for (const args of [
+    ['init'],
+    ['settings', 'adopt', '--confirm'],
+    ['rules', 'promote', join(c.dir, 'node_modules/farsight-sentinel/rules/foundation-preview'), '--confirm'],
+  ]) {
+    const value = await owner(...args);
+    assert.equal(value.outcome, 'prepared', JSON.stringify({ step: args[0], value }));
+  }
+  let log = '';
+  const launch = (file, args) => {
+    const child = spawn(process.execPath, [file, ...args], { cwd: ws, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    children.add(child);
+    child.stdout.on('data', (b) => (log = (log + b).slice(-16000)));
+    child.stderr.on('data', (b) => (log = (log + b).slice(-16000)));
+    return child;
+  };
+  launch(bin, ['serve', '--workspace', ws, '--idle-ms', '0']);
+  const services = join(env.XDG_STATE_HOME, 'farsight/sentinel/trust/services');
+  for (let i = 0; i < 200; i++) {
+    try {
+      if (readdirSync(services).some((n) => n.endsWith('.json'))) break;
+    } catch {}
+    assert.ok(i < 199, log);
+    await wait(20);
+  }
+  const socket = createServer();
+  await new Promise((r) => socket.listen(0, '127.0.0.1', r));
+  const port = socket.address().port;
+  await new Promise((r) => socket.close(r));
+  const origin = `http://127.0.0.1:${port}`,
+    graph = join(ws, 'owner-graph.json');
+  await c.exec(c.bin('farsight'), ['ingest', source, '--repo', 'original-owner-fixture', '--out', graph], {
+    cwd: ws,
+    env,
+  });
+  launch(c.bin('farsight'), ['serve', graph, '--port', String(port)]);
+  for (let i = 0; i < 200; i++) {
+    try {
+      const v = await (await fetch(origin + '/api/version')).json();
+      if (v.session?.instance) break;
+    } catch {}
+    assert.ok(i < 199, log);
+    await wait(20);
+  }
+  assert.equal((await (await fetch(origin + '/api/sentinel/companion')).json()).available, false);
+  launch(bin, ['owner-ui', '--workspace', ws, '--farsight-origin', origin]);
+  for (let i = 0; i < 200; i++) {
+    const v = await (await fetch(origin + '/api/sentinel/companion')).json();
+    if (v.available) {
+      assert.deepEqual(Object.keys(v).sort(), ['available', 'ownerOrigin']);
+      break;
+    }
+    assert.ok(i < 199, log);
+    await wait(20);
+  }
+  browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } }),
+    page = await context.newPage(),
+    errors = [],
+    requests = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  page.on('response', (r) => {
+    if (r.status() >= 400) requests.push({ status: r.status(), url: r.url() });
+  });
+  await page.goto(origin + '/#/sentinel');
+  const frame = page.frameLocator('iframe[title="Sentinel"]');
+  await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).waitFor({ timeout: 15000 });
+  await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).click();
+  await frame.getByRole('button', { name: 'Confirm preparation', exact: true }).click();
+  await frame.locator('#status').getByText('prepared', { exact: true }).waitFor({ timeout: 30000 });
+  rmSync(source, { recursive: true });
+  await frame.getByRole('button', { name: 'Retained inputs', exact: true }).click();
+  await frame.locator('#rows tbody tr').first().waitFor();
+  await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).click();
+  await frame.getByRole('button', { name: 'Confirm this run action', exact: true }).click();
+  await frame.locator('#status').getByText('completed', { exact: true }).waitFor({ timeout: 30000 });
+  await frame.getByRole('button', { name: 'Read shareable report', exact: true }).click();
+  await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 30000 });
+  const report = await frame.locator('#report-text').textContent(),
+    digest = await frame.locator('#report-text').getAttribute('data-format-digest');
+  assert.ok(report.length > 100);
+  assert.equal(digest, 'sha256:' + createHash('sha256').update(report).digest('hex'));
+  assert.equal(await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isDisabled(), true);
+  await frame.getByRole('button', { name: 'Refresh run list', exact: true }).click();
+  await frame.locator('#run-choice option').nth(1).waitFor({ state: 'attached' });
+  const runKeys = await frame.locator('#run-choice option').evaluateAll((options) => options.map((o) => o.value));
+  assert.ok(runKeys.length > 1);
+  assert.ok(runKeys.slice(1).every((key) => /^h[a-f0-9]{32}$/.test(key)));
+  await frame.locator('#run-choice').selectOption(runKeys[1]);
+  await frame.getByRole('button', { name: 'Refresh process graph', exact: true }).click();
+  await frame.locator('#process-graph .process-card').last().waitFor();
+  await frame.locator('#process-graph .process-links path').first().waitFor({ state: 'attached' });
+  await frame.locator('#process-graph .process-card summary').last().click();
+  await frame
+    .locator('#process-graph .process-card[open] details summary')
+    .filter({ hasText: 'Retained inputs' })
+    .first()
+    .click();
+  await frame.locator('#process-graph .process-card[open] table tbody tr').first().waitFor();
+  await frame.getByRole('button', { name: 'Read shareable report', exact: true }).click();
+  await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 30000 });
+  if (evidence) {
+    mkdirSync(evidence, { recursive: true });
+    writeFileSync(join(evidence, 'report.md'), report);
+    await page.screenshot({ path: join(evidence, 'installed-completed.png'), fullPage: true });
+  }
+  await page.reload();
+  await frame.locator('#status').getByText('completed', { exact: true }).waitFor({ timeout: 15000 });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(requests, []);
+  const result = {
+    installedNpmOnly: true,
+    noCheckoutRuntimeImports: true,
+    sourceGone: true,
+    prepare: true,
+    separateUiConfirmation: true,
+    checksStartedSeparately: true,
+    reportFormatDigest: digest,
+    retainedRunSelection: true,
+    processDag: true,
+    expandedWorkIo: true,
+    reconnect: true,
+    errors,
+    requests,
+  };
+  if (evidence) writeFileSync(join(evidence, 'result.json'), JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(result));
+} finally {
+  await browser?.close();
+  for (const child of [...children].reverse()) {
+    if (child.exitCode !== null || child.signalCode !== null) continue;
+    child.kill('SIGTERM');
+    await Promise.race([new Promise((r) => child.once('exit', r)), wait(4000)]);
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  }
+  c.cleanup();
+}

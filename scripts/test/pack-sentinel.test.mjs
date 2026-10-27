@@ -3,32 +3,68 @@
 // compiled by tsc). The real package's contracts are its own; CI smokes the real tarball.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, existsSync, readFileSync, readdirSync, chmodSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  symlinkSync,
+  rmSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  chmodSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const write = (root, path, text) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
-const node = (root, script, ...args) => spawnSync(process.execPath, [join(root, 'scripts', script), ...args], { cwd: root, encoding: 'utf8', timeout: 180_000 });
-const tsc = (root) => spawnSync(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', join(root, 'packages/sentinel/tsconfig.json')], { encoding: 'utf8' });
+const write = (root, path, text) => {
+  mkdirSync(dirname(join(root, path)), { recursive: true });
+  writeFileSync(join(root, path), text);
+};
+const node = (root, script, ...args) =>
+  spawnSync(process.execPath, [join(root, 'scripts', script), ...args], {
+    cwd: root,
+    encoding: 'utf8',
+    timeout: 180_000,
+  });
+const tsc = (root) =>
+  spawnSync(
+    process.execPath,
+    [resolve('node_modules/typescript/bin/tsc'), '-p', join(root, 'packages/sentinel/tsconfig.json')],
+    { encoding: 'utf8' },
+  );
 const json = (value) => JSON.stringify(value, null, 2);
 
 const MANIFEST = {
-  name: '@farsight/sentinel', version: '0.0.0-draft.1', private: true, description: 'draft contracts only',
-  type: 'module', engines: { node: '>=24' }, main: './dist/index.js', types: './dist/index.d.ts',
+  name: '@farsight/sentinel',
+  version: '0.0.0-draft.1',
+  private: true,
+  description: 'draft contracts only',
+  type: 'module',
+  engines: { node: '>=24' },
+  main: './dist/index.js',
+  types: './dist/index.d.ts',
   bin: { 'farsight-sentinel': './dist/cli.js' },
   exports: {
     '.': { types: './dist/index.d.ts', import: './dist/index.js' },
     './contracts': { types: './dist/contracts/index.d.ts', import: './dist/contracts/index.js' },
     './store': { types: './dist/store/index.d.ts', import: './dist/store/index.js' },
-    './schemas/*': './schemas/*', './package.json': './package.json',
+    './schemas/*': './schemas/*',
+    './package.json': './package.json',
   },
   dependencies: { '@farsight/core': 'workspace:*' },
 };
 
 function workspace({ build = true } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'farsight-pack-sentinel-'));
-  for (const file of ['pack-sentinel.mjs', 'sentinel-native-helper.mjs', 'pack-preflight.mjs', 'npm-consumer.mjs', 'test-sentinel-package.mjs']) {
+  for (const file of [
+    'pack-sentinel.mjs',
+    'sentinel-native-helper.mjs',
+    'pack-preflight.mjs',
+    'npm-consumer.mjs',
+    'test-sentinel-package.mjs',
+  ]) {
     write(root, `scripts/${file}`, readFileSync(resolve('scripts', file), 'utf8'));
   }
   symlinkSync(resolve('node_modules'), join(root, 'node_modules'), 'dir');
@@ -36,25 +72,56 @@ function workspace({ build = true } = {}) {
   write(root, 'packages/core/package.json', JSON.stringify({ name: '@farsight/core', main: 'dist/index.js' }));
   write(root, 'packages/core/dist/index.js', '');
   // core's gitIdentity, stood in: the packer stamps the Sentinel build with it, by the rule farsight-cli's packer uses.
-  write(root, 'packages/core/dist/version.js', "export function gitIdentity() { return { commit: 'abc1234', codeCommit: 'abc1234', dirty: false }; }\n");
+  write(
+    root,
+    'packages/core/dist/version.js',
+    "export function gitIdentity() { return { commit: 'abc1234', codeCommit: 'abc1234', dirty: false }; }\n",
+  );
   write(root, 'packages/sentinel/package.json', json(MANIFEST));
-  write(root, 'packages/sentinel/tsconfig.json', json({ compilerOptions: {
-    target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, declaration: true,
-    sourceMap: true, declarationMap: true, rootDir: 'src', outDir: 'dist', types: [],
-  }, include: ['src'] }));
+  write(
+    root,
+    'packages/sentinel/tsconfig.json',
+    json({
+      compilerOptions: {
+        target: 'ES2022',
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        strict: true,
+        declaration: true,
+        sourceMap: true,
+        declarationMap: true,
+        rootDir: 'src',
+        outDir: 'dist',
+        types: [],
+      },
+      include: ['src'],
+    }),
+  );
   const KINDS = { report: 'ReportEnvelope', run: 'RunEnvelope', work: 'WorkEnvelope', attempt: 'AttemptEnvelope' };
-  write(root, 'packages/sentinel/src/contracts/index.ts', [
-    ...Object.entries(KINDS).map(([kind, type]) => `export interface ${type} { schema: 'sentinel-${kind}/draft-1'; id: string }`),
-    'export const ENVELOPES = {',
-    ...Object.entries(KINDS).map(([kind, type]) => `  ${kind}: { schema: 'sentinel-${kind}/draft-1', type: '${type}' },`),
-    '} as const;',
-    'export type EnvelopeKind = keyof typeof ENVELOPES;', '',
-  ].join('\n'));
+  write(
+    root,
+    'packages/sentinel/src/contracts/index.ts',
+    [
+      ...Object.entries(KINDS).map(
+        ([kind, type]) => `export interface ${type} { schema: 'sentinel-${kind}/draft-1'; id: string }`,
+      ),
+      'export const ENVELOPES = {',
+      ...Object.entries(KINDS).map(
+        ([kind, type]) => `  ${kind}: { schema: 'sentinel-${kind}/draft-1', type: '${type}' },`,
+      ),
+      '} as const;',
+      'export type EnvelopeKind = keyof typeof ENVELOPES;',
+      '',
+    ].join('\n'),
+  );
   // A stand-in for the draft store with the real facade's public surface, just enough for the package smoke:
   // a JSON file in a private store folder, a new epoch per open, staged and verified receipts, stale-epoch
   // refusal and reads from a second process. It has no SQLite and no lock; the real store is smoked by CI.
   // It reaches node: builtins at run time only, so the stand-in needs no @types/node to compile.
-  write(root, 'packages/sentinel/src/store/index.ts', `
+  write(
+    root,
+    'packages/sentinel/src/store/index.ts',
+    `
 declare global { interface Buffer extends Uint8Array { toString(encoding?: string): string } }
 type Fs = { existsSync(p: string): boolean; mkdirSync(p: string, o?: object): void; readFileSync(p: string, e: string): string;
   writeFileSync(p: string, d: string, o?: object): void; statSync(p: string): { mode: number } };
@@ -191,30 +258,56 @@ export async function openStore(path: string, options: { waitMs?: number } = {})
     close() { save(); },
   };
 }
-`);
-  write(root, 'packages/sentinel/src/index.ts', [
-    "export { StoreError, LedgerError, ObjectStoreError, openStore, SQLITE_RELEASE_POLICY, qualificationFor } from './store/index.js';",
-    "import { ENVELOPES, type EnvelopeKind, type ReportEnvelope, type RunEnvelope, type WorkEnvelope, type AttemptEnvelope } from './contracts/index.js';",
-    "export * from './contracts/index.js';",
-    'export interface EnvelopeTypes { report: ReportEnvelope; run: RunEnvelope; work: WorkEnvelope; attempt: AttemptEnvelope }',
-    'export type ValidationResult<T> = { ok: true; value: T } | { ok: false; errors: { code: string; path: string }[] };',
-    'export function validateEnvelope<K extends EnvelopeKind>(kind: K, value: unknown): ValidationResult<EnvelopeTypes[K]> {',
-    '  const v = value as { schema?: unknown; id?: unknown };',
-    "  if (v?.schema !== ENVELOPES[kind].schema) return { ok: false, errors: [{ code: 'unsupportedVersion', path: '/schema' }] };",
-    "  if (typeof v.id !== 'string') return { ok: false, errors: [{ code: 'invalid', path: '/id' }] };",
-    '  return { ok: true, value: value as EnvelopeTypes[K] };',
-    '}', '',
-  ].join('\n'));
-  write(root, 'packages/sentinel/src/cli.ts', "console.log('farsight-sentinel (draft): no scanner is available yet');\nexport {};\n");
+`,
+  );
+  write(
+    root,
+    'packages/sentinel/src/index.ts',
+    [
+      "export { StoreError, LedgerError, ObjectStoreError, openStore, SQLITE_RELEASE_POLICY, qualificationFor } from './store/index.js';",
+      "import { ENVELOPES, type EnvelopeKind, type ReportEnvelope, type RunEnvelope, type WorkEnvelope, type AttemptEnvelope } from './contracts/index.js';",
+      "export * from './contracts/index.js';",
+      'export interface EnvelopeTypes { report: ReportEnvelope; run: RunEnvelope; work: WorkEnvelope; attempt: AttemptEnvelope }',
+      'export type ValidationResult<T> = { ok: true; value: T } | { ok: false; errors: { code: string; path: string }[] };',
+      'export function validateEnvelope<K extends EnvelopeKind>(kind: K, value: unknown): ValidationResult<EnvelopeTypes[K]> {',
+      '  const v = value as { schema?: unknown; id?: unknown };',
+      "  if (v?.schema !== ENVELOPES[kind].schema) return { ok: false, errors: [{ code: 'unsupportedVersion', path: '/schema' }] };",
+      "  if (typeof v.id !== 'string') return { ok: false, errors: [{ code: 'invalid', path: '/id' }] };",
+      '  return { ok: true, value: value as EnvelopeTypes[K] };',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  write(
+    root,
+    'packages/sentinel/src/cli.ts',
+    "console.log('farsight-sentinel (draft): no scanner is available yet');\nexport {};\n",
+  );
   for (const kind of Object.keys(KINDS)) {
-    write(root, `packages/sentinel/schemas/sentinel-${kind}.draft-1.schema.json`, JSON.stringify({ $id: `sentinel-${kind}/draft-1`, type: 'object' }));
+    write(
+      root,
+      `packages/sentinel/schemas/sentinel-${kind}.draft-1.schema.json`,
+      JSON.stringify({ $id: `sentinel-${kind}/draft-1`, type: 'object' }),
+    );
   }
   // The store smoke reads run-active, work-idle and attempt-running; every fixture is named <kind>[-case].json.
-  for (const [file, kind, id] of [['report', 'report', 'r1'], ['run-active', 'run', 'run-1'], ['work-idle', 'work', 'work-capture'], ['attempt-running', 'attempt', 'att-1']]) {
-    write(root, `packages/sentinel/test/contracts/valid/${file}.json`, JSON.stringify({ schema: `sentinel-${kind}/draft-1`, id }));
+  for (const [file, kind, id] of [
+    ['report', 'report', 'r1'],
+    ['run-active', 'run', 'run-1'],
+    ['work-idle', 'work', 'work-capture'],
+    ['attempt-running', 'attempt', 'att-1'],
+  ]) {
+    write(
+      root,
+      `packages/sentinel/test/contracts/valid/${file}.json`,
+      JSON.stringify({ schema: `sentinel-${kind}/draft-1`, id }),
+    );
   }
   write(root, 'build/sentinel/keep.txt', 'prior artifact');
-  if (build) { const built = tsc(root); assert.equal(built.status, 0, built.stdout); }
+  if (build) {
+    const built = tsc(root);
+    assert.equal(built.status, 0, built.stdout);
+  }
   return root;
 }
 const tarball = (root) => join(root, 'build/sentinel/farsight-sentinel-0.0.0-draft.1.tgz');
@@ -232,7 +325,9 @@ test('pack-sentinel refuses an unbuilt or absent Sentinel before touching build/
     assert.equal(existsSync(join(root, 'build/sentinel/keep.txt')), true);
     rmSync(join(root, 'packages/sentinel'), { recursive: true });
     assert.match(node(root, 'pack-sentinel.mjs').stderr, /no Sentinel package to pack/);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('the tarball carries typed exports, declarations, its own metadata and the schemas', () => {
@@ -246,7 +341,8 @@ test('the tarball carries typed exports, declarations, its own metadata and the 
       '.': { types: './dist/index.d.ts', import: './dist/index.mjs' },
       './contracts': { types: './dist/contracts/index.d.ts', import: './dist/contracts/index.mjs' },
       './store': { types: './dist/store/index.d.ts', import: './dist/store/index.mjs' },
-      './package.json': './package.json', './schemas/*': './schemas/*',
+      './package.json': './package.json',
+      './schemas/*': './schemas/*',
     });
     assert.equal(manifest.types, './dist/index.d.ts');
     assert.equal(manifest.version, '0.0.0-draft.1', "Sentinel's own version, not the app's");
@@ -259,8 +355,13 @@ test('the tarball carries typed exports, declarations, its own metadata and the 
     assert.match(readFileSync(join(out, 'cli.mjs'), 'utf8'), /^#!\/usr\/bin\/env node\n/);
     assert.doesNotMatch(readFileSync(join(out, 'index.d.ts'), 'utf8'), /sourceMappingURL/);
     assert.ok(existsSync(join(out, 'contracts/index.d.ts')));
-    assert.ok(!existsSync(join(out, 'index.js.map')) && !existsSync(join(out, 'index.d.ts.map')), 'no maps into absent sources');
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    assert.ok(
+      !existsSync(join(out, 'index.js.map')) && !existsSync(join(out, 'index.d.ts.map')),
+      'no maps into absent sources',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("Sentinel's version is its own: no fallback to the app's, an expected version is enforced, and the build is stamped", () => {
@@ -286,9 +387,18 @@ test("Sentinel's version is its own: no fallback to the app's, an expected versi
     const none = node(root, 'pack-sentinel.mjs');
     assert.equal(none.status, 1);
     assert.match(none.stderr, /no version of its own; farsight-sentinel is never versioned from farsight-cli/);
-    assert.ok(!readdirSync(join(root, 'build/sentinel')).some((f) => f.includes('0.0.0-test')), 'nothing was packed under the app version');
-    assert.equal(readFileSync(join(root, 'build/sentinel/keep.txt'), 'utf8'), 'prior', 'refusals leave prior artifacts');
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    assert.ok(
+      !readdirSync(join(root, 'build/sentinel')).some((f) => f.includes('0.0.0-test')),
+      'nothing was packed under the app version',
+    );
+    assert.equal(
+      readFileSync(join(root, 'build/sentinel/keep.txt'), 'utf8'),
+      'prior',
+      'refusals leave prior artifacts',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a clean npm consumer imports, type-checks and validates through the installed package', () => {
@@ -297,20 +407,31 @@ test('a clean npm consumer imports, type-checks and validates through the instal
     assert.equal(node(root, 'pack-sentinel.mjs').status, 0);
     const smoke = node(root, 'test-sentinel-package.mjs');
     assert.equal(smoke.status, 0, smoke.stderr + smoke.stdout);
-    assert.match(smoke.stdout, /sentinel package ok: farsight-sentinel --help, 3 typed exports \(4 contract types compiled\), 4 schemas, 4 fixtures, store reopened across processes \([a-z0-9-]+ SQLite [0-9.]+, candidate\), npm consumer/);
+    assert.match(
+      smoke.stdout,
+      /sentinel package ok: farsight-sentinel --help, 3 typed exports \(4 contract types compiled\), 4 schemas, 4 fixtures, store reopened across processes \([a-z0-9-]+ SQLite [0-9.]+, candidate\), npm consumer/,
+    );
     // the installed schema set must be the source set
     write(root, 'packages/sentinel/schemas/sentinel-extra.draft-1.schema.json', '{}');
     const stale = node(root, 'test-sentinel-package.mjs');
     assert.equal(stale.status, 1);
     assert.match(stale.stderr, /the installed schema set is the source set/);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('the smoke fails when a contract type is missing, and the pack when the schemas are', () => {
   const root = workspace();
   try {
-    write(root, 'packages/sentinel/src/contracts/index.ts', readFileSync(join(root, 'packages/sentinel/src/contracts/index.ts'), 'utf8')
-      .replace("type: 'ReportEnvelope'", "type: 'MissingEnvelope'"));
+    write(
+      root,
+      'packages/sentinel/src/contracts/index.ts',
+      readFileSync(join(root, 'packages/sentinel/src/contracts/index.ts'), 'utf8').replace(
+        "type: 'ReportEnvelope'",
+        "type: 'MissingEnvelope'",
+      ),
+    );
     assert.equal(tsc(root).status, 0);
     assert.equal(node(root, 'pack-sentinel.mjs').status, 0);
     const untypedContract = node(root, 'test-sentinel-package.mjs');
@@ -321,43 +442,73 @@ test('the smoke fails when a contract type is missing, and the pack when the sch
     const run = node(root, 'pack-sentinel.mjs');
     assert.equal(run.status, 1);
     assert.match(run.stderr, /exports \.\/schemas\/\* but packages\/sentinel\/schemas has no JSON schema/);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('an untyped export or a declaration a consumer cannot resolve is refused', () => {
   const root = workspace();
   try {
-    write(root, 'packages/sentinel/package.json', json({ ...MANIFEST, exports: { ...MANIFEST.exports, './contracts': './dist/contracts/index.js' } }));
+    write(
+      root,
+      'packages/sentinel/package.json',
+      json({ ...MANIFEST, exports: { ...MANIFEST.exports, './contracts': './dist/contracts/index.js' } }),
+    );
     const untyped = node(root, 'pack-sentinel.mjs');
     assert.equal(untyped.status, 1);
     assert.match(untyped.stderr, /untyped: \.\/contracts/);
 
     write(root, 'packages/sentinel/package.json', json(MANIFEST));
-    write(root, 'packages/sentinel/dist/index.d.ts', readFileSync(join(root, 'packages/sentinel/dist/index.d.ts'), 'utf8') +
-      "\nexport type { Counted } from '@farsight/core';\nexport type { Stats } from 'node:fs';\n");
+    write(
+      root,
+      'packages/sentinel/dist/index.d.ts',
+      readFileSync(join(root, 'packages/sentinel/dist/index.d.ts'), 'utf8') +
+        "\nexport type { Counted } from '@farsight/core';\nexport type { Stats } from 'node:fs';\n",
+    );
     const leaky = node(root, 'pack-sentinel.mjs');
     assert.equal(leaky.status, 1);
     assert.match(leaky.stderr, /import: @farsight\/core/);
     assert.match(leaky.stderr, /import: node:fs/);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("third-party dependencies of Sentinel's closure stay external and are declared once", () => {
   const root = workspace();
   try {
-    write(root, 'packages/core/package.json', JSON.stringify({ name: '@farsight/core', main: 'dist/index.js', dependencies: { yaml: '^2.0.0' } }));
-    write(root, 'packages/sentinel/package.json', json({ ...MANIFEST, dependencies: { ...MANIFEST.dependencies, ajv: '8.20.0' } }));
-    write(root, 'packages/sentinel/src/index.ts', readFileSync(join(root, 'packages/sentinel/src/index.ts'), 'utf8') +
-      "// @ts-ignore the stand-in has no ajv installed; esbuild keeps it external\nimport Ajv from 'ajv';\nexport const validator = () => new Ajv();\n");
+    write(
+      root,
+      'packages/core/package.json',
+      JSON.stringify({ name: '@farsight/core', main: 'dist/index.js', dependencies: { yaml: '^2.0.0' } }),
+    );
+    write(
+      root,
+      'packages/sentinel/package.json',
+      json({ ...MANIFEST, dependencies: { ...MANIFEST.dependencies, ajv: '8.20.0' } }),
+    );
+    write(
+      root,
+      'packages/sentinel/src/index.ts',
+      readFileSync(join(root, 'packages/sentinel/src/index.ts'), 'utf8') +
+        "// @ts-ignore the stand-in has no ajv installed; esbuild keeps it external\nimport Ajv from 'ajv';\nexport const validator = () => new Ajv();\n",
+    );
     const packed = node(root, 'pack-sentinel.mjs');
     assert.equal(packed.status, 0, packed.stderr);
     assert.deepEqual(packedManifest(root).dependencies, { ajv: '8.20.0', yaml: '^2.0.0' });
     assert.match(readFileSync(join(root, 'build/sentinel/package/dist/index.mjs'), 'utf8'), /from "ajv"/);
-    write(root, 'packages/core/package.json', JSON.stringify({ name: '@farsight/core', main: 'dist/index.js', dependencies: { ajv: '^8.0.0' } }));
+    write(
+      root,
+      'packages/core/package.json',
+      JSON.stringify({ name: '@farsight/core', main: 'dist/index.js', dependencies: { ajv: '^8.0.0' } }),
+    );
     const conflict = node(root, 'pack-sentinel.mjs');
     assert.equal(conflict.status, 1);
     assert.match(conflict.stderr, /ajv is required as both/);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a missing transitive compiled module or sibling declaration fails before build/sentinel is replaced', () => {
@@ -366,8 +517,12 @@ test('a missing transitive compiled module or sibling declaration fails before b
     write(root, 'build/sentinel/farsight-sentinel-prior.tgz', 'prior');
     // core's main exists, but re-exports a module that was never compiled: only a real bundle sees it
     write(root, 'packages/core/dist/index.js', "export * from './counts.js';\n");
-    write(root, 'packages/sentinel/src/index.ts', readFileSync(join(root, 'packages/sentinel/src/index.ts'), 'utf8') +
-      "export * as core from '../../core/dist/index.js';\n");
+    write(
+      root,
+      'packages/sentinel/src/index.ts',
+      readFileSync(join(root, 'packages/sentinel/src/index.ts'), 'utf8') +
+        "export * as core from '../../core/dist/index.js';\n",
+    );
     const bundle = node(root, 'pack-sentinel.mjs');
     assert.equal(bundle.status, 1);
     assert.match(bundle.stderr, /prior artifacts in build\/ are unchanged[\s\S]*counts\.js/);
@@ -375,14 +530,23 @@ test('a missing transitive compiled module or sibling declaration fails before b
     assert.equal(existsSync(join(root, 'build/sentinel/keep.txt')), true);
 
     write(root, 'packages/core/dist/index.js', '');
-    write(root, 'packages/sentinel/dist/index.d.ts', readFileSync(join(root, 'packages/sentinel/dist/index.d.ts'), 'utf8') +
-      "\nexport type { Gone } from './gone.js';\n");
+    write(
+      root,
+      'packages/sentinel/dist/index.d.ts',
+      readFileSync(join(root, 'packages/sentinel/dist/index.d.ts'), 'utf8') +
+        "\nexport type { Gone } from './gone.js';\n",
+    );
     const decl = node(root, 'pack-sentinel.mjs');
     assert.equal(decl.status, 1);
     assert.match(decl.stderr, /sibling declaration that is not built[\s\S]*index\.d\.ts: \.\/gone\.js/);
     assert.equal(existsSync(join(root, 'build/sentinel/farsight-sentinel-prior.tgz')), true);
-    assert.deepEqual(readdirSync(join(root, 'build')).filter((n) => n.startsWith('.stage-')), []);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    assert.deepEqual(
+      readdirSync(join(root, 'build')).filter((n) => n.startsWith('.stage-')),
+      [],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a successful Sentinel pack replaces build/sentinel only', () => {
@@ -396,8 +560,13 @@ test('a successful Sentinel pack replaces build/sentinel only', () => {
     assert.equal(existsSync(join(root, 'build/sentinel/keep.txt')), false, 'its own prior output is replaced');
     assert.equal(existsSync(join(root, 'build/farsight-cli-0.0.0.tgz')), true);
     assert.equal(existsSync(join(root, 'build/echo/farsight-echo-0.0.0.tgz')), true);
-    assert.deepEqual(readdirSync(join(root, 'build')).filter((n) => n.startsWith('.stage-')), []);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    assert.deepEqual(
+      readdirSync(join(root, 'build')).filter((n) => n.startsWith('.stage-')),
+      [],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('npm pack exiting 0 without a tarball keeps build/sentinel; an inherited dry run is switched off', () => {
@@ -407,18 +576,38 @@ test('npm pack exiting 0 without a tarball keeps build/sentinel; an inherited dr
     write(root, 'fake-bin/npm', '#!/bin/sh\nexit 0\n');
     chmodSync(join(root, 'fake-bin/npm'), 0o755);
     const env = (extra) => ({ cwd: root, encoding: 'utf8', timeout: 180_000, env: { ...process.env, ...extra } });
-    const silent = spawnSync(process.execPath, [join(root, 'scripts/pack-sentinel.mjs')], env({ PATH: `${join(root, 'fake-bin')}:${process.env.PATH}` }));
+    const silent = spawnSync(
+      process.execPath,
+      [join(root, 'scripts/pack-sentinel.mjs')],
+      env({ PATH: `${join(root, 'fake-bin')}:${process.env.PATH}` }),
+    );
     assert.equal(silent.status, 1);
-    assert.match(silent.stderr, /prior artifacts in build\/ are unchanged[\s\S]*wrote no farsight-sentinel-0\.0\.0-draft\.1\.tgz/);
+    assert.match(
+      silent.stderr,
+      /prior artifacts in build\/ are unchanged[\s\S]*wrote no farsight-sentinel-0\.0\.0-draft\.1\.tgz/,
+    );
     assert.equal(readFileSync(join(root, 'build/sentinel/farsight-sentinel-prior.tgz'), 'utf8'), 'prior');
     assert.equal(existsSync(join(root, 'build/sentinel/keep.txt')), true);
-    assert.deepEqual(readdirSync(join(root, 'build')).filter((n) => n.startsWith('.stage-')), []);
+    assert.deepEqual(
+      readdirSync(join(root, 'build')).filter((n) => n.startsWith('.stage-')),
+      [],
+    );
 
-    const dry = spawnSync(process.execPath, [join(root, 'scripts/pack-sentinel.mjs')], env({ npm_config_dry_run: 'true' }));
+    const dry = spawnSync(
+      process.execPath,
+      [join(root, 'scripts/pack-sentinel.mjs')],
+      env({ npm_config_dry_run: 'true' }),
+    );
     assert.equal(dry.status, 0, dry.stderr);
     assert.ok(existsSync(tarball(root)));
-    assert.equal(existsSync(join(root, 'build/sentinel/farsight-sentinel-prior.tgz')), false, 'replaced by the real output');
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    assert.equal(
+      existsSync(join(root, 'build/sentinel/farsight-sentinel-prior.tgz')),
+      false,
+      'replaced by the real output',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('the root export and a subpath share one module instance in the installed tarball', () => {
@@ -427,19 +616,30 @@ test('the root export and a subpath share one module instance in the installed t
   try {
     const packed = node(root, 'pack-sentinel.mjs');
     assert.equal(packed.status, 0, packed.stderr);
-    assert.ok(readdirSync(join(root, 'build/sentinel/package/dist/chunks')).length > 0, 'shared modules are emitted once, as chunks');
+    assert.ok(
+      readdirSync(join(root, 'build/sentinel/package/dist/chunks')).length > 0,
+      'shared modules are emitted once, as chunks',
+    );
     write(consumer, 'package.json', JSON.stringify({ name: 'consumer', private: true, type: 'module' }));
-    const installed = spawnSync('npm', ['install', '--offline', '--no-audit', '--no-fund', tarball(root)],
-      { cwd: consumer, encoding: 'utf8', timeout: 180_000 });
+    const installed = spawnSync('npm', ['install', '--offline', '--no-audit', '--no-fund', tarball(root)], {
+      cwd: consumer,
+      encoding: 'utf8',
+      timeout: 180_000,
+    });
     assert.equal(installed.status, 0, installed.stderr);
-    write(consumer, 'check.mjs', [
-      "import * as root from 'farsight-sentinel';",
-      "import * as store from 'farsight-sentinel/store';",
-      'let thrown;',
-      "try { await store.openStore('relative/path'); } catch (e) { thrown = e; }",
-      'console.log(JSON.stringify({ open: root.openStore === store.openStore, error: root.StoreError === store.StoreError,',
-      '  instanceofRoot: thrown instanceof root.StoreError, instanceofStore: thrown instanceof store.StoreError }));', '',
-    ].join('\n'));
+    write(
+      consumer,
+      'check.mjs',
+      [
+        "import * as root from 'farsight-sentinel';",
+        "import * as store from 'farsight-sentinel/store';",
+        'let thrown;',
+        "try { await store.openStore('relative/path'); } catch (e) { thrown = e; }",
+        'console.log(JSON.stringify({ open: root.openStore === store.openStore, error: root.StoreError === store.StoreError,',
+        '  instanceofRoot: thrown instanceof root.StoreError, instanceofStore: thrown instanceof store.StoreError }));',
+        '',
+      ].join('\n'),
+    );
     const ran = spawnSync(process.execPath, ['check.mjs'], { cwd: consumer, encoding: 'utf8' });
     assert.equal(ran.status, 0, ran.stderr);
     assert.deepEqual(JSON.parse(ran.stdout), { open: true, error: true, instanceofRoot: true, instanceofStore: true });
@@ -452,40 +652,71 @@ test('the root export and a subpath share one module instance in the installed t
 test("a publishable workspace library's declarations are vendored; a string literal never reads as an import", () => {
   const root = workspace();
   try {
-    write(root, 'packages/lib/package.json', JSON.stringify({ name: '@farsight/lib', version: '0.1.0', main: 'dist/index.js', types: './dist/index.d.ts',
-      publishConfig: { access: 'public' }, exports: { '.': { types: './dist/index.d.ts', import: './dist/index.js' } } }));
+    write(
+      root,
+      'packages/lib/package.json',
+      JSON.stringify({
+        name: '@farsight/lib',
+        version: '0.1.0',
+        main: 'dist/index.js',
+        types: './dist/index.d.ts',
+        publishConfig: { access: 'public' },
+        exports: { '.': { types: './dist/index.d.ts', import: './dist/index.js' } },
+      }),
+    );
     write(root, 'packages/lib/dist/index.js', 'export {};\n');
     write(root, 'packages/lib/dist/index.d.ts', "export * from './shape.js';\n");
     // A type whose string literal is 'from': an import scanner that ignores strings would read it as `from '...'`.
-    write(root, 'packages/lib/dist/shape.d.ts', "export interface Edge { kind: string; from: string; to: string }\nexport type Ends = Pick<Edge, 'kind' | 'from' | 'to'>;\n");
-    write(root, 'packages/sentinel/package.json', json({ ...MANIFEST, dependencies: { ...MANIFEST.dependencies, '@farsight/lib': 'workspace:*' } }));
-    write(root, 'packages/sentinel/dist/index.d.ts', readFileSync(join(root, 'packages/sentinel/dist/index.d.ts'), 'utf8') +
-      "\nexport type { Edge, Ends } from '@farsight/lib';\n");
+    write(
+      root,
+      'packages/lib/dist/shape.d.ts',
+      "export interface Edge { kind: string; from: string; to: string }\nexport type Ends = Pick<Edge, 'kind' | 'from' | 'to'>;\n",
+    );
+    write(
+      root,
+      'packages/sentinel/package.json',
+      json({ ...MANIFEST, dependencies: { ...MANIFEST.dependencies, '@farsight/lib': 'workspace:*' } }),
+    );
+    write(
+      root,
+      'packages/sentinel/dist/index.d.ts',
+      readFileSync(join(root, 'packages/sentinel/dist/index.d.ts'), 'utf8') +
+        "\nexport type { Edge, Ends } from '@farsight/lib';\n",
+    );
     const packed = node(root, 'pack-sentinel.mjs');
     assert.equal(packed.status, 0, packed.stderr);
     const out = join(root, 'build/sentinel/package/dist');
     assert.match(readFileSync(join(out, 'index.d.ts'), 'utf8'), /from '\.\/vendor\/lib\/index\.js'/);
     assert.ok(existsSync(join(out, 'vendor/lib/index.d.ts')) && existsSync(join(out, 'vendor/lib/shape.d.ts')));
-    assert.equal(packedManifest(root).dependencies?.['@farsight/lib'], undefined, 'a vendored library is never a dependency');
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    assert.equal(
+      packedManifest(root).dependencies?.['@farsight/lib'],
+      undefined,
+      'a vendored library is never a dependency',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
-
-
-for (const stem of ['frameworks/controls','analysis/paths']) test(`a shipped ${stem} worker requires its fixed driver before the previous package is touched`, () => {
-  const root = workspace();
-  try {
-    write(root, `packages/sentinel/src/${stem}/worker.ts`, 'export const worker = true;\n');
-    write(root, 'build/sentinel/previous-package', 'keep this exact prior package');
-    const before = readdirSync(join(root, 'build/sentinel')).sort();
-    const run = node(root, 'pack-sentinel.mjs');
-    assert.equal(run.status, 1);
-    assert.ok(run.stderr.includes(`${stem}/driver.ts is missing`),run.stderr);
-    assert.equal(readFileSync(join(root, 'build/sentinel/previous-package'), 'utf8'), 'keep this exact prior package');
-    assert.deepEqual(readdirSync(join(root, 'build/sentinel')).sort(), before);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
-
+for (const stem of ['frameworks/controls', 'analysis/paths'])
+  test(`a shipped ${stem} worker requires its fixed driver before the previous package is touched`, () => {
+    const root = workspace();
+    try {
+      write(root, `packages/sentinel/src/${stem}/worker.ts`, 'export const worker = true;\n');
+      write(root, 'build/sentinel/previous-package', 'keep this exact prior package');
+      const before = readdirSync(join(root, 'build/sentinel')).sort();
+      const run = node(root, 'pack-sentinel.mjs');
+      assert.equal(run.status, 1);
+      assert.ok(run.stderr.includes(`${stem}/driver.ts is missing`), run.stderr);
+      assert.equal(
+        readFileSync(join(root, 'build/sentinel/previous-package'), 'utf8'),
+        'keep this exact prior package',
+      );
+      assert.deepEqual(readdirSync(join(root, 'build/sentinel')).sort(), before);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
 test('a configured review registry ships its fixed operation entry and refuses a missing one', () => {
   const root = workspace();
@@ -502,5 +733,7 @@ test('a configured review registry ships its fixed operation entry and refuses a
     const packed = node(root, 'pack-sentinel.mjs');
     assert.equal(packed.status, 0, packed.stderr);
     assert.ok(existsSync(join(root, 'build/sentinel/package/dist/review/dispatch.mjs')));
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

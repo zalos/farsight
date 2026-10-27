@@ -61,7 +61,10 @@ for (const [name, before, after] of different) {
 
 test('comments are compared separately from program shape', () => {
   const problems = compare('fixture.ts', '// before\nconst x = 1;', '// after\nconst x = 1;');
-  assert.deepEqual(problems.map((problem) => problem.level), ['comment']);
+  assert.deepEqual(
+    problems.map((problem) => problem.level),
+    ['comment'],
+  );
 });
 
 test('the CLI checks revisions, working-tree edits, file changes and strict comments', () => {

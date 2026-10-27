@@ -1,25 +1,38 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, readFileSync, rmSync, existsSync, symlinkSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  copyFileSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+  existsSync,
+  symlinkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const legacy = '#!/bin/sh\n'
-  + '# Installed into .git/hooks by `node scripts/install-hooks.mjs` (run by `pnpm install`\'s prepare).\n'
-  + '# The subject must be a Conventional Commit; CI checks the same rule on the PR title and commits.\n'
-  + 'exec node "$(git rev-parse --show-toplevel)/scripts/lint-commits.mjs" --file "$1" --any-scope\n';
+const legacy =
+  '#!/bin/sh\n' +
+  "# Installed into .git/hooks by `node scripts/install-hooks.mjs` (run by `pnpm install`'s prepare).\n" +
+  '# The subject must be a Conventional Commit; CI checks the same rule on the PR title and commits.\n' +
+  'exec node "$(git rev-parse --show-toplevel)/scripts/lint-commits.mjs" --file "$1" --any-scope\n';
 
 test('lefthook migrates a linked worktree without changing any LFS hooks', () => {
   const temp = mkdtempSync(join(tmpdir(), 'farsight-hooks-'));
   const repo = join(temp, 'repo');
   const tree = join(temp, 'tree');
   const git = (args, cwd = repo) => execFileSync('git', args, { cwd, stdio: 'pipe' });
-  const install = () => execFileSync(process.execPath, [join(tree, 'scripts/install-hooks.mjs')], {
-    cwd: tree, env: { ...process.env, CI: '', LEFTHOOK: '1' }, stdio: 'pipe',
-  });
+  const install = () =>
+    execFileSync(process.execPath, [join(tree, 'scripts/install-hooks.mjs')], {
+      cwd: tree,
+      env: { ...process.env, CI: '', LEFTHOOK: '1' },
+      stdio: 'pipe',
+    });
   try {
     mkdirSync(repo);
     git(['init', '-b', 'main']);
@@ -32,7 +45,12 @@ test('lefthook migrates a linked worktree without changing any LFS hooks', () =>
     git(['worktree', 'add', '-b', 'feature', tree]);
     symlinkSync(join(root, 'node_modules'), join(tree, 'node_modules'), 'dir');
     const hooks = resolve(tree, git(['rev-parse', '--git-path', 'hooks'], tree).toString().trim());
-    const lfs = new Map(['pre-push', 'post-checkout', 'post-commit', 'post-merge'].map((name) => [name, `#!/bin/sh\n# LFS ${name}\nexit 0\n`]));
+    const lfs = new Map(
+      ['pre-push', 'post-checkout', 'post-commit', 'post-merge'].map((name) => [
+        name,
+        `#!/bin/sh\n# LFS ${name}\nexit 0\n`,
+      ]),
+    );
     for (const [name, content] of lfs) writeFileSync(join(hooks, name), content);
     writeFileSync(join(hooks, 'commit-msg'), legacy);
     install();
@@ -60,7 +78,9 @@ test('the installer is a no-op in CI and outside a Git checkout', () => {
     copyFileSync(join(root, 'scripts/install-hooks.mjs'), join(temp, 'scripts/install-hooks.mjs'));
     for (const ci of ['', 'true']) {
       const output = execFileSync(process.execPath, [join(temp, 'scripts/install-hooks.mjs')], {
-        cwd: temp, env: { ...process.env, CI: ci }, encoding: 'utf8',
+        cwd: temp,
+        env: { ...process.env, CI: ci },
+        encoding: 'utf8',
       });
       assert.match(output, ci ? /CI, nothing to install/ : /not a git checkout, nothing to install/);
       assert.equal(existsSync(join(temp, '.git')), false);

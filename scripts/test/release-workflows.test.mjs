@@ -8,7 +8,11 @@ import { resolve } from 'node:path';
 
 const read = (name) => readFileSync(resolve('.github/workflows', name), 'utf8');
 /** The lines of a workflow that are code, not comments. */
-const code = (text) => text.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
+const code = (text) =>
+  text
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('#'))
+    .join('\n');
 const uses = (text, flag) => code(text).split(flag).length - 1;
 
 /** The steps of a workflow, in order: { name, text } for each `- name:` block. */
@@ -30,12 +34,20 @@ function steps(text) {
   }
   return out;
 }
-const find = (list, pattern) => { const i = list.findIndex((s) => pattern.test(s.name)); assert.ok(i >= 0, `no step matching ${pattern}`); return i; };
+const find = (list, pattern) => {
+  const i = list.findIndex((s) => pattern.test(s.name));
+  assert.ok(i >= 0, `no step matching ${pattern}`);
+  return i;
+};
 
 test('no workflow input, variable or secret can waive an acceptance gate', () => {
   for (const name of ['release.yml', 'publish.yml', 'verify-release.yml']) {
     const text = code(read(name));
-    assert.doesNotMatch(text, /allow_pending|ALLOW_PENDING|require_complete|REQUIRE_COMPLETE|--require-complete|--diagnostic/, `${name} has a gate override`);
+    assert.doesNotMatch(
+      text,
+      /allow_pending|ALLOW_PENDING|require_complete|REQUIRE_COMPLETE|--require-complete|--diagnostic/,
+      `${name} has a gate override`,
+    );
     assert.doesNotMatch(text, /continue-on-error/, `${name} lets a step fail quietly`);
   }
 });
@@ -47,7 +59,12 @@ test('publish: complete acceptance runs unconditionally before the tag, the Rele
   assert.match(step, /node scripts\/npm-acceptance\.mjs/);
   assert.doesNotMatch(step, /--allow-pending/, 'publication never allows pending gates');
   assert.doesNotMatch(step, /^\s+if:/m, 'the acceptance is unconditional');
-  for (const later of [/^Tag the release commit/, /^Create the GitHub Release/, /^Publish to npm/, /^Write the release manifest/]) {
+  for (const later of [
+    /^Tag the release commit/,
+    /^Create the GitHub Release/,
+    /^Publish to npm/,
+    /^Write the release manifest/,
+  ]) {
     assert.ok(find(list, later) > accept, `${later} runs after the acceptance`);
   }
   assert.equal(uses(read('publish.yml'), '--allow-pending'), 0);
@@ -61,14 +78,21 @@ test('release: a real run needs complete acceptance before any branch or PR; onl
   assert.doesNotMatch(step, /^\s+if:/m, 'the acceptance is unconditional');
   // the one place pending gates are allowed: guarded by the dry run
   const allows = step.split('\n').filter((l) => l.includes('--allow-pending'));
-  assert.deepEqual(allows.map((l) => l.trim()), ['if [ "$DRY_RUN" = "true" ]; then args+=(--allow-pending); fi']);
+  assert.deepEqual(
+    allows.map((l) => l.trim()),
+    ['if [ "$DRY_RUN" = "true" ]; then args+=(--allow-pending); fi'],
+  );
   assert.equal(uses(text, '--allow-pending'), 1, '--allow-pending is used once, in the dry-run branch');
   for (const later of [/^Push the release branch/, /^Open the release PR/]) {
     const i = find(list, later);
     assert.ok(i > accept, `${later} runs after the acceptance`);
     assert.match(list[i].text, /if: \$\{\{ !inputs\.dry_run \}\}/, `${later} never runs in a dry run`);
   }
-  assert.doesNotMatch(text, /git tag|gh release create|npm publish/, 'the release workflow creates no tag, Release or package');
+  assert.doesNotMatch(
+    text,
+    /git tag|gh release create|npm publish/,
+    'the release workflow creates no tag, Release or package',
+  );
 });
 
 test('verify-release always requires every gate, and publish calls it with nothing that could waive one', () => {
@@ -78,7 +102,11 @@ test('verify-release always requires every gate, and publish calls it with nothi
   assert.doesNotMatch(run, /--diagnostic|--allow-pending/);
   const call = /\n  verify:\n([\s\S]*?)(?:\n\S|\n  \S|$)/.exec(read('publish.yml'))?.[1] ?? '';
   assert.match(call, /uses: \.\/\.github\/workflows\/verify-release\.yml/);
-  assert.deepEqual(call.match(/^\s{6}\S+:/gm)?.map((s) => s.trim()), ['tag:'], 'the call passes the tag and nothing else');
+  assert.deepEqual(
+    call.match(/^\s{6}\S+:/gm)?.map((s) => s.trim()),
+    ['tag:'],
+    'the call passes the tag and nothing else',
+  );
 });
 
 test('the only development uses of --allow-pending publish nothing', () => {
