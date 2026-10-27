@@ -92,7 +92,7 @@ test(
       book = new ReceiptBook(join(f.ws.trustDir, 'receipts')),
       now = new Date(),
       r = issueReceipt(book, OWNER, binding, { now, ttlMs: 1000 });
-    let calls: string[] = [];
+    const calls: string[] = [];
     const req = {
       intent: binding.intent,
       stateDigest: binding.stateDigest,

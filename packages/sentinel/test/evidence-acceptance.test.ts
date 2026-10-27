@@ -218,8 +218,8 @@ test(
   'explicit abandon releases only exact old pending pins without source proof or physical deletion; original full audit replays after restart',
   needsStore,
   async (t) => {
-    let s = await acceptFixture(t),
-      p = await pending(s);
+    let s = await acceptFixture(t);
+    const p = await pending(s);
     const old = evidenceLedgerFor(s.store).operation(p.operationId)!;
     await assert.rejects(
       () => abandonReportImport(s.store, s.ws, p.operationId, { timing: timing() }),
@@ -276,8 +276,8 @@ test(
   'abandon transaction rollback retains exact old pins and requires a fresh receipt; accepted operations cannot be abandoned',
   needsStore,
   async (t) => {
-    let s = await acceptFixture(t),
-      p = await pending(s);
+    let s = await acceptFixture(t);
+    const p = await pending(s);
     s = await reopen(s, t);
     const preview = await abandonReportImport(s.store, s.ws, p.operationId, { timing: timing() }),
       receiptId = confirm(s, preview.binding!),
@@ -320,8 +320,8 @@ test(
   'six-role restart transfer keeps four original pins continuous, replaces receipt audit/root atomically, and accepts exactly once',
   needsStore,
   async (t) => {
-    let s = await acceptFixture(t),
-      p = await pending(s);
+    let s = await acceptFixture(t);
+    const p = await pending(s);
     const old = evidenceLedgerFor(s.store).operation(p.operationId)!.identity;
     s = await reopen(s, t);
     const preview = await acceptReportImportFiles(s.store, s.ws, s.ancestor, s.files, { timing: timing() }),
@@ -606,8 +606,8 @@ test(
   'immutable stage metadata and stale abandon confirmation cannot spend a receipt or release another pin; foreign workspace cannot replay acceptance',
   needsStore,
   async (t) => {
-    let s = await acceptFixture(t),
-      p = await pending(s, 'after-stage');
+    let s = await acceptFixture(t);
+    const p = await pending(s, 'after-stage');
     s = await reopen(s, t);
     const preview = await abandonReportImport(s.store, s.ws, p.operationId, { timing: timing() }),
       receiptId = confirm(s, preview.binding!);
