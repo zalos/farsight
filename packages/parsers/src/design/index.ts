@@ -54,7 +54,7 @@ export function parseManifestText(text: string, label = 'manifest'): DesignManif
   try {
     doc = JSON.parse(text);
   } catch (err) {
-    throw new Error(`${label}: not valid JSON — ${(err as Error).message}`);
+    throw new Error(`${label}: not valid JSON — ${(err as Error).message}`, { cause: err });
   }
   if (!isDesignManifest(doc))
     throw new Error(

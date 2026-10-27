@@ -31,7 +31,7 @@ import { walk, isNode, lineIndex, type AstNode } from '../walk.js';
 import { collectFiles } from '../shared/files.js';
 import { createAliasResolver } from '../aliases.js';
 import type { IngestOptions } from '../types.js';
-import { extractCases, isTestFile, DEFAULT_TEST_GLOBS, type TestGlobs } from './cases.js';
+import { extractCases, isTestFile, type TestGlobs } from './cases.js';
 import { CoverTargets, fileSignals, staticResolution, type StaticSignal } from './covers.js';
 import {
   findReports,
@@ -287,7 +287,7 @@ export function applyTests(
       if (claimed.some((c) => c.abs === helperAbs)) continue; // another test file, not a helper
       let map = helperCache.get(helperAbs);
       if (!map) {
-        let helperSource = '';
+        let helperSource: string;
         try {
           helperSource = readFileSync(helperAbs, 'utf8');
         } catch {
