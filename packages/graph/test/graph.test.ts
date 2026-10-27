@@ -131,7 +131,8 @@ test('multi-project test evidence validates status literals inside recursive run
   };
   const document = graphDocument(value);
   assert.deepEqual(deserializeGraph(JSON.stringify(document)), document);
-  const run = document.graph.nodes.find((node) => node.test)?.test?.run!;
+  const run = document.graph.nodes.find((node) => node.test)?.test?.run;
+  assert.ok(run);
   (run.projects![0] as any).status = {};
   assert.equal(validateGraph(document).valid, false);
 });
