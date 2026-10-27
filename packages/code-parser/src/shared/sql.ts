@@ -50,7 +50,7 @@ const STATEMENT_START = /^\s*(?:--[^\n]*\n\s*|\/\*[\s\S]*?\*\/\s*)*(select|inser
 
 /** `"schema"."name"` · `schema.name` · `name` → `name` (quotes and schema stripped, lower-cased). */
 function cleanName(raw: string): string {
-  const parts = raw.replace(/["`\]\[]/g, '').split('.');
+  const parts = raw.replace(/["`\][]/g, '').split('.');
   return (parts[parts.length - 1] ?? '').toLowerCase();
 }
 
@@ -74,8 +74,8 @@ export function sqlTables(text: string): SqlTable[] {
     if (!name) continue;
     // balance the parentheses to find the column list
     let depth = 1,
-      i = re.lastIndex,
-      start = i;
+      i = re.lastIndex;
+    const start = i;
     while (i < text.length && depth > 0) {
       const ch = text[i];
       if (ch === '(') depth++;

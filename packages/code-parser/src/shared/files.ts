@@ -36,7 +36,7 @@ export function collectFiles(
     try {
       entries = readdirSync(dir);
     } catch (error) {
-      if (!scope) throw new Error('Unable to read directory');
+      if (!scope) throw new Error('Unable to read directory', { cause: error });
       if (scope.stopped || error instanceof ReportedReadError) return;
       scope.report({
         code: 'read-error',
@@ -54,7 +54,7 @@ export function collectFiles(
           { dir, rules: ignore({ ignorecase: false }).add(readFileSync(join(dir, '.gitignore'), 'utf8')) },
         ];
       } catch (error) {
-        if (!scope) throw new Error(`Unable to read ${relative(root, dir) || '.'}/.gitignore`);
+        if (!scope) throw new Error(`Unable to read ${relative(root, dir) || '.'}/.gitignore`, { cause: error });
         if (!(error instanceof ReportedReadError) && !scope.stopped) {
           scope.report({
             code: 'read-error',

@@ -1,5 +1,5 @@
 /**
- * Doc-comment parsing shared by every language adapter. `/** … *​/` blocks are
+ * Doc-comment parsing shared by every language adapter. Documentation blocks are
  * the same shape in JSDoc/TSDoc/Javadoc; the six Farsight tags plus the
  * vanilla-tag harvest are language-agnostic (see docs/ANNOTATIONS.md).
  */
@@ -94,7 +94,7 @@ export function cleanProse(text: string): string {
 }
 
 /**
- * Doc block (`/** … *​/`) immediately above the declaration starting at `start`,
+ * Documentation block immediately above the declaration starting at `start`,
  * with `*`-gutter stripped — or null. `between` is the language's idea of what
  * may sit between the comment and `start` (TS: export/async/const keywords;
  * Java: whitespace only, because tree-sitter declaration nodes include their

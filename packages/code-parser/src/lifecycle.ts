@@ -404,7 +404,7 @@ export interface LifecycleFacts {
 }
 
 /** the same test-double paths the call resolution sets aside (tsjs.ts TEST_DOUBLE) */
-const TEST_DOUBLE = /(^|[\/\-_.])(in-?memory|mock|fake|stub|noop|dummy|fixtures?)([\/\-_.]|$)/i;
+const TEST_DOUBLE = /(^|[/\-_.])(in-?memory|mock|fake|stub|noop|dummy|fixtures?)([/\-_.]|$)/i;
 const sameSet = (a: string[], b: string[]): boolean => a.length === b.length && a.every((x) => b.includes(x));
 
 /**

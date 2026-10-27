@@ -1,7 +1,7 @@
 /**
  * `// @business …` branch-directive labels (Journey fork/arm labels) and the
- * shared fork-label text shape. Pure source-text + offset logic — `//` line and
- * `/* *​/` block comments look the same in every C-family language Farsight
+ * shared fork-label text shape. Pure source-text + offset logic — line and
+ * block comments look the same in every C-family language Farsight
  * parses, so TS and Java share this verbatim.
  */
 
