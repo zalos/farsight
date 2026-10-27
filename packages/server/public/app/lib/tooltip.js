@@ -366,7 +366,7 @@ export function tipContentFor(el) {
   if (d.tipId) {
     const fn = BUILDERS.get(d.tipId);
     if (!fn) return null;
-    let args = null;
+    let args;
     try {
       args = d.tipArgs ? JSON.parse(d.tipArgs) : null;
     } catch (err) {

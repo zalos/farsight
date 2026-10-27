@@ -15,7 +15,7 @@ import { countedHtml, defAttrs } from '../lib/counted.js';
 import { jrnRoleWords } from '../lib/journey-draw.js';
 
 const API = '/api/roles';
-let RS = { route: null, data: null, gen: 0 };
+const RS = { route: null, data: null, gen: 0 };
 
 function fill(key, vars) {
   let s = t(key);

@@ -45,20 +45,11 @@ import {
   jrnEvChipHtml,
   jrnObsText,
   jrnRunLineHtml,
-  jrnFootScopeHtml,
   jrnContractHtml,
   jrnMoLabel,
 } from '../lib/journey-draw.js';
 import { testChipHtml } from '../lib/test-chip.js';
-import {
-  doorsFor,
-  doorsHtml,
-  leadDoorHtml,
-  codeSlotHtml,
-  fillCode,
-  storylineLineHtml,
-  copyDoorsHtml,
-} from '../lib/detail-doors.js';
+import { doorsFor, doorsHtml, codeSlotHtml, fillCode, storylineLineHtml, copyDoorsHtml } from '../lib/detail-doors.js';
 import { gateAttrs } from '../lib/gate-card.js';
 import { lifecycleStripHtml, screenLifecycles } from '../lib/lifecycle-strip.js';
 import { propertyModel } from '../lib/map-property-model.js';

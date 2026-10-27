@@ -179,7 +179,7 @@ function partIdsOf(n) {
  * its parts', and `3 stories` sat over four tabs (pass swarm 2026-09-25).
  * @group Stories
  */
-function storiesHeadHtml(list, partIds) {
+function storiesHeadHtml(list, _partIds) {
   const own = list.filter((s) => s.type === 'story').length;
   const docs = list.filter((s) => s.type === 'docs').length;
   const api = '/api/stories';
@@ -287,7 +287,7 @@ function storiesBodyHtml(n) {
       )
       .join('') +
     '</div>';
-  let picture = '';
+  let picture;
   if (!LIVE.answer) picture = '<p class="set-note">' + esc(t('stories.checking')) + '</p>';
   else if (!book || !book.reachable) picture = notReachedHtml(book, repo);
   else if (!pick.frame) {

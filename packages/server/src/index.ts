@@ -769,8 +769,8 @@ function captureShots(ws: string, db: SnapshotDb, sync: number, store: GraphStor
     if (!img) continue;
     out.screens += 1;
     const repo = node.loc?.repo ?? node.id.split('::')[0]!;
-    let bytes: Buffer | null = null;
-    let source = '';
+    let bytes: Buffer | null;
+    let source: string;
     let ext = 'png';
     if (img.kind === 'file') {
       bytes = designFileBytes(store.roots[repo], img.path);

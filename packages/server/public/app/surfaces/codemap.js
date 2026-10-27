@@ -4,7 +4,7 @@
 // ships in pass P4. Route: #/codemap?repo=x&view=map|supply — repo/view are
 // parsed and carried in the store even where not yet consumed (P4 consumes).
 
-import { S, esc, cssId } from '../store.js';
+import { S, esc } from '../store.js';
 import { t } from '../strings.js';
 import { render, select, cardOf, revealCard } from '../lib/graph-render.js';
 import { cmapFromRoute, buildCmapControls, cmapArrive } from './codemap-projects.js';

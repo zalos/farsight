@@ -648,7 +648,7 @@ function linksOfItemFromCache(cache: WorkCache, id: string): WorkLinkFact[] {
     .linksFor(id)
     .filter((l) => l.work === id && l.kind === 'tracks')
     .map((l) => {
-      let d: { sha?: string; what?: string } = {};
+      let d: { sha?: string; what?: string };
       try {
         d = l.detail ? JSON.parse(l.detail) : {};
       } catch {

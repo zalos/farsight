@@ -19,7 +19,7 @@ import {
   currentLens,
 } from '../store.js';
 import { sym } from '../sym.js';
-import { t, def } from '../strings.js';
+import { t } from '../strings.js';
 import { setTip, tipSource, tipAttrs } from './tooltip.js';
 import { storiesSecHtml } from '../stories.js';
 import { defAttrs, plainTip, unCode } from './counted.js';
@@ -142,7 +142,7 @@ export function displayEdges(visibleIds, memberToGroup) {
     out = [];
   for (const e of S.GRAPH.edges) {
     if (e.kind === 'guards') continue;
-    let from = memberToGroup[e.from] || e.from,
+    const from = memberToGroup[e.from] || e.from,
       to = memberToGroup[e.to] || e.to;
     if (from === to) continue;
     if (!visibleIds.has(from) || !visibleIds.has(to)) continue;
@@ -438,10 +438,10 @@ export function drawEdges(memberToGroup) {
       hB = hOf(e.to);
     const wA = A.w || NODE_W,
       wB = B.w || NODE_W;
-    let x1 = A.x + wA,
-      y1 = A.y + hA / 2,
-      x2 = B.x,
-      y2 = B.y + hB / 2;
+    let x1 = A.x + wA;
+    const y1 = A.y + hA / 2;
+    let x2 = B.x;
+    const y2 = B.y + hB / 2;
     if (B.x <= A.x) {
       x1 = A.x;
       x2 = B.x + wB;

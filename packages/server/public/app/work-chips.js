@@ -104,7 +104,7 @@ export function whenWords(iso) {
 export function freshHtml(fr) {
   const f = fr || { state: 'never' };
   let key = 'work.fresh.never';
-  let words = '';
+  let words;
   let glyph = 'absent';
   if (f.state === 'synced') {
     key = 'work.fresh.synced';

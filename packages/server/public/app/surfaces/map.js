@@ -19,14 +19,14 @@
 
 import { readinessDoorHtml } from '../lib/readiness-door.js';
 import { S, esc, expose, currentLens, humanize, bizName, unCode, repoOf } from '../store.js';
-import { t, def, plainWords, unTick } from '../strings.js';
+import { t, plainWords, unTick } from '../strings.js';
 import { sym } from '../sym.js';
 import { designThumbHtml } from '../lib/graph-render.js';
 import { countedHtml, plainTip, countWords } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
 import { freshAttrs, freshSentence } from '../lib/freshness.js';
 import { withParams, screenRowAt, partOrder } from '../lib/route-url.js';
-import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml, copyDoorsHtml } from '../lib/detail-doors.js';
+import { doorsFor, doorsHtml, storylineLineHtml, copyDoorsHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import {
   mapCountChip,
@@ -113,7 +113,6 @@ import {
   openActionAt,
   openScreenAction,
   closeAction,
-  actionOpen,
   actionParams,
   actionKey,
   stopZoom,
@@ -1711,7 +1710,7 @@ function writeHash(flow, node) {
   let h = location.hash || '#/map';
   const qi = h.indexOf('?');
   const query = qi >= 0 ? h.slice(qi) : '';
-  let base = '#/map' + (flow ? '/' + encodeURIComponent(flow) : '');
+  const base = '#/map' + (flow ? '/' + encodeURIComponent(flow) : '');
   // the link is the picture (§K): where the board is and which card is open, so the same link opens the same view
   const v = node || MAP.act || lanesShown() || tableOpen() ? null : viewParams(flow);
   // below the screen the address names the place (surfaces/map-stops.js): screen · action · beat · layout · dock; at
@@ -3653,7 +3652,7 @@ export function mapCopyLink() {
     ta.style.cssText = 'position:fixed;left:-9999px;top:0';
     document.body.appendChild(ta);
     ta.select();
-    let ok = false;
+    let ok;
     try {
       ok = document.execCommand('copy');
     } catch {
@@ -3840,7 +3839,7 @@ function copyText(text, done) {
     ta.style.cssText = 'position:fixed;left:-9999px;top:0';
     document.body.appendChild(ta);
     ta.select();
-    let ok = false;
+    let ok;
     try {
       ok = document.execCommand('copy');
     } catch {
@@ -4669,7 +4668,7 @@ function streetHtml(d, j, g) {
 }
 
 /** One screen card: its picture, its place, its name, its route (not in the business lens) and its numbers. */
-function screenHtml(d, m, s, x, y, n) {
+function screenHtml(d, m, s, x, y, _n) {
   const node = s.node;
   const thumb = node && node.design ? designThumbHtml(node, 'map') : '';
   const ph =
@@ -5042,7 +5041,7 @@ function linkWordKey(l) {
 const LABEL_W = new Map();
 function labelWidth(word) {
   if (LABEL_W.has(word)) return LABEL_W.get(word);
-  let w = 0;
+  let w;
   try {
     const probe = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     probe.setAttribute('class', 'probe');

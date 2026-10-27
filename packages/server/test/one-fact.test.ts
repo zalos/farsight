@@ -16,7 +16,7 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { GraphStore, stitchHttp, buildIndex, type GraphIndex, type GraphMeta } from '@farsight/core';
+import { GraphStore, stitchHttp, buildIndex, type GraphIndex } from '@farsight/core';
 import { ingestRepo } from '@farsight/parsers';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
@@ -30,7 +30,6 @@ let port: number;
 let child: ChildProcessWithoutNullStreams;
 let childLog = '';
 let index: GraphIndex;
-let meta: GraphMeta;
 
 /** An OS-picked loopback port. 4477 / 4478 are live servers — never borrow them. */
 async function freePort(): Promise<number> {
@@ -78,7 +77,6 @@ before(async () => {
   store.save(graphPath);
   const { nodes, edges } = store.toJSON();
   index = buildIndex(nodes, edges);
-  meta = store.meta;
   port = await freePort();
   const boot =
     `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n` +

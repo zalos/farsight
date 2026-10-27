@@ -63,7 +63,7 @@ export function mountJourneys(route, el) {
  * the catalog.
  * @group Journey view
  */
-export function journeysRefresh(reason, route) {
+export function journeysRefresh(_reason, _route) {
   const el = document.getElementById('surface');
   if (el) renderPicker(el);
 }
@@ -564,7 +564,7 @@ function jrnFrontDoorData() {
         if (!data || data.error || !Array.isArray(data.designs) || !data.designs.length) return null;
         // the journeys themselves, organised persona → group above the manifests (§4.4) — read
         // before either is drawn, so the page lands in one paint and nothing moves under the pointer
-        let got = null;
+        let got;
         try {
           got = await loadJourneyTree(data.designs);
         } catch (err) {

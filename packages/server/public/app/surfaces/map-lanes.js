@@ -295,7 +295,7 @@ function needsHtml(p, say) {
       .replace('{list}', items.join(' · ')) + (nc ? ' · ' + nc : '');
   // *needs N* lists the N (gap log S2): the number's tip is the count with its scope, then one row per precondition —
   // its words, its tier, its evidence — so the column adds up to N; business folds the technical ones into one row
-  let num = '';
+  let num;
   if (n.counted) {
     const args = countedTipArgs(n.counted, API);
     const all = n.all || [];

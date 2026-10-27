@@ -132,10 +132,6 @@ export function compareAsOf() {
 
 // ── the control ────────────────────────────────────────────────────────────
 
-function endWords(e) {
-  if (!e) return '';
-  return 'sync ' + (e.sync != null ? e.sync : '?');
-}
 /** The control's current value: *sync a → sync b · since <day>*, or *off*. */
 function currentWords() {
   if (!CMP.spec) return t('compare.control.off');
