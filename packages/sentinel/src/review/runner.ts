@@ -45,6 +45,7 @@ import {
   type NativeTaskLayout,
 } from './native.js';
 import { resolveStageInstructions, stagePackDigests, type ResolvedStageInstructions } from './packs.js';
+import { retainedAttemptOf, type RetainedNativeAttempt } from './retained.js';
 
 /** The runners an agent stage can name (the pipeline contract's ids). */
 export type AgentRunnerId = 'copilot-cli' | 'claude-cli' | 'hosted-api';
@@ -554,11 +555,23 @@ export interface NativeFailedAttempt {
 export class NativeRunFailure extends Error {
   readonly code: string;
   readonly retained: NativeFailedAttempt;
+  /**
+   * The refused run's private record (`sentinel-attempt-retained/draft-1`) and the bytes it links, ready for the store
+   * to keep with the attempt's end. Null only if the record could not be built; the refusal itself still stands.
+   */
+  readonly record: RetainedNativeAttempt | null;
   constructor(code: string, retained: NativeFailedAttempt, cause: unknown) {
     super((cause as Error)?.message ?? code);
     this.name = 'NativeRunFailure';
     this.code = code;
     this.retained = retained;
+    let record: RetainedNativeAttempt | null;
+    try {
+      record = retainedAttemptOf(retained);
+    } catch {
+      record = null;
+    }
+    this.record = record;
   }
 }
 

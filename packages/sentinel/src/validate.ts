@@ -56,6 +56,7 @@ import type {
   ReviewPartitionsEnvelope,
   ReviewCheckpointEnvelope,
   ReviewRecordEnvelope,
+  AttemptRetainedEnvelope,
   ReviewInstructionsEnvelope,
   ReviewRequestEnvelope,
   PipelineDefinition,
@@ -110,6 +111,7 @@ export interface EnvelopeTypes {
   partitions: ReviewPartitionsEnvelope;
   checkpoint: ReviewCheckpointEnvelope;
   review: ReviewRecordEnvelope;
+  attemptretained: AttemptRetainedEnvelope;
   instructions: ReviewInstructionsEnvelope;
   reviewrequest: ReviewRequestEnvelope;
   // The declared pipeline (contracts/pipeline.ts). Its cross-stage checks are app/pipeline.ts's checkPipeline.
@@ -1308,6 +1310,23 @@ const checkpoint: Check<ReviewCheckpointEnvelope> = (v, out) => {
     out.add(err('/stopped', 'an unsettled call stops the session'));
 };
 
+/** A refused attempt's private record: each byte artifact linked once, its usage and cost as the run recorded them. */
+const attemptretained: Check<AttemptRetainedEnvelope> = (v, out) => {
+  const roles = v.links.map((l) => l.role);
+  if (new Set(roles).size !== roles.length) out.add(err('/links', 'each retained artifact is linked once'));
+  for (const role of ['transcript', 'instructions'] as const)
+    if (!roles.includes(role)) out.add(err('/links', `the ${role} is always retained`));
+  if (v.instructionRecord.stage !== v.stage)
+    out.add(err('/instructionRecord/stage', 'the instructions were sealed for this stage'));
+  const path = v.provenance.installation?.executablePath;
+  if (path !== undefined && !path.startsWith('/'))
+    out.add(err('/provenance/installation/executablePath', 'the executable path is absolute'));
+  const confirmed = v.provenance.tokens.certainty === 'confirmed';
+  if (v.completed !== confirmed) out.add(err('/completed', 'a run completed exactly when its usage was confirmed'));
+  if (!confirmed && !(v.provenance.cost.basis === 'unobserved' && v.provenance.cost.reason === 'usage-unknown'))
+    out.add(err('/provenance/cost', 'a run whose usage is unconfirmed has an unknown cost'));
+};
+
 const review: Check<ReviewRecordEnvelope> = (v, out) => {
   if ((v.outcome === 'completed') !== (v.verdict !== null))
     out.add(err('/verdict', 'exactly a completed review has a verdict'));
@@ -1363,6 +1382,7 @@ const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   partitions,
   checkpoint,
   review,
+  attemptretained,
   rulepack,
   rulelock,
   settings,
