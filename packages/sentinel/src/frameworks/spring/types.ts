@@ -4,6 +4,7 @@
 // declarations and imports only; nothing is compiled or loaded.
 import { annotationsOf, named, walk, type Annotation, type JavaFile, type JavaNode } from './syntax.js';
 
+/** A type declared in captured source: its simple and qualified names, file, node and kind. */
 export interface Declared {
   readonly name: string;
   readonly pkg: string;
@@ -13,6 +14,7 @@ export interface Declared {
   readonly kind: 'class' | 'interface' | 'annotation';
 }
 
+/** What a type name refers to: a captured declaration, an external qualified name, one of several, or unknown. */
 export type Resolved =
   | { readonly kind: 'captured'; readonly decl: Declared }
   | { readonly kind: 'external'; readonly fqn: string }
@@ -48,6 +50,7 @@ const DECL_KINDS: Record<string, Declared['kind']> = {
   enum_declaration: 'class',
 };
 
+/** The package a Java file declares; the empty string for the default package. */
 export function packageOf(file: JavaFile): string {
   const decl = named(file.root).find((n) => n.type === 'package_declaration');
   return decl
@@ -92,6 +95,7 @@ function eraseTypeArguments(written: string): string | undefined {
   return depth === 0 ? text : undefined;
 }
 
+/** The captured types and each file's imports: resolves a name as Java would, reading declarations only. */
 export class TypeIndex {
   private readonly byFqn = new Map<string, Declared[]>();
   private readonly bySimple = new Map<string, Declared[]>();
@@ -330,6 +334,7 @@ const STEREOTYPE_FQNS = new Set([
 /** Annotation packages whose other annotations do not make a class a component. */
 const NON_COMPONENT_PREFIXES = ['org.springframework.', 'java.', 'javax.', 'jakarta.', 'lombok.'];
 
+/** A three-valued answer: the source shows yes, shows no, or does not say. */
 export type Tri = 'yes' | 'no' | 'unknown';
 
 /** Whether the annotations on `node` (in `file`) make it a component, following meta-annotations declared in captured source. */
@@ -402,6 +407,9 @@ export interface AnnotationFacts {
 
 const STANDARD_PREFIXES = ['java.', 'javax.', 'jakarta.', 'lombok.'];
 
+/**
+ * The annotations on a declaration and their meta-annotations, with the first opaque one, if any (see AnnotationFacts).
+ */
 export function annotationFacts(index: TypeIndex, file: JavaFile, node: JavaNode): AnnotationFacts {
   const direct: ResolvedAnnotation[] = [];
   const meta: ResolvedAnnotation[] = [];

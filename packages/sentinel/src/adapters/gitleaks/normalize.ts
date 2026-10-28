@@ -16,7 +16,8 @@
 // report, an engine error, a missing or oversized report, an unknown rule or file, or lines a file does not have make
 // the whole scan an `error` over every target, with a coded reason. Files not sent are skipped scopes (job.ts); with
 // any of them the scan is `partial`.
-import { createHash } from 'node:crypto';
+import { sha256Id as sha } from '../../kernel/digest.js';
+import { SentinelError } from '../../kernel/errors.js';
 import type { CatalogKey, Digest, Id, ScopedReason } from '../../contracts/common.js';
 import type { ObservationEnvelope } from '../../contracts/observation.js';
 import type { WorkerOutcome } from '../../execution/supervisor.js';
@@ -30,27 +31,40 @@ import {
 import type { SecretsJob } from './job.js';
 import { GITLEAKS_RULE_IDS } from './rules.js';
 
+/** The one message every content observation carries: the matched value is withheld, the lines are cited. */
 export const OBSERVATION_MESSAGE =
   'A value shaped like a secret matched this detector. The value is withheld; open the cited lines in the captured source to review it.';
+/** The limitations every content observation states: the value is withheld and the location is a line range. */
 export const OBSERVATION_LIMITATIONS = Object.freeze([
   'sentinel.secrets.valueWithheld',
   'sentinel.secrets.lineLocation',
 ] as const);
+/** The one message every file-name observation carries: the name itself is withheld. */
 export const NAME_MESSAGE =
   'A file name shaped like a secret matched this detector. The name is withheld; the cited location reference identifies the file in the captured source.';
+/** The limitations every file-name observation states: the value is withheld and the match is on a name. */
 export const NAME_LIMITATIONS = Object.freeze([
   'sentinel.secrets.valueWithheld',
   'sentinel.secrets.nameMatch',
 ] as const);
 /** The scope of one captured file by its entry: `<sourceId>#entry:<n>`; `#` is not in a source ID, so it never reads as a path scope. */
 export const entryScope = (sourceId: string, entry: number) => `${sourceId}#entry:${entry}`;
+/** Matches an entry scope written by {@link entryScope}, capturing its source id and entry number. */
 export const ENTRY_SCOPE = /^([A-Za-z0-9][A-Za-z0-9._:-]*)#entry:(0|[1-9][0-9]{0,8})$/;
+/** The most observations one run keeps; a report with more is refused (`tooManyFindings`), never truncated. */
 export const MAX_SECRETS_OBSERVATIONS = 10_000;
+/** The media type of the worker's run record. */
 export const RECORD_MEDIA_TYPE = 'application/vnd.sentinel.gitleaks-run+json';
+/** The media type of the worker's report: rule, lines and file per match, never the matched text. */
 export const REPORT_MEDIA_TYPE = 'application/vnd.sentinel.gitleaks-report';
 
+/**
+ * One run's word: complete when every target was sent and scanned, partial when some were left out, error when nothing
+ * counts.
+ */
 export type SecretsScanStatus = 'complete' | 'partial' | 'error';
 
+/** What a run is audited by: the engine, adapter, image and platform, and the digests of everything it ran with. */
 export interface SecretsAudit {
   readonly engine: string;
   readonly adapterId: Id;
@@ -68,6 +82,7 @@ export interface SecretsAudit {
   readonly report: Digest | null;
 }
 
+/** A normalized run: its status, the withheld observations, what was scanned and what was not, and its audit. */
 export interface SecretsScanResult {
   readonly status: SecretsScanStatus;
   /** Why the scan is an error. Absent for complete and partial. */
@@ -82,6 +97,7 @@ export interface SecretsScanResult {
   readonly audit: SecretsAudit;
 }
 
+/** What normalizing one run needs: the job, the verified outcome and outputs, and the sealed inputs. */
 export interface NormalizeInput {
   readonly job: SecretsJob;
   readonly jobDigest: Digest;
@@ -97,7 +113,6 @@ export interface NormalizeInput {
 
 const WORKER_CODE = /^sentinel-gitleaks-worker\/1 (sentinel\.secrets\.[a-z][A-Za-z]*)\n$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
-const sha = (b: string | Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 const FAILURES: Readonly<Record<string, CatalogKey>> = {
   engineError: 'sentinel.secrets.toolFailed',
   killed: 'sentinel.secrets.toolTimedOut',
@@ -105,9 +120,10 @@ const FAILURES: Readonly<Record<string, CatalogKey>> = {
   reportTooLarge: 'sentinel.secrets.reportTooLarge',
 };
 
-class Refused extends Error {
-  constructor(readonly code: CatalogKey) {
-    super(code);
+class Refused extends SentinelError<CatalogKey> {
+  constructor(code: CatalogKey) {
+    super(code, code);
+    this.name = 'Refused';
   }
 }
 const refuse = (code: CatalogKey): never => {
@@ -213,6 +229,11 @@ export function lineSpan(
   return { startByte, endByte };
 }
 
+/**
+ * Reads one finished attempt into withheld observations: every matched value and name is withheld and only its lines
+ * and file are cited. Never throws for bad output: a missing, malformed or oversized report, an unknown rule or file,
+ * or more than {@link MAX_SECRETS_OBSERVATIONS} matches makes the whole run an error that credits nothing.
+ */
 export function normalizeSecretsRun(input: NormalizeInput): SecretsScanResult {
   const { job, outcome } = input;
   const all = [...job.files, ...job.unsent].sort((a, b) => a.ordinal - b.ordinal);

@@ -7,7 +7,6 @@
 // refusal the pack can read is kept as evidence at its position, with both properties unknown there, because a status
 // code and a request value do not show a principal or a permission. A property does not apply only when every layer
 // before the handler was read and none can refuse; anything else is unknown with its reason, never protected.
-import { createHash } from 'node:crypto';
 import { canonicalJson } from '@farsight/graph';
 import type { AnalysisArtifact } from '@farsight/code-parser';
 import type {
@@ -19,6 +18,8 @@ import type {
   SnapshotEnvelope,
   SourceEvidence,
 } from '../../contracts/index.js';
+import { sha256Hex, sha256Id } from '../../kernel/digest.js';
+import { SentinelError } from '../../kernel/errors.js';
 import { validateEnvelope } from '../../validate.js';
 import { effectOf, type Property } from './effects.js';
 import {
@@ -45,12 +46,17 @@ import {
 } from './syntax.js';
 import { EXPRESS_VERSION, parseJson, versionScope, type JsonDoc, type VersionVerdict } from './version.js';
 
+/** The pack's identity: its id, implementation version and the one Express version it models. */
 export const EXPRESS_PACK = Object.freeze({
   id: 'sentinel.framework.express',
   implementation: 'sentinel-express/draft-1',
   version: EXPRESS_VERSION,
 });
 
+/**
+ * What analyzeExpress reads: the snapshot entries, the source id, its parser evidence, a reader of captured bytes and
+ * bounds.
+ */
 export interface ExpressPackInput {
   readonly snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>;
   readonly sourceId: string;
@@ -76,9 +82,13 @@ export interface ExpressPackInput {
   };
 }
 
-export class ExpressPackError extends Error {
+/**
+ * The pack produced control facts that do not validate against their contract: a defect in the pack, never a
+ * property of the source. Its code is the contract's `sentinel.contract.invalid`.
+ */
+export class ExpressPackError extends SentinelError<'sentinel.contract.invalid'> {
   constructor(message: string) {
-    super(message);
+    super('sentinel.contract.invalid', message);
     this.name = 'ExpressPackError';
   }
 }
@@ -91,7 +101,7 @@ const SAFE_BOUNDARIES = new Set([
 ]);
 const MAX_EVIDENCE = 64;
 const PROPERTIES: readonly Property[] = ['authentication', 'authorization'];
-const digestOf = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJson(v)).digest('hex')}`;
+const digestOf = (v: unknown) => sha256Id(canonicalJson(v));
 
 /** One layer on a request's path to a route's handler, in dispatch order. */
 type Entry =
@@ -484,7 +494,7 @@ export async function analyzeExpress(input: ExpressPackInput): Promise<ControlFa
     evidence: SourceEvidence[],
     reasonCode?: ExpressReason,
   ) => {
-    const id = `express.${createHash('sha256').update(`${surfaceId}\u0000${property}\u0000${order}`).digest('hex').slice(0, 40)}`;
+    const id = `express.${sha256Hex(`${surfaceId}\u0000${property}\u0000${order}`).slice(0, 40)}`;
     const ev = dedupe(evidence).slice(0, MAX_EVIDENCE);
     facts.push(
       verdict === 'unknown'

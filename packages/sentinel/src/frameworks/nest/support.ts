@@ -1,4 +1,5 @@
 // What the Nest pack supports, and no more (PR 16, ADR 32).
+/** The pack's identity and its supported subset, as data: the exact versions it models and nothing else. */
 export const NEST_PACK = Object.freeze({
   id: 'framework-nest',
   version: '0.1.0',

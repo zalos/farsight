@@ -38,23 +38,28 @@ export interface ProfileCondition {
   readonly at: At;
 }
 
+/** When a configuration is active: always, under listed profiles, or in a form the pack does not read (unknown). */
 export type Activity =
   | { readonly kind: 'always' }
   | { readonly kind: 'profiles'; readonly conditions: readonly ProfileCondition[] }
   | { readonly kind: 'unsupported'; readonly reason: SpringReason; readonly at: At };
 
+/** Which requests a security chain serves: any, those matching literal path patterns, or unknown. */
 export type ChainMatcher =
   | { readonly kind: 'any' }
   | { readonly kind: 'paths'; readonly patterns: readonly string[]; readonly at: At }
   | { readonly kind: 'unsupported'; readonly at: At };
 
+/** Which requests one authorization rule selects: any, a method and literal path patterns, or unknown. */
 export type RuleMatcher =
   | { readonly kind: 'any'; readonly at: At }
   | { readonly kind: 'paths'; readonly method: string | null; readonly patterns: readonly string[]; readonly at: At }
   | { readonly kind: 'unsupported'; readonly at: At };
 
+/** What one authorization rule requires of a selected request; `unsupported` is any form the pack does not read. */
 export type RuleAction = 'permitAll' | 'authenticated' | 'restricted' | 'denyAll' | 'unsupported';
 
+/** One `authorizeHttpRequests` rule: what it selects, what it requires and where it is written. */
 export interface Rule {
   readonly matcher: RuleMatcher;
   readonly action: RuleAction;
@@ -70,6 +75,7 @@ export type Anonymous = 'default' | 'disabled' | 'custom';
 /** Whether Spring registers a class's beans, as far as the captured source shows. */
 export type Registration = 'registered' | 'not-registered' | 'unknown';
 
+/** One SecurityFilterChain bean: its order, when it is active, which requests it serves and its rules in order. */
 export interface Chain {
   /** `<path>#<method name>`, stable within the snapshot. */
   readonly id: string;
@@ -89,6 +95,7 @@ export interface Chain {
   readonly unsupported?: { readonly reason: SpringReason; readonly at: At };
 }
 
+/** One `@EnableMethodSecurity`: when it is active and which annotation families it turns on, null when not literal. */
 export interface MethodSecurityEnablement {
   readonly at: At;
   readonly activity: Activity;
@@ -100,6 +107,7 @@ export interface MethodSecurityEnablement {
   readonly proxyMode: boolean;
 }
 
+/** The security configuration the pack read: the chains, role prefix changes, method security and its frontiers. */
 export interface SpringConfiguration {
   readonly chains: readonly Chain[];
   /** Whether any GrantedAuthorityDefaults bean may change the `ROLE_` prefix role checks use. */
@@ -154,6 +162,7 @@ export const SPRING_REASON_CODES = Object.freeze([
   'sentinel.spring.beanDeclarationUnknown',
   'sentinel.spring.chainOverridden',
 ] as const);
+/** One of {@link SPRING_REASON_CODES}. */
 export type SpringReason = (typeof SPRING_REASON_CODES)[number];
 
 /** DSL calls on HttpSecurity that neither select requests nor authorize them. */

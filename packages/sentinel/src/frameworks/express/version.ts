@@ -4,8 +4,10 @@
 // any manifest that cannot be read leaves the version unresolved or unsupported, never assumed.
 import { parseProgram, stringValue, unwrap, type JsNode } from './syntax.js';
 
+/** The one Express version the pack models; any other resolved version is `versionUnsupported`. */
 export const EXPRESS_VERSION = '4.21.2';
 
+/** A JSON text read with positions, so each property can be cited by its span. */
 export interface JsonDoc {
   readonly text: string;
   /** The parsed value; undefined when the text is not valid JSON. */
@@ -61,6 +63,7 @@ export function propertyOf(obj: JsNode | undefined, key: string): JsNode | undef
   return (obj.properties as JsNode[]).find((p) => stringValue(p.key as JsNode) === key);
 }
 
+/** Whether the source's Express is the modeled version, with the manifest evidence either way. */
 export type VersionVerdict =
   | { readonly ok: true; readonly evidence: readonly { readonly path: string; readonly node: JsNode }[] }
   | {

@@ -2,6 +2,7 @@
 // code: the bytes are parsed with Oxc and only literal syntax is read. A value Next 14.2.25 would have to compute, or
 // syntax this pack has not verified Next extracts the same way (`as const`, `satisfies`, identifiers), is `dynamic`,
 // never guessed. Spans are zero-based, half-open UTF-8 byte offsets into the captured bytes.
+/** A zero-based, half-open range of UTF-8 bytes in a captured file. */
 export interface ByteRange {
   readonly startByte: number;
   readonly endByte: number;
@@ -59,6 +60,7 @@ async function program(file: string, src: SourceText): Promise<Ast | null> {
 
 // ---- literal values ----
 
+/** A value read from literal syntax only: no identifier, call or computed expression is ever evaluated. */
 export type Literal = string | number | boolean | null | readonly Literal[] | { readonly [k: string]: Literal };
 type Eval = { ok: true; value: Literal } | { ok: false; at: Ast };
 
@@ -127,6 +129,9 @@ export interface MatcherEntry {
   readonly invalid?: string;
 }
 
+/**
+ * The middleware's `config` export: absent (every path), a static matcher, or a form the pack cannot read (unknown).
+ */
 export type MiddlewareConfig =
   /** No `config` export: Next's default matcher, every request path. */
   | { readonly state: 'absent' }
@@ -142,6 +147,7 @@ export type MiddlewareConfig =
       readonly detail: string;
     };
 
+/** The middleware file as the pack reads it: refused with its reason, or its export and config. */
 export type MiddlewareRead =
   | {
       readonly ok: false;
@@ -278,6 +284,7 @@ export async function readMiddleware(file: string, bytes: Uint8Array): Promise<M
 
 // ---- next.config ----
 
+/** The project's `next.config`: empty and so without effect, or a form the pack does not read and so unknown. */
 export type NextConfigRead =
   | { readonly state: 'empty'; readonly span: ByteRange }
   | { readonly state: 'unsupported'; readonly detail: string; readonly span?: ByteRange };
