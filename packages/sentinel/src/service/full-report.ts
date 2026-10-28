@@ -28,6 +28,7 @@ import type {
 import type { BuiltinOperation, ExecutionSite, Provenance, StageCost } from '../contracts/pipeline.js';
 import { runStages } from '../execution/stage-inputs.js';
 import { SCRIPT_PROVENANCE_SCHEMA, SCRIPT_RUNNER_ID } from '../execution/script-runner.js';
+import { NATIVE_REVIEW_SCHEMA } from '../review/native-dispatch.js';
 import { validateEnvelope } from '../validate.js';
 import type { SentinelStore } from '../store/index.js';
 import { loadPlan } from '../execution/plans.js';
@@ -1347,9 +1348,10 @@ export interface RunStages {
 /**
  * The model observations and the provenance of a completed run, from its retained ledger alone.
  *
- * A model observation is read only through its accepted review publication (readPublishedInstructions: the exact
- * admitted unit, attempt, invocation, admission, instructions, requests and record, every citation re-derived from
- * the unit's assigned captured bytes); anything that does not read back refuses the report. The document fold then
+ * A model observation is read only through its accepted review publication: readPublishedInstructions authenticates
+ * brokered requests, and readPublishedNativeReview authenticates the native transcript and provenance. Both bind the
+ * admitted unit, attempt, instructions and every citation to assigned captured bytes. An unreadable publication
+ * refuses the report. The document fold then
  * embeds its citations under the report's disclosure profile and the accepted-secret fold, like a finding's.
  *
  * Provenance: one record per published unit, the bootstrap work the analysis depends on first (in start order), then
@@ -1377,14 +1379,18 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
   const reviewUnits = plan.units.filter((u) => u.review);
   if (reviewUnits.length > MAX_REVIEW_UNITS) unbound('more model review units than one report reads');
   const traces = new Map<string, import('../review/instructions.js').RetainedInstructionTrace>();
+  const nativeTraces = new Map<string, import('../review/native-dispatch.js').NativeReviewTrace>();
   const published = reviewUnits.filter((u) => store.ledger.getPublication(u));
   if (published.length) {
     const { readPublishedInstructions } = await import('../review/instructions.js');
+    const { readPublishedNativeReview } = await import('../review/native-dispatch.js');
     const deadlineAt = Date.now() + 20_000;
     const signal = AbortSignal.timeout(20_000);
     for (const u of published) {
       try {
-        traces.set(u.id, await readPublishedInstructions(store, u, { deadlineAt, signal }));
+        const native = store.ledger.getPublication(u)!.outputs.some((o) => o.schema === NATIVE_REVIEW_SCHEMA);
+        if (native) nativeTraces.set(u.id, await readPublishedNativeReview(store, u, { deadlineAt, signal }));
+        else traces.set(u.id, await readPublishedInstructions(store, u, { deadlineAt, signal }));
       } catch {
         return unbound('an accepted model review does not read back exactly');
       }
@@ -1392,7 +1398,7 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
   }
   const reviews = reviewUnits.length
     ? published.flatMap((u) =>
-        traces.get(u.id)!.observations.map((o) => {
+        (nativeTraces.get(u.id) ?? traces.get(u.id))!.observations.map((o) => {
           if (o.snapshotId !== a.snapshot.id || o.producer.kind !== 'model-review')
             unbound('a model observation is not a review of this capture');
           return { observation: o, stage: stageOf(u), unit: { id: u.id, revision: u.revision } };
@@ -1470,6 +1476,11 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
       invocation: env.invocation ?? null,
     };
     if (unit?.review) {
+      const native = nativeTraces.get(unit.id);
+      if (native) {
+        provenance.push(native.provenance);
+        continue;
+      }
       const trace = traces.get(unit.id);
       if (!trace) return unbound('a published model review was not read back');
       const record = trace.record;
@@ -1479,7 +1490,10 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
           ? ('claude-cli' as const)
           : encoding === 'sentinel-copilot-chat/v1'
             ? ('copilot-cli' as const)
-            : ('hosted-api' as const);
+            : admitted.policy?.settings.providers.find((p) => p.id === unit.review!.selection.providerId)?.kind ===
+                'ollama'
+              ? ('ollama' as const)
+              : ('hosted-api' as const);
       const usage = env.usage;
       const confirmed = record.totals.usage === 'confirmed' && usage.certainty === 'confirmed';
       const cost: StageCost =
@@ -1487,11 +1501,16 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
           ? { basis: 'rates', amount: usage.monetaryCost, currency: usage.currency }
           : {
               basis: 'unobserved',
-              reason: runner !== 'hosted-api' ? 'subscription' : !confirmed ? 'usage-unknown' : 'no-rates',
+              reason:
+                runner === 'claude-cli' || runner === 'copilot-cli'
+                  ? 'subscription'
+                  : !confirmed
+                    ? 'usage-unknown'
+                    : 'no-rates',
             };
       provenance.push({
         ...base,
-        where: runner === 'hosted-api' ? where : 'sandboxed-cli',
+        where: runner === 'claude-cli' || runner === 'copilot-cli' ? 'sandboxed-cli' : where,
         kind: 'agent',
         mode: 'brokered',
         runner,

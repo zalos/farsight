@@ -315,6 +315,68 @@ test(
   },
 );
 
+test('a native Copilot observation and its retained provenance render in every report format', needsStore, async () => {
+  const observation = await modelObservation('The native review found request text flowing into SQL.');
+  observation.producer.model.requestedModel = 'gpt-6-luna';
+  observation.producer.model.returnedModel = 'gpt-6-luna';
+  observation.producer.model.source = 'host-reported';
+  const agent = {
+    ...PROVENANCE[2],
+    where: 'sandboxed-cli',
+    mode: 'native',
+    runner: 'copilot-cli',
+    runnerVersion: '1.0.105',
+    executableDigest: sha('pinned Copilot executable'),
+    model: { requested: 'gpt-6-luna', reported: 'gpt-6-luna', identitySource: 'host-reported' },
+    wires: [],
+    transcript: sha('retained native transcript'),
+    tokens: { input: 1234, output: 56, certainty: 'confirmed' },
+    cost: { basis: 'unobserved', reason: 'subscription' },
+  };
+  const reviews = [{ observation, stage: 'review-general', unit: { id: 'w-review', revision: 2 } }];
+  const input = await baseInput('private', { reviews, provenance: [PROVENANCE[0], PROVENANCE[1], agent] });
+  const out = await generateReport(input as any);
+  assert.ok(validateEnvelope('report', out.document).ok);
+  assert.equal(out.document.counts.reviewObservations.n, 1);
+  assert.equal(out.document.reviews[0].evidence[0].state, 'embedded');
+  assert.deepEqual(out.document.provenance[2], agent);
+  assert.match(out.markdown, /The native review found request text/);
+  assert.match(out.html, /cost unobserved · subscription/);
+  assert.equal(out.sarif.version, '2.1.0');
+  assert.equal(out.sarif.runs[0].results.length, 1, 'SARIF retains the scanner finding, not the model claim');
+  assert.deepEqual(digests(out), {
+    json: 'sha256:397055b2593d08be527b2a5be15cc1b049a977ff5c1eeb01344b7d704a57290c',
+    markdown: 'sha256:1b18afc46dcbb006e8369f45f38cd7ac2acb9ede087293dd51c97fd51ac5004d',
+    html: 'sha256:2b43cff5db1d79b2dec52957c2b36263e5a2af835044bffe0f81e5a8ada952d0',
+    sarif: 'sha256:8b769e712b16a71bdbfe9dd21f78054b5b629cdf967fe06d3c20fc9a58f24ca1',
+  });
+  const withheld = withholdSecretRun(out.document, new Map());
+  assert.equal(Object.hasOwn(withheld.reviews[0], 'message'), false);
+  assert.equal(withheld.reviews[0].evidence[0].state, 'withheld');
+  assert.equal(withheld.provenance[2].mode, 'native');
+  assert.deepEqual(withheld.provenance[2].cost, { basis: 'unobserved', reason: 'subscription' });
+  const shared = await generateReport(
+    (await baseInput('shareable', { reviews, provenance: [PROVENANCE[0], PROVENANCE[1], agent] })) as any,
+  );
+  assert.equal(shared.document.reviews[0].evidence[0].state, 'withheld');
+  assert.doesNotMatch(shared.markdown, /The native review found request text/);
+});
+
+test('a brokered-only review retains its four report renderings', needsStore, async () => {
+  const review = {
+    observation: await modelObservation(),
+    stage: 'review-general',
+    unit: { id: 'w-review', revision: 2 },
+  };
+  const out = await generateReport((await baseInput('private', { reviews: [review], provenance: PROVENANCE })) as any);
+  assert.deepEqual(digests(out), {
+    json: 'sha256:1dc65570aef0160ccdd1f744446271f77b116d1a68dda19e7d7f81035dac28e8',
+    markdown: 'sha256:1694aa7734841157d23943c63750ee02eef93658c242dbaa093de183e911c59e',
+    html: 'sha256:b0d3389a4ce2fa4f6d1daf20e43ff7c76c71ecc08ad7fc922e6cc9875f154acf',
+    sarif: 'sha256:8b769e712b16a71bdbfe9dd21f78054b5b629cdf967fe06d3c20fc9a58f24ca1',
+  });
+});
+
 test(
   'a run with an accepted secret match withholds every model statement and citation, and keeps provenance',
   needsStore,
@@ -602,7 +664,7 @@ test(
     assert.equal(agent.model.requested, provider.models[0]!.model);
     assert.equal(agent.turns, 2);
     assert.equal(agent.wires.length, 2);
-    assert.equal(agent.runner, 'hosted-api');
+    assert.equal(agent.runner, 'ollama');
     // A local model with no fee: its confirmed usage at the provider's own (zero) rate is a list price, said so.
     assert.deepEqual(agent.cost, { basis: 'rates', amount: '0', currency: 'USD' });
     assert.equal(agent.tokens.certainty, 'confirmed');

@@ -46,7 +46,7 @@ export function outputSchemasOf(output: StageOutputType | 'walkthrough' | string
       'sentinel-paths/draft-1',
     ],
     coverage: [COVERAGE_SCHEMA],
-    observations: ['sentinel-review-record/draft-1', 'sentinel-observation/draft-1'],
+    observations: ['sentinel-review-record/draft-1', 'sentinel-native-review/draft-1', 'sentinel-observation/draft-1'],
     'walkthrough-md': [PATHS_OUTPUT_SCHEMA],
     walkthrough: [PATHS_OUTPUT_SCHEMA],
     report: [],
@@ -72,6 +72,7 @@ async function documentSchemaOf(store: SentinelStore, id: string): Promise<strin
 const RUNNER_OF: Readonly<Record<string, AgentRunnerId>> = Object.freeze({
   'claude-cli': 'claude-cli',
   'copilot-cli': 'copilot-cli',
+  ollama: 'ollama',
 });
 
 /**
