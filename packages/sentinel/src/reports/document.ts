@@ -21,7 +21,10 @@ import type {
   ReportControlInspection,
   ReportStructuralPaths,
   ReportHistoricalFinding,
+  ReportReviewObservation,
   RegisterText,
+  Provenance,
+  WorkRef,
 } from '../contracts/index.js';
 import { validateEnvelope } from '../validate.js';
 import { correlate, type Finding } from '../findings/correlate.js';
@@ -116,6 +119,17 @@ export interface ReportInput {
    * used to place anything, since a symbol id names its file.
    */
   readonly withheldFiles?: ReadonlySet<string>;
+  /**
+   * Model observations with the stage and unit that published them: a cited class beside the findings, never grouped
+   * into them. Absent: the document has no review section.
+   */
+  readonly reviews?: readonly {
+    readonly observation: ObservationEnvelope;
+    readonly stage: string;
+    readonly unit: WorkRef;
+  }[];
+  /** One provenance record per published attempt. Absent: the document has no provenance section. */
+  readonly provenance?: readonly Provenance[];
   /** A comparison computed with `compareAssessments` over these findings and a baseline's. */
   readonly comparison?: {
     readonly baselineReportId: string;
@@ -293,6 +307,83 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
   if (input.comparison && reportFindings.some((f) => !f.comparison))
     throw new ReportError('sentinel.report.invalidInput', 'the comparison does not cover every finding');
 
+  // Model observations: each cited span embedded under the same profile as a finding's, a withheld location never read
+  // or located, and the model's statement only in a private report. Never a finding, never coverage.
+  const reviews: ReportReviewObservation[] | undefined = input.reviews ? [] : undefined;
+  for (const r of input.reviews ?? []) {
+    const o = r.observation;
+    if (o.producer.kind !== 'model-review' || o.snapshotId !== input.run.snapshotId)
+      throw new ReportError(
+        'sentinel.report.invalidInput',
+        `observation ${o.id} is not a model review of this capture`,
+      );
+    const evidence: ReportEvidence[] = [];
+    const seen = new Set<string>();
+    for (const e of o.evidence) {
+      const where = 'location' in e ? `entry:${e.entry}` : `path:${e.relativePath}`;
+      const key = `${e.sourceId}\u0000${where}\u0000${e.content}\u0000${e.span.startByte}\u0000${e.span.endByte}`;
+      if (seen.has(key) || evidence.length >= MAX_EVIDENCE || e.snapshotId !== input.run.snapshotId) continue;
+      seen.add(key);
+      const id = `ev.${digest(key).slice(7, 39)}`;
+      if ('location' in e || input.withheldFiles?.has(`${e.sourceId}:${e.relativePath}`)) {
+        evidence.push({ id, state: 'withheld', reasonCode: 'sentinel.report.withheld.secret', content: e.content });
+        used.add('sentinel.report.withheld.secret');
+        continue;
+      }
+      const bytes = Buffer.from(await read(e.content));
+      const start = Math.min(e.span.startByte, bytes.length),
+        end = Math.min(e.span.endByte, bytes.length);
+      const location = {
+        relativePath: e.relativePath,
+        startByte: start,
+        endByte: Math.max(end, start + 1),
+        startLine: lineOf(bytes, start),
+        endLine: lineOf(bytes, Math.max(start, end - 1)),
+      };
+      if (!profile.embedSource) {
+        evidence.push({
+          id,
+          state: 'withheld',
+          reasonCode: 'sentinel.report.withheld.shareable',
+          content: e.content,
+          location,
+        });
+        used.add('sentinel.report.withheld.shareable');
+      } else
+        evidence.push({
+          id,
+          state: 'embedded',
+          excerpt: bytes.subarray(start, end).toString('utf8').slice(0, MAX_EXCERPT_CHARS),
+          content: e.content,
+          location,
+        });
+    }
+    for (const k of o.limitationKeys) used.add(k);
+    reviews!.push({
+      id: o.id,
+      stage: r.stage,
+      unit: { id: r.unit.id, revision: r.unit.revision },
+      attemptId: o.producer.attemptId,
+      model: structuredClone(o.producer.model),
+      promptDigest: o.producer.promptDigest,
+      ruleFamilyId: o.rule?.familyId ?? null,
+      severity: o.originalSeverity,
+      ...(profile.embedSource ? { message: o.message } : {}),
+      evidence,
+      limitationKeys: [...o.limitationKeys],
+    });
+  }
+  if (reviews) for (const key of ['heading', 'proposed', 'model']) used.add(`sentinel.report.review.${key}`);
+  const provenance = input.provenance ? structuredClone([...input.provenance]) : undefined;
+  if (provenance) {
+    used.add('sentinel.report.provenance.heading');
+    for (const p of provenance) {
+      used.add(`sentinel.report.provenance.where.${p.where}`);
+      if (p.kind === 'agent')
+        used.add(`sentinel.report.provenance.cost.${p.cost.basis === 'rates' ? 'rates' : p.cost.reason}`);
+    }
+  }
+
   const historical: ReportHistoricalFinding[] = (input.comparison?.result.historical ?? []).map((h) => {
     const b = input.comparison!.baselineFindings.get(h.baselineFindingId);
     if (!b)
@@ -460,6 +551,13 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
           }),
         }
       : {}),
+    ...(reviews
+      ? {
+          reviewObservations: rc(reviews.length, 'sentinel.count.reviewObservations', 'sentinel.scope.report', {
+            recheck: { cli: `farsight-sentinel report ${input.run.id} --full --format json` },
+          }),
+        }
+      : {}),
     ...(input.comparison
       ? {
           historical: rc(
@@ -512,6 +610,7 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
       closure.add(g.place.context.artifact);
       closure.add(g.place.context.sourceBindingReceipt);
     }
+  for (const r of reviews ?? []) for (const e of r.evidence) closure.add(e.content);
   for (const i of inspections ?? []) {
     closure.add(i.artifact);
     for (const id of Object.values(i.analysis)) closure.add(id);
@@ -548,6 +647,8 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
     ...(inspections ? { inspections } : {}),
     ...(structuralPaths ? { structuralPaths } : {}),
     ...(input.comparison ? { historical } : {}),
+    ...(reviews ? { reviews } : {}),
+    ...(provenance ? { provenance } : {}),
     definitions,
     artifactClosure: [...closure].sort(),
   };

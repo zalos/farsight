@@ -1,7 +1,7 @@
 // The Markdown rendering of a report document (PR 19, ADR 38): the same scope, counts and facts as the document, both
 // registers, every finding with its place, comparison and evidence, every gap, and the definitions. Untrusted text is
 // escaped; excerpts are fenced with a fence longer than any backtick run inside them, so source cannot end the block.
-import type { ReportEnvelope, ReportEvidence, FindingPlace } from '../contracts/index.js';
+import type { ReportEnvelope, ReportEvidence, FindingPlace, Provenance } from '../contracts/index.js';
 import { structuralText } from './structural-paths.js';
 import { inspectionText } from './inspection.js';
 import { COUNT_ORDER, countText, wordOf, defineOf, labelKey } from './words.js';
@@ -50,6 +50,44 @@ function evidenceLines(doc: ReportEnvelope, e: ReportEvidence): string[] {
   if (e.state === 'withheld')
     return [`- Evidence ${md(e.id)} at ${where}: withheld (${md(wordOf(doc, e.reasonCode, 'business'))})`];
   return [`- Evidence ${md(e.id)} at ${where}:`, '', fence(e.excerpt), ''];
+}
+
+const short = (d: string | null | undefined) => (d ? d.replace(/^sha256:/, '').slice(0, 12) : 'unknown');
+
+/** One provenance record as one line of words: what ran, where, for how long, and for a model its tokens and cost. */
+export function provenanceLine(doc: ReportEnvelope, p: Provenance): string {
+  const where = wordOf(doc, `sentinel.report.provenance.where.${p.where}`, 'business');
+  const took = p.durationMs === null ? '' : ` · ${p.durationMs} ms`;
+  const head = `${p.stage} (${p.unit.id}) · ${where}`;
+  switch (p.kind) {
+    case 'builtin':
+      return `${head} · Sentinel ${p.operation} · module ${short(p.moduleDigest)} · ${p.sentinelVersion}${took}`;
+    case 'tool':
+      return `${head} · ${p.adapterId} ${p.adapterVersion}${p.image ? ` · image ${p.image.reference}` : ''}${p.rules.length ? ` · ${p.rules.length} rules` : ''}${took}`;
+    case 'script':
+      return `${head} · ${p.interpreter.name} ${p.interpreter.version} · entry ${short(p.entryDigest)} · ${p.argv.join(' ')}${p.outputSchema ? ` · output ${p.outputSchema.id}` : ''}${took}`;
+    case 'agent': {
+      const tokens =
+        p.tokens.input === null && p.tokens.output === null
+          ? 'tokens unknown'
+          : `${p.tokens.input ?? '?'} tokens in · ${p.tokens.output ?? '?'} out (${p.tokens.certainty})`;
+      const cost =
+        p.cost.basis === 'rates'
+          ? `${p.cost.amount} ${p.cost.currency} · ${wordOf(doc, 'sentinel.report.provenance.cost.rates', 'business')}`
+          : wordOf(doc, `sentinel.report.provenance.cost.${p.cost.reason}`, 'business');
+      return `${head} · ${p.runner} ${p.mode} · model ${p.model.requested}${p.model.reported && p.model.reported !== p.model.requested ? ` (reported ${p.model.reported})` : ''} · ${p.turns} turns · ${tokens} · ${cost}${took}`;
+    }
+  }
+}
+
+/** The review section's lines for one observation, before its evidence. */
+export function reviewLines(doc: ReportEnvelope, r: NonNullable<ReportEnvelope['reviews']>[number]): string[] {
+  return [
+    `${r.stage} · ${wordOf(doc, `sentinel.report.severity.${r.severity}`, 'business')} · ${wordOf(doc, 'sentinel.report.review.model', 'business')} ${r.model.requestedModel}${r.model.returnedModel && r.model.returnedModel !== r.model.requestedModel ? ` (reported ${r.model.returnedModel})` : ''} · ${r.model.source}`,
+    ...(r.ruleFamilyId ? [`rule family ${r.ruleFamilyId}`] : []),
+    ...(r.message !== undefined ? [r.message] : []),
+    `observation ${r.id} · prompt ${short(r.promptDigest)}`,
+  ];
 }
 
 /**
@@ -134,6 +172,24 @@ export function renderMarkdown(doc: ReportEnvelope): string {
   if (doc.structuralPaths?.length) {
     lines.push(`## ${md(wordOf(doc, 'sentinel.paths.report.heading', 'business'))}`, '');
     for (const p of structuralText(doc)) lines.push(`### ${md(p.source)}`, '', ...p.lines.map((l) => `- ${md(l)}`), '');
+  }
+  if (doc.reviews) {
+    lines.push(`## ${md(wordOf(doc, 'sentinel.report.review.heading', 'business'))}`, '');
+    lines.push(
+      `${md(wordOf(doc, 'sentinel.report.review.proposed', 'business'))}.${doc.counts.reviewObservations ? ` ${md(countText(doc, doc.counts.reviewObservations, 'business'))}.` : ''}`,
+      '',
+    );
+    for (const r of doc.reviews) {
+      lines.push(`### <a id="${anchor('review', r.id)}"></a>${md(reviewLines(doc, r)[0]!)}`, '');
+      for (const l of reviewLines(doc, r).slice(1)) lines.push(`- ${md(l)}`);
+      for (const e of r.evidence) lines.push(...evidenceLines(doc, e));
+      lines.push('');
+    }
+  }
+  if (doc.provenance) {
+    lines.push(`## ${md(wordOf(doc, 'sentinel.report.provenance.heading', 'business'))}`, '');
+    for (const p of doc.provenance) lines.push(`- ${md(provenanceLine(doc, p))}`);
+    lines.push('');
   }
   lines.push('## Gaps in the checks', '');
   if (!doc.gaps.length)

@@ -16,6 +16,8 @@ import type {
   WorkRef,
 } from './common.js';
 import type { CoverageStatus } from './coverage.js';
+import type { ModelIdentity } from './observation.js';
+import type { Provenance, StageId } from './pipeline.js';
 
 /** One part of a count's partition: core's `CountPart`. Parts sum to the count they explain. */
 export interface ReportCountPart {
@@ -279,6 +281,31 @@ export interface ReportControlInspection {
   limitationKey: 'sentinel.controls.limitation.inspectionOnly';
 }
 
+/**
+ * One model review's cited claim: proposed by a model and always drawn as one, never a finding and never coverage.
+ * Its message and its evidence pass the same disclosure profile and accepted-secret fold as a finding's.
+ */
+export interface ReportReviewObservation {
+  /** The observation's id, as the review published it. */
+  id: Id;
+  /** The stage whose unit published it. */
+  stage: StageId;
+  unit: WorkRef;
+  attemptId: Id;
+  model: ModelIdentity;
+  promptDigest: Digest;
+  /** The rule family a guided review was asked about; null for a general review. */
+  ruleFamilyId: Id | null;
+  /** As the model supplied it. */
+  severity: ShortText;
+  /** The model's statement: only in a private report of a run whose accepted secret scan matched nothing. */
+  message?: BoundedText;
+  /** @maxItems 64 */
+  evidence: ReportEvidence[];
+  /** @maxItems 64 */
+  limitationKeys: CatalogKey[];
+}
+
 /** sentinel-report/draft-1 — one deterministic projection at a pinned ledger sequence and evaluation time. */
 export interface ReportEnvelope {
   schema: 'sentinel-report/draft-1';
@@ -311,6 +338,8 @@ export interface ReportEnvelope {
     controlAnswers?: ReportCount;
     /** Structural query outcomes, counted separately from findings and security coverage. */
     pathQueries?: ReportCount;
+    /** Model observations: proposed claims, counted apart from findings and never coverage. */
+    reviewObservations?: ReportCount;
   };
   /** @maxItems 25000 */
   findings: ReportFinding[];
@@ -333,6 +362,17 @@ export interface ReportEnvelope {
   };
   /** @maxItems 25000 */
   historical?: ReportHistoricalFinding[];
+  /**
+   * Model observations, by stage and unit: a cited class beside the findings, never folded into them.
+   * @maxItems 1024
+   */
+  reviews?: ReportReviewObservation[];
+  /**
+   * What ran for each published unit: implementation, version, where, what it read and wrote, how long, and for a
+   * model stage its tokens and cost.
+   * @maxItems 10000
+   */
+  provenance?: Provenance[];
   /** @maxItems 2048 */
   definitions?: ReportDefinition[];
   /** @maxItems 4096 */

@@ -122,6 +122,10 @@
             "pathQueries": {
               "$ref": "#/definitions/ReportCount",
               "description": "Structural query outcomes, counted separately from findings and security coverage."
+            },
+            "reviewObservations": {
+              "$ref": "#/definitions/ReportCount",
+              "description": "Model observations: proposed claims, counted apart from findings and never coverage."
             }
           },
           "required": [
@@ -203,6 +207,22 @@
             "$ref": "#/definitions/ReportHistoricalFinding"
           },
           "maxItems": 25000
+        },
+        "reviews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportReviewObservation"
+          },
+          "description": "Model observations, by stage and unit: a cited class beside the findings, never folded into them.",
+          "maxItems": 1024
+        },
+        "provenance": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Provenance"
+          },
+          "description": "What ran for each published unit: implementation, version, where, what it read and wrote, how long, and for a model stage its tokens and cost.",
+          "maxItems": 10000
         },
         "definitions": {
           "type": "array",
@@ -1773,6 +1793,1132 @@
       ],
       "additionalProperties": false,
       "description": "A baseline finding the current findings do not continue, with why: resolved by a comparable check, a removed surface, unassessed in the current scope, changed detection, incomparable conditions, or an ambiguous pairing that stays open. It is never dropped, and only `resolved-by-comparable-check` says the issue is gone."
+    },
+    "ReportReviewObservation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id",
+          "description": "The observation's id, as the review published it."
+        },
+        "stage": {
+          "$ref": "#/definitions/StageId",
+          "description": "The stage whose unit published it."
+        },
+        "unit": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "model": {
+          "$ref": "#/definitions/ModelIdentity"
+        },
+        "promptDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "ruleFamilyId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The rule family a guided review was asked about; null for a general review."
+        },
+        "severity": {
+          "$ref": "#/definitions/ShortText",
+          "description": "As the model supplied it."
+        },
+        "message": {
+          "$ref": "#/definitions/BoundedText",
+          "description": "The model's statement: only in a private report of a run whose accepted secret scan matched nothing."
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportEvidence"
+          },
+          "maxItems": 64
+        },
+        "limitationKeys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CatalogKey"
+          },
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "id",
+        "stage",
+        "unit",
+        "attemptId",
+        "model",
+        "promptDigest",
+        "ruleFamilyId",
+        "severity",
+        "evidence",
+        "limitationKeys"
+      ],
+      "additionalProperties": false,
+      "description": "One model review's cited claim: proposed by a model and always drawn as one, never a finding and never coverage. Its message and its evidence pass the same disclosure profile and accepted-secret fold as a finding's."
+    },
+    "StageId": {
+      "type": "string",
+      "description": "A stage id: a built-in plan stage (`capture`, `review-guided`) or one a pipeline declares (`secrets`, `triage`). Lower-case words joined by single hyphens, so it never collides with a context input, which carries a dot.",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "ModelIdentity": {
+      "type": "object",
+      "properties": {
+        "requestedModel": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "returnedModel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "immutableRevision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "source": {
+          "$ref": "#/definitions/IdentitySource"
+        }
+      },
+      "required": [
+        "requestedModel",
+        "returnedModel",
+        "immutableRevision",
+        "source"
+      ],
+      "additionalProperties": false,
+      "description": "A model's identity at the strength it is actually known, never inferred from response text."
+    },
+    "IdentitySource": {
+      "type": "string",
+      "enum": [
+        "provider-response",
+        "local-weight-digest",
+        "host-reported",
+        "self-reported",
+        "unknown"
+      ],
+      "description": "How a worker's identity is known. Host-reported identity is not provider attestation."
+    },
+    "Provenance": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "builtin",
+            "tool",
+            "script",
+            "agent"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "builtin"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/BuiltinProvenance"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "tool"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/ToolProvenance"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "script"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/ScriptProvenance"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "agent"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/AgentProvenance"
+          }
+        }
+      ],
+      "description": "What ran for one unit of a stage: which implementation, which version, where, what it read and wrote, how long, and for a model stage how many tokens and what it cost."
+    },
+    "BuiltinProvenance": {
+      "type": "object",
+      "properties": {
+        "stage": {
+          "$ref": "#/definitions/StageId"
+        },
+        "unit": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "attempt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The attempt this record describes; null for work satisfied by reuse."
+        },
+        "where": {
+          "$ref": "#/definitions/ExecutionSite"
+        },
+        "startedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "durationMs": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "read": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "description": "Every artifact the attempt was allowed to read.",
+          "maxItems": 1024
+        },
+        "wrote": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "maxItems": 1024
+        },
+        "invocation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The retained invocation record (executable digest, argv, environment names). Never a credential."
+        },
+        "kind": {
+          "type": "string",
+          "const": "builtin"
+        },
+        "operation": {
+          "$ref": "#/definitions/BuiltinOperation"
+        },
+        "moduleDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "sentinelVersion": {
+          "$ref": "#/definitions/ShortText"
+        }
+      },
+      "required": [
+        "attempt",
+        "durationMs",
+        "endedAt",
+        "invocation",
+        "kind",
+        "moduleDigest",
+        "operation",
+        "read",
+        "sentinelVersion",
+        "stage",
+        "startedAt",
+        "unit",
+        "where",
+        "wrote"
+      ],
+      "additionalProperties": false,
+      "description": "A Sentinel-implemented stage."
+    },
+    "ExecutionSite": {
+      "type": "string",
+      "enum": [
+        "in-process",
+        "child",
+        "container",
+        "host",
+        "sandboxed-cli"
+      ],
+      "description": "Where an attempt ran. `host` is a script on the owner's computer; `sandboxed-cli` an agent CLI under its sandbox."
+    },
+    "BuiltinOperation": {
+      "type": "string",
+      "enum": [
+        "capture",
+        "parse",
+        "inventory",
+        "walkthrough",
+        "framework-controls",
+        "report"
+      ],
+      "description": "What a `builtin` stage runs: Sentinel's own capture, parse and inventory, the bounded call paths under each entry point (`walkthrough`, today's `analysis/paths`), the framework control facts, and the report."
+    },
+    "ToolProvenance": {
+      "type": "object",
+      "properties": {
+        "stage": {
+          "$ref": "#/definitions/StageId"
+        },
+        "unit": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "attempt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The attempt this record describes; null for work satisfied by reuse."
+        },
+        "where": {
+          "$ref": "#/definitions/ExecutionSite"
+        },
+        "startedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "durationMs": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "read": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "description": "Every artifact the attempt was allowed to read.",
+          "maxItems": 1024
+        },
+        "wrote": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "maxItems": 1024
+        },
+        "invocation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The retained invocation record (executable digest, argv, environment names). Never a credential."
+        },
+        "kind": {
+          "type": "string",
+          "const": "tool"
+        },
+        "adapterId": {
+          "$ref": "#/definitions/Id"
+        },
+        "adapterVersion": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "image": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ProvenanceImage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workerDigest": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "familyId": {
+                "$ref": "#/definitions/RuleFamilyId"
+              },
+              "revision": {
+                "$ref": "#/definitions/Ordinal"
+              },
+              "definitionDigest": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "familyId",
+              "revision",
+              "definitionDigest"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 2048
+        },
+        "databases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "databaseId": {
+                "$ref": "#/definitions/Id"
+              },
+              "snapshotDigest": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "databaseId",
+              "snapshotDigest"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 256
+        }
+      },
+      "required": [
+        "adapterId",
+        "adapterVersion",
+        "attempt",
+        "databases",
+        "durationMs",
+        "endedAt",
+        "image",
+        "invocation",
+        "kind",
+        "read",
+        "rules",
+        "stage",
+        "startedAt",
+        "unit",
+        "where",
+        "workerDigest",
+        "wrote"
+      ],
+      "additionalProperties": false,
+      "description": "A pinned scanner in its container."
+    },
+    "ProvenanceImage": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "id": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "reference",
+        "id"
+      ],
+      "additionalProperties": false,
+      "description": "A container image as an attempt used it: the reference written and the image id actually run."
+    },
+    "RuleFamilyId": {
+      "type": "string",
+      "description": "A stable rule family: `sentinel.<area>.<name>` for original rules, `<vendor>.<area>.<name>` otherwise.",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*){2,7}$",
+      "maxLength": 128
+    },
+    "ScriptProvenance": {
+      "type": "object",
+      "properties": {
+        "stage": {
+          "$ref": "#/definitions/StageId"
+        },
+        "unit": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "attempt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The attempt this record describes; null for work satisfied by reuse."
+        },
+        "where": {
+          "$ref": "#/definitions/ExecutionSite"
+        },
+        "startedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "durationMs": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "read": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "description": "Every artifact the attempt was allowed to read.",
+          "maxItems": 1024
+        },
+        "wrote": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "maxItems": 1024
+        },
+        "invocation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The retained invocation record (executable digest, argv, environment names). Never a credential."
+        },
+        "kind": {
+          "type": "string",
+          "const": "script"
+        },
+        "entryDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "interpreter": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "enum": [
+                "node",
+                "sh"
+              ]
+            },
+            "version": {
+              "$ref": "#/definitions/ShortText"
+            },
+            "digest": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Digest"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "path": {
+              "$ref": "#/definitions/ShortText"
+            }
+          },
+          "required": [
+            "name",
+            "version",
+            "digest"
+          ],
+          "additionalProperties": false,
+          "description": "`path`: the interpreter binary that ran, by absolute path, when it ran on the host."
+        },
+        "confinement": {
+          "type": "string",
+          "const": "none",
+          "description": "`none`: a host script is unconfined by design. It runs as the owner, with the owner's file system and network, like any script the owner runs, and only while the adopted settings turn `stage.host-scripts` on."
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/OutputSchemaId"
+            },
+            "digest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "id",
+            "digest"
+          ],
+          "additionalProperties": false,
+          "description": "The schema its output document was validated against before publication, by digest."
+        },
+        "argv": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScriptArgument"
+          },
+          "maxItems": 64
+        },
+        "environmentNames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EnvironmentName"
+          },
+          "maxItems": 128
+        },
+        "image": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ProvenanceImage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present only when it ran in a container."
+        }
+      },
+      "required": [
+        "argv",
+        "attempt",
+        "durationMs",
+        "endedAt",
+        "entryDigest",
+        "environmentNames",
+        "image",
+        "interpreter",
+        "invocation",
+        "kind",
+        "read",
+        "stage",
+        "startedAt",
+        "unit",
+        "where",
+        "wrote"
+      ],
+      "additionalProperties": false,
+      "description": "A promoted script on the host or in a pinned script-runner container."
+    },
+    "OutputSchemaId": {
+      "type": "string",
+      "description": "A custom output's schema id, `<area>.<name>/v<n>` (`sentinel.triage/v1`). Sentinel validates the stage's output against it after the stage exits; a failed validation is a failed attempt, never a partial publication.",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+/v[1-9][0-9]{0,5}$",
+      "maxLength": 128
+    },
+    "ScriptArgument": {
+      "type": "string",
+      "description": "One argument passed to a script, as written. Never a credential: settings and pipelines hold none.",
+      "maxLength": 1024
+    },
+    "EnvironmentName": {
+      "type": "string",
+      "description": "An environment variable's name as a script saw it. Values are never recorded.",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+    },
+    "AgentProvenance": {
+      "type": "object",
+      "properties": {
+        "stage": {
+          "$ref": "#/definitions/StageId"
+        },
+        "unit": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "attempt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Id"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The attempt this record describes; null for work satisfied by reuse."
+        },
+        "where": {
+          "$ref": "#/definitions/ExecutionSite"
+        },
+        "startedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endedAt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "durationMs": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "read": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "description": "Every artifact the attempt was allowed to read.",
+          "maxItems": 1024
+        },
+        "wrote": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "maxItems": 1024
+        },
+        "invocation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The retained invocation record (executable digest, argv, environment names). Never a credential."
+        },
+        "kind": {
+          "type": "string",
+          "const": "agent"
+        },
+        "mode": {
+          "$ref": "#/definitions/AgentMode"
+        },
+        "runner": {
+          "$ref": "#/definitions/AgentRunnerId"
+        },
+        "runnerVersion": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ShortText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "executableDigest": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": "object",
+          "properties": {
+            "requested": {
+              "$ref": "#/definitions/ModelName"
+            },
+            "reported": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ModelName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "identitySource": {
+              "$ref": "#/definitions/IdentitySource"
+            }
+          },
+          "required": [
+            "requested",
+            "reported",
+            "identitySource"
+          ],
+          "additionalProperties": false
+        },
+        "promptDigest": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skillDigests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Digest"
+          },
+          "description": "In selection order.",
+          "maxItems": 16
+        },
+        "wires": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "description": "Every retained request wire, in order.",
+          "maxItems": 1024
+        },
+        "transcript": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The native mode's full transcript (every tool call and read); null for a brokered stage."
+        },
+        "turns": {
+          "$ref": "#/definitions/Count"
+        },
+        "tokens": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "output": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "certainty": {
+              "$ref": "#/definitions/UsageCertainty"
+            }
+          },
+          "required": [
+            "input",
+            "output",
+            "certainty"
+          ],
+          "additionalProperties": false
+        },
+        "cost": {
+          "$ref": "#/definitions/StageCost"
+        },
+        "deadline": {
+          "type": "object",
+          "properties": {
+            "grantedMs": {
+              "$ref": "#/definitions/Count"
+            },
+            "usedMs": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "grantedMs",
+            "usedMs"
+          ],
+          "additionalProperties": false,
+          "description": "The stage deadline and how much of it the attempt used."
+        }
+      },
+      "required": [
+        "attempt",
+        "cost",
+        "deadline",
+        "durationMs",
+        "endedAt",
+        "executableDigest",
+        "invocation",
+        "kind",
+        "mode",
+        "model",
+        "promptDigest",
+        "read",
+        "runner",
+        "runnerVersion",
+        "skillDigests",
+        "stage",
+        "startedAt",
+        "tokens",
+        "transcript",
+        "turns",
+        "unit",
+        "where",
+        "wires",
+        "wrote"
+      ],
+      "additionalProperties": false,
+      "description": "A model stage through a CLI runner or, behind its flag, a hosted API."
+    },
+    "AgentMode": {
+      "type": "string",
+      "enum": [
+        "brokered",
+        "native"
+      ],
+      "description": "`brokered`: Sentinel runs the loop and the evidence broker serves cited slices. `native`: the CLI runs its own loop over a scratch tree holding only the stage's declared inputs, and its full transcript is retained."
+    },
+    "AgentRunnerId": {
+      "type": "string",
+      "enum": [
+        "claude-cli",
+        "copilot-cli",
+        "hosted-api"
+      ],
+      "description": "The agent runners a stage may name. A hosted API is off unless `review.hosted-api` is on."
+    },
+    "ModelName": {
+      "type": "string",
+      "description": "A model name as the provider spells it.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$"
+    },
+    "UsageCertainty": {
+      "type": "string",
+      "enum": [
+        "confirmed",
+        "unknown",
+        "not-applicable"
+      ],
+      "description": "Confirmed spend and unknown usage are distinct facts; a timeout never proves a provider stopped billing."
+    },
+    "StageCost": {
+      "type": "object",
+      "properties": {
+        "basis": {
+          "enum": [
+            "rates",
+            "unobserved"
+          ]
+        }
+      },
+      "required": [
+        "basis"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "rates"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "rates"
+              },
+              "amount": {
+                "$ref": "#/definitions/DecimalAmount"
+              },
+              "currency": {
+                "$ref": "#/definitions/CurrencyCode"
+              }
+            },
+            "required": [
+              "basis",
+              "amount",
+              "currency"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "unobserved"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "unobserved"
+              },
+              "reason": {
+                "$ref": "#/definitions/CostUnobservedReason"
+              }
+            },
+            "required": [
+              "basis",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "description": "What a model stage cost: always one of two answers, never nothing. `rates`: the provider has owner-entered rates and the usage was confirmed (list price, not a bill). `unobserved`: the cost is not known, with its reason, and is never printed as a zero amount. Only a model stage has a cost; Sentinel's own stages, scanners and scripts have none."
+    },
+    "DecimalAmount": {
+      "type": "string",
+      "description": "A non-negative decimal amount written as a string, so money is never a binary float.",
+      "pattern": "^(0|[1-9][0-9]{0,15})(\\.[0-9]{1,9})?$"
+    },
+    "CurrencyCode": {
+      "type": "string",
+      "description": "An ISO 4217 currency code.",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "CostUnobservedReason": {
+      "type": "string",
+      "enum": [
+        "subscription",
+        "usage-unknown",
+        "no-rates"
+      ],
+      "description": "Why a model stage's cost is not known: a subscription CLI reports no price, the usage itself was not confirmed, or the provider has no owner-entered rates."
     },
     "ReportDefinition": {
       "type": "object",
