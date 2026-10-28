@@ -12,6 +12,7 @@ import { canonicalJsonBytes } from '../store/objects.js';
 import { PATHS_SUPPORTED_RULES } from '../analysis/paths/definitions.js';
 import { CONTROLS_SUPPORTED_RULES } from '../frameworks/controls/driver.js';
 import { productionDrivers } from '../adapters/drivers/index.js';
+import { SCANNER_ADAPTER_IDS } from '../adapters/drivers/canonical.js';
 import { PREVIEW_DETECTOR_ID } from '../adapters/preview-detector.js';
 import { builtinPackDir, ownExecutable } from './package-paths.js';
 import { readPackDirectory, validatePack } from '../rules/index.js';
@@ -202,11 +203,7 @@ export function builtinRulePack(selector: string): readonly string[] | undefined
 /** The check adapters this build ships (whose rules are bound by supportedRules). */
 export const SHIPPED_CHECK_ADAPTERS: ReadonlySet<string> = new Set([
   PREVIEW_DETECTOR_ID,
-  'pattern-semgrep',
-  'advisories-osv',
-  'iac-trivy',
-  'ci-zizmor',
-  'secrets-gitleaks',
+  ...SCANNER_ADAPTER_IDS,
   'framework-controls',
   'bounded-paths',
 ]);
