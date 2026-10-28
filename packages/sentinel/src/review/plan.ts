@@ -21,6 +21,7 @@ import { reviewFail } from './errors.js';
 import { guidedSpec } from './guided.js';
 import { generalSpec } from './general.js';
 import { partitionInventory } from './evidence.js';
+import { cliKind } from './providers/registry.js';
 const digest = (v: unknown) => canonicalDigest(v) as ArtifactId;
 const bad = (): never => reviewFail('sentinel.review.integrity', 'the admitted review inputs differ');
 export const MAX_REVIEW_UNITS = 32;
@@ -329,7 +330,7 @@ export function reviewSeedsFor(
       ...s,
       budget: {
         ...s.budget,
-        ...(resolved.binding.kind === 'copilot-cli' ? { maxSteps: 3, deadlineMs: 120000 } : {}),
+        ...cliKind(resolved.binding.kind)?.sessionBudget,
         maxOutputTokens: Math.min(s.budget.maxOutputTokens, resolved.binding.limits.maxOutputTokens),
       },
       adapterDigest: adapter.digest,
