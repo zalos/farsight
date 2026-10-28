@@ -33,6 +33,14 @@ export interface CopilotAgentRequest {
   readonly task: string;
   /** Model requests (turns) allowed; one more stops the process and fails the run. */
   readonly maxTurns: number;
+  /**
+   * Promoted skills, in order: written to `.github/skills/<id>/` in the scratch tree, which `--add-dir` loads as the
+   * session's only trusted skills. Their bytes were checked against the pack lock before this request was made.
+   */
+  readonly skills?: readonly Readonly<{
+    id: string;
+    files: readonly Readonly<{ path: string; bytes: Uint8Array }>[];
+  }>[];
 }
 
 /** A tool the model ran, with the scratch-relative path it named when it named one. */
@@ -61,6 +69,8 @@ export function copilotAgentArguments(l: {
   sharePath: string;
   workDir: string;
   model: string;
+  /** The stage has promoted skills under `<workDir>/.github/skills/`: load that tree's skills as trusted. */
+  skills?: boolean;
 }): readonly string[] {
   return Object.freeze([
     '--no-auto-update',
@@ -77,6 +87,7 @@ export function copilotAgentArguments(l: {
     '-C',
     l.workDir,
     '--trust-folder',
+    ...(l.skills ? ['--add-dir', l.workDir] : []),
     '--available-tools',
     ...COPILOT_READ_TOOLS,
     '--excluded-tools',
@@ -374,7 +385,7 @@ export async function nativeCopilotAgentCall(authority: CopilotAgentAuthority): 
       work = current.ownedRoot + '/work',
       usagePath = current.ownedRoot + '/state/usage.json',
       sharePath = current.ownedRoot + '/state/transcript.md',
-      files = copilotPrivateState(selector);
+      files = copilotPrivateState(selector, { stageSkills: Boolean(request.skills?.length) });
     await writeFile(current.ownedRoot + '/state/config.json', files.config, { flag: 'wx', mode: 0o600 });
     await writeFile(current.ownedRoot + '/state/settings.json', files.settings, { flag: 'wx', mode: 0o600 });
     // The scratch tree: only the declared inputs and the instructions, read-only to the sandboxed process.
@@ -384,6 +395,16 @@ export async function nativeCopilotAgentCall(authority: CopilotAgentAuthority): 
       const rel = safeInputPath(f.relativePath);
       await mkdir(dirname(join(work, rel)), { recursive: true, mode: 0o700 });
       await writeFile(join(work, rel), f.bytes, { flag: 'wx', mode: 0o400 });
+    }
+    for (const skill of request.skills ?? []) {
+      if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(skill.id))
+        fail('sentinel.provider.invalidProfile', 'a skill id is a plain pack id');
+      for (const f of skill.files) {
+        const rel = safeInputPath(f.path);
+        const target = join(work, '.github/skills', skill.id, rel);
+        await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+        await writeFile(target, f.bytes, { flag: 'wx', mode: 0o400 });
+      }
     }
     copilotBoundary(limits);
     await verifyNativeCopilotSetup(current, limits);
@@ -397,7 +418,13 @@ export async function nativeCopilotAgentCall(authority: CopilotAgentAuthority): 
           label: 'sentinel-copilot-agent',
           policy: current.policy,
           executable: current.executable,
-          args: copilotAgentArguments({ usagePath, sharePath, workDir: work, model: request.model }),
+          args: copilotAgentArguments({
+            usagePath,
+            sharePath,
+            workDir: work,
+            model: request.model,
+            skills: Boolean(request.skills?.length),
+          }),
           cwd: work,
           env: current.env,
           timing: limits,
