@@ -21,6 +21,8 @@ import { guidedSpec } from '../review/guided.js';
 import { generalSpec } from '../review/general.js';
 import { partitionInventory } from '../review/evidence.js';
 import { prepareInstructions } from '../review/instructions.js';
+import { brokeredInstructions } from '../review/packs.js';
+import type { AgentStageDefinition } from '../contracts/pipeline.js';
 import { withReviewUnits } from '../review/plan.js';
 import type { SessionSpec } from '../review/session.js';
 import { REVIEW_ADAPTERS, type ReviewRuntime } from '../review/dispatch.js';
@@ -46,13 +48,53 @@ export function reviewProfile(record: ExecutionProfileRecord, registry: AdapterR
 }
 const LIMITS = { maxSliceLines: 200, maxSliceBytes: 65536, maxToolCalls: 20, maxServedBytes: 262144 },
   BUDGET = { maxSteps: 12, maxInvalidReplies: 2, maxInputBytes: 4194304, maxOutputTokens: 512, deadlineMs: 120000 };
-/** Specs come from the accepted inventory/checks, with bundled prompt and an explicit empty skill selection. */
+/**
+ * The agent stages a pipeline declares, the trust folder their promoted packs live in, and for each review kind the
+ * id of the stage the planner places its seeds under. A review binds to that stage by identity, never by guessing
+ * from a fan-out, so an unrelated agent stage can never lend its prompt or skills to a review.
+ */
+export interface ReviewStagePacks {
+  readonly trustDir: string;
+  readonly stages: readonly AgentStageDefinition[];
+  readonly stageOf: Readonly<Partial<Record<'guided' | 'general', string>>>;
+}
+const stageForKind = (packs: ReviewStagePacks, kind: 'guided' | 'general') => {
+  const id = packs.stageOf[kind];
+  if (id === undefined) return undefined;
+  const stage = packs.stages.find((st) => st.id === id);
+  if (!stage || stage.kind !== 'agent')
+    return reviewFail('sentinel.review.invalidInput', `the ${kind} review's stage ${id} is not a declared agent stage`);
+  return stage;
+};
+/**
+ * A review spec's prompt, instructions and sealed pack binding: from the agent stage that runs it when that stage
+ * names promoted packs (resolved and checked here), otherwise the bundled prompt with no skills.
+ */
+export function reviewInstructionsFor(
+  s: SessionSpec,
+  stagePacks: ReviewStagePacks | undefined,
+): Pick<SessionSpec, 'prompt' | 'instructions' | 'packs'> {
+  const stage = stagePacks && stageForKind(stagePacks, s.kind);
+  // The mode first: a native stage never runs a brokered review, even one naming no prompt, skills or instructions.
+  if (stage && stage.mode !== 'brokered')
+    return reviewFail('sentinel.review.invalidInput', 'a review session runs a brokered agent stage');
+  if (!stage || (stage.prompt === undefined && !stage.skills?.length && stage.instructions === undefined))
+    return { prompt: s.prompt, instructions: prepareInstructions({ prompt: s.prompt, skills: [] }) };
+  const prepared = brokeredInstructions(stagePacks!.trustDir, stage, s.prompt);
+  return { prompt: prepared.prompt, instructions: prepared.instructions, packs: prepared.packs };
+}
+/**
+ * Specs come from the accepted inventory/checks. Their prompt and ordered skills come from the agent stage that runs
+ * them when it names promoted packs (resolved and checked against the pack lock here, and the reference → digest
+ * binding sealed into the spec); otherwise the bundled prompt with an explicit empty skill selection.
+ */
 export function reviewsFor(
   plan: PlanEnvelope,
   evidence: BootstrapEvidence,
   policy: EffectivePolicy,
   registry: AdapterRegistry,
   packs: readonly import('../rules/pack.js').ValidatedPack[] = [],
+  stagePacks?: ReviewStagePacks,
 ) {
   const specs: SessionSpec[] = [],
     terms = new Map<string, import('../contracts/plan.js').PlannedReview['terms']>(),
@@ -61,6 +103,7 @@ export function reviewsFor(
   const enabled = (kind: 'guided' | 'general', segment: string) =>
     configured.stages.some((s) => s.stage === kind) ||
     configured.segments.some((s) => s.stage === kind && s.segmentId === segment);
+  const instructionsFor = (s: SessionSpec) => reviewInstructionsFor(s, stagePacks);
   const finish = (s: SessionSpec, segmentId: string) => {
     if (!enabled(s.kind, segmentId)) return;
     if (specs.length >= 32) reviewFail('sentinel.review.planLimit', 'more than 32 requested, maximum 32');
@@ -78,7 +121,7 @@ export function reviewsFor(
         maxOutputTokens: Math.min(s.budget.maxOutputTokens, resolved.binding.limits.maxOutputTokens),
       },
       adapterDigest: adapter.digest,
-      instructions: prepareInstructions({ prompt: s.prompt, skills: [] }),
+      ...instructionsFor(s),
       segmentId,
       requestedSelection: resolved.selection,
     });
@@ -156,6 +199,7 @@ export async function reviewRuntime(
     throw new ExecutionError('sentinel.execution.planInvalid', { reason: 'model workspace names another held store' });
   const ledger = await BudgetLedger.open(join(store.storePath, 'review-budget.sqlite'));
   return {
+    trustDir: ws.trustDir,
     ledger,
     broker: new ModelBroker({ ledger, credentials: keychainSource(), epoch: store.epoch }),
     requestedBy: OWNER,
