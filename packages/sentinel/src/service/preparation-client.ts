@@ -23,6 +23,7 @@ const invalid = (): never => {
   throw new PreparationError('sentinel.preparation.invalid');
 };
 const bookFor = (ws: Workspace) => new ReceiptBook(join(ws.trustDir, 'receipts'));
+/** The file name, in the trust directory, that keeps this workspace's preparation request key for one store. */
 function savedPath(ws: Workspace, storeId: string): string {
   return `preparation-client-${canonicalDigest({ workspace: workspaceIdentity(ws.path), storeId }).slice(7)}.json`;
 }
@@ -58,13 +59,22 @@ function savedRecord(ws: Workspace, storeId: string): { requestKey: string; disp
     return invalid();
   return { requestKey: v.requestKey, dispatch: legacy ? 'unknown' : v.dispatch };
 }
+/** The saved request key for this workspace and store, or null when none is saved. */
 function savedKey(ws: Workspace, storeId: string): string | null {
   return savedRecord(ws, storeId)?.requestKey ?? null;
 }
+/**
+ * True when `key` is the saved key and it is known to have been unsent or definitively refused, so no accepted
+ * preparation can exist for it.
+ */
 function absentKeyReplaceable(ws: Workspace, storeId: string, key: string): boolean {
   const record = savedRecord(ws, storeId);
   return record?.requestKey === key && record.dispatch !== 'unknown';
 }
+/**
+ * Saves the request key and what is known about its dispatch, atomically and owner-private; a malformed key or dispatch
+ * is `sentinel.preparation.invalid`.
+ */
 function saveKey(ws: Workspace, storeId: string, key: string, dispatch: DispatchState = 'unknown'): void {
   if (!KEY.test(key) || !['unsent', 'unknown', 'refused'].includes(dispatch)) return invalid();
   const bytes = canonicalJsonBytes({
@@ -78,6 +88,7 @@ function saveKey(ws: Workspace, storeId: string, key: string, dispatch: Dispatch
   if (bytes.length > 1024) return invalid();
   writePrivateFileAtomic(ws.trustDir, savedPath(ws, storeId), bytes, 'sentinel.receipt.storeUnsafe');
 }
+/** True when an outcome found no preparation and refused or failed, so its key was never accepted. */
 function definitivelyRefused(value: PreparationOutcome): boolean {
   return (
     value.status?.found !== true &&
@@ -124,6 +135,56 @@ function confirm(
   assertMayConfirm(OWNER);
   return { receiptId: issueReceipt(bookFor(ws), OWNER, binding, { now, ttlMs: 600000 }).id };
 }
+type ServiceClient = NonNullable<Awaited<ReturnType<typeof connectService>>>;
+/**
+ * With the key lock held for an accept: the outcome a saved earlier request already decides, if it does. The same key
+ * keeps its own outcome (`sentinel.preparation.changed` when asked with another parent); an earlier request still
+ * running, or interrupted and resumable, refuses this one with `sentinel.preparation.busy`. A saved key known to be
+ * unsent or definitively refused decides nothing; one the service no longer finds is `sentinel.preparation.unavailable`.
+ */
+async function priorRequestOutcome(
+  ws: Workspace,
+  client: ServiceClient,
+  lock: Awaited<ReturnType<typeof preparationKeyLock>>,
+  key: string,
+  parentId: string | undefined,
+): Promise<CommandResult | undefined> {
+  const previous = savedKey(ws, client.storeId);
+  if (!previous) return undefined;
+  const old = preparationOutcome(await client.request('prepare.status', { requestKey: previous }));
+  lock.assertHeld();
+  // A known unsent or definitively refused key has no accepted journal.
+  if (old.status?.found === false && absentKeyReplaceable(ws, client.storeId, previous)) return undefined;
+  if (!old.status?.found) throw new PreparationError('sentinel.preparation.unavailable');
+  if (previous === key) {
+    if (parentId !== undefined) throw new PreparationError('sentinel.preparation.changed');
+    return project({ ...old, outcome: 'kept' }, { requestKeySaved: true });
+  }
+  const status = old.status;
+  const replaceable =
+    status.phase === 'prepared' ||
+    (parentId === undefined &&
+      (['failed', 'canceled'].includes(status.phase) ||
+        (status.phase === 'interrupted' && status.resumeAvailable === false)));
+  if (!replaceable)
+    return project({ ...old, outcome: 'refused', reasonCode: 'sentinel.preparation.busy' }, { requestKeySaved: true });
+  return undefined;
+}
+/**
+ * The owner CLI's `prepare` command through the running service: `preview` and `status` read; `accept`, `resume` and
+ * `cancel` need the owner's confirmation and a receipt. An accept generates and saves its request key before it is
+ * sent, so a lost answer can be found again. Arguments that do not fit the action throw `PreparationError` with
+ * `sentinel.preparation.invalid`. Its outcomes:
+ * - the service's own outcome for the request (`status`, `resume`, `cancel`, `accept`), or `answered` with the preview;
+ * - `kept` when the saved key is the same request; `refused` with `sentinel.preparation.busy` while an earlier
+ *   request still runs or can resume;
+ * - `awaiting-confirmation` without `--confirm`; `configuration-failure` with the policy's or capability's reason when
+ *   admission denies it;
+ * - `unavailable` with `sentinel.service.operationUnavailable` when no service runs or offers the operation, or with
+ *   `sentinel.preparation.unavailable`;
+ * - `configuration-failure` with a `PreparationError` code (`changed`, `unavailable`, `invalid` and the rest) before
+ *   anything was sent, and with `sentinel.preparation.outcomeUnknown` once a write was sent and its answer was lost.
+ */
 export async function prepareCommand(
   ws: Workspace,
   options: { action?: string; confirm: boolean; requestKey?: string; parentId?: string },
@@ -154,31 +215,8 @@ export async function prepareCommand(
         : savedKey(ws, client.storeId));
     if (!key) throw new PreparationError('sentinel.preparation.unavailable');
     if (action === 'accept' && lock) {
-      const previous = savedKey(ws, client.storeId);
-      if (previous) {
-        const old = preparationOutcome(await client.request('prepare.status', { requestKey: previous }));
-        lock.assertHeld();
-        if (old.status?.found === false && absentKeyReplaceable(ws, client.storeId, previous)) {
-          /* known unsent or definitively refused; no accepted journal exists */
-        } else {
-          if (!old.status?.found) throw new PreparationError('sentinel.preparation.unavailable');
-          if (previous === key) {
-            if (options.parentId !== undefined) throw new PreparationError('sentinel.preparation.changed');
-            return project({ ...old, outcome: 'kept' }, { requestKeySaved: true });
-          }
-          const status = old.status;
-          const replaceable =
-            status.phase === 'prepared' ||
-            (options.parentId === undefined &&
-              (['failed', 'canceled'].includes(status.phase) ||
-                (status.phase === 'interrupted' && status.resumeAvailable === false)));
-          if (!replaceable)
-            return project(
-              { ...old, outcome: 'refused', reasonCode: 'sentinel.preparation.busy' },
-              { requestKeySaved: true },
-            );
-        }
-      }
+      const prior = await priorRequestOutcome(ws, client, lock, key, options.parentId);
+      if (prior) return prior;
     }
     if (action === 'status')
       return project(preparationOutcome(await client.request('prepare.status', { requestKey: key })));

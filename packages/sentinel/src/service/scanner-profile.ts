@@ -6,6 +6,7 @@ import { createCheckDriverRegistry } from '../execution/check-drivers.js';
 import { createCapabilityTable, type CapabilityFact } from '../planner/index.js';
 import { executionProfileRecord } from '../execution/profile.js';
 import { productionDrivers } from '../adapters/drivers/index.js';
+import { SECRETS_ADAPTER_ID } from '../adapters/drivers/canonical.js';
 import {
   foundationRegistry,
   foundationProfile,
@@ -178,7 +179,7 @@ export async function scannerExecution(
   const packs = book.packsOf(lock);
   if ((inspection && !frameworkAvailable(lock, packs)) || (paths && !pathsAvailable(lock, packs)))
     throw new ScannerAssetError('sentinel.assets.missing');
-  const secretsSnapshot = ids.includes('secrets-gitleaks')
+  const secretsSnapshot = ids.includes(SECRETS_ADAPTER_ID)
     ? (await (await import('../snapshot/materialize.js')).openSnapshot(store, admitted.plan.pins.snapshotId!)).snapshot
     : undefined;
   return {

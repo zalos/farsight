@@ -11,6 +11,7 @@ import {
   fstatSync,
   unlinkSync,
   constants as FS,
+  type BigIntStats,
 } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -24,6 +25,7 @@ import { publishOnce } from './publish-once.js';
 import { PreparationError, type PreparationErrorCode } from './preparation-clock.js';
 import { PREPARATION_BUNDLE_LIMIT } from './preparation-inputs.js';
 
+/** The most ended preparations the journal keeps; past it a new one is `sentinel.preparation.retentionRequired`. */
 export const PREPARATION_TERMINAL_LIMIT = 256;
 const RECORD_LIMIT = 4096;
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
@@ -31,6 +33,7 @@ const ID = /^prep-[a-f0-9]{32}$/;
 const RUN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const UID = process.getuid?.();
 const UNSAFE = 'sentinel.receipt.storeUnsafe' as const;
+/** Every phase a preparation record can be in; `prepared`, `interrupted`, `failed` and `canceled` are the ends. */
 export const PREPARATION_PHASES = [
   'admitting',
   'resuming',
@@ -44,7 +47,12 @@ export const PREPARATION_PHASES = [
   'failed',
   'canceled',
 ] as const;
+/** One of `PREPARATION_PHASES`. */
 export type PreparationPhase = (typeof PREPARATION_PHASES)[number];
+/**
+ * One preparation's journal record: its identity, its owner epochs and revision, its phase and checkpoint, its parent,
+ * its times and the digests of its configuration and resolution.
+ */
 export interface PreparationRecord {
   schema: 'sentinel-preparation/1';
   prepId: string;
@@ -108,6 +116,7 @@ const fail = (code: PreparationErrorCode = 'sentinel.preparation.invalid'): neve
   throw new PreparationError(code);
 };
 const hash = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
+/** True when the record has ended: prepared, interrupted, failed or canceled. */
 export const terminalPreparation = (r: PreparationRecord): boolean => TERMINAL.has(r.phase);
 function checked(value: unknown): PreparationRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();
@@ -167,6 +176,20 @@ function checked(value: unknown): PreparationRecord {
   return Object.freeze(structuredClone(v));
 }
 
+/** The path's own status (links not followed), or undefined when nothing is there; any other failure throws. */
+function lstatIfPresent(path: string): BigIntStats | undefined {
+  try {
+    return lstatSync(path, { bigint: true });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    return undefined;
+  }
+}
+/**
+ * The private journal of preparations under the held store: one record per request key, written once and then by
+ * revision, with its configuration and resolution bundles. Only the held owner writes; unknown files are kept, never
+ * deleted, and any record that does not check is `sentinel.preparation.invalid`.
+ */
 export class PreparationJournal {
   readonly #store: SentinelStore;
   readonly #root: string;
@@ -217,12 +240,7 @@ export class PreparationJournal {
               ![1n, 2n].includes(st.nlink)
             )
               return fail();
-            let named;
-            try {
-              named = lstatSync(canonical, { bigint: true });
-            } catch (e) {
-              if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
-            }
+            const named = lstatIfPresent(canonical);
             const alias = named !== undefined && identityOf(named) === identityOf(st);
             if (
               st.nlink === 2n &&
