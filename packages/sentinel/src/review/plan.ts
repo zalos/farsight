@@ -1,5 +1,6 @@
-// Closed model inputs appended to a genuine deterministic analysis plan. These bytes are data; plan admission,
-// current adopted selection and the coordinator's exact unit/attempt remain the authority.
+// The review units' closed model inputs: one seed builder for planning (`reviewSeedsFor`, placed by the planner) and
+// for admission's re-derivation (`verifyReviewInputs`). These bytes are data; plan admission, current adopted selection
+// and the coordinator's exact unit/attempt remain the authority.
 import { createHash } from 'node:crypto';
 import { validateEnvelope } from '../validate.js';
 import type { ArtifactId, PlanEnvelope, PlanWork, PlannedReview } from '../contracts/index.js';
