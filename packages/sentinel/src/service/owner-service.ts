@@ -437,7 +437,9 @@ export class OwnerService {
   /**
    * Decides one owner-action write that is not on a run (a pipeline file): the owner's receipt for exactly this
    * binding under the current policy, spent once; otherwise admission with the connection's own requester, which no
-   * grant passes for an owner action. Being connected grants nothing.
+   * grant passes for an owner action. Being connected grants nothing. The owner's receipt is the CLI's, or, on the
+   * paired browser's live proof, its own `settings.adopt` receipt for exactly these bytes (U-3): writing only; the
+   * file is adopted by the CLI owner alone.
    */
   #authorizeOwnerWrite(
     command: string,
@@ -451,6 +453,26 @@ export class OwnerService {
         ? adopted.policy
         : effectivePolicy(loadPolicyInputs({ workspace: this.#ws.path, trustDir: this.#ws.trustDir }));
     const now = this.#now();
+    const uiProof = by.channel === 'owner-ui' ? activeOwnerUiProof() : null;
+    if (receiptId !== undefined && uiProof) {
+      // The paired browser's receipt, checked by its own book under the live proof: the same shape the composite
+      // start's owner-UI envelope receipts use. An unknown, spent, mismatched or uncovered one refuses.
+      try {
+        const spent = new OwnerUiReceiptBook(join(this.#ws.trustDir, 'receipts'), uiProof).consume(
+          receiptId,
+          { ...binding, policyRevision: policy.revision },
+          now,
+        );
+        return { facts: { receipt: spent.digest, receiptIssuer: 'owner-ui' } };
+      } catch (e) {
+        const code = (e as { code?: unknown }).code;
+        return {
+          refusal: result(command, 'configuration-failure', {
+            reasonCode: typeof code === 'string' && code.startsWith('sentinel.') ? code : 'sentinel.receipt.mismatch',
+          }),
+        };
+      }
+    }
     if (receiptId !== undefined) {
       try {
         const spent = receiptBook(this.#ws).consume(receiptId, { ...binding, policyRevision: policy.revision }, now);
