@@ -28,6 +28,12 @@ import {
 import { validateEnvelope } from '../validate.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 const same = (a: unknown, b: unknown) => canonicalJsonBytes(a ?? null).equals(canonicalJsonBytes(b ?? null));
+/**
+ * Derives again the structural path section of one accepted bounded-paths unit, from its genuine publication, owned
+ * attempt and invocation and the exact admitted path request; parsed documents alone are not authority, and its
+ * coverage never counts as security coverage. Any binding that does not hold refuses through `refuse` (the full report
+ * raises `sentinel.report.evidenceUnbound`).
+ */
 export async function acceptedPaths(
   store: SentinelStore,
   admitted: AdmittedPlan,

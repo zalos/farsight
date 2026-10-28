@@ -8,6 +8,10 @@
 import type { CoverageStatus } from '../contracts/index.js';
 import { matchFindings, type MatchableFinding } from './match.js';
 
+/**
+ * What one check of a rule family ran under. The rule revision, engine and capabilities decide whether two checks
+ * detect the same way; the environment and relevant limits whether their results are comparable at all.
+ */
 export interface DetectionConditions {
   readonly ruleRevision: string;
   readonly engine: string;
@@ -32,6 +36,10 @@ export interface CompatibilityMapping {
   readonly rationale: string;
 }
 
+/**
+ * A finding as a comparison reads it: its fingerprints, rule family and anchors, a withheld anchor by its location key
+ * and never its path.
+ */
 export interface ComparableFinding extends MatchableFinding {
   readonly ruleFamilyId: string;
   readonly anchors: readonly {
@@ -45,11 +53,16 @@ export interface ComparableFinding extends MatchableFinding {
   }[];
 }
 
+/** One run's side of a comparison: its findings and the assessment of each rule family's check. */
 export interface AssessmentSide<F extends ComparableFinding = ComparableFinding> {
   readonly findings: readonly F[];
   readonly checks: readonly CheckAssessment[];
 }
 
+/**
+ * What the current run can say exists, so that an anchor it lacks reads as removed, unknown or unverified rather than
+ * fixed.
+ */
 export interface CurrentSurfaces {
   /** Every included captured file, as `sourceId:relativePath`. */
   readonly files: ReadonlySet<string>;
@@ -59,8 +72,13 @@ export interface CurrentSurfaces {
   readonly graph: { readonly nodeIds: ReadonlySet<string>; readonly analysedFiles: ReadonlySet<string> } | null;
 }
 
+/** How a current finding stands against the baseline. */
 export type CurrentLabel =
   'new' | 'persistent' | 'changed-evidence' | 'changed-detection' | 'reopened' | 'reopened-disposition-expired';
+/**
+ * Why a baseline finding that no current finding continues is still listed: only `resolved-by-comparable-check` says it
+ * is gone.
+ */
 export type HistoricalLabel =
   | 'resolved-by-comparable-check'
   | 'removed-surface'
@@ -69,6 +87,7 @@ export type HistoricalLabel =
   | 'incomparable-conditions'
   | 'changed-evidence';
 
+/** One current finding's label, its `sentinel.compare.*` reason and the match it came from. */
 export interface CurrentOutcome {
   readonly findingId: string;
   readonly label: CurrentLabel;
@@ -78,6 +97,7 @@ export interface CurrentOutcome {
     readonly baselineFindingIds: readonly string[];
   };
 }
+/** One discontinued baseline finding's label and `sentinel.compare.*` reason. */
 export interface HistoricalOutcome {
   readonly baselineFindingId: string;
   readonly label: HistoricalLabel;
@@ -85,6 +105,7 @@ export interface HistoricalOutcome {
   readonly match?: { readonly kind: 'ambiguous'; readonly baselineFindingIds: readonly string[] };
 }
 
+/** The two sides of a comparison and the reviewed compatibility mappings between their detection conditions. */
 export interface ComparisonRequest<F extends ComparableFinding> {
   readonly baseline: AssessmentSide<F> & {
     /** Findings the baseline report already listed as resolved by a comparable check: a match reopens them. */
@@ -96,6 +117,7 @@ export interface ComparisonRequest<F extends ComparableFinding> {
   readonly compatibility?: readonly CompatibilityMapping[];
 }
 
+/** A label for every current finding, and an outcome for every baseline finding that is not continued. */
 export interface Comparison {
   readonly current: readonly CurrentOutcome[];
   readonly historical: readonly HistoricalOutcome[];
@@ -137,6 +159,15 @@ const fileKey = (a: {
     ? `${a.sourceId}:withheld:${a.locationKey ?? ''}:${a.content ?? ''}`
     : `${a.sourceId}:${a.relativePath}`;
 
+/**
+ * Labels every current finding (`new`, `persistent`, `changed-evidence`, `changed-detection`, `reopened`,
+ * `reopened-disposition-expired`) and keeps every baseline finding that is not continued, with a reason. A baseline
+ * finding is `resolved-by-comparable-check` (`sentinel.compare.comparableCheckClean`) only when its anchors are still
+ * present, exactly one complete current check of its rule family covered all its files, and that check ran under
+ * equivalent detection conditions (or a reviewed mapping) and the same environment and limits. Otherwise it is a
+ * removed surface, unassessed scope, changed detection or incomparable conditions, each with its reason code. Probable
+ * and ambiguous pairings stay open as changed evidence. Throws `MatchError` when the fingerprint versions differ.
+ */
 export function compareAssessments<F extends ComparableFinding>(request: ComparisonRequest<F>): Comparison {
   const { baseline, current } = request;
   const mappings = request.compatibility ?? [];
