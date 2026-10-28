@@ -36,7 +36,7 @@ import { exchange } from './transport.js';
 import type { NativeClaudeRuntime } from './cli-native-profile.js';
 import type { NativeReviewWire } from './cli-native-wire.js';
 import { providerKind } from './registry.js';
-import type { CopilotAgentRequest, CopilotAgentResult } from './cli-copilot-agent.js';
+import type { CopilotAgentPartial, CopilotAgentRequest, CopilotAgentResult } from './cli-copilot-agent.js';
 export type { NativeCallAuthority, CopilotCallAuthority } from './authority.js';
 export {
   beginNativeCall,
@@ -115,11 +115,23 @@ export class ModelCallError extends ProviderError {
   readonly nativeCopilot?: Readonly<NativeCopilotDiagnostic>;
   /** A native run that completed and settled, then was refused (identity, budget): kept for the private record. */
   readonly agentResult?: CopilotAgentResult;
-  constructor(cause: ProviderError, reservation: Reservation | null, agentResult?: CopilotAgentResult) {
+  /** A native run that failed before completing: its bounded partial ledger, kept for the private record. */
+  readonly agentPartial?: CopilotAgentPartial;
+  /** The qualified installation a native run used (category and exact path): private provenance. */
+  readonly agentInstallation?: Readonly<{ source: string; executable: string }>;
+  constructor(
+    cause: ProviderError,
+    reservation: Reservation | null,
+    agentResult?: CopilotAgentResult,
+    agentInstallation?: Readonly<{ source: string; executable: string }>,
+  ) {
     super(cause.code, '', cause.spend);
     this.message = cause.message;
     this.reservation = reservation;
     if (agentResult) this.agentResult = agentResult;
+    if (agentInstallation) this.agentInstallation = agentInstallation;
+    const partial = (cause as { partial?: CopilotAgentPartial }).partial;
+    if (partial) this.agentPartial = partial;
     if (cause instanceof NativeCredentialError) this.nativeAuth = cause.nativeAuth;
     if (cause instanceof NativeCopilotError) this.nativeCopilot = cause.nativeCopilot;
   }
@@ -401,6 +413,7 @@ export class ModelBroker {
       receipt: held.receipt,
     });
     res = ledger.dispatch(res.id, stamp(this.#now()));
+    const installation = cli.agent.installation(held.cliRuntime);
     let result: CopilotAgentResult;
     try {
       result = await cli.agent.call(authority);
@@ -417,7 +430,7 @@ export class ModelBroker {
               stamp(this.#now()),
               e instanceof NativeCopilotError ? copilotFailureEvent(e) : e.code,
             );
-      throw new ModelCallError(e, after);
+      throw new ModelCallError(e, after, undefined, installation);
     } finally {
       cli.agent.release(authority);
     }
@@ -435,6 +448,7 @@ export class ModelBroker {
         ),
         settled,
         result,
+        installation,
       );
     if (result.usage.inputTokens + result.usage.outputTokens > req.tokens)
       throw new ModelCallError(
@@ -445,10 +459,11 @@ export class ModelBroker {
         ),
         settled,
         result,
+        installation,
       );
     return Object.freeze({
       result,
-      installation: cli.agent.installation(held.cliRuntime),
+      installation,
       identity: Object.freeze({
         requestedModel: binding.model,
         returnedModel: result.reportedModel,

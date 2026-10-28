@@ -548,6 +548,7 @@ test(
     const overBudget = Object.assign(new Error('over budget'), {
       code: 'sentinel.provider.budgetExhausted',
       agentResult: settledResult('{"observations":[],"inspected":[]}'),
+      agentInstallation: { source: 'homebrew-cask', executable: '/original/cask/copilot' },
     });
     const budget = await COPILOT_RUNNER.run(
       nativeStage,
@@ -561,7 +562,45 @@ test(
     );
     assert(budget instanceof NativeRunFailure);
     assert.equal(budget.code, 'sentinel.provider.budgetExhausted');
+    assert.equal(budget.retained.completed, true);
     assert.equal(budget.retained.provenance.turns, 2);
+    assert.deepEqual(budget.retained.provenance.installation, {
+      source: 'homebrew-cask',
+      executablePath: '/original/cask/copilot',
+    });
+    // Stopped before completing (a denied tool, here): the bounded partial stream and the installation are kept,
+    // usage is uncertain and the cost is unobserved for that reason, never zero.
+    const partialStream = Buffer.from('{"type":"tool.execution_start","data":{"toolName":"bash"}}\n');
+    const denied = Object.assign(new Error('denied tool'), {
+      code: 'sentinel.provider.malformedResponse',
+      agentPartial: {
+        turns: 1,
+        tools: [{ tool: 'view', path: 'src/server/auth.ts' }],
+        filesRead: ['src/server/auth.ts'],
+        events: 9,
+        stream: new Uint8Array(partialStream),
+      },
+      agentInstallation: { source: 'path', executable: '/original/bin/copilot' },
+    });
+    const stopped = await COPILOT_RUNNER.run(
+      nativeStage,
+      inputs,
+      nativeContext(async () => {
+        throw denied;
+      }),
+    ).then(
+      () => assert.fail('a stopped run publishes nothing'),
+      (e: any) => e,
+    );
+    assert(stopped instanceof NativeRunFailure);
+    assert.equal(stopped.code, 'sentinel.provider.malformedResponse');
+    assert.equal(stopped.retained.completed, false);
+    assert.equal(stopped.retained.finalAnswer, null);
+    assert.deepEqual(stopped.retained.filesRead, ['src/server/auth.ts']);
+    assert.equal(Buffer.from(stopped.retained.transcript).toString(), partialStream.toString());
+    assert.deepEqual(stopped.retained.provenance.tokens, { input: null, output: null, certainty: 'uncertain' });
+    assert.deepEqual(stopped.retained.provenance.cost, { basis: 'unobserved', reason: 'usage-unknown' });
+    assert.equal(stopped.retained.provenance.installation?.executablePath, '/original/bin/copilot');
   },
 );
 

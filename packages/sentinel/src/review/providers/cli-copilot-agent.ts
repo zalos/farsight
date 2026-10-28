@@ -63,6 +63,20 @@ export interface CopilotAgentResult {
   readonly share: Uint8Array;
 }
 
+/** The partial inspection ledger of a native run that failed before completion. Private; usage uncertain. */
+export interface CopilotAgentPartial {
+  readonly turns: number;
+  readonly tools: readonly CopilotToolUse[];
+  readonly filesRead: readonly string[];
+  readonly events: number;
+  /** The JSONL stream as captured up to the failure (bounded). */
+  readonly stream: Uint8Array;
+}
+/** A native run's failure: the closed diagnostic, plus the partial ledger when the process had started. */
+export class NativeAgentError extends NativeCopilotError {
+  partial?: CopilotAgentPartial;
+}
+
 /** The fixed native-mode argv after the executable. The prompt is piped on stdin, never argv. */
 export function copilotAgentArguments(l: {
   usagePath: string;
@@ -275,6 +289,23 @@ export class CopilotAgentDecoder {
     if (path.startsWith('/') && !path.startsWith(root)) return null;
     const rel = posix.normalize(path.startsWith('/') ? path.slice(root.length) : path);
     return rel === '..' || rel.startsWith('../') || rel.startsWith('/') ? null : rel;
+  }
+  /** What the stream showed so far: the private partial ledger a failed run keeps. */
+  partial(): Readonly<{
+    turns: number;
+    tools: readonly CopilotToolUse[];
+    filesRead: readonly string[];
+    events: number;
+  }> {
+    const filesRead: string[] = [];
+    for (const t of this.#tools)
+      if (t.path !== null && t.path !== '.' && !filesRead.includes(t.path)) filesRead.push(t.path);
+    return Object.freeze({
+      turns: this.#turns,
+      tools: Object.freeze([...this.#tools]),
+      filesRead: Object.freeze(filesRead),
+      events: this.#events,
+    });
   }
   finish(): Readonly<{
     finalAnswer: string;
@@ -491,7 +522,7 @@ export async function nativeCopilotAgentCall(authority: CopilotAgentAuthority): 
           );
     const prior = e instanceof NativeCopilotError ? e.nativeCopilot : undefined,
       p = proxy.observation();
-    throw new NativeCopilotError(error.code, possibleSpend ? 'possible' : error.spend, {
+    const failure = new NativeAgentError(error.code, possibleSpend ? 'possible' : error.spend, {
       schema: 'sentinel-copilot-failure/1',
       phase: prior?.phase ?? phase,
       reason:
@@ -521,6 +552,11 @@ export async function nativeCopilotAgentCall(authority: CopilotAgentAuthority): 
       downstreamBytes: p.downstreamWireBytes,
       proxyEnded: p.endedBy,
     });
+    // The bounded partial ledger is kept, privately, before cleanup removes the owned root: what the stream showed
+    // (every tool call and path) and its raw JSONL as captured. Usage stays uncertain; no output is ever published.
+    if (decoder)
+      failure.partial = Object.freeze({ ...decoder.partial(), stream: new Uint8Array(transcript.content()) });
+    throw failure;
   } finally {
     finishCopilotAgentCall(authority);
     await proxy.close();
