@@ -110,6 +110,33 @@ async function standIn(
       return route.fulfill({ status: 401, headers: cors, json: { error: 'sentinel.viewer.notPaired' } });
     const path = new URL(req.url()).pathname.replace('/api/sentinel/', '');
     if (path === 'scans' && opts.holdScans) await opts.holdScans; // the list answers late
+    // a finished scan's report, as the companion delivers it: whole, named, for download
+    // the workspace's pipeline, for the edit mode one press away: this stand-in workspace has none
+    if (path === 'pipeline')
+      return route.fulfill({
+        headers: cors,
+        json: {
+          schema: 'sentinel-viewer-pipeline/draft-1',
+          trust: 'missing',
+          reasonCode: null,
+          pipeline: null,
+          fileDigest: null,
+          digest: null,
+          problems: [],
+          readOnly: true,
+        },
+      });
+    const report = /^scans\/([^/]+)\/report\/(html|md)$/.exec(path);
+    if (report && decodeURIComponent(report[1]!) === RUN)
+      return route.fulfill({
+        headers: {
+          ...cors,
+          'access-control-expose-headers': 'x-sentinel-format-digest, content-disposition',
+          'content-type': report[2] === 'html' ? 'text/html; charset=utf-8' : 'text/markdown; charset=utf-8',
+          'content-disposition': `attachment; filename="sentinel-scan-1.${report[2]}"`,
+        },
+        body: report[2] === 'html' ? '<!doctype html><title>Sentinel report</title>' : '# Sentinel report\n',
+      });
     const m = /^scans(?:\/before\/(\d+)|\/([^/]+)(?:\/stages\/([^/]+)(?:\/units\/(\d+))?)?)?$/.exec(path);
     const run = m?.[2] ? decodeURIComponent(m[2]) : null;
     const stage = m?.[3] ? decodeURIComponent(m[3]) : null;
@@ -226,6 +253,41 @@ test.describe('the Sentinel ladder', () => {
     await page.getByText('read the full prompt').click();
     await expect(page.locator('.snt-turn.sys .snt-pre')).toContainText('You are reviewing');
     await expect(page.locator('.snt-crumb')).toContainText(/stage \d of 6/);
+  });
+
+  test("Rerun this stage is greyed, with the owner command line's two lines in the code registers", async ({
+    page,
+    baseURL,
+  }) => {
+    await standIn(page, baseURL);
+    const stage = RECORDED.scan.stages[0].id;
+    await gotoReady(page, AT + '?pick=' + encodeURIComponent(stage));
+    const dock = page.locator('.snt-dock [data-pane="stage"]');
+    await expect(dock.getByRole('button', { name: 'Rerun this stage' })).toHaveAttribute('aria-disabled', 'true');
+    await expect(dock.locator('.snt-cli')).toContainText('farsight-sentinel pipeline adopt --confirm');
+    await expect(dock.locator('.snt-cli')).toContainText(`farsight-sentinel rerun ${RUN} --stage ${stage} --confirm`);
+    await gotoReady(page, AT + '?pick=' + encodeURIComponent(stage) + '&lens=business');
+    await expect(dock).toContainText(/adopt the pipeline and rerun this stage from the owner command line/i);
+    await expect(dock.locator('.snt-cli')).toHaveCount(0);
+  });
+
+  test("a finished scan's report downloads as HTML and as Markdown, read with the pass", async ({ page, baseURL }) => {
+    await standIn(page, baseURL);
+    await gotoReady(page, AT);
+    for (const [format, label] of [
+      ['html', 'Report · HTML'],
+      ['md', 'Report · Markdown'],
+    ] as const) {
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.locator('.snt-tools').getByRole('button', { name: label }).click(),
+      ]);
+      expect(download.suggestedFilename()).toBe(`sentinel-scan-1.${format}`);
+    }
+    // the edit mode is one press away
+    await page.locator('.snt-tools [data-act="edit"]').click();
+    await expect(page).toHaveURL(/#\/sentinel\?edit=1/);
+    await expect(page.locator('.snt-stage')).toContainText(/no pipeline file/i);
   });
 
   test('the business register prints no identifier, digest or path at any stop', async ({ page, baseURL }) => {

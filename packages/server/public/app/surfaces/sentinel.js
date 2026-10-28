@@ -9,6 +9,11 @@
 // the paired owner frame hands it after the frame's own launch pairing — a pass that reads retained scans and nothing
 // else. This host never receives the owner capability, a reload token or a receipt: writes stay in the frame, which
 // is the owner panel the dock shows when the reader presses Scan (the existing browser preview-and-confirm flow).
+//
+// The PIPELINE stop's edit mode (`#/sentinel?edit=1`, lane L-UX U-3) edits the workspace's declared pipeline as plain
+// data in this page (lib/sentinel-editor-model.js) and hands the whole object to the paired frame, which has the owner
+// service check and preview it and asks the owner to confirm the write there. The page learns the service's answer
+// (problems by stage, what would rerun, written or not) and nothing that confirms: adoption stays the owner CLI's.
 import { t, def } from '../strings.js';
 import { S, esc, currentLens } from '../store.js';
 import { tipAttrs, registerTip, sourceText } from '../lib/tooltip.js';
@@ -37,6 +42,20 @@ import {
   scanState,
   doorState,
 } from '../lib/sentinel-model.js';
+import {
+  STAGE_KINDS,
+  STAGE_FIELDS,
+  SHARED_FIELDS,
+  editStage,
+  changeKind,
+  addStageAfter,
+  removeStage,
+  problemsByStage,
+  changedStages,
+  choiceKey,
+  stageName,
+  pipelineText,
+} from '../lib/sentinel-editor-model.js';
 
 /**
  * Whether a browser may start a scan, as the last read of the SCANS answer said it, bound to the companion and the
@@ -79,6 +98,13 @@ const SN = {
   timer: null,
   dockTab: 'stage',
   generation: 0,
+  /** the edit mode: the read model's pipeline answer, the edited copy (null until a field changes), the file digest
+   * the edit started from, and the frame's last answer for it */
+  config: null,
+  draft: null,
+  draftBase: undefined,
+  check: null,
+  checking: false,
 };
 
 // ── the owner frame: pairing, the read pass, and the confirmations it alone can make ─────────────────────────────
@@ -146,6 +172,19 @@ function message(event) {
     SN.pass = v.pass;
     SN.passWaiters.splice(0).forEach((w) => w(v.pass));
     if (first) void load();
+    return;
+  }
+  if (v.type === 'sentinel-owner-pipeline-result') {
+    // The service's answer for the pipeline this page handed the frame: problems, what would rerun, written or not.
+    if (
+      !SN.child ||
+      v.frameNonce !== SN.child.frameNonce ||
+      v.documentId !== SN.child.documentId ||
+      v.hostInstance !== S.VERSION?.session?.instance ||
+      !['checked', 'refused', 'written', 'failed'].includes(v.state)
+    )
+      return;
+    void pipelineResult(v);
     return;
   }
   if (
@@ -227,9 +266,11 @@ async function load() {
   draw();
   try {
     const at = place.scan ? 'scans/' + encodeURIComponent(place.scan) : '';
-    if (place.stop === 'scans') SN.scans = await read(place.before ? 'scans/before/' + place.before : 'scans');
-    if (place.stop === 'scans' && SN.scans?.scanAction) rememberScanAction(SN.scans.scanAction);
-    else if (place.stop === 'pipeline') SN.scan = await read(at);
+    if (place.edit) SN.config = await read('pipeline');
+    else if (place.stop === 'scans') {
+      SN.scans = await read(place.before ? 'scans/before/' + place.before : 'scans');
+      if (SN.scans?.scanAction) rememberScanAction(SN.scans.scanAction);
+    } else if (place.stop === 'pipeline') SN.scan = await read(at);
     else {
       const stageAt = at + '/stages/' + encodeURIComponent(place.stage);
       const [scan, stage] = await Promise.all([read(at), read(stageAt)]);
@@ -262,7 +303,7 @@ async function load() {
     if (button) scan(button);
   }
   // A scan still moving is read again: the ladder fills in as it runs.
-  const row = place.stop === 'scans' ? SN.scans?.scans?.find(scanLive) : SN.scan?.scan;
+  const row = place.edit ? null : place.stop === 'scans' ? SN.scans?.scans?.find(scanLive) : SN.scan?.scan;
   if (row && scanLive(row) && !SN.error) SN.timer = setTimeout(() => void load(), 2000);
 }
 
@@ -340,7 +381,8 @@ function chromeHtml() {
   const p = SN.place;
   const at = SENTINEL_STOPS.findIndex((s) => s.id === p.stop);
   const stops = SENTINEL_STOPS.map((s, i) => {
-    const reach = s.built && (s.id === 'scans' || (s.id === 'pipeline' && p.scan) || (s.id === 'stage' && p.stage));
+    const reach =
+      s.built && (s.id === 'scans' || (s.id === 'pipeline' && (p.scan || p.edit)) || (s.id === 'stage' && p.stage));
     const tip = s.built ? defAttrs(s.key) : tipAttrs({ key: 'sentinel.viewer.stop.notBuilt', noFocus: true });
     return (
       '<button type="button" data-stop="' +
@@ -357,6 +399,8 @@ function chromeHtml() {
       '</button>'
     );
   }).join('');
+  // the edit mode draws the pipeline file as its ladder only
+  const usable = (l) => l.built && (!p.edit || l.id === 'ladder');
   const layouts = (SENTINEL_LAYOUTS[p.stop] || [])
     .map(
       (l) =>
@@ -367,8 +411,13 @@ function chromeHtml() {
         '" aria-pressed="' +
         (l.id === p.layout) +
         '"' +
-        (l.built ? '' : ' aria-disabled="true"') +
-        (l.built ? defAttrs(l.key) : tipAttrs({ key: 'sentinel.viewer.stop.notBuilt', noFocus: true })) +
+        (usable(l) ? '' : ' aria-disabled="true"') +
+        (usable(l)
+          ? defAttrs(l.key)
+          : tipAttrs({
+              key: l.built ? 'sentinel.viewer.edit.ladderOnly' : 'sentinel.viewer.stop.notBuilt',
+              noFocus: true,
+            })) +
         '>' +
         word(l.key) +
         '</button>',
@@ -396,6 +445,7 @@ function chromeHtml() {
     layouts +
     '</div>' +
     '<div class="snt-tools">' +
+    toolsHtml() +
     '<button type="button" class="map-tb snt-scan' +
     (scan.on ? ' primary' : '') +
     '" data-act="scan"' +
@@ -424,6 +474,16 @@ function crumbHtml() {
   const sep = '<span class="snt-sep">›</span>';
   const dot = '<span class="snt-sep">·</span>';
   let h = ws ? '<b>' + esc(ws) + '</b>' : '';
+  if (p.edit) {
+    h += (h ? sep : '') + word('sentinel.viewer.edit.crumb');
+    if (SN.config) {
+      if (!biz()) h += dot + '<span class="mono">' + esc('.farsight/sentinel/pipeline.json') + '</span>';
+      const trust = SN.config.trust === 'not-adopted' ? 'notAdopted' : SN.config.trust || 'missing';
+      h += dot + keyChip(trust === 'adopted' ? 'ok' : 'warn', 'sentinel.viewer.edit.trust.' + trust);
+      if (SN.draft) h += dot + keyChip('warn', 'sentinel.viewer.edit.draft');
+    }
+    return h;
+  }
   if (p.stop === 'scans') {
     h += (h ? sep : '') + word('sentinel.viewer.crumb.scans');
     if (SN.scans) h += dot + cnt(SN.scans.counts.shown);
@@ -467,6 +527,15 @@ function crumbHtml() {
 }
 
 function verdictsHtml() {
+  if (SN.place.edit) {
+    if (SN.checking) return keyChip('', 'sentinel.viewer.edit.checking');
+    const c = SN.check;
+    if (!c) return '';
+    if (c.state === 'checked') return keyChip('ok', 'sentinel.viewer.edit.checked');
+    if (c.state === 'written') return keyChip('ok', 'sentinel.viewer.edit.written');
+    if (c.state === 'writtenEarlier') return keyChip('warn', 'sentinel.viewer.edit.writtenEarlier');
+    return detailChip('err', c.reasonCode || 'sentinel.viewer.edit.refused', c.detail);
+  }
   const row = SN.place.stop === 'scans' ? null : SN.scan?.scan;
   if (!row) return '';
   const c = row.counts;
@@ -826,10 +895,21 @@ function stageDockHtml(stage) {
         word('sentinel.viewer.dock.back') +
         '</a>') +
     '<button type="button" class="map-tb" aria-disabled="true"' +
-    tipAttrs({ key: 'sentinel.viewer.dock.rerunLater', noFocus: true }) +
+    tipAttrs({ key: 'sentinel.viewer.dock.rerunCli', noFocus: true }) +
     '>' +
     word('sentinel.viewer.dock.rerun') +
-    '</button></div>'
+    '</button></div>' +
+    // a stage reruns as a linked child of the scan once the owner adopts the pipeline: from the owner CLI for now
+    '<div class="snt-note">' +
+    word('sentinel.viewer.dock.rerunCli') +
+    (code
+      ? '<pre class="snt-cli">farsight-sentinel pipeline adopt --confirm\nfarsight-sentinel rerun ' +
+        esc(SN.place.scan || '') +
+        ' --stage ' +
+        esc(stage.id) +
+        ' --confirm</pre>'
+      : '') +
+    '</div>'
   );
 }
 
@@ -1081,6 +1161,7 @@ function bodyHtml() {
   if (!SN.companion) return empty('sentinel.ownerUi.launch');
   if (!SN.pass) return empty('sentinel.viewer.pairing');
   if (p.stop === 'scans') return SN.scans ? scansHtml() : empty('sentinel.viewer.loading');
+  if (p.edit) return SN.config ? editHtml() : empty('sentinel.viewer.loading');
   if (p.stop === 'pipeline') {
     if (!SN.scan) return empty('sentinel.viewer.loading');
     return p.layout === 'table' ? pipelineTableHtml() : ladderHtml();
@@ -1091,7 +1172,8 @@ function bodyHtml() {
 /** The dock's tabs and the active one: the picked stage (below the SCANS stop), and the owner panel. */
 function dockTabs() {
   const tabs = [];
-  if (SN.place.stop !== 'scans' && SN.scan) tabs.push(['stage', 'sentinel.viewer.dock.stage']);
+  if (SN.place.edit) tabs.push(['stage', 'sentinel.viewer.dock.edit']);
+  else if (SN.place.stop !== 'scans' && SN.scan) tabs.push(['stage', 'sentinel.viewer.dock.stage']);
   tabs.push(['owner', 'sentinel.viewer.dock.owner']);
   const active = tabs.some(([id]) => id === SN.dockTab) ? SN.dockTab : tabs[0][0];
   return { tabs, active };
@@ -1129,7 +1211,7 @@ function draw() {
   stagePane.hidden = dock.active !== 'stage';
   const stage =
     p.stop === 'stage' ? SN.stage?.stage : p.stop === 'pipeline' && SN.scan ? pickedStage(SN.scan, p.pick) : null;
-  stagePane.innerHTML = dock.active === 'stage' ? stageDockHtml(stage) : '';
+  stagePane.innerHTML = dock.active !== 'stage' ? '' : p.edit ? editorDockHtml(p.pick) : stageDockHtml(stage);
   const owner = root.querySelector('[data-pane="owner"]');
   owner.hidden = dock.active !== 'owner';
   owner.querySelector('.snt-sub').textContent = t(
@@ -1137,6 +1219,581 @@ function draw() {
   );
   if (SN.frame && SN.frame.parentNode !== owner) owner.appendChild(SN.frame);
   root.classList.toggle('busy', SN.loading);
+}
+
+// ── the edit mode: the workspace's pipeline, edited here, checked and written through the owner frame ───────────
+
+/** The pipeline on screen: the edited copy, else the file as the read model served it. */
+function working() {
+  return SN.draft ?? SN.config?.pipeline ?? null;
+}
+
+/**
+ * The draft's identity between this page and the owner frame: the sha256 of exactly the text the CLI writes for it.
+ * A check names it, the frame confirms only those bytes, and every answer comes back with it.
+ */
+async function draftDigest(pipeline) {
+  const bytes = new TextEncoder().encode(pipelineText(pipeline));
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return 'sha256:' + Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * The page's last check no longer speaks for what it shows (an edit, a discard): the frame drops the check if it is
+ * still out with the service, and the confirmation if it offers one.
+ */
+function withdrawCheck() {
+  if ((SN.checking || SN.check?.state === 'checked') && SN.frame?.contentWindow && SN.child)
+    SN.frame.contentWindow.postMessage(
+      { type: 'sentinel-owner-pipeline-withdraw', frameNonce: SN.child.frameNonce, documentId: SN.child.documentId },
+      SN.origin,
+    );
+}
+
+/**
+ * An edit: the page's copy changes, and the last check no longer speaks for it. A confirmation the frame still offers
+ * for the earlier copy is withdrawn, so what the owner confirms is always what the page shows.
+ */
+function edited(next) {
+  if (!SN.draft) SN.draftBase = SN.config?.fileDigest ?? null;
+  withdrawCheck();
+  SN.draft = next;
+  SN.check = null;
+  SN.checking = false;
+  draw();
+}
+
+/** The tools beside Scan: edit the pipeline, or (in the edit mode) check and discard; a finished scan's reports. */
+function toolsHtml() {
+  const p = SN.place;
+  const off = (why) => ' aria-disabled="true"' + tipAttrs({ key: why, noFocus: true });
+  if (p.edit) {
+    const why = readOnlyWhy()
+      ? 'sys.readonly.control'
+      : !SN.pass || !SN.child
+        ? 'sentinel.viewer.pairing'
+        : !SN.draft
+          ? 'sentinel.viewer.edit.nothingToCheck'
+          : SN.checking
+            ? 'sentinel.viewer.edit.checking'
+            : null;
+    return (
+      '<button type="button" class="map-tb' +
+      (why ? '' : ' primary') +
+      '" data-act="echeck"' +
+      (why ? off(why) : tipAttrs({ key: 'sentinel.viewer.edit.check', noFocus: true })) +
+      '>' +
+      word('sentinel.viewer.edit.check') +
+      '</button>' +
+      '<button type="button" class="map-tb" data-act="ediscard"' +
+      (SN.draft
+        ? tipAttrs({ key: 'sentinel.viewer.edit.discard', noFocus: true })
+        : off('sentinel.viewer.edit.nothingToCheck')) +
+      '>' +
+      word('sentinel.viewer.edit.discard') +
+      '</button>'
+    );
+  }
+  const row = p.stop !== 'scans' && SN.scan?.scan?.id === p.scan ? SN.scan.scan : null;
+  const reports =
+    row && !scanLive(row)
+      ? ['html', 'md']
+          .map(
+            (f) =>
+              '<button type="button" class="map-tb" data-act="report" data-format="' +
+              f +
+              '"' +
+              tipAttrs({ key: 'sentinel.viewer.report.' + f, noFocus: true }) +
+              '>' +
+              word('sentinel.viewer.report.' + f) +
+              '</button>',
+          )
+          .join('')
+      : '';
+  return (
+    reports +
+    '<button type="button" class="map-tb" data-act="edit"' +
+    tipAttrs({ key: 'sentinel.viewer.edit.open', noFocus: true }) +
+    '>' +
+    word('sentinel.viewer.edit.open') +
+    '</button>'
+  );
+}
+
+/**
+ * A service word with its `{detail}` filled: the safe detail the service gave (stage ids, field paths), in the code
+ * registers; the business register drops a parenthesised detail, which can name a scanner or a rule by its id.
+ */
+function detailWords(key, detail) {
+  const text = t(key);
+  if (!text.includes('{detail}')) return text;
+  const d = typeof detail === 'string' ? detail.slice(0, 240) : '';
+  const paren = /\s*\(\{detail\}\)/;
+  if (!d || biz()) return text.replace(paren, '').split('{detail}').join(d);
+  return text.split('{detail}').join(d);
+}
+const detailChip = (cls, key, detail) => chip(cls, esc(detailWords(key, detail)), defAttrs(key));
+
+/**
+ * A declared stage's name in the register on screen: the catalog's words (or the name the owner declared) in
+ * business, those words beside the id in hybrid, the id in code.
+ */
+function stageText(stage) {
+  const n = stageName(stage);
+  const words = n.key ? t(n.key) : n.declared;
+  return biz() ? words : lensNow() === 'code' ? String(stage.id) : words + ' · ' + stage.id;
+}
+function stageNameHtml(stage) {
+  const n = stageName(stage);
+  const words = esc(n.key ? t(n.key) : n.declared);
+  if (biz()) return words;
+  if (lensNow() === 'code') return '<span class="mono">' + esc(stage.id) + '</span>';
+  return words + ' ' + chip('plain', esc(stage.id));
+}
+
+/** What the last check said would happen to a stage: reused, run again, added, changed. */
+function changeOf(id) {
+  return SN.check?.preview?.stages?.find((x) => x.id === id) || null;
+}
+
+function editRowHtml(stage, i, problems, touched) {
+  const k = kindChip(stage.kind);
+  const sel = SN.place.pick === stage.id;
+  const change = changeOf(stage.id);
+  const runner =
+    stage.kind === 'agent'
+      ? stage.runner
+      : stage.kind === 'script'
+        ? stage.runner
+        : stage.kind === 'tool'
+          ? stage.adapter
+          : stage.operation;
+  return (
+    '<div class="snt-erow ' +
+    esc(k.cls) +
+    (sel ? ' sel' : '') +
+    '" data-estage="' +
+    esc(stage.id) +
+    '" tabindex="0" role="button" aria-label="' +
+    esc(stageText(stage)) +
+    '"><span class="snt-n">' +
+    (i + 1) +
+    '</span><span class="snt-enm">' +
+    stageNameHtml(stage) +
+    '</span>' +
+    keyChip(k.cls, k.key) +
+    (!biz() && runner && typeof runner === 'string' ? chip('plain', esc(runner)) : '') +
+    (change ? keyChip('', whereKey(change.where)) : '') +
+    (touched ? keyChip('warn', 'sentinel.viewer.edit.edited') : '') +
+    (problems?.length ? keyChip('err', 'sentinel.viewer.edit.problem') : '') +
+    '<span class="snt-ech">' +
+    (change ? keyChip(change.change === 'unchanged' ? 'ok' : 'warn', 'sentinel.ownerUi.change.' + change.change) : '') +
+    '</span></div>'
+  );
+}
+
+function addHereHtml(afterId) {
+  return (
+    '<div class="snt-eadd"><span>' +
+    word('sentinel.viewer.edit.addHere') +
+    '</span>' +
+    STAGE_KINDS.map(
+      (k) =>
+        '<button type="button" class="map-tb" data-eadd="' +
+        esc(afterId) +
+        '" data-enew="' +
+        k +
+        '"' +
+        defAttrs('sentinel.viewer.kind.' + k) +
+        '>' +
+        word('sentinel.viewer.kind.' + k) +
+        '</button>',
+    ).join('') +
+    '</div>'
+  );
+}
+
+/** The edit mode's stage area: the pipeline file as its ladder, the picked stage's JSON beneath, nothing run. */
+function editHtml() {
+  const pipe = working();
+  if (!pipe || !Array.isArray(pipe.stages))
+    return (
+      '<div class="snt-empty">' +
+      word('sentinel.viewer.edit.noFile') +
+      (biz() ? '' : ' <span class="mono">farsight-sentinel init</span>') +
+      '</div>'
+    );
+  const problems = problemsByStage(SN.check?.problems?.length ? SN.check.problems : SN.config?.problems);
+  const touched = new Set(SN.draft ? changedStages(SN.config?.pipeline, SN.draft) : []);
+  const own = problems.get('') || [];
+  const removed = SN.check?.preview?.removed || [];
+  const picked = pipe.stages.find((x) => x.id === SN.place.pick);
+  return (
+    (own.length
+      ? '<div class="snt-eprob">' + own.map((x) => problemHtml(x)).join('') + '</div>'
+      : SN.check?.state === 'refused' || SN.check?.state === 'failed'
+        ? '<div class="snt-eprob">' +
+          detailChip('err', SN.check.reasonCode || 'sentinel.viewer.edit.refused', SN.check.detail) +
+          '</div>'
+        : '') +
+    (SN.check?.state === 'writtenEarlier'
+      ? '<div class="snt-note warn">' + esc(def('sentinel.viewer.edit.writtenEarlier')) + '</div>'
+      : '') +
+    (SN.check?.state === 'written'
+      ? '<div class="snt-note">' +
+        word('sentinel.viewer.edit.adoptNote') +
+        (biz() ? '' : ' <span class="mono">farsight-sentinel pipeline adopt --confirm</span>') +
+        '</div>'
+      : '') +
+    '<div class="snt-eladder">' +
+    pipe.stages
+      .map(
+        (stage, i) =>
+          editRowHtml(stage, i, problems.get(stage.id), touched.has(stage.id)) +
+          (stage.id === SN.place.pick ? addHereHtml(stage.id) : ''),
+      )
+      .join('') +
+    removed
+      .map(
+        (id) =>
+          '<div class="snt-erow gone"><span class="snt-enm">' +
+          esc(biz() ? String(id).replace(/-/g, ' ') : id) +
+          '</span>' +
+          keyChip('warn', 'sentinel.ownerUi.change.removed') +
+          '</div>',
+      )
+      .join('') +
+    (SN.place.pick ? '' : addHereHtml(pipe.stages[pipe.stages.length - 1]?.id ?? '')) +
+    '</div>' +
+    (picked && !biz()
+      ? '<pre class="snt-json"><span class="snt-jc">' +
+        esc('// ' + t('sentinel.viewer.edit.writes') + ' · .farsight/sentinel/pipeline.json') +
+        '</span>\n' +
+        esc(JSON.stringify(picked, null, 2)) +
+        '</pre>'
+      : '') +
+    '<div class="snt-foot"><span class="snt-foot-note">' +
+    word('sentinel.viewer.edit.footNote') +
+    '</span></div>'
+  );
+}
+
+function problemHtml(x) {
+  const key = typeof x.code === 'string' && x.code.startsWith('sentinel.') ? x.code : 'sentinel.viewer.edit.problem';
+  return '<div class="snt-pr">' + detailChip(x.class === 'refused' ? 'err' : 'warn', key, x.detail) + '</div>';
+}
+
+const listText = (v) =>
+  Array.isArray(v)
+    ? v.some((x) => x && typeof x === 'object')
+      ? JSON.stringify(v)
+      : v.join(', ')
+    : v == null
+      ? ''
+      : String(v);
+function listValue(text) {
+  const s = String(text).trim();
+  if (!s) return [];
+  if (s.startsWith('[')) {
+    try {
+      const v = JSON.parse(s);
+      return Array.isArray(v) ? v : s;
+    } catch {
+      return s; // the service says what is wrong with it
+    }
+  }
+  return s
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function fieldHtml(stage, f) {
+  const label = 'sentinel.viewer.edit.field.' + f.key;
+  const v = stage[f.key];
+  let input;
+  // an identifier, a pack reference, a model name or a wiring: the business register names the field and says where
+  // it is edited, and prints no value
+  if (f.technical && biz())
+    return (
+      '<dt' +
+      defAttrs(label) +
+      '>' +
+      word(label) +
+      '</dt><dd class="snt-fld snt-sub"' +
+      defAttrs('sentinel.viewer.edit.inCode') +
+      '>' +
+      word('sentinel.viewer.edit.inCode') +
+      '</dd>'
+    );
+  if (f.key === 'required') {
+    input = [true, false]
+      .map(
+        (b) =>
+          '<button type="button" class="map-tb' +
+          (v === b ? ' on' : '') +
+          '" data-efield="required" data-evalue="' +
+          b +
+          '">' +
+          word(b ? 'sentinel.viewer.edit.yes' : 'sentinel.viewer.edit.no') +
+          '</button>',
+      )
+      .join('');
+  } else if (f.choices) {
+    input = f.choices
+      .map(
+        (c) =>
+          '<button type="button" class="map-tb' +
+          (v === c ? ' on' : '') +
+          '" data-efield="' +
+          f.key +
+          '" data-evalue="' +
+          esc(c) +
+          '"' +
+          defAttrs(choiceKey(f.words, c)) +
+          '>' +
+          word(choiceKey(f.words, c)) +
+          '</button>',
+      )
+      .join('');
+  } else if (f.key === 'budget') {
+    const b = v && typeof v === 'object' ? v : {};
+    input = ['turns', 'tokens', 'usd', 'seconds']
+      .map(
+        (k) =>
+          '<label class="snt-bud"><span>' +
+          word('sentinel.viewer.edit.budget.' + k) +
+          '</span><input data-ebudget="' +
+          k +
+          '" value="' +
+          esc(b[k] == null ? '' : String(b[k])) +
+          '" inputmode="decimal" size="7"></label>',
+      )
+      .join('');
+  } else {
+    input =
+      '<input data-efield="' +
+      f.key +
+      '"' +
+      (f.list ? ' data-elist="1"' : '') +
+      ' value="' +
+      esc(f.list ? listText(v) : v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v)) +
+      '" spellcheck="false">';
+  }
+  return '<dt' + defAttrs(label) + '>' + word(label) + '</dt><dd class="snt-fld">' + input + '</dd>';
+}
+
+/** The editor drawer: one stage's fields, its kind's own and the shared ones, and what the service last said of it. */
+function editorDockHtml(id) {
+  const pipe = working();
+  const at = pipe?.stages?.findIndex((x) => x.id === id) ?? -1;
+  if (!pipe || at < 0) return '<p class="snt-sub">' + word('sentinel.viewer.edit.pick') + '</p>';
+  const stage = pipe.stages[at];
+  const k = kindChip(stage.kind);
+  const problems =
+    problemsByStage(SN.check?.problems?.length ? SN.check.problems : SN.config?.problems).get(stage.id) || [];
+  const change = changeOf(stage.id);
+  return (
+    '<h2>' +
+    esc(fill('sentinel.viewer.edit.stageTitle', { n: at + 1 })) +
+    ' · ' +
+    esc(stageText(stage)) +
+    '</h2><div class="snt-row">' +
+    keyChip(k.cls, k.key) +
+    (change ? keyChip('', whereKey(change.where)) : '') +
+    '</div><dl class="snt-kv snt-form"><dt' +
+    defAttrs('sentinel.viewer.edit.field.kind') +
+    '>' +
+    word('sentinel.viewer.edit.field.kind') +
+    '</dt><dd class="snt-fld">' +
+    STAGE_KINDS.map(
+      (kind) =>
+        '<button type="button" class="map-tb' +
+        (stage.kind === kind ? ' on' : '') +
+        '" data-ekind="' +
+        kind +
+        '"' +
+        defAttrs('sentinel.viewer.kind.' + kind) +
+        '>' +
+        word('sentinel.viewer.kind.' + kind) +
+        '</button>',
+    ).join('') +
+    '</dd>' +
+    (STAGE_FIELDS[stage.kind] || []).map((f) => fieldHtml(stage, f)).join('') +
+    SHARED_FIELDS.map((f) => fieldHtml(stage, f)).join('') +
+    '</dl>' +
+    (problems.length ? '<div class="snt-eprob">' + problems.map((x) => problemHtml(x)).join('') + '</div>' : '') +
+    '<div class="snt-acts">' +
+    '<button type="button" class="map-tb primary" data-act="echeck"' +
+    (SN.draft && !readOnlyWhy() && SN.pass && !SN.checking
+      ? tipAttrs({ key: 'sentinel.viewer.edit.check', noFocus: true })
+      : ' aria-disabled="true"' + tipAttrs({ key: 'sentinel.viewer.edit.nothingToCheck', noFocus: true })) +
+    '>' +
+    word('sentinel.viewer.edit.check') +
+    '</button><button type="button" class="map-tb" data-act="eremove"' +
+    tipAttrs({ key: 'sentinel.viewer.edit.remove', noFocus: true }) +
+    '>' +
+    word('sentinel.viewer.edit.remove') +
+    '</button></div>' +
+    '<div class="snt-note">' +
+    word('sentinel.viewer.edit.writeNote') +
+    '</div>'
+  );
+}
+
+/** A click inside the edit mode: a row picks its stage, a choice sets its field, a kind changes, a stage is added. */
+function editClick(target) {
+  const add = target.closest('[data-eadd]');
+  if (add) {
+    const out = addStageAfter(working(), add.dataset.eadd, add.dataset.enew);
+    edited(out.pipeline);
+    go({ edit: true, pick: out.id });
+    return true;
+  }
+  const kind = target.closest('[data-ekind]');
+  if (kind && SN.place.pick) {
+    edited(changeKind(working(), SN.place.pick, kind.dataset.ekind));
+    return true;
+  }
+  const choice = target.closest('[data-efield][data-evalue]');
+  if (choice && SN.place.pick) {
+    const raw = choice.dataset.evalue;
+    edited(
+      editStage(working(), SN.place.pick, choice.dataset.efield, raw === 'true' ? true : raw === 'false' ? false : raw),
+    );
+    return true;
+  }
+  const row = target.closest('[data-estage]');
+  if (row) {
+    SN.dockTab = 'stage';
+    go({ edit: true, pick: row.dataset.estage });
+    return true;
+  }
+  return false;
+}
+
+/** A typed field: a list is comma-separated (or JSON, for wired outputs), a budget part a number or a decimal. */
+function onChange(e) {
+  const target = e.target instanceof Element ? e.target : null;
+  if (!target || !SN.place.edit || !SN.place.pick) return;
+  const stage = working()?.stages?.find((x) => x.id === SN.place.pick);
+  if (!stage) return;
+  if (target.matches('[data-ebudget]')) {
+    const key = target.dataset.ebudget,
+      raw = String(target.value).trim();
+    const budget = { ...(stage.budget || {}) };
+    if (!raw) delete budget[key];
+    else budget[key] = key === 'usd' || !/^[0-9]+$/.test(raw) ? raw : Number(raw);
+    edited(editStage(working(), stage.id, 'budget', Object.keys(budget).length ? budget : undefined));
+    return;
+  }
+  if (target.matches('[data-efield]')) {
+    const key = target.dataset.efield;
+    edited(
+      editStage(working(), stage.id, key, target.dataset.elist ? listValue(target.value) : String(target.value).trim()),
+    );
+  }
+}
+
+/** Check: the frame has the service check and preview the edited pipeline, and asks the owner to confirm the write. */
+async function checkPipeline() {
+  if (!SN.draft || readOnlyWhy() || !SN.frame?.contentWindow || !SN.child) return;
+  const draft = SN.draft;
+  SN.checking = true;
+  SN.check = null;
+  SN.dockTab = 'owner';
+  draw();
+  const digest = await draftDigest(draft);
+  if (SN.draft !== draft || !SN.frame?.contentWindow || !SN.child) return; // edited meanwhile: that edit withdrew it
+  SN.frame.contentWindow.postMessage(
+    {
+      type: 'sentinel-owner-pipeline',
+      frameNonce: SN.child.frameNonce,
+      documentId: SN.child.documentId,
+      pipeline: draft,
+      expectDigest: SN.draftBase ?? null,
+      draftDigest: digest,
+    },
+    SN.origin,
+  );
+}
+
+/**
+ * The frame's answer, for the draft it names. An answer for an earlier copy than the one on screen is not this draft's:
+ * a check of it is dropped, and a write of it leaves the newer draft here, on top of the file it wrote.
+ */
+async function pipelineResult(v) {
+  if (typeof v.draftDigest !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(v.draftDigest)) return;
+  // the draft on screen when the comparison is made: an edit during the digest's await is compared, never cleared
+  let draft, current;
+  do {
+    draft = SN.draft;
+    current = draft ? await draftDigest(draft) : null;
+  } while (draft !== SN.draft);
+  // (a write after the draft was discarded is simply the file's new state)
+  if (current !== v.draftDigest && !(v.state === 'written' && !SN.draft)) {
+    if (v.state !== 'written') return;
+    SN.checking = false;
+    SN.draftBase = typeof v.written?.fileDigest === 'string' ? v.written.fileDigest : SN.draftBase;
+    SN.check = { state: 'writtenEarlier', reasonCode: null, detail: null, problems: [], preview: null };
+    void load();
+    return;
+  }
+  SN.checking = false;
+  SN.check = {
+    state: v.state,
+    reasonCode: typeof v.reasonCode === 'string' ? v.reasonCode : null,
+    detail: typeof v.detail === 'string' ? v.detail : null,
+    problems: Array.isArray(v.problems) ? v.problems.filter((x) => x && typeof x === 'object') : [],
+    preview: v.preview && Array.isArray(v.preview.stages) ? v.preview : null,
+  };
+  if (v.state === 'written') {
+    // the file now holds what the owner confirmed: read it again, and the edit is done
+    SN.draft = null;
+    SN.draftBase = undefined;
+    SN.dockTab = 'stage';
+    void load();
+    return;
+  }
+  if (v.state !== 'checked') SN.dockTab = 'stage';
+  draw();
+}
+
+/** A finished scan's report, read with the pass and saved as a file; the page keeps nothing of it. */
+async function download(format, again = true) {
+  if (!SN.pass || !SN.place.scan || !['html', 'md'].includes(format)) return;
+  try {
+    const r = await fetch(
+      SN.origin + '/api/sentinel/scans/' + encodeURIComponent(SN.place.scan) + '/report/' + format,
+      {
+        headers: { authorization: 'Bearer ' + SN.pass },
+        cache: 'no-store',
+        credentials: 'omit',
+      },
+    );
+    if (r.status === 401 && again) {
+      await askPass();
+      return download(format, false);
+    }
+    if (!r.ok) {
+      const value = await r.json().catch(() => ({}));
+      throw Object.assign(Error('report'), { code: value.error || 'sentinel.ownerUi.failed' });
+    }
+    const name =
+      /filename="([A-Za-z0-9._-]{1,80})"/.exec(r.headers.get('content-disposition') || '')?.[1] ||
+      'sentinel-report.' + format;
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    SN.error = (e && e.code) || 'sentinel.ownerUi.failed';
+    draw();
+  }
 }
 
 // ── input ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1164,10 +1821,28 @@ function onClick(e) {
   }
   const act = target.closest('[data-act]');
   if (act) {
-    if (act.dataset.act === 'refresh') void load();
-    if (act.dataset.act === 'scan') scan(act);
+    if (act.getAttribute('aria-disabled') === 'true') return;
+    const a = act.dataset.act;
+    if (a === 'refresh') void load();
+    if (a === 'scan') scan(act);
+    if (a === 'edit') go({ edit: true, pick: SN.place.pick || SN.place.stage });
+    if (a === 'report') void download(act.dataset.format);
+    if (a === 'echeck') void checkPipeline();
+    if (a === 'ediscard') {
+      withdrawCheck();
+      SN.checking = false;
+      SN.draft = null;
+      SN.draftBase = undefined;
+      SN.check = null;
+      draw();
+    }
+    if (a === 'eremove' && SN.place.pick) {
+      edited(removeStage(working(), SN.place.pick));
+      go({ edit: true });
+    }
     return;
   }
+  if (SN.place.edit && editClick(target)) return;
   const tab = target.closest('[data-tab]');
   if (tab) {
     SN.dockTab = tab.dataset.tab;
@@ -1188,6 +1863,11 @@ function onClick(e) {
 }
 
 function onKey(e) {
+  const row = e.target instanceof Element ? e.target.closest('[data-estage]') : null;
+  if (row && e.key === 'Enter') {
+    go({ edit: true, pick: row.dataset.estage });
+    return;
+  }
   const card = e.target instanceof Element ? e.target.closest('[data-stage]') : null;
   if (card && SN.place.stop === 'pipeline' && e.key === 'Enter') go({ scan: SN.place.scan, stage: card.dataset.stage });
 }
@@ -1280,6 +1960,10 @@ export async function mountSentinel(_route, el) {
   SN.unit = null;
   SN.error = null;
   SN.dockTab = 'stage';
+  // an edit in progress survives leaving the page; the file it started from is read again
+  SN.config = null;
+  SN.check = null;
+  SN.checking = false;
   el.innerHTML =
     '<div class="snt"><div class="snt-chrome"></div><div class="snt-body"><div class="snt-stage"></div>' +
     '<aside class="snt-dock" aria-label="' +
@@ -1288,6 +1972,7 @@ export async function mountSentinel(_route, el) {
     '<div class="snt-pane snt-owner" data-pane="owner" hidden><p class="snt-sub"></p></div></aside></div></div>';
   el.addEventListener('click', onClick);
   el.addEventListener('keydown', onKey);
+  el.addEventListener('change', onChange);
   draw();
   try {
     const response = await fetch('/api/sentinel/companion', { cache: 'no-store' }),
@@ -1368,6 +2053,7 @@ export function unmountSentinel() {
   }
   SN.el?.removeEventListener('click', onClick);
   SN.el?.removeEventListener('keydown', onKey);
+  SN.el?.removeEventListener('change', onChange);
   SN.frame = null;
   SN.child = null;
   SN.pass = null;
@@ -1475,6 +2161,27 @@ body.surface-sentinel .surface{overflow:hidden}
 .snt-sw.k-tool{background:repeating-linear-gradient(45deg,var(--k-tool) 0 3px,transparent 3px 5px);border:1px solid var(--k-tool)}
 .snt-sw.k-agent{background:var(--k-agent)}
 .snt-foot-note{margin-left:auto}
+.snt-eladder{display:flex;flex-direction:column;gap:6px;max-width:1040px}
+.snt-erow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--k-builtin);border-radius:6px;padding:9px 12px;cursor:pointer;min-width:0}
+.snt-erow.k-tool{border-left:4px double var(--k-tool)}
+.snt-erow.k-agent{border-left-color:var(--k-agent)}
+.snt-erow.sel{outline:1px solid var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.snt-erow:focus-visible{outline:2px solid var(--accent)}
+.snt-erow.gone{opacity:.6;border-style:dashed;cursor:default}
+.snt-erow .snt-n{position:static;flex:none}
+.snt-enm{font:600 13px var(--body);color:var(--ink);overflow-wrap:anywhere}
+.snt-ech{margin-left:auto;display:flex;gap:6px}
+.snt-eadd{display:flex;align-items:center;gap:6px;flex-wrap:wrap;border:1px dashed var(--line);border-radius:6px;padding:6px 12px;font:10.5px var(--hud);letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.snt-eprob{display:flex;flex-direction:column;gap:4px;margin:0 0 8px}
+.snt-pr{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px}
+.snt-json{margin:12px 0 0;max-width:1040px;padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:6px;font:12px var(--mono);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.snt-jc{color:var(--dim)}
+.snt-cli{margin:6px 0 0;font:11.5px var(--mono);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.snt-form dd.snt-fld{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.snt-form .map-tb.on{border-color:var(--accent);color:var(--ink);box-shadow:inset 0 0 0 1px var(--accent)}
+.snt-form input{min-width:0;flex:1 1 140px;background:var(--ground);border:1px solid var(--line);border-radius:4px;color:var(--ink);font:12px var(--mono);padding:4px 6px}
+.snt-bud{display:inline-flex;flex-direction:column;gap:2px;font:10px var(--hud);letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.snt-bud input{flex:none;width:76px}
 .snt-table{border-collapse:collapse;font-size:12px;min-width:min(100%,760px)}
 .snt-table th{font:10.5px var(--hud);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:6px 10px;border-bottom:1px solid var(--line)}
 .snt-table td{padding:6px 10px;border-bottom:1px solid var(--line-soft);color:var(--ink);vertical-align:top}

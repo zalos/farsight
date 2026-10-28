@@ -21,7 +21,7 @@ import { trustedPolicy } from './provider-helpers.ts';
 import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { needsStore } from './snapshot-helpers.ts';
 test(
-  'owner UI refuses paid start before preview or UI receipt; shared MCP start leaves real owner receipt unspent',
+  'owner UI refuses a paid start no grant admits, before any UI receipt; shared MCP start leaves real owner receipt unspent',
   { ...needsStore, timeout: 30000 },
   async (t) => {
     const f = await preparationFixture(t),
@@ -121,8 +121,10 @@ test(
       { proof: pair.proof, revision: 1, runId, action: 'start' },
       ui,
     );
+    // The panel confirms a model start as one composite (ADR 48 as amended by U-3), but only one the policy admits:
+    // this fixture grants no paid.admit, so its preview refuses with the policy's own reason and issues nothing.
     assert.equal(preview.unavailable, true);
-    assert.equal(preview.outcome.reasonCode, 'sentinel.review.foregroundRequired');
+    assert.equal(preview.outcome.reasonCode, 'sentinel.admission.noGrant');
     assert.equal('id' in preview, false);
     assert.deepEqual(readdirSync(book.directory).sort(), before, 'no new UI receipt on a refused preview');
     for (const receiptId of [undefined, confirmation.receiptId]) {

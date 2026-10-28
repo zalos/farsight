@@ -23,6 +23,7 @@ import {
 } from '../service/preparation-client.js';
 import { preparationKeyLock } from '../service/preparation-key-lock.js';
 import { validateEnvelope } from '../validate.js';
+import { MAX_PIPELINE_BYTES } from '../app/pipeline.js';
 import { ownerHost } from './host.js';
 import { OwnerUiSession, OwnerUiError } from './session.js';
 import { publishOwnerCompanion } from './descriptor.js';
@@ -310,10 +311,13 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
         throw new OwnerUiError();
       let size = 0;
       const chunks: Buffer[] = [];
+      // A pipeline the owner edited travels whole (the file's own 256 KiB bound, with room for its JSON quoting); every
+      // other request is a few small fields.
+      const limit = req.url === '/pipeline-preview' ? 2 * MAX_PIPELINE_BYTES : 16384;
       for await (const raw of req) {
         const bytes = Buffer.from(raw);
         size += bytes.length;
-        if (size > 16384) throw new OwnerUiError();
+        if (size > limit) throw new OwnerUiError();
         chunks.push(bytes);
       }
       const body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
@@ -425,6 +429,25 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
         send(res, 200, { preview: { ...preview, runId: selection?.key }, confirmation: confirm });
         return;
       }
+      if (req.url === '/pipeline-preview') {
+        // The viewer's edited pipeline, handed to this frame by its exact paired parent: the service checks it and
+        // previews what running it would do; the owner confirms the write here, and adoption stays the CLI owner's.
+        const f = fields(body, ['pipeline', 'expectDigest']);
+        const preview: any = await ui(
+          'owner-ui.pipeline-preview',
+          { pipeline: f.pipeline, expectDigest: f.expectDigest },
+          cap,
+          abort.signal,
+        );
+        if (preview.unavailable || typeof preview.id !== 'string') {
+          send(res, 200, { ...preview, unavailable: true });
+          return;
+        }
+        const confirm = session.challenge(cap, 'pipeline');
+        pendingPreview = { kind: 'pipeline', previewId: preview.id, challenge: confirm };
+        send(res, 200, { preview, confirmation: confirm });
+        return;
+      }
       if (req.url === '/confirm') {
         const f = fields(body, ['id', 'revision']);
         if (effect || !pendingPreview) throw new OwnerUiError('sentinel.ownerUi.busy');
@@ -476,7 +499,9 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
                 choose(answer.status.runId, 'preparation');
               }
               send(res, 200, answer);
-            } else send(res, 200, await ui('owner-ui.control', { previewId: pending.previewId }, cap, abort.signal));
+            } else if (pending.kind === 'pipeline')
+              send(res, 200, await ui('owner-ui.pipeline-write', { previewId: pending.previewId }, cap, abort.signal));
+            else send(res, 200, await ui('owner-ui.control', { previewId: pending.previewId }, cap, abort.signal));
           } finally {
             lock?.close();
           }
