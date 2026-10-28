@@ -41,7 +41,7 @@ import { mountChanges, changesRefresh } from './surfaces/changes.js';
 import { mountStewardship } from './surfaces/stewardship.js';
 import { mountApis, apisRefresh } from './surfaces/apis.js';
 import { mountTests, testsRefresh } from './surfaces/tests.js';
-import { mountSentinel, unmountSentinel, sentinelUpdate } from './surfaces/sentinel.js';
+import { mountSentinel, unmountSentinel, sentinelUpdate, sentinelScanDoorHtml } from './surfaces/sentinel.js';
 import { mountWork, workRefresh } from './surfaces/work.js';
 import { mountMap, mapRefresh, mapUpdate, unmountMap, mapOpen, mapTravel } from './surfaces/map.js';
 import { renderConfigFiles } from './surfaces/settings-config.js';
@@ -1679,7 +1679,9 @@ export function renderSettings() {
           '">' +
           esc(s.status || '—') +
           '</td>' +
-          '<td><button class="x" data-write onclick="if(!readOnlyWhy()){S.SETTINGS.sources.splice(' +
+          '<td class="src-acts">' +
+          (s.type === 'local' ? sentinelScanDoorHtml() : '') +
+          '<button class="x" data-write onclick="if(!readOnlyWhy()){S.SETTINGS.sources.splice(' +
           i +
           ',1);renderSettings()}" aria-label="remove">✕</button></td></tr>',
       )
