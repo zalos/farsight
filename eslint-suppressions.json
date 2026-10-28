@@ -64,6 +64,11 @@
       "count": 2
     }
   },
+  "packages/sentinel/src/execution/stage-inputs.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
   "packages/sentinel/src/findings/decision-basis.ts": {
     "boundaries/dependencies": {
       "count": 6
@@ -100,6 +105,11 @@
     }
   },
   "packages/sentinel/src/planner/capabilities.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/planner/pipeline.ts": {
     "boundaries/dependencies": {
       "count": 1
     }
@@ -151,7 +161,7 @@
   },
   "packages/sentinel/src/review/plan.ts": {
     "boundaries/dependencies": {
-      "count": 1
+      "count": 2
     }
   },
   "packages/sentinel/src/review/runner.ts": {
