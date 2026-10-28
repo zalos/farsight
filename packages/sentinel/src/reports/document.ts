@@ -85,7 +85,8 @@ export interface PlannedCheck {
 }
 
 /**
- * Everything `buildReport` folds into one document. It reads nothing else, so the same input gives the same document.
+ * Everything `buildReport` folds into one document. Besides it, the fold reads only the catalog's words, so the same
+ * input and catalog give the same document.
  */
 export interface ReportInput {
   readonly id: string;

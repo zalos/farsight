@@ -311,7 +311,9 @@ function append(s: Store, state: State, payload: Pick<Entry, 'proposal' | 'appro
 /**
  * The append-only private owner journal of one workspace's decisions. Each entry is a numbered create-once file chained
  * to the digest of the one before; every read replays the whole chain and checks each approval against its spent owner
- * receipt, and any break is `sentinel.decision.corruptHistory`. Transports only propose; approval is `approveForOwner`.
+ * receipt. A broken chain, entry or receipt refuses the read with `sentinel.decision.corruptHistory`, or with
+ * `sentinel.decision.invalidInput` for an entry whose fields do not fit. Transports only propose; approval is
+ * `approveForOwner`.
  */
 export class DecisionJournal {
   /** Owner-private user state, outside captured checkouts. The workspace identity is a digest of its real identity. */

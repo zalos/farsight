@@ -28,7 +28,8 @@ const fileScope = (sourceId: string, path: string) => `${sourceId}:${path}`;
  * withheld locations that resolve to files its unit was assigned, with spans inside their captured bytes. Anything else
  * is refused through `ctx.refuse` (the full report raises `sentinel.report.evidenceUnbound`, the selected-privacy
  * reader `sentinel.execution.bootstrapEvidence`). Returns the observation, the `sourceId:path` of every file whose name
- * matched, and every long token on the matched lines, all of which a report treats as secret.
+ * matched, and the tokens a report treats as secret: whatever `ctx.tokensOf` extracts from a name match's file path and
+ * from a content match's matched lines. The tokens depend on that extractor; one that returns none yields none.
  */
 export async function secretObservation(
   v: any,

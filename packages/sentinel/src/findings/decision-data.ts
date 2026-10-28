@@ -43,8 +43,9 @@ export const validNode = (v: unknown): v is NodeId =>
 /** True for a calendar timestamp the contracts accept. */
 export const timestamp = (v: unknown): v is string => typeof v === 'string' && isCalendarTimestamp(v);
 /**
- * Asserts a plain object with every required key and no key outside the required and optional ones; otherwise
- * `sentinel.decision.invalidInput`.
+ * Asserts a non-array object that has every required key as an own property and whose enumerable own string keys are
+ * all required or optional; otherwise `sentinel.decision.invalidInput`. Symbol and non-enumerable keys are not checked,
+ * and a class instance passes.
  */
 export function fields(
   value: unknown,

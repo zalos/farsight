@@ -44,10 +44,10 @@ export interface DeploymentAssertion {
   readonly expiresAt: string | null;
 }
 /**
- * Copies and checks at most 64 assertions: exact fields, known trust, property and direction, at least one surface and
- * unique surfaces and evidence, digest-shaped bindings, an expiry after the last verification, and for
- * `runtime-observed` a verification time, an expiry and evidence. Anything else, or a repeated assertion id, is
- * `sentinel.decision.invalidInput`. Returns a frozen copy.
+ * Copies and checks at most 64 assertions: the assertion fields as `fields` checks them, known trust, property and
+ * direction, at least one surface and unique surfaces and evidence, digest-shaped bindings, an expiry after the last
+ * verification, and for `runtime-observed` a verification time, an expiry and evidence. Anything else, or a repeated
+ * assertion id, is `sentinel.decision.invalidInput`. Returns a frozen copy.
  */
 export function checkedAssertions(given: unknown): readonly DeploymentAssertion[] {
   const all = snapshot(given);
