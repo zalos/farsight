@@ -75,10 +75,11 @@ export function reviewInstructionsFor(
   stagePacks: ReviewStagePacks | undefined,
 ): Pick<SessionSpec, 'prompt' | 'instructions' | 'packs'> {
   const stage = stagePacks && stageForKind(stagePacks, s.kind);
+  // The mode first: a native stage never runs a brokered review, even one naming no prompt, skills or instructions.
+  if (stage && stage.mode !== 'brokered')
+    return reviewFail('sentinel.review.invalidInput', 'a review session runs a brokered agent stage');
   if (!stage || (stage.prompt === undefined && !stage.skills?.length && stage.instructions === undefined))
     return { prompt: s.prompt, instructions: prepareInstructions({ prompt: s.prompt, skills: [] }) };
-  if (stage.mode !== 'brokered')
-    return reviewFail('sentinel.review.invalidInput', 'a review session runs a brokered agent stage');
   const prepared = brokeredInstructions(stagePacks!.trustDir, stage, s.prompt);
   return { prompt: prepared.prompt, instructions: prepared.instructions, packs: prepared.packs };
 }

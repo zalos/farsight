@@ -520,6 +520,8 @@ test('a review binds to the stage the planner placed it under, by id, never to a
       model: 'claude-sonnet-5-5',
       instructions: 'stages/review@1#instructions.md',
     },
+    // A native stage naming nothing: still never the bundled prompt for a brokered review.
+    { id: 'empty-native', kind: 'agent', mode: 'native', runner: 'claude-cli', model: 'claude-sonnet-5-5' },
   ] as any;
   assert.deepEqual(
     reviewInstructionsFor(base, { trustDir, stages, stageOf: {} }).packs,
@@ -531,7 +533,12 @@ test('a review binds to the stage the planner placed it under, by id, never to a
     bound.packs?.map((p) => p.ref),
     ['skills/invoice-approvals@1'],
   );
-  for (const stageOf of [{ general: 'triage' }, { general: 'capture' }, { general: 'absent' }])
+  for (const stageOf of [
+    { general: 'triage' },
+    { general: 'empty-native' },
+    { general: 'capture' },
+    { general: 'absent' },
+  ])
     assert.throws(
       () => reviewInstructionsFor(base, { trustDir, stages, stageOf }),
       code('sentinel.review.invalidInput'),
