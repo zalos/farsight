@@ -207,6 +207,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'review/providers/sandboxed-cli.js': ['node:child_process', 'node:fs', 'node:fs/promises'],
   // Copilot native mode: the scratch tree is written under the runner's owned root; no process of its own.
   'review/providers/cli-copilot-agent.js': ['node:fs/promises', 'node:path'],
+  // Stage packs: owner-promoted prompt and skill bytes, copied into the trust folder and re-checked by digest.
+  'review/packs.js': ['node:crypto', 'node:fs', 'node:path'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   // The Spring pack: tree-sitter's Java grammar, loaded on first analysis only; graph is pure JSON helpers.
   'frameworks/spring/pack.js': ['@farsight/graph', 'node:crypto'],

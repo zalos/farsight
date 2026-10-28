@@ -375,8 +375,16 @@ export class ModelBroker {
       !(req.instructions instanceof Uint8Array)
     )
       fail('sentinel.provider.invalidProfile', 'a native stage names bounded inputs, instructions and a task');
+    if (req.skills !== undefined && (!Array.isArray(req.skills) || req.skills.length > 16))
+      fail('sentinel.provider.invalidProfile', 'a native stage names at most 16 skills');
     const bytes =
-      req.files.reduce((n, f) => n + f.bytes.byteLength, 0) + req.instructions.byteLength + Buffer.byteLength(req.task);
+      req.files.reduce((n, f) => n + f.bytes.byteLength, 0) +
+      (req.skills?.reduce(
+        (n, k) => n + k.files.reduce((m: number, f: { bytes: Uint8Array }) => m + f.bytes.byteLength, 0),
+        0,
+      ) ?? 0) +
+      req.instructions.byteLength +
+      Buffer.byteLength(req.task);
     if (bytes > binding.limits.maxRequestBytes * 64)
       fail('sentinel.provider.requestTooLarge', `${bytes} input bytes for a native stage`);
     const ledger = this.#deps.ledger;
@@ -406,6 +414,7 @@ export class ModelBroker {
         instructions: req.instructions,
         task: req.task,
         maxTurns: req.maxTurns,
+        ...(req.skills?.length ? { skills: req.skills } : {}),
       }),
       limits: Object.freeze({ deadlineAt: req.deadlineAt, ...(req.signal ? { signal: req.signal } : {}) }),
       ledger,
@@ -680,6 +689,8 @@ export interface AgentRunRequest {
   readonly files: CopilotAgentRequest['files'];
   readonly instructions: Uint8Array;
   readonly task: string;
+  /** Promoted skills, already checked against the pack lock. */
+  readonly skills?: CopilotAgentRequest['skills'];
   /** The stage's turn budget: model requests allowed. */
   readonly maxTurns: number;
   /** The stage's token budget: reserved before dispatch; a run that reports more fails after settling. */

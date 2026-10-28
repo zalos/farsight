@@ -28,6 +28,7 @@ import type { ModelBroker, ModelEnvelope } from './providers/broker.js';
 import type { ProviderBinding } from './providers/profile.js';
 import { reviewFail } from './errors.js';
 import { NATIVE_REVIEW_INSTRUCTIONS, nativeOutputSchema, nativeTask, parseFinalAnswer } from './native.js';
+import { resolveStageInstructions, stagePackDigests, type ResolvedStageInstructions } from './packs.js';
 
 /** The runners an agent stage can name (the pipeline contract's ids). */
 export type AgentRunnerId = 'copilot-cli' | 'claude-cli' | 'hosted-api';
@@ -118,6 +119,14 @@ export interface NativeRunResult {
   readonly tools: readonly Readonly<{ tool: string; path: string | null }>[];
   readonly instructions: Uint8Array;
   readonly task: string;
+  /** Every pack reference the stage used and the pack digest it resolved to, as the pipeline digest covers them. */
+  readonly packs: readonly Readonly<{ ref: string; digest: string }>[];
+  /** The promoted skills, in order, with each file's digest: the exact bytes that were materialised. */
+  readonly skills: readonly Readonly<{
+    ref: string;
+    digest: string;
+    files: readonly Readonly<{ path: string; digest: string }>[];
+  }>[];
   readonly provenance: AgentRunProvenance;
 }
 export type AgentRunResult = BrokeredRunResult | NativeRunResult;
@@ -135,8 +144,11 @@ export interface NativeRunContext {
   readonly binding: ProviderBinding;
   readonly operationId: string;
   readonly signal?: AbortSignal;
-  /** Promoted instruction bytes for this stage; absent means the bundled native review instructions. */
-  readonly instructions?: Uint8Array;
+  /**
+   * The workspace trust folder that holds promoted stage packs. Required when the stage names instructions or
+   * skills; every referenced byte is re-checked against the pack lock here, before anything is admitted or sent.
+   */
+  readonly trustDir?: string;
 }
 export interface AgentRunContext {
   readonly brokered?: BrokeredRunContext;
@@ -181,14 +193,26 @@ async function runCopilotNative(
   const named = (stage.produces ?? []).filter((p): p is { name: string; schema: string } => typeof p === 'object');
   if (named.length !== 1) return reviewFail('sentinel.review.outputSchema', 'a native stage declares one named output');
   const schema = nativeOutputSchema(named[0]!.schema);
-  if (stage.instructions !== undefined && context.instructions === undefined)
-    fail('sentinel.provider.invalidProfile', 'promoted stage instructions are read from their stage pack');
-  if (stage.skills?.length) fail('sentinel.provider.invalidProfile', 'skills are read from their promoted packs');
+  const packed = stage.instructions !== undefined || Boolean(stage.skills?.length);
+  if (packed && context.trustDir === undefined)
+    fail('sentinel.provider.invalidProfile', 'promoted instructions and skills are read from the trust folder');
+  // Changed or unapproved pack bytes refuse here, before the credential probe, any reservation or any launch.
+  const resolved: ResolvedStageInstructions = packed
+    ? resolveStageInstructions(context.trustDir!, { ...stage, mode: 'native' })
+    : Object.freeze({ text: null, skills: Object.freeze([]) });
   const paths = inputs.map((f) => safeInputPath(f.relativePath));
   if (new Set(paths).size !== paths.length || !paths.length)
     fail('sentinel.provider.invalidProfile', 'a native stage reads distinct inputs');
-  const instructions = context.instructions ?? new TextEncoder().encode(NATIVE_REVIEW_INSTRUCTIONS.text + '\n');
-  const task = nativeTask(stage.id, paths, schema);
+  const instructions = resolved.text?.bytes ?? new TextEncoder().encode(NATIVE_REVIEW_INSTRUCTIONS.text + '\n');
+  const skills = resolved.skills.map((k) =>
+    Object.freeze({ id: k.id, files: k.files.map((f) => Object.freeze({ path: f.path, bytes: f.bytes })) }),
+  );
+  const task = nativeTask(
+    stage.id,
+    paths,
+    schema,
+    resolved.skills.map((k) => k.id),
+  );
   const pinned = context.binding.copilotProfile ? copilotProfileById(context.binding.copilotProfile.id) : undefined;
   // The vendor's login must be reachable from this process (a foreground CLI or a service child in the owner's login
   // session); a locked or absent login refuses here, before any reservation or launch.
@@ -224,7 +248,7 @@ async function runCopilotNative(
         identitySource: 'host-reported' as const,
       }),
       promptDigest: canonicalDigest({ instructions: Buffer.from(instructions).toString('base64'), task }) as Digest,
-      skillDigests: Object.freeze([]),
+      skillDigests: Object.freeze(resolved.skills.map((k) => k.digest as Digest)),
       turns: seen.turns,
       tokens: seen.usage
         ? Object.freeze({
@@ -285,6 +309,7 @@ async function runCopilotNative(
       files: inputs.map((f) => ({ relativePath: f.relativePath, bytes: f.bytes })),
       instructions,
       task,
+      ...(skills.length ? { skills } : {}),
       maxTurns: turns!,
       tokens: tokens!,
       deadlineAt: started + grantedMs,
@@ -335,6 +360,16 @@ async function runCopilotNative(
     tools: reply.result.tools,
     instructions,
     task,
+    packs: stagePackDigests(resolved),
+    skills: Object.freeze(
+      resolved.skills.map((k) =>
+        Object.freeze({
+          ref: k.ref,
+          digest: k.digest,
+          files: Object.freeze(k.files.map((f) => Object.freeze({ path: f.path, digest: f.digest }))),
+        }),
+      ),
+    ),
     provenance,
   });
 }

@@ -28,7 +28,8 @@ import { dirname, join } from 'node:path';
 import { canonicalDigest } from '../policy/digest.js';
 import { readPackDirectory } from '../rules/pack.js';
 import { reviewFail } from './errors.js';
-import type { SkillSelection } from './instructions.js';
+import { prepareInstructions, type PreparedInstructions, type SkillSelection } from './instructions.js';
+import type { PromptArtifact } from './prompts.js';
 
 export const STAGE_PACK_MANIFEST = 'sentinel-stage-pack.json';
 export const STAGE_PACK_SCHEMA = 'sentinel-stage-pack/draft-1';
@@ -261,7 +262,7 @@ export function resolveSkill(trustDir: string, ref: string): ResolvedSkill {
       text: text(main),
       resources: pack.files
         .filter((f) => f.path !== 'SKILL.md')
-        .map((f) => Object.freeze({ id: f.path, revision: pack.revision, text: text(f) })),
+        .map((f) => Object.freeze({ id: f.path.replaceAll('/', '.'), revision: pack.revision, text: text(f) })),
     }),
   });
 }
@@ -312,4 +313,27 @@ export function stagePackDigests(
     ...(resolved.text ? [Object.freeze({ ref: resolved.text.ref, digest: resolved.text.pack })] : []),
     ...resolved.skills.map((s) => Object.freeze({ ref: s.ref, digest: s.digest })),
   ]);
+}
+
+/**
+ * A brokered stage's prepared instructions: the promoted prompt (or the bundled one) and its promoted skills, in
+ * order, as the review session retains and sends them. The instruction record then lists every byte and digest.
+ */
+export function brokeredInstructions(
+  trustDir: string,
+  stage: { readonly prompt?: string; readonly skills?: readonly string[] },
+  bundled: PromptArtifact,
+): Readonly<{ instructions: PreparedInstructions; packs: ReturnType<typeof stagePackDigests> }> {
+  const resolved = resolveStageInstructions(trustDir, { ...stage, mode: 'brokered' });
+  const prompt: PromptArtifact = resolved.text
+    ? Object.freeze({
+        id: `${REF.exec(resolved.text.ref)![2]}:${resolved.text.path.replaceAll('/', '.')}`,
+        version: Number(REF.exec(resolved.text.ref)![3]),
+        text: new TextDecoder('utf8', { fatal: true }).decode(resolved.text.bytes),
+      })
+    : bundled;
+  return Object.freeze({
+    instructions: prepareInstructions({ prompt, skills: resolved.skills.map((k) => k.selection) }),
+    packs: stagePackDigests(resolved),
+  });
 }
