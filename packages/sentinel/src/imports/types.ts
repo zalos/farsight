@@ -87,7 +87,7 @@ export const IMPORT_FORMATS = Object.freeze([
   'zap-traditional-json',
   'zap-traditional-json-plus',
 ] as const);
-/** One of `IMPORT_FORMATS`. */
+// No JSDoc here: the import-view schema is generated from this type, and a doc block would become its description.
 export type ImportFormat = (typeof IMPORT_FORMATS)[number];
 
 /** The adapter's own identity: a different version may read the same bytes differently, so it is part of the output. */
@@ -95,7 +95,7 @@ export const IMPORT_ADAPTER = Object.freeze({ id: 'sentinel.import.reports', ver
 
 /** The three attributes a Set-Cookie line can show. Integrity and confidentiality are never derived from a report. */
 export const COOKIE_PROPERTIES = Object.freeze(['cookie-secure', 'cookie-http-only', 'cookie-same-site'] as const);
-/** One of `COOKIE_PROPERTIES`. */
+// No JSDoc here: the import-view schema is generated from this type, and a doc block would become its description.
 export type CookieProperty = (typeof COOKIE_PROPERTIES)[number];
 
 /** Hard ceilings, global per import. No caller, manifest or report can raise them. */
@@ -216,7 +216,7 @@ export class ImportBudget {
   }
 }
 
-/** A JSON value as the strict parser returns it. */
+// No JSDoc here: the import-view schema is generated from this type, and a doc block would become its description.
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [k: string]: Json };
 /** A JSON object. */
 export type JsonObject = { readonly [k: string]: Json };
