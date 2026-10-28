@@ -30,6 +30,11 @@ export interface CopilotAgentRequest {
   readonly files: readonly Readonly<{ relativePath: string; bytes: Uint8Array }>[];
   /** Written to `.github/copilot-instructions.md` in the scratch tree. */
   readonly instructions: Uint8Array;
+  /**
+   * The digests each written file must hash to, sealed before dispatch and never derived from the buffers above:
+   * the instructions file's (from its pack's manifest, or of the bundled text) and each input's.
+   */
+  readonly digests: Readonly<{ instructions: string; files: readonly string[] }>;
   /** Piped on stdin as the one prompt-mode user message. */
   readonly task: string;
   /** Model requests (turns) allowed; one more stops the process and fails the run. */
@@ -40,7 +45,8 @@ export interface CopilotAgentRequest {
    */
   readonly skills?: readonly Readonly<{
     id: string;
-    files: readonly Readonly<{ path: string; bytes: Uint8Array }>[];
+    /** Each file with the digest its promoted pack's manifest pins (checked against the pack lock). */
+    files: readonly Readonly<{ path: string; bytes: Uint8Array; digest: string }>[];
   }>[];
 }
 
@@ -391,7 +397,7 @@ export function safeInputPath(path: string): string {
 }
 
 /** Each written file is still one regular, single-link file holding exactly its bytes; otherwise scratchChanged. */
-export async function verifyMaterialised(expected: readonly Readonly<{ path: string; bytes: Uint8Array }>[]) {
+export async function verifyMaterialised(expected: readonly Readonly<{ path: string; digest: string }>[]) {
   for (const e of expected) {
     let now: Buffer | undefined;
     try {
@@ -400,10 +406,16 @@ export async function verifyMaterialised(expected: readonly Readonly<{ path: str
     } catch {
       now = undefined;
     }
-    if (!now || sha256(now) !== sha256(e.bytes))
+    if (!now || 'sha256:' + sha256(now) !== e.digest)
       throw new ProviderError('sentinel.provider.scratchChanged', 'a materialised file changed before launch');
   }
 }
+/** A buffer about to be written must already hash to its sealed digest; a changed buffer is never written. */
+const sealed = (bytes: Uint8Array, digest: string) => {
+  if ('sha256:' + sha256(bytes) !== digest)
+    throw new ProviderError('sentinel.provider.scratchChanged', 'a buffer differs from its sealed digest');
+  return bytes;
+};
 const SIGNALS = new Set(['SIGKILL', 'SIGTERM', 'SIGABRT', 'SIGSEGV']);
 const AGENT_WORDS = Object.freeze({
   canceled: 'Copilot native run canceled',
@@ -437,11 +449,17 @@ export async function nativeCopilotAgentCall(authority: CopilotAgentAuthority): 
     await writeFile(current.ownedRoot + '/state/settings.json', files.settings, { flag: 'wx', mode: 0o600 });
     // The scratch tree: only the declared inputs and the instructions, read-only to the sandboxed process.
     await mkdir(join(work, '.github'), { recursive: true, mode: 0o700 });
-    await writeFile(join(work, '.github/copilot-instructions.md'), request.instructions, { flag: 'wx', mode: 0o400 });
-    for (const f of request.files) {
+    if (request.digests.files.length !== request.files.length)
+      fail('sentinel.provider.invalidProfile', 'every native input has its sealed digest');
+    await writeFile(
+      join(work, '.github/copilot-instructions.md'),
+      sealed(request.instructions, request.digests.instructions),
+      { flag: 'wx', mode: 0o400 },
+    );
+    for (const [i, f] of request.files.entries()) {
       const rel = safeInputPath(f.relativePath);
       await mkdir(dirname(join(work, rel)), { recursive: true, mode: 0o700 });
-      await writeFile(join(work, rel), f.bytes, { flag: 'wx', mode: 0o400 });
+      await writeFile(join(work, rel), sealed(f.bytes, request.digests.files[i]!), { flag: 'wx', mode: 0o400 });
     }
     for (const skill of request.skills ?? []) {
       if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(skill.id))
@@ -450,7 +468,7 @@ export async function nativeCopilotAgentCall(authority: CopilotAgentAuthority): 
         const rel = safeInputPath(f.path);
         const target = join(work, '.github/skills', skill.id, rel);
         await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-        await writeFile(target, f.bytes, { flag: 'wx', mode: 0o400 });
+        await writeFile(target, sealed(f.bytes, f.digest), { flag: 'wx', mode: 0o400 });
       }
     }
     copilotBoundary(limits);
@@ -458,11 +476,11 @@ export async function nativeCopilotAgentCall(authority: CopilotAgentAuthority): 
     // Immediately before the process starts: every materialised file is re-read and must hash to the bytes the
     // request carries (the instructions, each skill file, each input). A changed byte refuses before any launch.
     await verifyMaterialised([
-      { path: join(work, '.github/copilot-instructions.md'), bytes: request.instructions },
+      { path: join(work, '.github/copilot-instructions.md'), digest: request.digests.instructions },
       ...(request.skills ?? []).flatMap((k) =>
-        k.files.map((f) => ({ path: join(work, '.github/skills', k.id, f.path), bytes: f.bytes })),
+        k.files.map((f) => ({ path: join(work, '.github/skills', k.id, f.path), digest: f.digest })),
       ),
-      ...request.files.map((f) => ({ path: join(work, f.relativePath), bytes: f.bytes })),
+      ...request.files.map((f, i) => ({ path: join(work, f.relativePath), digest: request.digests.files[i]! })),
     ]);
     copilotBoundary(limits);
     decoder = new CopilotAgentDecoder(work, request.maxTurns);

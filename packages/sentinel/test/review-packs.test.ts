@@ -168,6 +168,7 @@ test('a changed or unapproved pack byte refuses a native stage before anything i
       binding: { model: 'gpt-6-luna', copilotProfile: { id: COPILOT_AGENT_PROFILE.id } } as any,
       operationId: 'original-pack-stage',
       trustDir: dir,
+      retain: async () => {},
     },
   });
   await assert.rejects(COPILOT_RUNNER.run(stage, inputs, context(trustDir)), code('sentinel.review.packUnapproved'));
@@ -218,6 +219,7 @@ test(
         binding: { model: 'gpt-6-luna', copilotProfile: { id: COPILOT_AGENT_PROFILE.id } } as any,
         operationId: 'original-pack-stage',
         trustDir,
+        retain: async () => {},
       },
     });
     assert.equal(result.mode, 'native');
@@ -341,7 +343,7 @@ test('a brokered review spec takes the promoted prompt and skills, seals the bin
       skills: ['skills/invoice-approvals@1'],
     },
   ] as any;
-  const out = reviewInstructionsFor(base, { trustDir, stages });
+  const out = reviewInstructionsFor(base, { trustDir, stages, stageOf: { general: 'review' } });
   assert.equal(out.prompt.id, 'general-review:prompt.md', 'the sealed spec names the promoted prompt it sends');
   assert.match(out.prompt.text, /Promoted: name the role/);
   assert.equal(instructionIdentity(out.instructions).skills.length, 1);
@@ -358,7 +360,12 @@ test('a brokered review spec takes the promoted prompt and skills, seals the bin
   writeFileSync(copyPath, 'replaced\n');
   assert.throws(() => recheckPacks(trustDir, out.packs!), code('sentinel.review.packChanged'));
   assert.throws(
-    () => reviewInstructionsFor(base, { trustDir, stages: [{ ...stages[0], mode: 'native' }] }),
+    () =>
+      reviewInstructionsFor(base, {
+        trustDir,
+        stages: [{ ...stages[0], mode: 'native' }],
+        stageOf: { general: 'review' },
+      }),
     code('sentinel.review.invalidInput'),
   );
 });
@@ -369,25 +376,26 @@ test('every materialised file must still hash to its sealed bytes immediately be
     b = join(dir, 'b.md');
   writeFileSync(a, 'alpha\n');
   writeFileSync(b, 'beta\n');
+  const d = (t: string) => 'sha256:' + createHash('sha256').update(t).digest('hex');
   await verifyMaterialised([
-    { path: a, bytes: Buffer.from('alpha\n') },
-    { path: b, bytes: Buffer.from('beta\n') },
+    { path: a, digest: d('alpha\n') },
+    { path: b, digest: d('beta\n') },
   ]);
   writeFileSync(b, 'beta, changed\n');
   await assert.rejects(
-    verifyMaterialised([{ path: b, bytes: Buffer.from('beta\n') }]),
+    verifyMaterialised([{ path: b, digest: d('beta\n') }]),
     code('sentinel.provider.scratchChanged'),
   );
   rmSync(b);
   symlinkSync(a, b);
   await assert.rejects(
-    verifyMaterialised([{ path: b, bytes: Buffer.from('alpha\n') }]),
+    verifyMaterialised([{ path: b, digest: d('alpha\n') }]),
     code('sentinel.provider.scratchChanged'),
     'a link in place of a written file refuses',
   );
   rmSync(a);
   await assert.rejects(
-    verifyMaterialised([{ path: a, bytes: Buffer.from('alpha\n') }]),
+    verifyMaterialised([{ path: a, digest: d('alpha\n') }]),
     code('sentinel.provider.scratchChanged'),
   );
 });
@@ -486,3 +494,94 @@ test(
     assert.deepEqual(order, ['seal-failed'], 'no seal, no dispatch');
   },
 );
+
+test('a review binds to the stage the planner placed it under, by id, never to another agent stage', (t) => {
+  const { trustDir } = trust(t);
+  promoteStagePack(trustDir, STAGE, { confirm: true });
+  promoteStagePack(trustDir, SKILL, { confirm: true });
+  const base = { kind: 'general', prompt: GENERAL_PROMPT } as any;
+  // The plan's own stage shape (README §3.3): a per-entry brokered review and a native triage stage.
+  const stages = [
+    { id: 'capture', kind: 'builtin', operation: 'capture' },
+    {
+      id: 'review',
+      kind: 'agent',
+      mode: 'brokered',
+      runner: 'copilot-cli',
+      model: 'gpt-6-luna',
+      fanOut: 'per-entry',
+      skills: ['skills/invoice-approvals@1'],
+    },
+    {
+      id: 'triage',
+      kind: 'agent',
+      mode: 'native',
+      runner: 'claude-cli',
+      model: 'claude-sonnet-5-5',
+      instructions: 'stages/review@1#instructions.md',
+    },
+  ] as any;
+  assert.deepEqual(
+    reviewInstructionsFor(base, { trustDir, stages, stageOf: {} }).packs,
+    undefined,
+    'no stage placed for the general review: the bundled prompt, and no other stage lends its packs',
+  );
+  const bound = reviewInstructionsFor(base, { trustDir, stages, stageOf: { general: 'review' } });
+  assert.deepEqual(
+    bound.packs?.map((p) => p.ref),
+    ['skills/invoice-approvals@1'],
+  );
+  for (const stageOf of [{ general: 'triage' }, { general: 'capture' }, { general: 'absent' }])
+    assert.throws(
+      () => reviewInstructionsFor(base, { trustDir, stages, stageOf }),
+      code('sentinel.review.invalidInput'),
+      JSON.stringify(stageOf),
+    );
+});
+
+test('a packed stage is refused unless its instruction record is sealed, and a seal cannot change what is sent', async (t) => {
+  const { trustDir } = trust(t);
+  promoteStagePack(trustDir, STAGE, { confirm: true });
+  const skillPack = promoteStagePack(trustDir, SKILL, { confirm: true });
+  let calls = 0;
+  let sent: any;
+  const broker = {
+    runAgent: async (_e: unknown, _b: unknown, request: any) => {
+      calls++;
+      sent = request;
+      throw Object.assign(Error('stop'), { code: 'sentinel.provider.unreachable' });
+    },
+  } as any;
+  const native = (retain?: (r: any) => Promise<void>) => ({
+    native: {
+      broker,
+      envelope: {} as any,
+      binding: { model: 'gpt-6-luna', copilotProfile: { id: COPILOT_AGENT_PROFILE.id } } as any,
+      operationId: 'original-unsealed',
+      trustDir,
+      ...(retain ? { retain } : {}),
+    },
+  });
+  await assert.rejects(COPILOT_RUNNER.run(stage, inputs, native()), code('sentinel.review.instructionsUnsealed'));
+  assert.equal(calls, 0);
+  if (process.platform !== 'darwin') return; // the credential probe needs the macOS login keychain
+  await assert.rejects(
+    COPILOT_RUNNER.run(
+      stage,
+      inputs,
+      native(async (record) => {
+        record.skills[0].files[0].bytes.fill(0x41);
+        record.instructions.bytes.fill(0x41);
+      }),
+    ),
+  );
+  assert.equal(calls, 1);
+  const file = sent.skills[0].files[0];
+  assert.equal(file.digest, skillPack.files[0]!.digest, 'the digest the pack lock pins');
+  assert.equal('sha256:' + createHash('sha256').update(file.bytes).digest('hex'), file.digest);
+  assert.equal(
+    'sha256:' + createHash('sha256').update(sent.instructions).digest('hex'),
+    sent.digests.instructions,
+    'the request carries its own copies',
+  );
+});

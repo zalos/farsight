@@ -412,6 +412,7 @@ export class ModelBroker {
         model: binding.model,
         files: req.files,
         instructions: req.instructions,
+        digests: req.digests,
         task: req.task,
         maxTurns: req.maxTurns,
         ...(req.skills?.length ? { skills: req.skills } : {}),
@@ -688,6 +689,8 @@ export interface AgentRunRequest {
   readonly operationId: string;
   readonly files: CopilotAgentRequest['files'];
   readonly instructions: Uint8Array;
+  /** The sealed digests the written instructions and inputs must hash to. */
+  readonly digests: CopilotAgentRequest['digests'];
   readonly task: string;
   /** Promoted skills, already checked against the pack lock. */
   readonly skills?: CopilotAgentRequest['skills'];
