@@ -74,6 +74,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // The declared pipeline (app/): the credential-shape check, and the pipeline file read beside the settings.
   'app/pipeline.js': ['@farsight/core/dist/credential-shapes.js', '@farsight/core/dist/strings-sentinel-plan.js'],
   'app/pipeline-adoption.js': ['node:fs', 'node:path'],
+  'app/service.js': ['node:crypto', 'node:fs', 'node:path'],
+  'app/principal.js': ['node:fs', 'node:url'],
   'service/preparation-key-lock.js': ['node:path'],
   'service/preparation-client.js': ['node:crypto', 'node:path'],
   'service/preparation-projection.js': ['@farsight/core/dist/strings.js'],
@@ -202,6 +204,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'review/providers/cli-native-agent.js': ['node:crypto', 'node:fs/promises', 'node:path'],
   // Stage packs: owner-promoted prompt and skill bytes, copied into the trust folder and re-checked by digest.
   'review/packs.js': ['node:crypto', 'node:fs', 'node:path'],
+  // Native review dispatch: the published run's records and artifacts are content-addressed; no process of its own.
+  'review/native-dispatch.js': ['node:crypto'],
   'review/runner.js': ['node:crypto'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   // The Spring pack: tree-sitter's Java grammar, loaded on first analysis only; graph is pure JSON helpers.
@@ -221,6 +225,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
     '@farsight/core/dist/strings-sentinel-owner-ui.js',
     '@farsight/core/dist/strings-sentinel-service.js',
     '@farsight/core/dist/strings.js',
+    'node:crypto',
     'node:fs',
     'node:path',
   ],
@@ -534,9 +539,11 @@ test('planned commands refuse with exit 3 and start nothing', () => {
     assert.match(
       r.stderr,
       new RegExp(
-        `^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`,
+        `^unavailable: ${command} is not implemented in this draft build \\(planned in a later release\\)\\. Nothing was started\\.`,
       ),
     );
+    // No printed word names an implementation-plan PR.
+    assert.doesNotMatch(r.stderr + r.stdout, /\bPR \d/);
     // JSON says unavailable, with every verdict not asked: never a scan result.
     const body = JSON.parse(r.stdout);
     assert.equal(body.outcome, 'unavailable', command);

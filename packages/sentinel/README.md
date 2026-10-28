@@ -225,7 +225,11 @@ the folder you want to scan:
 npm install -g <pinned farsight-sentinel tarball URL>   # a GitHub Release asset once one is published (PR 26);
                                                         # until then a local build of scripts/pack-sentinel.mjs
 cd /path/to/your/workspace
-farsight-sentinel init                     # .farsight/sentinel/settings.json (0600); again: kept byte for byte
+farsight-sentinel init                     # .farsight/sentinel/settings.json and pipeline.json (0600); again: kept
+farsight-sentinel scan                     # what it would adopt, promote and run, every model and budget; exit 4
+farsight-sentinel scan --confirm           # one confirmation: adopt, promote, plan and run (--detach: in the service)
+farsight-sentinel report                   # the newest scan's report; scans lists them, status and wait read the newest
+# or step by step:
 farsight-sentinel settings adopt --confirm # you, the owner, adopt these exact bytes (without --confirm: shown, exit 4)
 farsight-sentinel rules promote builtin:foundation-preview --confirm   # the shipped original pack into your rule lock
 farsight-sentinel plan                     # capture, publish the bootstrap, plan and admit the analysis; prints the run id
@@ -1111,9 +1115,11 @@ farsight-sentinel run PLAN_ID --workspace ./workspace --confirm --confirm-models
 farsight-sentinel report RUN_ID --workspace ./workspace --instructions --json
 ```
 
-Inspect the exact model selection, disclosure and budget in the plan before confirming. `--confirm-models` needs
-foreground `--confirm`; it cannot be combined with detach and does not replace the separate model admission
-receipt. Another live owner yields busy until it naturally releases; the command never takes its lock. Model
+Inspect the exact model selection, disclosure and budget in the plan before confirming. `--confirm-models` goes
+with `--confirm`: in the foreground, or with `--detach` (and `resume`), where one confirmation is the composite the
+background service runs: the start receipt for the plan's digest, stages and model binding with its budget, and one
+receipt for each model envelope, which the service spends only for that envelope and never issues itself (ADR 48,
+amended 2026-10-28). `scan --confirm` confirms the same composite after its preview named every model. Another live owner yields busy until it naturally releases; the command never takes its lock. Model
 execution and settings editing from the graphical service remain unavailable in this slice.
 
 The private result contains accepted model statements and captured citations, exact Sentinel prompt/selected

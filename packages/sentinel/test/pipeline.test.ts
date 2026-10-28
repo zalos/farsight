@@ -976,6 +976,9 @@ test("pipeline.write validates and previews; it writes only on the owner's recei
   )) as any;
   assert.deepEqual([ok.outcome, ok.facts.written], ['prepared', true]);
   assert.match(ok.facts.receipt, /^sha256:/);
+  // On the browser's channel with no live paired proof, only the CLI owner's receipt counts (the browser's own
+  // settings.adopt receipt needs its live proof, U-3).
+  assert.equal(ok.facts.receiptIssuer, undefined);
   const replay = (await service.handle(
     'pipeline.write',
     { pipeline: secrets, expectDigest: digestOf(), receiptId: receipt },

@@ -27,7 +27,7 @@ import {
 } from '../adapters/drivers/index.js';
 import { PREVIEW_RULE } from '../adapters/preview-detector.js';
 import { PIPELINE_PATH, parsePipeline } from '../app/pipeline.js';
-import { profilePipeline } from '../app/pipeline-profiles.js';
+import { profilePipeline, PROFILES, PROFILE_PACKS } from '../app/pipeline-profiles.js';
 
 /** The settings file's place in a workspace, and its scrubbed defaults: PR 06's own, so init writes what policy reads. */
 export { SETTINGS_PATH, DEFAULT_SETTINGS };
@@ -67,20 +67,8 @@ export function initialSettings(profile: string) {
   };
 }
 
-/**
- * The scan profiles init describes: the foundation preview, the five pinned scanners, the secret scan alone, and the
- * plan's agentic example (the secret and pattern scanners, the walkthrough, a brokered Copilot review and a native
- * Claude triage).
- */
-export const PROFILES = ['static', 'scanners', 'secrets', 'agentic'] as const;
-
-/** The rule packs a profile's owner promotes before planning: the packs this package ships, by name. */
-export const PROFILE_PACKS: Readonly<Record<(typeof PROFILES)[number], readonly string[]>> = Object.freeze({
-  static: ['foundation-preview'],
-  scanners: ['pattern', 'advisories', 'infrastructure', 'ci', 'secrets'],
-  secrets: ['secrets'],
-  agentic: ['secrets', 'pattern'],
-});
+// The profiles and the rule packs each uses live beside their pipelines (app/pipeline-profiles.ts).
+export { PROFILES, PROFILE_PACKS };
 
 export type InitErrorCode =
   | 'sentinel.init.workspaceUnsafe'

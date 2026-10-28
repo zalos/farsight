@@ -4,7 +4,15 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scannerCliClosure, scannerLoadsText, selectChecks, detectChecks } from '../ci-changes.mjs';
+import {
+  codeView,
+  computedLoadSites,
+  loadSites,
+  scannerCliClosure,
+  scannerLoadsText,
+  selectChecks,
+  detectChecks,
+} from '../ci-changes.mjs';
 import { suiteFiles } from '../sentinel-tests.mjs';
 import { CONSUMERS } from '../test-sentinel-consumers.mjs';
 // pnpm test:sentinel:package packs once and runs every installed consumer through the parallel runner.
@@ -87,19 +95,28 @@ test('the scanner workflow runs for what its steps execute: review dispatch and 
     'examples/invoice-app/screens.json',
     'scripts/test-sentinel-evidence-consumer.mjs',
     'scripts/sentinel-evidence-provenance.mjs',
-    // in the area of a load the walk cannot follow: Sentinel's sources and scripts (its Trivy checks script and the
-    // framework controls closure import computed paths), its test fixtures (the test helpers' workers), every built
-    // package's sources and the root scripts (the consumers and the packer)
+    // reached through the packer's and consumers' literal loads: the asset hooks, core's build identity, the
+    // installed framework driver and the evidence consumer's private hooks
+    'packages/sentinel/scripts/package-assets-drivers.mjs',
+    'packages/core/src/version.ts',
+    'packages/sentinel/src/frameworks/controls/driver.ts',
+    'packages/sentinel/src/evidence/test-hooks.ts',
+    // in the area of a load the walk cannot follow: Sentinel's sources and scripts (its Trivy checks script, its asset
+    // hooks and the framework controls closure import computed paths) and its test fixtures (the test helpers' workers)
     'packages/sentinel/src/review/evaluation.ts',
     'packages/sentinel/src/review/providers/owner.ts',
     'packages/sentinel/test/fixtures/model-review/a.json',
-    'packages/parsers/src/lifecycle.ts',
-    'scripts/test-sentinel-package.mjs',
   ])
     assert.equal(selected([path]), true, path);
-  // what no step runs or imports: test files the workflow does not run, another package's tests, the viewer, the
-  // server, the CLI and Echo, and the other examples
+  // what no step runs or imports: test files the workflow does not run, another package's tests, sources and scripts
+  // no step loads (the parsers' files nothing imports, the release and e2e scripts), the viewer, the server, the CLI
+  // and Echo, and the other examples
   for (const path of [
+    'packages/parsers/src/lifecycle.ts',
+    'scripts/test-sentinel-package.mjs',
+    'scripts/release.mjs',
+    'scripts/pack-echo.mjs',
+    'scripts/test/release.test.mjs',
     'packages/sentinel/test/review-packs.test.ts',
     'packages/sentinel/test/cli-copilot-native.test.ts',
     'packages/sentinel/test/owner-ui-browser.test.ts',
@@ -150,6 +167,197 @@ test("the scanner closure is derived from the workflow's steps and their imports
     rmSync(empty, { recursive: true, force: true });
   }
 });
+test('the load detector reads a computed load across lines, generated code included, and nothing else', () => {
+  const sites = (text) => computedLoadSites(text).map(({ line, expression }) => [line, expression]);
+  // computed, each on one line or split over several
+  assert.deepEqual(sites('const u = new URL(`../dist/${p}`, import.meta.url);'), [[1, '`../dist/${p}`']]);
+  assert.deepEqual(sites('const a = 1;\nconst u = new URL(\n  `../dist/${p}`,\n  import.meta.url,\n);\n'), [
+    [2, '`../dist/${p}`'],
+  ]);
+  assert.deepEqual(sites('await import(\n  join(dir, name),\n);'), [[1, 'join(dir, name)']]);
+  assert.deepEqual(sites('const m = require(\n  name\n);'), [[1, 'name']]);
+  assert.deepEqual(sites('require.resolve(spec)'), [[1, 'spec']]);
+  // generated in a template: a dynamic import, a static import and a bare one, wrappers taken off
+  assert.deepEqual(
+    sites(
+      'const code = `import {a} from ${JSON.stringify(first)};\\nimport ${JSON.stringify(second)};\\nawait import(${JSON.stringify("file://" + third)});`;',
+    ),
+    [
+      [1, 'first'],
+      [1, 'second'],
+      [1, 'third'],
+    ],
+  );
+  // a literal load, quoted or a template with no substitution, is handed to the walk, never dropped
+  for (const text of [
+    "await import('./x.js');",
+    'await import(`./x.js`);',
+    'require(`./x.js`);',
+    'require.resolve("./x.js");',
+    'new URL(`./x.js`, import.meta.url);',
+    "new URL(\n  './x.js',\n  import.meta.url\n);",
+  ])
+    assert.deepEqual(
+      loadSites(text).map(({ line, literal }) => ({ line, literal })),
+      [{ line: 1, literal: './x.js' }],
+      text,
+    );
+  // a brace that does not close is still a load, with no expression to resolve
+  assert.deepEqual(sites('await import(join(a, b'), [[1, null]]);
+  // not loads: literals the walk follows (one line or several), a URL with another base, prose, comments
+  for (const text of [
+    "await import('./x.js');",
+    "new URL(\n  '../dist/x.js',\n  import.meta.url\n);",
+    'new URL(path, base);',
+    'const words = `accepted report import ${digest}`;',
+    'const words = `an integer from ${min} to ${max}`;',
+    'a lazy `import()` in a description',
+    '// await import(name)',
+    ' * await import(name)',
+  ])
+    assert.deepEqual(sites(text), [], text);
+});
+
+test("the code view blanks comments and strings' text, keeps template substitutions and every offset", () => {
+  const text = [
+    "const a = 'x // not a comment'; // const installed = 1",
+    '/* const installed = 2 */ const b = "a { brace";',
+    'const c = `text ${join(installed, "dist/x.mjs")} more`;',
+    'const r = /[\'"{]/g; const d = a / 2;',
+  ].join('\n');
+  const code = codeView(text);
+  assert.equal(code.length, text.length);
+  assert.deepEqual(
+    code.split('\n').map((line) => line.replace(/\s+/g, ' ').trim()),
+    ["const a = ' ';", 'const b = " ";', 'const c = ` ${join(installed, " ")} `;', 'const r = / /g; const d = a / 2;'],
+  );
+});
+
+test('a computed load whose target is one literal is followed, not given an area', () => {
+  const fake = mkdtempSync(join(tmpdir(), 'farsight-scanner-literal-'));
+  const write = (path, text) => {
+    mkdirSync(join(fake, path, '..'), { recursive: true });
+    writeFileSync(join(fake, path), text);
+  };
+  const manifest = (name) => JSON.stringify({ name, version: '0.0.0', main: './dist/index.js' });
+  const closureOf = (...lines) => {
+    write('scripts/consumer.mjs', lines.join('\n') + '\n');
+    return scannerCliClosure(fake);
+  };
+  const reaches = (closure, path) =>
+    selectChecks([path], { root: fake, packageInputs: new Set(), isolationInputs: new Set(), scannerInputs: closure })
+      .scannerCli;
+  const sources = ['index', 'url-target', 'driver', 'tick-import', 'tick-require', 'tick-url', 'unreached'];
+  const LOAD = "await import(pathToFileURL(join(installed, 'dist/hidden.mjs')).href);";
+  const BOUND = "const installed = join(realpathSync.native(c.dir), 'node_modules/farsight-sentinel');";
+  try {
+    write('.github/workflows/sentinel-scanner-cli.yml', 'run: node scripts/consumer.mjs\n');
+    write('packages/sentinel/package.json', manifest('@farsight/sentinel'));
+    write('packages/parsers/package.json', manifest('@farsight/parsers'));
+    for (const name of sources) write(`packages/sentinel/src/${name}.ts`, 'export {};\n');
+    // Sol's repro: hidden.ts in both packages, so a base wrongly taken for Sentinel's skips the parsers' one
+    for (const pkg of ['sentinel', 'parsers']) write(`packages/${pkg}/src/hidden.ts`, 'export {};\n');
+    const closure = closureOf(
+      // a URL against the module, wrapped
+      "await import(pathToFileURL(fileURLToPath(new URL('../packages/sentinel/dist/url-target.js', import.meta.url))).href);",
+      "await import(new URL('../packages/sentinel/dist/index.js', import.meta.url).href);",
+      // templates with no substitution are literals like quoted strings, in each of the three forms
+      'await import(`../packages/sentinel/dist/tick-import.js`);',
+      'require(`../packages/sentinel/dist/tick-require.js`);',
+      'new URL(`../packages/sentinel/dist/tick-url.js`, import.meta.url);',
+      // a resolved specifier (a third party: nothing in the repository)
+      "await import(pathToFileURL(require.resolve('some-sdk/client.js')).href);",
+      // a file of the installed tarball by its dist/ path, under a base the file binds once to that package's root
+      "const installed = join(realpathSync.native(c.dir), 'node_modules/farsight-sentinel');",
+      'const code = `await import(${JSON.stringify("file://" + join(installed, "dist/driver.mjs"))});`;',
+      // a module this script writes from a literal
+      "writeFileSync(join(c.dir, 'public.mjs'), \"export * from 'farsight-sentinel';\\n\");",
+      "await import(pathToFileURL(join(c.dir, 'public.mjs')).href);",
+    );
+    assert.deepEqual(closure.unresolved, [], 'every load names its target');
+    for (const name of sources.slice(0, -1)) {
+      assert.ok(closure.files.has(`packages/sentinel/src/${name}.ts`), name);
+      assert.equal(reaches(closure, `packages/sentinel/src/${name}.ts`), true, `an edit to ${name} selects`);
+    }
+    assert.equal(
+      reaches(closure, 'packages/sentinel/src/unreached.ts'),
+      false,
+      'no area: an unreached source stays out',
+    );
+
+    // a dist/ tail counts only under a base proven to be a package root at the load: an unbound base, one bound
+    // twice, to another package or to a call, one bound only in a comment, one a parameter or catch clause shadows,
+    // and a load before the declaration or outside its block leave the load computed. It is listed, and its area (a
+    // root script's) selects the parsers' hidden.ts.
+    for (const lines of [
+      [LOAD],
+      ["let installed = join(c.dir, 'node_modules/farsight-sentinel');", "installed = join(other, 'x');", LOAD],
+      ["const installed = join(c.dir, 'node_modules/left-pad');", LOAD],
+      ['const installed = somewhere();', LOAD],
+      [`// ${BOUND}`, LOAD],
+      [`/* ${BOUND} */`, LOAD],
+      [BOUND, 'function load(installed) {', `  ${LOAD}`, '}'],
+      [BOUND, 'const load = (installed) => {', `  ${LOAD}`, '};'],
+      [BOUND, "const load = installed => import(join(installed, 'dist/hidden.mjs'));"],
+      [BOUND, 'try {} catch (installed) {', `  ${LOAD}`, '}'],
+      // Sol's loop forms, a property shorthand and a destructuring: any occurrence outside the declaration and the
+      // loads is enough to keep the area
+      [BOUND, 'for (const installed of dirs) {', `  ${LOAD}`, '}'],
+      [BOUND, 'for (const installed in dirs) {', `  ${LOAD}`, '}'],
+      [BOUND, 'report({ installed });', LOAD],
+      [BOUND, 'const { installed: other } = paths;', LOAD],
+      [BOUND, 'const { installed } = paths;', LOAD],
+      [BOUND, 'console.log(installed);', LOAD],
+      // a load written in a comment opens no span: the parameter it would have covered still shadows the base
+      [BOUND, '// import(', 'async function load(installed) {', `  ${LOAD}`, '}', '// )'],
+      [BOUND, '// new URL(', 'async function load(installed) {', `  ${LOAD}`, '}', '// )'],
+      [LOAD, BOUND],
+      ['{', `  ${BOUND}`, '}', LOAD],
+    ]) {
+      const unknown = closureOf(...lines);
+      const at = lines.findIndex((line) => line.includes("'dist/hidden.mjs'")) + 1;
+      assert.deepEqual(
+        unknown.unresolved.map(({ site }) => site),
+        [`scripts/consumer.mjs:${at}`],
+        lines.join(' | '),
+      );
+      assert.equal(reaches(unknown, 'packages/parsers/src/hidden.ts'), true, `selects: ${lines.join(' | ')}`);
+    }
+    // proven: one declaration, no shadowing, the load after it in its block (here inside a nested function)
+    for (const lines of [
+      [BOUND, LOAD],
+      [BOUND, 'async function load(dir) {', `  ${LOAD}`, '}'],
+      ['{', `  ${BOUND}`, `  ${LOAD}`, '}'],
+    ]) {
+      const proven = closureOf(...lines);
+      assert.deepEqual(proven.unresolved, [], lines.join(' | '));
+      assert.equal(reaches(proven, 'packages/sentinel/src/hidden.ts'), true);
+      assert.equal(reaches(proven, 'packages/parsers/src/hidden.ts'), false, `proven: ${lines.join(' | ')}`);
+    }
+    // the workspace folder is a known root too
+    const folder = closureOf(
+      "const dir = join(root, 'packages', 'sentinel');",
+      "await import(pathToFileURL(join(dir, 'dist/driver.mjs')).href);",
+    );
+    assert.deepEqual(folder.unresolved, []);
+    assert.ok(folder.files.has('packages/sentinel/src/driver.ts'));
+
+    // the same script writing a different module than it loads, or loading a dist/ file no package has, gets an area
+    const missed = closureOf(
+      "const installed = join(c.dir, 'node_modules/farsight-sentinel');",
+      "writeFileSync(join(c.dir, 'other.mjs'), '');",
+      "await import(pathToFileURL(join(c.dir, 'public.mjs')).href);",
+      "await import(pathToFileURL(join(installed, 'dist/chunks/x.mjs')).href);",
+    );
+    assert.deepEqual(
+      missed.unresolved.map(({ site }) => site),
+      ['scripts/consumer.mjs:3', 'scripts/consumer.mjs:4'],
+    );
+  } finally {
+    rmSync(fake, { recursive: true, force: true });
+  }
+});
+
 test('a load the walk cannot follow selects its whole area and is listed with its importer', () => {
   const fake = mkdtempSync(join(tmpdir(), 'farsight-scanner-computed-'));
   const write = (path, text) => {
@@ -196,8 +404,11 @@ test('a load the walk cannot follow selects its whole area and is listed with it
   const { unresolved } = scannerCliClosure();
   const trivy = unresolved.find(({ site }) => site.startsWith('packages/sentinel/scripts/acquire-trivy-checks.mjs:'));
   assert.deepEqual(trivy?.area, ['packages/sentinel/src/', 'packages/sentinel/scripts/']);
-  const packer = unresolved.find(({ site }) => site.startsWith('scripts/pack-sentinel.mjs:'));
-  assert.ok(packer?.area.includes('scripts/') && packer.area.includes('packages/core/src/'), 'a root script');
+  // no root script loads a computed path any more: the packer's and consumers' loads are literal
+  assert.deepEqual(
+    unresolved.filter(({ site }) => site.startsWith('scripts/')),
+    [],
+  );
   const { scannerLoads } = detectChecks({ base: undefined, head: undefined, event: 'pull_request' });
   assert.deepEqual(scannerLoads, [], 'an unavailable range selects every check and lists nothing');
 });
@@ -342,10 +553,12 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
   assert.deepEqual([...unit, ...processSuite].sort(), every, 'every test file is in exactly one suite');
   assert.deepEqual(unit.slice(0, noSkipSuite.length), noSkipSuite, 'the unit suite runs its no-skip group first');
   assert.ok(!noSkipSuite.some((file) => processSuite.includes(file)), 'no file is in both lists');
-  // the files whose clock and SIGKILL races failed on CI at core-count concurrency run one at a time
+  // the files whose clock and SIGKILL races failed on CI at core-count concurrency run one at a time, until their
+  // checkpoints are deterministic: preparation-publication-crash's is (#233), so it runs in the parallel group again
   const { serialSuite } = await import('../sentinel-tests.mjs');
-  for (const name of ['preparation-admission', 'preparation-publication-crash'])
-    assert.ok(serialSuite().includes(`test/${name}.test.ts`), name);
+  assert.ok(serialSuite().includes('test/preparation-admission.test.ts'));
+  assert.ok(!serialSuite().includes('test/preparation-publication-crash.test.ts'));
+  assert.ok(processSuite.includes('test/preparation-publication-crash.test.ts'), 'still with zero skips');
   for (const file of serialSuite()) assert.ok(every.includes(file), file);
   // the twelve in-process files that left sentinel-service's zero-skip list keep the guarantee in validate
   for (const name of [

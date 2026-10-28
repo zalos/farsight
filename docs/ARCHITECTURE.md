@@ -2126,6 +2126,22 @@ where the qualified inspection does not supply them. Full and baseline compariso
 regenerated through the existing canonical renderer for the exact selected runs. Linked whole-run preparation
 keeps its existing owner receipt; per-work browser rerun, settings editing and custom stages remain unavailable.
 
+ADR48 viewer read-model extension (2026-10-28): the owner companion also serves a read-only model of retained scans
+to Farsight's own Sentinel surface, cross-origin, without Farsight's server importing Sentinel (ADR 18). The paired
+owner frame mints a separate **read pass** (`POST /viewer-pass` under its session capability) and hands it to its
+exact parent with a message bound to the frame nonce, document and host instance; the parent never holds the owner
+capability, a reload token, a receipt or a nonce. The pass authorizes only `GET /api/sentinel/scans`,
+`/scans/before/<n>`, `/scans/<run id>`, `/scans/<run id>/stages/<stage>`, `.../units/<k>` and
+`/scans/<run id>/report[/<format>]`, answered by closed `owner-ui.*` read operations under the session's own proof
+and view revision; the CORS grant names only the paired Farsight origin, never credentials; every other method on
+those routes is 405; a new pass replaces the old one and the session's end ends both. A scan is addressed by its run
+id; its number is a display ordinal from the ledger's run-created order. What a try ran is read from its retained
+invocation record, authenticated against its attempt, work, epoch and pinned adapter, with host paths and token
+arguments scrubbed. An opened check or review carries bounded retained text (outputs, exchanges) as owner-private
+data to the paired page only; a secret match in the accepted evidence withholds every name and text, and the source
+itself is never streamed. A browser Scan press only asks the owner frame, which keeps its own preview and separate
+confirmation; the viewer greys Scan with the frame's reason when a browser cannot start one.
+
 ADR48 release qualification gate: optional owner-adopted `nativeClaudeReviewEnabled` defaults false when
 absent. Public native-Claude stage resolution and existing admitted review selections at foreground start
 refuse before run confirmation/receipt effects, credentials or process launch. The direct retained binding
@@ -2171,3 +2187,25 @@ This choice is visible in the redacted effective policy, included in its revisio
 bindings. It changes neither model capability nor source-disclosure/network/paid admission. General review's
 accepted records remain `deterministicCoverage: false`; reports retain zero planned checks and the files seen by no
 check. Guided review still depends on planned checks. Selected external scanners still use pinned containers only.
+
+**Amendment — the composite start (2026-10-28).** *What it said:* a plan with model stages started only in the
+owner's foreground command line (`run PLAN --confirm --confirm-models`); the detached service, MCP and resume could
+not authorize the model workflow and refused with `sentinel.review.foregroundRequired` before a receipt was spent or
+anything started. *What it says now:* the detached owner service may run such a plan when the owner's own command line
+confirmed it as one composite, in one `--confirm` (`scan --confirm`, or `run --detach --confirm --confirm-models` and
+`resume --confirm --confirm-models`). The composite is the start receipt, bound to the admitted plan digest, the stages
+the revision runs and each model binding with its runner, model and budget, plus one `paid.admit` receipt for each
+model envelope the run opens, bound to exactly that store, run, plan digest and binding. The service checks every
+envelope receipt (`book.check`, nothing spent) before it spends the start receipt, refuses a receipt for another
+envelope (`sentinel.receipt.mismatch`) and a plan or binding that differs from the one confirmed; it hands each
+receipt to the run only for its own envelope and never issues an owner receipt itself. A start that reaches the service
+without the composite (an agent or MCP, or one carrying no envelope receipts) still refuses with `foregroundRequired`
+and opens no envelope; the command line asks for `--confirm-models` before it issues anything. A foreground start
+(`run --confirm --confirm-models`, `scan --confirm`) takes the same composite: its envelope is decided before the start
+(a denial refuses before anything starts) and its receipt is issued with the start, never as a stage dispatches. A
+rerun with changed bindings needs its own confirmation, since no receipt outlives its plan. *Why:* the
+owner reads the whole composite in the preview (every stage, where it runs and what it does, every model with its
+budget) before confirming it, so one confirmation over exactly those bindings is the same consent the foreground pair
+gave, and the run no longer depends on the confirming terminal staying open. The owner-panel clause above (the
+paired browser "cannot confirm … model spending") is unchanged until the browser half lands (U-3: its own receipt for
+the start and for each envelope, through the same facade).

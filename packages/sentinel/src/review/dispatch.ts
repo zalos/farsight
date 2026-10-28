@@ -21,7 +21,8 @@ import { readReviewSpec } from './plan.js';
 import { recheckPacks } from './packs.js';
 import { providerCaller } from './caller.js';
 import { LedgerCheckpointStore } from './checkpoints.js';
-import { runnerForKind } from './runner.js';
+import { pinRunsNative, runnerForKind } from './runner.js';
+import { runNativeReview } from './native-dispatch.js';
 import { reviewFail } from './errors.js';
 import { usageOf } from './operation.js';
 export const REVIEW_IMPLEMENTATION_URL = import.meta.url;
@@ -54,6 +55,18 @@ const bad = (): never => {
     reason: 'review requires its exact admitted coordinator unit and current model binding',
   });
 };
+/**
+ * Whether a sealed review spec may run on a pin: a native spec only on a pin that runs its own loop and names the
+ * spec's runner, a brokered spec only on a pin that does not. Checked before the envelope opens.
+ */
+export function admitsMode(
+  spec: Pick<import('./session.js').SessionSpec, 'native'>,
+  binding: import('./providers/profile.js').ProviderBinding,
+): boolean {
+  const native = pinRunsNative(binding);
+  if (native !== Boolean(spec.native)) return false;
+  return !spec.native || spec.native.runner === runnerForKind(binding.kind).id;
+}
 export async function prepareAdmittedReview(
   store: SentinelStore,
   plan: ValidatedPlan,
@@ -75,6 +88,8 @@ export async function prepareAdmittedReview(
   }
   const policy = runtime.currentPolicy(),
     resolved = resolveReviewModel(policy, spec.kind, spec.segmentId!);
+  // Before any envelope opens: the sealed mode and runner are the current pin's.
+  if (!admitsMode(spec, resolved.binding)) return bad();
   // The owner may select model review without an external scanner. A requested secret rule remains a gate even
   // when missing assets prevented a scanner unit from being planned; failed/partial scans never become optional.
   const secretScanSelected =
@@ -185,6 +200,21 @@ export async function runAdmittedReview(
   // The admitted turn loop runs through the stage's agent runner; brokered mode is exactly the session below.
   const binding = prepared.resolved.binding,
     runner = runnerForKind(binding.kind);
+  // Native mode: the runner the pin names runs its own loop over the unit's inputs; the same publication path.
+  if (spec.native)
+    return runNativeReview({
+      store,
+      unit,
+      attemptId,
+      spec: { ...spec, attemptId },
+      runtime,
+      envelope,
+      binding: current,
+      runner,
+      signal,
+      deadlineAt,
+      ...(stageInputs ? { stageInputs } : {}),
+    });
   const ran = await runner.run(
     {
       id: unit.stage,

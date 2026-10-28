@@ -12,8 +12,12 @@ export interface OwnerUiReceiptEnvelope {
   schema: 'sentinel-owneruireceipt/draft-1';
   id: Id;
   actor: { channel: 'owner-ui'; principal: 'human' };
-  /** This channel cannot confirm settings, rules, acquisition, imports, disclosures or model spending. */
-  action: 'capture.source' | 'run.start' | 'run.pause' | 'run.cancel';
+  /**
+   * The paired browser confirms capture and the run controls; with U-3, also the model envelopes of a composite start
+   * (`paid.admit`, each bound to one envelope) and a pipeline file write (`settings.adopt`, bound to exactly the bytes
+   * written; writing only, adoption stays the CLI owner's). It never confirms rules, acquisition, imports or disclosure.
+   */
+  action: 'capture.source' | 'run.start' | 'run.pause' | 'run.cancel' | 'paid.admit' | 'settings.adopt';
   intentDigest: Digest;
   stateDigest: Digest;
   policyRevision: Digest;

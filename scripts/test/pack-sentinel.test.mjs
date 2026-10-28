@@ -569,6 +569,44 @@ test('a successful Sentinel pack replaces build/sentinel only', () => {
   }
 });
 
+test("asset hooks load through the packer's literal table; one it does not name stops the pack and leaves no stage", () => {
+  const root = workspace();
+  try {
+    // a named hook in this workspace runs, from this workspace's folder
+    write(
+      root,
+      'packages/sentinel/scripts/package-assets.mjs',
+      "import { writeFileSync } from 'node:fs';\nimport { join } from 'node:path';\n" +
+        "export async function stageAssets(dir) { writeFileSync(join(dir, 'hook-ran'), 'yes'); return { files: [], exports: {} }; }\n",
+    );
+    const named = node(root, 'pack-sentinel.mjs');
+    assert.equal(named.status, 0, named.stderr);
+    assert.equal(readFileSync(join(root, 'packages/sentinel/hook-ran'), 'utf8'), 'yes');
+
+    write(root, 'build/sentinel/farsight-sentinel-prior.tgz', 'prior');
+    write(
+      root,
+      'packages/sentinel/scripts/package-assets-unknown.mjs',
+      "export async function stageAssets() { throw new Error('an unnamed hook must not run'); }\n",
+    );
+    const unknown = node(root, 'pack-sentinel.mjs');
+    assert.equal(unknown.status, 1);
+    assert.match(
+      unknown.stderr,
+      /packages\/sentinel\/scripts\/package-assets-unknown\.mjs is an asset hook scripts\/pack-sentinel\.mjs does not name/,
+    );
+    assert.doesNotMatch(unknown.stderr, /must not run/);
+    assert.equal(existsSync(join(root, 'build/sentinel/farsight-sentinel-prior.tgz')), true, 'prior artifacts kept');
+    assert.deepEqual(
+      readdirSync(join(root, 'build')).filter((n) => n.startsWith('.stage-')),
+      [],
+      'the stage is cleaned on refusal',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('npm pack exiting 0 without a tarball keeps build/sentinel; an inherited dry run is switched off', () => {
   const root = workspace();
   try {
