@@ -300,6 +300,14 @@ test('a computed load whose target is one literal is followed, not given an area
       [BOUND, 'const load = (installed) => {', `  ${LOAD}`, '};'],
       [BOUND, "const load = installed => import(join(installed, 'dist/hidden.mjs'));"],
       [BOUND, 'try {} catch (installed) {', `  ${LOAD}`, '}'],
+      // Sol's loop forms, a property shorthand and a destructuring: any occurrence outside the declaration and the
+      // loads is enough to keep the area
+      [BOUND, 'for (const installed of dirs) {', `  ${LOAD}`, '}'],
+      [BOUND, 'for (const installed in dirs) {', `  ${LOAD}`, '}'],
+      [BOUND, 'report({ installed });', LOAD],
+      [BOUND, 'const { installed: other } = paths;', LOAD],
+      [BOUND, 'const { installed } = paths;', LOAD],
+      [BOUND, 'console.log(installed);', LOAD],
       [LOAD, BOUND],
       ['{', `  ${BOUND}`, '}', LOAD],
     ]) {

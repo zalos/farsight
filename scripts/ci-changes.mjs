@@ -353,45 +353,40 @@ export function scannerCliClosure(root = repoRoot) {
   // a literal (its text is followed with the file's). Anything else is null: its area is selected.
   const QUOTED = String.raw`('[^'\n]*'|"[^"\n]*"|\x60[^\x60$\n]*\x60)`;
   const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // The workspace package a base names at a load: proven only when the file's code (comments and string text aside,
-  // codeView) declares the name exactly once, as `const <base> = join(…, <a package root>)`, with no other binding
-  // of it anywhere (another declaration, a destructuring, a parameter, a catch, an assignment), and the load lies
-  // after that declaration inside the block that holds it. A package root is an installed tarball
-  // (`'node_modules/farsight-sentinel'`) or a workspace folder (`'packages', 'sentinel'`, `'packages/sentinel'`).
-  // Anything short of that is unknown, and the load keeps its area.
+  // The workspace package a base names at a load. Proven only by one occurrence count over the file's code view
+  // (codeView: comments and string text blanked): every whole-word occurrence of the name is either its one
+  // `const <base> = join(…, <a package root>)` declaration or the first argument of a `join(<base>, …)` or an
+  // occurrence inside an `import(…)` or `new URL(…)` argument; and the load lies after that declaration inside the
+  // block that holds it. Any other occurrence anywhere (a loop binding, a parameter, a destructuring, an assignment, a
+  // property shorthand or access, any other statement) leaves it unknown, and the load keeps its area. A package
+  // root is an installed tarball (`'node_modules/farsight-sentinel'`) or a workspace folder (`'packages',
+  // 'sentinel'`, `'packages/sentinel'`).
   const packageOf = (text, code, base, index) => {
     if (!/^[\w$]+$/.test(base)) return null;
-    const name = String.raw`(?<![\w$.])${escape(base)}(?![\w$])`;
-    const declared = [...code.matchAll(new RegExp(String.raw`\bconst\s+${escape(base)}\s*=(?![=>])\s*([^;\n]*)`, 'g'))];
+    const word = escape(base);
+    const declared = [...code.matchAll(new RegExp(String.raw`\bconst\s+(${word})\s*=(?![=>])`, 'g'))];
     if (declared.length !== 1) return null;
-    const others = [
-      String.raw`\b(?:let|var)\s+${escape(base)}(?![\w$])`,
-      String.raw`\b(?:const|let|var)\s*[{[][^=;]*?${name}`,
-      String.raw`\b(?:function\s*\*?|class)\s+${escape(base)}(?![\w$])`,
-      String.raw`\bimport\b[^;]*?${name}[^;]*?\bfrom\b`,
-      String.raw`${name}\s*=>`,
-    ];
-    if (others.some((pattern) => new RegExp(pattern).test(code))) return null;
-    const assignments = code.match(
-      new RegExp(String.raw`${name}\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|\?\?|&&|\|\|)?=(?![=>])`, 'g'),
-    );
-    if (assignments?.length !== 1) return null; // the declaration's own
-    // a parameter list or a catch clause naming it shadows the declaration somewhere
-    for (const open of code.matchAll(/\(/g)) {
-      const inner = balanced(code, open.index + 1);
-      if (inner === null || !new RegExp(name).test(inner)) continue;
-      const before = code.slice(Math.max(0, open.index - 40), open.index);
-      const after = code.slice(open.index + inner.length + 2, open.index + inner.length + 40);
-      const method =
-        /\{/.test(after.trimStart()[0] ?? '') &&
-        /(?<![\w$.])(?!(?:if|for|while|switch|with|return|typeof|await|in|of|new|void|delete|else)\b)[\w$]+\s*$/.test(
-          before,
-        );
-      if (/^\s*=>/.test(after) || /\bfunction\s*\*?\s*[\w$]*\s*$/.test(before) || /\bcatch\s*$/.test(before) || method)
-        return null;
+    const at = declared[0].index;
+    const allowed = new Set([at + declared[0][0].indexOf(base, 'const'.length)]);
+    for (const m of code.matchAll(new RegExp(String.raw`\bjoin\(\s*(${word})\s*,`, 'g')))
+      allowed.add(m.index + m[0].indexOf(base, 'join('.length));
+    // occurrences inside an import(…) or new URL(…) argument, read over the original text (generated code included)
+    const spans = [];
+    for (const m of text.matchAll(/\b(?:import\s*\(|new\s+URL\s*\()/g)) {
+      const inner = balanced(text, m.index + m[0].length);
+      if (inner !== null) spans.push([m.index + m[0].length, m.index + m[0].length + inner.length]);
+    }
+    // a binding or an assignment is never one, even inside a load's argument
+    const binds = new RegExp(String.raw`^\s*(?:(?:[-+*/%&|^]|\*\*|<<|>>>?|\?\?|&&|\|\|)?=(?!=)|=>)`);
+    for (const m of code.matchAll(new RegExp(String.raw`(?<![\w$])${word}(?![\w$])`, 'g'))) {
+      if (allowed.has(m.index)) continue;
+      const inLoad = spans.some(([from, to]) => m.index >= from && m.index < to);
+      const rest = code.slice(m.index + base.length, m.index + base.length + 8);
+      if (inLoad && !binds.test(rest) && !/\b(?:const|let|var)\s+$/.test(code.slice(Math.max(0, m.index - 8), m.index)))
+        continue;
+      return null; // any other occurrence: a binding, a shadow or a use this proof does not read
     }
     // the load lies after the declaration, inside the block that holds it
-    const at = declared[0].index;
     if (index <= at) return null;
     const stack = [];
     for (let i = 0; i < at; i++)
