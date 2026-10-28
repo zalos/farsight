@@ -691,5 +691,6 @@ test(
     const again = await report('private');
     assert.equal(again.json, priv.json);
     assert.equal(again.markdown, priv.markdown);
+    assert.deepEqual(digests(again), digests(priv), 'all four brokered report formats regenerate from the same ledger');
   },
 );

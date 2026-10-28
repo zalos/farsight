@@ -26,7 +26,7 @@ import type {
   WorkRef,
 } from '../contracts/index.js';
 import type { BuiltinOperation, ExecutionSite, Provenance, StageCost } from '../contracts/pipeline.js';
-import { runStages } from '../execution/stage-inputs.js';
+import { runStages, runnerOfProvider } from '../execution/stage-inputs.js';
 import { SCRIPT_PROVENANCE_SCHEMA, SCRIPT_RUNNER_ID } from '../execution/script-runner.js';
 import { NATIVE_REVIEW_SCHEMA } from '../review/native-dispatch.js';
 import { validateEnvelope } from '../validate.js';
@@ -1490,10 +1490,9 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
           ? ('claude-cli' as const)
           : encoding === 'sentinel-copilot-chat/v1'
             ? ('copilot-cli' as const)
-            : admitted.policy?.settings.providers.find((p) => p.id === unit.review!.selection.providerId)?.kind ===
-                'ollama'
-              ? ('ollama' as const)
-              : ('hosted-api' as const);
+            : runnerOfProvider(
+                admitted.policy?.settings.providers.find((p) => p.id === unit.review!.selection.providerId),
+              );
       const usage = env.usage;
       const confirmed = record.totals.usage === 'confirmed' && usage.certainty === 'confirmed';
       const cost: StageCost =
