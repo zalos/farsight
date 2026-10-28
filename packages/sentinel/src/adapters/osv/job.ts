@@ -4,6 +4,7 @@
 import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, openSync, readSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { sha256Id as sha256 } from '../../kernel/digest.js';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { CapturedInput } from '../../execution/supervisor.js';
 import { isSafeRelativePath } from '../../validate.js';
@@ -11,7 +12,9 @@ import { OSV_ENGINE_TIMEOUT_SECONDS, OSV_WORKER_BYTES, OSV_WORKER_DIGEST, type O
 import { osvFail } from './errors.js';
 import type { AdvisorySnapshot } from './acquire.js';
 
+/** An ecosystem the advisories adapter assesses. */
 export type Ecosystem = 'npm' | 'Maven';
+/** A dependency file the adapter reads: an npm or pnpm lockfile, a Maven POM or a CycloneDX SBOM. */
 export type DependencyFileKind = 'npm-package-lock' | 'npm-pnpm-lock' | 'maven-pom' | 'cyclonedx-sbom';
 
 /** The basename the container uses for each kind: the names OSV-Scanner recognizes, from a fixed list. */
@@ -29,6 +32,7 @@ export const KIND_ECOSYSTEMS: Readonly<Record<DependencyFileKind, readonly Ecosy
   'cyclonedx-sbom': ['npm', 'Maven'],
 });
 
+/** The kind of dependency file a captured path is, by its basename; undefined for any other file. */
 export function dependencyKindOf(relativePath: string): DependencyFileKind | undefined {
   const base = relativePath.slice(relativePath.lastIndexOf('/') + 1);
   if (base === 'package-lock.json') return 'npm-package-lock';
@@ -38,6 +42,7 @@ export function dependencyKindOf(relativePath: string): DependencyFileKind | und
   return undefined;
 }
 
+/** A captured file offered to a job: its source-relative path, its artifact id and its sealed copy. */
 export interface DependencyTarget {
   readonly relativePath: string;
   readonly artifact: ArtifactId;
@@ -50,12 +55,14 @@ export interface SnapshotInput {
   readonly path: string;
 }
 
+/** A file the job sends to the engine, by its index in the container and its captured identity. */
 export interface OsvJobTarget {
   readonly index: number;
   readonly relativePath: string;
   readonly artifact: ArtifactId;
   readonly kind: DependencyFileKind;
 }
+/** A file the job does not send, with why: it is not a dependency file, or its ecosystem has no snapshot. */
 export interface OsvUnsent {
   readonly relativePath: string;
   readonly artifact: ArtifactId;
@@ -63,6 +70,7 @@ export interface OsvUnsent {
   readonly reason: 'not-dependency-file' | 'database-absent';
 }
 
+/** The job a worker runs: its targets, what it leaves out and why, the advisory snapshots and the engine's bound. */
 export interface OsvJob {
   readonly schema: 'sentinel-osv-job/draft-1';
   readonly worker: string;
@@ -72,6 +80,7 @@ export interface OsvJob {
   readonly engineTimeoutSeconds: number;
 }
 
+/** A built job: the job, the digest of the file the worker reads and the sealed inputs the attempt needs. */
 export interface BuiltOsvJob {
   readonly job: OsvJob;
   /** Digest of the line file the worker reads; the run record must name it. */
@@ -79,8 +88,8 @@ export interface BuiltOsvJob {
   readonly inputs: readonly CapturedInput[];
 }
 
+/** The most dependency files one attempt sends; more is refused, never truncated. */
 export const MAX_OSV_TARGETS = 1_000;
-const sha256 = (b: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
 function digestOfFile(path: string): ArtifactId {
   const fd = openSync(path, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0));
@@ -100,6 +109,12 @@ function digestOfFile(path: string): ArtifactId {
   }
 }
 
+/**
+ * Builds one attempt's job from captured targets and verified snapshots. Refuses, with an OsvError: more than
+ * {@link MAX_OSV_TARGETS} targets, an unsafe or duplicate path, a target or snapshot whose bytes do not match their id,
+ * and two snapshots for one ecosystem. A file that is not a dependency file, or whose ecosystem has no snapshot, is
+ * listed as unsent with its reason.
+ */
 export function buildOsvJob(
   targets: readonly DependencyTarget[],
   snapshots: readonly SnapshotInput[],

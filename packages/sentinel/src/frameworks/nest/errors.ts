@@ -1,6 +1,7 @@
 // Nest pack reason codes. Every code is a catalog key in packages/core/src/strings-sentinel-nest.ts; a test pins
 // this list against the catalog.
 import { sentinelNestWord } from '@farsight/core/dist/strings-sentinel-nest.js';
+import { SentinelError } from '../../kernel/errors.js';
 
 /** Why a fact is unknown, or which registration the pack could not follow. Recorded, never thrown. */
 export const NEST_REASON_CODES = Object.freeze([
@@ -46,7 +47,9 @@ export const NEST_REASON_CODES = Object.freeze([
   'sentinel.nest.fileNotCaptured',
   'sentinel.nest.spanUnavailable',
 ] as const);
+/** One of {@link NEST_REASON_CODES}. */
 export type NestReasonCode = (typeof NEST_REASON_CODES)[number];
+/** A reason code without its `sentinel.nest.` prefix. */
 export type NestReason = NestReasonCode extends `sentinel.nest.${infer C}` ? C : never;
 
 /** The words for a reason code, in the professional register. */
@@ -54,10 +57,13 @@ export function nestReasonWord(code: NestReasonCode): string {
   return sentinelNestWord(code);
 }
 
-/** The analysis produced an envelope that does not validate: a defect in the pack, never a property of the source. */
-export class NestPackError extends Error {
+/**
+ * The analysis produced an envelope that does not validate: a defect in the pack, never a property of the source.
+ * Its code is the contract's `sentinel.contract.invalid`.
+ */
+export class NestPackError extends SentinelError<'sentinel.contract.invalid'> {
   constructor(detail: string) {
-    super(`the Nest pack's control facts do not validate: ${detail}`);
+    super('sentinel.contract.invalid', `the Nest pack's control facts do not validate: ${detail}`);
     this.name = 'NestPackError';
   }
 }
