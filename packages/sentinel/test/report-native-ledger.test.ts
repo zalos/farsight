@@ -86,6 +86,16 @@ test(
     assert.ok(validateEnvelope('report', first.document).ok);
     assert.equal(first.document.reviews?.length, 2);
     assert.equal(first.document.counts.reviewObservations.n, 2);
+    const reviewProgress = first.document.reviews?.[0]?.progress;
+    assert.ok(reviewProgress);
+    assert.equal(reviewProgress.outcome, 'not-recorded');
+    assert.deepEqual([reviewProgress.turns.n, reviewProgress.turns.of], [2, undefined]);
+    assert.deepEqual([reviewProgress.filesRead.n, reviewProgress.filesRead.of], [2, 2]);
+    assert.deepEqual([reviewProgress.modelInspected?.n, reviewProgress.modelInspected?.of], [2, 2]);
+    assert.deepEqual(first.document.reviews?.[1]?.progress, reviewProgress);
+    const { countedProblems } = await import('@farsight/core/dist/counts.js');
+    for (const c of [reviewProgress.turns, reviewProgress.filesRead, reviewProgress.modelInspected])
+      assert.deepEqual(countedProblems(c!), []);
     assert.equal(first.document.findings.length, 0, 'model claims do not become findings');
     assert.deepEqual(first.document.reviews?.map((r) => r.evidence[0]?.location?.relativePath).sort(), [
       'src/auth.ts',
@@ -118,6 +128,8 @@ test(
     assert.match(first.markdown.replace(/\\(.)/g, '$1'), /copilot-cli 1\.0\.105 native/);
     assert.match(first.markdown.replace(/\\(.)/g, '$1'), /model gpt-6-luna/);
     assert.match(first.html, /model gpt-6-luna/);
+    assert.match(first.markdown, /turn cap not recorded/);
+    assert.match(first.html, /turn cap not recorded/);
     assert.doesNotMatch(first.markdown, /model luna(?:\s|[·.])/);
     for (const text of [first.markdown, first.html]) {
       assert.ok(text.includes(agent.executableDigest!));

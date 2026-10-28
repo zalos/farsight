@@ -36,6 +36,7 @@ import { retainedBootstrapForReport, type RetainedAncestorRevision } from '../ex
 import type { ParserIndex, ParserResult } from '../snapshot/parser.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import { secretObservation } from '../reports/accepted-secrets.js';
+import type { ReviewProgressInput } from '../reports/document.js';
 import { selectedSecretPrivacy } from '../reports/selected-privacy.js';
 import { resolveWithheldLocation } from '../snapshot/locations.js';
 import type { WithheldLocationEvidence } from '../contracts/index.js';
@@ -1341,6 +1342,7 @@ export interface RunStages {
     readonly observation: ObservationEnvelope;
     readonly stage: string;
     readonly unit: WorkRef;
+    readonly progress: ReviewProgressInput;
   }[];
   readonly provenance: readonly Provenance[];
 }
@@ -1380,17 +1382,64 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
   if (reviewUnits.length > MAX_REVIEW_UNITS) unbound('more model review units than one report reads');
   const traces = new Map<string, import('../review/instructions.js').RetainedInstructionTrace>();
   const nativeTraces = new Map<string, import('../review/native-dispatch.js').NativeReviewTrace>();
+  const progress = new Map<string, ReviewProgressInput>();
   const published = reviewUnits.filter((u) => store.ledger.getPublication(u));
   if (published.length) {
     const { readPublishedInstructions } = await import('../review/instructions.js');
     const { readPublishedNativeReview } = await import('../review/native-dispatch.js');
+    const { readReviewSpec } = await import('../review/plan.js');
     const deadlineAt = Date.now() + 20_000;
     const signal = AbortSignal.timeout(20_000);
     for (const u of published) {
       try {
         const native = store.ledger.getPublication(u)!.outputs.some((o) => o.schema === NATIVE_REVIEW_SCHEMA);
-        if (native) nativeTraces.set(u.id, await readPublishedNativeReview(store, u, { deadlineAt, signal }));
-        else traces.set(u.id, await readPublishedInstructions(store, u, { deadlineAt, signal }));
+        const assigned = new Set(u.inputs.map((i) => i.relativePath));
+        if (assigned.size !== u.inputs.length) unbound('a model review has repeated assigned files');
+        if (native) {
+          const trace = await readPublishedNativeReview(store, u, { deadlineAt, signal });
+          nativeTraces.set(u.id, trace);
+          const answer = trace.record.output.value;
+          const inspectedPaths: unknown[] =
+            isRecord(answer) && Array.isArray(answer.inspected)
+              ? answer.inspected
+              : unbound('a native review has no inspected-file list');
+          if (!inspectedPaths.every((p) => typeof p === 'string'))
+            unbound('a native review has no inspected-file list');
+          const read = new Set(trace.record.filesRead.filter((p) => assigned.has(p)));
+          const inspected = new Set((inspectedPaths as string[]).filter((p) => assigned.has(p)));
+          if (!Number.isSafeInteger(trace.provenance.turns) || trace.provenance.turns < 0)
+            unbound('a native review progress record exceeds its assigned reads');
+          progress.set(u.id, {
+            outcome: 'not-recorded',
+            turnsUsed: trace.provenance.turns,
+            turnCap: null,
+            filesRead: read.size,
+            filesGiven: assigned.size,
+            modelInspected: inspected.size,
+            source: 'native',
+          });
+        } else {
+          const trace = await readPublishedInstructions(store, u, { deadlineAt, signal });
+          traces.set(u.id, trace);
+          const spec = await readReviewSpec(store, u);
+          const read = new Set(trace.record.inspected.map((i) => i.relativePath));
+          const unread = new Set(trace.record.notInspected);
+          if (
+            read.size + unread.size !== assigned.size ||
+            [...read].some((p) => unread.has(p)) ||
+            [...read, ...unread].some((p) => !assigned.has(p)) ||
+            trace.record.totals.steps > spec.budget.maxSteps
+          )
+            unbound('a brokered review progress record differs from its admitted scope');
+          progress.set(u.id, {
+            outcome: trace.record.outcome,
+            turnsUsed: trace.record.totals.steps,
+            turnCap: spec.budget.maxSteps,
+            filesRead: read.size,
+            filesGiven: assigned.size,
+            source: 'brokered',
+          });
+        }
       } catch {
         return unbound('an accepted model review does not read back exactly');
       }
@@ -1401,7 +1450,12 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
         (nativeTraces.get(u.id) ?? traces.get(u.id))!.observations.map((o) => {
           if (o.snapshotId !== a.snapshot.id || o.producer.kind !== 'model-review')
             unbound('a model observation is not a review of this capture');
-          return { observation: o, stage: stageOf(u), unit: { id: u.id, revision: u.revision } };
+          return {
+            observation: o,
+            stage: stageOf(u),
+            unit: { id: u.id, revision: u.revision },
+            progress: progress.get(u.id) ?? unbound('a published model review has no progress record'),
+          };
         }),
       )
     : undefined;

@@ -96,8 +96,12 @@ export const RATED: ReadonlySet<string> = new Set(['critical', 'high', 'medium',
 
 /** The review section's lines for one observation, before its evidence. */
 export function reviewLines(doc: ReportEnvelope, r: NonNullable<ReportEnvelope['reviews']>[number]): string[] {
+  const progress = r.progress
+    ? `${wordOf(doc, 'sentinel.report.review.progress', 'business')}: ${wordOf(doc, `sentinel.report.review.progress.${r.progress.outcome}`, 'business')} · ${countText(doc, r.progress.turns, 'business')} · ${countText(doc, r.progress.filesRead, 'business')}${r.progress.modelInspected ? ` · ${countText(doc, r.progress.modelInspected, 'business')}` : ''}`
+    : null;
   return [
     `${r.stage} · ${wordOf(doc, RATED.has(r.severity) ? `sentinel.report.severity.${r.severity}` : 'sentinel.report.review.unrated', 'business')} · ${wordOf(doc, 'sentinel.report.review.model', 'business')} ${r.model.requestedModel}${r.model.returnedModel && r.model.returnedModel !== r.model.requestedModel ? ` (reported ${r.model.returnedModel})` : ''} · ${r.model.source}`,
+    ...(progress ? [progress] : []),
     ...(r.ruleFamilyId ? [`rule family ${r.ruleFamilyId}`] : []),
     ...(r.message !== undefined ? [r.message] : []),
     `observation ${r.id} · prompt ${short(r.promptDigest)}`,

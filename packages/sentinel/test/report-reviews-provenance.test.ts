@@ -270,6 +270,7 @@ test(
       assert.equal(out.document.findings.length, 1);
       assert.equal(out.document.counts.reviewObservations.n, 1);
       assert.equal(out.document.reviews.length, 1);
+      assert.equal(Object.hasOwn(out.document.reviews[0], 'progress'), false, 'the older review shape remains valid');
       assert.equal(out.document.provenance.length, 3);
     }
     const plain = await generateReport((await baseInput('private')) as any);
@@ -312,6 +313,33 @@ test(
     assert.match(priv.markdown, /The total is built from request text/);
     assert.doesNotMatch(shared.markdown, /The total is built from request text/);
     assert.doesNotMatch(shared.html, /export async function createInvoice/);
+  },
+);
+
+test(
+  'an unfinished review says so beside its limited inspection, without making a SARIF finding',
+  needsStore,
+  async () => {
+    const review = {
+      observation: await modelObservation(),
+      stage: 'review-general',
+      unit: { id: 'w-review', revision: 2 },
+      progress: {
+        outcome: 'unfinished',
+        turnsUsed: 3,
+        turnCap: 3,
+        filesRead: 1,
+        filesGiven: 6,
+        source: 'brokered',
+      },
+    };
+    const out = await generateReport((await baseInput('private', { reviews: [review] })) as any);
+    assert.ok(validateEnvelope('report', out.document).ok);
+    assert.equal(out.document.reviews?.[0]?.progress?.outcome, 'unfinished');
+    assert.match(out.json, /"outcome":"unfinished"/);
+    assert.match(out.markdown, /review unfinished.*3 of 3 model exchanges used.*1 of 6 files opened for this review/);
+    assert.match(out.html, /review unfinished.*3 of 3 model exchanges used.*1 of 6 files opened for this review/);
+    assert.equal(out.sarif.runs[0]?.results.length, out.document.findings.length);
   },
 );
 
@@ -596,18 +624,22 @@ test(
     const ws = join(dir, 'workspace');
     mkdirSync(join(ws, 'src'), { recursive: true });
     writeFileSync(join(ws, 'src/query.ts'), 'export const q = (id: string) => "SELECT * FROM t WHERE id = " + id;\n');
-    // A local reviewer that reads the file once, then concludes with a claim citing what it read.
+    for (let i = 1; i <= 5; i++) writeFileSync(join(ws, `src/extra-${i}.ts`), `export const extra${i} = ${i};\n`);
+    // The reviewer spends its full turn allowance, but opens only one of its six assigned files.
+    let replies = 0;
     const endpoint = await mockEndpoint(t, (req: { body: string }, res: any) => {
       const msgs = JSON.parse(req.body).messages;
       const last = JSON.parse(msgs[msgs.length - 1].content);
-      const content = last.evidence
-        ? JSON.stringify({
-            action: 'final',
-            verdict: 'finding',
-            inspected: ['src/query.ts'],
-            claims: [{ statement: 'Request text reaches SQL.', citations: [last.evidence[0].id] }],
-          })
-        : JSON.stringify({ action: 'read', path: 'src/query.ts', startLine: 1, endLine: 1 });
+      replies++;
+      const content =
+        replies === 12
+          ? JSON.stringify({
+              action: 'final',
+              verdict: 'finding',
+              inspected: ['src/query.ts'],
+              claims: [{ statement: 'Request text reaches SQL.', citations: [last.evidence[0].id] }],
+            })
+          : JSON.stringify({ action: 'read', path: 'src/query.ts', startLine: 1, endLine: 1 });
       json(res, 200, ollamaReply({ message: { role: 'assistant', content } }));
     });
     const env = { ...process.env, HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
@@ -618,6 +650,7 @@ test(
     const s = JSON.parse(readFileSync(file, 'utf8'));
     const provider = structuredClone(trustedPolicy({ ollama: endpoint.origin }).settings.providers[0]);
     provider.models[0]!.capability.revision = null;
+    provider.models[0]!.limits.maxMessages = 64;
     s.mandatoryRules = [];
     s.hostedReviewSecretScan = 'when-selected';
     s.providers = [provider];
@@ -635,7 +668,7 @@ test(
     const id = planned.body.facts.planId;
     const ran = await cli('run', id, '--confirm', '--confirm-models');
     assert.equal(ran.body.facts.state, 'completed', JSON.stringify(ran.body));
-    assert.equal(endpoint.seen.length, 2, 'the reviewer read once and concluded');
+    assert.equal(endpoint.seen.length, 12, 'the reviewer reached its turn cap after repeatedly reading one file');
 
     const sw = workspaceOf(ws, env);
     const report = async (disclosure: 'private' | 'shareable') => {
@@ -666,6 +699,12 @@ test(
     assert.equal(r.evidence[0].state, 'embedded');
     assert.equal(r.evidence[0].location.relativePath, 'src/query.ts');
     assert.match(r.evidence[0].excerpt, /SELECT \* FROM t WHERE id = /);
+    assert.equal(r.progress.outcome, 'completed');
+    assert.deepEqual([r.progress.turns.n, r.progress.turns.of], [12, 12]);
+    assert.deepEqual([r.progress.filesRead.n, r.progress.filesRead.of], [1, 6]);
+    assert.equal(r.progress.modelInspected, undefined);
+    const { countedProblems } = await import('@farsight/core/dist/counts.js');
+    for (const c of [r.progress.turns, r.progress.filesRead]) assert.deepEqual(countedProblems(c), []);
     // Every published unit has one record: the bootstrap operations, then the review with its tokens and cost.
     const kinds = doc.provenance.map((p: any) => `${p.kind}:${p.stage}`);
     assert.deepEqual(
@@ -676,8 +715,8 @@ test(
     const agent = doc.provenance.find((p: any) => p.kind === 'agent');
     assert.equal(agent.attempt, r.attemptId);
     assert.equal(agent.model.requested, provider.models[0]!.model);
-    assert.equal(agent.turns, 2);
-    assert.equal(agent.wires.length, 2);
+    assert.equal(agent.turns, 12);
+    assert.equal(agent.wires.length, 12);
     assert.equal(agent.runner, 'ollama');
     // A local model with no fee: its confirmed usage at the provider's own (zero) rate is a list price, said so.
     assert.deepEqual(agent.cost, { basis: 'rates', amount: '0', currency: 'USD' });
@@ -693,7 +732,10 @@ test(
       'counted with the counts',
     );
     assert.match(priv.markdown, /Request text reaches SQL/);
+    assert.match(priv.markdown, /12 of 12 model exchanges used.*1 of 6 files opened for this review/);
     assert.match(priv.html, /How each stage ran/);
+    assert.match(priv.html, /12 of 12 model exchanges used.*1 of 6 files opened for this review/);
+    assert.equal(priv.sarif.runs[0]?.results.length, 0, 'limited review progress is not a SARIF finding');
 
     const shared = await report('shareable');
     assert.equal((shared.document as any).reviews[0].evidence[0].reasonCode, 'sentinel.report.withheld.shareable');
