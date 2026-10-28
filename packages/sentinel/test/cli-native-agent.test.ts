@@ -75,9 +75,17 @@ const REF = 'keychain:farsight/claude-example';
 
 const line = (v: unknown) => JSON.stringify(v) + '\n';
 const init = (m = model) => line({ type: 'system', subtype: 'init', cwd: WORK, model: m, tools: CLAUDE_READ_TOOLS });
-const assistant = (id: string, content: unknown[]) =>
-  line({ type: 'assistant', message: { id, role: 'assistant', model, content } });
-const toolUse = (name: string, input: unknown) => ({ type: 'tool_use', id: 'toolu_' + name, name, input });
+const assistant = (id: string, content: unknown[], m: string = model) =>
+  line({ type: 'assistant', message: { id, role: 'assistant', model: m, content } });
+const toolUse = (name: string, input: unknown, id = 'toolu_' + name) => ({ type: 'tool_use', id, name, input });
+const toolResult = (id: string, isError = false) =>
+  line({
+    type: 'user',
+    message: {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: id, ...(isError ? { is_error: true } : {}) }],
+    },
+  });
 const ANSWER = Object.freeze({
   observations: [{ path: 'src/a.ts', line: 1, kind: 'note', claim: 'An original constant is exported.' }],
   inspected: ['src/a.ts'],
@@ -232,19 +240,21 @@ test('the stream monitor stops the run on a tool, path, turn, identity or answer
   // Repeated stream events of one message are one turn.
   assert.doesNotThrow(() => decode(init() + assistant('a', []) + assistant('a', []) + assistant('b', []), 2));
   // Answers: an error result, a text-only result, another model, missing usage, an event after the result.
+  const answered = init() + assistant('m', []);
   for (const [name, text, c] of [
-    ['error result', init() + result({ is_error: true }), 'sentinel.provider.malformedResponse'],
+    ['error result', answered + result({ is_error: true }), 'sentinel.provider.malformedResponse'],
     [
       'text only',
-      init() + result({ structured_output: undefined, result: '{}' }),
+      answered + result({ structured_output: undefined, result: '{}' }),
       'sentinel.provider.malformedResponse',
     ],
     [
       'another model',
-      init() + result({ modelUsage: { other: { inputTokens: 1, outputTokens: 1 } } }),
+      answered + result({ modelUsage: { other: { inputTokens: 1, outputTokens: 1 } } }),
       'sentinel.provider.identityMismatch',
     ],
-    ['usage missing', init() + result({ usage: { input_tokens: 1 } }), 'sentinel.provider.malformedResponse'],
+    ['usage missing', answered + result({ usage: { input_tokens: 1 } }), 'sentinel.provider.malformedResponse'],
+    ['no answering message', init() + result(), 'sentinel.provider.identityMismatch'],
   ] as const)
     assert.throws(() => decode(text).out(), code(c), name);
   assert.throws(() => decode(STREAM + init()), code('sentinel.provider.malformedResponse'), 'nothing after the result');
@@ -253,10 +263,117 @@ test('the stream monitor stops the run on a tool, path, turn, identity or answer
   assert.throws(() => d.push(Buffer.from([0xff, 0x0a])), code('sentinel.provider.malformedResponse'), 'strict UTF-8');
   // The partial ledger a failed run keeps: what was read before the refusal.
   const partial = new ClaudeAgentDecoder(WORK, 4);
-  partial.push(Buffer.from(init() + assistant('m1', [toolUse('Read', { file_path: WORK + '/src/a.ts' })])));
+  partial.push(
+    Buffer.from(
+      init() + assistant('m1', [toolUse('Read', { file_path: WORK + '/src/a.ts' })]) + toolResult('toolu_Read'),
+    ),
+  );
   assert.throws(() => partial.push(Buffer.from(assistant('m2', [toolUse('Bash', { command: 'id' })]))));
   assert.deepEqual(partial.partial().filesRead, ['src/a.ts']);
   assert.equal(partial.partial().turns, 2);
+});
+
+test('the identity is the model that answered, never the one init names; other models are kept apart', () => {
+  // Sol's replay: init says Sonnet, the answering message says Haiku. Refused, never reported as Sonnet.
+  const haiku = 'claude-haiku-4-5-20251001';
+  const swapped = init() + assistant('m1', [toolUse(CLAUDE_OUTPUT_TOOL, ANSWER)], haiku) + result();
+  assert.throws(() => decode(swapped).out(), code('sentinel.provider.identityMismatch'));
+  // Two answering models in one run: refused.
+  const mixed =
+    init() + assistant('m1', [], model) + assistant('m2', [toolUse(CLAUDE_OUTPUT_TOOL, ANSWER)], haiku) + result();
+  assert.throws(() => decode(mixed).out(), code('sentinel.provider.identityMismatch'));
+  // An answering message without a model: malformed.
+  assert.throws(
+    () => decode(init() + line({ type: 'assistant', message: { id: 'm1', content: [] } })),
+    code('sentinel.provider.identityMalformed'),
+  );
+  // The alias answering as its own dated snapshot is that snapshot, with its usage; a background model is secondary.
+  const dated = model + '-20261001';
+  const snapshot = decode(
+    init() +
+      assistant('m1', [toolUse(CLAUDE_OUTPUT_TOOL, ANSWER)], dated) +
+      result({
+        modelUsage: {
+          [dated]: { inputTokens: 900, cacheCreationInputTokens: 100, cacheReadInputTokens: 0, outputTokens: 80 },
+          'claude-small-background': { inputTokens: 5, outputTokens: 1 },
+        },
+      }),
+  ).out();
+  assert.equal(snapshot.reportedModel, dated);
+  assert.deepEqual(snapshot.secondaryModels, ['claude-small-background']);
+  // The answering model must have reported usage.
+  assert.throws(
+    () =>
+      decode(
+        init() + assistant('m1', [], dated) + result({ modelUsage: { [model]: { inputTokens: 1, outputTokens: 1 } } }),
+      ).out(),
+    code('sentinel.provider.identityMismatch'),
+  );
+});
+
+test('a file is read only when a Read of it succeeded: a Glob naming it, or a failed Read, reads nothing', () => {
+  // Sol's replay: only `Glob {path: "src/a.ts"}`, then an answer citing src/a.ts as inspected.
+  const globOnly = decode(
+    init() +
+      assistant('m1', [toolUse('Glob', { pattern: '*', path: 'src/a.ts' })]) +
+      toolResult('toolu_Glob') +
+      assistant('m2', [toolUse(CLAUDE_OUTPUT_TOOL, ANSWER)]) +
+      result(),
+  ).out();
+  assert.deepEqual(globOnly.filesRead, []);
+  assert.throws(
+    () =>
+      nativeOutputSchema('sentinel.review-observations/v1').validate(
+        ANSWER,
+        new Set(['src/a.ts']),
+        new Set(globOnly.filesRead),
+      ),
+    code('sentinel.review.outputSchema'),
+    'an observation on a file the transcript never read fails the stage schema',
+  );
+  // A Read whose result is an error, or that never got a result, reads nothing; a successful one reads its file.
+  const failed = decode(
+    init() +
+      assistant('m1', [
+        toolUse('Read', { file_path: WORK + '/src/missing.ts' }, 'toolu_r1'),
+        toolUse('Read', { file_path: WORK + '/src/pending.ts' }, 'toolu_r2'),
+        toolUse('Read', { file_path: WORK + '/src/a.ts' }, 'toolu_r3'),
+      ]) +
+      toolResult('toolu_r1', true) +
+      toolResult('toolu_r3') +
+      assistant('m2', [toolUse(CLAUDE_OUTPUT_TOOL, ANSWER)]) +
+      result(),
+  ).out();
+  assert.deepEqual(failed.filesRead, ['src/a.ts']);
+  // A result for a tool use never issued, or a tool-use id issued twice, is refused.
+  assert.throws(() => decode(init() + toolResult('toolu_never')), code('sentinel.provider.malformedResponse'));
+  assert.throws(
+    () =>
+      decode(
+        init() +
+          assistant('m1', [toolUse('Read', { file_path: WORK + '/src/a.ts' }, 'toolu_x')]) +
+          assistant('m2', [toolUse('Glob', { pattern: '*' }, 'toolu_x')]),
+      ),
+    code('sentinel.provider.malformedResponse'),
+  );
+});
+
+test("the turn limit holds for the CLI's own count and for every message, which must carry a well-formed id", () => {
+  // Sol's replay: num_turns 5 with maxTurns 2 and one assistant id. Refused.
+  const one = init() + assistant('m1', [toolUse(CLAUDE_OUTPUT_TOOL, ANSWER)]);
+  assert.throws(() => decode(one + result({ num_turns: 5 }), 2).out(), code('sentinel.provider.budgetExhausted'));
+  assert.throws(
+    () => decode(one + result({ num_turns: undefined }), 2).out(),
+    code('sentinel.provider.malformedResponse'),
+  );
+  assert.throws(() => decode(one + result({ num_turns: -1 }), 2).out(), code('sentinel.provider.malformedResponse'));
+  assert.equal(decode(one + result({ num_turns: 2 }), 2).out().turns, 2);
+  for (const bad of [undefined, '', 'msg 1', 'x'.repeat(201), 7])
+    assert.throws(
+      () => decode(init() + line({ type: 'assistant', message: { id: bad, model, content: [] } })),
+      code('sentinel.provider.malformedResponse'),
+      String(bad),
+    );
 });
 
 test('no input may carry a name a CLI reads as its own instructions or configuration, at any depth or case', () => {
@@ -879,6 +996,7 @@ test(
     assert.deepEqual(run.provenance.tokens, { input: 1000, output: 80, certainty: 'confirmed' });
     assert.deepEqual(run.provenance.cost, { basis: 'unobserved', reason: 'subscription' });
     assert.equal(run.provenance.model.reported, model);
+    assert.deepEqual(run.secondaryModels, []);
     assert.equal(publicProvenance(run.provenance).installation?.executablePath, '<redacted>');
     assert.equal(sealed.length, 1, 'the instruction record was sealed before the run');
     const observed = normalize(
@@ -913,6 +1031,7 @@ test(
       (owned) =>
         init() +
         assistant('m1', [toolUse('Read', { file_path: owned + '/work/src/a.ts' })]) +
+        toolResult('toolu_Read') +
         assistant('m2', [toolUse('Bash', { command: 'cat /etc/passwd' })]),
     );
     const stage = { ...STAGE, skills: [] };

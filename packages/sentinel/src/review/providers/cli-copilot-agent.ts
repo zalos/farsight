@@ -64,6 +64,8 @@ export interface CopilotAgentResult {
   /** Scratch-relative paths the read tools named, in first-read order, deduplicated. */
   readonly filesRead: readonly string[];
   readonly usage: Readonly<{ inputTokens: number; outputTokens: number; requests: number }>;
+  /** Other models the CLI reports usage for (a small background model), never the answering one. */
+  readonly secondaryModels?: readonly string[];
   /** The JSONL event stream as the CLI printed it (bounded). */
   readonly events: Uint8Array;
   /** The `--share` Markdown transcript (bounded). */
