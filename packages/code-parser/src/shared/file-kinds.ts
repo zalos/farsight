@@ -1,8 +1,8 @@
 import type { TestRef } from '@farsight/graph';
 /**
- * Glob → RegExp for test paths. `shared/files.ts` has its own, but its `**` /
- * `*` rewrite order collapses `**​/` into a single-segment match, which a claim
- * glob like `**​/*.spec.ts` cannot live with. Tokenized here instead.
+ * Glob → RegExp for test paths. `shared/files.ts` has its own, but its star
+ * rewrite order collapses a double-star path prefix into a single-segment match,
+ * which nested test globs cannot use. Tokenized here instead.
  */
 export function testGlobToRegExp(glob: string): RegExp {
   let out = '';
@@ -28,7 +28,7 @@ export function testGlobToRegExp(glob: string): RegExp {
   return new RegExp(`^${out}(?:/.*)?$`);
 }
 
-/** The default claim globs. Line comments only in this file — a `*​/` inside a block comment ends it. */
+/** The default claim globs. Avoid spelling a block-comment terminator inside documentation. */
 export const DEFAULT_TEST_GLOBS = [
   '**/*.test.ts',
   '**/*.test.tsx',

@@ -31,6 +31,7 @@ function label(value: unknown, key = 'echo.config.shape', empty = false): string
     value !== value.trim() ||
     (!empty && !value) ||
     value.length > 256 ||
+    // eslint-disable-next-line no-control-regex -- Configuration labels must reject ASCII control bytes.
     /[\x00-\x1f\x7f]/.test(value)
   )
     fail(key);
@@ -73,6 +74,7 @@ function origin(
   if (
     typeof value !== 'string' ||
     value !== value.trim() ||
+    // eslint-disable-next-line no-control-regex -- Endpoint validation rejects controls, whitespace and backslashes.
     /[\x00-\x20\x7f\\]/.test(value) ||
     !/^https?:\/\/[^/?#]+\/?$/i.test(value)
   )
@@ -242,6 +244,7 @@ export function validateConfig(value: unknown): EchoConfig {
     const skills = record(profile.skills, ['directories']);
     if (!Array.isArray(skills.directories) || skills.directories.length > 64) fail();
     const directories = skills.directories.map((value) => {
+      // eslint-disable-next-line no-control-regex -- Skill-directory paths must reject ASCII control bytes.
       if (typeof value !== 'string' || !value.trim() || value.length > 4096 || /[\x00-\x1f\x7f]/.test(value)) fail();
       return value;
     });

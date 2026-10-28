@@ -19,7 +19,6 @@ import {
   humanize,
   effectiveGroup,
   currentLens,
-  cssId,
   repoOf,
 } from './store.js';
 import {
@@ -29,7 +28,7 @@ import {
   storylineTravelItems,
   scoreStoryline,
 } from './lib/search-model.js';
-import { t, def, initRegister, onRegisterChange, toggleRegister } from './strings.js';
+import { t, def, initRegister, onRegisterChange } from './strings.js';
 import { sym, grammarHtml } from './sym.js';
 import { render, select, scopeLabel, closeCtx, refreshStats, cardOf, revealCard } from './lib/graph-render.js';
 import { mountJourneys, journeysRefresh } from './surfaces/journeys.js';

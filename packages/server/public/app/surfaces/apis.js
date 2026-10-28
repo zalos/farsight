@@ -5,22 +5,17 @@
 // #/apis/<apiId>?view=compare (a proposed spec against the code — READ-ONLY).
 // All facts come from /api/apis* (core/openapi.ts); nothing is computed here.
 
-import { S, expose, esc, mdInline, repoOf, bizLabel, bizName, currentLens, humanize, plainClause } from '../store.js';
-import { t, def, proseHtml } from '../strings.js';
+import { S, expose, esc, mdInline, bizLabel, bizName, currentLens, humanize, plainClause } from '../store.js';
+import { t, proseHtml } from '../strings.js';
 import { sym } from '../sym.js';
 import { vsl, scopeLabel } from '../lib/graph-render.js';
 import { tipAttrs, registerTip, numberTip, tipSource } from '../lib/tooltip.js';
-import { defAttrs, unCode } from '../lib/counted.js';
+import { unCode } from '../lib/counted.js';
 import { emptyHtml } from '../lib/empty-state.js';
 
 /** True in the business lens: no methods, paths, identifiers or spec lines. @group APIs */
 function biz() {
   return currentLens() === 'business';
-}
-
-/** A catalog word's tip, or nothing when it has no define. @group APIs */
-function tipOf(key) {
-  return key && def(key) ? defAttrs(key) : '';
 }
 
 /**
@@ -277,7 +272,7 @@ async function loadDetail(el, apiId, route) {
   CURRENT = a;
   const view = route.view === 'spec' || route.view === 'compare' ? route.view : 'ops';
   const isUrl = /^https?:\/\//.test(a.specPath || '');
-  let html =
+  const html =
     '<div class="set-wrap api-wrap"><a class="api-back" href="#/apis">← ' +
     esc(t('apis.back')) +
     '</a>' +
@@ -833,7 +828,7 @@ async function renderSpecView(body, a, line) {
  * @group APIs
  * @business Check a proposed API document against what the code really does, before anyone builds against it.
  */
-function renderCompare(body, a) {
+function renderCompare(body, _a) {
   body.innerHTML =
     '<div class="set-sec api-compare"><p class="set-note">' +
     esc(t('apis.compare.sub')) +

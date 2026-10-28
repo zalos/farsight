@@ -546,7 +546,6 @@ describe("the front door's cells cannot overclaim (swarm 2026-09-23)", () => {
     // rail's stops — ride in its tip, named, never summed into it (pass swarm
     // 2026-09-25: *"a run-on of 14 counts"*). The header has no runner of its own,
     // so the guard is at the source.
-    const read = (f: string): string => readFileSync(join(repoRoot, 'packages/server/public/app/surfaces', f), 'utf8');
     // the count line moved with the journey page's drawing to lib/journey-draw.js: the Map's table prints it in its head
     const header =
       readFileSync(join(repoRoot, 'packages/server/public/app/lib/journey-draw.js'), 'utf8')

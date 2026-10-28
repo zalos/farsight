@@ -60,7 +60,7 @@ test('missing container executable requires completed exact-path failure, never 
   const result = {
     exitCode: 127,
     stderr:
-      'exec: \"/sentinel-executable-intentionally-absent\": stat /sentinel-executable-intentionally-absent: no such file or directory',
+      'exec: "/sentinel-executable-intentionally-absent": stat /sentinel-executable-intentionally-absent: no such file or directory',
   };
   assert.equal(missingContainerExecutable(result), true);
   for (const changed of [

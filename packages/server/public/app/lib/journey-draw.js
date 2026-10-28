@@ -17,7 +17,7 @@
 //
 // Everything from the server is untrusted display data → esc().
 
-import { S, expose, esc, jsArg, repoOf, bizLabel, humanize, currentLens } from '../store.js';
+import { S, expose, esc, jsArg, repoOf, humanize, currentLens } from '../store.js';
 import { t, def, evidenceWord, plainWords, proseHtml, unTick } from '../strings.js';
 import { sym } from '../sym.js';
 import { vsl, linkHtml, designThumbHtml } from './graph-render.js';
@@ -126,7 +126,7 @@ function jrnIsPlannedCall(s) {
  */
 function jrnBannerHtml(s) {
   const n = s.node || {};
-  let text = '',
+  let text,
     cls = 'jrn-banner',
     icon = '';
   if (s.via === 'http') text = '⇄ HTTP ' + (n.name || 'call') + ' → ' + (n.repo || '');
@@ -1527,7 +1527,7 @@ const JRN_BIZ_TABS = ['words', 'gates', 'decisions'];
  * @group Journey view */
 export function jrnBizTab() {
   if (!S.jrnBiz) {
-    let v = null;
+    let v;
     try {
       v = localStorage.getItem('fs-jrn-biz');
     } catch (e) {
@@ -1675,6 +1675,7 @@ function jrnDecChipsHtml(list) {
     '</div>'
   );
 }
+/* eslint-disable no-unused-vars -- Retained journey/test proposals reference this renderer; deletion needs a documentation migration. */
 /**
  * Lane 2 cell: what the business promises during one segment — ▶ start on the
  * first, the sentence the person is living through, then whichever of the
@@ -1688,6 +1689,7 @@ function jrnDecChipsHtml(list) {
  * @business This part of the journey in words: what the person does, and — one click away — who is allowed in and where it can branch.
  */
 function jrnBizCellHtml(sg, last) {
+  /* eslint-enable no-unused-vars */
   const scr = sg.screen;
   // the flowchart step is the first sentence of the screen's business text — the
   // full description stays on the screen card above the line of visibility
@@ -1717,7 +1719,7 @@ function jrnBizCellHtml(sg, last) {
   }
   // exactly one of the three, and an empty cell always says which kind is absent
   // rather than leaving a reader to wonder whether it was merely not drawn
-  let body = '';
+  let body;
   if (tab === 'gates') {
     body = jrnGateListHtml(sg.gates, 'journey.scopeHere', sg.configChecks);
   } else if (tab === 'decisions') {
@@ -2276,7 +2278,7 @@ function jrnDockSize() {
   if (!pane) return;
   const d = S.JRN_DRILL ? 'inline' : jrnDock();
   const open = !pane.classList.contains('empty');
-  let size = 0;
+  let size;
   try {
     size = +localStorage.getItem('fs-jrn-dock-' + d) || 0;
   } catch (e) {
@@ -3712,7 +3714,7 @@ function jrnSheetVerifiedHtml(sg, mo) {
 function jrnSheetCellHtml(layer, li, col) {
   const { sg, mo } = col;
   const business = currentLens() === 'business';
-  let inner = '';
+  let inner;
   if (layer.kind === 'user') {
     // the screen itself is what the user sees when the action has no component of its own
     const scr = col.first || !mo.component ? jrnScreenNode(sg) : null;

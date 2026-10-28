@@ -68,6 +68,7 @@ export async function discoverSetupModels(
   signal.throwIfAborted();
   if (
     !Array.isArray(names) ||
+    // eslint-disable-next-line no-control-regex -- Provider model identifiers must reject ASCII control bytes.
     names.some((name) => typeof name !== 'string' || !name.trim() || name.length > 256 || /[\x00-\x1f\x7f]/.test(name))
   )
     throw new ModelSetupFailure('invalid_response');

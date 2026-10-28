@@ -543,7 +543,7 @@ test('an empty graph reports no tests indexed rather than 0%', () => {
 });
 
 test('farsight-diff v1: the four additive kinds, and the schema still validates', () => {
-  const base = storeOf(shop({ withObserved: true }), 1);
+  storeOf(shop({ withObserved: true }), 1);
   // head: the e2e test is deleted, so the flow and the page lose their last covers edge,
   // and refundOrder's body changes while nothing verifies it
   const headGraph = shop({ withObserved: true, dropE2E: true });

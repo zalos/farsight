@@ -635,6 +635,7 @@ describe('journeys', () => {
     // the branch, indented under the step it leaves from, with its condition and its way back
     assert.match(
       out,
+      // eslint-disable-next-line no-regex-spaces -- Match the renderer's three-space branch indentation exactly.
       /^1\. Start a new invoice — .*\n   ↳ Draft and send an invoice · branch of Start a new invoice · when Operations reviews the draft before it is sent · back to Billing cycle — .*`invoice-app::flow::draft-and-send`/m,
     );
     assert.equal(

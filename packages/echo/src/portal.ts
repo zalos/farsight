@@ -16,6 +16,7 @@ function invalid(): never {
   throw new PortalFailure('invalid');
 }
 const text = (value: unknown, max: number): value is string =>
+  // eslint-disable-next-line no-control-regex -- Portal text permits tabs/newlines while rejecting the other ASCII controls.
   typeof value === 'string' && value.length <= max && !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value);
 const date = (value: unknown): value is string =>
   typeof value === 'string' &&

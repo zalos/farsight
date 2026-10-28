@@ -210,8 +210,7 @@ async function preventDuplicateHooks(
 }
 
 function merge(before: string | undefined, host: HookHost, next?: ObjectValue): string | undefined {
-  let document: ObjectValue;
-  document = before === undefined ? {} : parseObject(before);
+  const document: ObjectValue = before === undefined ? {} : parseObject(before);
   const hooks = document.hooks === undefined ? {} : object(document.hooks);
   if (document.hooks === undefined && !next) return before;
   document.hooks = hooks;
@@ -317,7 +316,7 @@ async function ignoreLocalFiles(workspace: string, destinations: string[]): Prom
   await ensureLocalPath(dirname(dirname(path)), path);
   const before = await contents(path);
   await mkdir(dirname(path), { recursive: true });
-  const escape = (value: string) => value.replace(/[\\*?\[\]#! ]/g, '\\$&');
+  const escape = (value: string) => value.replace(/[\\*?[\]#! ]/g, '\\$&');
   const patterns = missing
     .filter((value) => !value.startsWith(`${echoDirectory}/`))
     .map((value) => `/${escape(value)}`);

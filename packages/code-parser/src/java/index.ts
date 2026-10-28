@@ -12,7 +12,7 @@ import { PARSER_VERSION } from '../version.js';
  */
 import { readFileSync, checkpoint, fileStatus, fileReadError, parseError, currentRead } from '../repository.js';
 import { relative as platformRelative, resolve as resolvePath } from 'node:path';
-import type { GraphFragment, GraphNode, GraphEdge, NodeKind } from '@farsight/graph';
+import type { GraphFragment, GraphNode, GraphEdge } from '@farsight/graph';
 import type { LanguageAdapter, IngestOptions } from '../types.js';
 import { collectFiles, freshnessMeta } from '../shared/files.js';
 import { parseDoc, docCommentAbove, docLinkFields, type ParsedDoc } from '../shared/docs.js';
@@ -558,7 +558,7 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
   }
 
   /** Calls, template publishes and repository ops inside one method body. */
-  function extractBody(mBody: TSNode, fnId: string, jt: JavaType, source: string) {
+  function extractBody(mBody: TSNode, fnId: string, jt: JavaType, _source: string) {
     walkTS(mBody, (b) => {
       if (TYPE_DECLS.has(b.type)) return false; // local/anonymous classes own their bodies
       if (b.type !== 'method_invocation') return;

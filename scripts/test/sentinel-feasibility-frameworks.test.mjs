@@ -4,7 +4,7 @@ import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { parseArgs, preview, runHasFailures } from '../sentinel-feasibility-frameworks.mjs';
+import { parseArgs, runHasFailures } from '../sentinel-feasibility-frameworks.mjs';
 import {
   BASE_IMAGES,
   OWNER_LABEL,

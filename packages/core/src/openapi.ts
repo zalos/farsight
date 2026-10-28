@@ -13,7 +13,7 @@
  * Pure functions over parsed objects: YAML/JSON reading lives in
  * `@farsight/parsers` (core stays dependency-free).
  */
-import type { GraphNode, GraphEdge, GraphFragment, OperationContract, ContractParam, DriftKind, Loc } from './graph.js';
+import type { GraphNode, GraphFragment, OperationContract, ContractParam, DriftKind, Loc } from './graph.js';
 import type { GraphIndex } from './query.js';
 import { buildIndex, businessSummary } from './query.js';
 import { t } from './strings.js';
@@ -853,7 +853,7 @@ export function fieldsFromSource(text: string | undefined): string[] | undefined
       }
     }
   } else {
-    for (const m of text.matchAll(/(?:private|public|protected)\s+[\w<>\[\], ]+\s+(\w+)\s*[;=]/g)) out.push(m[1]!);
+    for (const m of text.matchAll(/(?:private|public|protected)\s+[\w<>[\], ]+\s+(\w+)\s*[;=]/g)) out.push(m[1]!);
   }
   return out.length ? [...new Set(out)].slice(0, 40) : undefined;
 }

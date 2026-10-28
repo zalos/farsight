@@ -21,13 +21,7 @@ export {
   isTestFile,
   type TestGlobs,
 } from '@farsight/code-parser/support';
-import {
-  testGlobToRegExp,
-  DEFAULT_TEST_GLOBS,
-  runnerImports,
-  isTestFile,
-  type TestGlobs,
-} from '@farsight/code-parser/support';
+import { runnerImports } from '@farsight/code-parser/support';
 
 /** Which runner a claimed file uses — its imports, else a guess from its name. */
 export function runnerOf(rel: string, source: string): TestRef['runner'] {
@@ -111,7 +105,7 @@ export interface ExtractedFile {
   cases: TestCase[];
 }
 
-/** The file's leading doc block (`/** … *​/` with nothing but whitespace or line comments before it). */
+/** The file's leading documentation block, with only whitespace or line comments before it. */
 export function fileHeaderDoc(source: string): ParsedDoc | null {
   const head = source.slice(0, 16000);
   // the header region is everything before the first case/suite call — a block after

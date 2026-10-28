@@ -21,7 +21,6 @@ import type {
   JourneyPersonaDecl,
   JourneyGroupDecl,
   JourneyStorylineDecl,
-  JourneysMeta,
   DesignStep,
   DecisionDecl,
 } from './graph.js';

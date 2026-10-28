@@ -51,6 +51,7 @@ export async function bindSession(
     typeof sessionId !== 'string' ||
     !sessionId.trim() ||
     sessionId.length > 1024 ||
+    // eslint-disable-next-line no-control-regex -- Session identifiers must reject ASCII control bytes.
     /[\x00-\x1f\x7f]/.test(sessionId)
   )
     throw new Error(echoConfigWord('echo.session.invalid'));
@@ -71,7 +72,7 @@ export async function bindSession(
       if (resolve(local) !== resolve(ctx.directory)) await bindAt(ctx, host, sessionId, join(local, 'sessions'));
     } catch (error) {
       if (error instanceof Error && error.message === echoConfigWord('echo.session.conflict')) throw error;
-      throw new Error(echoConfigWord('echo.session.store'));
+      throw new Error(echoConfigWord('echo.session.store'), { cause: error });
     }
   }
   await bindAt(ctx, host, sessionId, join(ctx.directory, 'sessions'));
@@ -108,19 +109,19 @@ async function bindAt(
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
       const info = await lstat(destination);
-      if (!info.isFile() || info.isSymbolicLink()) throw new Error();
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error(undefined, { cause: error });
       const existing = JSON.parse(await readFile(destination, 'utf8')) as Record<string, unknown>;
       if (
         existing.version !== 1 ||
         typeof existing.fingerprint !== 'string' ||
         !/^[a-f0-9]{64}$/.test(existing.fingerprint)
       )
-        throw new Error();
+        throw new Error(undefined, { cause: error });
       if (existing.fingerprint !== fingerprint) throw new SessionConflict();
     }
   } catch (error) {
-    if (error instanceof SessionConflict) throw new Error(echoConfigWord('echo.session.conflict'));
-    throw new Error(echoConfigWord('echo.session.store'));
+    if (error instanceof SessionConflict) throw new Error(echoConfigWord('echo.session.conflict'), { cause: error });
+    throw new Error(echoConfigWord('echo.session.store'), { cause: error });
   } finally {
     await unlink(temporary).catch(() => {});
   }

@@ -23,7 +23,7 @@ export function parseSpecText(text: string, label = 'spec'): ParsedSpec {
     try {
       doc = JSON.parse(text);
     } catch (err) {
-      throw new Error(`${label}: not valid JSON — ${(err as Error).message}`);
+      throw new Error(`${label}: not valid JSON — ${(err as Error).message}`, { cause: err });
     }
     if (!isOpenApiDoc(doc))
       throw new Error(
@@ -54,7 +54,7 @@ function jsonLineLocator(text: string): ParsedSpec['lineOf'] {
   return (path, method) => {
     const pathKey = JSON.stringify(path) + ':';
     const methodKey = `"${method}"`;
-    let i = lines.findIndex((l) => l.includes(pathKey));
+    const i = lines.findIndex((l) => l.includes(pathKey));
     if (i < 0) return undefined;
     for (let j = i; j < Math.min(lines.length, i + 400); j++) {
       if (lines[j]!.trimStart().startsWith(methodKey)) return j + 1;

@@ -153,7 +153,7 @@ async function load(gen) {
   const surfaces = [];
   for (const d of Array.isArray(sources) ? sources : []) for (const s of d.surfaces || []) surfaces.push(s);
   // the tables follow the organised tree: persona → group → journeys, the order the manifests declare
-  let tree = null;
+  let tree;
   try {
     tree = (await loadJourneyTree(sources)).tree;
   } catch {

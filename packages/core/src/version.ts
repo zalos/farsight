@@ -154,7 +154,7 @@ export function gitIdentity(cwd: string): { commit?: string; codeCommit?: string
       .toString()
       .trim();
   const out: { commit?: string; codeCommit?: string; dirty?: boolean } = {};
-  let top = '';
+  let top: string;
   try {
     out.commit = run(['rev-parse', '--short', 'HEAD']) || undefined;
     top = run(['rev-parse', '--show-toplevel']);

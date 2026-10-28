@@ -45,7 +45,6 @@ import {
   jrnLadderCellHtml,
   jrnDock,
   jrnSetDock,
-  jrnLifecycleHtml,
   jrnMoLabel,
   jrnMarkerAt,
   jrnNav,
@@ -107,7 +106,7 @@ const VIEWS = ['screens', 'lanes', 'table', 'beats', 'ladder', 'drill'];
 const VIEW_DEFAULT = { business: 'screens', hybrid: 'table', code: 'beats' };
 /** The view a journey opens at in this register: what the reader last picked here, else the register's default. @group Map */
 export function registerView(lens = currentLens()) {
-  let v = null;
+  let v;
   try {
     v = localStorage.getItem('fs-map-view.' + lens);
   } catch (e) {

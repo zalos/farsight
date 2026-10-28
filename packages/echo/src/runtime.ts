@@ -363,7 +363,7 @@ function acquireOwnerLock(path: string): () => void {
         }
       };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw new Error(word('locked'));
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw new Error(word('locked'), { cause: error });
       try {
         const before = lstatSync(path);
         const owner = JSON.parse(privateFile(path, 256).toString('utf8')) as { pid?: unknown; nonce?: unknown };
@@ -374,14 +374,14 @@ function acquireOwnerLock(path: string): () => void {
           Number(owner.pid) <= 0 ||
           (owner.nonce !== undefined && (typeof owner.nonce !== 'string' || !/^[a-f0-9]{32}$/.test(owner.nonce)))
         )
-          throw new Error();
+          throw new Error(undefined, { cause: error });
         let stopped = false;
         try {
           process.kill(Number(owner.pid), 0);
         } catch (failure) {
           stopped = (failure as NodeJS.ErrnoException).code === 'ESRCH';
         }
-        if (!stopped) throw new Error();
+        if (!stopped) throw new Error(undefined, { cause: error });
         const current = lstatSync(path);
         if (current.ino !== before.ino || current.dev !== before.dev) continue;
         rmSync(path);

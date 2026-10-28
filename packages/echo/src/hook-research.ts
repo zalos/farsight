@@ -69,6 +69,7 @@ const validText = (value: unknown, limit: number): value is string =>
   !!value.trim() &&
   value === value.trim() &&
   value.length <= limit &&
+  // eslint-disable-next-line no-control-regex -- Hook input text excludes ASCII controls before it reaches a provider.
   !/[\x00-\x1f\x7f]/.test(value);
 const validId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9_-]{32}$/.test(value);
 const envelope = (status: HookBriefResult['status'], requestId: string | null = null): HookBriefResult => ({

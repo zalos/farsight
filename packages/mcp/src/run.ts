@@ -94,7 +94,6 @@ import {
   type GraphNode,
   type GraphEdge,
   type Subgraph,
-  type Direction,
   type JourneyStep,
   storybookLive,
   type StoriesAnswer,
@@ -135,7 +134,7 @@ import { registerAffectedTools } from './affected-tools.js';
 import { registerWalkTools } from './walk-tools.js';
 import { registerRolesTools } from './roles-tools.js';
 import { cutToBudget, budgetFor, shortHeading, MIN_BUDGET, DEFAULT_BUDGET, type LeftOutPart } from './budget.js';
-import { resolveTier, inTier, tierOf, tierLine, CORE_TOOLS, type ToolTier } from './tiers.js';
+import { resolveTier, inTier, tierOf, tierLine, type ToolTier } from './tiers.js';
 import { readAgentSettings, contextBlock, sinceOf } from './context.js';
 
 /** Serve the graph over stdio — what `farsight mcp` runs. */

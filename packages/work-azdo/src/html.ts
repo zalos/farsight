@@ -254,6 +254,7 @@ function inline(s: string): string {
   t = esc(t);
   t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, text: string, href: string) => `<a href="${href}">${text}</a>`);
   t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+  // eslint-disable-next-line no-control-regex -- NUL-delimited placeholders restore the escaped inline-code spans.
   return t.replace(/\u0000(\d+)\u0000/g, (_, i: string) => codes[Number(i)]!);
 }
 

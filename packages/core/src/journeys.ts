@@ -807,7 +807,7 @@ function personaResolver(index: GraphIndex, metas: Record<string, JourneysMeta> 
       }
     }
     if (guardPersona.size) {
-      let met = guardsMet(screenId);
+      const met = guardsMet(screenId);
       // a component that calls nothing guarded is read where it is drawn: the pages that render it
       if (!met.size && node.kind === 'component') {
         for (const pg of renderingPages(screenId))

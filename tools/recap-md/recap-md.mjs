@@ -132,7 +132,7 @@ function readStdin() {
   const size = 64 * 1024;
   const tmp = Buffer.alloc(size);
   while (total <= MAX_INPUT_BYTES) {
-    let n = 0;
+    let n;
     try {
       n = readSync(0, tmp, 0, size, null);
     } catch (e) {
@@ -190,6 +190,7 @@ async function callModel(model, messages) {
     throw new Error(
       `recap-md: cannot reach Ollama at ${base} — is it running? ` +
         `Try 'brew services start ollama'. (${e && e.message ? e.message : e})`,
+      { cause: e },
     );
   }
   if (!res.ok) {
@@ -200,7 +201,7 @@ async function callModel(model, messages) {
   try {
     data = await res.json();
   } catch (e) {
-    throw new Error(`recap-md: could not parse Ollama response. (${e && e.message ? e.message : e})`);
+    throw new Error(`recap-md: could not parse Ollama response. (${e && e.message ? e.message : e})`, { cause: e });
   }
   const content = data && data.message && data.message.content;
   if (typeof content !== 'string' || !content.trim()) {

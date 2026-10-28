@@ -244,7 +244,7 @@ test('pull: incremental reads the revisions feed from the watermark — changes,
       };
     },
   ];
-  const { fake, p, cfg: c } = setup({ handlers });
+  const { p, cfg: c } = setup({ handlers });
   const s = await p.connect(c, FAKE_PAT);
   const pages = await drain(
     p.pull(s, JSON.stringify({ v: 1, p: { ExampleProject: { t: 'W1', since: '2026-09-01T00:00:00Z' } } }), c.scope),

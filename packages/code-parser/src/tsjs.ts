@@ -31,7 +31,7 @@ import { isBuiltin, packageOf, workspacePackageOf, PackageJsonIndex } from './sh
 import type { LanguageAdapter, IngestOptions } from './types.js';
 import { collectFiles, freshnessMeta } from './shared/files.js';
 import { parseDoc, docCommentAbove, docLinkFields } from './shared/docs.js';
-import { capLabel, leadingBranchLabel, trailingBranchLabel, NEGATE_FLIP } from './shared/labels.js';
+import { leadingBranchLabel, trailingBranchLabel, NEGATE_FLIP } from './shared/labels.js';
 import { autoTags, joinPaths, normalizePath, snippetRange } from './shared/tags.js';
 import {
   readNestFile,
@@ -246,7 +246,7 @@ const BUILTIN_METHODS = new Set([
   'clone',
 ]);
 // a class or file named like a stand-in: the production twin wins a method-name resolution
-const TEST_DOUBLE = /(^|[\/\-_.])(in-?memory|mock|fake|stub|noop|dummy)/i;
+const TEST_DOUBLE = /(^|[/\-_.])(in-?memory|mock|fake|stub|noop|dummy)/i;
 // a callback handed to one of these runs inside the caller's transaction — the
 // drill's transaction boundary is a parser fact, not a first-to-last-write guess
 const TX_CALLEES = new Set(['withOps', 'withTenant', 'withTx', 'transaction', '$transaction']);
@@ -1795,7 +1795,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         const keys: string[] = [];
         let i = parents.length - 1;
         let obj: AstNode | undefined;
-        let objIdx = -1;
+        let objIdx: number;
         for (;;) {
           const p = parents[i];
           if (!p || p.type !== 'Property') return false;

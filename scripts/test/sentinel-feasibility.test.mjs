@@ -318,6 +318,7 @@ test('probe failures retain bounded scrubbed name, code and message without stac
     message: '\x1b[31mvalidation\x00 failed\n' + 'z'.repeat(1000000),
   });
   assert.ok(Object.values(huge).every((value) => value.length <= 512));
+  // eslint-disable-next-line no-control-regex -- Verify scrubbed diagnostics contain no C0/C1 control bytes.
   assert.equal(/[\x00-\x1f\x7f-\x9f]/.test(huge.message), false);
   assert.match(huge.message, /validation/);
 });

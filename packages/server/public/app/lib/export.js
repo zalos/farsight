@@ -220,7 +220,7 @@ function pictureCss() {
     }
   };
   for (const sh of document.styleSheets) {
-    let rules = null;
+    let rules;
     try {
       rules = sh.cssRules;
     } catch {
@@ -582,7 +582,7 @@ export async function saveView(surface, format, opts = {}) {
       date: f.date,
       ext: format,
     });
-    let out = { file: name, footer: lines.join(' | ') };
+    const out = { file: name, footer: lines.join(' | ') };
     if (format === 'csv') {
       if (!reg.csv) throw new Error(t('export.why.notTable'));
       const tab = reg.csv();

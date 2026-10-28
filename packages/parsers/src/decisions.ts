@@ -36,7 +36,7 @@ export function decisionSites(
   repo: string,
 ): (DecisionSite & { id: string })[] {
   const out: (DecisionSite & { id: string })[] = [];
-  let files: string[] = [];
+  let files: string[];
   try {
     files = collectFiles(repoRoot, CODE_EXTS, options, (b) => b.endsWith('.d.ts'));
   } catch {

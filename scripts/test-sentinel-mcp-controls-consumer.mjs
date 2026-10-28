@@ -116,7 +116,7 @@ try {
       } catch (e) {
         await client.close().catch(() => {});
         clients.delete(client);
-        throw Error('installed MCP startup: ' + e.message + '; ' + diagnostic + '; service: ' + errors);
+        throw Error('installed MCP startup: ' + e.message + '; ' + diagnostic + '; service: ' + errors, { cause: e });
       }
       return client;
     }

@@ -70,7 +70,6 @@ import {
   spineRowNote,
   spineSentences,
   parseSyncRef as parseSyncRefValue,
-  INCOMPLETE_SENTENCE,
   storylineDiff,
   storylineDiffDocument,
   storylineDiffLines,
@@ -86,11 +85,9 @@ import type {
   GraphEdge,
   TestsMeta,
   TestsMatrixIdentity,
-  TestMatrixCell,
   ImpactNode,
   ImpactReport,
   CommitInput,
-  FileStatus,
 } from '@farsight/core';
 import {
   ingestRepo,
@@ -114,7 +111,7 @@ import {
   headTitle,
   shallowFloorSentence,
 } from '@farsight/parsers';
-import type { GitCommit, GitFileStatus } from '@farsight/parsers';
+import type { GitCommit } from '@farsight/parsers';
 import {
   serveGraph,
   writeSpine,
@@ -589,24 +586,6 @@ function renderDiff(diff: GraphDiff, format: string): string {
 // ── history: git as a lens on the snapshot spine (change-history-2026-09.md) ──
 
 /**
- * git's `--raw` status letter → the word `commit_file.status` stores. `B` is
- * git's own "pairing Broken", and `FileStatus` has no word for it: calling it
- * `modified` would assert the continuity git just said it could not establish,
- * so it lands on `unknown`, the one word that claims nothing.
- */
-const GIT_STATUS_WORD: Record<GitFileStatus, FileStatus> = {
-  A: 'added',
-  C: 'copied',
-  D: 'deleted',
-  M: 'modified',
-  R: 'renamed',
-  T: 'typechange',
-  U: 'unmerged',
-  B: 'unknown',
-  X: 'unknown',
-};
-
-/**
  * The seam between the reader (`parsers/shared/git.ts`) and the tables
  * (`SnapshotDb.writeCommits`): unix seconds → ISO 8601, status letter → status
  * word. `GitFileChange.binary` has no column — a `commit_file` row carries
@@ -808,6 +787,7 @@ switch (command) {
     console.log('');
     a.steps.forEach((st, i) => console.log(`  ${i + 1}. ${st}`));
     process.exit(a.ok ? 0 : 1);
+    break;
   }
   case 'export': {
     const graphFile = resolve(flag('graph', 'graph.json')!);
@@ -1307,6 +1287,7 @@ switch (command) {
       }
     }
     process.exit(gate.exit);
+    break;
   }
   case 'api': {
     const sub = positional[0];
@@ -1401,6 +1382,7 @@ switch (command) {
       break;
     }
     fail(`unknown api subcommand: ${sub} (list | spec | diff)`);
+    break;
   }
   case 'deps': {
     // packages as nodes (docs/proposals/dependencies-and-nx.md §2.1, §2.3): the same folds
@@ -1522,6 +1504,7 @@ switch (command) {
       break;
     }
     fail(`unknown deps subcommand: ${sub} (list | where)`);
+    break;
   }
   case 'config': {
     // every farsight.config.json per source, as ingest recorded them on meta.config — the same
@@ -2155,6 +2138,7 @@ switch (command) {
       break;
     }
     fail(`unknown tests subcommand: ${sub} (list | matrix | import)`);
+    break;
   }
   case 'stories': {
     const graphFile = resolve(flag('graph', 'graph.json')!);
@@ -2483,6 +2467,7 @@ switch (command) {
       break;
     }
     fail(`unknown design subcommand: ${sub} (list | diff)`);
+    break;
   }
   default:
     fail(`unknown command: ${command}\n\n${USAGE}`);

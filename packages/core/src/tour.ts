@@ -145,7 +145,7 @@ export function flowSummary(index: GraphIndex, flowId: string): { j: Journey; su
     WALKS.set(index, m);
   }
   if (m.has(flowId)) return m.get(flowId)!;
-  let v: { j: Journey; sum: JourneySummary } | null = null;
+  let v: { j: Journey; sum: JourneySummary } | null;
   try {
     const j = journey(index, flowId);
     v = { j, sum: journeySummary(index, j, screensFor(index, flowId)) };

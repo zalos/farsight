@@ -76,6 +76,7 @@ test("journeys --storyline: that storyline's steps first, under the personas onl
   // the branch sits indented under the step it leaves from
   assert.match(
     r.out,
+    // eslint-disable-next-line no-regex-spaces -- Match the renderer's three-space branch indentation exactly.
     /^1\. Start a new invoice — .*\n   ↳ Draft and send an invoice · branch of Start a new invoice · when Operations reviews the draft before it is sent · back to Billing cycle — /m,
   );
   assert.match(r.out, /^1\. Start a new invoice — .*`invoice-app::flow::new-invoice`$/m);

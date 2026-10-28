@@ -122,7 +122,7 @@ const DOC_REF =
 const DOC_REF_G = new RegExp(DOC_REF.source, 'g');
 // A piece of code in prose: a backticked span, a path, a URL path, a file name, an HTTP verb.
 const CODE_BIT =
-  /`[^`]*`|(?:^|[\s(])\/[\w{}:.\-]+|\b[\w-]+\/[\w./-]*\w\.\w+|\b\w+\.(?:tsx?|jsx?|mjs|json|md|ya?ml)\b|\b(?:GET|POST|PUT|PATCH|DELETE)s?\b|=>|\w\(\)/;
+  /`[^`]*`|(?:^|[\s(])\/[\w{}:.-]+|\b[\w-]+\/[\w./-]*\w\.\w+|\b\w+\.(?:tsx?|jsx?|mjs|json|md|ya?ml)\b|\b(?:GET|POST|PUT|PATCH|DELETE)s?\b|=>|\w\(\)/;
 const IDENT =
   /\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b|\b[a-z0-9]+(?:_[a-z0-9]+)+\b|\b[A-Z0-9]+(?:_[A-Z0-9]+)+\b/g;
 

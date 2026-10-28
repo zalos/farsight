@@ -46,7 +46,6 @@ import {
   jrnSheetModel,
   jrnMarkerAt,
   jrnSelect,
-  jrnScrollTo,
   jrnTxLineHtml,
   jrnTestsFootHtml,
   jrnStepTestFacts,
@@ -439,7 +438,7 @@ function jrnDrillBoxHtml(m, layer, tree, also) {
 }
 /** The screen that stayed open from an earlier action — its component, marked *still open*; clicking jumps to where it was drawn.
  * @group Journey drill */
-function jrnDrillScreenBoxHtml(comp, sg) {
+function jrnDrillScreenBoxHtml(comp, _sg) {
   const n = S.BYID[comp.id] || {};
   return (
     '<div class="jrn-bx ui dim" id="jrn-bx-' +

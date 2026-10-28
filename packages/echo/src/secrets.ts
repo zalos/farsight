@@ -8,6 +8,7 @@ export interface KeychainRef {
 }
 
 export function parseKeychainRef(ref: unknown): KeychainRef | null {
+  // eslint-disable-next-line no-control-regex -- Secret references must reject whitespace and ASCII control bytes.
   if (typeof ref !== 'string' || ref.length > 512 || /[\s\x00-\x1f\x7f]/.test(ref)) return null;
   const match = /^keychain:farsight-echo\/([A-Za-z0-9][A-Za-z0-9._@+-]*)$/.exec(ref);
   return match ? { service: 'farsight-echo', account: match[1]! } : null;
@@ -31,7 +32,7 @@ export async function resolveSecret(ref?: string, options: SecretOptions = {}): 
     return value;
   } catch (error) {
     if (error instanceof KeychainReadError && error.code === 'unsupported')
-      throw new Error(echoConfigWord('echo.secret.platform'));
-    throw new Error(echoConfigWord('echo.secret.unavailable'));
+      throw new Error(echoConfigWord('echo.secret.platform'), { cause: error });
+    throw new Error(echoConfigWord('echo.secret.unavailable'), { cause: error });
   }
 }

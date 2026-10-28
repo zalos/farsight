@@ -114,9 +114,6 @@ const CHROME_FILES = [
   'lib/tour.js',
   'lib/ask.js',
 ];
-// journeys.js: only its NEW surface chrome is expected to use t(); its legacy
-// overlay strings are grandfathered line-by-line below.
-const GRANDFATHERED = ['lib/graph-render.js', 'store.js', 'sym.js'];
 const JARGON_BUDGET = 5;
 
 const failures = [];

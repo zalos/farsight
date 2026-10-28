@@ -97,7 +97,6 @@ export async function syncSource(
   let pulled = 0;
   let changed = 0;
   let deleted = 0;
-  let cursor: Cursor | null = before.cursor;
 
   try {
     const ttl = opts.schemaTtlMs ?? parseDuration(cfg.rediscoverAfter, DEFAULT_REDISCOVER_AFTER_MS);
@@ -170,7 +169,7 @@ export async function syncSource(
       if (cache.replaceItem(cfg.id, full.get(it.id) ?? it, syncNo)) changed++;
     }
     for (const id of gone) if (cache.markDeleted(id, syncNo)) deleted++;
-    cursor = finalCursor;
+    const cursor = finalCursor;
 
     const durationMs = now().getTime() - started.getTime();
     cache.finishSync(cfg.id, syncNo, { at: now().toISOString(), pulled, changed, deleted, cursor, durationMs });

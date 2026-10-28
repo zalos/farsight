@@ -36,7 +36,7 @@ export async function withSettingsLock<T>(configPath: string, action: () => Prom
           before.size > 256 ||
           (process.getuid && before.uid !== process.getuid())
         )
-          throw new Error();
+          throw new Error(undefined, { cause: error });
         const owner = JSON.parse(await readFile(path, 'utf8')) as { pid?: unknown; nonce?: unknown };
         if (
           !Number.isSafeInteger(owner.pid) ||
@@ -45,7 +45,7 @@ export async function withSettingsLock<T>(configPath: string, action: () => Prom
           !/^[a-f0-9-]{36}$/.test(owner.nonce)
         ) {
           // Another writer may still be filling its newly created lock.
-          if (Date.now() - before.mtimeMs > 5000) throw new Error();
+          if (Date.now() - before.mtimeMs > 5000) throw new Error(undefined, { cause: error });
         } else {
           let stopped = false;
           try {
@@ -64,7 +64,7 @@ export async function withSettingsLock<T>(configPath: string, action: () => Prom
         // An empty lock is possible between exclusive creation and its first
         // write. Retry within the same bounded interval without adopting it.
       }
-      if (Date.now() >= deadline) throw new Error(echoConfigWord('echo.config.write'));
+      if (Date.now() >= deadline) throw new Error(echoConfigWord('echo.config.write'), { cause: error });
       await delay(15);
     }
   }

@@ -127,7 +127,6 @@ async function resolveSeeds(p) {
   }
   if (p.type === 'work') {
     let id = p.id.includes('::') ? p.id : null;
-    let label = p.id;
     if (!id) {
       const list = await json('/api/work?q=' + encodeURIComponent(p.id));
       const hit =
@@ -137,7 +136,7 @@ async function resolveSeeds(p) {
     }
     const ans = await json('/api/work/item/' + encodeURIComponent(id));
     if (!ans || !ans.item) return { unknown: true };
-    label = biz() ? ans.item.title || ans.item.key : [ans.item.key, ans.item.title].filter(Boolean).join(' · ');
+    const label = biz() ? ans.item.title || ans.item.key : [ans.item.key, ans.item.title].filter(Boolean).join(' · ');
     // the parts its commits touched; else the parts the item is linked to
     let ids = (ans.commits || []).flatMap((c) => c.nodes || []);
     if (!ids.length) ids = (ans.links || []).map((l) => l.id || l.nodeId).filter(Boolean);

@@ -21,6 +21,7 @@ const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 const only = (value: Record<string, unknown>, keys: string[]) => Object.keys(value).every((key) => keys.includes(key));
 const validText = (value: unknown, max: number): value is string =>
+  // eslint-disable-next-line no-control-regex -- Submind text permits tabs/newlines while rejecting other ASCII controls.
   typeof value === 'string' && !!value.trim() && value.length <= max && !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value);
 const refKey = (value: { id: string; revision: string }) => `${value.id}:${value.revision}`;
 const clipped = (value: string, max: number): string =>

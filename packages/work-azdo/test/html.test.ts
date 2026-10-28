@@ -28,6 +28,7 @@ test('html: a recorded ExampleProject description renders as a readable nested l
   const d = rec('batch').value.find((v: any) => v.id === 350).fields['System.Description'];
   const text = htmlToText(d);
   assert.match(text, /^\*\*Info Required \/ Requested\*\*/);
+  // eslint-disable-next-line no-regex-spaces -- Match the recorded description's two-space nested-list indentation.
   assert.match(text, /\n- Attachments\n  - Receipts, picture, etc\./);
   assert.match(text, /\[Example product safety notice .*\]\(https:\/\/example\.com\/notices\)/);
   assert.doesNotMatch(text, /<|&nbsp;|&amp;/);

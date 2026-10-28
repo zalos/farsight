@@ -19,7 +19,7 @@ import { footerFacts, footerLines } from '../lib/export-model.js';
 
 const API = '/api/readiness?storyline=';
 /** What the page holds: the storyline asked for, its answer, the theme it found. */
-let RD = { id: null, data: null, theme: null, gen: 0 };
+const RD = { id: null, data: null, theme: null, gen: 0 };
 
 /** A catalog word with `{name}` placeholders filled. */
 function fill(key, vars) {
