@@ -16,6 +16,7 @@ import { BudgetLedger } from '../review/providers/budget.js';
 import { ModelBroker } from '../review/providers/broker.js';
 import { keychainSource } from '../review/providers/credentials.js';
 import { resolveReviewModel } from '../review/providers/selection.js';
+import { cliKind } from '../review/providers/registry.js';
 import { guidedSpec } from '../review/guided.js';
 import { generalSpec } from '../review/general.js';
 import { partitionInventory } from '../review/evidence.js';
@@ -73,7 +74,7 @@ export function reviewsFor(
       ...s,
       budget: {
         ...s.budget,
-        ...(resolved.binding.kind === 'copilot-cli' ? { maxSteps: 3, deadlineMs: 120000 } : {}),
+        ...cliKind(resolved.binding.kind)?.sessionBudget,
         maxOutputTokens: Math.min(s.budget.maxOutputTokens, resolved.binding.limits.maxOutputTokens),
       },
       adapterDigest: adapter.digest,

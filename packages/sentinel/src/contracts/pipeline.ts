@@ -359,7 +359,15 @@ export type EnvironmentName = string;
 export interface ScriptProvenance extends ProvenanceBase {
   kind: 'script';
   entryDigest: Digest;
-  interpreter: { name: 'node' | 'sh'; version: ShortText; digest: Digest | null };
+  /** `path`: the interpreter binary that ran, by absolute path, when it ran on the host. */
+  interpreter: { name: 'node' | 'sh'; version: ShortText; digest: Digest | null; path?: ShortText };
+  /**
+   * `none`: a host script is unconfined by design. It runs as the owner, with the owner's file system and network,
+   * like any script the owner runs, and only while the adopted settings turn `stage.host-scripts` on.
+   */
+  confinement?: 'none';
+  /** The schema its output document was validated against before publication, by digest. */
+  outputSchema?: { id: OutputSchemaId; digest: Digest };
   /** @maxItems 64 */
   argv: ScriptArgument[];
   /** @maxItems 128 */

@@ -59,6 +59,33 @@ const ENTRY = Buffer.from(
     '',
   ].join('\n'),
 );
+/** The declared output schema: a notes document must say what it read. */
+const SCHEMA = Buffer.from(
+  JSON.stringify({
+    type: 'object',
+    required: ['schema', 'documents', 'findings', 'folder', 'environment'],
+    properties: {
+      schema: { const: 'sentinel.notes/v1' },
+      documents: { type: 'integer', minimum: 0 },
+      findings: { type: 'integer', minimum: 0 },
+      folder: { type: 'array', items: { type: 'string' } },
+      environment: { type: 'array', items: { type: 'string' } },
+      sleeper: { type: 'integer' },
+    },
+  }),
+);
+/** The coded step, and around it a descendant that keeps the output stream open and outlives the interpreter. */
+const FORKING = Buffer.from(
+  [
+    "import { spawn } from 'node:child_process';",
+    "const sleeper = spawn('/bin/sleep', ['30'], { stdio: ['ignore', 'inherit', 'inherit'] });",
+    "process.stdout.write(JSON.stringify({ schema: 'sentinel.notes/v1', documents: 0, findings: 0, folder: [], environment: [], sleeper: sleeper.pid }));",
+    'process.exit(0);',
+    '',
+  ].join('\n'),
+);
+/** A document that names its schema and nothing else the schema requires. */
+const BARE = Buffer.from("process.stdout.write(JSON.stringify({ schema: 'sentinel.notes/v1' }));\n");
 const SERVER_FILES = [
   'package.json',
   ...['invoiceService', 'db', 'routes', 'approvals'].map((f) => `src/server/${f}.ts`),
@@ -76,7 +103,8 @@ const NOTES = {
 };
 
 /** A run of the invoice-app example whose current revision is the preview plus the host script, not yet run. */
-async function scripted(t: any, options: { hostScripts: boolean }) {
+async function scripted(t: any, options: { hostScripts: boolean; entry?: Buffer }) {
+  const entryBytes = options.entry ?? ENTRY;
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-host-script-')));
   t.after(() => {
     unlock(dir);
@@ -125,7 +153,8 @@ async function scripted(t: any, options: { hostScripts: boolean }) {
   const packs = book.packsOf(current.lock);
   const profile = publicProfile(registry, new Set(), packs);
   const evidence = await retainedBootstrapForReport(store, runId, derived);
-  const digest = sha(ENTRY);
+  const digest = sha(entryBytes);
+  const schemaDigest = sha(SCHEMA);
   const plan = planPipelineAnalysis({
     runId,
     revision: derived.plan.revision + 1,
@@ -138,13 +167,15 @@ async function scripted(t: any, options: { hostScripts: boolean }) {
     policy: plannerPolicyFrom(adopted.policy),
     limits: { maxScopesPerWork: 1 },
     pipeline,
-    scripts: new Map([['notes', digest]]),
+    scripts: new Map([['notes', { entry: digest, schema: schemaDigest }]]),
   });
   await admitPlan(store, {
     plan,
     ruleLock: current.lock,
     policy: adopted.policy,
-    profile: withPipeline(profile.record, pipeline, [{ stage: 'notes', entry: NOTES.entry, digest }]),
+    profile: withPipeline(profile.record, pipeline, [
+      { stage: 'notes', entry: NOTES.entry, digest, schema: { id: 'sentinel.notes/v1', digest: schemaDigest } },
+    ]),
   });
   store.ledger.advanceRunPlan(runId, plan.revision);
   const unit = plan.units.find((u: any) => u.stage === 'notes')!;
@@ -160,7 +191,13 @@ async function scripted(t: any, options: { hostScripts: boolean }) {
       });
       return coordinator.run();
     })();
-  return { store, runId, plan, unit, digest, run };
+  /** The bytes the owner supplies: an entry (the adopted one unless given) and the adopted output schema. */
+  const supplied = (entry: Buffer = entryBytes) =>
+    new Map([
+      [digest, entry],
+      [schemaDigest, SCHEMA],
+    ]);
+  return { store, runId, plan, unit, digest, schemaDigest, run, supplied };
 }
 
 test(
@@ -175,7 +212,7 @@ test(
       preview.length,
       'the script waits for every preview unit',
     );
-    const summary = await s.run(new Map([[s.digest, ENTRY]]));
+    const summary = await s.run(s.supplied());
     assert.equal(summary.state, 'completed', JSON.stringify(summary.failures));
     const publication = s.store.ledger.getPublication({ id: s.unit.id, revision: 1 })!;
     assert.ok(publication, 'the script unit published');
@@ -223,6 +260,9 @@ test(
         argv: provenance.argv,
         environmentNames: provenance.environmentNames,
         image: provenance.image,
+        confinement: provenance.confinement,
+        interpreterPath: provenance.interpreter.path,
+        outputSchema: provenance.outputSchema,
       },
       {
         kind: 'script',
@@ -233,6 +273,9 @@ test(
         argv: ['entry.mjs'],
         environmentNames: [],
         image: null,
+        confinement: 'none',
+        interpreterPath: process.execPath,
+        outputSchema: { id: 'sentinel.notes/v1', digest: s.schemaDigest },
       },
     );
     assert.match(provenance.interpreter.digest, /^sha256:[0-9a-f]{64}$/);
@@ -254,14 +297,14 @@ test(
   async (t) => {
     const tampered = await scripted(t, { hostScripts: true });
     const changed = Buffer.concat([ENTRY, Buffer.from('// one more line\n')]);
-    const one = await tampered.run(new Map([[tampered.digest, changed]]));
+    const one = await tampered.run(tampered.supplied(changed));
     assert.equal(one.state, 'completed', JSON.stringify(one.failures));
     const row = tampered.store.ledger.getWork({ id: tampered.unit.id, revision: 1 })!;
     assert.deepEqual([row.state, row.reason], ['blocked', 'sentinel.execution.inputMismatch']);
     assert.equal(tampered.store.ledger.countAttempts({ id: tampered.unit.id, revision: 1 }), 0);
 
     const off = await scripted(t, { hostScripts: false });
-    const two = await off.run(new Map([[off.digest, ENTRY]]));
+    const two = await off.run(off.supplied());
     assert.equal(two.state, 'completed', JSON.stringify(two.failures));
     const held = off.store.ledger.getWork({ id: off.unit.id, revision: 1 })!;
     assert.deepEqual([held.state, held.reason], ['blocked', 'sentinel.execution.featureOff']);
@@ -272,3 +315,54 @@ test(
         assert.ok(s.store.ledger.getPublication({ id: u.id, revision: 1 }));
   },
 );
+
+test(
+  'a document that only names its schema fails its attempt: it is validated against the pinned schema first',
+  needsStore,
+  async (t) => {
+    const s = await scripted(t, { hostScripts: true, entry: BARE });
+    const summary = await s.run(s.supplied());
+    assert.equal(summary.state, 'completed', JSON.stringify(summary.failures));
+    const ref = { id: s.unit.id, revision: 1 };
+    assert.equal(s.store.ledger.getPublication(ref), null, 'nothing is published');
+    assert.ok(
+      summary.failures.some((f: any) => f.work.id === s.unit.id && f.code === 'sentinel.execution.outputMismatch'),
+    );
+    assert.ok(s.store.ledger.countAttempts(ref) >= 1, 'the attempt ran and failed');
+  },
+);
+
+test(
+  'a descendant keeping the output open cannot hold the attempt: the group is killed when the interpreter exits',
+  needsStore,
+  async (t) => {
+    const s = await scripted(t, { hostScripts: true, entry: FORKING });
+    const t0 = performance.now();
+    const summary = await s.run(s.supplied());
+    const elapsed = performance.now() - t0;
+    assert.equal(summary.state, 'completed', JSON.stringify(summary.failures));
+    const publication = s.store.ledger.getPublication({ id: s.unit.id, revision: 1 })!;
+    assert.ok(publication, 'the script published once its interpreter exited');
+    const o = publication.outputs.find((x: any) => x.schema === 'sentinel.notes/v1')!;
+    const notes = JSON.parse((await s.store.readArtifact(o.id)).toString('utf8'));
+    assert.ok(Number.isSafeInteger(notes.sleeper) && notes.sleeper > 0);
+    assert.throws(
+      () => process.kill(notes.sleeper, 0),
+      (e: any) => e.code === 'ESRCH',
+      'the sleeper was killed with the group',
+    );
+    assert.ok(elapsed < 25_000, `the attempt settled in ${Math.round(elapsed)} ms, not after the sleeper's 30 s`);
+  },
+);
+
+test('an interpreter is measured before a script runs: its path, its digest and its version', async () => {
+  const { interpreterOf, SH_UNVERSIONED } = await import('../dist/execution/script-runner.js');
+  const node = interpreterOf('node');
+  assert.deepEqual([node.path, node.version], [process.execPath, process.version]);
+  assert.equal(node.digest, sha(readFileSync(process.execPath)));
+  const sh = interpreterOf('sh');
+  assert.equal(sh.path, '/bin/sh');
+  assert.equal(sh.digest, sha(readFileSync('/bin/sh')));
+  assert.ok(sh.version === SH_UNVERSIONED || sh.version.length > 0);
+  assert.notEqual(sh.version, 'posix-sh');
+});

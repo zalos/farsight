@@ -39,15 +39,15 @@ export interface ExecutionProfileRecord {
   parse: { selection: ParserSelection; limits: Required<ParserLimits> };
   /** The declared pipeline the run is planned from; absent for a run planned from its implied default. */
   pipeline?: PipelineDefinition;
-  /** Each declared script stage's entry, by the digest of the bytes the owner adopted. */
-  scripts?: Array<{ stage: string; entry: string; digest: Digest }>;
+  /** Each declared script stage's entry and output schema, by the digests of the bytes the owner adopted. */
+  scripts?: Array<{ stage: string; entry: string; digest: Digest; schema: { id: string; digest: Digest } }>;
 }
 
 /** The record with the declared pipeline the run is planned from (validated: it must derive a stage model). */
 export function withPipeline(
   record: ExecutionProfileRecord,
   pipeline: PipelineDefinition,
-  scripts: readonly { stage: string; entry: string; digest: Digest }[] = [],
+  scripts: readonly { stage: string; entry: string; digest: Digest; schema: { id: string; digest: Digest } }[] = [],
 ): ExecutionProfileRecord {
   try {
     stageModel(pipeline);
@@ -138,7 +138,12 @@ export function checkProfileForPlan(record: ExecutionProfileRecord, plan: PlanEn
       !stage ||
       !entry ||
       entry.entry !== stage.entry ||
-      scriptFingerprintOf(stage, entry.digest, u.implementationDigest, u.dependencies) !== u.inputFingerprint
+      scriptFingerprintOf(
+        stage,
+        { entry: entry.digest, schema: entry.schema.digest },
+        u.implementationDigest,
+        u.dependencies,
+      ) !== u.inputFingerprint
     )
       refuse(`script unit ${u.id} is not pinned to the entry the profile records`);
   }
