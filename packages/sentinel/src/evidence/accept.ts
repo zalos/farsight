@@ -75,7 +75,17 @@ function preflightIntent(
     },
   };
 }
-/** ws is the trusted existing Workspace selected by local/OwnerService, never any input report/root JSON. */
+/**
+ * The private acceptance pipeline for one report import. `ws` is the trusted existing Workspace that the local owner
+ * CLI or OwnerService selected, never anything from the report or its JSON. Policy is asked before any file is read;
+ * then the report and manifest are read within the import's bounds, normalized, bound to the retained source and, with
+ * a spent owner receipt, published once. Its statuses: `denied` (the policy refuses, or refuses the binding),
+ * `refused` (an `ImportRefusalCode` and position), `confirmationStale` (the candidate is not `expectCandidate`),
+ * `awaiting-confirmation` (no receipt yet), `accepted` (newly, or `reused` for an already accepted candidate), and,
+ * once a receipt was spent, `spentNotPublished` or `publicationUnknown` (with `acceptanceRecorded` when the acceptance
+ * is recorded but its read back failed). An unknown run, or a retained acceptance that does not authenticate, throws
+ * `sentinel.store.corruptRecord`; a retained source that cannot be proven throws the proof's own code.
+ */
 export async function acceptReportImportFiles(
   store: SentinelStore,
   ws: Workspace,

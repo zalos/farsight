@@ -171,10 +171,19 @@ async function priorRequestOutcome(
   return undefined;
 }
 /**
- * The owner CLI's `prepare` command through the running service: `preview` and `status` read, `accept`, `resume` and
+ * The owner CLI's `prepare` command through the running service: `preview` and `status` read; `accept`, `resume` and
  * `cancel` need the owner's confirmation and a receipt. An accept generates and saves its request key before it is
- * sent, so a lost answer can be found again. Arguments that do not fit the action are `sentinel.preparation.invalid`;
- * once a write was sent and its answer is lost, the outcome is `sentinel.preparation.outcomeUnknown`.
+ * sent, so a lost answer can be found again. Arguments that do not fit the action throw `PreparationError` with
+ * `sentinel.preparation.invalid`. Its outcomes:
+ * - the service's own outcome for the request (`status`, `resume`, `cancel`, `accept`), or `answered` with the preview;
+ * - `kept` when the saved key is the same request; `refused` with `sentinel.preparation.busy` while an earlier
+ *   request still runs or can resume;
+ * - `awaiting-confirmation` without `--confirm`; `configuration-failure` with the policy's or capability's reason when
+ *   admission denies it;
+ * - `unavailable` with `sentinel.service.operationUnavailable` when no service runs or offers the operation, or with
+ *   `sentinel.preparation.unavailable`;
+ * - `configuration-failure` with a `PreparationError` code (`changed`, `unavailable`, `invalid` and the rest) before
+ *   anything was sent, and with `sentinel.preparation.outcomeUnknown` once a write was sent and its answer was lost.
  */
 export async function prepareCommand(
   ws: Workspace,
