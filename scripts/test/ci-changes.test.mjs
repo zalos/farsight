@@ -30,10 +30,13 @@ test('ordinary docs skip runtime checks; packaged docs still check their tarball
       'docs/research/analysis-core-options-2026-10-17.md',
       'docs/ARCHITECTURE.md',
       '.github/PULL_REQUEST_TEMPLATE.md',
-      '.claude/skills/example/SKILL.md',
+      '.claude/agents/review-example.md',
     ]),
     none,
   );
+  // the two skills trees are checked against each other, so an edit to either runs the script tests
+  assert.deepEqual(selectChecks(['.claude/skills/example/SKILL.md']), { ...none, validate: true });
+  assert.deepEqual(selectChecks(['.agents/skills/example/references/x.md']), { ...none, validate: true });
   assert.deepEqual(selectChecks(['docs/ECHO.md', 'packages/echo/README.md']), { ...none, echo: true });
 });
 
@@ -430,6 +433,11 @@ test("validate tests the packages a change reaches: pnpm's changed-since set plu
       .packages,
     ['@farsight/echo'],
     'paths validate does not test leave the set alone',
+  );
+  assert.deepEqual(
+    selectTests(['.claude/skills/git-pr-flow/SKILL.md', '.agents/skills/git-pr-flow/SKILL.md'], BASE),
+    { base: BASE, also: [], packages: [] },
+    'the skills trees select validate for its script tests only',
   );
 });
 

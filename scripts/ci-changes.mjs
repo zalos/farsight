@@ -41,6 +41,9 @@ export function sentinelIsolationInputs(root = repoRoot) {
   return dirs;
 }
 
+/** The skills trees: read only by the script tests (scripts/check-skills-mirror.mjs), never by a package's tests. */
+const SKILLS = /^\.(?:claude|agents)\/skills\//;
+
 /** The checks one changed path selects, or `null` when it selects every check. */
 function pathChecks(path, inputs, isolation) {
   const checks = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false };
@@ -72,6 +75,9 @@ function pathChecks(path, inputs, isolation) {
   } else if (['packages/sentinel/README.md', 'scripts/test-sentinel-package.mjs'].includes(path)) {
     // Sentinel's tarball and its packaging; Farsight's package does not include it.
     checks.sentinel = true;
+  } else if (SKILLS.test(path)) {
+    // The two skills trees must stay identical: scripts/check-skills-mirror.mjs runs under pnpm test:scripts.
+    checks.validate = true;
   } else if (/^(?:[^/]+\.md|docs\/.*\.md|\.(?:github|claude|agents)\/.*\.md)$/s.test(path) || path === 'LICENSE') {
     // Only known documentation locations; Markdown in fixtures can affect tests.
   } else if (path === 'scripts/synth-graph.mjs') {
@@ -233,7 +239,8 @@ export function selectTests(paths, base, { root = repoRoot, graph, reach, packag
   const changed = new Set();
   for (const path of paths) {
     const checks = pathChecks(path, inputs, isolation);
-    if (checks && !checks.validate) continue; // documentation, e2e and packaging inputs: no unit test reads them
+    // documentation, e2e and packaging inputs, and the skills trees: no package's unit test reads them
+    if ((checks && !checks.validate) || SKILLS.test(path)) continue;
     const dir = /^packages\/([^/]+)\//.exec(path)?.[1];
     if (!checks || !graph.has(dir)) return EVERY;
     changed.add(dir);

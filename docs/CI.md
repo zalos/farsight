@@ -79,7 +79,8 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 
 | changed paths | runtime checks |
 |---|---|
-| Root Markdown, Markdown under `docs/`, `.github/`, `.claude/`, `.agents/`, or `LICENSE` | none, except the packaged Echo docs below |
+| Root Markdown, Markdown under `docs/`, `.github/`, `.claude/` or `.agents/` (outside `skills/`), or `LICENSE` | none, except the packaged Echo docs below |
+| `.claude/skills/` or `.agents/skills/` (the two trees must be identical) | `validate` — `scripts/check-skills-mirror.mjs` through `pnpm test:scripts` |
 | `docs/ECHO.md`, `packages/echo/README.md`, Echo packaging scripts or example connection/settings | `echo-package` |
 | `packages/sentinel/README.md`, `scripts/test-sentinel-package.mjs` | `sentinel-package` |
 | `scripts/pack-sentinel.mjs` | `sentinel-package` + `validate` (Sentinel's review-package unit test packs the tarball) |
@@ -113,7 +114,8 @@ that gate. The run summary lists the packages the selector expects; validate's l
 `Scope: n of 15 workspace projects`.
 
 Every package is tested when a path that selects validate lies outside a workspace package (root files, the
-lockfile, `scripts/`, `schemas/`, `examples/`, workflows and the selector itself), when a path is under `packages/`
+lockfile, `scripts/`, `schemas/`, `examples/`, workflows and the selector itself; the skills trees, which only the
+script tests read, select no package), when a path is under `packages/`
 without a manifest, when the manifests or a test folder cannot be read, and when `testBase` is missing, empty or not
 in the checkout (validate fetches the full history so it is). The required check names do not change. pnpm diffs
 `testBase` against the checkout, so on a PR whose branch is behind its base the set also covers the base branch's
