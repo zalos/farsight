@@ -60,6 +60,10 @@
         "nativeClaudeReviewEnabled": {
           "type": "boolean",
           "description": "Native Claude execution is deferred when absent or false; enabling does not establish runtime qualification."
+        },
+        "hostScripts": {
+          "type": "boolean",
+          "description": "Host script stages are off when absent or false. On, an owner-promoted script may run on this computer, a weaker isolation class the report names. Read only through the feature registry (`stage.host-scripts`)."
         }
       },
       "required": [

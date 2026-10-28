@@ -7,6 +7,7 @@ import { compareTimestamps } from '../validate.js';
 import { approvedDecisionAuthority, decisionHistoryAuthority, type ApprovedDecision } from './dispositions.js';
 import { checkedBasis, fail, timestamp, validDigest, type DecisionBasis } from './decision-data.js';
 
+/** Why one surface's path is in its state after evaluation: the decision that holds, or what invalidated it. */
 export type DecisionPathReason =
   | 'no-decision'
   | 'expired'
@@ -24,6 +25,10 @@ export type DecisionPathReason =
   | 'accepted-risk'
   | 'false-positive'
   | 'deferred';
+/**
+ * One surface's result: its state (`open` unless a valid accepted risk or false positive holds), the validity of the
+ * decision selected for it, and the reason.
+ */
 export interface EvaluatedDecisionPath {
   readonly surfaceId: NodeId;
   readonly dispositionId: string | null;
@@ -31,6 +36,10 @@ export interface EvaluatedDecisionPath {
   readonly validity: 'valid' | 'expired' | 'invalidated' | 'none';
   readonly reason: DecisionPathReason;
 }
+/**
+ * The evaluation of a finding's approved decisions at one time, bound to the journal head it read. Only
+ * `evaluateDecisions` gives one authority (`decisionEvaluationAuthority`); its serialization is an inert record.
+ */
 export interface DecisionEvaluation {
   readonly schema: 'sentinel-decision-evaluation/1';
   readonly workspace: string;
@@ -47,6 +56,14 @@ const evaluations = new WeakMap<object, DecisionEvaluation>();
 /** Only an evaluation made by this fold has provenance; serialization is an inert historical record. */
 export const decisionEvaluationAuthority = (value: unknown): DecisionEvaluation | undefined =>
   value && typeof value === 'object' ? evaluations.get(value) : undefined;
+/**
+ * Evaluates one workspace's genuine approvals against a current basis at `options.at`. Per surface, the latest approval
+ * for the finding applies only while it is unexpired, the finding, source, environment, deployment, route, control,
+ * resolution and framework digests are unchanged, and the resolution is exact. An accepted risk stays visible, a
+ * deferral stays open, and a mitigation is `assertion-unverified` until imported provenance exists. Refuses
+ * `sentinel.decision.invalidInput` for a bad basis, workspace or time, and `sentinel.decision.unauthorized` unless the
+ * approvals are one complete current read of this workspace's journal; a stale read is `sentinel.decision.staleState`.
+ */
 export function evaluateDecisions(
   approvals: readonly ApprovedDecision[],
   basisInput: DecisionBasis,

@@ -4,6 +4,7 @@ import type { StringEntry } from './strings.js';
 // a stable reason code; the professional text is its message. Both registers carry the same words until the PR 09
 // vocabulary freeze, as in strings-sentinel-cli.ts. No text here echoes a settings value or a secret.
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
+const two = (hud: string, professional: string, define: string): StringEntry => ({ hud, professional, define });
 
 export const SENTINEL_POLICY_STRINGS: Record<string, StringEntry> = {
   'sentinel.rules.packUnreadable': same('the rule pack could not be read', 'A file or folder of the candidate pack could not be listed or opened, so the pack was not staged.'),
@@ -51,4 +52,12 @@ export const SENTINEL_POLICY_STRINGS: Record<string, StringEntry> = {
   'sentinel.admission.credentialScoped': same('the credential’s scope covers this action', 'The adapter checked the referenced keychain credential’s scope and it permits this action.'),
   'sentinel.admission.credentialDenied': same('the credential’s scope does not cover this action', 'The adapter checked the referenced keychain credential’s scope and it does not permit this action.'),
   'sentinel.admission.credentialUnknown': same('the credential’s scope is unknown', 'Admission needs to know what the credential may do. An unknown scope denies.'),
+  // The feature registry (policy/features.ts): what each gated feature allows, and the one reason a stage that needs an
+  // off feature is refused with. The business register names the feature in plain words, never its registry name.
+  'sentinel.feature.hostScripts': two('scripts run on this computer', 'host script stages (stage.host-scripts)', 'An owner-promoted script runs as a pipeline stage directly on this computer instead of in a pinned container. It is a weaker isolation class, and the report says so. Off unless the adopted settings turn it on.'),
+  'sentinel.feature.claudeCli': two('reviews by Claude', 'Claude CLI agent stages (runner.claude-cli)', 'An agent stage may run through the Claude command-line tool on this computer, under its sandbox and Sentinel’s network proxy. Off unless the adopted settings turn it on; turning it on does not qualify the runner.'),
+  'sentinel.feature.copilotCli': two('reviews by Copilot', 'Copilot CLI agent stages (runner.copilot-cli)', 'An agent stage may run through the Copilot command-line tool on this computer, under its sandbox and Sentinel’s network proxy. This is the qualified runner and is on.'),
+  'sentinel.feature.hostedApi': two('reviews by a hosted model service', 'hosted model API stages (review.hosted-api)', 'An agent stage may send its inputs to a hosted model service over the network and be charged for it. Off unless the adopted settings turn it on.'),
+  'sentinel.feature.off': two('{detail} is turned off in the adopted settings', '{detail} is off in the adopted Sentinel settings', 'A pipeline can ask for a feature but cannot turn one on. Only the owner’s adopted settings do, so a stage that needs a feature that is off is refused before anything runs.'),
+  'sentinel.feature.unknown': same('an unknown feature was asked for', 'Only the features in Sentinel’s feature registry can be turned on or off. Any other name is a mistake in the caller and is refused.'),
 };

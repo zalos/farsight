@@ -1,6 +1,7 @@
 // Readable inspection lines from the canonical, already disclosed report section. No new verdict or coverage fold.
 import type { ReportEnvelope } from '../contracts/index.js';
 import { wordOf } from './words.js';
+/** The control inspection section as readable lines per source, in the document's own words. It adds no verdict. */
 export function inspectionText(doc: ReportEnvelope): Array<{ source: string; lines: string[] }> {
   const word = (key: string) => wordOf(doc, key, 'business');
   const text = (key: string, values: Record<string, string>) =>
