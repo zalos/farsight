@@ -246,9 +246,9 @@ test('no ledger path may name the owner lock file, by spelling, case or inode', 
   assert.equal(after.mtimeNs, before.mtimeNs, 'the owner file was never written');
 });
 
-// The six shipped migrations, byte for byte (docs/proposals/sentinel-v2 K-3): an applied migration is recorded by its
-// checksum, so a changed one would refuse every ledger it already upgraded. A new schema change is a seventh.
-test('migrations 1 to 6 keep their exact bytes and checksums', () => {
+// The shipped migrations, byte for byte: an applied migration is recorded by its checksum, so edits refuse an
+// existing ledger. A schema change adds a new step.
+test('migrations 1 to 7 keep their exact bytes and checksums', () => {
   const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
   assert.deepEqual(
     LEDGER_MIGRATIONS.map((m: { version: number; name: string; sql: string }) => [
@@ -294,8 +294,39 @@ test('migrations 1 to 6 keep their exact bytes and checksums', () => {
         'f81722f684b0297b0107e4129b3379f6ede92ea285692ca8ae5761f1378f10df',
         'sha256:17fbb8bcfbe6463909ae22cc76ce061f201150aa262f668b6bc61cfda4763935',
       ],
+      [
+        7,
+        'attempt-retention',
+        '17907212d6bb4147123173251a07e7fc533071ffcf761fa22e387eb82991b83b',
+        'sha256:f8ce550ca08e715365eb12bb040dd8129f29614a96c5bacc76c1a37894f04b6d',
+      ],
     ],
   );
   for (const m of LEDGER_MIGRATIONS)
     assert.equal(migrationChecksum(m), `sha256:${sha(`${m.version}\n${m.name}\n${m.sql}`)}`, 'the checksum formula');
+});
+
+test('a schema 6 ledger upgrades to 7 without changing its earlier migration rows', async (t) => {
+  const dir = scratch(t);
+  const first = await openLedger(owner(dir), { migrations: LEDGER_MIGRATIONS.slice(0, 6) });
+  const path = first.path;
+  first.close();
+  const rows = () => {
+    const db = new DatabaseSync(path, { readOnly: true });
+    try {
+      return db
+        .prepare('SELECT version, name, checksum, build, applied_at FROM schema_migrations ORDER BY version')
+        .all();
+    } finally {
+      db.close();
+    }
+  };
+  const before = rows();
+  const upgraded = await openLedger(owner(dir));
+  assert.deepEqual(upgraded.migration, { from: 6, to: 7, backupPath: upgraded.migration.backupPath });
+  assert.ok(upgraded.migration.backupPath);
+  upgraded.close();
+  const after = rows();
+  assert.deepEqual(after.slice(0, 6), before);
+  assert.equal(after[6]?.version, 7);
 });

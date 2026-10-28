@@ -504,6 +504,29 @@ ${APPEND_ONLY('evidence_acceptances', 'UPDATE')}
 ${APPEND_ONLY('evidence_acceptances', 'DELETE')}
 `;
 
+// A failed or canceled attempt keeps its private record and its linked artifacts for as long as its row exists.
+const V7 = `
+CREATE TABLE attempt_retained (
+  attempt_id TEXT NOT NULL,
+  work_id TEXT NOT NULL,
+  work_revision INTEGER NOT NULL,
+  artifact_id TEXT NOT NULL REFERENCES artifacts(id),
+  role TEXT NOT NULL CHECK (role IN ('record','linked')),
+  schema TEXT NOT NULL CHECK (length(schema) BETWEEN 1 AND 128),
+  privacy TEXT NOT NULL CHECK (privacy IN ('metadata','source-derived','source')),
+  sequence INTEGER NOT NULL REFERENCES events(sequence),
+  PRIMARY KEY (attempt_id, artifact_id),
+  FOREIGN KEY (attempt_id, work_id, work_revision) REFERENCES attempts(id, work_id, work_revision)
+) STRICT;
+CREATE UNIQUE INDEX attempt_retained_one_record ON attempt_retained(attempt_id) WHERE role = 'record';
+CREATE INDEX attempt_retained_by_artifact ON attempt_retained(artifact_id);
+CREATE TRIGGER attempt_retained_ended BEFORE INSERT ON attempt_retained
+  WHEN (SELECT state FROM attempts WHERE id = NEW.attempt_id) NOT IN ('failed','canceled','canceled-after-spend')
+  BEGIN SELECT RAISE(ABORT, 'sentinel.store.wrongState: attempt_retained'); END;
+${APPEND_ONLY('attempt_retained', 'UPDATE')}
+${APPEND_ONLY('attempt_retained', 'DELETE')}
+`;
+
 /** The shipped migrations, in order. Never edit a released step: add the next number. */
 export const LEDGER_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: 'foundation', sql: V1 },
@@ -512,6 +535,7 @@ export const LEDGER_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 4, name: 'plan-admission', sql: V4 },
   { version: 5, name: 'plan-selection', sql: V5 },
   { version: 6, name: 'evidence-operations', sql: V6 },
+  { version: 7, name: 'attempt-retention', sql: V7 },
 ]);
 
 /** The checksum a ledger records for one applied migration: the content address of its version, name and SQL. */
