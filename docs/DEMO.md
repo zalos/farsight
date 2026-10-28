@@ -7,8 +7,8 @@ the output quoted is what that run printed.
 
 > **Verified** end to end on `main` `e4f49098` and again on `69842407` (2026-10-28), each from a fresh clone into a
 > clean npm prefix, macOS on Apple silicon, Node 24.21.0, Copilot CLI 1.0.105, no Docker; steps 2 and 4c again on
-> `3f82c972`, which brought the viewer's SCANS · PIPELINE · STAGE ladder (#227). Steps that change when an open pull
-> request lands are marked **after #237** (one `scan` command); this file is re-run and updated as each one merges.
+> `3f82c972` (the viewer's SCANS · PIPELINE · STAGE ladder, #227); steps 2 and 4a, and 4b up to the model
+> confirmation, again on `4fd4e251` (the `scan` command, #237). This file is re-run and updated as later changes land.
 
 | step | what you do | time |
 |---|---|---|
@@ -99,29 +99,38 @@ cd ~/farsight-demo/app
 ### 4a. A first scan, no model
 
 ```sh
-farsight-sentinel init
+farsight-sentinel init                                              # 0.2 s
 #   created …/app/.farsight/sentinel/settings.json from the default settings
 #   created …/app/.farsight/sentinel/pipeline.json from the static profile
 #   …
-#   next: review both files, adopt them as their owner (settings adopt --confirm), promote the rule packs this
-#   profile uses (rules promote builtin:foundation-preview --confirm), then plan a scan (plan)
+#   next: review both files, then run scan: it shows what it would adopt (the settings and pipeline, as settings
+#   adopt --confirm), the rule packs this profile uses that it would promote (rules promote
+#   builtin:foundation-preview --confirm) and what it would run; scan --confirm does all of it as their owner
 farsight-sentinel settings adopt --confirm                          # settings sha256:… · pipeline sha256:… · prepared
 farsight-sentinel rules promote builtin:foundation-preview --confirm  # pack sentinel-foundation-preview 0.1.0 · … · prepared
-farsight-sentinel plan
-#   plan run-<id> · sha256:… · effects: local-artifacts · Foundation preview: these counts show the pipeline works
-#   end to end. They are not scanner or framework coverage.
-#   prepared
-farsight-sentinel run run-<id> --confirm                            # about 12 s; exit 2
-#   run run-<id> · completed · preview findings: 0
+farsight-sentinel scan                                              # 0.2 s; exit 4
+#   1. capture (builtin) · runs in-process · local-artifacts
+#   2. parse (builtin) · runs child · local-artifacts
+#   3. inventory (builtin) · runs child · local-artifacts
+#   4. preview (tool) · runs child · local-artifacts
+#   5. report (builtin) · runs in-process · local-artifacts
+#   stages: the static profile's defaults (settings-configured reviews included); declare them in pipeline.json to pin them
+#   to confirm as the owner: farsight-sentinel scan --confirm
+#   waiting for the owner to confirm: the scan waits for the owner to confirm it; nothing was captured or run
+farsight-sentinel scan --confirm                                    # about 15 s; exit 2
+#   plan run-<id> · sha256:…
+#   run run-<id> · completed
+#   next: farsight-sentinel report
 #   required checks did not complete: foundation preview complete: this is not required coverage
-farsight-sentinel report run-<id>
+farsight-sentinel report                                            # the latest scan; exit 0
 ```
 
-Both setup steps are needed, in that order: `plan` refuses until the settings are adopted and the preview rule pack is
-promoted. **Exit 2 is the honest result**, not a failure: the static profile runs one original preview check (SQL text
-assembled from strings) over every source file, and Sentinel never calls that required coverage. The report says so.
-Copy the run id from `plan`'s first line into `run` and `report` (**after #237**: `farsight-sentinel scan` previews and
-`scan --confirm` runs, with no id to copy).
+`scan` without `--confirm` only shows what would happen (exit 4) and runs nothing. Adopting and promoting first, as
+above, keeps each owner step visible; `scan` alone would list them (*first, as the owner: adopt the settings sha256:…
+and the pipeline sha256:…* · *then, as the owner: promote the foundation-preview rule pack*) and `scan --confirm` would
+do them itself. **Exit 2 is the honest result**, not a failure: the static profile runs one original preview check
+(SQL text assembled from strings) over every source file, and Sentinel never calls that required coverage. The report
+says so. There is no run id to copy: `report` reads the latest scan (`report run-<id>` reads any other).
 
 ### 4b. The Copilot review
 
@@ -178,15 +187,25 @@ Then:
 ```sh
 farsight-sentinel settings adopt --confirm                          # prepared
 farsight-sentinel plan
-#   plan run-<id2> · sha256:… · effects: local-artifacts, paid-inference, source-disclosure, network · Foundation preview: …
+#   plan run-<id2> · sha256:… · pinned checks and model review · effects: local-artifacts, paid-inference,
+#   source-disclosure, network · Foundation preview: …
+#   stages: the static profile's defaults (settings-configured reviews included); declare them in pipeline.json to pin them
 farsight-sentinel run run-<id2> --confirm --confirm-models          # about 40 s; exit 2 again
 #   run run-<id2> · completed · preview findings: 0
 #   required checks did not complete: foundation preview complete: this is not required coverage
 farsight-sentinel report run-<id2> --full
 ```
 
-`--confirm-models` is the separate confirmation for the model call (without it `run` stops at exit 4; its message
-currently says *add --confirm* even when `--confirm` is there). The full report ends with **How each stage ran**, one
+`--confirm-models` is the separate confirmation for the model call. Without it `run` stops at exit 4 and shows what
+it would call and the exact line to type:
+
+```text
+model for review-general: native-copilot luna through native-copilot · budget 816000 tokens
+to confirm as the owner: farsight-sentinel run run-<id2> --confirm --confirm-models
+waiting for the owner to confirm: the background service needs the owner's confirmation for this: add --confirm
+```
+
+(the last line still says *add --confirm*; the line above it is the one to type). The full report ends with **How each stage ran**, one
 line per stage; the review's line carries the model, the turns, the tokens and the cost (the numbers vary from run
 to run):
 
@@ -250,12 +269,14 @@ Stop everything with Ctrl-C in each terminal (the service also stops by itself a
 
 | mistake | what you see | exit | what to do |
 |---|---|---|---|
-| **1. Copilot is not logged in** | exactly the success lines of step 4b: `run … · completed · preview findings: 0` and *required checks did not complete: foundation preview complete: this is not required coverage*. Only `report <id> --full` differs: the review line reads `model luna · 1 turns · tokens unknown · cost unobserved · subscription`, and `report <id> --instructions --json` names `sentinel.review.frontier.modelError` | 2 | `copilot --no-auto-update login`, then `plan` and `run … --confirm --confirm-models` again |
-| **2. Settings not adopted** (or `init` never ran) | *configuration or infrastructure failure: this workspace's settings are not adopted* | 3 | `farsight-sentinel settings adopt --confirm`, then `rules promote builtin:foundation-preview --confirm` |
+| **1. Copilot is not logged in** | exactly the success lines of step 4b: `run … · completed · preview findings: 0` and *required checks did not complete: foundation preview complete: this is not required coverage*. Only `report <id> --full` differs: the review line reads `model luna · 1 turns · tokens unknown · cost unobserved · subscription`, and `report <id> --instructions --json` names `sentinel.review.frontier.modelError` | 2 | `copilot login`, then `plan` and `run … --confirm --confirm-models` again |
+| **2. Settings not adopted** (or `init` never ran) | `plan`: *configuration or infrastructure failure: this workspace's settings are not adopted* (exit 3). `scan` lists the adoption it would do (exit 4); before `init`, `scan` says *configuration or infrastructure failure: the Sentinel settings file could not be read* (exit 3) | 3 or 4 | `farsight-sentinel init` if needed, then `settings adopt --confirm` and `rules promote builtin:foundation-preview --confirm` (or `scan --confirm`, which does both) |
 | **3. No model grant** (the `paid.admit` grant or the run.start effects missing) | the 30 preview checks run, then `run … · completed · preview findings: 0` and *configuration or infrastructure failure: a planned check failed to execute*; `report <id> --full` has no review line, and `--instructions --json` says `sentinel.review.integrity`, which is misleading | 3 | add both grant edits from step 4b, `settings adopt --confirm`, `plan`, `run` again |
 | **4. Node 22 on PATH** | *SQLite {found} has not been qualified for the Sentinel store on {host} (qualified there: {qualified}) (SQLite 3.47.2 has not been qualified for the Sentinel store on darwin-arm64 (qualified there: 3.53.3, 3.53.4))* | 3 | `nvm use 24` in that shell; npm installs the package under Node 22 without complaint, but it only runs under Node 24 |
 
 A changed `pipeline.json` or `settings.json` is refused until adopted again (*the pipeline changed since it was
-adopted*). While `farsight-sentinel serve` holds the store, `plan`, foreground `run`, `report --full` and
-`report --instructions` refuse with *the workspace's service holds the store*; stop the service, or use
-`run <id> --detach --confirm` for runs without a model.
+adopted*). While `farsight-sentinel serve` runs (step 4c), `plan`, `scan`, `status`, `report` and `report --full` go
+through it, but the foreground model run and `report --instructions` refuse with *the workspace's service holds the
+store; this needs the store in this process (plan, scan, status, report and scans go through the service)*: stop the
+service for step 4b. `report` with no run id reads the latest scan, so after a `plan` you have not run yet it answers
+*the run did not complete*; name the run (`report run-<id>`) instead.
