@@ -1,0 +1,113 @@
+// Who calls the facade (app/service.ts). Every method takes a principal; what it may do follows from which kind it
+// is, never from what it says about itself.
+//
+// - The owner principal is minted only by the command line's own entry, in the owner's own process (ADR 37): it can
+//   confirm, which issues the owner's receipts here. The mint is handed out once per process (`claimOwnerMint`), to
+//   cli.ts as it loads; the owner exists only as an object that mint made and this module remembers, so a copy, a
+//   parsed request body or any object built to look like one is not it, and is refused. These checks keep ordinary
+//   importers and forged objects out; they do not prove process provenance against code running as the same OS
+//   user, which is outside Sentinel's boundary (ADR 37).
+// - An agent principal is what every connection to the local service is, the owner's own CLI included: built by the
+//   transport from the channel it accepted, never the owner channel. It confirms nothing; owner authority reaches it
+//   only as an owner receipt issued by the command line after its --confirm.
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { requestedByOf, ActorError, type RequestedBy, type ServiceChannel } from './actor.js';
+
+export interface OwnerPrincipal {
+  readonly kind: 'owner';
+  readonly requestedBy: RequestedBy;
+}
+export interface AgentPrincipal {
+  readonly kind: 'agent';
+  readonly requestedBy: RequestedBy;
+}
+export type Principal = OwnerPrincipal | AgentPrincipal;
+
+/** The owner principals this module minted: the only objects `isOwner` accepts. */
+const OWNERS = new WeakSet<object>();
+/** Whether the mint was handed out: once per process, to the command line's entry (cli.ts claims it as it loads). */
+let mintClaimed = false;
+/**
+ * Where this package's command line can be, relative to this module, in each of its two layouts: the compiled tree
+ * (dist/app/principal.js beside dist/cli.js) and the packed tarball, whose bundle puts the command line at
+ * dist/cli.mjs and this module either in a shared chunk (dist/chunks/) or inside dist/cli.mjs itself. Only files that
+ * exist count.
+ */
+const CLI_ENTRIES = ['../cli.js', '../cli.mjs', './cli.mjs'].map((rel) => fileURLToPath(new URL(rel, import.meta.url)));
+
+/**
+ * Whether this process's entry is this package's command line: `process.argv[1]`, resolved through any link (the
+ * installed `farsight-sentinel` bin and npm's `.bin` entry are links), is exactly its command line file. A test, a library importer or another program
+ * started the ordinary way is not, whatever it imports. This reads the process's own arguments, so it is not proof of
+ * provenance: code running as the same OS user can set them (outside Sentinel's boundary, ADR 37).
+ */
+export function entryIsOwnerCli(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  let real: string;
+  try {
+    real = realpathSync.native(entry);
+  } catch {
+    return false;
+  }
+  return CLI_ENTRIES.some((candidate) => {
+    try {
+      return realpathSync.native(candidate) === real;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * Hands the owner mint to the command line's own entry, once per process. The claim is refused in a process whose
+ * entry is not the owner's command line (`sentinel.actor.ownerMintNotEntry`), so an ordinary library importer, a test
+ * or another program cannot make an owner, even first. In the command line's own process, cli.ts claims it as it
+ * loads, before any command runs, and keeps it module-private; any later claim (a second importer, a transport) is
+ * refused with `sentinel.actor.ownerMintClaimed`. This refuses ordinary importers and forged objects; it does not
+ * prove process provenance against code running as the same OS user, which can set its own arguments (ADR 37).
+ */
+export function claimOwnerMint(): () => OwnerPrincipal {
+  if (!entryIsOwnerCli()) throw new ActorError('sentinel.actor.ownerMintNotEntry');
+  if (mintClaimed) throw new ActorError('sentinel.actor.ownerMintClaimed');
+  mintClaimed = true;
+  return () => {
+    const owner: OwnerPrincipal = Object.freeze({ kind: 'owner', requestedBy: requestedByOf({ kind: 'owner-cli' }) });
+    OWNERS.add(owner);
+    return owner;
+  };
+}
+
+/** A connection's principal, from the channel its transport accepted: always an agent, never the owner channel. */
+export function agentPrincipal(by: RequestedBy): AgentPrincipal {
+  if (by.channel === 'owner-cli' || by.principal !== 'agent')
+    throw new ActorError('sentinel.actor.ownerChannelNotGrantable');
+  const granted = requestedByOf({
+    kind: 'service-connection',
+    granted: { principal: 'agent', channel: by.channel as ServiceChannel },
+  });
+  return Object.freeze({ kind: 'agent', requestedBy: granted });
+}
+
+/** True only for an owner principal this module minted. */
+export const isOwner = (p: unknown): p is OwnerPrincipal => typeof p === 'object' && p !== null && OWNERS.has(p);
+
+/** True for an agent principal; anything that is neither is refused by the facade. */
+const isAgent = (p: unknown): p is AgentPrincipal =>
+  typeof p === 'object' &&
+  p !== null &&
+  !OWNERS.has(p) &&
+  (p as { kind?: unknown }).kind === 'agent' &&
+  (p as AgentPrincipal).requestedBy?.principal === 'agent' &&
+  (p as AgentPrincipal).requestedBy?.channel !== 'owner-cli';
+
+/**
+ * The principal a facade method acts for, checked: the owner it minted, or an agent. An object that claims to be the
+ * owner but was not minted here (a forged or copied one) is refused with `sentinel.actor.confirmNotOwner`.
+ */
+export function principalOf(p: unknown): Principal {
+  if (isOwner(p)) return p;
+  if (isAgent(p)) return p;
+  throw new ActorError('sentinel.actor.confirmNotOwner');
+}

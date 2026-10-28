@@ -104,6 +104,49 @@ try {
     assert.deepEqual(readFileSync(join(at, '.farsight', 'sentinel', 'pipeline.json')), pipeline);
     assert.equal((await call('pipeline', 'validate')).status, 0, `${profile}: the pipeline it wrote is sound`);
   }
+  // A first scan is four commands with no id to retype: init, scan (the preview, exit 4), scan --confirm, report.
+  {
+    const at = join(scratch, 'first-scan');
+    mkdirSync(join(at, 'src'), { recursive: true });
+    // Its own owner state: the rule lock it promotes into is the owner's, not the workspace's.
+    const own = { ...env, HOME: join(scratch, 'first-home'), XDG_STATE_HOME: join(scratch, 'first-owner-state') };
+    mkdirSync(own.HOME, { recursive: true });
+    writeFileSync(
+      join(at, 'src', 'users.ts'),
+      'export const find = (id: string) => db.query("SELECT * FROM users WHERE id = " + id);\n',
+    );
+    const call = async (...args) => {
+      try {
+        const r = await consumer.exec(bin, [...args, '--json'], { cwd: at, env: own });
+        return { status: 0, body: JSON.parse(r.stdout) };
+      } catch (error) {
+        if (typeof error.code !== 'number') throw error;
+        return { status: error.code, body: JSON.parse(error.stdout) };
+      }
+    };
+    assert.equal((await call('init')).status, 0);
+    const preview = await call('scan');
+    assert.deepEqual(
+      [preview.status, preview.body.facts.setup.map((s) => s.kind)],
+      [4, ['adopt', 'promote']],
+      JSON.stringify(preview.body),
+    );
+    const scanned = await call('scan', '--confirm');
+    // The installed bin (npm's .bin link to the bundled dist/cli.mjs) is the owner's command line: it mints its owner.
+    assert.notEqual(
+      scanned.body.reasonCode,
+      'sentinel.actor.ownerMintNotEntry',
+      'the installed CLI is the owner entry',
+    );
+    assert.deepEqual(
+      [scanned.status, scanned.body.outcome, scanned.body.facts.state],
+      [2, 'required-coverage-incomplete', 'completed'],
+      JSON.stringify(scanned.body),
+    );
+    const firstReport = await consumer.exec(bin, ['report'], { cwd: at, env: own });
+    assert.match(firstReport.stdout, new RegExp(scanned.body.facts.runId));
+    assert.match(firstReport.stdout, /1 finding in this report/);
+  }
   assert.equal((await sentinel('settings', 'adopt')).status, 4, 'adoption waits for the owner');
   assert.equal((await sentinel('settings', 'adopt', '--confirm')).status, 0);
   // The rule pack the package ships, promoted by the owner from the installed tarball alone.
@@ -217,7 +260,7 @@ try {
     JSON.stringify(refused.body),
   );
   console.log(
-    `sentinel preview consumer ok: npm-only install, init twice, adopt, promote the built-in pack, plan ${planId}, run (exit 2, preview), report; background run ${second} (detach, join, wait, report); each of its units rerun alone with the source gone; a custom pack for the preview detector refused`,
+    `sentinel preview consumer ok: npm-only install, init twice, a first scan (init, scan, scan --confirm, report), adopt, promote the built-in pack, plan ${planId}, run (exit 2, preview), report; background run ${second} (detach, join, wait, report); each of its units rerun alone with the source gone; a custom pack for the preview detector refused`,
   );
 } finally {
   consumer.cleanup();
