@@ -177,8 +177,11 @@ export interface ScriptStageDefinition extends StageDefinitionBase {
   args?: ScriptArgument[];
 }
 
-/** The agent runners a stage may name. A hosted API is off unless `review.hosted-api` is on. */
-export type AgentRunnerId = 'claude-cli' | 'copilot-cli' | 'hosted-api';
+/**
+ * The agent runners a stage may name: the two CLIs, a hosted model API (off unless `review.hosted-api` is on), and a
+ * local model server (an adopted `ollama` provider that keeps the source on this machine).
+ */
+export type AgentRunnerId = 'claude-cli' | 'copilot-cli' | 'hosted-api' | 'ollama';
 
 /**
  * `brokered`: Sentinel runs the loop and the evidence broker serves cited slices. `native`: the CLI runs its own loop

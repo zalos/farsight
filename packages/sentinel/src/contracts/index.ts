@@ -159,7 +159,7 @@ export const STAGE_OUTPUT_TYPES = [
   'report',
 ] as const;
 export const STAGE_FAN_OUTS = ['per-run', 'per-source', 'per-entry', 'per-check'] as const;
-export const AGENT_RUNNERS = ['claude-cli', 'copilot-cli', 'hosted-api'] as const;
+export const AGENT_RUNNERS = ['claude-cli', 'copilot-cli', 'hosted-api', 'ollama'] as const;
 export const AGENT_MODES = ['brokered', 'native'] as const;
 export const EXECUTION_SITES = ['in-process', 'child', 'container', 'host', 'sandboxed-cli'] as const;
 export const COST_UNOBSERVED_REASONS = ['subscription', 'usage-unknown', 'no-rates'] as const;

@@ -71,6 +71,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // Exact-owned native memory witness: bounded fixed proc/cgroup reads and one filesystem notification watcher.
   'execution/cgroup-memory.js': ['node:fs'],
 
+  // The declared pipeline (app/): the credential-shape check, and the pipeline file read beside the settings.
+  'app/pipeline.js': ['@farsight/core/dist/credential-shapes.js'],
+  'app/pipeline-adoption.js': ['node:fs', 'node:path'],
   'service/preparation-key-lock.js': ['node:path'],
   'service/preparation-client.js': ['node:crypto', 'node:path'],
   'service/preparation-projection.js': ['@farsight/core/dist/strings.js'],

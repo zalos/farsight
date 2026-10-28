@@ -423,6 +423,24 @@ test('what the workspace has not made available is reported, not refused', () =>
     }),
   );
   assert.deepEqual(ready, []);
+  // A local model server binds only an Ollama provider that keeps the source here; it needs no gated feature.
+  const local = pipelineOf([
+    ...BOOT,
+    { id: 'l', kind: 'agent', mode: 'native', runner: 'ollama', model: 'qwen3:4b', needs: ['parse'] },
+  ]);
+  const ollama = (disclosure: 'local-only' | 'hosted') =>
+    ({
+      ...provider,
+      id: 'local',
+      kind: 'ollama',
+      endpoint: 'http://127.0.0.1:11434',
+      disclosure,
+      models: [{ id: 'q', model: 'qwen3:4b', capability: {} }],
+    }) as never;
+  assert.deepEqual(checkPipeline(local, { settings: settingsWith({ providers: [ollama('local-only')] }) }), []);
+  assert.deepEqual(unavailable(checkPipeline(local, { settings: settingsWith({ providers: [ollama('hosted')] }) })), [
+    'sentinel.pipeline.runnerNotConfigured',
+  ]);
   // A model the provider lists but the owner never probed and adopted does not bind.
   const unprobed = { ...provider, models: [{ id: 'luna', model: 'gpt-6-luna', capability: null }] } as never;
   assert.deepEqual(

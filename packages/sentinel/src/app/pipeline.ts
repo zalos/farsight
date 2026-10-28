@@ -265,19 +265,23 @@ const FLAG_NAMES: readonly FeatureFlagName[] = [
 /** The features one stage needs. */
 function featuresOf(stage: StageDefinition): readonly FeatureFlagName[] {
   if (stage.kind === 'script' && stage.runner === 'host') return ['stage.host-scripts'];
-  if (stage.kind === 'agent') return [RUNNER_FEATURE[stage.runner]!];
+  // A local model server is no gated feature: its adopted provider keeps the source on this machine.
+  if (stage.kind === 'agent' && RUNNER_FEATURE[stage.runner]) return [RUNNER_FEATURE[stage.runner]!];
   return [];
 }
 
 /** Does the adopted settings provider list bind this agent stage's runner and model? */
 function runnerConfigured(stage: Extract<StageDefinition, { kind: 'agent' }>, settings: Readonly<SettingsEnvelope>) {
-  const kinds =
-    stage.runner === 'hosted-api' ? ['openai-compatible', 'ollama'] : [stage.runner as 'claude-cli' | 'copilot-cli'];
+  // Which adopted providers can serve each runner: the CLI of that name, a hosted API (an HTTP provider whose
+  // disclosure is hosted), or a local model server (an Ollama provider that keeps the source here).
+  const serves = (p: SettingsEnvelope['providers'][number]) =>
+    stage.runner === 'hosted-api'
+      ? (p.kind === 'openai-compatible' || p.kind === 'ollama') && p.disclosure === 'hosted'
+      : stage.runner === 'ollama'
+        ? p.kind === 'ollama' && p.disclosure === 'local-only'
+        : p.kind === stage.runner;
   const providers = settings.providers.filter(
-    (p) =>
-      kinds.includes(p.kind) &&
-      (stage.provider === undefined || p.id === stage.provider) &&
-      (stage.runner !== 'hosted-api' || p.disclosure === 'hosted'),
+    (p) => serves(p) && (stage.provider === undefined || p.id === stage.provider),
   );
   if (stage.provider === undefined && providers.length > 1) return false;
   return providers.some((p) => (p.models ?? []).some((m) => m.model === stage.model && m.capability !== null));

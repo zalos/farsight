@@ -918,7 +918,7 @@ test('the pipeline enums are pinned to an explicit list and to the generated sch
     [
       'agent runners',
       AGENT_RUNNERS,
-      ['claude-cli', 'copilot-cli', 'hosted-api'],
+      ['claude-cli', 'copilot-cli', 'hosted-api', 'ollama'],
       pipelineEnum('PipelineDefinition', 'AgentRunnerId'),
     ],
     ['agent modes', AGENT_MODES, ['brokered', 'native'], pipelineEnum('PipelineDefinition', 'AgentMode')],
@@ -988,7 +988,7 @@ test('the example pipeline and stage runs validate, and each bound refuses one p
     ['money as a binary float', (v) => (stage('triage')(v).budget.usd = 0.5)],
     ['zero turns', (v) => (stage('review')(v).budget.turns = 0)],
     ['65 turns', (v) => (stage('review')(v).budget.turns = 65)],
-    ['an unknown runner', (v) => (stage('review')(v).runner = 'ollama')],
+    ['an unknown runner', (v) => (stage('review')(v).runner = 'llama-server')],
     ['an unknown mode', (v) => (stage('review')(v).mode = 'free')],
     ['an unknown kind', (v) => (stage('report')(v).kind = 'plugin')],
     ['an unknown operation', (v) => (stage('report')(v).operation = 'paths')],
