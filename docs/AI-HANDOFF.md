@@ -17,6 +17,7 @@ Intermittent CI tests seen in phase 0:
 - `e2e`: owner-UI browser gate `/confirm` timed out after 30 s on #210's rebased run.
 - `sentinel-isolation`: OOM witness (#184).
 - MCP-controls package consumer: local timeout / `controlOutcomeUnknown` on #209; not reproduced.
+- `validate`: `packages/sentinel/test/preparation-publication-crash.test.ts:57` service-readiness retry limit (`i < 200`) before the SIGKILL checkpoint, seen on #211's first run.
 
 ## Phase 0 hygiene landed — 2026-10-27
 
