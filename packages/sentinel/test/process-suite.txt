@@ -77,6 +77,7 @@ test/preview-slice.test.ts
 test/providers.test.ts
 test/publish-once.test.ts
 test/receipts-publish.test.ts
+test/report-reviews-provenance.test.ts
 test/retained-proof-boundaries.test.ts
 test/retained-source.test.ts
 test/review-instructions-retained.test.ts
