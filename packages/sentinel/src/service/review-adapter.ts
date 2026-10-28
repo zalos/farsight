@@ -48,18 +48,23 @@ export function reviewProfile(record: ExecutionProfileRecord, registry: AdapterR
 }
 const LIMITS = { maxSliceLines: 200, maxSliceBytes: 65536, maxToolCalls: 20, maxServedBytes: 262144 },
   BUDGET = { maxSteps: 12, maxInvalidReplies: 2, maxInputBytes: 4194304, maxOutputTokens: 512, deadlineMs: 120000 };
-/** The agent stages a pipeline declares and the trust folder their promoted packs live in. */
+/**
+ * The agent stages a pipeline declares, the trust folder their promoted packs live in, and for each review kind the
+ * id of the stage the planner places its seeds under. A review binds to that stage by identity, never by guessing
+ * from a fan-out, so an unrelated agent stage can never lend its prompt or skills to a review.
+ */
 export interface ReviewStagePacks {
   readonly trustDir: string;
   readonly stages: readonly AgentStageDefinition[];
+  readonly stageOf: Readonly<Partial<Record<'guided' | 'general', string>>>;
 }
-/** The agent stage a review kind runs under: the guided review is per check; the general review per source or run. */
-const stageForKind = (stages: readonly AgentStageDefinition[], kind: 'guided' | 'general') => {
-  const matching = stages.filter(
-    (st) => (st.fanOut === 'per-check' ? 'guided' : st.fanOut === 'per-entry' ? null : 'general') === kind,
-  );
-  if (matching.length > 1) reviewFail('sentinel.review.invalidInput', `two agent stages declare the ${kind} review`);
-  return matching[0];
+const stageForKind = (packs: ReviewStagePacks, kind: 'guided' | 'general') => {
+  const id = packs.stageOf[kind];
+  if (id === undefined) return undefined;
+  const stage = packs.stages.find((st) => st.id === id);
+  if (!stage || stage.kind !== 'agent')
+    return reviewFail('sentinel.review.invalidInput', `the ${kind} review's stage ${id} is not a declared agent stage`);
+  return stage;
 };
 /**
  * A review spec's prompt, instructions and sealed pack binding: from the agent stage that runs it when that stage
@@ -69,7 +74,7 @@ export function reviewInstructionsFor(
   s: SessionSpec,
   stagePacks: ReviewStagePacks | undefined,
 ): Pick<SessionSpec, 'prompt' | 'instructions' | 'packs'> {
-  const stage = stagePacks && stageForKind(stagePacks.stages, s.kind);
+  const stage = stagePacks && stageForKind(stagePacks, s.kind);
   if (!stage || (stage.prompt === undefined && !stage.skills?.length && stage.instructions === undefined))
     return { prompt: s.prompt, instructions: prepareInstructions({ prompt: s.prompt, skills: [] }) };
   if (stage.mode !== 'brokered')

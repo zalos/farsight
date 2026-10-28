@@ -502,7 +502,7 @@ test(
         budget: { turns: 3, tokens: 20000, seconds: 120 },
       },
       [{ relativePath: 'src/approvals.ts', bytes: Buffer.from('export const approve = () => 1;\n') }],
-      { native: { broker, envelope, binding, operationId: 'original-skill-stage', trustDir } },
+      { native: { broker, envelope, binding, operationId: 'original-skill-stage', trustDir, retain: async () => {} } },
     );
     assert.equal(ran.mode, 'native');
     const launch = normalize(launches[0]!, launches[0]!, homedir());

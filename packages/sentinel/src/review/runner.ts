@@ -210,13 +210,26 @@ async function runCopilotNative(
   const resolved: ResolvedStageInstructions = packed
     ? resolveStageInstructions(context.trustDir!, { ...stage, mode: 'native' })
     : Object.freeze({ text: null, skills: Object.freeze([]) });
+  // A stage with packs runs only after its exact instruction record is sealed by the caller.
+  if (packed && !context.retain) return reviewFail('sentinel.review.instructionsUnsealed');
   const paths = inputs.map((f) => safeInputPath(f.relativePath));
   if (new Set(paths).size !== paths.length || !paths.length)
     fail('sentinel.provider.invalidProfile', 'a native stage reads distinct inputs');
   const instructions = resolved.text?.bytes ?? new TextEncoder().encode(NATIVE_REVIEW_INSTRUCTIONS.text + '\n');
+  // The sealed digests are taken now, from the pack lock (skills, a promoted instructions file) or from the bytes as
+  // first received (inputs, the bundled instructions); the request carries its own copies, so nothing a caller does
+  // to the record can change what is written, and the scratch tree is verified against these strings.
   const skills = resolved.skills.map((k) =>
-    Object.freeze({ id: k.id, files: k.files.map((f) => Object.freeze({ path: f.path, bytes: f.bytes })) }),
+    Object.freeze({
+      id: k.id,
+      files: k.files.map((f) => Object.freeze({ path: f.path, bytes: Uint8Array.from(f.bytes), digest: f.digest })),
+    }),
   );
+  const inputDigests = Object.freeze(inputs.map((f) => 'sha256:' + createHash('sha256').update(f.bytes).digest('hex')));
+  const instructionsDigest =
+    resolved.text?.digest ?? 'sha256:' + createHash('sha256').update(instructions).digest('hex');
+  const sendInputs = inputs.map((f) => ({ relativePath: f.relativePath, bytes: Uint8Array.from(f.bytes) }));
+  const sendInstructions = Uint8Array.from(instructions);
   const task = nativeTask(
     stage.id,
     paths,
@@ -321,9 +334,12 @@ async function runCopilotNative(
     stage: stage.id,
     instructions: Object.freeze({
       ref: resolved.text?.ref ?? null,
-      digest: sha(instructions),
-      bytes: instructions,
+      digest: instructionsDigest as Digest,
+      bytes: Uint8Array.from(instructions),
     }),
+    inputs: Object.freeze(
+      inputs.map((f, i) => Object.freeze({ relativePath: f.relativePath, digest: inputDigests[i] as Digest })),
+    ),
     task: Object.freeze({ digest: sha(Buffer.from(task)), text: task }),
     skills: Object.freeze(
       resolved.skills.map((k) =>
@@ -331,7 +347,9 @@ async function runCopilotNative(
           ref: k.ref,
           digest: k.digest,
           files: Object.freeze(
-            k.files.map((f) => Object.freeze({ path: f.path, digest: f.digest as Digest, bytes: f.bytes })),
+            k.files.map((f) =>
+              Object.freeze({ path: f.path, digest: f.digest as Digest, bytes: Uint8Array.from(f.bytes) }),
+            ),
           ),
         }),
       ),
@@ -344,8 +362,9 @@ async function runCopilotNative(
   try {
     reply = await context.broker.runAgent(context.envelope, context.binding, {
       operationId: context.operationId,
-      files: inputs.map((f) => ({ relativePath: f.relativePath, bytes: f.bytes })),
-      instructions,
+      files: sendInputs,
+      instructions: sendInstructions,
+      digests: Object.freeze({ instructions: instructionsDigest, files: inputDigests }),
       task,
       ...(skills.length ? { skills } : {}),
       maxTurns: turns!,
@@ -434,6 +453,8 @@ export interface NativeInstructionRecord {
   readonly withholding: 'accepted-secret-fold-before-read';
   readonly stage: string;
   readonly instructions: Readonly<{ ref: string | null; digest: Digest; bytes: Uint8Array }>;
+  /** Each input's digest as first received; the scratch tree is verified against these, never against buffers. */
+  readonly inputs: readonly Readonly<{ relativePath: string; digest: Digest }>[];
   readonly task: Readonly<{ digest: Digest; text: string }>;
   readonly skills: readonly Readonly<{
     ref: string;
