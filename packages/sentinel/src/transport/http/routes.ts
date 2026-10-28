@@ -11,6 +11,7 @@
 //   GET /api/sentinel/scans/<run id>/stages/<stage>           one STAGE
 //   GET /api/sentinel/scans/<run id>/stages/<stage>/units/<k> one check or review of it, opened
 //   GET /api/sentinel/scans/<run id>/report[/md|html|json|sarif]   the retained report, rendered
+//   GET /api/sentinel/pipeline                                 the workspace's declared pipeline, as the file holds it
 
 /** One read the address names: the owner-ui operation and its body, or a report rendering. */
 export type ReadRoute =
@@ -18,7 +19,8 @@ export type ReadRoute =
   | { readonly kind: 'scan'; readonly runId: string }
   | { readonly kind: 'stage'; readonly runId: string; readonly stage: string }
   | { readonly kind: 'unit'; readonly runId: string; readonly stage: string; readonly unit: number }
-  | { readonly kind: 'report'; readonly runId: string; readonly format: ReportFormatName };
+  | { readonly kind: 'report'; readonly runId: string; readonly format: ReportFormatName }
+  | { readonly kind: 'pipeline' };
 
 export const REPORT_FORMAT_NAMES = ['md', 'html', 'json', 'sarif'] as const;
 export type ReportFormatName = (typeof REPORT_FORMAT_NAMES)[number];
@@ -45,6 +47,7 @@ const decoded = (part: string): string | null => {
 export function readRoute(url: string): ReadRoute | null {
   if (!isReadModelPath(url) || url.includes('?') || url.includes('#') || url.length > 512) return null;
   const parts = url.slice(READ_PREFIX.length).split('/');
+  if (parts.length === 1 && parts[0] === 'pipeline') return { kind: 'pipeline' };
   if (parts[0] !== 'scans') return null;
   if (parts.length === 1) return { kind: 'scans', before: null };
   if (parts[1] === 'before')
@@ -79,6 +82,8 @@ export function routeOperation(route: ReadRoute): { readonly op: string; readonl
       return { op: 'owner-ui.unit', body: { runId: route.runId, stage: route.stage, unit: route.unit } };
     case 'report':
       return { op: 'owner-ui.scan-report', body: { runId: route.runId, format: route.format } };
+    case 'pipeline':
+      return { op: 'owner-ui.pipeline', body: {} };
   }
 }
 

@@ -1,7 +1,8 @@
 // The one-start call authorities the broker issues for a native CLI turn, and the checks a native call makes against
 // them. Package-internal: only the broker's generate issues one, from its private envelope after a durable
 // reservation is dispatched; no caller JSON or copied object can mint, reuse or widen one.
-import { isConsumedReceipt, type ConsumedReceipt } from '../../policy/receipts.js';
+import type { OwnerUiReceiptEnvelope } from '../../contracts/index.js';
+import { receiptAuthority, type ConsumedReceipt } from '../../policy/receipts.js';
 import type { BudgetLedger } from './budget.js';
 import { fail } from './errors.js';
 import { nativeRuntimeHelper, type NativeClaudeRuntime, type NativeTiming } from './cli-native-profile.js';
@@ -11,6 +12,8 @@ import { Secret } from './credentials.js';
 import { nativeClaudeTokenFromSecret, type NativeClaudeToken } from './cli-native-auth.js';
 
 export type NativeLimits = NativeTiming & { maxResponseBytes: number; maxOutputTokens: number };
+/** A receipt a book's `consume` returned: the owner CLI's book or the paired browser's owner-UI book. */
+export type SpentReceipt = ConsumedReceipt | ConsumedReceipt<OwnerUiReceiptEnvelope>;
 
 /** Package-internal opaque authority. No exported factory outside the broker: only generate issues it. */
 export interface NativeCallAuthority {
@@ -22,14 +25,14 @@ const nativeCalls = new WeakMap<
   NativeCallContext & {
     ledger: BudgetLedger;
     reservationId: string;
-    receipt: ConsumedReceipt;
+    receipt: SpentReceipt;
     phase: 'issued' | 'started' | 'read';
   }
 >();
 
 /** Issued by the broker only, for one dispatched reservation under a consumed receipt. */
 export function issueNativeCall(
-  context: NativeCallContext & { ledger: BudgetLedger; reservationId: string; receipt: ConsumedReceipt },
+  context: NativeCallContext & { ledger: BudgetLedger; reservationId: string; receipt: SpentReceipt },
 ): NativeCallAuthority {
   const authority = Object.freeze({ nativeCall: 'closed-v1' as const });
   nativeCalls.set(authority, { ...context, phase: 'issued' });
@@ -37,7 +40,12 @@ export function issueNativeCall(
 }
 function activeNativeCall(value: object) {
   const held = nativeCalls.get(value);
-  if (!held || !isConsumedReceipt(held.receipt) || held.ledger.reservation(held.reservationId).state !== 'dispatched')
+  // The broker's `spentForIntent` compared the intent before issue; here: a book's `consume` returned it.
+  if (
+    !held ||
+    receiptAuthority(held.receipt) === undefined ||
+    held.ledger.reservation(held.reservationId).state !== 'dispatched'
+  )
     return fail('sentinel.provider.notAdmitted', 'native call has no live admitted reservation');
   if (held.limits.signal?.aborted) fail('sentinel.provider.canceled', 'native authority canceled');
   if (Date.now() >= held.limits.deadlineAt)
@@ -78,12 +86,12 @@ export interface CopilotCallAuthority {
 type CopilotContext = { runtime: NativeCopilotRuntime; wire: NativeReviewWire; limits: NativeLimits };
 const copilotCalls = new WeakMap<
   object,
-  CopilotContext & { ledger: BudgetLedger; reservationId: string; receipt: ConsumedReceipt; started: boolean }
+  CopilotContext & { ledger: BudgetLedger; reservationId: string; receipt: SpentReceipt; started: boolean }
 >();
 
 /** Issued by the broker only, for one dispatched reservation under a consumed receipt. */
 export function issueCopilotCall(
-  context: CopilotContext & { ledger: BudgetLedger; reservationId: string; receipt: ConsumedReceipt },
+  context: CopilotContext & { ledger: BudgetLedger; reservationId: string; receipt: SpentReceipt },
 ): CopilotCallAuthority {
   const authority = Object.freeze({ nativeCall: 'copilot-closed-v1' as const });
   copilotCalls.set(authority, { ...context, started: false });
@@ -94,7 +102,8 @@ export function beginCopilotCall(value: CopilotCallAuthority): CopilotContext {
   if (
     !held ||
     held.started ||
-    !isConsumedReceipt(held.receipt) ||
+    // The broker's `spentForIntent` compared the intent before issue; here: a book's `consume` returned it.
+    receiptAuthority(held.receipt) === undefined ||
     held.ledger.reservation(held.reservationId).state !== 'dispatched'
   )
     return fail('sentinel.provider.notAdmitted', 'Copilot requires its exact unused dispatched authority');
@@ -119,10 +128,10 @@ type CopilotAgentContext = {
 };
 const copilotAgentCalls = new WeakMap<
   object,
-  CopilotAgentContext & { ledger: BudgetLedger; reservationId: string; receipt: ConsumedReceipt; started: boolean }
+  CopilotAgentContext & { ledger: BudgetLedger; reservationId: string; receipt: SpentReceipt; started: boolean }
 >();
 export function issueCopilotAgentCall(
-  context: CopilotAgentContext & { ledger: BudgetLedger; reservationId: string; receipt: ConsumedReceipt },
+  context: CopilotAgentContext & { ledger: BudgetLedger; reservationId: string; receipt: SpentReceipt },
 ): CopilotAgentAuthority {
   const authority = Object.freeze({ nativeCall: 'copilot-agent-v1' as const });
   copilotAgentCalls.set(authority, { ...context, started: false });
@@ -133,7 +142,8 @@ export function beginCopilotAgentCall(value: CopilotAgentAuthority): CopilotAgen
   if (
     !held ||
     held.started ||
-    !isConsumedReceipt(held.receipt) ||
+    // The broker's `spentForIntent` compared the intent before issue; here: a book's `consume` returned it.
+    receiptAuthority(held.receipt) === undefined ||
     held.ledger.reservation(held.reservationId).state !== 'dispatched'
   )
     return fail('sentinel.provider.notAdmitted', 'Copilot native run requires its exact unused dispatched authority');
@@ -166,7 +176,7 @@ const claudeAgentCalls = new WeakMap<
     credential: Secret;
     ledger: BudgetLedger;
     reservationId: string;
-    receipt: ConsumedReceipt;
+    receipt: SpentReceipt;
     started: boolean;
   }
 >();
@@ -175,7 +185,7 @@ export function issueClaudeAgentCall(
     credential: Secret | null;
     ledger: BudgetLedger;
     reservationId: string;
-    receipt: ConsumedReceipt;
+    receipt: SpentReceipt;
   },
 ): ClaudeAgentAuthority {
   if (!(context.credential instanceof Secret))
@@ -189,7 +199,8 @@ export function beginClaudeAgentCall(value: ClaudeAgentAuthority): ClaudeAgentCo
   if (
     !held ||
     held.started ||
-    !isConsumedReceipt(held.receipt) ||
+    // The broker's `spentForIntent` compared the intent before issue; here: a book's `consume` returned it.
+    receiptAuthority(held.receipt) === undefined ||
     held.ledger.reservation(held.reservationId).state !== 'dispatched'
   )
     return fail('sentinel.provider.notAdmitted', 'Claude native run requires its exact unused dispatched authority');
