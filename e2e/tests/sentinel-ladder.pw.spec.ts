@@ -111,6 +111,21 @@ async function standIn(
     const path = new URL(req.url()).pathname.replace('/api/sentinel/', '');
     if (path === 'scans' && opts.holdScans) await opts.holdScans; // the list answers late
     // a finished scan's report, as the companion delivers it: whole, named, for download
+    // the workspace's pipeline, for the edit mode one press away: this stand-in workspace has none
+    if (path === 'pipeline')
+      return route.fulfill({
+        headers: cors,
+        json: {
+          schema: 'sentinel-viewer-pipeline/draft-1',
+          trust: 'missing',
+          reasonCode: null,
+          pipeline: null,
+          fileDigest: null,
+          digest: null,
+          problems: [],
+          readOnly: true,
+        },
+      });
     const report = /^scans\/([^/]+)\/report\/(html|md)$/.exec(path);
     if (report && decodeURIComponent(report[1]!) === RUN)
       return route.fulfill({
@@ -272,6 +287,7 @@ test.describe('the Sentinel ladder', () => {
     // the edit mode is one press away
     await page.locator('.snt-tools [data-act="edit"]').click();
     await expect(page).toHaveURL(/#\/sentinel\?edit=1/);
+    await expect(page.locator('.snt-stage')).toContainText(/no pipeline file/i);
   });
 
   test('the business register prints no identifier, digest or path at any stop', async ({ page, baseURL }) => {
