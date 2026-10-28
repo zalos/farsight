@@ -131,7 +131,7 @@
   },
   "packages/sentinel/src/review/caller.ts": {
     "boundaries/dependencies": {
-      "count": 3
+      "count": 4
     }
   },
   "packages/sentinel/src/review/checkpoints.ts": {
@@ -152,6 +152,11 @@
   "packages/sentinel/src/review/plan.ts": {
     "boundaries/dependencies": {
       "count": 1
+    }
+  },
+  "packages/sentinel/src/review/runner.ts": {
+    "boundaries/dependencies": {
+      "count": 4
     }
   },
   "packages/sentinel/src/review/session.ts": {
