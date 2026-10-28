@@ -460,8 +460,8 @@ function pipelineCommand(p: ParsedCommand, ws: Workspace, confirm: boolean, now:
 }
 
 /**
- * The owner mint, claimed by this entry as it loads (once per process; no other module can claim it), and the owner
- * of this command, minted only on the owner's own command path (never in `serve`, `mcp` or `owner-ui`).
+ * The owner mint, claimed by this entry as it loads (once per process; no other module can claim it after), and the
+ * owner of this command, minted only on the owner's own command path (never in `serve`, `mcp` or `owner-ui`).
  */
 const mintOwner = entryIsOwnerCli() ? claimOwnerMint() : undefined;
 let ownerOfCommand: OwnerPrincipal | undefined;

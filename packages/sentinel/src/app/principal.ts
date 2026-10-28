@@ -4,7 +4,9 @@
 // - The owner principal is minted only by the command line's own entry, in the owner's own process (ADR 37): it can
 //   confirm, which issues the owner's receipts here. The mint is handed out once per process (`claimOwnerMint`), to
 //   cli.ts as it loads; the owner exists only as an object that mint made and this module remembers, so a copy, a
-//   parsed request body or any object built to look like one is not it, and is refused.
+//   parsed request body or any object built to look like one is not it, and is refused. These checks keep ordinary
+//   importers and forged objects out; they do not prove process provenance against code running as the same OS
+//   user, which is outside Sentinel's boundary (ADR 37).
 // - An agent principal is what every connection to the local service is, the owner's own CLI included: built by the
 //   transport from the channel it accepted, never the owner channel. It confirms nothing; owner authority reaches it
 //   only as an owner receipt issued by the command line after its --confirm.
@@ -26,13 +28,14 @@ export type Principal = OwnerPrincipal | AgentPrincipal;
 const OWNERS = new WeakSet<object>();
 /** Whether the mint was handed out: once per process, to the command line's entry (cli.ts claims it as it loads). */
 let mintClaimed = false;
-/** This package's command line (dist/cli.js beside dist/app/): the only entry an owner can exist under. */
+/** This package's command line (dist/cli.js beside dist/app/): the entry the owner mint is handed out under. */
 const CLI_ENTRY = fileURLToPath(new URL('../cli.js', import.meta.url));
 
 /**
  * Whether this process's entry is this package's command line: `process.argv[1]`, resolved through any link (the
- * installed `farsight-sentinel` bin is one), is exactly its `cli.js`. A test, a library importer, `node -e` or another
- * program is not, whatever it imports.
+ * installed `farsight-sentinel` bin is one), is exactly its `cli.js`. A test, a library importer or another program
+ * started the ordinary way is not, whatever it imports. This reads the process's own arguments, so it is not proof of
+ * provenance: code running as the same OS user can set them (outside Sentinel's boundary, ADR 37).
  */
 export function entryIsOwnerCli(): boolean {
   const entry = process.argv[1];
@@ -45,11 +48,12 @@ export function entryIsOwnerCli(): boolean {
 }
 
 /**
- * Hands the owner mint to the command line's own entry, once per process. An owner exists only in a process whose
- * entry is the owner's command line: in any other process the claim is refused (`sentinel.actor.ownerMintNotEntry`),
- * so a library importer, a test or another program cannot make one even first. In the command line's own process,
- * cli.ts claims it as it loads, before any command runs, and keeps it module-private; any later claim (a second
- * importer, a transport) is refused with `sentinel.actor.ownerMintClaimed`.
+ * Hands the owner mint to the command line's own entry, once per process. The claim is refused in a process whose
+ * entry is not the owner's command line (`sentinel.actor.ownerMintNotEntry`), so an ordinary library importer, a test
+ * or another program cannot make an owner, even first. In the command line's own process, cli.ts claims it as it
+ * loads, before any command runs, and keeps it module-private; any later claim (a second importer, a transport) is
+ * refused with `sentinel.actor.ownerMintClaimed`. This refuses ordinary importers and forged objects; it does not
+ * prove process provenance against code running as the same OS user, which can set its own arguments (ADR 37).
  */
 export function claimOwnerMint(): () => OwnerPrincipal {
   if (!entryIsOwnerCli()) throw new ActorError('sentinel.actor.ownerMintNotEntry');
