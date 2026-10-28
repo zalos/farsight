@@ -1,29 +1,31 @@
-// The declared default pipeline plans to today's unit set and digests (P-3's acceptance), on the invoice-app example.
+// The declared default pipeline plans the recorded golden revisions (P-3's acceptance), on the invoice-app example.
 //
-// Today's planning is the bootstrap, then the analysis over the captured and parsed snapshot, then (with model review
-// configured) the review units appended by withReviewUnits, called exactly as service/canonical.ts calls them. The
-// golden file pins the machine-independent scenarios' unit ids, input fingerprints and plan digests as they were on
-// main before declared planning existed; `SENTINEL_GOLDEN_WRITE=1` rewrites it (a reviewer then reads the diff).
-// The declared path plans the default pipeline (defaultPipelineOf) and must give the same revisions byte for byte;
-// a planted change (a stage removed) must change them.
+// The golden files are the oracle. `invoice-app.json` pins the machine-independent scenarios' unit ids, input
+// fingerprints and plan digests as they were on main before declared planning existed; `invoice-app-reviewed.json`
+// pins the reviewed scenario (the guided and general review units) as the retired withReviewUnits placed them, recorded
+// once from that path before it was removed. `SENTINEL_GOLDEN_WRITE=1` rewrites both from the declared path (a
+// reviewer then reads the diff). A plan digest covers the plan's canonical bytes, so matching it is byte for byte; a
+// planted change (a stage removed) must change them.
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promoteStagePack } from '../dist/review/packs.js';
 import {
   PlanError,
   agentSeedsOf,
+  declaredAnalysis,
   defaultPipelineOf,
-  planAnalysis,
-  planBootstrap,
   planPipelineAnalysis,
   planPipelineBootstrap,
   selectStages,
   stageModel,
 } from '../dist/planner/index.js';
-import { reviewsFor } from '../dist/service/review-adapter.js';
-import { reviewSeedsFor } from '../dist/review/plan.js';
+import { reviewSeedsFor, reviewUnitOf } from '../dist/review/plan.js';
+import { canonicalDigest } from '../dist/policy/digest.js';
 import { publicRegistry } from '../dist/service/scanner-profile.js';
-import { canonicalJsonBytes } from '../dist/store/objects.js';
 import { needsStore } from './snapshot-helpers.ts';
 import {
   SCANNER_ADAPTERS,
@@ -34,12 +36,15 @@ import {
   lockOver,
   plannerInputs,
   portableRegistry,
+  portableReviewRegistry,
   profileOver,
   shippedPacks,
 } from './pipeline-golden-helpers.ts';
 
 const GOLDEN = new URL('./fixtures/pipeline-golden/invoice-app.json', import.meta.url);
+const REVIEWED = new URL('./fixtures/pipeline-golden/invoice-app-reviewed.json', import.meta.url);
 const RUN = 'run-golden';
+const SKILL = fileURLToPath(new URL('./fixtures/stage-packs/skills/invoice-approvals', import.meta.url));
 
 type Scenario = 'scanners' | 'static';
 /**
@@ -90,28 +95,6 @@ function inputsOf({ registry, scenario, review, tools }: Terms) {
   return { s, packs, profile, policy, view, lock, checks };
 }
 
-/** Today's canonical planning: bootstrap, analysis, then the closed review units when model review is configured. */
-function legacyPlans(terms: Terms) {
-  const { s, packs, profile, policy, view, lock } = inputsOf(terms);
-  const boot = planBootstrap({ runId: RUN, sourceIds: ['workspace'], profile: profile.planner });
-  const inventory = boot.units.find((u: any) => u.stage === 'inventory')!;
-  const deterministic = planAnalysis({
-    runId: RUN,
-    revision: 2,
-    previous: boot,
-    bootstrap: [{ id: inventory.id, revision: inventory.revision }],
-    profile: profile.planner,
-    ...plannerInputs(fx.evidence),
-    lock: lock.view,
-    policy: view,
-    limits: s.limits,
-  });
-  const reviewed = terms.review
-    ? reviewsFor(deterministic, fx.evidence, policy, terms.registry, packs)
-    : { plan: deterministic, artifacts: [] };
-  return { boot, analysis: reviewed.plan, deterministic, artifacts: reviewed.artifacts };
-}
-
 /** The same terms planned through a declaration (the default pipeline unless one is given). */
 function declaredPlans(terms: Terms, pipeline?: any, seeds?: any[]) {
   const { s, profile, lock, view, checks } = inputsOf(terms);
@@ -146,7 +129,12 @@ function declaredPlans(terms: Terms, pipeline?: any, seeds?: any[]) {
   return { boot, analysis, declaration };
 }
 
-const bytes = (plan: unknown) => canonicalJsonBytes(plan);
+/** The digest of a revision's canonical bytes without its own digest field: what the recorded digest pins. */
+const bodyDigest = (plan: any) => {
+  const { digest: recorded, ...body } = plan;
+  void recorded;
+  return canonicalDigest(body);
+};
 /** The pipeline without one stage, and without every mention of it in the others' ordering. */
 const withoutStage = (p: any, id: string) => ({
   ...p,
@@ -161,10 +149,10 @@ const portableTerms = (scenario: Scenario): Terms => ({
   tools: scenario === 'static' ? ['sentinel.preview.detector'] : SCENARIOS[scenario].tools,
 });
 
-test('today’s plans of the invoice-app example are the recorded golden plans', needsStore, () => {
+test('the declared default pipeline plans the recorded golden plans of the invoice-app example', needsStore, () => {
   const recorded: Record<string, unknown> = {};
   for (const scenario of Object.keys(SCENARIOS) as Scenario[]) {
-    const { boot, analysis } = legacyPlans(portableTerms(scenario));
+    const { boot, analysis } = declaredPlans(portableTerms(scenario));
     recorded[scenario] = { bootstrap: identityOf(boot), analysis: identityOf(analysis) };
   }
   if (process.env.SENTINEL_GOLDEN_WRITE === '1') writeFileSync(GOLDEN, JSON.stringify(recorded, null, 2) + '\n');
@@ -184,61 +172,123 @@ test('the declared default pipeline plans the golden revisions, unit for unit an
   const golden = JSON.parse(readFileSync(GOLDEN, 'utf8'));
   for (const scenario of Object.keys(SCENARIOS) as Scenario[]) {
     const terms = portableTerms(scenario);
-    const legacy = legacyPlans(terms);
     const declared = declaredPlans(terms);
     assert.deepEqual(
       { bootstrap: identityOf(declared.boot), analysis: identityOf(declared.analysis) },
       golden[scenario],
       `${scenario}: unit ids, input fingerprints and plan digests`,
     );
-    assert.ok(bytes(declared.boot).equals(bytes(legacy.boot)), `${scenario}: the bootstrap revision`);
-    assert.ok(bytes(declared.analysis).equals(bytes(legacy.analysis)), `${scenario}: the analysis revision`);
+    // Byte for byte: each revision's digest is of its canonical bytes, and that digest is the recorded one.
+    assert.equal(bodyDigest(declared.boot), golden[scenario].bootstrap.digest, `${scenario}: the bootstrap revision`);
+    assert.equal(bodyDigest(declared.analysis), golden[scenario].analysis.digest, `${scenario}: the analysis revision`);
   }
 });
 
-test('on the shipped registry the declared default pipeline is today’s plan too', needsStore, () => {
+test('on the shipped registry the declared default pipeline plans the golden units', needsStore, () => {
+  // The shipped adapters' digests cover their built bytes, so ids and digests are not recorded for them; every unit's
+  // stage, adapter, input set and check count is, and the shipped plan has exactly the golden ones.
+  const golden = JSON.parse(readFileSync(GOLDEN, 'utf8'));
+  const shape = (units: any[]) =>
+    units.map((u) => [u.stage, u.adapterId, u.inputSetDigest, u.checks]).sort((a, b) => (a.join() < b.join() ? -1 : 1));
   for (const scenario of Object.keys(SCENARIOS) as Scenario[]) {
-    const terms = { registry: publicRegistry(), scenario };
-    const legacy = legacyPlans(terms);
-    const declared = declaredPlans(terms);
-    assert.ok(bytes(declared.boot).equals(bytes(legacy.boot)), `${scenario}: the bootstrap revision`);
-    assert.ok(bytes(declared.analysis).equals(bytes(legacy.analysis)), `${scenario}: the analysis revision`);
-    assert.equal(declared.analysis.digest, legacy.analysis.digest);
+    const declared = declaredPlans({ registry: publicRegistry(), scenario });
+    for (const [plan, recorded] of [
+      [declared.boot, golden[scenario].bootstrap],
+      [declared.analysis, golden[scenario].analysis],
+    ] as const) {
+      assert.deepEqual(shape(identityOf(plan).units), shape(recorded.units), `${scenario}: ${plan.kind} units`);
+      assert.equal(bodyDigest(plan), plan.digest, `${scenario}: ${plan.kind} digest of its canonical bytes`);
+    }
   }
 });
 
-test('review units declared as agent stages are placed and sealed exactly as withReviewUnits did', needsStore, () => {
-  // The guided review (one unit per planned check: the preview's 30 fit the review side's bound of 32) and the general
-  // review (one unit per source partition), both on a local model.
-  const terms: Terms = { registry: publicRegistry(), scenario: 'static', review: { guided: ['all'], general: true } };
-  const legacy = legacyPlans(terms);
-  const reviewUnits = legacy.analysis.units.filter((u: any) => u.review);
-  assert.deepEqual([...new Set(reviewUnits.map((u: any) => u.stage))].sort(), ['review-general', 'review-guided']);
-  // The seed builder makes the same seeds and artifacts from the deterministic revision, touching no plan.
-  const { policy, packs } = inputsOf(terms);
-  const built = reviewSeedsFor(legacy.deterministic, fx.evidence, policy, terms.registry, packs);
-  const bySegment = (seeds: any[]) => [...seeds].sort((a, b) => (a.segmentId < b.segmentId ? -1 : 1));
-  assert.deepEqual(bySegment(built.seeds), bySegment(agentSeedsOf(legacy.analysis)));
-  assert.deepEqual(built.artifacts.map((a: any) => a.id).sort(), legacy.artifacts.map((a: any) => a.id).sort());
-  const declared = declaredPlans(terms, undefined, built.seeds);
-  assert.ok(bytes(declared.analysis).equals(bytes(legacy.analysis)), 'the reviewed analysis revision');
-  assert.equal(declared.analysis.digest, legacy.analysis.digest);
-  // Each review unit belongs to the agent stage declaring its fan-out.
-  const model = stageModel(declared.declaration);
-  const pick = selectStages(model, declared.analysis, ['review-general']);
-  assert.deepEqual(
-    pick.units,
-    reviewUnits
-      .filter((u: any) => u.stage === 'review-general')
-      .map((u: any) => u.id)
-      .sort(),
-  );
-  // A configured review the pipeline does not declare is refused, never added.
-  assert.throws(
-    () => declaredPlans(terms, withoutStage(declared.declaration, 'review-guided'), built.seeds),
-    (e: any) => e instanceof PlanError && e.code === 'sentinel.plan.agentStageMissing',
-  );
-});
+test(
+  'review units declared as agent stages are the recorded review units, and admission re-derives each one',
+  needsStore,
+  () => {
+    // The guided review (one unit per planned check: the preview's 30 fit the review side's bound of 32) and the general
+    // review (one unit per source partition), both on a local model, with the review adapters' digests fixed stand-ins.
+    const terms: Terms = { ...portableTerms('static'), review: { guided: ['all'], general: true } };
+    const { policy, packs } = inputsOf(terms);
+    const deterministic = declaredPlans(terms);
+    const built = reviewSeedsFor(
+      deterministic.analysis,
+      fx.evidence,
+      policy,
+      portableReviewRegistry(terms.registry),
+      packs,
+    );
+    const declared = declaredPlans(terms, undefined, built.seeds);
+    const reviewed = { analysis: identityOf(declared.analysis), artifacts: built.artifacts.length };
+    if (process.env.SENTINEL_GOLDEN_WRITE === '1')
+      writeFileSync(REVIEWED, JSON.stringify({ reviewed }, null, 2) + '\n');
+    assert.deepEqual(reviewed, JSON.parse(readFileSync(REVIEWED, 'utf8')).reviewed);
+    assert.equal(bodyDigest(declared.analysis), reviewed.analysis.digest, 'the reviewed revision, byte for byte');
+    const reviewUnits = declared.analysis.units.filter((u: any) => u.review);
+    assert.deepEqual([...new Set(reviewUnits.map((u: any) => u.stage))].sort(), ['review-general', 'review-guided']);
+    // The planner places the seeds as they were built, and admission's re-derivation gives each placed unit exactly.
+    const bySegment = (seeds: any[]) => [...seeds].sort((a, b) => (a.segmentId < b.segmentId ? -1 : 1));
+    assert.deepEqual(bySegment(built.seeds), bySegment(agentSeedsOf(declared.analysis)));
+    for (const seed of built.seeds) {
+      const unit = reviewUnits.find((u: any) => u.review.segmentId === seed.segmentId);
+      assert.deepEqual(reviewUnitOf(declared.analysis, seed), unit, seed.segmentId);
+    }
+    // Each review unit belongs to the agent stage declaring its fan-out.
+    const model = stageModel(declared.declaration);
+    const pick = selectStages(model, declared.analysis, ['review-general']);
+    assert.deepEqual(
+      pick.units,
+      reviewUnits
+        .filter((u: any) => u.stage === 'review-general')
+        .map((u: any) => u.id)
+        .sort(),
+    );
+    // A configured review the pipeline does not declare is refused, never added.
+    assert.throws(
+      () => declaredPlans(terms, withoutStage(declared.declaration, 'review-guided'), built.seeds),
+      (e: any) => e instanceof PlanError && e.code === 'sentinel.plan.agentStageMissing',
+    );
+    // When the general review's agent stage names a promoted skill, its seeds carry it, sealed with its digest; the
+    // guided seeds, whose stage names none, are unchanged; the planner places them and admission re-derives them.
+    const trustDir = realpathSync(mkdtempSync(join(tmpdir(), 'sentinel-golden-trust-')));
+    try {
+      const skill = promoteStagePack(trustDir, SKILL, { confirm: true });
+      const general = declaredAnalysis(model).stageOfSeed({ kind: 'general' });
+      const stagePacks = {
+        trustDir,
+        stages: [
+          {
+            ...declared.declaration.stages.find((st: any) => st.id === general),
+            skills: ['skills/invoice-approvals@1'],
+          },
+        ],
+        stageOf: { general },
+      };
+      const packed = reviewSeedsFor(
+        deterministic.analysis,
+        fx.evidence,
+        policy,
+        portableReviewRegistry(terms.registry),
+        packs,
+        stagePacks as any,
+      );
+      const kinds = (seeds: any[], kind: string) => bySegment(seeds.filter((x) => x.kind === kind));
+      assert.deepEqual(kinds(packed.seeds, 'guided'), kinds(built.seeds, 'guided'));
+      const [packedGeneral] = kinds(packed.seeds, 'general'),
+        [bundledGeneral] = kinds(built.seeds, 'general');
+      assert.notEqual(packedGeneral.review.specDigest, bundledGeneral.review.specDigest);
+      const record = JSON.parse(
+        Buffer.from(packed.artifacts.find((a: any) => a.id === packedGeneral.review.spec)!.bytes).toString('utf8'),
+      );
+      assert.deepEqual(record.spec.packs, [{ ref: 'skills/invoice-approvals@1', digest: skill.digest }]);
+      const placed = declaredPlans(terms, undefined, packed.seeds);
+      const unit = placed.analysis.units.find((u: any) => u.review?.segmentId === packedGeneral.segmentId);
+      assert.deepEqual(reviewUnitOf(placed.analysis, packedGeneral), unit);
+    } finally {
+      rmSync(trustDir, { recursive: true, force: true });
+    }
+  },
+);
 
 test(
   'a planted change, the secrets stage removed, changes the plan and keeps the rule as a counted gap',
@@ -259,7 +309,7 @@ test(
     // What the stage would have checked is unsupported because no stage runs it; scope gaps keep their own reason.
     const secrets = analysis.checks.filter((c: any) => c.familyId === 'sentinel.secrets.current-tree');
     const wouldRun = new Set(
-      legacyPlans(terms)
+      declaredPlans(terms)
         .analysis.checks.filter((c: any) => c.familyId === 'sentinel.secrets.current-tree' && c.state === 'planned')
         .map((c: any) => c.id),
     );

@@ -1049,12 +1049,14 @@ export async function runPlan(
     // here, before any receipt is spent or anything starts); its receipt is issued with the start, never as a stage
     // dispatches.
     const paid = reviews.length > 0 && !isFinalRunState(runStateIn(store, plan.runId));
-    const envelopes = paid ? envelopeReceiptsFor(ws, policy, plan, store.storeId, options.now) : null;
-    if (envelopes && 'refusal' in envelopes) return envelopes.refusal;
+    const models = paid ? envelopeDecisionsFor(policy, plan, store.storeId, options.now) : null;
+    if (models && 'refusal' in models) return models.refusal;
     const binding = runWriteBinding(ws, 'run.start', plan, { storeId: store.storeId, runId: plan.runId });
     const decided = decide(ws, policy, binding.intent, binding.stateDigest, options.confirm, options.now);
+    // A start that is not admitted leaves nothing behind: no envelope receipt was issued for it.
     if (!decided.admitted) return decided.result;
     const verdicts = printed(decided.record);
+    const envelopes = models ? { receipts: issueEnvelopeReceipts(ws, models.envelopes, options.now) } : null;
     if (!isFinalRunState(runStateIn(store, plan.runId))) {
       // A plan this installation cannot execute (another build's adapters, a rule no shipped adapter implements):
       // refused before anything starts; canonicalResult says why.
@@ -1222,11 +1224,12 @@ export function confirmForService(
       }),
     };
   }
-  // Each model envelope the start opens, decided first (a denial issues nothing), then issued (envelopeReceiptsFor).
-  const envelopes = options.models ? envelopeReceiptsFor(ws, policy, record, options.storeId, options.now) : null;
-  if (envelopes && 'refusal' in envelopes)
-    return { result: { ...envelopes.refusal, command: options.command, facts: { ...facts } } };
-  const envelopeReceipts = envelopes ? envelopes.receipts.map((r) => r.id) : [];
+  // Each model envelope the start opens, decided like the start before anything is issued (a denial issues nothing);
+  // then the set is issued: the envelope receipts and the start receipt.
+  const decided = options.models ? envelopeDecisionsFor(policy, record, options.storeId, options.now) : null;
+  if (decided && 'refusal' in decided)
+    return { result: { ...decided.refusal, command: options.command, facts: { ...facts } } };
+  const envelopeReceipts = decided ? issueEnvelopeReceipts(ws, decided.envelopes, options.now).map((r) => r.id) : [];
   const book = receiptBook(ws);
   const receipt = issueReceipt(
     book,
@@ -1276,19 +1279,19 @@ function modelsOf(
 }
 
 /**
- * The model envelope receipts of a composite start, issued by the owner in this process: the run's one binding
- * resolved again under the adopted policy (it must be the admitted one), its envelope decided first under admission
- * (a denial issues nothing and says why), then one receipt issued for exactly that envelope (`envelopeBinding`). The
- * same set serves a start through the service (confirmForService) and a foreground start (runPlan).
+ * The model envelopes of a composite start, decided by the owner in this process before anything is issued: the run's
+ * one binding resolved again under the adopted policy (it must be the admitted one) and its envelope decided under
+ * admission (a denial issues nothing and says why). `issueEnvelopeReceipts` then issues one receipt for exactly each
+ * decided envelope (`envelopeBinding`), once the start is decided too. The same pair serves a start through the
+ * service (confirmForService) and a foreground start (runPlan).
  */
-export function envelopeReceiptsFor(
-  ws: Workspace,
+export function envelopeDecisionsFor(
   policy: EffectivePolicy,
   plan: CurrentPlan,
   storeId: string,
   now: Date,
-): { receipts: readonly { stateDigest: string; id: string }[] } | { refusal: CommandResult } {
-  if (!plan.model) return { receipts: [] };
+): { envelopes: readonly ReturnType<typeof envelopeBinding>[] } | { refusal: CommandResult } {
+  if (!plan.model) return { envelopes: [] };
   const [model] = modelsOf(policy, plan);
   if (plan.modelConflict || !model?.binding)
     return {
@@ -1315,10 +1318,27 @@ export function envelopeReceiptsFor(
         facts: { runId: plan.runId },
       }),
     };
+  return { envelopes: Object.freeze([envelope]) };
+}
+
+/** Issues the owner's receipt for each decided envelope; called only once the start is decided as well. */
+export function issueEnvelopeReceipts(
+  ws: Workspace,
+  envelopes: readonly ReturnType<typeof envelopeBinding>[],
+  now: Date,
+): readonly { stateDigest: string; id: string }[] {
+  if (!envelopes.length) return [];
   assertMayConfirm(OWNER);
+  const book = receiptBook(ws);
   // Spent when the model stage begins, after the checks before it: the longest a receipt may live.
-  const id = issueReceipt(receiptBook(ws), OWNER, envelope, { now, ttlMs: MAX_RECEIPT_TTL_MS }).id;
-  return { receipts: Object.freeze([Object.freeze({ stateDigest: envelope.stateDigest, id })]) };
+  return Object.freeze(
+    envelopes.map((e) =>
+      Object.freeze({
+        stateDigest: e.stateDigest,
+        id: issueReceipt(book, OWNER, e, { now, ttlMs: MAX_RECEIPT_TTL_MS }).id,
+      }),
+    ),
+  );
 }
 
 /**

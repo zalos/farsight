@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { needsStore, unlock } from './snapshot-helpers.ts';
 import { json, mockEndpoint, ollamaReply, trustedPolicy } from './provider-helpers.ts';
-import { agentPrincipal, claimOwnerMint, isOwner, principalOf } from '../dist/app/principal.js';
+import { agentPrincipal, claimOwnerMint, entryIsOwnerCli, isOwner, principalOf } from '../dist/app/principal.js';
 import {
   HeldSentinelService,
   LocalSentinelService,
@@ -116,8 +116,9 @@ async function facadeParity(ws: string, env: Record<string, string>, runId: stri
       out.push(await call());
     return out;
   };
-  const owner = claimOwnerMintOnce();
-  const local = await reads(new LocalSentinelService(wsOf), owner);
+  // Reads take any principal: an agent's, the only kind a test process can hold (no owner exists outside the CLI).
+  const reader = agentPrincipal({ principal: 'agent', channel: 'cli' } as never);
+  const local = await reads(new LocalSentinelService(wsOf), reader);
   const store = await openStore(wsOf.storePath);
   const service = new OwnerService(store, wsOf, { now: () => now });
   try {
@@ -133,7 +134,7 @@ async function facadeParity(ws: string, env: Record<string, string>, runId: stri
         service.handle(op, body, { principal: 'agent', channel: 'cli' } as never),
       close() {},
     });
-    const remote = await reads(new RemoteSentinelService(wsOf, connect), owner);
+    const remote = await reads(new RemoteSentinelService(wsOf, connect), reader);
     const labels = [
       'status',
       'status page',
@@ -156,17 +157,6 @@ async function facadeParity(ws: string, env: Record<string, string>, runId: stri
   }
 }
 
-/** The one owner this test process mints (the mint is claimed once per process). */
-let testOwner: unknown;
-let testMint: (() => unknown) | undefined;
-function claimOwnerMintOnce(): any {
-  if (!testOwner) {
-    testMint ??= claimOwnerMint();
-    testOwner = testMint();
-  }
-  return testOwner;
-}
-
 /** The same executable, without blocking this process (a fixture endpoint here must keep answering). */
 function ownerAsync(ws: string, env: Record<string, string>) {
   return (...args: string[]) =>
@@ -182,29 +172,47 @@ function ownerAsync(ws: string, env: Record<string, string>) {
 }
 
 test('only an owner the command line minted is the owner; a copy, a parsed body or a forged object is refused', async (t) => {
-  // The mint is handed out once per process: here (no CLI is loaded in this test's process) this claim is the one.
-  const me = claimOwnerMintOnce();
-  // A second importer cannot make an owner: the mint is already claimed.
-  assert.throws(
-    () => claimOwnerMint(),
-    (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.ownerMintClaimed',
+  const principalJs = fileURLToPath(new URL('../dist/app/principal.js', import.meta.url));
+  const notEntry = (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.ownerMintNotEntry';
+  // This test process's entry is not the command line: even the first claim here is refused.
+  assert.equal(entryIsOwnerCli(), false);
+  assert.throws(() => claimOwnerMint(), notEntry);
+  const probes = scratchDir(t, 'sentinel-mint-');
+  // A fresh process whose entry is another program, importing the package first of anything: it cannot mint.
+  const first = join(probes, 'first-importer.mjs');
+  writeFileSync(
+    first,
+    `const { claimOwnerMint } = await import(${JSON.stringify(principalJs)});
+     try { claimOwnerMint()(); console.log('minted'); } catch (e) { console.log(e.code); }\n`,
   );
-  // The command line claims it as it loads: any module that asks after it, in the same process, is refused.
-  const afterCli = spawnSync(
-    process.execPath,
-    [
-      '--input-type=module',
-      '-e',
-      `await import(${JSON.stringify(CLI)});
-       const { claimOwnerMint } = await import(${JSON.stringify(fileURLToPath(new URL('../dist/app/principal.js', import.meta.url)))});
-       try { claimOwnerMint(); console.log('minted'); } catch (e) { console.log(e.code); }`,
-    ],
-    { encoding: 'utf8', env: { PATH: process.env.PATH ?? '', HOME: tmpdir() } },
+  const library = spawnSync(process.execPath, [first], { encoding: 'utf8', env: { PATH: process.env.PATH ?? '' } });
+  assert.match(library.stdout, /^sentinel\.actor\.ownerMintNotEntry$/m, library.stdout + library.stderr);
+  assert.doesNotMatch(library.stdout, /minted/);
+  // The command line's own process: it mints its owner (a command that needs one answers) and holds the mint, so
+  // another module there that asks after it (a preload checking as the process ends) is refused.
+  const late = join(probes, 'late-importer.mjs');
+  writeFileSync(
+    late,
+    `import { writeSync } from 'node:fs';
+     const { claimOwnerMint } = await import(${JSON.stringify(principalJs)});
+     process.on('exit', () => {
+       try { claimOwnerMint(); writeSync(2, 'minted\\n'); } catch (e) { writeSync(2, e.code + '\\n'); }
+     });\n`,
   );
-  assert.match(afterCli.stdout, /sentinel\.actor\.ownerMintClaimed$/m, afterCli.stdout + afterCli.stderr);
-  assert.doesNotMatch(afterCli.stdout, /minted/);
-  assert.equal(isOwner(me), true);
-  assert.equal(principalOf(me), me);
+  const probeWs = join(probes, 'ws');
+  mkdirSync(probeWs);
+  const cli = spawnSync(process.execPath, ['--import', late, CLI, 'scans', '--json'], {
+    cwd: probeWs,
+    encoding: 'utf8',
+    env: { PATH: process.env.PATH ?? '', HOME: join(probes, 'home'), XDG_STATE_HOME: join(probes, 'state') },
+  });
+  assert.equal(JSON.parse(cli.stdout).command, 'scans', cli.stdout + cli.stderr);
+  assert.doesNotMatch(cli.stderr, /ownerMintNotEntry/, 'the command line minted its owner');
+  assert.match(cli.stderr, /^sentinel\.actor\.ownerMintClaimed$/m, cli.stderr);
+  assert.doesNotMatch(cli.stderr, /minted/);
+  // No owner exists here; whatever is built to look like one is refused by every check.
+  const me = { kind: 'owner', requestedBy: OWNER };
+  assert.equal(isOwner(me), false);
   for (const forged of [
     structuredClone(me),
     { ...me },
@@ -692,5 +700,28 @@ test(
     assert.equal(ep.seen.length, callsBeforeDenied, 'no model was called');
     assert.equal(JSON.parse(run('status', denied, '--json').stdout).facts.cursor, events, 'nothing started');
     assert.deepEqual(listing(), beforeDenied, 'no receipt issued');
+
+    // A start that admission denies, with its model envelope allowed, leaves no model receipt either: both are decided
+    // before the set is issued.
+    settings.grants.push({ actions: ['paid.admit'], principals: ['human'], confirm: 'always' });
+    settings.grants[0].actions = settings.grants[0].actions.filter((a: string) => a !== 'run.start');
+    writeFileSync(path, JSON.stringify(settings));
+    assert.equal(run('settings', 'adopt', '--confirm').status, 0);
+    writeFileSync(join(ws, 'src', 'original.ts'), 'export const original = (x: string) => x.toLowerCase();\n');
+    const startDenied = JSON.parse(run('plan', '--json').stdout).facts.planId as string;
+    const beforeStart = listing();
+    const callsBeforeStart = ep.seen.length;
+    const eventsBeforeStart = JSON.parse(run('status', startDenied, '--json').stdout).facts.cursor;
+    const notStarted = await runPlan(wsOf, {
+      planId: startDenied,
+      confirm: true,
+      confirmModels: true,
+      now: new Date(),
+    });
+    assert.equal(notStarted.outcome, 'configuration-failure', JSON.stringify(notStarted));
+    assert.match(String(notStarted.reasonCode), /^sentinel\.admission\./);
+    assert.deepEqual(listing(), beforeStart, 'no envelope receipt for a start that was not admitted');
+    assert.equal(ep.seen.length, callsBeforeStart);
+    assert.equal(JSON.parse(run('status', startDenied, '--json').stdout).facts.cursor, eventsBeforeStart);
   },
 );
