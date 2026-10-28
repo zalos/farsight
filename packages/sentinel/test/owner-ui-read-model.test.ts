@@ -15,6 +15,7 @@ import {
   scansAnswer,
   scanRow,
   scrubArgv,
+  scrubHostText,
   sentOf,
   stageAnswer,
   stageName,
@@ -92,7 +93,7 @@ const attempt = (over: Partial<AttemptRecord> = {}): AttemptRecord => ({
   error: null,
   ...over,
 });
-const out = (schema: string, privacy: 'metadata' | 'source-derived' | 'source' = 'source-derived', bytes = 120) => ({
+const output = (schema: string, privacy: 'metadata' | 'source-derived' | 'source' = 'source-derived', bytes = 120) => ({
   schema,
   privacy,
   bytes,
@@ -122,22 +123,22 @@ const unit = (key: string, stage: string, over: Partial<UnitRecord> = {}): UnitR
   review: null,
   work: { state: 'published', reason: null, kind: 'coded', deadlineMs: 120000, reusedFrom: null },
   attempts: [attempt()],
-  outputs: [out('application/json')],
+  outputs: [output('application/json')],
   reviewed: null,
   ...over,
 });
 function synthetic(over: Partial<ScanRecord> = {}): ScanRecord {
   const capture = unit('c#1', 'capture', {
-    outputs: [out('sentinel-bootstrap-capture/draft-1')],
+    outputs: [output('sentinel-bootstrap-capture/draft-1')],
     invocation: { absent: 'sentinel.viewer.invocation.none' },
   });
   const parse = unit('p#1', 'parse', {
     dependencies: ['c#1'],
-    outputs: [out('sentinel-parser-result/draft-1'), out('farsight-analysis', 'source', 4096)],
+    outputs: [output('sentinel-parser-result/draft-1'), output('farsight-analysis', 'source', 4096)],
   });
   const inventory = unit('i#1', 'inventory', {
     dependencies: ['p#1'],
-    outputs: [out('sentinel-bootstrap-inventory/draft-1')],
+    outputs: [output('sentinel-bootstrap-inventory/draft-1')],
   });
   const check = (key: string, adapter: string, scope: string, invocation?: InvocationRecordView) =>
     unit(key, 'check', {
@@ -151,7 +152,7 @@ function synthetic(over: Partial<ScanRecord> = {}): ScanRecord {
       inputs: 1,
       work: { state: 'published', reason: null, kind: 'external-tool', deadlineMs: 120000, reusedFrom: null },
       attempts: [attempt({ worker: 'container' })],
-      outputs: [out('sentinel-driver-finding/draft-1'), out('sentinel-coverage/draft-1')],
+      outputs: [output('sentinel-driver-finding/draft-1'), output('sentinel-coverage/draft-1')],
     });
   const review = unit('r#2', 'review-general', {
     planRevision: 2,
@@ -169,7 +170,7 @@ function synthetic(over: Partial<ScanRecord> = {}): ScanRecord {
         usage: { certainty: 'confirmed', inputTokens: 80, outputTokens: 6, monetaryCost: '0.0048', currency: 'USD' },
       }),
     ],
-    outputs: [out('sentinel-review-record/draft-1'), out('sentinel-observation/draft-1')],
+    outputs: [output('sentinel-review-record/draft-1'), output('sentinel-observation/draft-1')],
   });
   return {
     id: 'run-synthetic-three',
@@ -486,10 +487,10 @@ test('an opened check or review carries what ran, its retained outputs and the e
   const detail = {
     invocation: gitleaksInvocation,
     outputs: [
-      { ...out('sentinel-driver-finding/draft-1'), text: '{"rule":"aws-key","line":3}', reason: null },
-      { ...out('application/json'), text: big, reason: null },
-      { ...out('farsight-analysis', 'source'), text: 'export const source = 1;', reason: null },
-      { ...out('application/octet-stream'), text: null, reason: 'sentinel.viewer.raw.binary' },
+      { ...output('sentinel-driver-finding/draft-1'), text: '{"rule":"aws-key","line":3}', reason: null },
+      { ...output('application/json'), text: big, reason: null },
+      { ...output('farsight-analysis', 'source'), text: 'export const source = 1;', reason: null },
+      { ...output('application/octet-stream'), text: null, reason: 'sentinel.viewer.raw.binary' },
     ],
   };
   const opened = unitAnswer('example-app', scan, 'sentinel.stage.check.secrets-gitleaks', 1, detail)!;
@@ -537,6 +538,60 @@ test('an opened check or review carries what ran, its retained outputs and the e
   assert.equal(hidden.outputs[0]!.size!.n, 120);
   assert.equal(JSON.stringify(hidden).includes('aws-key'), false);
   assert.equal(outputView(withheld, detail.outputs[0]!).text, null);
+});
+
+test("retained text leaves with none of this computer's folders in it", () => {
+  const roots = ['/srv/build/ws', '/srv/build/ws/.farsight/sentinel/store', '/opt/node/v24/bin/node', '/opt/node/v24'];
+  const text = [
+    'workspace /srv/build/ws/src/a.ts',
+    'store "/srv/build/ws/.farsight/sentinel/store/objects/ab"',
+    'node /opt/node/v24/bin/node --import file:///opt/node/v24/lib/gate.js',
+    'home /Users/example/workspace/.farsight/sentinel/store',
+    'linux /home/someone/x.ts · tmp /private/var/folders/x/T/y · windows C:\\Users\\me\\ws',
+    'escaped "C:\\\\Users\\\\me\\\\ws"',
+    'kept: src/a.ts, /input/abc, workspace:src/b.ts',
+  ].join('\n');
+  const out = scrubHostText(text, roots);
+  for (const leak of ['/srv/build', '/opt/node', '/Users/', '/home/', '/private/', 'C:\\'])
+    assert.equal(out.includes(leak), false, leak);
+  assert.match(out, /workspace <host path>\n/);
+  assert.match(out, /store "<host path>"/);
+  assert.match(out, /kept: src\/a\.ts, \/input\/abc, workspace:src\/b\.ts/, 'relative and container paths stay');
+  // The fold applies the folder rule to whatever it is handed: an accepted output, an exchange, an observation.
+  const scan = synthetic();
+  const opened = unitAnswer('example-app', scan, 'sentinel.stage.check.secrets-gitleaks', 1, {
+    invocation: null,
+    outputs: [
+      {
+        ...output('application/json'),
+        text: '{"at":"/Users/example/workspace/.farsight/sentinel/store"}',
+        reason: null,
+      },
+    ],
+  })!;
+  assert.equal(opened.outputs[0]!.text, '{"at":"<host path>"}');
+  const trace = scan.review.units[0]!;
+  const review = unitAnswer(
+    'example-app',
+    {
+      ...scan,
+      review: {
+        status: 'available',
+        units: [
+          {
+            ...trace,
+            observations: [{ ...trace.observations[0]!, message: 'see /home/me/ws/src/a.ts' }],
+            turns: [{ ...trace.turns[0]!, sent: '{"task":"x","files":[],"root":"/Users/me/ws"}' }],
+          },
+        ],
+      },
+    },
+    'sentinel.stage.review.general',
+    1,
+    { invocation: null, outputs: [] },
+  )!;
+  assert.equal(review.unit.review!.turns[0]!.text!.sent!.text, '{"task":"x","files":[],"root":"<host path>"}');
+  assert.equal(review.unit.review!.observations[0]!.message, 'see <host path>');
 });
 
 test('argv leaves with no host path and no token in it', () => {

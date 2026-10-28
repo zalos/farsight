@@ -7,8 +7,9 @@
 //
 // A scan is addressed by its run id; its number is a display ordinal only, exact and stable (the order the store
 // created its runs). What never leaves this fold's own fields: a plan, unit or attempt id, an artifact handle or a
-// store path. An opened check or review also carries retained text verbatim (an output, an exchange), bounded and to
-// the paired owner only; that text is the record as kept and may name the record's own ids.
+// store path. An opened check or review also carries retained text (an output, an exchange), bounded and to the paired
+// owner only; that text is the record as kept, and may name the record's own ids, except that every folder of this
+// computer in it (the workspace, the store, the Node install, the home folder) is scrubbed to `<host path>`.
 // Digests that identify what ran (an implementation, an image, a prompt) are provenance and are carried; the viewer
 // prints them and the run id outside the business register only. When the scan's accepted evidence holds a secret
 // match, every file name, prompt text, model message, retained output and request detail is withheld here, as the
@@ -857,6 +858,45 @@ function reviewsOf(scan: ScanRecord): Map<string, ReviewRecord> {
   );
 }
 
+/** What a host path is shown as, wherever one is scrubbed. */
+export const HOST_PLACEHOLDER = '<host path>';
+/** The rest of a path after its root: anything up to a quote, a space or a bracket. */
+const PATH_TAIL = `[^\\s"'\`<>()[\\]{},;|]*`;
+const SEP = String.raw`(?:\\{1,2}|/)`;
+/** An absolute path under a folder that names this computer or its user (macOS, Linux, Windows, a file URL). */
+const HOST_TEXT = new RegExp(
+  String.raw`(?:file://)?(?:[A-Za-z]:)?` +
+    SEP +
+    String.raw`(?:Users|home|private|var` +
+    SEP +
+    String.raw`folders|tmp|root|Volumes|opt` +
+    SEP +
+    String.raw`homebrew)` +
+    SEP +
+    PATH_TAIL,
+  'g',
+);
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * Retained text with nothing of this computer in it: each known root (the workspace, the store, the trust folder,
+ * the Node install, the home folder; also as a file URL and JSON-escaped) and every path under a folder that names
+ * the computer or its user becomes `<host path>`, with the rest of that path. The service passes its own roots; the
+ * fold applies the folder rule again to whatever it is handed.
+ */
+export function scrubHostText(text: string, roots: readonly string[] = []): string {
+  let out = text;
+  const known = [
+    ...new Set(
+      roots
+        .filter((r) => typeof r === 'string' && r.length >= 4 && /^(?:[A-Za-z]:)?[\\/]/.test(r))
+        .flatMap((r) => [r, JSON.stringify(r).slice(1, -1)]),
+    ),
+  ].sort((a, b) => b.length - a.length);
+  for (const root of known)
+    out = out.replace(new RegExp('(?:file://)?' + escapeRegExp(root) + PATH_TAIL, 'g'), HOST_PLACEHOLDER);
+  return out.replace(HOST_TEXT, HOST_PLACEHOLDER);
+}
+
 const TOKEN_ARG =
   /^(--?[A-Za-z0-9_-]*(?:token|secret|password|passwd|credential|apikey|api-key|auth)[A-Za-z0-9_-]*=).+$/i;
 const HOST_PATH =
@@ -1316,8 +1356,11 @@ export function replyOf(text: string | null, withheld: boolean): TurnRow['reply'
 }
 
 const claims = (n: number) => count(n, 'sentinel.viewer.count.claims', SCOPE.turn, "the model's reply, its claims");
-const textPart = (raw: string | null, max: number): TextPart | null =>
-  raw === null ? null : { text: raw.length > max ? raw.slice(0, max) : raw, truncated: raw.length > max };
+const textPart = (raw: string | null, max: number): TextPart | null => {
+  if (raw === null) return null;
+  const text = scrubHostText(raw);
+  return { text: text.length > max ? text.slice(0, max) : text, truncated: text.length > max };
+};
 
 function reviewedOf(scan: ScanRecord, unit: UnitRecord, scope: string): ReviewedView | null {
   if (!unit.reviewed) return null;
@@ -1456,7 +1499,7 @@ function unitRow(
               endByte: c.endByte,
             }));
             return {
-              message: bounded(o.message, READ_MODEL_LIMITS.messageChars),
+              message: bounded(scrubHostText(o.message), READ_MODEL_LIMITS.messageChars),
               severity: bounded(o.severity, 32),
               citations,
               counts: {
@@ -1501,7 +1544,7 @@ export function stageAnswer(workspace: string, scan: ScanRecord, stageId: string
               SCOPE.stage,
               'review instructions, recorded bytes',
             ),
-            text: prompt.text === null ? null : prompt.text.slice(0, READ_MODEL_LIMITS.textBytes),
+            text: prompt.text === null ? null : scrubHostText(prompt.text).slice(0, READ_MODEL_LIMITS.textBytes),
           }
         : null,
     review: scan.withheld ? 'withheld' : scan.review.status,
@@ -1531,7 +1574,8 @@ export function outputView(scan: ScanRecord, o: RawOutputRecord): OutputView {
         : null;
   if (reason || o.text === null) return { ...base, text: null, truncated: false, withheld: reason };
   const max = READ_MODEL_LIMITS.outputChars;
-  return { ...base, text: o.text.slice(0, max), truncated: o.text.length > max, withheld: null };
+  const text = scrubHostText(o.text);
+  return { ...base, text: text.slice(0, max), truncated: text.length > max, withheld: null };
 }
 
 /**

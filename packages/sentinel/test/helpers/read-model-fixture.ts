@@ -88,7 +88,13 @@ export async function completedReviewScan(t: any) {
   const dir = scratch(t, 'sentinel-viewer-review-'),
     root = join(dir, 'workspace');
   mkdirSync(join(root, 'src'), { recursive: true });
-  writeFileSync(join(root, 'src', 'original.ts'), 'export const original = (x: string) => x;\n');
+  // The second line names this computer's folders (the workspace, its store, the Node that runs the test): the
+  // model is served it, and retained text in the read model must never show it.
+  writeFileSync(
+    join(root, 'src', 'original.ts'),
+    'export const original = (x: string) => x;\n' +
+      `// built in ${root} with its store at ${workspaceOf(root).storePath} by ${process.execPath}\n`,
+  );
   const ep = await mockEndpoint(t, (q, r) => {
     const last = JSON.parse(JSON.parse(q.body).messages.at(-1).content),
       reply = last.evidence
@@ -100,7 +106,7 @@ export async function completedReviewScan(t: any) {
             ],
             inspected: ['src/original.ts'],
           }
-        : { action: 'read', path: 'src/original.ts', startLine: 1, endLine: 1 };
+        : { action: 'read', path: 'src/original.ts', startLine: 1, endLine: 2 };
     json(r, 200, ollamaReply({ message: { role: 'assistant', content: JSON.stringify(reply) } }));
   });
   const env = { ...process.env, HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
