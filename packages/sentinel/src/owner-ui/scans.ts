@@ -28,6 +28,7 @@ import {
   scanAnswer,
   scanRow,
   scansAnswer,
+  scrubHostText,
   stageAnswer,
   stageUnits,
   unitAnswer,
@@ -100,6 +101,27 @@ export class OwnerUiScans {
     if (proof.issuer.storeId !== this.#store.storeId || proof.issuer.ownerEpoch !== this.#store.epoch)
       throw new OwnerUiError();
   }
+
+  /**
+   * The folders of this computer retained text must never show: the workspace, the store, the trust folder, the Node
+   * that runs the service (its executable and install prefix) and the home folder. (String work: no path import.)
+   */
+  get #roots(): string[] {
+    const exec = process.execPath;
+    const up = (p: string) => p.replace(/[\\/][^\\/]*$/, '');
+    return [
+      this.#ws.path,
+      this.#ws.storePath,
+      this.#ws.trustDir,
+      this.#store.storePath,
+      exec,
+      up(up(exec)),
+      process.env.HOME ?? '',
+      process.env.USERPROFILE ?? '',
+    ].filter(Boolean);
+  }
+
+  #scrub = (text: string): string => scrubHostText(text, this.#roots);
 
   /** The workspace folder's own name, as the owner sees it in the file system. */
   get #workspace(): string {
@@ -368,7 +390,9 @@ export class OwnerUiScans {
       isolation: v.isolation,
       operation: null,
       image: v.image ? { reference: v.image.reference, id: v.image.id, architecture: v.image.architecture } : null,
-      argv: v.argv.slice(0, READ_MODEL_LIMITS.argvItems),
+      argv: v.argv
+        .slice(0, READ_MODEL_LIMITS.argvItems)
+        .map((a: unknown) => (typeof a === 'string' ? this.#scrub(a) : a)),
       environmentNames: v.environmentNames.filter((n: unknown) => typeof n === 'string'),
       limits: {
         memoryBytes: Math.floor(v.limits.memoryBytes),
@@ -407,7 +431,7 @@ export class OwnerUiScans {
         if (controlBytes(text)) {
           text = null;
           reason = 'sentinel.viewer.raw.binary';
-        }
+        } else text = this.#scrub(text); // a retained output may name this computer's folders: never shown
       } catch (error) {
         reason = error instanceof TypeError ? 'sentinel.viewer.raw.binary' : 'sentinel.viewer.raw.unreadable';
       }
@@ -634,7 +658,12 @@ export class OwnerUiScans {
             );
             if (!named) throw new OwnerUiError('sentinel.viewer.absent.reviewUnreadable');
             traces.push(
-              reviewRecord(u.key, named, await readPublishedInstructions(store, d.unit, { signal: want.signal })),
+              reviewRecord(
+                u.key,
+                named,
+                await readPublishedInstructions(store, d.unit, { signal: want.signal }),
+                this.#scrub,
+              ),
             );
           }
           review = { status: 'available', units: traces };
@@ -710,7 +739,9 @@ function reviewRecord(
   unitKey: string,
   identity: Extract<Awaited<ReturnType<typeof reviewIdentityIn>>, { status: 'available' }>['reviews'][number],
   trace: Awaited<ReturnType<typeof readPublishedInstructions>>,
+  scrub: (text: string) => string,
 ): ReviewRecord {
+  const clean = (text: string | null) => (text === null ? null : scrub(text));
   const m = trace.instructions;
   const promptBytes = trace.contents.find((c) => c.id === m.prompt.content)?.bytes;
   const byOperation = new Map(trace.requests.map((r) => [r.operationId, r]));
@@ -731,8 +762,8 @@ function reviewRecord(
       inputTokens: typeof usage?.inputTokens === 'number' ? usage.inputTokens : null,
       outputTokens: typeof usage?.outputTokens === 'number' ? usage.outputTokens : null,
       inputBytes: typeof op.inputBytes === 'number' ? op.inputBytes : null,
-      sent: request ? lastOf(request.messages, 'user') : null,
-      reply,
+      sent: clean(request ? lastOf(request.messages, 'user') : null),
+      reply: clean(reply),
     };
   });
   return {
@@ -749,7 +780,7 @@ function reviewRecord(
       revision: identity.instructions.prompt.revision,
       digest: identity.instructions.prompt.digest,
       bytes: identity.instructions.prompt.bytes,
-      text: promptBytes ? utf8(promptBytes) : null,
+      text: clean(promptBytes ? utf8(promptBytes) : null),
     },
     skills: identity.instructions.skills.map((s, i) => ({
       name: m.skills[i]?.id ?? '',
@@ -762,7 +793,7 @@ function reviewRecord(
     totals: { ...record.totals },
     turns,
     observations: trace.observations.map((o) => ({
-      message: o.message,
+      message: scrub(o.message),
       severity: String(o.originalSeverity ?? 'unrated'),
       citations: o.evidence.flatMap((e) =>
         'relativePath' in e && typeof e.relativePath === 'string'
