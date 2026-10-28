@@ -6,10 +6,11 @@ import { join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 import { loadPlan } from '../dist/execution/plans.js';
 import { adoptWorkspaceSettings } from '../dist/service/local.js';
+import { loadPipeline } from '../dist/app/pipeline-adoption.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { PreparationJournal } from '../dist/service/preparation-journal.js';
@@ -381,6 +382,137 @@ test(
       await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).waitFor({ timeout: 15000 });
       await frame.locator('#status').getByText('completed', { exact: true }).waitFor({ timeout: 15000 });
       await page.screenshot({ path: join(evidence, 'reconnected.png'), fullPage: true });
+      // The PIPELINE stop's edit mode (U-3): the view edits a copy of the pipeline file; an empty model stage is refused
+      // through the real frame with the service's reason; then an edit is checked and written by the frame's own
+      // confirmation — exactly the edited bytes, and not adopted.
+      const pipelinePath = join(f.ws.path, '.farsight', 'sentinel', 'pipeline.json'),
+        before = JSON.parse(readFileSync(pipelinePath, 'utf8')),
+        adoptedBefore = loadPipeline({ workspace: f.ws.path, trustDir: f.ws.trustDir, readOnly: true });
+      await page.goto(`http://127.0.0.1:${port}/#/sentinel?edit=1&pick=report`);
+      await page
+        .locator('.snt-erow:not(.gone)')
+        .nth(before.stages.length - 1)
+        .waitFor({ timeout: 15000 });
+      await page.locator('.snt-eadd [data-enew="agent"]').click();
+      await page.locator('.snt-tools [data-act="echeck"]').click();
+      await page
+        .locator('.snt-verdicts')
+        .getByText(/the pipeline file is not a valid pipeline \(\/stages\/\d+: required: must have required property/)
+        .waitFor({ timeout: 15000 });
+      const confirmWrite = frame.getByRole('button', { name: 'Confirm writing the pipeline', exact: true });
+      assert.equal(await confirmWrite.count(), 0);
+      assert.deepEqual(JSON.parse(readFileSync(pipelinePath, 'utf8')), before);
+      await page.locator('.snt-tools [data-act="ediscard"]').click();
+      await page.locator('.snt-erow:not(.gone)', { hasText: 'report' }).click();
+      const seconds = page.locator('.snt-dock [data-ebudget="seconds"]');
+      await seconds.fill('120');
+      await seconds.press('Tab');
+      await page.locator('.snt-tools [data-act="echeck"]').click();
+      await confirmWrite.waitFor({ timeout: 15000 });
+      // An edit after Check withdraws the frame's confirmation for the earlier bytes; checking again offers a new one.
+      await page.locator('.snt-tabs [data-tab="stage"]').click();
+      await seconds.fill('121');
+      await seconds.press('Tab');
+      await page.locator('.snt-tabs [data-tab="owner"]').click();
+      await frame
+        .getByText('The page changed the pipeline after it was checked: nothing was written. Check it again.', {
+          exact: true,
+        })
+        .waitFor({ timeout: 15000 });
+      assert.equal(await confirmWrite.count(), 0);
+      // A check still out with the service when the page edits: its answer is dropped, no confirmation appears.
+      let release!: () => void;
+      const held = new Promise<void>((r) => (release = r));
+      await page.route('**/pipeline-preview', async (route) => {
+        await held;
+        await route.continue();
+      });
+      await page.locator('.snt-tabs [data-tab="stage"]').click();
+      await seconds.fill('120');
+      await seconds.press('Tab');
+      const answered = page.waitForResponse((r) => r.url().endsWith('/pipeline-preview'));
+      await page.locator('.snt-tools [data-act="echeck"]').click();
+      await page.locator('.snt-tabs [data-tab="stage"]').click();
+      await seconds.fill('122');
+      await seconds.press('Tab');
+      release();
+      await answered;
+      await page.unroute('**/pipeline-preview');
+      await page.locator('.snt-tabs [data-tab="owner"]').click();
+      await frame
+        .getByText('The page changed the pipeline after it was checked: nothing was written. Check it again.', {
+          exact: true,
+        })
+        .waitFor({ timeout: 15000 });
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(await confirmWrite.count(), 0, 'a withdrawn check offers no confirmation');
+      assert.equal(await page.locator('.snt-verdicts').getByText('checked · confirm in the owner panel').count(), 0);
+      // Discard after a check withdraws it as well.
+      await page.locator('.snt-tools [data-act="echeck"]').click();
+      await confirmWrite.waitFor({ timeout: 15000 });
+      await page.locator('.snt-tools [data-act="ediscard"]').click();
+      for (let i = 0; i < 100 && (await confirmWrite.count()); i++) await new Promise((r) => setTimeout(r, 50));
+      assert.equal(await confirmWrite.count(), 0, 'a discarded draft offers no confirmation');
+      assert.deepEqual(JSON.parse(readFileSync(pipelinePath, 'utf8')), before);
+      await page.locator('.snt-erow[data-estage="report"]').click();
+      // The same bytes checked twice, the first answer late: each check has its own token, so only the second check's
+      // answer offers a confirmation.
+      const holds: Array<() => void> = [];
+      await page.route('**/pipeline-preview', async (route) => {
+        await new Promise<void>((r) => holds.push(r));
+        await route.continue();
+      });
+      await page.locator('.snt-tabs [data-tab="stage"]').click();
+      await seconds.fill('120');
+      await seconds.press('Tab');
+      await page.locator('.snt-tools [data-act="echeck"]').click();
+      for (let i = 0; i < 200 && holds.length < 1; i++) await new Promise((r) => setTimeout(r, 25));
+      await page.locator('.snt-tabs [data-tab="stage"]').click();
+      await seconds.fill('125');
+      await seconds.press('Tab');
+      await seconds.fill('120');
+      await seconds.press('Tab');
+      await page.locator('.snt-tools [data-act="echeck"]').click();
+      for (let i = 0; i < 200 && holds.length < 2; i++) await new Promise((r) => setTimeout(r, 25));
+      assert.equal(holds.length, 2, 'two checks of the same bytes are out');
+      const firstAnswer = page.waitForResponse((r) => r.url().endsWith('/pipeline-preview'));
+      holds[0]!();
+      await firstAnswer;
+      await new Promise((r) => setTimeout(r, 300));
+      await page.locator('.snt-tabs [data-tab="owner"]').click();
+      assert.equal(await confirmWrite.count(), 0, 'the earlier check of the same bytes offers nothing');
+      holds[1]!();
+      await confirmWrite.waitFor({ timeout: 15000 });
+      await page.unroute('**/pipeline-preview');
+      assert.deepEqual(JSON.parse(readFileSync(pipelinePath, 'utf8')), before, 'checking writes nothing');
+      await page.screenshot({ path: join(evidence, 'pipeline-checked.png') });
+      await confirmWrite.click();
+      await page
+        .locator('.snt-verdicts')
+        .getByText('written · adopt it from the command line')
+        .waitFor({ timeout: 15000 });
+      const edited = structuredClone(before);
+      edited.stages[edited.stages.length - 1].budget = { seconds: 120 };
+      assert.equal(
+        readFileSync(pipelinePath, 'utf8'),
+        JSON.stringify(edited, null, 2) + '\n',
+        'exactly the edited bytes',
+      );
+      const uiReceipts = join(f.ws.trustDir, 'receipts'),
+        writes = readdirSync(uiReceipts)
+          .filter((n) => n.endsWith('.json'))
+          .map((n) => JSON.parse(readFileSync(join(uiReceipts, n), 'utf8')))
+          .filter((r) => r.schema === 'sentinel-owneruireceipt/draft-1' && r.action === 'settings.adopt');
+      assert.equal(writes.length, 1);
+      assert.ok(existsSync(join(uiReceipts, `${writes[0].id}.spent`)));
+      assert.equal(adoptedBefore.trust, 'adopted');
+      assert.equal(
+        loadPipeline({ workspace: f.ws.path, trustDir: f.ws.trustDir, readOnly: true }).trust,
+        'changed',
+        'written, not adopted',
+      );
+      await page.screenshot({ path: join(evidence, 'pipeline-written.png') });
+      await page.locator('.snt-tabs [data-tab="owner"]').click();
       assert.deepEqual(errors, []);
       assert.deepEqual(consoleErrors, [], JSON.stringify({ http, consoleErrors }));
       assert.deepEqual(http, []);
@@ -437,6 +569,7 @@ test(
             report: true,
             reload: true,
             linkedRerun: true,
+            pipelineRefusedThenWrittenNotAdopted: true,
             originalOutputsRetained: true,
             bootstrapEvidence: true,
             historicalVeto: true,

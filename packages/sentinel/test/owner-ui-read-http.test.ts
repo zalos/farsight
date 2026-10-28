@@ -144,6 +144,15 @@ test(
       );
     }
 
+    // The workspace's declared pipeline, as the file holds it, for the PIPELINE stop's edit mode (U-3).
+    const declared = await read('/api/sentinel/pipeline');
+    assert.equal(declared.status, 200);
+    assert.equal(declared.headers.get('access-control-allow-origin'), farsight);
+    const config: any = await declared.json();
+    assert.equal(config.schema, 'sentinel-viewer-pipeline/draft-1');
+    assert.ok(['missing', 'not-adopted', 'changed', 'adopted', 'invalid'].includes(config.trust), config.trust);
+    assert.ok(Array.isArray(config.problems));
+
     // Preflight: the paired origin only.
     const preflight = await read('/api/sentinel/scans', { method: 'OPTIONS', bearer: null });
     assert.equal(preflight.status, 204);
@@ -164,6 +173,7 @@ test(
 
     // Every write method on every read route is refused, with the paired pass in hand.
     for (const path of [
+      '/api/sentinel/pipeline',
       '/api/sentinel/scans',
       '/api/sentinel/scans/before/2',
       at,

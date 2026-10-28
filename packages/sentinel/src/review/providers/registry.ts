@@ -5,7 +5,6 @@
 // `sandboxed-cli` (Claude Code, Copilot CLI) through one admitted turn of the pinned CLI under the shared sandboxed
 // runner. Adding a kind is one entry here plus its contract member; a kind with no entry is refused everywhere.
 import type { ProviderSettings, ModelSettings, SettingsEnvelope } from '../../contracts/index.js';
-import type { ConsumedReceipt } from '../../policy/receipts.js';
 import type { BudgetLedger } from './budget.js';
 import { fail } from './errors.js';
 import { featureEnabled } from '../../policy/features.js';
@@ -24,6 +23,7 @@ import {
   type ClaudeAgentAuthority,
   type CopilotAgentAuthority,
   type NativeLimits,
+  type SpentReceipt,
 } from './authority.js';
 import {
   copilotProfileById,
@@ -74,7 +74,7 @@ export interface CliKind {
     limits: NativeLimits;
     ledger: BudgetLedger;
     reservationId: string;
-    receipt: ConsumedReceipt;
+    receipt: SpentReceipt;
   }): object;
   call(authority: object): Promise<ParsedReply>;
   /** Ends the authority whatever the call did; idempotent. */
@@ -95,7 +95,7 @@ export interface CliKind {
       credential: Secret | null;
       ledger: BudgetLedger;
       reservationId: string;
-      receipt: ConsumedReceipt;
+      receipt: SpentReceipt;
     }): object;
     call(authority: object): Promise<CopilotAgentResult>;
     release(authority: object): void;
