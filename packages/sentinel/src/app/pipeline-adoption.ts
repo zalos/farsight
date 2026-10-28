@@ -21,6 +21,8 @@ import { assertTrustOutside, workspaceIdentity, type WorkspaceIdentity } from '.
 import { intentDigest, receiptAuthority, stamp, type ConsumedReceipt } from '../policy/receipts.js';
 import { ensurePrivateDir, readCheckoutFile, readPrivateFile, writePrivateFileAtomic } from '../policy/user-state.js';
 import { MAX_PIPELINE_BYTES, PIPELINE_PATH, PipelineError, packRefsOf, parsePipeline } from './pipeline.js';
+import { resolveSkill, resolveStageFile } from '../review/packs.js';
+import { ReviewError } from '../review/errors.js';
 
 /** The target a pipeline adoption's intent names beside the workspace, so it is never a settings adoption. */
 export const PIPELINE_TARGET = 'sentinel.pipeline';
@@ -40,8 +42,27 @@ export interface WorkspacePipeline {
 /** Resolves a stage or skill pack reference to the digest of its bytes, or undefined when it is not promoted. */
 export type PackResolver = (ref: PackRef) => Digest | undefined;
 
-/** No stage or skill pack is promoted in this build yet: every reference resolves to nothing. */
+/** A resolver that knows no pack: every reference resolves to nothing (a check without a trust folder). */
 export const NO_PACKS: PackResolver = () => undefined;
+
+/**
+ * The owner's promoted stage and skill packs (review/packs.ts, `<trust>/stage-packs`): a reference resolves to the
+ * digest the pack lock pins, after its bytes are re-read and checked against it. A pack that is not promoted, a file
+ * its pack does not hold, or a byte changed since promotion resolves to nothing, so the pipeline's digest moves and
+ * its adoption no longer holds.
+ */
+export function promotedPacks(trustDir: string): PackResolver {
+  return (ref) => {
+    try {
+      return (
+        ref.startsWith('stages/') ? resolveStageFile(trustDir, ref).pack : resolveSkill(trustDir, ref).digest
+      ) as Digest;
+    } catch (e) {
+      if (e instanceof ReviewError) return undefined;
+      throw e;
+    }
+  };
+}
 
 /** The pipeline's digest: its file's bytes and every pack it names, in a fixed order. */
 export function pipelineDigestOf(fileDigest: Digest, packs: WorkspacePipeline['packs']): Digest {

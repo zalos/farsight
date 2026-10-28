@@ -11,6 +11,7 @@ export const COMMANDS = {
   init: null,
   settings: null,
   pipeline: null,
+  stage: null,
   plan: null,
   paths: null,
   run: null,
@@ -66,6 +67,7 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
     positional: ['action'],
     min: 1,
   },
+  stage: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action', 'folder'], min: 2 },
   plan: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: [], min: 0 },
   paths: {
     flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--request': 'value' },
@@ -245,6 +247,8 @@ export function parseArgs(argv: readonly string[]): ParseResult {
       if (!['--json', '--workspace', ...allowed[args.action!]!].includes(flag))
         return fail('sentinel.args.unknownFlag', flag);
   }
+  if (command === 'stage' && args.action !== 'promote')
+    return fail('sentinel.args.unexpectedArgument', String(args.action));
   if (command === 'decision') {
     const common = ['--json', '--workspace'];
     const allowed: Record<string, string[]> = {

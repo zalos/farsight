@@ -2,7 +2,16 @@
 // profiles init writes, adoption by digest, the plan gate and the browser's write. Nothing here runs a stage.
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,8 +30,10 @@ import {
   loadPipeline,
   NO_PACKS,
   pipelineAdoptionIntent,
+  promotedPacks,
   readWorkspacePipeline,
 } from '../dist/app/pipeline-adoption.js';
+import { promoteStagePack } from '../dist/review/packs.js';
 import { profilePipeline } from '../dist/app/pipeline-profiles.js';
 import { initWorkspace, PROFILES } from '../dist/cli/init.js';
 import { DEFAULT_SETTINGS, ReceiptBook, validateEnvelope } from '../dist/index.js';
@@ -632,6 +643,68 @@ test('adopting the settings names each feature the adopted pipeline still waits 
   assert.match(pipeline.digest, /^sha256:/, 'the pipeline is adopted as it is');
   assert.deepEqual(pipeline.waitingOn, ['runner.claude-cli']);
   assert.ok(pipeline.problems.some((x) => x.code === 'sentinel.pipeline.flagDisabled'));
+});
+
+test('the adopted digest covers the promoted pack bytes: one changed byte undoes the adoption', (t) => {
+  const ws = workspace(t);
+  const now = new Date();
+  assert.equal(adoptWorkspaceSettings(ws, { confirm: true, now }).outcome, 'prepared');
+  const packs = here('./fixtures/stage-packs/');
+  promoteStagePack(ws.trustDir, join(packs, 'stages/review'), { confirm: true });
+  promoteStagePack(ws.trustDir, join(packs, 'skills/invoice-approvals'), { confirm: true });
+  const p = join(ws.path, PIPELINE_PATH);
+  const base = profilePipeline('static');
+  writeFileSync(
+    p,
+    bytes({
+      ...base,
+      stages: [
+        ...base.stages,
+        {
+          id: 'review',
+          kind: 'agent',
+          mode: 'native',
+          runner: 'copilot-cli',
+          model: 'gpt-6-luna',
+          instructions: 'stages/review@1#instructions.md',
+          skills: ['skills/invoice-approvals@1'],
+          needs: ['parse'],
+        },
+      ],
+    }),
+  );
+  const adopted = adoptWorkspacePipeline(ws, { confirm: true, now });
+  assert.equal(adopted.outcome, 'prepared', JSON.stringify(adopted));
+  const loaded = loadPipeline({ workspace: ws.path, trustDir: ws.trustDir, resolve: promotedPacks(ws.trustDir) });
+  assert.equal(loaded.trust, 'adopted');
+  assert.deepEqual(
+    loaded.read!.packs.map((x) => x.ref),
+    ['stages/review@1#instructions.md', 'skills/invoice-approvals@1'],
+  );
+  assert.ok(loaded.read!.packs.every((x) => /^sha256:/.test(x.digest ?? '')));
+  // One byte of the promoted instructions changes in the trust folder: the pack no longer resolves, the digest moves,
+  // and the adoption no longer holds; plan refuses the stage's pack.
+  const file = join(ws.trustDir, 'stage-packs', 'stages', 'review@1', 'instructions.md');
+  chmodSync(file, 0o600);
+  const original = readFileSync(file);
+  const flipped = Buffer.from(original);
+  flipped[0] = flipped[0]! ^ 0x01;
+  writeFileSync(file, flipped);
+  const after = loadPipeline({ workspace: ws.path, trustDir: ws.trustDir, resolve: promotedPacks(ws.trustDir) });
+  assert.equal(after.trust, 'changed');
+  assert.notEqual(after.read!.digest, loaded.read!.digest);
+  const policy = (adoptedPolicy(ws) as { policy: never }).policy;
+  assert.equal(
+    (pipelineGate(ws, policy) as { refusal: { reasonCode: string } }).refusal.reasonCode,
+    'sentinel.pipeline.unknownPack',
+  );
+  assert.equal(adoptWorkspacePipeline(ws, { confirm: true, now }).reasonCode, 'sentinel.pipeline.unknownPack');
+  // The byte restored, the original adoption holds again: the digest is of the bytes, not of the moment.
+  writeFileSync(file, original);
+  assert.equal(
+    loadPipeline({ workspace: ws.path, trustDir: ws.trustDir, resolve: promotedPacks(ws.trustDir) }).trust,
+    'adopted',
+  );
 });
 
 test('a settings receipt cannot adopt the pipeline, nor a pipeline receipt the settings', (t) => {

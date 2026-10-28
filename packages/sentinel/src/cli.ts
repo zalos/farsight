@@ -44,6 +44,9 @@ import { parseArgs, plannedIn, COMMANDS, type ParsedCommand } from './cli/args.j
 import { initWorkspace, InitError, PROFILE_PACKS } from './cli/init.js';
 import { checkPipeline, parsePipeline, PipelineError, PIPELINE_PATH, type PipelineProblem } from './app/pipeline.js';
 import { featureOf } from './policy/features.js';
+import { promoteStagePack, validateStagePack, STAGE_PACK_LIMITS } from './review/packs.js';
+import { ReviewError } from './review/errors.js';
+import { readPackDirectory } from './rules/pack.js';
 import { result, type CommandResult } from './cli/outcome.js';
 import { ENVELOPES, ENVELOPE_KINDS, MAX_ENVELOPE_BYTES, type EnvelopeKind } from './contracts/index.js';
 import { parseEnvelope } from './validate.js';
@@ -51,14 +54,26 @@ import { parseEnvelope } from './validate.js';
 import { sentinelWord, SENTINEL_CLI_STRINGS } from '@farsight/core/dist/strings-sentinel-cli.js';
 import { SENTINEL_DECISION_STRINGS } from '@farsight/core/dist/strings-sentinel-decisions.js';
 import { SENTINEL_OWNER_UI_STRINGS } from '@farsight/core/dist/strings-sentinel-owner-ui.js';
-import { sentinelServiceWord } from '@farsight/core/dist/strings-sentinel-service.js';
+import { sentinelServiceWord, SENTINEL_SERVICE_STRINGS } from '@farsight/core/dist/strings-sentinel-service.js';
+import { STRINGS } from '@farsight/core/dist/strings.js';
 
+const fill = (text: string, values: Record<string, string | number>) =>
+  Object.entries(values).reduce((t, [name, value]) => t.replaceAll(`{${name}}`, String(value)), text);
+/**
+ * A printed word, from the catalog. The decision, CLI and service catalogs come first, as before; any other Sentinel
+ * reason (a review, capture or execution code) is read from the shared catalog, and a key no catalog has is printed as
+ * itself, so a refusal is always shown and never turns into "the command could not finish".
+ */
 const word = (key: string, values: Record<string, string | number> = {}) =>
   Object.hasOwn(SENTINEL_DECISION_STRINGS, key)
     ? SENTINEL_DECISION_STRINGS[key]!.hud.replace(/\{([a-zA-Z]+)\}/g, (_, k: string) => String(values[k] ?? ''))
     : Object.hasOwn(SENTINEL_CLI_STRINGS, key)
       ? sentinelWord(key, values)
-      : sentinelServiceWord(key, values);
+      : Object.hasOwn(SENTINEL_SERVICE_STRINGS, key)
+        ? sentinelServiceWord(key, values)
+        : Object.hasOwn(STRINGS, key)
+          ? fill(STRINGS[key]!.professional, values)
+          : key;
 
 function version(): string {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
@@ -80,6 +95,7 @@ function help(): string {
     `  ${word('sentinel.cli.usageInit')}`,
     `  ${word('sentinel.cli.usageSettings')}`,
     `  ${word('sentinel.cli.usagePipeline')}`,
+    `  ${word('sentinel.cli.usageStage')}`,
     `  ${word('sentinel.cli.usagePlan')}`,
     `  ${word('sentinel.cli.usagePaths')}`,
     `  ${word('sentinel.cli.usageRun')}`,
@@ -326,6 +342,35 @@ function serviceOut(r: CommandResult, lines: string[] = [], values: Record<strin
     );
   }
   return finish(r);
+}
+
+/** `stage promote <folder> [--confirm]`. A promoted revision is write-once; the same bytes again are kept. */
+function stagePromote(ws: Workspace, folder: string, confirm: boolean): number {
+  checkWorkspaceLayout(ws);
+  let source: string;
+  try {
+    source = realpathSync.native(folder);
+  } catch {
+    return serviceOut(result('stage.promote', 'refused', { reasonCode: 'sentinel.review.packInvalid' }), [], {
+      detail: 'the folder does not exist',
+    });
+  }
+  try {
+    const pack = confirm
+      ? promoteStagePack(ws.trustDir, source, { confirm: true })
+      : validateStagePack(readPackDirectory(source, STAGE_PACK_LIMITS));
+    const ref = `${pack.kind}s/${pack.id}@${pack.revision}`;
+    const facts = { ref, digest: pack.digest, files: pack.files.length };
+    const r = result('stage.promote', confirm ? 'prepared' : 'awaiting-confirmation', { facts });
+    const lines = [`${ref} · ${pack.digest}`];
+    if (!confirm) lines.push(word('sentinel.cli.confirmWith', { command: `stage promote ${folder} --confirm` }));
+    return serviceOut(r, lines);
+  } catch (e) {
+    if (!(e instanceof ReviewError)) throw e;
+    return serviceOut(result('stage.promote', 'configuration-failure', { reasonCode: e.code }), [], {
+      detail: e.message.replace(/^[^:]*: /, ''),
+    });
+  }
 }
 
 /** A declared pipeline's problems, one line each, in the catalog's words with their safe detail. */
@@ -674,6 +719,13 @@ async function owner(p: ParsedCommand): Promise<number> {
     if (p.command === 'pipeline') {
       if (live) live.close();
       return pipelineCommand(p, ws, confirm, now);
+    }
+    if (p.command === 'stage') {
+      // `stage promote <folder>`: the owner promotes a stage or skill pack's exact bytes into the trust folder, where
+      // a pipeline's prompts, instructions and skills are read from (review/packs.ts). Without --confirm it shows the
+      // pack it would promote and waits.
+      live?.close();
+      return stagePromote(ws, p.args.folder!, confirm);
     }
     if (p.command === 'rules') {
       // The owner's rule lock lives in the owner's private state, not the store: it works with or without a service.
@@ -1026,6 +1078,7 @@ async function dispatch(p: ParsedCommand): Promise<number> {
       return init(p);
     case 'settings':
     case 'pipeline':
+    case 'stage':
     case 'plan':
     case 'paths':
     case 'run':

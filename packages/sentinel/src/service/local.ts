@@ -42,7 +42,7 @@ import {
 } from '../app/pipeline.js';
 import type { PipelineDefinition } from '../contracts/index.js';
 import { readCheckoutFile, writePrivateFileAtomic } from '../policy/user-state.js';
-import { adoptPipeline, loadPipeline, NO_PACKS, pipelineAdoptionIntent } from '../app/pipeline-adoption.js';
+import { adoptPipeline, loadPipeline, pipelineAdoptionIntent, promotedPacks } from '../app/pipeline-adoption.js';
 import { builtinRulePack, shippedCheckAdapters } from './trusted-profile.js';
 import { FEATURE_FLAGS } from '../policy/features.js';
 import {
@@ -353,7 +353,7 @@ function pipelineIntentOf(
   ws: Workspace,
 ): { intent: ActionIntent; digest: string } | { error: PipelineError } | undefined {
   try {
-    const { intent, read } = pipelineAdoptionIntent(ws.path, NO_PACKS);
+    const { intent, read } = pipelineAdoptionIntent(ws.path, packsOf(ws));
     return { intent, digest: read.digest };
   } catch (e) {
     if (e instanceof PipelineError) {
@@ -366,13 +366,13 @@ function pipelineIntentOf(
 
 /** Issues and spends the owner's receipt for the pipeline as it is now, and records the adoption. */
 function adoptPipelineNow(ws: Workspace, now: Date) {
-  const { intent, read } = pipelineAdoptionIntent(ws.path, NO_PACKS);
+  const { intent, read } = pipelineAdoptionIntent(ws.path, packsOf(ws));
   const book = receiptBook(ws);
   const policyRevision = effectivePolicy(loadPolicyInputs({ workspace: ws.path, trustDir: trustFolder(ws) })).revision;
   const binding = { intent, stateDigest: read.digest, policyRevision };
   const receipt = issueReceipt(book, OWNER, binding, { now, ttlMs: RECEIPT_TTL_MS });
   const spent = book.consume(receipt.id, binding, now);
-  return adoptPipeline({ workspace: ws.path, trustDir: ws.trustDir, receipt: spent, now, resolve: NO_PACKS });
+  return adoptPipeline({ workspace: ws.path, trustDir: ws.trustDir, receipt: spent, now, resolve: packsOf(ws) });
 }
 
 /** `pipeline adopt`: the owner adopts the workspace's pipeline bytes, and the packs they name, as they are now. */
@@ -397,6 +397,9 @@ export function adoptWorkspacePipeline(ws: Workspace, options: { confirm: boolea
   });
 }
 
+/** The owner's promoted stage and skill packs, which a pipeline's digest covers. */
+const packsOf = (ws: Workspace) => promotedPacks(trustFolder(ws));
+
 /** The adopted policy, or null (the defaults) when the settings are not adopted. */
 function adoptedOrNull(ws: Workspace): EffectivePolicy | null {
   const adopted = adoptedPolicy(ws);
@@ -418,7 +421,7 @@ export function pipelineEnvironment(ws: Workspace, policy: EffectivePolicy | nul
   const shipped = shippedCheckAdapters();
   return Object.freeze({
     settings: policy?.settings ?? null,
-    pack: NO_PACKS,
+    pack: packsOf(ws),
     rulePack: builtinRulePack,
     adapters: new Map([...shipped].map(([id, a]) => [id, a.families])),
     locked,
@@ -428,13 +431,13 @@ export function pipelineEnvironment(ws: Workspace, policy: EffectivePolicy | nul
 
 /** Every problem with the workspace's pipeline here, or [] when there is no readable pipeline file. */
 function pipelineProblems(ws: Workspace, policy: EffectivePolicy | null): readonly PipelineProblem[] {
-  const loaded = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: NO_PACKS });
+  const loaded = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
   return loaded.read ? checkPipeline(loaded.read.pipeline, pipelineEnvironment(ws, policy)) : [];
 }
 
 /** `pipeline show`: the workspace's pipeline, how far it is trusted, and every problem with it here. */
 export function showWorkspacePipeline(ws: Workspace): CommandResult {
-  const loaded = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: NO_PACKS });
+  const loaded = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
   if (loaded.trust === 'missing') return result('pipeline.show', 'answered', { facts: { trust: 'missing' } });
   if (!loaded.read)
     return result('pipeline.show', 'configuration-failure', {
@@ -504,7 +507,7 @@ export function writeWorkspacePipeline(
     if (!(e instanceof PipelineError)) throw e;
     return result('pipeline.write', 'configuration-failure', { reasonCode: e.code, facts: { detail: e.detail } });
   }
-  const current = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: NO_PACKS });
+  const current = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
   const preview = previewPipeline(next, current.trust === 'adopted' ? current.read!.pipeline : null);
   const refused = problems.find((p) => p.class === 'refused');
   if (refused)
@@ -538,7 +541,7 @@ export function writeWorkspacePipeline(
       facts: { detail: e.message, written: false },
     });
   }
-  const read = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: NO_PACKS });
+  const read = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
   return result('pipeline.write', 'prepared', {
     facts: {
       ...decided.facts,
@@ -572,7 +575,7 @@ export function pipelineGate(
   policy: EffectivePolicy,
   command = 'plan',
 ): { refusal: CommandResult } | { facts: Record<string, unknown> } {
-  const loaded = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: NO_PACKS });
+  const loaded = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
   if (loaded.trust === 'missing') return { facts: {} };
   if (!loaded.read)
     return {

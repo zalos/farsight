@@ -296,6 +296,21 @@ test('init, as an owner reads it: both files, which profile a kept file holds, a
   const waiting = run(['settings', 'adopt']);
   assert.equal(waiting.status, 4);
   assert.match(waiting.stdout, /to confirm as the owner: farsight-sentinel settings adopt --confirm/);
+  // `stage promote` shows the pack and waits; with --confirm the owner promotes it, and the same bytes again are kept.
+  const pack = fileURLToPath(new URL('./fixtures/stage-packs/stages/review', import.meta.url));
+  const shownPack = run(['stage', 'promote', pack]);
+  assert.equal(shownPack.status, 4, shownPack.stderr);
+  assert.match(shownPack.stdout, /stages\/review@1 · sha256:/);
+  assert.match(shownPack.stdout, /farsight-sentinel stage promote .* --confirm/);
+  for (let i = 0; i < 2; i++) {
+    const promoted = run(['stage', 'promote', pack, '--confirm', '--json']);
+    assert.equal(promoted.status, 0, promoted.stderr);
+    assert.equal(JSON.parse(promoted.stdout).facts.ref, 'stages/review@1');
+  }
+  const notAPack = run(['stage', 'promote', ws]);
+  assert.equal(notAPack.status, 3);
+  assert.match(notAPack.stderr, /a stage pack is not valid/, 'a review code is printed in words, not a crash');
+  assert.equal(parseArgs(['stage', 'remove', pack]).ok, false);
   assert.equal(parseArgs(['pipeline', 'adopt', '--file', 'x']).ok, false, 'adopt reads the workspace file only');
   assert.equal(parseArgs(['pipeline', 'remove']).ok, false);
 });

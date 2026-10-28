@@ -217,6 +217,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
     '@farsight/core/dist/strings-sentinel-decisions.js',
     '@farsight/core/dist/strings-sentinel-owner-ui.js',
     '@farsight/core/dist/strings-sentinel-service.js',
+    '@farsight/core/dist/strings.js',
     'node:fs',
     'node:path',
   ],
