@@ -34,6 +34,7 @@ export const PROVIDER_ERROR_CODES = Object.freeze([
   'sentinel.provider.reservationState',
   'sentinel.provider.ledgerInvalid',
   'sentinel.provider.epochFenced',
+  'sentinel.provider.scratchChanged',
 ] as const);
 export type ProviderErrorCode = (typeof PROVIDER_ERROR_CODES)[number];
 
