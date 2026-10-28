@@ -10,6 +10,8 @@ import { REPORT_FORMATS, type ReportFormat } from './service/full-report.js';
 import {
   privateReviewTrace,
   adoptWorkspaceSettings,
+  adoptWorkspacePipeline,
+  showWorkspacePipeline,
   confirmForService,
   currentRules,
   followWorkspaceRun,
@@ -39,7 +41,12 @@ import { PREVIEW_DETECTOR_ID, runPreviewWorker } from './adapters/preview-detect
 import { adoptScannerAsset, acquireScannerDatabase } from './service/scanner-assets.js';
 import { CAPABILITIES } from './capabilities.js';
 import { parseArgs, plannedIn, COMMANDS, type ParsedCommand } from './cli/args.js';
-import { initWorkspace, InitError } from './cli/init.js';
+import { initWorkspace, InitError, PROFILE_PACKS } from './cli/init.js';
+import { checkPipeline, parsePipeline, PipelineError, PIPELINE_PATH, type PipelineProblem } from './app/pipeline.js';
+import { featureOf } from './policy/features.js';
+import { promoteStagePack, validateStagePack, STAGE_PACK_LIMITS } from './review/packs.js';
+import { ReviewError } from './review/errors.js';
+import { readPackDirectory } from './rules/pack.js';
 import { result, type CommandResult } from './cli/outcome.js';
 import { ENVELOPES, ENVELOPE_KINDS, MAX_ENVELOPE_BYTES, type EnvelopeKind } from './contracts/index.js';
 import { parseEnvelope } from './validate.js';
@@ -47,14 +54,26 @@ import { parseEnvelope } from './validate.js';
 import { sentinelWord, SENTINEL_CLI_STRINGS } from '@farsight/core/dist/strings-sentinel-cli.js';
 import { SENTINEL_DECISION_STRINGS } from '@farsight/core/dist/strings-sentinel-decisions.js';
 import { SENTINEL_OWNER_UI_STRINGS } from '@farsight/core/dist/strings-sentinel-owner-ui.js';
-import { sentinelServiceWord } from '@farsight/core/dist/strings-sentinel-service.js';
+import { sentinelServiceWord, SENTINEL_SERVICE_STRINGS } from '@farsight/core/dist/strings-sentinel-service.js';
+import { STRINGS } from '@farsight/core/dist/strings.js';
 
+const fill = (text: string, values: Record<string, string | number>) =>
+  Object.entries(values).reduce((t, [name, value]) => t.replaceAll(`{${name}}`, String(value)), text);
+/**
+ * A printed word, from the catalog. The decision, CLI and service catalogs come first, as before; any other Sentinel
+ * reason (a review, capture or execution code) is read from the shared catalog, and a key no catalog has is printed as
+ * itself, so a refusal is always shown and never turns into "the command could not finish".
+ */
 const word = (key: string, values: Record<string, string | number> = {}) =>
   Object.hasOwn(SENTINEL_DECISION_STRINGS, key)
     ? SENTINEL_DECISION_STRINGS[key]!.hud.replace(/\{([a-zA-Z]+)\}/g, (_, k: string) => String(values[k] ?? ''))
     : Object.hasOwn(SENTINEL_CLI_STRINGS, key)
       ? sentinelWord(key, values)
-      : sentinelServiceWord(key, values);
+      : Object.hasOwn(SENTINEL_SERVICE_STRINGS, key)
+        ? sentinelServiceWord(key, values)
+        : Object.hasOwn(STRINGS, key)
+          ? fill(STRINGS[key]!.professional, values)
+          : key;
 
 function version(): string {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
@@ -75,6 +94,8 @@ function help(): string {
     `      ${word('sentinel.cli.kinds', { kinds: ENVELOPE_KINDS.join(', ') })}`,
     `  ${word('sentinel.cli.usageInit')}`,
     `  ${word('sentinel.cli.usageSettings')}`,
+    `  ${word('sentinel.cli.usagePipeline')}`,
+    `  ${word('sentinel.cli.usageStage')}`,
     `  ${word('sentinel.cli.usagePlan')}`,
     `  ${word('sentinel.cli.usagePaths')}`,
     `  ${word('sentinel.cli.usageRun')}`,
@@ -240,11 +261,14 @@ function init(p: ParsedCommand): number {
     errOut(word(e.code, { detail: e.detail }));
     return finish(result('init', 'refused', { reasonCode: e.code, facts: { workspace } }));
   }
+  const file = (f: typeof done.settings) => ({ outcome: f.outcome, path: f.path, digest: f.digest, holds: f.holds });
   const facts = {
     path: done.path,
     digest: done.digest,
     profile: done.profile,
     recognised: done.recognised,
+    settings: file(done.settings),
+    pipeline: file(done.pipeline),
     downloads: 0,
     scansStarted: 0,
   };
@@ -252,13 +276,49 @@ function init(p: ParsedCommand): number {
     errOut(word('sentinel.init.unrecognised'));
     return finish(result('init', 'refused', { reasonCode: 'sentinel.init.unrecognised', facts }));
   }
+  if (!done.pipeline.recognised) {
+    errOut(word('sentinel.init.pipelineUnrecognised'));
+    return finish(result('init', 'refused', { reasonCode: 'sentinel.init.pipelineUnrecognised', facts }));
+  }
   if (!jsonOut) {
-    out(word(done.outcome === 'prepared' ? 'sentinel.init.created' : 'sentinel.init.kept', { path: done.path }));
-    out(word('sentinel.init.profile', { profile: done.profile }));
+    // A kept file is used as it is: say which profile it holds when that is not the one asked for.
+    const holds = (f: typeof done.settings) => {
+      if (f.outcome === 'prepared' || f.holds === done.profile) return;
+      out(
+        f.holds === null
+          ? word('sentinel.init.edited')
+          : word('sentinel.init.holdsOther', { holds: f.holds, profile: done.profile }),
+      );
+    };
+    out(
+      word(done.settings.outcome === 'prepared' ? 'sentinel.init.created' : 'sentinel.init.kept', { path: done.path }),
+    );
+    holds(done.settings);
+    out(
+      done.pipeline.outcome === 'prepared'
+        ? word('sentinel.init.pipelineCreated', { path: done.pipeline.path, profile: done.profile })
+        : word('sentinel.init.kept', { path: done.pipeline.path }),
+    );
+    holds(done.pipeline);
+    // The profile in effect is what the settings file holds: a kept file is used as it is, whatever was asked for.
+    const kept = done.settings.outcome === 'kept';
+    const inEffect = kept ? done.settings.holds : done.profile;
+    out(
+      inEffect === done.profile
+        ? word('sentinel.init.profile', { profile: done.profile })
+        : inEffect === null
+          ? word('sentinel.init.profileEdited', { asked: done.profile })
+          : word('sentinel.init.profileKept', { profile: inEffect, asked: done.profile }),
+    );
     out(word('sentinel.init.prerequisites'));
     out(word('sentinel.init.credentials'));
     out(word('sentinel.init.noEffects'));
-    out(word('sentinel.init.next'));
+    const packs = inEffect === null ? [] : (PROFILE_PACKS[inEffect as keyof typeof PROFILE_PACKS] ?? []);
+    out(
+      packs.length
+        ? word('sentinel.init.next', { packs: packs.map((p) => `rules promote builtin:${p} --confirm`).join('; ') })
+        : word('sentinel.init.nextEdited'),
+    );
   }
   return finish(result('init', done.outcome, { facts }));
 }
@@ -273,15 +333,126 @@ function workspaceFor(p: ParsedCommand) {
 }
 
 /** Prints a service result: JSON whole, or its outcome words, reason and the facts a reader needs. */
-function serviceOut(r: CommandResult, lines: string[] = []): number {
+function serviceOut(r: CommandResult, lines: string[] = [], values: Record<string, string | number> = {}): number {
   if (!jsonOut) {
     for (const l of lines) out(l);
     const head = word(`sentinel.outcome.${r.outcome.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())}`);
     (r.exitCode === 0 ? out : errOut)(
-      r.reasonCode && r.reasonCode !== 'sentinel.outcome.unavailable' ? `${head}: ${word(r.reasonCode)}` : head,
+      r.reasonCode && r.reasonCode !== 'sentinel.outcome.unavailable' ? `${head}: ${word(r.reasonCode, values)}` : head,
     );
   }
   return finish(r);
+}
+
+/** `stage promote <folder> [--confirm]`. A promoted revision is write-once; the same bytes again are kept. */
+function stagePromote(ws: Workspace, folder: string, confirm: boolean): number {
+  checkWorkspaceLayout(ws);
+  let source: string;
+  try {
+    source = realpathSync.native(folder);
+  } catch {
+    return serviceOut(result('stage.promote', 'refused', { reasonCode: 'sentinel.review.packInvalid' }), [], {
+      detail: 'the folder does not exist',
+    });
+  }
+  try {
+    const pack = confirm
+      ? promoteStagePack(ws.trustDir, source, { confirm: true })
+      : validateStagePack(readPackDirectory(source, STAGE_PACK_LIMITS));
+    const ref = `${pack.kind}s/${pack.id}@${pack.revision}`;
+    const facts = { ref, digest: pack.digest, files: pack.files.length };
+    const r = result('stage.promote', confirm ? 'prepared' : 'awaiting-confirmation', { facts });
+    const lines = [`${ref} · ${pack.digest}`];
+    if (!confirm) lines.push(word('sentinel.cli.confirmWith', { command: `stage promote ${folder} --confirm` }));
+    return serviceOut(r, lines);
+  } catch (e) {
+    if (!(e instanceof ReviewError)) throw e;
+    return serviceOut(result('stage.promote', 'configuration-failure', { reasonCode: e.code }), [], {
+      detail: e.message.replace(/^[^:]*: /, ''),
+    });
+  }
+}
+
+/** A declared pipeline's problems, one line each, in the catalog's words with their safe detail. */
+function problemLines(problems: unknown): string[] {
+  return Array.isArray(problems)
+    ? (problems as PipelineProblem[]).map((p) => `  ${p.stage ?? 'pipeline'}: ${word(p.code, { detail: p.detail })}`)
+    : [];
+}
+
+/** One line per feature the adopted pipeline waits on, naming the setting that turns it on. */
+function waitingLines(waiting: unknown): string[] {
+  return Array.isArray(waiting)
+    ? (waiting as string[]).flatMap((name) => {
+        const f = featureOf(name);
+        return f ? [word('sentinel.cli.pipelineWaitsOn', { feature: name, setting: f.setting ?? '(none)' })] : [];
+      })
+    : [];
+}
+
+/** The detail of the problem a refusal names, for its reason line. */
+function refusedDetail(r: CommandResult): Record<string, string> {
+  const view = (r.facts.pipeline ?? r.facts) as { problems?: PipelineProblem[]; detail?: string };
+  const first = view.problems?.find((x) => x.code === r.reasonCode);
+  return { detail: first?.detail ?? view.detail ?? '' };
+}
+
+/** `pipeline show | validate | adopt`: read, check or adopt the declared pipeline. None of them runs anything. */
+function pipelineCommand(p: ParsedCommand, ws: Workspace, confirm: boolean, now: Date): number {
+  if (p.args.action === 'validate') {
+    const file = typeof p.flags['--file'] === 'string' ? resolve(p.flags['--file']) : resolve(ws.path, PIPELINE_PATH);
+    let bytes: Buffer;
+    try {
+      if (!statSync(file).isFile()) throw new Error('not a file');
+      bytes = readFileSync(file);
+    } catch {
+      errOut(word('sentinel.pipeline.unreadable', { detail: file }));
+      return finish(result('pipeline.validate', 'refused', { reasonCode: 'sentinel.pipeline.unreadable' }));
+    }
+    let problems: readonly PipelineProblem[];
+    try {
+      problems = checkPipeline(parsePipeline(bytes));
+    } catch (e) {
+      if (!(e instanceof PipelineError)) throw e;
+      errOut(word(e.code, { detail: e.detail }));
+      return finish(result('pipeline.validate', 'refused', { reasonCode: e.code, facts: { detail: e.detail } }));
+    }
+    const refused = problems.find((x) => x.class === 'refused');
+    const r = refused
+      ? result('pipeline.validate', 'refused', { reasonCode: refused.code, facts: { problems } })
+      : result('pipeline.validate', 'answered', { facts: { problems } });
+    if (!jsonOut && !refused) out(word('sentinel.cli.pipelineSound'));
+    return serviceOut(r, problemLines(problems), refusedDetail(r));
+  }
+  if (p.args.action === 'adopt') {
+    const r = adoptWorkspacePipeline(ws, { confirm, now });
+    const lines = [
+      ...(r.facts.digest ? [`pipeline ${String(r.facts.digest)}`] : []),
+      ...problemLines(r.facts.problems),
+      ...waitingLines(r.facts.waitingOn),
+    ];
+    if (r.outcome === 'awaiting-confirmation')
+      lines.push(word('sentinel.cli.confirmWith', { command: 'pipeline adopt --confirm' }));
+    return serviceOut(r, lines, refusedDetail(r));
+  }
+  const r = showWorkspacePipeline(ws);
+  const f = r.facts as Record<string, unknown>;
+  const lines =
+    f.id === undefined
+      ? []
+      : [
+          word('sentinel.cli.pipelineShown', {
+            id: String(f.id),
+            revision: String(f.revision),
+            stages: String(f.stages),
+            digest: String(f.digest),
+            trust: String(f.trust),
+          }),
+          ...problemLines(f.problems),
+        ];
+  if (f.id !== undefined && Array.isArray(f.problems) && f.problems.length === 0)
+    lines.push(word('sentinel.cli.pipelineSound'));
+  return serviceOut(r, lines, refusedDetail(r));
 }
 
 const SERVICE_START_MS = 15_000;
@@ -535,7 +706,26 @@ async function owner(p: ParsedCommand): Promise<number> {
         return finish(result('settings', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
       }
       const r = adoptWorkspaceSettings(ws, { confirm, now });
-      return serviceOut(r, [`settings ${String(r.facts.settingsDigest)}`]);
+      const pipeline = r.facts.pipeline as { digest?: string; reasonCode?: string; detail?: string } | undefined;
+      const lines = [`settings ${String(r.facts.settingsDigest)}`];
+      if (pipeline?.digest) lines.push(`pipeline ${pipeline.digest}`);
+      if (pipeline?.reasonCode) lines.push(`pipeline: ${word(pipeline.reasonCode, { detail: pipeline.detail ?? '' })}`);
+      lines.push(...problemLines((r.facts.pipeline as { problems?: unknown } | undefined)?.problems));
+      lines.push(...waitingLines((r.facts.pipeline as { waitingOn?: unknown } | undefined)?.waitingOn));
+      if (r.outcome === 'awaiting-confirmation')
+        lines.push(word('sentinel.cli.confirmWith', { command: 'settings adopt --confirm' }));
+      return serviceOut(r, lines);
+    }
+    if (p.command === 'pipeline') {
+      if (live) live.close();
+      return pipelineCommand(p, ws, confirm, now);
+    }
+    if (p.command === 'stage') {
+      // `stage promote <folder>`: the owner promotes a stage or skill pack's exact bytes into the trust folder, where
+      // a pipeline's prompts, instructions and skills are read from (review/packs.ts). Without --confirm it shows the
+      // pack it would promote and waits.
+      live?.close();
+      return stagePromote(ws, p.args.folder!, confirm);
     }
     if (p.command === 'rules') {
       // The owner's rule lock lives in the owner's private state, not the store: it works with or without a service.
@@ -589,6 +779,8 @@ async function owner(p: ParsedCommand): Promise<number> {
     }
     if (p.command === 'plan') {
       const r = await planWorkspace(ws, { confirm, now });
+      const pipeline = r.facts.pipeline as { problems?: unknown } | undefined;
+      if (!r.disclosure) return serviceOut(r, problemLines(pipeline?.problems), refusedDetail(r));
       return serviceOut(
         r,
         r.disclosure
@@ -637,7 +829,17 @@ async function owner(p: ParsedCommand): Promise<number> {
   } catch (e) {
     const code = (e as { code?: string }).code;
     if (e instanceof PolicyError || (typeof code === 'string' && code.startsWith('sentinel.'))) {
-      errOut(`${code}: ${(e as Error).message}`);
+      // The reason in words when the catalog has them (a raw code repeated is no help); the safe message otherwise.
+      const message = (e as Error).message;
+      let said: string;
+      try {
+        const plain = word(code!);
+        const detailed = word(code!, { detail: message });
+        said = detailed !== plain ? detailed : message && message !== code ? `${plain} (${message})` : plain;
+      } catch {
+        said = `${code}: ${message}`;
+      }
+      errOut(said);
       return finish(result(p.command, 'configuration-failure', { reasonCode: code }));
     }
     throw e;
@@ -875,6 +1077,8 @@ async function dispatch(p: ParsedCommand): Promise<number> {
     case 'init':
       return init(p);
     case 'settings':
+    case 'pipeline':
+    case 'stage':
     case 'plan':
     case 'paths':
     case 'run':

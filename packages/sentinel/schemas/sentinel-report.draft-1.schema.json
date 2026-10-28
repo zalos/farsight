@@ -2808,9 +2808,10 @@
       "enum": [
         "claude-cli",
         "copilot-cli",
-        "hosted-api"
+        "hosted-api",
+        "ollama"
       ],
-      "description": "The agent runners a stage may name. A hosted API is off unless `review.hosted-api` is on."
+      "description": "The agent runners a stage may name: the two CLIs, a hosted model API (off unless `review.hosted-api` is on), and a local model server (an adopted `ollama` provider that keeps the source on this machine)."
     },
     "ModelName": {
       "type": "string",
