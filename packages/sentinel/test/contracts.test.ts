@@ -30,7 +30,20 @@ import {
   ASSERTION_TRUSTS,
   COMPARISON_LABELS,
   PROTOCOL_MESSAGE_TYPES,
+  BUILTIN_PLAN_STAGES,
+  REVIEW_PLAN_STAGES,
+  PIPELINE_STAGE_KINDS,
+  WORK_STAGE_KIND_OF,
+  BUILTIN_OPERATIONS,
+  STAGE_OUTPUT_TYPES,
+  STAGE_FAN_OUTS,
+  AGENT_RUNNERS,
+  AGENT_MODES,
+  EXECUTION_SITES,
+  COST_UNOBSERVED_REASONS,
+  FEATURE_FLAG_NAMES,
 } from '../dist/index.js';
+import { createGenerator } from 'ts-json-schema-generator';
 import type { EnvelopeKind, HelloMessage } from '../dist/index.js';
 import { MAX_REPORTED_ERRORS } from '../dist/index.js';
 import { counted, countedProblems } from '@farsight/core/dist/counts.js';
@@ -350,7 +363,19 @@ const PINS: Array<[string, readonly string[], string[], string[]]> = [
     ],
     schemaEnum('work', 'WorkEnvelope', 'state'),
   ],
-  ['stage kinds', STAGE_KINDS, ['coded', 'agentic', 'external-tool'], schemaEnum('work', 'StageKind')],
+  ['stage kinds', STAGE_KINDS, ['coded', 'agentic', 'external-tool', 'script'], schemaEnum('work', 'StageKind')],
+  [
+    'built-in plan stages',
+    BUILTIN_PLAN_STAGES,
+    ['capture', 'parse', 'inventory', 'check'],
+    schemaEnum('plan', 'BuiltinPlanStage'),
+  ],
+  [
+    'built-in review stages',
+    REVIEW_PLAN_STAGES,
+    ['review-guided', 'review-general'],
+    schemaEnum('plan', 'ReviewPlanStage'),
+  ],
   [
     'attempt states',
     ATTEMPT_STATES,
@@ -784,4 +809,221 @@ test('protocol negotiation selects the shared draft or refuses explicitly', () =
   assert.equal(refused.type, 'refuse');
   assert.ok(validateEnvelope('protocol', refused).ok);
   assert.ok(validateEnvelope('protocol', negotiateProtocol(hello)).ok);
+});
+
+// ---- the declared pipeline (README §3) ----
+// A plan unit's stage widened from the closed built-in enums to a stage id. The built-in ids keep their own enums, so
+// every retained plan still validates, and the schema accepts a declared stage id. (The plan's cross-field invariants
+// still know only the built-in stages; declared planning is what teaches them more.)
+test('a plan unit stage is a stage id with the built-in ids kept', () => {
+  const ajv = new Ajv({ allErrors: false, strict: true, allowUnionTypes: true }).addFormat('date-time', {
+    type: 'string',
+    validate: isCalendarTimestamp,
+  });
+  const schemaOnly = ajv.compile(schemaOf('plan'));
+  for (const file of ['plan-bootstrap', 'plan-analysis']) {
+    const plan = load(file);
+    assert.ok(schemaOnly(plan), `${file}: ${JSON.stringify(schemaOnly.errors)}`);
+    for (const stage of new Set(plan.units.map((u: any) => u.stage)))
+      assert.ok([...BUILTIN_PLAN_STAGES, ...REVIEW_PLAN_STAGES].includes(stage as never), `${file}: ${stage}`);
+  }
+  const unit = (stage: unknown) => {
+    const plan = load('plan-analysis');
+    plan.units[0].stage = stage;
+    return schemaOnly(plan);
+  };
+  for (const stage of [...BUILTIN_PLAN_STAGES, ...REVIEW_PLAN_STAGES, 'secrets', 'triage', 'lint-notes', 'a1'])
+    assert.equal(unit(stage), true, stage);
+  for (const stage of ['', 'Capture', 'farsight.journeys', '-x', 'x-', 'a--b', 'a_b', 'x'.repeat(65), 3, null])
+    assert.equal(unit(stage), false, String(stage));
+  // A work envelope may record the new script kind; every old kind still validates.
+  for (const kind of STAGE_KINDS) {
+    const work = load('work-running');
+    work.stage.kind = kind;
+    assert.ok(validateEnvelope('work', work).ok, kind);
+  }
+  const work = load('work-running');
+  work.stage.kind = 'builtin';
+  assert.equal(validateEnvelope('work', work).ok, false, 'a pipeline kind is not a work stage kind');
+});
+
+test('settings carry the host-scripts setting as an optional boolean', () => {
+  const settings = load('settings');
+  assert.ok(validateEnvelope('settings', settings).ok);
+  for (const value of [true, false]) assert.ok(validateEnvelope('settings', { ...settings, hostScripts: value }).ok);
+  for (const value of ['true', 1, null])
+    assert.equal(validateEnvelope('settings', { ...settings, hostScripts: value }).ok, false, String(value));
+});
+
+// The pipeline contracts are types until pipeline.json is adopted as its own envelope. Their schemas come from the same
+// generator with the same options as scripts/generate-schemas.mjs, so what is pinned here is what will be published.
+const pipelineSchemaOf = (() => {
+  const generator = createGenerator({
+    path: `${pkg}src/contracts/*.ts`,
+    tsconfig: `${pkg}tsconfig.json`,
+    type: '*',
+    additionalProperties: false,
+    expose: 'export',
+    topRef: true,
+    jsDoc: 'extended',
+    skipTypeCheck: true,
+  });
+  const cache = new Map<string, any>();
+  return (type: string) => {
+    if (!cache.has(type)) cache.set(type, generator.createSchema(type));
+    return cache.get(type);
+  };
+})();
+const pipelineAjv = () =>
+  new Ajv({ allErrors: false, strict: true, allowUnionTypes: true }).addFormat('date-time', {
+    type: 'string',
+    validate: isCalendarTimestamp,
+  });
+const pipelineEnum = (root: string, def: string, prop?: string) => {
+  const defs = pipelineSchemaOf(root).definitions;
+  let d = defs[def];
+  if (prop) d = d.properties[prop];
+  if (d.$ref) d = defs[d.$ref.split('/').pop()];
+  return d.enum ? [...d.enum] : d.anyOf.flatMap((a: any) => (a.const !== undefined ? [a.const] : a.enum));
+};
+const PIPELINE_FIXTURES = here('./fixtures/pipeline/');
+const pipelineFixture = (name: string) => JSON.parse(readFileSync(`${PIPELINE_FIXTURES}${name}.json`, 'utf8'));
+
+test('the pipeline enums are pinned to an explicit list and to the generated schema', () => {
+  const pins: Array<[string, readonly string[], string[], string[]]> = [
+    [
+      'pipeline stage kinds',
+      PIPELINE_STAGE_KINDS,
+      ['builtin', 'tool', 'script', 'agent'],
+      pipelineEnum('PipelineDefinition', 'StageDefinition', 'kind'),
+    ],
+    [
+      'built-in operations',
+      BUILTIN_OPERATIONS,
+      ['capture', 'parse', 'inventory', 'walkthrough', 'framework-controls', 'report'],
+      pipelineEnum('PipelineDefinition', 'BuiltinOperation'),
+    ],
+    [
+      'stage output types',
+      STAGE_OUTPUT_TYPES,
+      ['source', 'parse', 'inventory', 'findings', 'coverage', 'observations', 'walkthrough-md', 'report'],
+      pipelineEnum('PipelineDefinition', 'StageOutputType'),
+    ],
+    [
+      'fan-out',
+      STAGE_FAN_OUTS,
+      ['per-run', 'per-source', 'per-entry', 'per-check'],
+      pipelineEnum('PipelineDefinition', 'StageFanOut'),
+    ],
+    [
+      'agent runners',
+      AGENT_RUNNERS,
+      ['claude-cli', 'copilot-cli', 'hosted-api'],
+      pipelineEnum('PipelineDefinition', 'AgentRunnerId'),
+    ],
+    ['agent modes', AGENT_MODES, ['brokered', 'native'], pipelineEnum('PipelineDefinition', 'AgentMode')],
+    [
+      'execution sites',
+      EXECUTION_SITES,
+      ['in-process', 'child', 'container', 'host', 'sandboxed-cli'],
+      pipelineEnum('StageRun', 'ExecutionSite'),
+    ],
+    [
+      'unobserved cost reasons',
+      COST_UNOBSERVED_REASONS,
+      ['subscription', 'usage-unknown', 'no-rates'],
+      pipelineEnum('StageRun', 'CostUnobservedReason'),
+    ],
+    ['stage run states', WORK_STATES, [...WORK_STATES], pipelineEnum('StageRun', 'StageRun', 'state')],
+    [
+      'feature flags',
+      FEATURE_FLAG_NAMES,
+      ['stage.host-scripts', 'runner.claude-cli', 'runner.copilot-cli', 'review.hosted-api'],
+      Object.keys(pipelineSchemaOf('PipelineDefinition').definitions.PipelineFlags.properties),
+    ],
+  ];
+  for (const [name, exported, literal, schema] of pins) {
+    assert.deepEqual([...exported], literal, `${name}: exported constant`);
+    assert.deepEqual([...schema].sort(), [...literal].sort(), `${name}: schema`);
+  }
+  // The four pipeline kinds map onto the work contract's stage kinds, one to one.
+  assert.deepEqual(WORK_STAGE_KIND_OF, {
+    builtin: 'coded',
+    tool: 'external-tool',
+    script: 'script',
+    agent: 'agentic',
+  });
+  assert.deepEqual(Object.values(WORK_STAGE_KIND_OF).sort(), [...STAGE_KINDS].sort());
+});
+
+test('the example pipeline and stage runs validate, and each bound refuses one past it', () => {
+  const ajv = pipelineAjv();
+  const pipeline = ajv.compile(pipelineSchemaOf('PipelineDefinition'));
+  const stageRun = ajv.compile(pipelineSchemaOf('StageRun'));
+  const example = pipelineFixture('example');
+  assert.ok(pipeline(example), JSON.stringify(pipeline.errors));
+  assert.deepEqual([...new Set(example.stages.map((s: any) => s.kind))].sort(), [...PIPELINE_STAGE_KINDS].sort());
+  const runs = pipelineFixture('stage-runs');
+  for (const run of runs) assert.ok(stageRun(run), `${run.stage}: ${JSON.stringify(stageRun.errors)}`);
+  assert.deepEqual(
+    [...new Set(runs.flatMap((r: any) => r.provenance.map((p: any) => p.kind)))].sort(),
+    [...PIPELINE_STAGE_KINDS].sort(),
+    'the fixtures reach every provenance branch',
+  );
+  const refused = (mut: (v: any) => void, base = example, check = pipeline) => {
+    const v = structuredClone(base);
+    mut(v);
+    return !check(v);
+  };
+  const stage = (id: string) => (v: any) => v.stages.find((s: any) => s.id === id);
+  const cases: Array<[string, (v: any) => void]> = [
+    ['the settings alias is not a pipeline flag', (v) => (v.flags = { hostScripts: true })],
+    ['an unknown flag', (v) => (v.flags = { 'stage.anything': true })],
+    ['money as a binary float', (v) => (stage('triage')(v).budget.usd = 0.5)],
+    ['zero turns', (v) => (stage('review')(v).budget.turns = 0)],
+    ['65 turns', (v) => (stage('review')(v).budget.turns = 65)],
+    ['an unknown runner', (v) => (stage('review')(v).runner = 'ollama')],
+    ['an unknown mode', (v) => (stage('review')(v).mode = 'free')],
+    ['an unknown kind', (v) => (stage('report')(v).kind = 'plugin')],
+    ['an unknown operation', (v) => (stage('report')(v).operation = 'paths')],
+    ['a tool stage with no rules', (v) => (stage('secrets')(v).rules = [])],
+    ['a rule pack that is not a selector', (v) => (stage('patterns')(v).rules = 'builtin:pattern')],
+    ['a pack revision of zero', (v) => (stage('review')(v).prompt = 'stages/review@0#prompt.md')],
+    ['a pack file that climbs', (v) => (stage('review')(v).prompt = 'stages/review@3#../prompt.md')],
+    ['a skill outside a skill pack', (v) => (stage('review')(v).skills = ['prompt.md'])],
+    ['17 skills', (v) => (stage('review')(v).skills = Array.from({ length: 17 }, (_, i) => `skills/s${i}@1`))],
+    ['a context input that is not graph context', (v) => (stage('triage')(v).needs = ['other.journeys'])],
+    ['an output reference without an output', (v) => (stage('triage')(v).needs = [{ stage: 'review' }])],
+    ['a custom output without a schema', (v) => (stage('triage')(v).produces = [{ name: 'triage' }])],
+    ['a custom schema id without a version', (v) => (stage('triage')(v).produces[0].schema = 'sentinel.triage')],
+    ['a script runner that is not host or container', (v) => (stage('lint-notes')(v).runner = 'remote')],
+    ['a stage field of another kind', (v) => (stage('secrets')(v).model = 'gpt-6-luna')],
+    ['no stages', (v) => (v.stages = [])],
+    [
+      '65 stages',
+      (v) => (v.stages = Array.from({ length: 65 }, (_, i) => ({ id: `s${i}`, kind: 'builtin', operation: 'parse' }))),
+    ],
+    ['the v2 example version string', (v) => (v.schema = 'sentinel-pipeline/1')],
+  ];
+  for (const [name, mut] of cases) assert.ok(refused(mut), name);
+  assert.equal(
+    refused(
+      (v) => (v.stages = Array.from({ length: 64 }, (_, i) => ({ id: `s${i}`, kind: 'builtin', operation: 'parse' }))),
+    ),
+    false,
+    '64 stages',
+  );
+  const run = runs.find((r: any) => r.kind === 'agent');
+  const runCases: Array<[string, (v: any) => void]> = [
+    ['a zero cost that is really unobserved', (v) => (v.provenance[0].cost = { basis: 'unobserved', amount: '0' })],
+    ['an unknown unobserved reason', (v) => (v.provenance[0].cost = { basis: 'unobserved', reason: 'free' })],
+    ['rates without a currency', (v) => (v.provenance[0].cost = { basis: 'rates', amount: '0.09' })],
+    ['an environment value instead of a name', (v) => (v.provenance[0].environmentNames = ['PATH=/bin'])],
+    ['an unknown execution site', (v) => (v.provenance[0].where = 'cloud')],
+    ['an unknown input state', (v) => (v.io.inputs[0].state = 'stale')],
+  ];
+  for (const [name, mut] of runCases) assert.ok(refused(mut, run, stageRun), name);
+  const rated = structuredClone(run);
+  rated.provenance[0].cost = { basis: 'rates', amount: '0.09', currency: 'USD' };
+  assert.ok(stageRun(rated), JSON.stringify(stageRun.errors));
 });

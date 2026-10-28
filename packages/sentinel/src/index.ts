@@ -77,4 +77,15 @@ export type {
 // Rule packs, the rule lock and trusted policy (ADR 23). Pure or explicit-path calls; nothing runs at import.
 export * from './rules/index.js';
 export * from './policy/index.js';
+// The feature-flag registry: the one place a gated feature (host scripts, a runner, hosted APIs) is read.
+export {
+  FEATURE_FLAGS,
+  FEATURE_OFF_REASON,
+  FeatureFlagError,
+  featureEnabled,
+  featureOf,
+  featureState,
+  featureStates,
+} from './policy/features.js';
+export type { FeatureFlagDefinition, FeatureSetting, FeatureState } from './policy/features.js';
 export { MAX_RECEIPT_TTL_MS } from './validate.js';
