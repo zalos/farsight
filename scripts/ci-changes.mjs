@@ -75,6 +75,9 @@ export function selectChecks(paths, { packageInputs, isolationInputs } = {}) {
     ) {
       // Sentinel's tarball and its packaging; Farsight's package does not include it.
       checks.sentinel = true;
+    } else if (/^\.(?:claude|agents)\/skills\//.test(path)) {
+      // The two skills trees must stay identical: scripts/check-skills-mirror.mjs runs under pnpm test:scripts.
+      checks.validate = true;
     } else if (/^(?:[^/]+\.md|docs\/.*\.md|\.(?:github|claude|agents)\/.*\.md)$/s.test(path) || path === 'LICENSE') {
       // Only known documentation locations; Markdown in fixtures can affect tests.
     } else if (path.startsWith('e2e/') || /^scripts\/(?:e2e|e2e-perf|synth-graph)\.mjs$/.test(path)) {
