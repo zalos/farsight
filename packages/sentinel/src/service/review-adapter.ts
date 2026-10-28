@@ -1,7 +1,5 @@
 // Current owner-adopted model selection enters only the two fixed coordinator operations. No vendor discovery.
-import { reviewFail } from '../review/errors.js';
 import { join } from 'node:path';
-import type { PlanEnvelope } from '../contracts/plan.js';
 import type { SentinelStore } from '../store/index.js';
 import type { EffectivePolicy } from '../policy/settings.js';
 import type { Workspace } from './local.js';
@@ -10,21 +8,10 @@ import { issueReceipt } from '../policy/owner-receipts.js';
 import { envelopeIntent } from '../review/providers/broker.js';
 import { adoptedPolicy, OWNER, receiptBook } from './local.js';
 import { createAdapterRegistry, type AdapterRegistry, type AdapterDefinition } from '../execution/registry.js';
-import type { BootstrapEvidence } from '../execution/bootstrap.js';
 import type { ExecutionProfileRecord } from '../execution/profile.js';
 import { BudgetLedger } from '../review/providers/budget.js';
 import { ModelBroker } from '../review/providers/broker.js';
 import { keychainSource } from '../review/providers/credentials.js';
-import { resolveReviewModel } from '../review/providers/selection.js';
-import { cliKind } from '../review/providers/registry.js';
-import { guidedSpec } from '../review/guided.js';
-import { generalSpec } from '../review/general.js';
-import { partitionInventory } from '../review/evidence.js';
-import { prepareInstructions } from '../review/instructions.js';
-import { brokeredInstructions } from '../review/packs.js';
-import type { AgentStageDefinition } from '../contracts/pipeline.js';
-import { withReviewUnits } from '../review/plan.js';
-import type { SessionSpec } from '../review/session.js';
 import { REVIEW_ADAPTERS, type ReviewRuntime } from '../review/dispatch.js';
 export { REVIEW_ADAPTERS } from '../review/dispatch.js';
 import { ExecutionError } from '../execution/errors.js';
@@ -46,148 +33,8 @@ export function reviewProfile(record: ExecutionProfileRecord, registry: AdapterR
     ].sort((a, b) => (a.adapterId < b.adapterId ? -1 : 1)),
   };
 }
-const LIMITS = { maxSliceLines: 200, maxSliceBytes: 65536, maxToolCalls: 20, maxServedBytes: 262144 },
-  BUDGET = { maxSteps: 12, maxInvalidReplies: 2, maxInputBytes: 4194304, maxOutputTokens: 512, deadlineMs: 120000 };
-/**
- * The agent stages a pipeline declares, the trust folder their promoted packs live in, and for each review kind the
- * id of the stage the planner places its seeds under. A review binds to that stage by identity, never by guessing
- * from a fan-out, so an unrelated agent stage can never lend its prompt or skills to a review.
- */
-export interface ReviewStagePacks {
-  readonly trustDir: string;
-  readonly stages: readonly AgentStageDefinition[];
-  readonly stageOf: Readonly<Partial<Record<'guided' | 'general', string>>>;
-}
-const stageForKind = (packs: ReviewStagePacks, kind: 'guided' | 'general') => {
-  const id = packs.stageOf[kind];
-  if (id === undefined) return undefined;
-  const stage = packs.stages.find((st) => st.id === id);
-  if (!stage || stage.kind !== 'agent')
-    return reviewFail('sentinel.review.invalidInput', `the ${kind} review's stage ${id} is not a declared agent stage`);
-  return stage;
-};
-/**
- * A review spec's prompt, instructions and sealed pack binding: from the agent stage that runs it when that stage
- * names promoted packs (resolved and checked here), otherwise the bundled prompt with no skills.
- */
-export function reviewInstructionsFor(
-  s: SessionSpec,
-  stagePacks: ReviewStagePacks | undefined,
-): Pick<SessionSpec, 'prompt' | 'instructions' | 'packs'> {
-  const stage = stagePacks && stageForKind(stagePacks, s.kind);
-  // The mode first: a native stage never runs a brokered review, even one naming no prompt, skills or instructions.
-  if (stage && stage.mode !== 'brokered')
-    return reviewFail('sentinel.review.invalidInput', 'a review session runs a brokered agent stage');
-  if (!stage || (stage.prompt === undefined && !stage.skills?.length && stage.instructions === undefined))
-    return { prompt: s.prompt, instructions: prepareInstructions({ prompt: s.prompt, skills: [] }) };
-  const prepared = brokeredInstructions(stagePacks!.trustDir, stage, s.prompt);
-  return { prompt: prepared.prompt, instructions: prepared.instructions, packs: prepared.packs };
-}
-/**
- * Specs come from the accepted inventory/checks. Their prompt and ordered skills come from the agent stage that runs
- * them when it names promoted packs (resolved and checked against the pack lock here, and the reference → digest
- * binding sealed into the spec); otherwise the bundled prompt with an explicit empty skill selection.
- */
-export function reviewsFor(
-  plan: PlanEnvelope,
-  evidence: BootstrapEvidence,
-  policy: EffectivePolicy,
-  registry: AdapterRegistry,
-  packs: readonly import('../rules/pack.js').ValidatedPack[] = [],
-  stagePacks?: ReviewStagePacks,
-) {
-  const specs: SessionSpec[] = [],
-    terms = new Map<string, import('../contracts/plan.js').PlannedReview['terms']>(),
-    configured = policy.settings.reviewModels;
-  if (!configured) return { plan, artifacts: [] };
-  const enabled = (kind: 'guided' | 'general', segment: string) =>
-    configured.stages.some((s) => s.stage === kind) ||
-    configured.segments.some((s) => s.stage === kind && s.segmentId === segment);
-  const instructionsFor = (s: SessionSpec) => reviewInstructionsFor(s, stagePacks);
-  const finish = (s: SessionSpec, segmentId: string) => {
-    if (!enabled(s.kind, segmentId)) return;
-    if (specs.length >= 32) reviewFail('sentinel.review.planLimit', 'more than 32 requested, maximum 32');
-    const resolved = resolveReviewModel(policy, s.kind, segmentId),
-      adapter = registry.get(s.adapterId);
-    terms.set(resolved.selection.bindingDigest, {
-      disclosure: resolved.binding.disclosure,
-      budget: policy.settings.providers.find((p) => p.id === resolved.selection.providerId)!.budget,
-    });
-    specs.push({
-      ...s,
-      budget: {
-        ...s.budget,
-        ...cliKind(resolved.binding.kind)?.sessionBudget,
-        maxOutputTokens: Math.min(s.budget.maxOutputTokens, resolved.binding.limits.maxOutputTokens),
-      },
-      adapterDigest: adapter.digest,
-      ...instructionsFor(s),
-      segmentId,
-      requestedSelection: resolved.selection,
-    });
-  };
-  for (const check of plan.checks) {
-    if (check.state !== 'planned') continue;
-    const unit = plan.units.find((u) => u.id === check.unit?.id && u.revision === check.unit.revision);
-    if (!unit) continue;
-    const files = unit.inputs
-        .map((i) =>
-          evidence.snapshot.entries.find(
-            (e) =>
-              e.kind === 'file' &&
-              e.disposition === 'included' &&
-              e.sourceId === i.sourceId &&
-              e.relativePath === i.relativePath &&
-              e.content === i.content,
-          )!,
-        )
-        .filter((e: any) => e?.kind === 'file' && e.disposition === 'included')
-        .map((e: any) => ({ relativePath: e.relativePath, content: e.content, bytes: e.bytes })),
-      pin = plan.pins.rules.find((r) => r.familyId === check.familyId && r.revision === check.ruleRevision)!;
-    finish(
-      guidedSpec({
-        runId: plan.runId,
-        attemptId: 'pending-review',
-        snapshotId: evidence.snapshot.id,
-        sourceId: check.sourceId,
-        check: {
-          checkId: check.id,
-          familyId: check.familyId,
-          revisionDigest: pin.definitionDigest,
-          ruleText: JSON.stringify(
-            packs
-              .flatMap((p) => p.manifest.rules)
-              .find((r) => r.familyId === check.familyId && r.revision === check.ruleRevision) ?? {
-              familyId: check.familyId,
-              revision: check.ruleRevision,
-              definitionDigest: pin.definitionDigest,
-            },
-          ),
-          files,
-        },
-        limits: LIMITS,
-        budget: BUDGET,
-      }),
-      'guided-' + check.id,
-    );
-  }
-  for (const source of evidence.snapshot.sources) {
-    const partitions = partitionInventory(evidence.snapshot, source.sourceId, { maxFiles: 100, maxBytes: 1048576 });
-    for (const part of partitions.partitions)
-      finish(
-        generalSpec({
-          runId: plan.runId,
-          attemptId: 'pending-review',
-          plan: partitions,
-          partitionId: part.id,
-          limits: LIMITS,
-          budget: BUDGET,
-        }),
-        'general-' + part.id,
-      );
-  }
-  return withReviewUnits(plan, specs, terms);
-}
+// The stage-pack binding of a review spec lives with the packs; it is re-exported here for existing callers.
+export { reviewInstructionsFor, type ReviewStagePacks } from '../review/packs.js';
 /** Actual owner process only. Busy stores are refused by the caller's existing withStore, never seized. */
 export async function reviewRuntime(
   store: SentinelStore,

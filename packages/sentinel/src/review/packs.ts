@@ -28,6 +28,8 @@ import { dirname, join } from 'node:path';
 import { canonicalDigest } from '../policy/digest.js';
 import { readPackDirectory } from '../rules/pack.js';
 import { reviewFail } from './errors.js';
+import type { SessionSpec } from './session.js';
+import type { AgentStageDefinition } from '../contracts/pipeline.js';
 import { prepareInstructions, type PreparedInstructions, type SkillSelection } from './instructions.js';
 import type { PromptArtifact } from './prompts.js';
 
@@ -350,4 +352,40 @@ export function recheckPacks(trustDir: string, bindings: readonly Readonly<{ ref
     const pack = readPromotedPack(trustDir, m[1] === 'stages' ? 'stage' : 'skill', m[2]!, Number(m[3]));
     if (pack.digest !== b.digest) changed(`${b.ref} differs from the bytes this review sealed`);
   }
+}
+
+/**
+ * The agent stages a pipeline declares, the trust folder their promoted packs live in, and for each review kind the
+ * id of the stage the planner places its seeds under. A review binds to that stage by identity, never by guessing
+ * from a fan-out, so an unrelated agent stage can never lend its prompt or skills to a review.
+ */
+export interface ReviewStagePacks {
+  readonly trustDir: string;
+  readonly stages: readonly AgentStageDefinition[];
+  readonly stageOf: Readonly<Partial<Record<'guided' | 'general', string>>>;
+}
+const stageForKind = (packs: ReviewStagePacks, kind: 'guided' | 'general') => {
+  const id = packs.stageOf[kind];
+  if (id === undefined) return undefined;
+  const stage = packs.stages.find((st) => st.id === id);
+  if (!stage || stage.kind !== 'agent')
+    return reviewFail('sentinel.review.invalidInput', `the ${kind} review's stage ${id} is not a declared agent stage`);
+  return stage;
+};
+/**
+ * A review spec's prompt, instructions and sealed pack binding: from the agent stage that runs it when that stage
+ * names promoted packs (resolved and checked here), otherwise the bundled prompt with no skills.
+ */
+export function reviewInstructionsFor(
+  s: SessionSpec,
+  stagePacks: ReviewStagePacks | undefined,
+): Pick<SessionSpec, 'prompt' | 'instructions' | 'packs'> {
+  const stage = stagePacks && stageForKind(stagePacks, s.kind);
+  // The mode first: a native stage never runs a brokered review, even one naming no prompt, skills or instructions.
+  if (stage && stage.mode !== 'brokered')
+    return reviewFail('sentinel.review.invalidInput', 'a review session runs a brokered agent stage');
+  if (!stage || (stage.prompt === undefined && !stage.skills?.length && stage.instructions === undefined))
+    return { prompt: s.prompt, instructions: prepareInstructions({ prompt: s.prompt, skills: [] }) };
+  const prepared = brokeredInstructions(stagePacks!.trustDir, stage, s.prompt);
+  return { prompt: prepared.prompt, instructions: prepared.instructions, packs: prepared.packs };
 }
