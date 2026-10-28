@@ -650,6 +650,16 @@ function runLines(r: CommandResult, command: string): string[] {
   ];
 }
 
+/** A run and the state it was in, in words: joined when a duplicate start joined it; never an `undefined` state. */
+function runStateLine(f: Record<string, unknown>): string {
+  const run = String(f.runId);
+  if (f.state === undefined || f.state === null) return word('sentinel.cli.runOnly', { run });
+  return word(f.joined === true ? 'sentinel.cli.runStateJoined' : 'sentinel.cli.runState', {
+    run,
+    state: String(f.state),
+  });
+}
+
 /**
  * `scan [--confirm] [--detach]`: plan, then start, through the facade. Without --confirm it previews every stage and
  * model and waits; with it the one confirmation plans and starts (in this process, or through the service when one
@@ -722,8 +732,8 @@ async function scanCommand(
     );
   }
   const lines: string[] = [];
-  if (f.planId) lines.push(`plan ${String(f.planId)} · ${String(f.planDigest)}`);
-  if (f.runId) lines.push(`run ${String(f.runId)} · ${String(f.state)}${f.joined === true ? ' · joined' : ''}`);
+  if (f.planId) lines.push(word('sentinel.cli.planLine', { plan: String(f.planId), digest: String(f.planDigest) }));
+  if (f.runId) lines.push(runStateLine(f));
   if (f.runId) lines.push(word('sentinel.cli.nextReport', { command: r.outcome === 'submitted' ? 'wait' : 'report' }));
   return serviceOut(r, lines, refusedDetail(r));
 }
@@ -938,12 +948,7 @@ async function owner(p: ParsedCommand): Promise<number> {
               ...(confirmed.envelopeReceipts.length ? { envelopeReceipts: [...confirmed.envelopeReceipts] } : {}),
             })
           : await ask(client, action, { runId, receiptId: confirmed.receiptId });
-      return serviceOut(
-        r,
-        r.facts.runId
-          ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)}${r.facts.joined === true ? ' · joined' : ''}`]
-          : [],
-      );
+      return serviceOut(r, r.facts.runId ? [runStateLine(r.facts)] : []);
     }
     // While the service runs it alone holds the store: reads and plans go through it (the facade's remote side), and
     // nothing is run or rerun in this process.
@@ -996,7 +1001,7 @@ async function owner(p: ParsedCommand): Promise<number> {
               adapter: String(u.adapterId),
               state: String(u.state),
               attempts: Number(u.attempts),
-            }) + (u.reasonCode ? ` · ${word(String(u.reasonCode))}` : ''),
+            }) + (u.reasonCode ? ` · ${word(String(u.reasonCode), { detail: String(u.detail ?? '') })}` : ''),
         ),
         refusedDetail(r),
       );
@@ -1018,7 +1023,7 @@ async function owner(p: ParsedCommand): Promise<number> {
         ...(limit === undefined ? {} : { limit }),
       });
       return serviceOut(r, [
-        ...(r.facts.state ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)}`] : []),
+        ...(r.facts.state ? [runStateLine(r.facts)] : []),
         ...stagesLine(r.facts.pipeline),
         ...heldLines(r.facts.held),
       ]);
@@ -1108,7 +1113,13 @@ async function owner(p: ParsedCommand): Promise<number> {
       return serviceOut(
         r,
         r.facts.runId && r.facts.parentId
-          ? [`run ${String(r.facts.runId)} · follows ${String(r.facts.parentId)} · ${String(r.facts.planDigest)}`]
+          ? [
+              word('sentinel.cli.runFollows', {
+                run: String(r.facts.runId),
+                parent: String(r.facts.parentId),
+                digest: String(r.facts.planDigest),
+              }),
+            ]
           : [],
       );
     }
@@ -1402,7 +1413,7 @@ async function waitFor(p: ParsedCommand, ws: Workspace): Promise<number> {
     const slice = Math.max(0, Math.min(end - Date.now(), 20_000));
     const r = await ask(client, 'run.wait', { runId, timeoutMs: slice }, slice + 10_000);
     if (r.outcome !== 'submitted' || Date.now() >= end)
-      return serviceOut(r, r.facts.state ? [`run ${runId} · ${String(r.facts.state)}`] : []);
+      return serviceOut(r, r.facts.state ? [runStateLine({ ...r.facts, runId })] : []);
   }
 }
 

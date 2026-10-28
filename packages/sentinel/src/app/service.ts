@@ -147,7 +147,15 @@ export async function stageIn(store: SentinelStore, runId: string, stageId: stri
           state: runs && !runs.has(u.id) ? 'held-by-selection' : (work?.state ?? 'not-created'),
           published,
           attempts: work ? store.ledger.countAttempts({ id: u.id, revision: u.revision }) : 0,
-          ...(work?.reason ? { reasonCode: work.reason } : {}),
+          ...(work?.reason
+            ? {
+                reasonCode: work.reason,
+                // What the reason is about, for its words: the model a review asked for, or the check's adapter.
+                detail: u.review
+                  ? `${u.review.selection.providerId} ${u.review.selection.modelId}`
+                  : String(u.adapterId ?? u.stage),
+              }
+            : {}),
         });
       }),
     },

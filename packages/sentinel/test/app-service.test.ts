@@ -301,6 +301,67 @@ test('the scan preview names every binding the plan can use, a segment-only sele
   assert.equal(preview.facts.ownerOnly, true);
 });
 
+test('the scan preview refuses a pipeline it cannot adopt or plan, and lists every problem it would plan with', (t) => {
+  const dir = scratchDir(t, 'sentinel-preview-problems-');
+  const ws = join(dir, 'ws');
+  mkdirSync(ws);
+  const env = { HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
+  initWorkspace({ workspace: ws, profile: 'agentic' });
+  const wsOf = workspaceOf(ws, env);
+  const by = agentPrincipal(AGENT as never);
+  // As init wrote it: every problem is one plan goes on with (the tools not adopted, no provider for the review).
+  const shipped = scanPreviewOf(wsOf, by, new Date());
+  assert.equal(shipped.outcome, 'awaiting-confirmation', JSON.stringify(shipped));
+  const problems = shipped.facts.pipeline.problems as { code: string; class: string; stage: string }[];
+  assert.deepEqual(
+    problems.map((p) => `${p.stage}:${p.code}:${p.class}`),
+    [
+      'secrets:sentinel.pipeline.toolNotAdopted:unavailable',
+      'patterns:sentinel.pipeline.toolNotAdopted:unavailable',
+      'review:sentinel.pipeline.runnerNotConfigured:unavailable',
+    ],
+  );
+  // The packs the setup promotes count as promoted: no rule is reported as missing from the lock.
+  assert.ok(!problems.some((p) => p.code === 'sentinel.pipeline.notPromoted'));
+  assert.deepEqual(shipped.facts.models, [
+    {
+      stage: 'review',
+      review: 'general',
+      segmentId: null,
+      providerId: null,
+      modelId: null,
+      runner: 'copilot-cli',
+      model: 'gpt-6-luna',
+      budget: null,
+    },
+  ]);
+  const file = join(ws, '.farsight', 'sentinel', 'pipeline.json');
+  const pipeline = JSON.parse(readFileSync(file, 'utf8'));
+  // A stage naming a pack the owner never promoted: adoption would refuse it, so the scan is refused, nothing offered.
+  const packed = structuredClone(pipeline);
+  packed.stages.find((s: { id: string }) => s.id === 'review').prompt = 'stages/review@3#prompt.md';
+  writeFileSync(file, JSON.stringify(packed));
+  const unadoptable = scanPreviewOf(wsOf, by, new Date());
+  assert.equal(unadoptable.outcome, 'configuration-failure');
+  assert.equal(unadoptable.reasonCode, 'sentinel.pipeline.unknownPack');
+  assert.equal(unadoptable.facts.confirmWith, undefined);
+  // A native Claude stage while its runner is off: refused as plan would refuse it.
+  const triage = structuredClone(pipeline);
+  triage.stages.splice(-1, 0, {
+    id: 'triage',
+    kind: 'agent',
+    mode: 'native',
+    runner: 'claude-cli',
+    model: 'claude-sonnet-5-5',
+    needs: [{ stage: 'review', output: 'observations' }],
+  });
+  writeFileSync(file, JSON.stringify(triage));
+  const off = scanPreviewOf(wsOf, by, new Date());
+  assert.equal(off.outcome, 'configuration-failure', JSON.stringify(off.facts));
+  assert.equal(off.reasonCode, 'sentinel.pipeline.flagDisabled');
+  assert.equal(off.facts.ownerOnly, undefined, 'nothing to confirm');
+});
+
 test('the composite start binds the plan digest, its stages and each model binding with its budget', (t) => {
   const dir = scratchDir(t, 'sentinel-composite-');
   mkdirSync(join(dir, 'ws'));
