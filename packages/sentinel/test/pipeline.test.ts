@@ -12,6 +12,7 @@ import {
   PipelineError,
   PIPELINE_ERROR_CODES,
   PIPELINE_PATH,
+  previewPipeline,
   stageOutputs,
   type PipelineEnvironment,
 } from '../dist/app/pipeline.js';
@@ -31,6 +32,7 @@ import { adoptionIntent } from '../dist/policy/adoption.js';
 import {
   adoptWorkspacePipeline,
   adoptWorkspaceSettings,
+  confirmPipelineWrite,
   pipelineGate,
   planWorkspace,
   showWorkspacePipeline,
@@ -266,6 +268,35 @@ test('the pipeline-wide and per-stage checks refuse each mistake with its code',
       'sentinel.pipeline.incompatibleType',
     ],
     [
+      'a native stage on a runner without its own loop',
+      pipelineOf([...BOOT, { id: 'a', kind: 'agent', mode: 'native', runner: 'ollama', model: 'm', needs: ['parse'] }]),
+      'sentinel.pipeline.modeUnsupported',
+    ],
+    [
+      'a native stage through a hosted API',
+      pipelineOf([
+        ...BOOT,
+        { id: 'a', kind: 'agent', mode: 'native', runner: 'hosted-api', model: 'm', needs: ['parse'] },
+      ]),
+      'sentinel.pipeline.modeUnsupported',
+    ],
+    [
+      "a custom output that takes the name of the stage's own",
+      pipelineOf([
+        ...BOOT,
+        {
+          id: 'a',
+          kind: 'agent',
+          mode: 'native',
+          runner: 'copilot-cli',
+          model: 'm',
+          needs: ['parse'],
+          produces: [{ name: 'observations', schema: 'sentinel.notes/v1' }],
+        },
+      ]),
+      'sentinel.pipeline.incompatibleType',
+    ],
+    [
       'a model stage fanned out per check',
       pipelineOf([
         ...BOOT,
@@ -426,7 +457,7 @@ test('what the workspace has not made available is reported, not refused', () =>
   // A local model server binds only an Ollama provider that keeps the source here; it needs no gated feature.
   const local = pipelineOf([
     ...BOOT,
-    { id: 'l', kind: 'agent', mode: 'native', runner: 'ollama', model: 'qwen3:4b', needs: ['parse'] },
+    { id: 'l', kind: 'agent', mode: 'brokered', runner: 'ollama', model: 'qwen3:4b', needs: ['parse'] },
   ]);
   const ollama = (disclosure: 'local-only' | 'hosted') =>
     ({
@@ -574,6 +605,35 @@ test('adoption pins the pipeline digest; a changed byte or an unpromoted pack is
   assert.deepEqual([refusal.outcome, refusal.reasonCode], ['configuration-failure', 'sentinel.pipeline.unknownPack']);
 });
 
+test('adopting the settings names each feature the adopted pipeline still waits on', (t) => {
+  const ws = workspace(t);
+  const now = new Date();
+  const p = join(ws.path, PIPELINE_PATH);
+  const base = profilePipeline('static');
+  writeFileSync(
+    p,
+    bytes({
+      ...base,
+      stages: [
+        ...base.stages,
+        {
+          id: 'triage',
+          kind: 'agent',
+          mode: 'native',
+          runner: 'claude-cli',
+          model: 'claude-sonnet-5-5',
+          needs: ['parse'],
+        },
+      ],
+    }),
+  );
+  const adopted = adoptWorkspaceSettings(ws, { confirm: true, now });
+  const pipeline = adopted.facts.pipeline as { digest: string; waitingOn: string[]; problems: { code: string }[] };
+  assert.match(pipeline.digest, /^sha256:/, 'the pipeline is adopted as it is');
+  assert.deepEqual(pipeline.waitingOn, ['runner.claude-cli']);
+  assert.ok(pipeline.problems.some((x) => x.code === 'sentinel.pipeline.flagDisabled'));
+});
+
 test('a settings receipt cannot adopt the pipeline, nor a pipeline receipt the settings', (t) => {
   const ws = workspace(t);
   const now = new Date();
@@ -689,49 +749,146 @@ test('plan refuses a cycle, a missing input, a wrong type, a disabled feature an
   assert.deepEqual([shown.outcome, shown.facts.trust, shown.facts.stages], ['answered', 'adopted', 5]);
 });
 
-test("the browser's pipeline.write validates, writes and previews; it never adopts, and never overwrites an edit", async (t) => {
+test("pipeline.write validates and previews; it writes only on the owner's receipt, never adopts, never overwrites an edit", async (t) => {
   const ws = workspace(t);
+  const now = new Date();
+  assert.equal(adoptWorkspaceSettings(ws, { confirm: true, now }).outcome, 'prepared');
   const p = join(ws.path, PIPELINE_PATH);
   const { createHash } = await import('node:crypto');
   const digestOf = () => `sha256:${createHash('sha256').update(readFileSync(p)).digest('hex')}`;
+  const original = readFileSync(p);
   const scanners = profilePipeline('scanners');
-  const stale = writeWorkspacePipeline(ws, scanners, 'sha256:' + '0'.repeat(64));
-  assert.deepEqual([stale.outcome, stale.reasonCode], ['configuration-failure', 'sentinel.pipeline.changed']);
+  const owner = (pipeline: unknown, expect: string | null) => {
+    const receipt = confirmPipelineWrite(ws, pipeline, expect, now);
+    return (binding: never) => {
+      void binding;
+      return { facts: { receipt } };
+    };
+  };
+  const nobody = () =>
+    ({
+      refusal: {
+        outcome: 'configuration-failure',
+        reasonCode: 'sentinel.admission.ownerOnly',
+        verdicts: undefined,
+        facts: {},
+      },
+    }) as never;
+  // The preview runs nothing: each stage's place in the order, where it would run, its effects, and what it reruns.
+  const refusedWrite = writeWorkspacePipeline(ws, scanners, digestOf(), nobody);
+  assert.deepEqual([refusedWrite.outcome, refusedWrite.facts.written], ['configuration-failure', false]);
+  assert.deepEqual(readFileSync(p), original, 'nothing is written without the owner');
+  const preview = refusedWrite.facts.preview as { stages: any[]; removed: string[] };
+  assert.deepEqual(
+    preview.stages.map((x) => [x.id, x.order, x.where, x.change]),
+    [
+      ['capture', 0, 'in-process', 'unchanged'],
+      ['parse', 1, 'child', 'unchanged'],
+      ['inventory', 2, 'child', 'unchanged'],
+      ['patterns', 3, 'container', 'added'],
+      ['advisories', 4, 'container', 'added'],
+      ['infrastructure', 5, 'container', 'added'],
+      ['ci', 6, 'container', 'added'],
+      ['secrets', 7, 'container', 'added'],
+      ['report', 8, 'in-process', 'changed'],
+    ],
+  );
+  assert.deepEqual(preview.removed, ['preview']);
+  assert.deepEqual(preview.stages.find((x) => x.id === 'secrets').effects, ['tool-execution', 'local-artifacts']);
+  // A broken pipeline is refused before any authority is asked, and the file stays as it was.
   const broken = writeWorkspacePipeline(
     ws,
     { ...scanners, stages: [...scanners.stages, scanners.stages[0]] },
     digestOf(),
+    nobody,
   );
   assert.deepEqual(
     [broken.outcome, broken.reasonCode, broken.facts.written],
     ['configuration-failure', 'sentinel.pipeline.duplicateStage', false],
   );
-  assert.deepEqual(JSON.parse(readFileSync(p, 'utf8')), JSON.parse(JSON.stringify(profilePipeline('static'))));
-  const written = writeWorkspacePipeline(ws, scanners, digestOf());
-  assert.deepEqual([written.outcome, written.facts.written, written.facts.trust], ['prepared', true, 'not-adopted']);
+  // With the owner's receipt the bytes are written (0600) and not adopted; a stale expected digest is refused.
+  const stale = writeWorkspacePipeline(
+    ws,
+    scanners,
+    'sha256:' + '0'.repeat(64),
+    owner(scanners, 'sha256:' + '0'.repeat(64)),
+  );
+  assert.deepEqual([stale.outcome, stale.reasonCode], ['configuration-failure', 'sentinel.pipeline.changed']);
+  const written = writeWorkspacePipeline(ws, scanners, digestOf(), owner(scanners, digestOf()));
+  assert.deepEqual([written.outcome, written.facts.written, written.facts.trust], ['prepared', true, 'changed']);
   assert.deepEqual(JSON.parse(readFileSync(p, 'utf8')), JSON.parse(JSON.stringify(scanners)));
   assert.equal(statSync(p).mode & 0o777, 0o600);
-  // Through the owner service's operation table: the same answer, and a body that is not exactly the two fields is refused.
+  // Through the owner service: an agent alone is refused (an owner action no grant gives it), the owner's receipt for
+  // exactly these bytes over exactly this file writes once, and a receipt for other bytes, or spent, writes nothing.
   const store = await openStore(ws.storePath);
   t.after(() => store.close());
   const service = new OwnerService(store, ws);
   const by = { principal: 'agent', channel: 'owner-ui' } as const;
-  const again = (await service.handle(
+  const secrets = profilePipeline('secrets');
+  const before = readFileSync(p);
+  const agent = (await service.handle('pipeline.write', { pipeline: secrets, expectDigest: digestOf() }, by)) as any;
+  assert.deepEqual(
+    [agent.outcome, agent.reasonCode, agent.facts.written],
+    ['configuration-failure', 'sentinel.admission.ownerOnly', false],
+  );
+  assert.deepEqual(readFileSync(p), before);
+  const wrong = confirmPipelineWrite(ws, profilePipeline('static'), digestOf(), now);
+  const mismatch = (await service.handle(
     'pipeline.write',
-    { pipeline: profilePipeline('secrets'), expectDigest: digestOf() },
+    { pipeline: secrets, expectDigest: digestOf(), receiptId: wrong },
     by,
-  )) as {
-    outcome: string;
-  };
-  assert.equal(again.outcome, 'prepared');
+  )) as any;
+  assert.deepEqual([mismatch.outcome, mismatch.reasonCode], ['configuration-failure', 'sentinel.receipt.mismatch']);
+  const receipt = confirmPipelineWrite(ws, secrets, digestOf(), now);
+  const ok = (await service.handle(
+    'pipeline.write',
+    { pipeline: secrets, expectDigest: digestOf(), receiptId: receipt },
+    by,
+  )) as any;
+  assert.deepEqual([ok.outcome, ok.facts.written], ['prepared', true]);
+  assert.match(ok.facts.receipt, /^sha256:/);
+  const replay = (await service.handle(
+    'pipeline.write',
+    { pipeline: secrets, expectDigest: digestOf(), receiptId: receipt },
+    by,
+  )) as any;
+  assert.equal(replay.outcome, 'configuration-failure');
   for (const body of [
     { pipeline: scanners },
     { pipeline: scanners, expectDigest: 'x' },
     { pipeline: [], expectDigest: null },
     { pipeline: scanners, expectDigest: null, adopt: true },
+    { pipeline: scanners, expectDigest: null, receiptId: 'a b' },
   ])
     await assert.rejects(
       () => service.handle('pipeline.write', body, by),
       (e: unknown) => e instanceof ServiceError && e.code === 'sentinel.service.requestInvalid',
     );
+});
+
+test('a change previews what it reruns: the stage, everything downstream of it, nothing upstream', () => {
+  const adopted = profilePipeline('agentic');
+  const next = structuredClone(adopted);
+  const review = next.stages.find((x) => x.id === 'review') as { model: string };
+  review.model = 'claude-sonnet-5-5';
+  const preview = previewPipeline(next, adopted);
+  assert.deepEqual(Object.fromEntries(preview.stages.map((x) => [x.id, x.change])), {
+    capture: 'unchanged',
+    parse: 'unchanged',
+    inventory: 'unchanged',
+    secrets: 'unchanged',
+    patterns: 'unchanged',
+    walk: 'unchanged',
+    review: 'changed',
+    triage: 'downstream',
+    report: 'downstream',
+  });
+  const triage = preview.stages.find((x) => x.id === 'triage')!;
+  assert.deepEqual(
+    [triage.where, triage.effects],
+    ['sandboxed-cli', ['source-disclosure', 'network', 'paid-inference', 'local-artifacts']],
+  );
+  assert.ok(preview.stages.find((x) => x.id === 'report')!.order > triage.order);
+  // With nothing adopted, every stage is new.
+  assert.ok(previewPipeline(next, null).stages.every((x) => x.change === 'added'));
 });

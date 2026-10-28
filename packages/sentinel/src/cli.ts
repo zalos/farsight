@@ -43,6 +43,7 @@ import { CAPABILITIES } from './capabilities.js';
 import { parseArgs, plannedIn, COMMANDS, type ParsedCommand } from './cli/args.js';
 import { initWorkspace, InitError, PROFILE_PACKS } from './cli/init.js';
 import { checkPipeline, parsePipeline, PipelineError, PIPELINE_PATH, type PipelineProblem } from './app/pipeline.js';
+import { featureOf } from './policy/features.js';
 import { result, type CommandResult } from './cli/outcome.js';
 import { ENVELOPES, ENVELOPE_KINDS, MAX_ENVELOPE_BYTES, type EnvelopeKind } from './contracts/index.js';
 import { parseEnvelope } from './validate.js';
@@ -283,15 +284,24 @@ function init(p: ParsedCommand): number {
         : word('sentinel.init.kept', { path: done.pipeline.path }),
     );
     holds(done.pipeline);
-    out(word('sentinel.init.profile', { profile: done.profile }));
+    // The profile in effect is what the settings file holds: a kept file is used as it is, whatever was asked for.
+    const kept = done.settings.outcome === 'kept';
+    const inEffect = kept ? done.settings.holds : done.profile;
+    out(
+      inEffect === done.profile
+        ? word('sentinel.init.profile', { profile: done.profile })
+        : inEffect === null
+          ? word('sentinel.init.profileEdited', { asked: done.profile })
+          : word('sentinel.init.profileKept', { profile: inEffect, asked: done.profile }),
+    );
     out(word('sentinel.init.prerequisites'));
     out(word('sentinel.init.credentials'));
     out(word('sentinel.init.noEffects'));
-    const packs = PROFILE_PACKS[done.profile as keyof typeof PROFILE_PACKS] ?? [];
+    const packs = inEffect === null ? [] : (PROFILE_PACKS[inEffect as keyof typeof PROFILE_PACKS] ?? []);
     out(
-      word('sentinel.init.next', {
-        packs: packs.map((p) => `rules promote builtin:${p} --confirm`).join('; '),
-      }),
+      packs.length
+        ? word('sentinel.init.next', { packs: packs.map((p) => `rules promote builtin:${p} --confirm`).join('; ') })
+        : word('sentinel.init.nextEdited'),
     );
   }
   return finish(result('init', done.outcome, { facts }));
@@ -322,6 +332,16 @@ function serviceOut(r: CommandResult, lines: string[] = [], values: Record<strin
 function problemLines(problems: unknown): string[] {
   return Array.isArray(problems)
     ? (problems as PipelineProblem[]).map((p) => `  ${p.stage ?? 'pipeline'}: ${word(p.code, { detail: p.detail })}`)
+    : [];
+}
+
+/** One line per feature the adopted pipeline waits on, naming the setting that turns it on. */
+function waitingLines(waiting: unknown): string[] {
+  return Array.isArray(waiting)
+    ? (waiting as string[]).flatMap((name) => {
+        const f = featureOf(name);
+        return f ? [word('sentinel.cli.pipelineWaitsOn', { feature: name, setting: f.setting ?? '(none)' })] : [];
+      })
     : [];
 }
 
@@ -364,6 +384,7 @@ function pipelineCommand(p: ParsedCommand, ws: Workspace, confirm: boolean, now:
     const lines = [
       ...(r.facts.digest ? [`pipeline ${String(r.facts.digest)}`] : []),
       ...problemLines(r.facts.problems),
+      ...waitingLines(r.facts.waitingOn),
     ];
     if (r.outcome === 'awaiting-confirmation')
       lines.push(word('sentinel.cli.confirmWith', { command: 'pipeline adopt --confirm' }));
@@ -644,6 +665,8 @@ async function owner(p: ParsedCommand): Promise<number> {
       const lines = [`settings ${String(r.facts.settingsDigest)}`];
       if (pipeline?.digest) lines.push(`pipeline ${pipeline.digest}`);
       if (pipeline?.reasonCode) lines.push(`pipeline: ${word(pipeline.reasonCode, { detail: pipeline.detail ?? '' })}`);
+      lines.push(...problemLines((r.facts.pipeline as { problems?: unknown } | undefined)?.problems));
+      lines.push(...waitingLines((r.facts.pipeline as { waitingOn?: unknown } | undefined)?.waitingOn));
       if (r.outcome === 'awaiting-confirmation')
         lines.push(word('sentinel.cli.confirmWith', { command: 'settings adopt --confirm' }));
       return serviceOut(r, lines);

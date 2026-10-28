@@ -36,12 +36,15 @@ import {
   parsePipeline,
   PipelineError,
   PIPELINE_PATH,
+  previewPipeline,
   type PipelineEnvironment,
   type PipelineProblem,
 } from '../app/pipeline.js';
+import type { PipelineDefinition } from '../contracts/index.js';
 import { readCheckoutFile, writePrivateFileAtomic } from '../policy/user-state.js';
 import { adoptPipeline, loadPipeline, NO_PACKS, pipelineAdoptionIntent } from '../app/pipeline-adoption.js';
 import { builtinRulePack, shippedCheckAdapters } from './trusted-profile.js';
+import { FEATURE_FLAGS } from '../policy/features.js';
 import {
   checkPreviewReport,
   PREVIEW_LIMITATIONS,
@@ -309,13 +312,37 @@ export function adoptWorkspaceSettings(ws: Workspace, options: { confirm: boolea
   const spent = book.consume(receipt.id, { intent, stateDigest: settingsDigest, policyRevision }, options.now);
   const adoption = adoptSettings({ workspace: ws.path, trustDir: ws.trustDir, receipt: spent, now: options.now });
   const adopted = pipeline !== undefined && !('error' in pipeline) ? adoptPipelineNow(ws, options.now) : undefined;
+  // What the adopted pipeline still waits on under the settings just adopted: each feature that is off, by name.
+  const problems = adopted ? pipelineProblems(ws, adoptedOrNull(ws)) : [];
   return result('settings.adopt', 'prepared', {
     facts: {
       settingsDigest: adoption.settingsDigest,
       adoptedAt: adoption.adoptedAt,
-      ...(adopted ? { pipeline: { digest: adopted.digest, adoptedAt: adopted.adoptedAt } } : pipelineFacts),
+      ...(adopted
+        ? {
+            pipeline: {
+              digest: adopted.digest,
+              adoptedAt: adopted.adoptedAt,
+              problems,
+              waitingOn: waitingFeatures(problems),
+            },
+          }
+        : pipelineFacts),
     },
   });
+}
+
+/** The features a pipeline's stages need that the adopted settings leave off, by registry name, once each. */
+export function waitingFeatures(problems: readonly PipelineProblem[]): string[] {
+  return [
+    ...new Set(
+      problems.flatMap((p) =>
+        p.code === 'sentinel.pipeline.flagDisabled'
+          ? FEATURE_FLAGS.filter((f) => p.detail.includes(f.name)).map((f) => f.name)
+          : [],
+      ),
+    ),
+  ];
 }
 
 // ---- the declared pipeline (`.farsight/sentinel/pipeline.json`) ----
@@ -365,7 +392,7 @@ export function adoptWorkspacePipeline(ws: Workspace, options: { confirm: boolea
   assertMayConfirm(OWNER);
   const adopted = adoptPipelineNow(ws, options.now);
   return result('pipeline.adopt', 'prepared', {
-    facts: { digest: adopted.digest, adoptedAt: adopted.adoptedAt, problems },
+    facts: { digest: adopted.digest, adoptedAt: adopted.adoptedAt, problems, waitingOn: waitingFeatures(problems) },
   });
 }
 
@@ -426,35 +453,81 @@ export function showWorkspacePipeline(ws: Workspace): CommandResult {
   });
 }
 
+/** What a pipeline write is confirmed against: these exact bytes, replacing exactly the file the writer read. */
+export function pipelineWriteBinding(
+  ws: Workspace,
+  bytes: Uint8Array,
+  expectDigest: string | null,
+): { intent: ActionIntent; stateDigest: string } {
+  const workspace = workspaceIdentity(ws.path).digest;
+  // `settings.adopt` is an owner action: no grant can give it to an agent, so only an owner's receipt writes.
+  const intent: ActionIntent = {
+    action: 'settings.adopt',
+    input: sha(bytes),
+    effects: [],
+    budget: { maxTokens: null, maxCost: null, currency: null },
+    scope: { profile: null, provider: null, targets: [`sentinel.workspace:${workspace}`, 'sentinel.pipeline.write'] },
+  };
+  return { intent, stateDigest: expectDigest ?? sha(Buffer.from('sentinel.pipeline.absent')) };
+}
+
+/** The bytes a pipeline object is written as: two-space JSON and a final newline, the form init writes. */
+export const pipelineBytesOf = (pipeline: unknown): Buffer =>
+  Buffer.from(`${JSON.stringify(pipeline, null, 2)}\n`, 'utf8');
+
 /**
- * `pipeline.write` (the browser's editor): validate a pipeline, write it as the workspace's pipeline file, and preview
- * what adopting it would pin. It never adopts and never runs: the file grants nothing until the owner adopts it.
- * `expectDigest` is the file digest the caller last read (null: there was no file), so a concurrent edit is refused
- * rather than overwritten. A pipeline with a refused problem is not written.
+ * `pipeline.write` (the browser's editor): validate a pipeline, preview what running it would do (each stage's order,
+ * where it would run, its effects, and which stages a change reruns against the adopted pipeline), and, only when the
+ * owner's authority for exactly these bytes is shown, write it as the workspace's pipeline file. It never adopts and
+ * never runs: the file grants nothing until the owner adopts it. `expectDigest` is the file digest the caller last
+ * read (null: there was no file), so a concurrent edit is refused rather than overwritten. A pipeline with a refused
+ * problem is not written. `authorize` decides the write (the service: an owner receipt, or admission, which an agent
+ * never passes for this owner action).
  */
-export function writeWorkspacePipeline(ws: Workspace, pipeline: unknown, expectDigest: string | null): CommandResult {
-  const bytes = Buffer.from(`${JSON.stringify(pipeline, null, 2)}\n`, 'utf8');
+export function writeWorkspacePipeline(
+  ws: Workspace,
+  pipeline: unknown,
+  expectDigest: string | null,
+  authorize: (binding: {
+    intent: ActionIntent;
+    stateDigest: string;
+  }) => { refusal: CommandResult } | { facts: Record<string, unknown> },
+): CommandResult {
+  const bytes = pipelineBytesOf(pipeline);
   let problems: readonly PipelineProblem[];
+  let next: PipelineDefinition;
   try {
-    problems = checkPipeline(parsePipeline(bytes), pipelineEnvironment(ws, adoptedOrNull(ws)));
+    next = parsePipeline(bytes);
+    problems = checkPipeline(next, pipelineEnvironment(ws, adoptedOrNull(ws)));
   } catch (e) {
     if (!(e instanceof PipelineError)) throw e;
     return result('pipeline.write', 'configuration-failure', { reasonCode: e.code, facts: { detail: e.detail } });
   }
+  const current = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: NO_PACKS });
+  const preview = previewPipeline(next, current.trust === 'adopted' ? current.read!.pipeline : null);
   const refused = problems.find((p) => p.class === 'refused');
   if (refused)
     return result('pipeline.write', 'configuration-failure', {
       reasonCode: refused.code,
-      facts: { problems, written: false },
+      facts: { problems, preview, written: false },
+    });
+  const binding = pipelineWriteBinding(ws, bytes, expectDigest);
+  const decided = authorize(binding);
+  if ('refusal' in decided)
+    return result('pipeline.write', decided.refusal.outcome, {
+      verdicts: decided.refusal.verdicts,
+      ...(decided.refusal.reasonCode ? { reasonCode: decided.refusal.reasonCode } : {}),
+      facts: { ...decided.refusal.facts, problems, preview, written: false },
     });
   const path = join(ws.path, PIPELINE_PATH);
-  let current: Buffer | undefined;
   try {
-    current = readCheckoutFile(path, MAX_PIPELINE_BYTES, 'sentinel.policy.settingsUnreadable', { nonblocking: true });
-    if ((current === undefined ? null : sha(current)) !== expectDigest)
+    const found = readCheckoutFile(path, MAX_PIPELINE_BYTES, 'sentinel.policy.settingsUnreadable', {
+      nonblocking: true,
+    });
+    if ((found === undefined ? null : sha(found)) !== expectDigest)
       return result('pipeline.write', 'configuration-failure', {
         reasonCode: 'sentinel.pipeline.changed',
-        facts: { problems, written: false },
+        facts: { problems, preview, written: false },
       });
     writePrivateFileAtomic(dirname(path), basename(path), bytes, 'sentinel.policy.settingsUnreadable');
   } catch (e) {
@@ -466,8 +539,27 @@ export function writeWorkspacePipeline(ws: Workspace, pipeline: unknown, expectD
   }
   const read = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: NO_PACKS });
   return result('pipeline.write', 'prepared', {
-    facts: { written: true, fileDigest: sha(bytes), digest: read.read?.digest ?? null, trust: read.trust, problems },
+    facts: {
+      ...decided.facts,
+      written: true,
+      fileDigest: sha(bytes),
+      digest: read.read?.digest ?? null,
+      trust: read.trust,
+      problems,
+      preview,
+    },
   });
+}
+
+/**
+ * The owner's receipt for one pipeline write, issued on the owner's own command line for exactly these bytes over
+ * exactly the file the writer read: what a service client presents to `pipeline.write`.
+ */
+export function confirmPipelineWrite(ws: Workspace, pipeline: unknown, expectDigest: string | null, now: Date): string {
+  assertMayConfirm(OWNER);
+  const binding = pipelineWriteBinding(ws, pipelineBytesOf(pipeline), expectDigest);
+  const policyRevision = effectivePolicy(loadPolicyInputs({ workspace: ws.path, trustDir: trustFolder(ws) })).revision;
+  return issueReceipt(receiptBook(ws), OWNER, { ...binding, policyRevision }, { now, ttlMs: RECEIPT_TTL_MS }).id;
 }
 
 /**

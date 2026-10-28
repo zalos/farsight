@@ -275,6 +275,14 @@ test('init, as an owner reads it: both files, which profile a kept file holds, a
   );
   const human = run(['init', '--profile', 'scanners']);
   assert.match(human.stdout, /it holds the agentic profile, not scanners/);
+  // The profile in effect is the kept one, and so are the packs to promote.
+  assert.match(human.stdout, /profile: agentic — the kept files hold it; scanners was asked for/);
+  assert.doesNotMatch(human.stdout, /profile: scanners/);
+  assert.match(
+    human.stdout,
+    /rules promote builtin:secrets --confirm; rules promote builtin:pattern --confirm\), then/,
+  );
+  assert.doesNotMatch(human.stdout, /builtin:advisories/);
   // The pipeline commands read and check what init wrote; nothing runs.
   const shown = run(['pipeline', 'show', '--json']);
   assert.equal(shown.status, 0, shown.stderr);

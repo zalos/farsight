@@ -9,11 +9,14 @@
 // names it and goes on, and that stage's checks stay unplanned with their reason, as a missing tool's do today.
 import { containsCredentialShape } from '@farsight/core/dist/credential-shapes.js';
 import type {
+  ActionEffect,
   BuiltinOperation,
   ContextInputId,
+  ExecutionSite,
   FeatureFlagName,
   PackRef,
   PipelineDefinition,
+  PipelineStageKind,
   RuleFamilyId,
   SettingsEnvelope,
   StageDefinition,
@@ -23,6 +26,7 @@ import type {
 } from '../contracts/index.js';
 import { validateEnvelope } from '../validate.js';
 import { featureEnabled } from '../policy/features.js';
+import { canonicalDigest } from '../policy/digest.js';
 
 /** The pipeline file's place in a workspace, beside the settings. */
 export const PIPELINE_PATH = '.farsight/sentinel/pipeline.json';
@@ -46,6 +50,7 @@ export const PIPELINE_ERROR_CODES = [
   'sentinel.pipeline.notPromoted',
   'sentinel.pipeline.toolNotAdopted',
   'sentinel.pipeline.runnerNotConfigured',
+  'sentinel.pipeline.modeUnsupported',
   'sentinel.pipeline.notAdopted',
   'sentinel.pipeline.changed',
   'sentinel.pipeline.adoptionUnauthorized',
@@ -390,6 +395,9 @@ export function checkPipeline(pipeline: PipelineDefinition, env: PipelineEnviron
 
 type Refuse = (code: PipelineErrorCode, stage: StageId | null, detail: string) => void;
 
+/** The runners that can run a stage natively: a CLI with its own loop and read tools. */
+const NATIVE_RUNNERS: ReadonlySet<string> = new Set(['claude-cli', 'copilot-cli']);
+
 /** Fields that belong together within one stage. */
 function checkStage(s: StageDefinition, refuse: Refuse): void {
   const natural = new Set(naturalOutputs(s));
@@ -401,6 +409,13 @@ function checkStage(s: StageDefinition, refuse: Refuse): void {
     if (typeof d !== 'string') {
       if (s.kind === 'builtin' || s.kind === 'tool')
         refuse('sentinel.pipeline.incompatibleType', s.id, `a ${s.kind} stage produces only its own outputs`);
+      // A custom output may not take the name of one the stage publishes of its own: one name, one output.
+      else if (natural.has(d.name as StageOutputType) || [...natural].some((t) => outputNameOf(t) === d.name))
+        refuse(
+          'sentinel.pipeline.incompatibleType',
+          s.id,
+          `stage ${s.id} declares a custom ${d.name}, the name of an output it already publishes`,
+        );
       continue;
     }
     if (natural.has(d)) continue;
@@ -416,6 +431,13 @@ function checkStage(s: StageDefinition, refuse: Refuse): void {
   if (s.fanOut === 'per-check' && s.kind !== 'tool')
     refuse('sentinel.pipeline.incompatibleType', s.id, `only a tool stage fans out per check`);
   if (s.kind === 'agent') {
+    // Native mode is a CLI running its own loop over a scratch tree; an HTTP model or a local model server has none.
+    if (s.mode === 'native' && !NATIVE_RUNNERS.has(s.runner))
+      refuse(
+        'sentinel.pipeline.modeUnsupported',
+        s.id,
+        `stage ${s.id} runs natively, which only a CLI runner (${[...NATIVE_RUNNERS].join(', ')}) does; ${s.runner} is brokered only`,
+      );
     if (s.mode === 'brokered' && s.instructions !== undefined)
       refuse('sentinel.pipeline.incompatibleType', s.id, `a brokered stage sends a prompt, not instructions`);
     if (s.mode === 'native' && s.prompt !== undefined)
@@ -520,4 +542,109 @@ function findCycle(ids: readonly StageId[], edges: ReadonlyMap<StageId, readonly
       if (found) return found;
     }
   return null;
+}
+
+// ---- the execution-free preview: where each stage would run, what running it would do, what a change reruns ----
+
+/** An effect of running a stage: the admission effects, and a script on this computer. */
+export type StageEffect = ActionEffect | 'host-execution';
+
+/** One stage as the preview shows it. Nothing here was run, planned or admitted. */
+export interface StagePreview {
+  readonly id: StageId;
+  readonly kind: PipelineStageKind;
+  /** Its place in the dependency order (0 first); stages that wait on nothing come in declaration order. */
+  readonly order: number;
+  readonly where: ExecutionSite;
+  readonly effects: readonly StageEffect[];
+  /**
+   * Against the adopted pipeline: `added`, `changed` (its declaration differs), `downstream` (unchanged, but a stage
+   * it reads or waits for is added or changed, so it would run again), or `unchanged` (a retained result can serve).
+   */
+  readonly change: 'added' | 'changed' | 'downstream' | 'unchanged';
+}
+
+/** Where a stage runs and what running it does, from its declaration alone. */
+function placeOf(s: StageDefinition): { where: ExecutionSite; effects: StageEffect[] } {
+  switch (s.kind) {
+    case 'builtin':
+      return {
+        where: s.operation === 'capture' || s.operation === 'report' ? 'in-process' : 'child',
+        effects: ['local-artifacts'],
+      };
+    case 'tool':
+      return { where: 'container', effects: ['tool-execution', 'local-artifacts'] };
+    case 'script':
+      return s.runner === 'host'
+        ? { where: 'host', effects: ['host-execution', 'local-artifacts'] }
+        : { where: 'container', effects: ['tool-execution', 'local-artifacts'] };
+    case 'agent':
+      return s.runner === 'ollama'
+        ? { where: 'in-process', effects: ['local-artifacts'] }
+        : s.runner === 'hosted-api'
+          ? { where: 'in-process', effects: ['source-disclosure', 'network', 'paid-inference', 'local-artifacts'] }
+          : { where: 'sandboxed-cli', effects: ['source-disclosure', 'network', 'paid-inference', 'local-artifacts'] };
+  }
+}
+
+/** The stages each stage reads from or waits for, by id. */
+function upstreamOf(s: StageDefinition): StageId[] {
+  return [
+    ...(s.needs ?? []).flatMap((n) => (typeof n === 'string' ? (n.startsWith('farsight.') ? [] : [n]) : [n.stage])),
+    ...(s.after ?? []),
+  ];
+}
+
+/**
+ * What adopting and running `next` would do, without running anything: each stage's place in the order, where it would
+ * run, its effects, and, against the adopted pipeline (null when there is none), which stages a change reruns.
+ */
+export function previewPipeline(
+  next: PipelineDefinition,
+  adopted: PipelineDefinition | null,
+): { readonly stages: readonly StagePreview[]; readonly removed: readonly StageId[] } {
+  const ids = next.stages.map((s) => s.id);
+  const byId = new Map(next.stages.map((s) => [s.id, s]));
+  const before = new Map((adopted?.stages ?? []).map((s) => [s.id, canonicalDigest(s)]));
+  // The dependency order: a stage after every stage it reads or waits for (declaration order breaks ties).
+  const order = new Map<StageId, number>();
+  const visiting = new Set<StageId>();
+  const place = (id: StageId): void => {
+    if (order.has(id) || visiting.has(id) || !byId.has(id)) return;
+    visiting.add(id);
+    for (const up of upstreamOf(byId.get(id)!)) place(up);
+    visiting.delete(id);
+    order.set(id, order.size);
+  };
+  for (const id of ids) place(id);
+  const direct = new Map(
+    next.stages.map((s) => [
+      s.id,
+      !before.has(s.id) ? ('added' as const) : before.get(s.id) !== canonicalDigest(s) ? ('changed' as const) : null,
+    ]),
+  );
+  const reruns = new Map<StageId, boolean>();
+  const rerun = (id: StageId, seen = new Set<StageId>()): boolean => {
+    if (reruns.has(id)) return reruns.get(id)!;
+    if (seen.has(id) || !byId.has(id)) return false;
+    seen.add(id);
+    const value = direct.get(id) !== null || upstreamOf(byId.get(id)!).some((up) => rerun(up, seen));
+    reruns.set(id, value);
+    return value;
+  };
+  const stages = [...next.stages]
+    .sort((a, b) => order.get(a.id)! - order.get(b.id)!)
+    .map((s) =>
+      Object.freeze({
+        id: s.id,
+        kind: s.kind,
+        order: order.get(s.id)!,
+        ...placeOf(s),
+        change: direct.get(s.id) ?? (rerun(s.id) ? ('downstream' as const) : ('unchanged' as const)),
+      }),
+    );
+  return Object.freeze({
+    stages: Object.freeze(stages),
+    removed: Object.freeze([...before.keys()].filter((id) => !byId.has(id))),
+  });
 }
