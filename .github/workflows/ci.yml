@@ -1,5 +1,6 @@
 # CI validation: every push to main and every pull request.
-# A small path selector skips checks unaffected by the change (see docs/CI.md).
+# A small path selector skips checks unaffected by the change, and validate tests only the packages the change
+# reaches (see docs/CI.md).
 # validate / e2e retain their required names; secrets always runs.
 # PR title and branch commit checks live in commits.yml so title edits don't restart CI.
 # Live tracker tests stay off: they run only with FARSIGHT_LIVE=1, which CI never sets.
@@ -29,6 +30,10 @@ jobs:
       sentinel: ${{ steps.select.outputs.sentinel }}
       isolation: ${{ steps.select.outputs.isolation }}
       recovery: ${{ steps.select.outputs.recovery }}
+      # validate's unit tests: `packages` with the names to test, `none` (only the skills trees changed), or
+      # anything else, a missing scope or a missing list under `packages` included, for every package
+      testScope: ${{ steps.select.outputs.testScope }}
+      testPackages: ${{ steps.select.outputs.testPackages }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -115,12 +120,19 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+      # `tsc -p` type-checks every package as it emits, with the config `pnpm -r typecheck` uses, so there is no
+      # separate typecheck step; e2e types are checked by the e2e job
       - run: pnpm build
       - name: Verify the generated graph contract
         run: node scripts/graph-schema.mjs --check
-      - name: Typecheck packages (e2e types are checked by the e2e job)
-        run: pnpm -r typecheck
-      - run: pnpm -r test
+      # The changed packages, their dependents and the packages whose tests read them, as the selector worked them
+      # out: one `pnpm --filter <name>` each, every name checked against the workspace first. A missing scope or a
+      # missing or empty list under `packages` tests every package.
+      - name: Test the packages the change reaches
+        env:
+          TEST_SCOPE: ${{ needs.changes.outputs.testScope }}
+          TEST_PACKAGES: ${{ needs.changes.outputs.testPackages }}
+        run: node scripts/ci-changes.mjs --run-tests
       - run: pnpm test:scripts
       - run: pnpm lint:strings
 
