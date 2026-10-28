@@ -149,7 +149,7 @@ const REVIEW_PROVIDER = {
         origin: 'http://127.0.0.1:9',
         model: 'review-model:1',
         listed: true,
-        revision: `sha256:${'a'.repeat(64)}`,
+        revision: null,
         probedAt: '2026-10-27T11:00:00.000000000Z',
       },
     },
@@ -169,13 +169,16 @@ export function adoptedPolicy(profile: 'static' | 'scanners', review: { guided?:
           ? {
               providers: [REVIEW_PROVIDER],
               reviewModels: {
-                stages: review.general ? [{ stage: 'general', providerId: 'local-review', modelId: 'review' }] : [],
-                segments: (review.guided ?? []).map((segmentId) => ({
-                  stage: 'guided',
-                  segmentId,
-                  providerId: 'local-review',
-                  modelId: 'review',
-                })),
+                // `guided: ['all']` reviews every planned check; other entries name guided segments.
+                stages: [
+                  ...(review.guided?.includes('all')
+                    ? [{ stage: 'guided', providerId: 'local-review', modelId: 'review' }]
+                    : []),
+                  ...(review.general ? [{ stage: 'general', providerId: 'local-review', modelId: 'review' }] : []),
+                ],
+                segments: (review.guided ?? [])
+                  .filter((s) => s !== 'all')
+                  .map((segmentId) => ({ stage: 'guided', segmentId, providerId: 'local-review', modelId: 'review' })),
               },
             }
           : {}),

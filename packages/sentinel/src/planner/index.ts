@@ -3,6 +3,8 @@
 export {
   planBootstrap,
   planAnalysis,
+  planPipelineBootstrap,
+  planPipelineAnalysis,
   checkWorkGraph,
   verifyPlanRevision,
   languageOf,
@@ -57,3 +59,30 @@ export { evaluateRequiredCoverage } from './coverage.js';
 export type { RequiredCoverage, CheckCoverage } from './coverage.js';
 export { createCapabilityTable, isCapabilityTable, capabilityOf } from './capabilities.js';
 export type { CapabilityFact, CapabilityTable, CapabilityAnswer } from './capabilities.js';
+export {
+  PIPELINE_SCHEMA,
+  BOOTSTRAP_OPERATIONS,
+  BUILTIN_CHECK_OPERATIONS,
+  TOOL_ADAPTERS,
+  DEFAULT_CHECK_STAGES,
+  stageModel,
+  requireBootstrap,
+  declaredAnalysis,
+  agentSeedsOf,
+  stagesOfUnits,
+  selectStages,
+  defaultPipelineOf,
+} from './pipeline.js';
+export type {
+  DeclaredPipeline,
+  DeclaredStage,
+  DeclaredStageKind,
+  DeclaredInput,
+  DeclaredOutput,
+  DeclaredFanOut,
+  StageModel,
+  StageRole,
+  AgentUnitSeed,
+  DeclaredAnalysis,
+  StageSelection,
+} from './pipeline.js';
