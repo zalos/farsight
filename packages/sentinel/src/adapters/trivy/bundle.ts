@@ -4,7 +4,7 @@
 // byte against the pins, and stores the archive by SHA-256 with a manifest of its provenance in an owner-only folder.
 // Because the request names digests, an acquisition is immutable: it can only ever yield those bytes. A scan never
 // downloads: it receives the archive by digest and runs with no network.
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import {
   closeSync,
   constants as FS,
@@ -17,6 +17,7 @@ import {
   writeSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { sha256Id as sha } from '../../kernel/digest.js';
 import type { ActionIntent } from '../../contracts/policy.js';
 import { canonicalDigest } from '../../policy/digest.js';
 import { intentDigest, receiptAuthority, stamp } from '../../policy/receipts.js';
@@ -24,11 +25,16 @@ import { ensurePrivateDir, readPrivateFile, writePrivateFileAtomic } from '../..
 import { TRIVY_CHECKS_BUNDLE } from './adapter.js';
 import { trivyFail } from './errors.js';
 
+/**
+ * The one registry the checks bundle is fetched from, and only by the owner's explicit acquisition, never by a scan.
+ */
 export const CHECKS_REGISTRY = 'https://ghcr.io';
 /** The only host the registry's blob redirect may lead to. */
 export const CHECKS_BLOB_HOST = 'https://pkg-containers.githubusercontent.com/';
 const REPO_PATH = 'aquasecurity/trivy-checks';
+/** The manifest URL of the pinned checks bundle. */
 export const checksManifestUrl = () => `${CHECKS_REGISTRY}/v2/${REPO_PATH}/manifests/${TRIVY_CHECKS_BUNDLE.manifest}`;
+/** The layer URL of the pinned checks bundle. */
 export const checksBlobUrl = () => `${CHECKS_REGISTRY}/v2/${REPO_PATH}/blobs/${TRIVY_CHECKS_BUNDLE.layer}`;
 const tokenUrl = () => `${CHECKS_REGISTRY}/token?scope=repository:${REPO_PATH}:pull&service=ghcr.io`;
 
@@ -65,13 +71,15 @@ export function checksAcquisitionIntent(): ActionIntent {
   };
 }
 
+/**
+ * The fetch the acquisition uses; a redirect is followed only to {@link CHECKS_BLOB_HOST}. Tests pass a recorded one.
+ */
 export type ChecksTransport = (
   url: string,
   init: { redirect: 'error' | 'manual'; headers?: Record<string, string>; signal?: AbortSignal },
 ) => Promise<Response>;
 
 const used = new WeakSet<object>();
-const sha = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
 async function boundedBytes(res: Response, max: number, what: string): Promise<Buffer> {
   if (!res.body) return trivyFail('sentinel.trivy.acquisitionFailed', `${what}: empty response`);

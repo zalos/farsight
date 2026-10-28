@@ -20,15 +20,18 @@ import type { ActionIntent } from '../../contracts/policy.js';
 import { canonicalDigest } from '../../policy/digest.js';
 import { intentDigest, receiptAuthority, stamp } from '../../policy/receipts.js';
 import { ensurePrivateDir, readPrivateFile, writePrivateFileAtomic } from '../../policy/user-state.js';
-import { snapshot } from '../../policy/immutable.js';
+import { frozenCopy as snapshot } from '../../kernel/freeze.js';
 import { osvFail } from './errors.js';
 import type { Ecosystem } from './job.js';
 
+/** The one origin advisory archives are fetched from, and only by the owner's explicit acquisition, never by a scan. */
 export const ADVISORY_ORIGIN = 'https://osv-vulnerabilities.storage.googleapis.com';
+/** The ecosystems an advisory snapshot can be acquired for. */
 export const ADVISORY_ECOSYSTEMS: readonly Ecosystem[] = Object.freeze(['npm', 'Maven']);
 /** The largest archive a request may allow: the npm archive was 219 MB on 2026-10-22; anything multi-GB is refused. */
 export const MAX_ACQUISITION_BYTES = 512 * 1024 * 1024;
 
+/** The archive URL of one ecosystem's advisories under {@link ADVISORY_ORIGIN}. */
 export const advisoryUrl = (ecosystem: Ecosystem): string => `${ADVISORY_ORIGIN}/${ecosystem}/all.zip`;
 
 /** One acquired archive and where it came from. */
@@ -49,6 +52,7 @@ export interface AdvisorySnapshot {
   readonly acquiredAt: string;
 }
 
+/** What the owner asks to acquire: which ecosystems, and the largest archive each may be. */
 export interface AcquisitionRequest {
   readonly ecosystems: readonly Ecosystem[];
   readonly maxBytesPerEcosystem: number;
@@ -70,6 +74,7 @@ export function acquisitionIntent(request: AcquisitionRequest): ActionIntent {
   };
 }
 
+/** The fetch the acquisition uses: redirects are an error, never followed. Tests pass a recorded transport. */
 export type Transport = (url: string, init: { redirect: 'error'; signal?: AbortSignal }) => Promise<Response>;
 
 function md5Of(header: string | null): string | null {
@@ -84,6 +89,7 @@ function md5Of(header: string | null): string | null {
 /** An IMF-fixdate (RFC 9110), the only Last-Modified form accepted; anything else leaves the age unknown. */
 const IMF_FIXDATE =
   /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$/;
+/** Reads a Last-Modified header in its one accepted form, an IMF-fixdate; any other form, or none, is null. */
 export function strictHttpDate(header: string | null): Date | null {
   const m = header ? IMF_FIXDATE.exec(header) : null;
   if (!m) return null;

@@ -10,9 +10,9 @@
 // sealed. Every input it reads is checked against its id. Output: one document with each library's control-fact
 // envelopes and frontiers, or the fixed reason a library refused its inputs. The worker claims no coverage: the
 // coordinator's driver derives it from this document (facts.ts).
-import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { sha256Hex as hex } from '../../kernel/digest.js';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { ControlFactsEnvelope } from '../../contracts/controls.js';
 import type { SnapshotEnvelope } from '../../contracts/snapshot.js';
@@ -38,7 +38,6 @@ export {
 export type { ControlsJob, ControlsOutput } from './definitions.js';
 
 const P = 'sentinel-worker/draft-1';
-const hex = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const HEX = /^sha256:([0-9a-f]{64})$/;
 
 class Refused extends Error {}

@@ -5,12 +5,14 @@
 // Protocol (sentinel-worker/draft-1 over newline-delimited JSON): hello → welcome → start → result. It reads only
 // the inputs the coordinator copied into SENTINEL_INPUT, writes one findings artifact to SENTINEL_OUTPUT, and
 // contacts nothing. The inputs include a manifest naming each content artifact's captured path.
-import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { sha256Hex as sha } from '../kernel/digest.js';
 
+/** The built-in foundation-preview detector's adapter id. */
 export const PREVIEW_DETECTOR_ID = 'sentinel.preview.detector';
 /** The rule family this detector implements, as the built-in foundation-preview pack declares it. */
 export const PREVIEW_RULE = 'sentinel.preview.sql-string-concat';
+/** The schema of the findings document the detector writes as its one output. */
 export const PREVIEW_FINDINGS_SCHEMA = 'sentinel-preview-findings/draft-1';
 
 const LANGUAGES = /\.(?:[cm]?[jt]sx?|java)$/i;
@@ -20,6 +22,7 @@ const CONCAT = new RegExp(String.raw`(["'])(?:(?!\1).)*${SQL}(?:(?!\1).)*\1\s*\+
 /** A template literal with SQL text and an interpolation. */
 const TEMPLATE = new RegExp(String.raw`\`[^\`]*${SQL}[^\`]*\$\{`, 'i');
 
+/** One preview finding: the captured input it was read from, its path and line, and the rule it matched. */
 export interface PreviewFinding {
   readonly input: string;
   readonly path: string;
@@ -42,7 +45,6 @@ export function detect(path: string, text: string, input: string): PreviewFindin
 // ---- the worker ----
 
 const P = 'sentinel-worker/draft-1';
-const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 
 /** Why a scope was not checked; each a catalog reason, so a skipped scope is never read as covered. */
 export const PREVIEW_SKIP_REASONS = Object.freeze({

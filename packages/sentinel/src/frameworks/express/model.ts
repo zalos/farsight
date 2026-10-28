@@ -18,6 +18,7 @@ import {
   type JsNode,
 } from './syntax.js';
 
+/** Why an Express fact is unknown or a frontier: each is a catalog key in core strings-sentinel-express.ts. */
 export const EXPRESS_REASON_CODES = Object.freeze([
   'sentinel.express.versionUnresolved',
   'sentinel.express.versionUnsupported',
@@ -46,13 +47,16 @@ export const EXPRESS_REASON_CODES = Object.freeze([
   'sentinel.express.refusalUnproven',
   'sentinel.express.routeNotInGraph',
 ] as const);
+/** One of {@link EXPRESS_REASON_CODES}. */
 export type ExpressReason = (typeof EXPRESS_REASON_CODES)[number];
 
+/** A place in the source: a captured file and a syntax node in it. */
 export interface At {
   readonly file: JsFile;
   readonly node: JsNode;
 }
 
+/** An application or router the pack follows: its layers in order, and why they are not all known when they are not. */
 export interface ExpressObject {
   readonly id: string;
   readonly kind: 'app' | 'router';
@@ -68,6 +72,7 @@ export interface ExpressObject {
   subApp?: At;
 }
 
+/** One entry of an object's stack: a middleware, a mounted object, a route, a parameter handler or an unknown entry. */
 export type Layer =
   | { readonly kind: 'middleware'; readonly path: string; readonly fn: JsNode; readonly file: JsFile; readonly at: At }
   | { readonly kind: 'mount'; readonly path: string; readonly target: ExpressObject; readonly at: At }
@@ -83,6 +88,7 @@ export type Layer =
   | { readonly kind: 'param'; readonly at: At }
   | { readonly kind: 'unknown'; readonly reason: ExpressReason; readonly at: At };
 
+/** What an expression resolves to, as far as the pack follows it; anything it does not follow is `unknown`. */
 export type Value =
   | { readonly kind: 'express' }
   | { readonly kind: 'router-factory' }
@@ -131,6 +137,7 @@ const OPTION_INERT_KEYS = new Set([
 export const isTestPath = (p: string) =>
   /(^|\/)(__tests__|tests?|e2e)\//.test(p) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(p);
 
+/** The applications and routers of a source, the registrations the pack could not follow, and value resolution. */
 export interface ExpressModel {
   readonly index: ModuleIndex;
   readonly objects: ExpressObject[];
@@ -146,6 +153,10 @@ export interface ExpressModel {
   foreignObject(file: JsFile, node: JsNode): boolean;
 }
 
+/**
+ * Builds the model from parsed files, test files excluded. Nothing is evaluated: values resolve only through the
+ * supported static forms, and every registration outside them is recorded as a frontier with its reason.
+ */
 export function buildModel(files: readonly JsFile[]): ExpressModel {
   const app = files.filter((f) => !isTestPath(f.path));
   const index = new ModuleIndex(app);
