@@ -317,12 +317,11 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
     '@farsight/core/dist/query.js',
   ],
   // Bounded call paths and attested deep import (ADR 36): pure over parser evidence and captured bytes; no engine, no process.
-  'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
-  'analysis/paths/protocol.js': ['node:crypto'],
+  'analysis/paths/paths.js': ['@farsight/graph'],
   // The fixed structural child reads only sealed files; its driver writes the private prepared request.
-  'analysis/paths/worker.js': ['node:crypto', 'node:fs', 'node:url'],
+  'analysis/paths/worker.js': ['node:fs', 'node:url'],
   'analysis/paths/driver.js': ['node:fs', 'node:path'],
-  'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
+  'analysis/deep/import.js': ['@farsight/graph'],
   // Imported report readers (PR 20 Stage A): one bounded no-follow file read, hashing and canonical JSON; no network,
   // no process, no decompression, no store or receipt.
   'imports/bounded-file.js': ['node:fs', 'node:path'],
