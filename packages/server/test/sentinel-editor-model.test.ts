@@ -101,3 +101,35 @@ test('every kind has fields, and the drawer offers the contract’s four kinds',
     'report',
   ]);
 });
+
+test('every choice and every stage name the drawer prints is a catalog word, with both registers and a define', async () => {
+  const { STRINGS } = await import('@farsight/core/dist/strings.js');
+  assert.equal(m.choiceKey('agentRunner', 'copilot-cli'), 'sentinel.viewer.edit.choice.agentRunner.copilotCli');
+  assert.equal(m.choiceKey('fanOut', 'per-source'), 'sentinel.viewer.edit.choice.fanOut.perSource');
+  const keys: string[] = [];
+  for (const f of [...Object.values(m.STAGE_FIELDS).flat(), ...m.SHARED_FIELDS] as any[]) {
+    if (f.choices) {
+      assert.ok(f.words, `${f.key} names its word group`);
+      for (const c of f.choices) keys.push(m.choiceKey(f.words, c));
+    }
+  }
+  for (const operation of ['capture', 'parse', 'inventory', 'walkthrough', 'framework-controls', 'report'])
+    keys.push(m.stageName({ id: 'x', kind: 'builtin', operation }).key);
+  for (const key of keys) {
+    const e = (STRINGS as any)[key];
+    assert.ok(e, key);
+    assert.ok(e.hud && e.professional && e.define, key);
+  }
+  // a scanner the read model names reads the same here; an unknown one, a script and a model stage read as declared
+  assert.deepEqual(m.stageName({ id: 'secrets', kind: 'tool', adapter: 'secrets-gitleaks' }), {
+    key: 'sentinel.viewer.stage.secrets',
+  });
+  assert.deepEqual(m.stageName({ id: 'my-scanner', kind: 'tool', adapter: 'unknown' }), { declared: 'my scanner' });
+  assert.deepEqual(m.stageName({ id: 'triage-findings', kind: 'agent' }), { declared: 'triage findings' });
+  // the values only the code registers print
+  const technical = [...Object.values(m.STAGE_FIELDS).flat(), ...m.SHARED_FIELDS]
+    .filter((f: any) => f.technical)
+    .map((f: any) => f.key);
+  for (const key of ['adapter', 'rules', 'entry', 'model', 'prompt', 'instructions', 'skills', 'needs', 'produces'])
+    assert.ok(technical.includes(key), key);
+});

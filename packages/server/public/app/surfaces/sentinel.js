@@ -52,6 +52,9 @@ import {
   removeStage,
   problemsByStage,
   changedStages,
+  choiceKey,
+  stageName,
+  pipelineText,
 } from '../lib/sentinel-editor-model.js';
 
 /**
@@ -181,7 +184,7 @@ function message(event) {
       !['checked', 'refused', 'written', 'failed'].includes(v.state)
     )
       return;
-    pipelineResult(v);
+    void pipelineResult(v);
     return;
   }
   if (
@@ -530,6 +533,7 @@ function verdictsHtml() {
     if (!c) return '';
     if (c.state === 'checked') return keyChip('ok', 'sentinel.viewer.edit.checked');
     if (c.state === 'written') return keyChip('ok', 'sentinel.viewer.edit.written');
+    if (c.state === 'writtenEarlier') return keyChip('warn', 'sentinel.viewer.edit.writtenEarlier');
     return detailChip('err', c.reasonCode || 'sentinel.viewer.edit.refused', c.detail);
   }
   const row = SN.place.stop === 'scans' ? null : SN.scan?.scan;
@@ -1224,11 +1228,30 @@ function working() {
   return SN.draft ?? SN.config?.pipeline ?? null;
 }
 
-/** An edit: the page's copy changes, and the last check no longer speaks for it. */
+/**
+ * The draft's identity between this page and the owner frame: the sha256 of exactly the text the CLI writes for it.
+ * A check names it, the frame confirms only those bytes, and every answer comes back with it.
+ */
+async function draftDigest(pipeline) {
+  const bytes = new TextEncoder().encode(pipelineText(pipeline));
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return 'sha256:' + Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * An edit: the page's copy changes, and the last check no longer speaks for it. A confirmation the frame still offers
+ * for the earlier copy is withdrawn, so what the owner confirms is always what the page shows.
+ */
 function edited(next) {
   if (!SN.draft) SN.draftBase = SN.config?.fileDigest ?? null;
+  if ((SN.checking || SN.check?.state === 'checked') && SN.frame?.contentWindow && SN.child)
+    SN.frame.contentWindow.postMessage(
+      { type: 'sentinel-owner-pipeline-withdraw', frameNonce: SN.child.frameNonce, documentId: SN.child.documentId },
+      SN.origin,
+    );
   SN.draft = next;
   SN.check = null;
+  SN.checking = false;
   draw();
 }
 
@@ -1303,6 +1326,23 @@ function detailWords(key, detail) {
 }
 const detailChip = (cls, key, detail) => chip(cls, esc(detailWords(key, detail)), defAttrs(key));
 
+/**
+ * A declared stage's name in the register on screen: the catalog's words (or the name the owner declared) in
+ * business, those words beside the id in hybrid, the id in code.
+ */
+function stageText(stage) {
+  const n = stageName(stage);
+  const words = n.key ? t(n.key) : n.declared;
+  return biz() ? words : lensNow() === 'code' ? String(stage.id) : words + ' · ' + stage.id;
+}
+function stageNameHtml(stage) {
+  const n = stageName(stage);
+  const words = esc(n.key ? t(n.key) : n.declared);
+  if (biz()) return words;
+  if (lensNow() === 'code') return '<span class="mono">' + esc(stage.id) + '</span>';
+  return words + ' ' + chip('plain', esc(stage.id));
+}
+
 /** What the last check said would happen to a stage: reused, run again, added, changed. */
 function changeOf(id) {
   return SN.check?.preview?.stages?.find((x) => x.id === id) || null;
@@ -1327,11 +1367,11 @@ function editRowHtml(stage, i, problems, touched) {
     '" data-estage="' +
     esc(stage.id) +
     '" tabindex="0" role="button" aria-label="' +
-    esc(stage.id) +
+    esc(stageText(stage)) +
     '"><span class="snt-n">' +
     (i + 1) +
     '</span><span class="snt-enm">' +
-    esc(stage.id) +
+    stageNameHtml(stage) +
     '</span>' +
     keyChip(k.cls, k.key) +
     (!biz() && runner && typeof runner === 'string' ? chip('plain', esc(runner)) : '') +
@@ -1388,6 +1428,9 @@ function editHtml() {
           detailChip('err', SN.check.reasonCode || 'sentinel.viewer.edit.refused', SN.check.detail) +
           '</div>'
         : '') +
+    (SN.check?.state === 'writtenEarlier'
+      ? '<div class="snt-note warn">' + esc(def('sentinel.viewer.edit.writtenEarlier')) + '</div>'
+      : '') +
     (SN.check?.state === 'written'
       ? '<div class="snt-note">' +
         word('sentinel.viewer.edit.adoptNote') +
@@ -1406,7 +1449,7 @@ function editHtml() {
       .map(
         (id) =>
           '<div class="snt-erow gone"><span class="snt-enm">' +
-          esc(id) +
+          esc(biz() ? String(id).replace(/-/g, ' ') : id) +
           '</span>' +
           keyChip('warn', 'sentinel.ownerUi.change.removed') +
           '</div>',
@@ -1461,6 +1504,20 @@ function fieldHtml(stage, f) {
   const label = 'sentinel.viewer.edit.field.' + f.key;
   const v = stage[f.key];
   let input;
+  // an identifier, a pack reference, a model name or a wiring: the business register names the field and says where
+  // it is edited, and prints no value
+  if (f.technical && biz())
+    return (
+      '<dt' +
+      defAttrs(label) +
+      '>' +
+      word(label) +
+      '</dt><dd class="snt-fld snt-sub"' +
+      defAttrs('sentinel.viewer.edit.inCode') +
+      '>' +
+      word('sentinel.viewer.edit.inCode') +
+      '</dd>'
+    );
   if (f.key === 'required') {
     input = [true, false]
       .map(
@@ -1484,8 +1541,10 @@ function fieldHtml(stage, f) {
           f.key +
           '" data-evalue="' +
           esc(c) +
-          '">' +
-          esc(c) +
+          '"' +
+          defAttrs(choiceKey(f.words, c)) +
+          '>' +
+          word(choiceKey(f.words, c)) +
           '</button>',
       )
       .join('');
@@ -1530,7 +1589,7 @@ function editorDockHtml(id) {
     '<h2>' +
     esc(fill('sentinel.viewer.edit.stageTitle', { n: at + 1 })) +
     ' · ' +
-    esc(stage.id) +
+    esc(stageText(stage)) +
     '</h2><div class="snt-row">' +
     keyChip(k.cls, k.key) +
     (change ? keyChip('', whereKey(change.where)) : '') +
@@ -1629,25 +1688,43 @@ function onChange(e) {
 }
 
 /** Check: the frame has the service check and preview the edited pipeline, and asks the owner to confirm the write. */
-function checkPipeline() {
+async function checkPipeline() {
   if (!SN.draft || readOnlyWhy() || !SN.frame?.contentWindow || !SN.child) return;
+  const draft = SN.draft;
   SN.checking = true;
   SN.check = null;
   SN.dockTab = 'owner';
   draw();
+  const digest = await draftDigest(draft);
+  if (SN.draft !== draft || !SN.frame?.contentWindow || !SN.child) return; // edited meanwhile: that edit withdrew it
   SN.frame.contentWindow.postMessage(
     {
       type: 'sentinel-owner-pipeline',
       frameNonce: SN.child.frameNonce,
       documentId: SN.child.documentId,
-      pipeline: SN.draft,
+      pipeline: draft,
       expectDigest: SN.draftBase ?? null,
+      draftDigest: digest,
     },
     SN.origin,
   );
 }
 
-function pipelineResult(v) {
+/**
+ * The frame's answer, for the draft it names. An answer for an earlier copy than the one on screen is not this draft's:
+ * a check of it is dropped, and a write of it leaves the newer draft here, on top of the file it wrote.
+ */
+async function pipelineResult(v) {
+  if (typeof v.draftDigest !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(v.draftDigest)) return;
+  const current = SN.draft ? await draftDigest(SN.draft) : null;
+  if (current !== v.draftDigest) {
+    if (v.state !== 'written') return;
+    SN.checking = false;
+    SN.draftBase = typeof v.written?.fileDigest === 'string' ? v.written.fileDigest : SN.draftBase;
+    SN.check = { state: 'writtenEarlier', reasonCode: null, detail: null, problems: [], preview: null };
+    void load();
+    return;
+  }
   SN.checking = false;
   SN.check = {
     state: v.state,
@@ -1736,7 +1813,7 @@ function onClick(e) {
     if (a === 'scan') scan(act);
     if (a === 'edit') go({ edit: true, pick: SN.place.pick || SN.place.stage });
     if (a === 'report') void download(act.dataset.format);
-    if (a === 'echeck') checkPipeline();
+    if (a === 'echeck') void checkPipeline();
     if (a === 'ediscard') {
       SN.draft = null;
       SN.draftBase = undefined;

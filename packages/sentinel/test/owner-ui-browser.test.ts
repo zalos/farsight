@@ -409,6 +409,22 @@ test(
       await seconds.press('Tab');
       await page.locator('.snt-tools [data-act="echeck"]').click();
       await confirmWrite.waitFor({ timeout: 15000 });
+      // An edit after Check withdraws the frame's confirmation for the earlier bytes; checking again offers a new one.
+      await page.locator('.snt-tabs [data-tab="stage"]').click();
+      await seconds.fill('121');
+      await seconds.press('Tab');
+      await page.locator('.snt-tabs [data-tab="owner"]').click();
+      await frame
+        .getByText('The page changed the pipeline after it was checked: nothing was written. Check it again.', {
+          exact: true,
+        })
+        .waitFor({ timeout: 15000 });
+      assert.equal(await confirmWrite.count(), 0);
+      await page.locator('.snt-tabs [data-tab="stage"]').click();
+      await seconds.fill('120');
+      await seconds.press('Tab');
+      await page.locator('.snt-tools [data-act="echeck"]').click();
+      await confirmWrite.waitFor({ timeout: 15000 });
       assert.deepEqual(JSON.parse(readFileSync(pipelinePath, 'utf8')), before, 'checking writes nothing');
       await page.screenshot({ path: join(evidence, 'pipeline-checked.png') });
       await confirmWrite.click();

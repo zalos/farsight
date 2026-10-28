@@ -248,10 +248,19 @@ async function standIn(page: Page, baseURL: string | undefined, opts: { readOnly
   const version: Json = await (await page.request.get('/api/version')).json();
   const instance = version.session.instance;
   // what the frame was handed, and whether the owner confirmed its write
-  const state: { got: Json; written: boolean } = { got: null, written: false };
-  await page.exposeFunction('__sentinelGot', (pipeline: Json, written: boolean) => {
+  const state: { got: Json; written: boolean; checks: Json[]; withdrawn: number } = {
+    got: null,
+    written: false,
+    checks: [],
+    withdrawn: 0,
+  };
+  await page.exposeFunction('__sentinelGot', (pipeline: Json, written: boolean, check: Json) => {
     state.got = pipeline;
-    state.written = written;
+    state.written = state.written || written;
+    if (check) state.checks.push(check);
+  });
+  await page.exposeFunction('__sentinelWithdrawn', () => {
+    state.withdrawn++;
   });
   await page.route(
     (url) => url.pathname === '/' || url.pathname === '/index.html',
@@ -287,17 +296,34 @@ async function standIn(page: Page, baseURL: string | undefined, opts: { readOnly
         const parentOrigin = ${JSON.stringify(origin)}, hostInstance = ${JSON.stringify(instance)};
         const R = ${JSON.stringify(RECORDED)};
         const frameNonce = 'frame-' + '1'.repeat(32), documentId = 'document-' + '2'.repeat(32), id = '3'.repeat(64);
-        const tell = (v) => parent.postMessage({ type: 'sentinel-owner-pipeline-result', frameNonce, documentId, hostInstance,
-          state: v.state, reasonCode: v.reasonCode ?? null, detail: v.detail ?? null, problems: v.problems ?? [], preview: v.preview ?? null,
+        let draft = null;
+        const tell = (v, digest = draft) => parent.postMessage({ type: 'sentinel-owner-pipeline-result', frameNonce, documentId, hostInstance,
+          state: v.state, draftDigest: digest, reasonCode: v.reasonCode ?? null, detail: v.detail ?? null, problems: v.problems ?? [], preview: v.preview ?? null,
           written: v.written ?? null }, parentOrigin);
         addEventListener('message', (e) => {
           if (e.origin !== parentOrigin || !e.data) return;
           if (e.data.type === 'sentinel-owner-context' && e.data.id === id)
             parent.postMessage({ type: 'sentinel-owner-read', frameNonce, documentId, hostInstance,
               pass: ${JSON.stringify(PASS)}, expiresAt: new Date(Date.now() + 3600000).toISOString() }, parentOrigin);
+          if (e.data.type === 'sentinel-owner-pipeline-withdraw' && e.data.frameNonce === frameNonce) {
+            // the page edited after its check: the confirmation goes; a race button keeps the earlier one, as an owner
+            // who pressed confirm before the withdraw arrived would
+            window.__sentinelWithdrawn();
+            const kept = draft;
+            document.getElementById('said').textContent = 'withdrawn';
+            const late = document.createElement('button');
+            late.textContent = 'Write the earlier check';
+            late.onclick = () => {
+              late.remove();
+              tell({ state: 'written', problems: R.checked.problems, preview: R.checked.preview, written: R.written }, kept);
+            };
+            document.getElementById('confirm').replaceChildren(late);
+            return;
+          }
           if (e.data.type !== 'sentinel-owner-pipeline' || e.data.frameNonce !== frameNonce) return;
           const p = e.data.pipeline;
-          window.__sentinelGot(p, false);
+          draft = e.data.draftDigest;
+          window.__sentinelGot(p, false, { draftDigest: e.data.draftDigest, expectDigest: e.data.expectDigest });
           document.getElementById('said').textContent = 'checking';
           // the recorded refusals: an empty agent stage, and (a stand-in rule) a capture stage made one per source
           if (p.stages.some((s) => s.kind === 'agent' && !s.model))
@@ -370,6 +396,7 @@ async function visibleWords(page: Page, root: string): Promise<string> {
 }
 
 const rows = (page: Page) => page.locator('.snt-erow:not(.gone)');
+const row = (page: Page, id: string) => page.locator(`.snt-erow[data-estage="${id}"]`);
 const frame = (page: Page) => page.frameLocator('.snt-owner iframe');
 
 test.describe('the PIPELINE edit mode', () => {
@@ -384,10 +411,10 @@ test.describe('the PIPELINE edit mode', () => {
     await expect(page.locator('.snt-crumb')).toContainText(/the pipeline/i);
     await expect(page.locator('.snt-crumb')).toContainText(/adopted/i);
     await expect(page.locator('.snt-layouts [data-layout="table"]')).toHaveAttribute('aria-disabled', 'true');
-    await rows(page).filter({ hasText: 'report' }).click();
+    await row(page, 'report').click();
     await expect(page).toHaveURL(/edit=1&pick=report/);
     const drawer = page.locator('.snt-dock [data-pane="stage"]');
-    await expect(drawer.locator('h2')).toHaveText(/Stage 5 · report/);
+    await expect(drawer.locator('h2')).toHaveText('Stage 5 · Write the report · report'); // hybrid: both names
     await expect(drawer.locator('[data-ekind="builtin"]')).toHaveClass(/\bon\b/);
     await expect(drawer.locator('[data-efield="operation"][data-evalue="report"]')).toHaveClass(/\bon\b/);
     await expect(page.locator('.snt-json')).toContainText('"operation": "report"');
@@ -405,15 +432,15 @@ test.describe('the PIPELINE edit mode', () => {
     await drawer.locator('[data-ebudget="seconds"]').fill('120');
     await drawer.locator('[data-ebudget="seconds"]').press('Tab');
     await expect(page.locator('.snt-crumb')).toContainText(/edited, not written/i);
-    await expect(rows(page).filter({ hasText: 'report' })).toContainText(/edited/i);
+    await expect(row(page, 'report')).toContainText(/edited/i);
     await expect(page.locator('.snt-json')).toContainText('"seconds": 120');
     await page.locator('.snt-tools [data-act="echeck"]').click();
     // the frame was handed exactly the edited pipeline, and the page shows the owner panel to confirm in
     await expect.poll(() => state.got).toEqual(RECORDED.edited);
     await expect(page.locator('.snt-tabs [data-tab="owner"]')).toHaveClass(/\bon\b/);
     await expect(page.locator('.snt-verdicts')).toContainText(/checked · confirm in the owner panel/i);
-    await expect(rows(page).filter({ hasText: 'report' })).toContainText(/changed/i);
-    await expect(rows(page).filter({ hasText: 'capture' })).toContainText(/reuses/i);
+    await expect(row(page, 'report')).toContainText(/changed/i);
+    await expect(row(page, 'capture')).toContainText(/reuses/i);
     await frame(page).getByRole('button', { name: 'Confirm writing the pipeline' }).click();
     await expect(page.locator('.snt-verdicts')).toContainText(/written · adopt it from the command line/i);
     await expect(page.locator('.snt-crumb')).toContainText(/changed since adopted/i);
@@ -445,28 +472,115 @@ test.describe('the PIPELINE edit mode', () => {
     // removing it, then a stage problem the service names lands on that stage
     await page.locator('.snt-dock [data-act="eremove"]').click();
     await expect(rows(page)).toHaveCount(RECORDED.read.pipeline.stages.length);
-    await rows(page).filter({ hasText: 'capture' }).click();
+    await row(page, 'capture').click();
     await drawer.locator('[data-efield="fanOut"][data-evalue="per-source"]').click();
     await page.locator('.snt-tools [data-act="echeck"]').click();
-    await expect(rows(page).filter({ hasText: 'capture' })).toContainText(/problem/i);
+    await expect(row(page, 'capture')).toContainText(/problem/i);
     await expect(drawer.locator('.snt-eprob')).toBeVisible();
     // Discard: the file as it is
     await page.locator('.snt-tools [data-act="ediscard"]').click();
     await expect(page.locator('.snt-crumb')).not.toContainText(/edited, not written/i);
   });
 
-  test('a read-only server greys Check with its reason, and the business register prints no identifier', async ({
-    page,
-    baseURL,
-  }) => {
+  test('a read-only server greys Check with its reason', async ({ page, baseURL }) => {
     await standIn(page, baseURL, { readOnly: true });
-    await gotoReady(page, EDIT + '&pick=report&lens=business');
+    await gotoReady(page, EDIT + '&pick=report');
     await page.locator('.snt-dock [data-ebudget="seconds"]').fill('60');
     await page.locator('.snt-dock [data-ebudget="seconds"]').press('Tab');
     await expect(page.locator('.snt-tools [data-act="echeck"]')).toHaveAttribute('aria-disabled', 'true');
-    await expect(page.locator('.snt-json')).toHaveCount(0); // the business register shows no file text
-    const hits = [...new Set((await visibleWords(page, '.snt-chrome, .snt-stage, .snt-dock')).match(IDENTIFIER) || [])];
-    expect(hits).toEqual([]);
+  });
+
+  test('the business register names each stage in words and prints no identifier, in text or in a field', async ({
+    page,
+    baseURL,
+  }) => {
+    await standIn(page, baseURL);
+    const stages = RECORDED.read.pipeline.stages;
+    // every id the file holds, and every raw value a choice could print
+    const ids = new Set<string>(
+      [
+        ...stages.flatMap((st: Json) => [
+          st.id,
+          st.adapter,
+          st.operation,
+          ...(Array.isArray(st.rules) ? st.rules : []),
+        ]),
+        // a kind's catalog words (tool · script · agent) and a declared name such as review are words, not ids
+        ...['builtin', 'framework-controls', 'walkthrough', 'container', 'host', 'node', 'sh'],
+        ...['brokered', 'native', 'copilot-cli', 'claude-cli', 'hosted-api', 'ollama'],
+        ...['per-run', 'per-source', 'per-entry', 'per-check'],
+      ].filter((x): x is string => typeof x === 'string'),
+    );
+    const look = async (where: string) => {
+      const texts = (await visibleWords(page, '.snt-chrome, .snt-stage, .snt-dock')).split('\n');
+      const values = await page
+        .locator('.snt-dock input')
+        .evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
+      for (const text of texts) {
+        expect(ids.has(text), `${where}: "${text}" is an id`).toBe(false);
+        for (const id of ids)
+          if (/[-.:/]/.test(id)) expect(text.includes(id), `${where}: "${text}" holds ${id}`).toBe(false);
+        expect(text.match(IDENTIFIER) ?? [], `${where}: ${text}`).toEqual([]);
+      }
+      for (const value of values) expect(value, `${where}: a field shows "${value}"`).toMatch(/^[0-9.]*$/);
+    };
+    for (const pick of stages.map((st: Json) => st.id)) {
+      await gotoReady(page, EDIT + '&pick=' + pick + '&lens=business');
+      await expect(page.locator('.snt-dock h2')).toContainText('Stage');
+      await look(pick);
+    }
+    // the stages read in words: a builtin by its operation, a scanner by what it checks
+    await expect(page.locator('.snt-erow').nth(0)).toContainText('Capture the source');
+    await expect(page.locator('.snt-erow').filter({ hasText: 'Preview pattern check' })).toHaveCount(1);
+    // after an added model stage and a check answered
+    await page.locator('.snt-eadd [data-enew="agent"]').click();
+    await expect(page.locator('.snt-dock [data-ekind="agent"]')).toHaveClass(/\bon\b/);
+    await look('the added stage');
+    await page.locator('.snt-dock [data-act="eremove"]').click();
+    await gotoReady(page, EDIT + '&pick=report&lens=business');
+    await page.locator('.snt-dock [data-ebudget="seconds"]').fill('90');
+    await page.locator('.snt-dock [data-ebudget="seconds"]').press('Tab');
+    await page.locator('.snt-tools [data-act="echeck"]').click();
+    await expect(page.locator('.snt-verdicts')).toContainText(/checked/i);
+    await page.locator('.snt-tabs [data-tab="stage"]').click();
+    await look('after a check');
+  });
+
+  test('an edit after Check withdraws the confirmation; a write of the earlier check keeps the newer draft', async ({
+    page,
+    baseURL,
+  }) => {
+    const state = await standIn(page, baseURL);
+    await gotoReady(page, EDIT + '&pick=report');
+    const seconds = page.locator('.snt-dock [data-ebudget="seconds"]');
+    await seconds.fill('120');
+    await seconds.press('Tab');
+    await page.locator('.snt-tools [data-act="echeck"]').click();
+    await expect(frame(page).getByRole('button', { name: 'Confirm writing the pipeline' })).toBeVisible();
+    // the check named the draft by the digest of the bytes it would write
+    await expect.poll(() => state.checks.length).toBe(1);
+    expect(state.checks[0].draftDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    // a later edit in the page: the frame's confirmation for the earlier bytes is withdrawn
+    await page.locator('.snt-tabs [data-tab="stage"]').click();
+    await seconds.fill('180');
+    await seconds.press('Tab');
+    await expect.poll(() => state.withdrawn).toBe(1);
+    await expect(frame(page).getByRole('button', { name: 'Confirm writing the pipeline' })).toHaveCount(0);
+    // an owner who confirmed the earlier check before the withdraw arrived: the file holds that version, and the
+    // newer draft stays here, unwritten, on top of it
+    await page.locator('.snt-tabs [data-tab="owner"]').click();
+    await frame(page).getByRole('button', { name: 'Write the earlier check' }).click();
+    await expect(page.locator('.snt-verdicts')).toContainText(/written · an earlier version/i);
+    await expect(page.locator('.snt-crumb')).toContainText(/edited, not written/i);
+    await expect(page.locator('.snt-stage')).toContainText(/later changes are still here/i);
+    await page.locator('.snt-tabs [data-tab="stage"]').click();
+    await expect(seconds).toHaveValue('180');
+    await expect(page.locator('.snt-json')).toContainText('"seconds": 180');
+    // checking the newer draft again replaces the file the earlier write left, not the one first read
+    await page.locator('.snt-tools [data-act="echeck"]').click();
+    await expect.poll(() => state.checks.length).toBe(2);
+    expect(state.checks[1].expectDigest).toBe(RECORDED.written.fileDigest);
+    expect(state.checks[1].draftDigest).not.toBe(state.checks[0].draftDigest);
   });
 
   for (const width of [1440, 1280])

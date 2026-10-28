@@ -11,40 +11,90 @@
 /** The four kinds a stage may be, in the order the drawer offers them. */
 export const STAGE_KINDS = Object.freeze(['builtin', 'tool', 'script', 'agent']);
 
-/** The fields the drawer shows for each kind, in order: `key` names the field in the stage; `list` takes several. */
+/**
+ * The fields the drawer shows for each kind, in order: `key` names the field in the stage; `list` takes several;
+ * `words` names the catalog group a choice's words come from (`choiceKey`); `technical` is a value only the code
+ * registers print (an id, a pack reference, a model name), never the business register.
+ */
 export const STAGE_FIELDS = Object.freeze({
   builtin: [
-    { key: 'operation', choices: ['capture', 'parse', 'inventory', 'walkthrough', 'framework-controls', 'report'] },
+    {
+      key: 'operation',
+      words: 'operation',
+      choices: ['capture', 'parse', 'inventory', 'walkthrough', 'framework-controls', 'report'],
+    },
   ],
-  tool: [{ key: 'adapter' }, { key: 'rules', list: true }],
+  tool: [
+    { key: 'adapter', technical: true },
+    { key: 'rules', list: true, technical: true },
+  ],
   script: [
-    { key: 'runner', choices: ['container', 'host'] },
-    { key: 'interpreter', choices: ['node', 'sh'] },
-    { key: 'entry' },
-    { key: 'args', list: true, optional: true },
+    { key: 'runner', words: 'scriptRunner', choices: ['container', 'host'] },
+    { key: 'interpreter', words: 'interpreter', choices: ['node', 'sh'] },
+    { key: 'entry', technical: true },
+    { key: 'args', list: true, optional: true, technical: true },
   ],
   agent: [
-    { key: 'mode', choices: ['brokered', 'native'] },
-    { key: 'runner', choices: ['copilot-cli', 'claude-cli', 'hosted-api', 'ollama'] },
-    { key: 'provider', optional: true },
-    { key: 'model' },
-    { key: 'prompt', optional: true },
-    { key: 'instructions', optional: true },
-    { key: 'skills', list: true, optional: true },
+    { key: 'mode', words: 'mode', choices: ['brokered', 'native'] },
+    { key: 'runner', words: 'agentRunner', choices: ['copilot-cli', 'claude-cli', 'hosted-api', 'ollama'] },
+    { key: 'provider', optional: true, technical: true },
+    { key: 'model', technical: true },
+    { key: 'prompt', optional: true, technical: true },
+    { key: 'instructions', optional: true, technical: true },
+    { key: 'skills', list: true, optional: true, technical: true },
   ],
 });
 
 /** Every kind's shared fields, after its own: inputs, outputs, ordering, fan-out, whether it is required, its budget. */
 export const SHARED_FIELDS = Object.freeze([
-  { key: 'needs', list: true, optional: true },
-  { key: 'produces', list: true, optional: true },
-  { key: 'after', list: true, optional: true },
-  { key: 'fanOut', choices: ['per-run', 'per-source', 'per-entry', 'per-check'], optional: true },
+  { key: 'needs', list: true, optional: true, technical: true },
+  { key: 'produces', list: true, optional: true, technical: true },
+  { key: 'after', list: true, optional: true, technical: true },
+  { key: 'fanOut', words: 'fanOut', choices: ['per-run', 'per-source', 'per-entry', 'per-check'], optional: true },
   { key: 'required', optional: true },
   { key: 'budget', optional: true },
 ]);
 
 const STAGE_ID = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
+/** The catalog key a choice prints with: `sentinel.viewer.edit.choice.<group>.<value>`, the value in camel case. */
+export function choiceKey(group, value) {
+  return (
+    'sentinel.viewer.edit.choice.' + group + '.' + String(value).replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase())
+  );
+}
+
+/** A scanner's words, by the adapter a tool stage names: the read model's names for the same checks. */
+const ADAPTER_NAMES = Object.freeze({
+  'sentinel.preview.detector': 'sentinel.viewer.stage.preview',
+  'secrets-gitleaks': 'sentinel.viewer.stage.secrets',
+  'advisories-osv': 'sentinel.viewer.stage.dependencies',
+  'pattern-semgrep': 'sentinel.viewer.stage.patterns',
+  'iac-trivy': 'sentinel.viewer.stage.infrastructure',
+  'ci-zizmor': 'sentinel.viewer.stage.workflows',
+});
+const OPERATION_NAMES = Object.freeze({
+  capture: 'sentinel.viewer.stage.capture',
+  parse: 'sentinel.viewer.stage.parse',
+  inventory: 'sentinel.viewer.stage.inventory',
+  walkthrough: 'sentinel.viewer.stage.paths',
+  'framework-controls': 'sentinel.viewer.stage.controls',
+  report: 'sentinel.viewer.stage.report',
+});
+
+/**
+ * The words a reader sees for a declared stage: the catalog's for Sentinel's own operations and the scanners it
+ * knows, else the name the owner declared — its id, hyphens read as spaces. `{ key }` or `{ declared }`.
+ */
+export function stageName(stage) {
+  const key =
+    stage?.kind === 'builtin'
+      ? OPERATION_NAMES[stage.operation]
+      : stage?.kind === 'tool'
+        ? ADAPTER_NAMES[stage.adapter]
+        : undefined;
+  return key ? { key } : { declared: String(stage?.id ?? '').replace(/-/g, ' ') };
+}
 
 /** The text `pipeline.write` turns an object into, and the CLI's `init` writes: two-space JSON, a final newline. */
 export function pipelineText(pipeline) {

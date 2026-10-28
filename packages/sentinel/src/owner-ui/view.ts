@@ -179,31 +179,43 @@ function browserMain(layout: typeof processLayout) {
       event.source !== parent ||
       event.origin !== parentOrigin ||
       !event.data ||
-      !['sentinel-owner-read-request', 'sentinel-owner-scan', 'sentinel-owner-pipeline'].includes(event.data.type) ||
+      ![
+        'sentinel-owner-read-request',
+        'sentinel-owner-scan',
+        'sentinel-owner-pipeline',
+        'sentinel-owner-pipeline-withdraw',
+      ].includes(event.data.type) ||
       event.data.frameNonce !== frameNonce ||
       event.data.documentId !== documentId
     )
       return;
     if (event.data.type === 'sentinel-owner-read-request') void handPass().catch(() => {});
+    else if (event.data.type === 'sentinel-owner-pipeline-withdraw') withdrawPipeline();
     else if (event.data.type === 'sentinel-owner-pipeline') {
       // The parent's edited pipeline: this panel has the service check it and preview it, and the owner confirms the
       // write here. What comes back to the parent is the service's answer, never a capability or a receipt.
-      const { pipeline, expectDigest } = event.data;
+      const { pipeline, expectDigest, draftDigest } = event.data;
       if (
         !cap ||
         sessionLost ||
         !pipeline ||
         typeof pipeline !== 'object' ||
         Array.isArray(pipeline) ||
-        !(expectDigest === null || (typeof expectDigest === 'string' && /^sha256:[a-f0-9]{64}$/.test(expectDigest)))
+        !(expectDigest === null || (typeof expectDigest === 'string' && /^sha256:[a-f0-9]{64}$/.test(expectDigest))) ||
+        typeof draftDigest !== 'string' ||
+        !/^sha256:[a-f0-9]{64}$/.test(draftDigest)
       )
         return;
       void run(async () => {
         notice(text('pipelineChecking'));
+        pipelineDraft = null;
         try {
-          showPipeline(await call('/pipeline-preview', { pipeline, expectDigest }));
+          // The page names the draft by the digest of the bytes it would write; the panel confirms exactly those.
+          if ((await textDigest(JSON.stringify(pipeline, null, 2) + '\n')) !== draftDigest)
+            throw Object.assign(Error('changed'), { code: 'sentinel.ownerUi.changed' });
+          showPipeline(await call('/pipeline-preview', { pipeline, expectDigest }), draftDigest);
         } catch (error: any) {
-          tellPipeline({ state: 'failed', reasonCode: error?.code ?? 'sentinel.ownerUi.failed' });
+          tellPipeline({ state: 'failed', reasonCode: error?.code ?? 'sentinel.ownerUi.failed', draftDigest });
           throw error;
         }
       });
@@ -686,9 +698,24 @@ function browserMain(layout: typeof processLayout) {
     }
     (document.getElementById('more') as HTMLButtonElement).disabled = !nextCursor;
   }
+  /** The sha256 of a text, as the page names a draft by the bytes it would write. */
+  async function textDigest(value: string) {
+    const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
+    return 'sha256:' + Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  /** The draft a pipeline confirmation here is for; the page's later edit withdraws it. */
+  let pipelineDraft: string | null = null;
+  function withdrawPipeline() {
+    if (!pipelineDraft) return;
+    pipelineDraft = null;
+    confirmation = null;
+    document.getElementById('preview')?.replaceChildren();
+    notice(text('pipelineWithdrawn'));
+  }
   /** What the parent page may know of a pipeline check or write: the service's own answer, in its own words. */
   function tellPipeline(answer: {
     state: 'checked' | 'refused' | 'written' | 'failed';
+    draftDigest: string;
     reasonCode?: string | null;
     detail?: unknown;
     problems?: unknown;
@@ -702,6 +729,7 @@ function browserMain(layout: typeof processLayout) {
         documentId,
         hostInstance,
         state: answer.state,
+        draftDigest: answer.draftDigest,
         reasonCode: typeof answer.reasonCode === 'string' ? answer.reasonCode : null,
         detail: typeof answer.detail === 'string' ? answer.detail.slice(0, 240) : null,
         problems: Array.isArray(answer.problems) ? answer.problems : [],
@@ -711,7 +739,7 @@ function browserMain(layout: typeof processLayout) {
       parentOrigin,
     );
   }
-  function showPipeline(answer: any) {
+  function showPipeline(answer: any, draft: string) {
     const e = document.getElementById('preview')!;
     e.replaceChildren();
     // offered a confirmation, the answer is { preview: <the service's answer>, confirmation }; refused, it is the answer
@@ -720,6 +748,7 @@ function browserMain(layout: typeof processLayout) {
       notice(detailed(checked.reasonCode || 'pipelineRefused', checked.detail), true);
       tellPipeline({
         state: 'refused',
+        draftDigest: draft,
         reasonCode: checked.reasonCode,
         detail: checked.detail,
         problems: checked.problems,
@@ -727,9 +756,10 @@ function browserMain(layout: typeof processLayout) {
       });
       return;
     }
-    tellPipeline({ state: 'checked', problems: checked.problems, preview: checked.preview });
+    tellPipeline({ state: 'checked', draftDigest: draft, problems: checked.problems, preview: checked.preview });
     notice(text('pipelineReady'));
     confirmation = answer.confirmation;
+    pipelineDraft = draft;
     const p = element('p', 'pipelineWriteOnly', e);
     p.className = 'notice';
     const list = element('ul', undefined, e);
@@ -751,8 +781,10 @@ function browserMain(layout: typeof processLayout) {
       'confirmPipeline',
       async () => {
         const current = confirmation;
-        if (!current) return;
+        // a confirmation for exactly the draft the page checked; an edit there since withdrew it
+        if (!current || pipelineDraft !== draft) return;
         confirmation = null;
+        pipelineDraft = null;
         confirm.remove();
         notice(text('actionPending'));
         const done = await call('/confirm', { id: current.id, revision: current.revision });
@@ -760,6 +792,7 @@ function browserMain(layout: typeof processLayout) {
           notice(text('pipelineWritten'));
           tellPipeline({
             state: 'written',
+            draftDigest: draft,
             problems: done.facts.problems,
             preview: done.facts.preview,
             written: { fileDigest: done.facts.fileDigest, digest: done.facts.digest, trust: done.facts.trust },
@@ -768,6 +801,7 @@ function browserMain(layout: typeof processLayout) {
           notice(detailed(done.reasonCode || 'failed', done.facts?.detail), true);
           tellPipeline({
             state: 'refused',
+            draftDigest: draft,
             reasonCode: done.reasonCode,
             detail: done.facts?.detail,
             problems: done.facts?.problems,

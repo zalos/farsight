@@ -130,6 +130,7 @@ export const SENTINEL_OWNER_UI_STRINGS:Record<string,StringEntry>={
  'sentinel.ownerUi.pipelineRefused':same('The edited pipeline cannot be written as it is.','The owner service found a problem that refuses it; each problem names its stage. Nothing was written.'),
  'sentinel.ownerUi.pipelineWriteOnly':same('Writing changes the pipeline file only; adopt it from the owner CLI before a scan uses it.','The browser receipt confirms this one write. A scan runs the adopted pipeline: farsight-sentinel pipeline adopt --confirm, then rerun.'),
  'sentinel.ownerUi.confirmPipeline':same('Confirm writing the pipeline','Issue one owner UI receipt for writing exactly the displayed pipeline over the file the page read; the service spends it once.'),
+ 'sentinel.ownerUi.pipelineWithdrawn':same('The page changed the pipeline after it was checked: nothing was written. Check it again.','A confirmation is for exactly the bytes that were checked; a later edit in the page withdraws it.'),
  'sentinel.ownerUi.pipelineWritten':same('Pipeline written. Adopt it from the owner CLI before a scan uses it.','The file holds the confirmed bytes and is not yet adopted: farsight-sentinel pipeline adopt --confirm.'),
  'sentinel.ownerUi.change.added':same('added','A stage the adopted pipeline does not have: it runs.'),
  'sentinel.ownerUi.change.changed':same('changed','The stage’s declaration differs from the adopted one: it runs again.'),
