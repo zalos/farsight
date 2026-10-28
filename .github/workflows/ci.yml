@@ -1,5 +1,6 @@
 # CI validation: every push to main and every pull request.
-# A small path selector skips checks unaffected by the change (see docs/CI.md).
+# A small path selector skips checks unaffected by the change, and validate tests only the packages the change
+# reaches (see docs/CI.md).
 # validate / e2e retain their required names; secrets always runs.
 # PR title and branch commit checks live in commits.yml so title edits don't restart CI.
 # Live tracker tests stay off: they run only with FARSIGHT_LIVE=1, which CI never sets.
@@ -29,6 +30,10 @@ jobs:
       sentinel: ${{ steps.select.outputs.sentinel }}
       isolation: ${{ steps.select.outputs.isolation }}
       recovery: ${{ steps.select.outputs.recovery }}
+      # validate's unit tests: the commit pnpm's changed-since filter compares from (empty: every package) and the
+      # packages whose tests read a reached package's files without depending on it
+      testBase: ${{ steps.select.outputs.testBase }}
+      testAlso: ${{ steps.select.outputs.testAlso }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -106,6 +111,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           lfs: true
+          fetch-depth: 0 # the test filter diffs the checkout against the selector's base commit
 
       - uses: pnpm/action-setup@v6 # version from package.json "packageManager"
 
@@ -115,12 +121,32 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+      # `tsc -p` type-checks every package as it emits, with the config `pnpm -r typecheck` uses, so there is no
+      # separate typecheck step; e2e types are checked by the e2e job
       - run: pnpm build
       - name: Verify the generated graph contract
         run: node scripts/graph-schema.mjs --check
-      - name: Typecheck packages (e2e types are checked by the e2e job)
-        run: pnpm -r typecheck
-      - run: pnpm -r test
+      # The packages with a file changed since the base, every package that depends on one (pnpm reads the
+      # manifests), and the selector's testAlso. An empty or unusable base tests every package.
+      - name: Test the packages the change reaches
+        env:
+          TEST_BASE: ${{ needs.changes.outputs.testBase }}
+          TEST_ALSO: ${{ needs.changes.outputs.testAlso }}
+        run: |
+          set -euo pipefail
+          if [[ "$TEST_BASE" =~ ^[0-9a-f]{40,64}$ ]] && git cat-file -e "$TEST_BASE^{commit}" 2>/dev/null; then
+            filters=(--filter "...[$TEST_BASE]")
+            read -ra also <<< "$TEST_ALSO"
+            for name in "${also[@]}"; do
+              [[ "$name" =~ ^@farsight/[a-z0-9-]+$ ]] || { echo "::error::unexpected package name: $name"; exit 1; }
+              filters+=(--filter "$name")
+            done
+            echo "Testing the packages changed since $TEST_BASE and their dependents${TEST_ALSO:+, and $TEST_ALSO}"
+            pnpm -r "${filters[@]}" test
+          else
+            echo "Testing every package"
+            pnpm -r test
+          fi
       - run: pnpm test:scripts
       - run: pnpm lint:strings
 
