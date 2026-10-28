@@ -15,11 +15,12 @@ import type {
   ModelSettings,
   ProviderSettings,
   ProviderTerms as ContractProviderTerms,
+  StageCost,
 } from '../../contracts/index.js';
 import { canonicalDigest } from '../../policy/digest.js';
 import { snapshot } from '../../policy/immutable.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
-import { toNanos } from './decimal.js';
+import { costOf, fromNanos, toNanos } from './decimal.js';
 import { fail } from './errors.js';
 import { PROVIDER_KIND_ENTRIES, providerKind } from './registry.js';
 
@@ -219,4 +220,27 @@ export function bindProvider(policy: EffectivePolicy, providerId: string, modelI
   });
   bindings.add(binding);
   return binding;
+}
+
+/**
+ * What confirmed usage cost under a binding's pricing, as a stage's provenance states it (`StageCost`). Each call is
+ * priced as the broker settles it in the ledger, then summed, so a rates amount is the amount the ledger holds. A
+ * subscription CLI reports tokens and never a price, and a local runtime has no rates: both are unobserved, never zero.
+ * A call that may have been charged without its usage (`unsettled`) leaves the cost unknown, whatever the pricing.
+ */
+export function stageCostOf(
+  binding: ProviderBinding,
+  usage: readonly Readonly<{ inputTokens: number; outputTokens: number }>[],
+  unsettled: boolean,
+): StageCost {
+  if (!isProviderBinding(binding)) fail('sentinel.provider.notTrusted', 'the cost requires a genuine binding');
+  if (unsettled) return Object.freeze({ basis: 'unobserved' as const, reason: 'usage-unknown' as const });
+  const p = binding.pricing;
+  if (p.kind === 'subscription-quota')
+    return Object.freeze({ basis: 'unobserved' as const, reason: 'subscription' as const });
+  if (p.kind !== 'rates') return Object.freeze({ basis: 'unobserved' as const, reason: 'no-rates' as const });
+  const input = toNanos(p.inputPerMillion)!,
+    output = toNanos(p.outputPerMillion)!;
+  const nanos = usage.reduce((n, u) => n + costOf(u.inputTokens, input) + costOf(u.outputTokens, output), 0n);
+  return Object.freeze({ basis: 'rates' as const, amount: fromNanos(nanos), currency: p.currency });
 }

@@ -1339,6 +1339,10 @@ const review: Check<ReviewRecordEnvelope> = (v, out) => {
   const unsettled = v.operations.some((o) => o.state === 'unsettled');
   if ((v.totals.usage === 'unknown') !== unsettled)
     out.add(err('/totals/usage', 'usage is unknown exactly when a call is unsettled'));
+  const cost = v.totals.cost;
+  if (cost && v.callerKind === 'mock') out.add(err('/totals/cost', 'a mock caller has no cost'));
+  if (cost && (cost.basis === 'unobserved' && cost.reason === 'usage-unknown') !== unsettled)
+    out.add(err('/totals/cost', 'the cost is unknown for want of usage exactly when a call is unsettled'));
   if (v.totals.steps !== v.operations.length) out.add(err('/totals/steps', 'steps count the operations'));
   if (v.model === null && v.operations.some((o) => o.state === 'settled'))
     out.add(err('/model', 'a settled reply names its model'));

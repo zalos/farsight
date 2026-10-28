@@ -13,6 +13,7 @@ import type {
 } from './common.js';
 import type { ReviewInstructionsEnvelope, ReviewInstructionBinding, ReviewRequestEnvelope } from './instructions.js';
 import type { CweId, ModelIdentity } from './observation.js';
+import type { StageCost } from './pipeline.js';
 
 /**
  * @asType integer
@@ -210,6 +211,12 @@ export interface ReviewRecordEnvelope {
     inputTokens: Count;
     outputTokens: Count;
     usage: 'confirmed' | 'unknown';
+    /**
+     * What the provider calls cost, as a stage's provenance states it: the rates price of the confirmed usage, or
+     * unobserved with its reason (a subscription CLI, an unsettled call, a provider with no rates); never a zero amount.
+     * Absent for a mock caller and on records written before it was recorded.
+     */
+    cost?: StageCost;
   };
   refusals: Count;
   rejectedReplies: Count;

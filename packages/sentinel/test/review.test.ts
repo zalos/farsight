@@ -657,6 +657,23 @@ test('through the real PR 21 broker: one session operation is one reserved, sett
   assert.equal(observations.length, 1);
   assert.equal(ledger.totals(env.id).byState.settled, 2);
   assert.equal(record.totals.usage, 'confirmed');
+  // The record states the cost as a stage's provenance does: a local runtime has no rates, so it is unobserved.
+  assert.deepEqual(record.totals.cost, { basis: 'unobserved', reason: 'no-rates' });
+  assert.ok(validateEnvelope('review', record).ok);
+  // A cost word that contradicts the calls, or a mock caller that states one, is refused.
+  const { digestOf } = await import('../dist/store/ledger-json.js');
+  const resealed = (r: Record<string, unknown>) => {
+    const { digest: _d, ...rest } = r;
+    void _d;
+    return { ...rest, digest: digestOf(rest) };
+  };
+  for (const bad of [
+    resealed({ ...record, totals: { ...record.totals, cost: { basis: 'unobserved', reason: 'usage-unknown' } } }),
+    resealed({ ...record, callerKind: 'mock' }),
+  ]) {
+    const checked = validateEnvelope('review', bad);
+    assert.ok(!checked.ok && checked.errors.some((e: { path: string }) => e.path === '/totals/cost'));
+  }
 });
 
 test('E5: the plan is two models × 30 cases × five trials × clean/canary; mocks exercise every metric and never pass the gate', async () => {
