@@ -921,20 +921,24 @@ farsight serve /path/to/graph.json --port 4477
 farsight-sentinel owner-ui --workspace /path/to/workspace --farsight-origin http://127.0.0.1:4477
 ```
 
-The companion stays in the foreground. Open **Sentinel** in Farsight (or reconnect/reload an already open viewer).
-Preview the adopted configuration, confirm preparation in the owner frame, inspect retained capture/parse and
-check inputs/outputs, then confirm start separately. Completed runs can prepare a linked child using the original
-captured snapshot; original outputs remain retained. The shareable Markdown report comes from the canonical
-report projection and its delivered-byte digest is checked before display. No terminal confirmation is required
-for these implemented actions after launching the companion.
+The companion stays in the foreground and prints the Sentinel view's address in that Farsight
+(`<origin>/#/sentinel`); open it (or reconnect/reload an already open viewer). The view reads every scan, its stages
+(SCANS · PIPELINE · STAGE) and its report, which downloads as HTML or Markdown. What you start — a scan, a run's
+start, pause or cancel, a pipeline write from the edit mode — is previewed and confirmed in the owner panel in the
+view's dock, never in the view itself: press **Scan**, confirm the preparation there, then confirm the start. Each
+delivered report is checked against the digest the companion sends with it. No terminal confirmation is required
+for these actions after launching the companion; adopting a written pipeline, a linked rerun and a comparison
+report stay the owner command line's (`pipeline adopt --confirm`, `rerun <run> --stage <stage> --confirm`,
+`compare <run> <baseline>`).
 
 One launch serves one pairing code within two minutes; the session expires absolutely after one hour, including
 reloads. Restart/expiry requires a new explicit launch. Live paired sessions retain the detached owner until that
-original expiry; an idle socket alone does not. Browser authority is separate from CLI authority and does not
-confirm model calls, imports, disclosures, acquisition or settings. Read-only hosts and historical navigation veto
+original expiry; an idle socket alone does not. Browser authority is separate from CLI authority. It confirms a model
+start only as one composite (each model with its budget) and a pipeline write only, never its adoption; it does not
+confirm imports, disclosures, acquisition or settings. Read-only hosts and historical navigation veto
 effects. Host/context checks immediately before dispatch are sampled, not an atomic cross-process guarantee.
 
-Settings Save and unqualified model stages are visibly unavailable. Hosted API review remains paused/default
+Settings saving is not in the browser. Hosted API review remains paused/default
 false; there is no hidden fallback. Configured model and exact prompt/skill identities require their actual
 qualified service projection. A busy dead saved preparation with `--parent` must be replaced through a fresh
 unlinked request; captured resumable state and unknown lookup state remain protected. Preparation corruption

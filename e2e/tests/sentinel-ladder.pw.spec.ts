@@ -45,7 +45,7 @@ const AT = '#/sentinel/' + RUN;
 async function standIn(
   page: Page,
   baseURL: string | undefined,
-  opts: { scanAction?: Json; readOnly?: boolean; holdScans?: Promise<void> } = {},
+  opts: { scanAction?: Json; readOnly?: boolean; holdScans?: Promise<void>; scanState?: string } = {},
 ) {
   // the viewer's own origin: the stand-in answers only it, as the companion does
   const origin = new URL(baseURL ?? 'http://localhost').origin;
@@ -90,6 +90,8 @@ async function standIn(
           if (e.data.type === 'sentinel-owner-context' && e.data.id === id)
             parent.postMessage({ type: 'sentinel-owner-read', frameNonce, documentId, hostInstance: ${JSON.stringify(instance)},
               pass: ${JSON.stringify(PASS)}, expiresAt: new Date(Date.now() + 3600000).toISOString() }, parentOrigin);
+          if (e.data.type === 'sentinel-owner-control' && e.data.frameNonce === frameNonce)
+            document.getElementById('said').textContent = 'control ' + e.data.action + ' ' + e.data.runId;
           if (e.data.type === 'sentinel-owner-scan' && e.data.frameNonce === frameNonce)
             document.getElementById('said').textContent = 'scan requested';
         });
@@ -155,7 +157,9 @@ async function standIn(
           : run !== RUN
             ? null
             : !stage
-              ? RECORDED.scan
+              ? opts.scanState
+                ? { ...RECORDED.scan, scan: { ...RECORDED.scan.scan, state: opts.scanState } }
+                : RECORDED.scan
               : !m[4]
                 ? RECORDED.stages[stage]
                 : RECORDED.units[stage]?.[m[4]];
@@ -254,6 +258,45 @@ test.describe('the Sentinel ladder', () => {
     await expect(page.locator('.snt-turn.sys .snt-pre')).toContainText('You are reviewing');
     await expect(page.locator('.snt-crumb')).toContainText(/stage \d of 6/);
   });
+
+  test("a scan's Start, Pause and Cancel ask the owner panel, with the run id; the view confirms nothing", async ({
+    page,
+    baseURL,
+  }) => {
+    await standIn(page, baseURL, { scanState: 'running' });
+    await gotoReady(page, AT);
+    const tools = page.locator('.snt-tools [data-act="control"]');
+    await expect(tools).toHaveCount(3); // a recorded running scan with nothing running now: start, pause, cancel
+    await page.locator('.snt-tools [data-act="control"][data-action="pause"]').click();
+    await expect(page.locator('.snt-tabs [data-tab="owner"]')).toHaveClass(/\bon\b/);
+    await expect(page.frameLocator('.snt-owner iframe').locator('#said')).toHaveText('control pause ' + RUN);
+  });
+
+  test('a completed scan offers no run control', async ({ page, baseURL }) => {
+    await standIn(page, baseURL);
+    await gotoReady(page, AT);
+    await expect(page.locator('.snt-card').first()).toBeVisible();
+    await expect(page.locator('.snt-tools [data-act="control"]')).toHaveCount(0);
+  });
+
+  test("a read-only session greys a paused scan's Resume, and a press asks nothing", async ({ page, baseURL }) => {
+    await standIn(page, baseURL, { scanState: 'paused', readOnly: true });
+    await gotoReady(page, AT);
+    const start = page.locator('.snt-tools [data-act="control"][data-action="start"]');
+    await expect(start).toHaveAttribute('aria-disabled', 'true');
+    await start.click({ force: true });
+    await expect(page.frameLocator('.snt-owner iframe').locator('#said')).toHaveText('paired');
+  });
+
+  for (const lens of ['business', 'hybrid', 'code'])
+    test(`the three stops draw in the ${lens} register with no page error`, async ({ page, baseURL }) => {
+      await standIn(page, baseURL);
+      for (const hash of ['#/sentinel', AT, AT + '/' + encodeURIComponent(reviewId('general'))]) {
+        await gotoReady(page, hash + (hash.includes('?') ? '&' : '?') + 'lens=' + lens);
+        await expect(page.locator('.snt-stage .snt-empty')).toHaveCount(0);
+        await expect(page.locator('.snt-stage')).not.toBeEmpty();
+      }
+    });
 
   test("Rerun this stage is greyed, with the owner command line's two lines in the code registers", async ({
     page,

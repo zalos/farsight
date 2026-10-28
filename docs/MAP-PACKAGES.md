@@ -389,14 +389,13 @@ gate, apart from the zero-skip pure service gate. These modules add no arbitrary
 
 The optional Sentinel owner panel (ADR48) uses core `sentinel-companion.ts` for read-only private descriptor
 validation, server `/api/sentinel/companion` and `/api/version.session.instance` for exact host discovery, and
-viewer `surfaces/sentinel.js` for the paired iframe and veto-only live/history context. Sentinel `owner-ui/`
-contains the foreground HTTP companion, pure session/host validation, qualified descriptor mutex, private
-service authority/receipts/operations, and static catalog-backed panel. `contracts/ownerui.ts` registers its
-separate closed receipt/capability documents. `test/owner-ui-*` covers real owner/socket/browser boundaries;
-`scripts/test-sentinel-owner-ui-consumer.mjs` uses only npm-installed public executables at runtime.
-
-The owner panel's `owner-ui/process.ts` privately resolves bounded retained-run handles and authenticated
-plan/model identity metadata; `process-layout.ts` folds canonical work dependencies into bounded graph levels.
-`InspectionWork.resources` optionally carries the actual recorded work grant. No raw source or generic artifact
-read endpoint is introduced. `owner-ui-process.test.ts` checks genuine source-gone owner projections and DAG
-bounds; the source and installed browser journeys exercise graph expansion and manual report selection.
+viewer `surfaces/sentinel.js` for the Sentinel view (SCANS · PIPELINE · STAGE and the pipeline's edit mode), the
+paired owner frame in its dock and veto-only live/history context. Sentinel `owner-ui/` contains the foreground HTTP
+companion, pure session/host validation, qualified descriptor mutex, private service authority/receipts/operations,
+the read model's operations (`scans.ts`, served by `transport/http/`) and the owner frame (`view.ts`): a confirmation
+panel only — it pairs, hands the view its read pass, and previews and confirms what the view asks (a scan, a run's
+start, pause or cancel, a pipeline write). The companion's own page was retired (ADR48, owner-panel retirement).
+`contracts/ownerui.ts` registers its separate closed receipt/capability documents. `test/owner-ui-*` covers real
+owner/socket/browser boundaries; `owner-ui-browser.test.ts` is the one real-browser journey through the view, and
+`scripts/test-sentinel-owner-ui-consumer.mjs`, the installed surface consumer, uses only npm-installed public
+executables at runtime.

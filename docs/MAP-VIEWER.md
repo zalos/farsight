@@ -1544,7 +1544,11 @@ A scan still running is read again every 2 s, so the ladder fills in as it runs.
 
 **Scan** asks the owner panel to preview a fresh capture (`sentinel-owner-scan`); the owner confirms there, the panel
 waits for the preparation and previews the start for a second confirmation — for a start that calls models, the
-composite: its stages and each model with its budget, confirmed once (ADR 48, owner-panel amendment). Scan is greyed with its reason as its tip — the session is read-only, no companion, not paired yet, or
+composite: its stages and each model with its budget, confirmed once (ADR 48, owner-panel amendment). On a scan's
+PIPELINE and STAGE stops, **Start or resume**, **Pause** and **Cancel** (what its state allows: Start while nothing of
+it runs, Pause while it runs, Cancel until it ends) ask the panel the same way (`sentinel-owner-control`, with the run
+id); the panel previews the control and the owner confirms it there, and its `sentinel-owner-action-result` makes the
+view read again. Greyed with their reason on a read-only session or before pairing. Scan is greyed with its reason as its tip — the session is read-only, no companion, not paired yet, or
 the read model's `scanAction` says the browser may not start this scan (no adopted settings; a configured model stage
 needs the owner command line) — and a press then does nothing. `#/sentinel?do=scan` (the Settings source row's door,
 `sentinelScanDoorHtml()`) presses it once and rewrites the address. The frame's view revision moves only when what it
@@ -1566,7 +1570,8 @@ e2e: `sentinel-edit.pw.spec.ts` (a stand-in frame answering with recorded servic
 service behind `SENTINEL_OWNER_UI_BROWSER=1`.
 
 The optional **Sentinel** surface is `surfaces/sentinel.js`: it discovers only a validated companion origin,
-embeds its static owner-origin frame, and supplies exact frame/document/host/revision context plus theme/register.
+embeds its static owner-origin frame (the owner panel: confirmations only — the companion's own page is retired, ADR 48),
+and supplies exact frame/document/host/revision context plus theme/register.
 It never receives a browser capability, reload token, descriptor nonce or receipt — only the read pass and the
 service's answers to a pipeline it handed the frame — and cannot confirm an action.
 A pinned sync or a read-only session changes the frame's revision and invalidates pending confirmations; host

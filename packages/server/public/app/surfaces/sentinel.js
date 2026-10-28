@@ -174,6 +174,17 @@ function message(event) {
     if (first) void load();
     return;
   }
+  if (v.type === 'sentinel-owner-action-result') {
+    // A run action the owner confirmed in the panel: read the scans again, whatever the outcome.
+    if (
+      SN.child &&
+      v.frameNonce === SN.child.frameNonce &&
+      v.documentId === SN.child.documentId &&
+      v.hostInstance === S.VERSION?.session?.instance
+    )
+      void load();
+    return;
+  }
   if (v.type === 'sentinel-owner-pipeline-result') {
     // The service's answer for the pipeline this page handed the frame: problems, what would rerun, written or not.
     if (
@@ -1263,6 +1274,44 @@ function edited(next) {
   draw();
 }
 
+/** A run's controls and the states that allow each (contracts/run.ts); the service still decides at its preview. */
+const RUN_CONTROLS = [
+  // a prepared scan is recorded as running before its checks start: Start is offered while nothing is running
+  {
+    action: 'start',
+    key: 'sentinel.viewer.tool.start',
+    when: (row, stages) =>
+      ['planned', 'paused'].includes(row.state) ||
+      (row.state === 'running' && !stages.some((st) => st.status === 'running')),
+  },
+  { action: 'pause', key: 'sentinel.viewer.tool.pause', when: (row) => row.state === 'running' },
+  {
+    action: 'cancel',
+    key: 'sentinel.viewer.tool.cancel',
+    when: (row) => ['planned', 'running', 'pausing', 'paused'].includes(row.state),
+  },
+];
+
+/**
+ * Start, pause or cancel one scan: the owner panel previews it and the owner confirms it there, with the panel's own
+ * control receipt — the same preview and confirmation the Scan flow uses. This page only asks.
+ */
+function control(action) {
+  if (readOnlyWhy() || !SN.frame?.contentWindow || !SN.child || !SN.place.scan) return;
+  SN.dockTab = 'owner';
+  draw();
+  SN.frame.contentWindow.postMessage(
+    {
+      type: 'sentinel-owner-control',
+      frameNonce: SN.child.frameNonce,
+      documentId: SN.child.documentId,
+      action,
+      runId: SN.place.scan,
+    },
+    SN.origin,
+  );
+}
+
 /** The tools beside Scan: edit the pipeline, or (in the edit mode) check and discard; a finished scan's reports. */
 function toolsHtml() {
   const p = SN.place;
@@ -1295,6 +1344,22 @@ function toolsHtml() {
     );
   }
   const row = p.stop !== 'scans' && SN.scan?.scan?.id === p.scan ? SN.scan.scan : null;
+  // A scan's run controls: what its state allows, previewed and confirmed in the owner panel, never here.
+  const offPair = readOnlyWhy() ? 'sys.readonly.control' : !SN.pass || !SN.child ? 'sentinel.viewer.pairing' : null;
+  const controls = !row
+    ? ''
+    : RUN_CONTROLS.filter((c) => c.when(row, SN.scan?.stages || []))
+        .map(
+          (c) =>
+            '<button type="button" class="map-tb" data-act="control" data-action="' +
+            c.action +
+            '"' +
+            (offPair ? off(offPair) : tipAttrs({ key: c.key, noFocus: true })) +
+            '>' +
+            word(c.key) +
+            '</button>',
+        )
+        .join('');
   const reports =
     row && !scanLive(row)
       ? ['html', 'md']
@@ -1311,6 +1376,7 @@ function toolsHtml() {
           .join('')
       : '';
   return (
+    controls +
     reports +
     '<button type="button" class="map-tb" data-act="edit"' +
     tipAttrs({ key: 'sentinel.viewer.edit.open', noFocus: true }) +
@@ -1827,6 +1893,7 @@ function onClick(e) {
     if (a === 'scan') scan(act);
     if (a === 'edit') go({ edit: true, pick: SN.place.pick || SN.place.stage });
     if (a === 'report') void download(act.dataset.format);
+    if (a === 'control' && ['start', 'pause', 'cancel'].includes(act.dataset.action)) control(act.dataset.action);
     if (a === 'echeck') void checkPipeline();
     if (a === 'ediscard') {
       withdrawCheck();
