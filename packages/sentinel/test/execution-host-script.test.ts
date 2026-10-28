@@ -532,6 +532,50 @@ test('a listed pid that another process took before it was stopped is continued 
   assert.ok(still && !still.state.includes('T'), 'the unrelated group was neither stopped nor killed');
 });
 
+test('a script process still listed as sleeping right after its stop is read again until stopped, then killed', async (t) => {
+  const { reapTree, SYSTEM_PROCESSES } = await import('../dist/execution/script-runner.js');
+  // A process the script started (recorded by its identity), whose first rows after SIGSTOP still say it sleeps, as
+  // /proc can on Linux before the stop takes effect: three reads, as many as the reap's listing rounds, so one read
+  // per round would continue it every time and leave it running.
+  const child = spawn('/bin/sleep', ['30'], { detached: true, stdio: 'ignore' });
+  child.unref();
+  const pid = child.pid!;
+  t.after(() => {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      /* already ended */
+    }
+  });
+  const [real] = await SYSTEM_PROCESSES.rows([pid]);
+  assert.ok(real);
+  const states: string[] = [];
+  let reads = 0;
+  await reapTree(undefined, new Map([[pid, real.started]]), () => false, {
+    table: async () => SYSTEM_PROCESSES.rows([pid]),
+    rows: async (pids: readonly number[]) => {
+      reads++;
+      let rows = await SYSTEM_PROCESSES.rows(pids);
+      // The first three reads say it sleeps; later reads are the system's own, once it is seen stopped.
+      if (reads <= 3) rows = rows.map((r: any) => ({ ...r, state: 'S' }));
+      else
+        for (let i = 0; i < 100 && !rows.every((r: any) => r.state.includes('T')); i++) {
+          await new Promise((r) => setTimeout(r, 20));
+          rows = await SYSTEM_PROCESSES.rows(pids);
+        }
+      states.push(...rows.map((r: any) => r.state));
+      return rows;
+    },
+  });
+  assert.deepEqual(states.slice(0, 3), ['S', 'S', 'S']);
+  assert.ok(
+    reads >= 4 && states.slice(3).some((x) => x.includes('T')),
+    `read again until stopped: ${states.join(',')}`,
+  );
+  await new Promise((r) => child.once('exit', r));
+  assert.equal(child.signalCode, 'SIGKILL', 'the verified, stopped process was killed');
+});
+
 test('a Linux process row is read after the command name, which may hold spaces and parentheses', async () => {
   const { procRow } = await import('../dist/execution/script-runner.js');
   const line = '4242 (a (b) c) T 1 4242 4242 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 987654 1234 56\n';
