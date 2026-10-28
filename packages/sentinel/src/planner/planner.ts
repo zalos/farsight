@@ -27,8 +27,8 @@ import {
   stageModel,
   type AgentUnitSeed,
   type DeclaredAnalysis,
-  type DeclaredPipeline,
 } from './pipeline.js';
+import type { PipelineDefinition } from '../contracts/pipeline.js';
 import {
   CHECK_STATES,
   DEFAULT_PLANNER_LIMITS,
@@ -380,7 +380,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
 
 /** The bootstrap revision of a declared pipeline: its capture, parse and inventory stages, planned as planBootstrap does. */
 export function planPipelineBootstrap(
-  request: BootstrapRequest & { readonly pipeline: DeclaredPipeline },
+  request: BootstrapRequest & { readonly pipeline: PipelineDefinition },
 ): PlanRevision {
   const { pipeline, ...rest } = request;
   requireBootstrap(stageModel(pipeline));
@@ -394,7 +394,7 @@ export function planPipelineBootstrap(
  * fan-out. The revision is sealed once.
  */
 export function planPipelineAnalysis(
-  request: AnalysisRequest & { readonly pipeline: DeclaredPipeline; readonly agents?: readonly AgentUnitSeed[] },
+  request: AnalysisRequest & { readonly pipeline: PipelineDefinition; readonly agents?: readonly AgentUnitSeed[] },
 ): PlanRevision {
   const { pipeline, agents, ...rest } = request;
   const model = stageModel(pipeline);

@@ -74,15 +74,10 @@ export {
   defaultPipelineOf,
 } from './pipeline.js';
 export type {
-  DeclaredPipeline,
-  DeclaredStage,
-  DeclaredStageKind,
-  DeclaredInput,
-  DeclaredOutput,
-  DeclaredFanOut,
   StageModel,
   StageRole,
   AgentUnitSeed,
   DeclaredAnalysis,
   StageSelection,
+  DefaultReview,
 } from './pipeline.js';

@@ -6,7 +6,7 @@
 // operation's selection and limits (they decide its output). Admission (plans.ts) stores it beside the plan and
 // checks it against the plan's pins; the coordinator checks it again against the live registry before anything runs.
 import type { Digest, Id } from '../contracts/common.js';
-import type { PlanAdapterPin, PlanEnvelope, PlanStage } from '../contracts/plan.js';
+import type { BuiltinPlanStage, PlanAdapterPin, PlanEnvelope } from '../contracts/plan.js';
 import type { ResourcePolicy } from '../contracts/work.js';
 import type { PlannerProfile } from '../planner/types.js';
 import type { ParserLimits, ParserSelection } from '../snapshot/parser.js';
@@ -24,7 +24,7 @@ export interface ExecutionProfileRecord {
   capabilities: { capability: string; adapterId: Id; adapterDigest: Digest }[];
   permits: string[];
   operations: PlanEnvelope['pins']['operations'];
-  resources: Record<PlanStage, ResourcePolicy>;
+  resources: Record<BuiltinPlanStage, ResourcePolicy>;
   parse: { selection: ParserSelection; limits: Required<ParserLimits> };
 }
 
@@ -37,7 +37,7 @@ const sameJson = (a: unknown, b: unknown) => Buffer.from(canonicalJsonBytes(a)).
 /** The record for a planner profile, the resources each stage is granted, and the parse operation's settings. */
 export function executionProfileRecord(
   profile: PlannerProfile,
-  resources: Record<PlanStage, ResourcePolicy>,
+  resources: Record<BuiltinPlanStage, ResourcePolicy>,
   parse: ExecutionProfileRecord['parse'],
 ): ExecutionProfileRecord {
   const pin = (id: Id | undefined) =>

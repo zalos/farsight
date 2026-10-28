@@ -82,8 +82,11 @@ function inputsOf({ registry, scenario, review, tools }: Terms) {
   const { policy, view } = adoptedPolicy(scenario, review);
   const lock = lockOver(packs, registry, tools ?? s.tools);
   const selected = new Set(policy.rules);
-  const adapters = lock.view.rules.filter((r: any) => selected.has(r.familyId)).map((r: any) => r.adapterId);
-  return { s, packs, profile, policy, view, lock, adapters };
+  // The default pipeline's check stages: each adapter the policy's locked rules run under, with exactly those rules.
+  const checks = lock.view.rules
+    .filter((r: any) => selected.has(r.familyId))
+    .map((r: any) => ({ adapterId: r.adapterId, rules: [r.familyId] }));
+  return { s, packs, profile, policy, view, lock, checks };
 }
 
 /** Today's canonical planning: bootstrap, analysis, then the closed review units when model review is configured. */
@@ -110,12 +113,15 @@ function legacyPlans(terms: Terms) {
 
 /** The same terms planned through a declaration (the default pipeline unless one is given). */
 function declaredPlans(terms: Terms, pipeline?: any, seedsFrom?: any) {
-  const { s, profile, lock, view, adapters } = inputsOf(terms);
+  const { s, profile, lock, view, checks } = inputsOf(terms);
+  // The planner does not read the runner or model (the review seed carries the adopted selection); these name what
+  // the test's local review provider is. The contract has no runner word for a local model server yet.
+  const review = { runner: 'hosted-api' as const, provider: 'local-review', model: 'review' };
   const reviews = [
-    ...(terms.review?.guided?.length ? ['guided' as const] : []),
-    ...(terms.review?.general ? ['general' as const] : []),
+    ...(terms.review?.guided?.length ? [{ kind: 'guided' as const, ...review }] : []),
+    ...(terms.review?.general ? [{ kind: 'general' as const, ...review }] : []),
   ];
-  const declaration = pipeline ?? defaultPipelineOf({ adapters, reviews });
+  const declaration = pipeline ?? defaultPipelineOf({ checks, reviews });
   const boot = planPipelineBootstrap({
     runId: RUN,
     sourceIds: ['workspace'],
@@ -233,8 +239,7 @@ test(
   () => {
     const terms = portableTerms('scanners');
     const golden = JSON.parse(readFileSync(GOLDEN, 'utf8')).scanners;
-    const { adapters } = inputsOf(terms);
-    const full = defaultPipelineOf({ adapters });
+    const full = defaultPipelineOf({ checks: inputsOf(terms).checks });
     const planted = withoutStage(full, 'secrets');
     const { boot, analysis } = declaredPlans(terms, planted);
     assert.equal(boot.digest, golden.bootstrap.digest, 'the bootstrap does not depend on check stages');
