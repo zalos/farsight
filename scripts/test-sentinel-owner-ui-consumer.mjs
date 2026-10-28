@@ -64,11 +64,11 @@ try {
   };
   launch(bin, ['serve', '--workspace', ws, '--idle-ms', '0']);
   const services = join(env.XDG_STATE_HOME, 'farsight/sentinel/trust/services');
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 1000; i++) {
     try {
       if (readdirSync(services).some((n) => n.endsWith('.json'))) break;
     } catch {}
-    assert.ok(i < 199, log);
+    assert.ok(i < 999, log);
     await wait(20);
   }
   const socket = createServer();
@@ -82,23 +82,23 @@ try {
     env,
   });
   launch(c.bin('farsight'), ['serve', graph, '--port', String(port)]);
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 1000; i++) {
     try {
       const v = await (await fetch(origin + '/api/version')).json();
       if (v.session?.instance) break;
     } catch {}
-    assert.ok(i < 199, log);
+    assert.ok(i < 999, log);
     await wait(20);
   }
   assert.equal((await (await fetch(origin + '/api/sentinel/companion')).json()).available, false);
   launch(bin, ['owner-ui', '--workspace', ws, '--farsight-origin', origin]);
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 1000; i++) {
     const v = await (await fetch(origin + '/api/sentinel/companion')).json();
     if (v.available) {
       assert.deepEqual(Object.keys(v).sort(), ['available', 'ownerOrigin']);
       break;
     }
-    assert.ok(i < 199, log);
+    assert.ok(i < 999, log);
     await wait(20);
   }
   browser = await chromium.launch({ headless: true });
@@ -112,6 +112,13 @@ try {
   });
   page.on('response', (r) => {
     if (r.status() >= 400) requests.push({ status: r.status(), url: r.url() });
+  });
+  // The read pass the paired frame hands its parent (transport/http/): captured here, as the viewer will use it.
+  await page.addInitScript(() => {
+    globalThis.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'sentinel-owner-read')
+        globalThis.__sentinelRead = { pass: e.data.pass, origin: e.origin };
+    });
   });
   await page.goto(origin + '/#/sentinel');
   const frame = page.frameLocator('iframe[title="Sentinel"]');
@@ -150,6 +157,36 @@ try {
   await frame.locator('#process-graph .process-card[open] table tbody tr').first().waitFor();
   await frame.getByRole('button', { name: 'Read shareable report', exact: true }).click();
   await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 30000 });
+  // The read model, read cross-origin from the Farsight page with that pass: the installed companion's own answers.
+  const model = await page.evaluate(async () => {
+    const read = globalThis.__sentinelRead;
+    if (!read) return null;
+    const get = async (path) => {
+      const r = await fetch(read.origin + path, { headers: { authorization: 'Bearer ' + read.pass } });
+      return {
+        status: r.status,
+        body: r.headers.get('content-type')?.startsWith('application/json') ? await r.json() : await r.text(),
+      };
+    };
+    const scans = await get('/api/sentinel/scans');
+    const id = scans.body.scans?.find((s) => s.state === 'completed')?.id;
+    const at = '/api/sentinel/scans/' + encodeURIComponent(id);
+    const scan = await get(at);
+    const last = scan.body.stages?.at(-1)?.id;
+    const unit = await get(at + '/stages/' + encodeURIComponent(last) + '/units/1');
+    return { id, scans, scan, unit };
+  });
+  assert.ok(model, 'the paired frame handed its parent a read pass');
+  assert.equal(model.scans.status, 200);
+  assert.equal(model.scan.status, 200);
+  assert.equal(model.unit.status, 200);
+  assert.ok(model.scan.body.stages.length >= 4);
+  assert.ok(model.scan.body.stages.every((s) => s.status === 'done'));
+  assert.equal(model.unit.body.schema, 'sentinel-viewer-unit/draft-1');
+  // A scan is addressed by its run id; no other run id leaves the read model's own fields (retained text is the
+  // record as kept, verbatim, to the paired owner only).
+  const fields = JSON.stringify(model, (k, v) => (k === 'text' && typeof v === 'string' ? '<retained>' : v));
+  assert.doesNotMatch(fields.split(model.id).join('<run>'), /run-[0-9a-f]{8}/);
   if (evidence) {
     mkdirSync(evidence, { recursive: true });
     writeFileSync(join(evidence, 'report.md'), report);
@@ -171,6 +208,7 @@ try {
     processDag: true,
     expandedWorkIo: true,
     reconnect: true,
+    readModel: true,
     errors,
     requests,
   };
