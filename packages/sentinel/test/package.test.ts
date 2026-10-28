@@ -185,7 +185,14 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'frameworks/next/errors.js': ['@farsight/core/dist/strings-sentinel-next.js'],
   // Fixed native CLI boundary: exact helper and executable, anonymous token FD, owned fixed TLS egress only.
   'review/providers/cli-copilot-call.js': ['node:fs/promises'],
-  'review/providers/cli-copilot-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:os', 'node:path'],
+  'review/providers/cli-copilot-profile.js': [
+    'node:child_process',
+    'node:crypto',
+    'node:fs',
+    'node:fs/promises',
+    'node:os',
+    'node:path',
+  ],
   'review/providers/cli-copilot-proxy.js': ['node:dns/promises', 'node:net'],
   'review/providers/cli-native-call.js': ['node:fs/promises'],
   'review/providers/cli-native-helper.js': [
@@ -200,6 +207,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'review/providers/cli-native-proxy.js': ['node:dns/promises', 'node:net'],
   // The one sandboxed CLI runner both native CLIs build on: the only process start in review/ outside the helper.
   'review/providers/sandboxed-cli.js': ['node:child_process', 'node:fs', 'node:fs/promises'],
+  // Copilot native mode: the scratch tree is written under the runner's owned root; no process of its own.
+  'review/providers/cli-copilot-agent.js': ['node:fs/promises', 'node:path'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   // The Spring pack: tree-sitter's Java grammar, loaded on first analysis only; graph is pure JSON helpers.
   'frameworks/spring/pack.js': ['@farsight/graph', 'node:crypto'],
@@ -272,7 +281,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'evidence/import-operation.js': ['node:crypto'],
   'evidence/owner-context.js': ['node:fs', 'node:path'],
   'evidence/audit.js': ['node:fs', 'node:path'],
-  'store/ledger-json.js': ['node:crypto'],
+  // The kernel: one canonical JSON form and one SHA-256 helper; nothing else imported, nothing started.
+  'kernel/digest.js': ['node:crypto'],
   // Scope-local counters and a monotonic clock; neither performs I/O or starts work on import.
   'store/admission-fence.js': ['node:async_hooks'],
   'store/read-budget.js': ['node:async_hooks', 'node:perf_hooks', 'node:timers/promises'],
