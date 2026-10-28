@@ -1,6 +1,9 @@
 // Every rendering reads the same authenticated and privacy-projected section; no additional search or verdict fold.
 import type { ReportEnvelope } from '../contracts/index.js';
 import { wordOf, camel } from './words.js';
+/**
+ * The structural path section as readable lines per source, in the document's own words. It adds no search or verdict.
+ */
 export function structuralText(doc: ReportEnvelope): Array<{ source: string; lines: string[] }> {
   const word = (key: string) => wordOf(doc, key, 'business');
   const text = (key: string, values: Record<string, string>) =>

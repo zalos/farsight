@@ -5,11 +5,13 @@
 // pairing is ambiguous and nothing is chosen: the first candidate is never taken, and distinct weaknesses that share
 // a sink or a symbol name stay distinct.
 
+/** The identity a match reads: a finding id and its versioned exact and probable fingerprints. */
 export interface MatchableFinding {
   readonly id: string;
   readonly fingerprint: { readonly version: string; readonly exact: string; readonly probable: string };
 }
 
+/** Exact and probable one-to-one pairs, the ambiguous groups nothing was chosen from, and the ids left on each side. */
 export interface MatchResult {
   readonly exact: readonly { readonly baseline: string; readonly current: string }[];
   readonly probable: readonly { readonly baseline: string; readonly current: string }[];
@@ -19,6 +21,7 @@ export interface MatchResult {
   readonly unmatchedCurrent: readonly string[];
 }
 
+/** Thrown when the two sides carry fingerprints of different versions, which are never compared. */
 export class MatchError extends Error {
   constructor(message: string) {
     super(message);
@@ -26,6 +29,11 @@ export class MatchError extends Error {
   }
 }
 
+/**
+ * Pairs baseline and current findings: exact fingerprints first, then probable ones among those left. A key shared by
+ * more than one finding on either side makes the whole group ambiguous, and none of it is paired. Throws `MatchError`
+ * when the fingerprint versions differ.
+ */
 export function matchFindings(
   baseline: readonly MatchableFinding[],
   current: readonly MatchableFinding[],

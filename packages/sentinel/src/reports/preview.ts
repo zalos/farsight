@@ -6,6 +6,7 @@ import { countedProblems } from '@farsight/core/dist/counts.js';
 import { STRINGS } from '@farsight/core/dist/strings.js';
 import type { ReportCount } from '../contracts/index.js';
 
+/** The schema id of the minimal preview report. */
 export const PREVIEW_REPORT_SCHEMA = 'sentinel-preview-report/draft-1';
 
 /** The scopes a preview report's counts may carry (core COUNT_SCOPES' Sentinel entries). */
@@ -16,6 +17,10 @@ export const PREVIEW_LIMITATIONS = Object.freeze([
   'sentinel.report.noScannerCoverage',
 ] as const);
 
+/**
+ * The minimal preview report: a run's Counted totals at one committed ledger sequence, labelled a foundation preview,
+ * with the limitations always printed with it.
+ */
 export interface PreviewReport {
   readonly schema: typeof PREVIEW_REPORT_SCHEMA;
   readonly label: 'foundation-preview';
@@ -28,6 +33,10 @@ export interface PreviewReport {
   readonly limitations: readonly string[];
 }
 
+/**
+ * A preview document `checkPreviewReport` refuses: code `sentinel.report.invalid`, with the failing check as its
+ * detail.
+ */
 export class ReportError extends Error {
   constructor(
     readonly code: 'sentinel.report.invalid',
