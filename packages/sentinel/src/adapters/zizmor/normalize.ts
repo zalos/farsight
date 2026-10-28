@@ -10,11 +10,11 @@
 //   bytes; never the engine's annotations or quoted features; no graph node is created;
 // - coverage is per file and needs the engine's own "completed" evidence; a file it collected but did not audit
 //   (unparseable, or not valid for its kind) and one it never collected at all are both gaps.
-import { createHash } from 'node:crypto';
+import { sha256Id as sha256 } from '../../kernel/digest.js';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { WorkerOutcome } from '../../execution/supervisor.js';
 import { canonicalDigest } from '../../policy/digest.js';
-import { deepFreeze } from '../../policy/immutable.js';
+import { deepFreeze } from '../../kernel/freeze.js';
 import {
   ZIZMOR_ENGINE,
   ZIZMOR_IMAGE_PLATFORMS,
@@ -25,6 +25,7 @@ import {
 import { zizmorFail } from './errors.js';
 import type { CiFileKind, ZizmorJob, ZizmorJobTarget } from './job.js';
 
+/** Why a file's coverage is what it is: each is a catalog key. */
 export const ZIZMOR_COVERAGE_REASONS = [
   'sentinel.zizmor.coverage.complete',
   'sentinel.zizmor.coverage.onlineAuditsSkipped',
@@ -46,7 +47,9 @@ export const ZIZMOR_COVERAGE_REASONS = [
   'sentinel.zizmor.coverage.outputTruncated',
   'sentinel.zizmor.coverage.platformUnmeasured',
 ] as const;
+/** One of {@link ZIZMOR_COVERAGE_REASONS}. */
 export type ZizmorCoverageReason = (typeof ZIZMOR_COVERAGE_REASONS)[number];
+/** Why a result the engine reported was refused rather than kept: each is a catalog key. */
 export const ZIZMOR_REFUSAL_REASONS = [
   'sentinel.zizmor.refused.unknownPath',
   'sentinel.zizmor.refused.malformed',
@@ -54,19 +57,26 @@ export const ZIZMOR_REFUSAL_REASONS = [
   'sentinel.zizmor.refused.ignored',
   'sentinel.zizmor.refused.notAudited',
 ] as const;
+/** One of {@link ZIZMOR_REFUSAL_REASONS}. */
 export type ZizmorRefusalReason = (typeof ZIZMOR_REFUSAL_REASONS)[number];
+/** The fixed categories a failed engine run is reported under; the engine's own log never leaves the container. */
 export const ZIZMOR_ENGINE_FAILURES = [
   'sentinel.zizmor.engine.engineError',
   'sentinel.zizmor.engine.usage',
   'sentinel.zizmor.engine.killed',
   'sentinel.zizmor.engine.unknown',
 ] as const;
+/** One of {@link ZIZMOR_ENGINE_FAILURES}. */
 export type ZizmorEngineFailure = (typeof ZIZMOR_ENGINE_FAILURES)[number];
+/** The severities the engine reports, as it spells them. */
 export const ZIZMOR_SEVERITIES = ['High', 'Medium', 'Low', 'Informational'] as const;
+/** One of {@link ZIZMOR_SEVERITIES}. */
 export type ZizmorSeverity = (typeof ZIZMOR_SEVERITIES)[number];
 const EXIT_OF: Record<ZizmorSeverity, number> = { High: 14, Medium: 13, Low: 12, Informational: 11 };
 
+/** One file's coverage word: complete only when no limitation applies. */
 export type ZizmorCoverageStatus = 'complete' | 'partial' | 'error' | 'not-applicable' | 'unsupported';
+/** One file's coverage: its status, its reason and every limitation. */
 export interface ZizmorCoverage {
   readonly relativePath: string;
   readonly artifact: ArtifactId;
@@ -75,6 +85,7 @@ export interface ZizmorCoverage {
   readonly reasonCode: ZizmorCoverageReason;
   readonly limitations: readonly ZizmorCoverageReason[];
 }
+/** A place a finding points at: a captured file, a byte span in it, and whether it is the primary place. */
 export interface ZizmorLocation {
   readonly relativePath: string;
   readonly artifact: ArtifactId;
@@ -92,6 +103,7 @@ export interface ZizmorFinding {
   readonly primary: ZizmorLocation;
   readonly related: readonly ZizmorLocation[];
 }
+/** A normalized run: the engine and platform, findings, per-file coverage and what was refused. */
 export interface ZizmorRunResult {
   readonly adapter: string;
   readonly engine: string;
@@ -109,6 +121,7 @@ export interface ZizmorRunResult {
   readonly coverage: readonly ZizmorCoverage[];
   readonly refused: readonly { readonly reasonCode: ZizmorRefusalReason; readonly relativePath: string | null }[];
 }
+/** What normalizing one run needs: the job, the verified outcome and outputs, and the sealed targets. */
 export interface ZizmorNormalizeInput {
   job: ZizmorJob;
   jobDigest: ArtifactId;
@@ -121,7 +134,6 @@ export interface ZizmorNormalizeInput {
 const ROOT = '/tmp/sentinel-zizmor/src/';
 const AUDIT = /^[a-z][a-z0-9-]{0,63}$/;
 const PATH = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
-const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 const UNSENT: Record<string, { status: ZizmorCoverageStatus; reason: ZizmorCoverageReason }> = {
   'not-ci-configuration': { status: 'not-applicable', reason: 'sentinel.zizmor.coverage.notCiConfiguration' },
   'path-unsupported': { status: 'unsupported', reason: 'sentinel.zizmor.coverage.pathUnsupported' },
@@ -142,6 +154,7 @@ const unsentRows = (job: ZizmorJob): ZizmorCoverage[] =>
   });
 const engineName = `${ZIZMOR_ENGINE.name} ${ZIZMOR_ENGINE.version}`;
 
+/** The result of a job that ran nothing: every file keeps its unsent reason, and nothing is covered. */
 export function notRunZizmor(job: ZizmorJob, adapterId: string): ZizmorRunResult {
   return deepFreeze({
     adapter: adapterId,
@@ -158,6 +171,12 @@ export function notRunZizmor(job: ZizmorJob, adapterId: string): ZizmorRunResult
   });
 }
 
+/**
+ * Reads one finished attempt into findings and per-file coverage. Refuses, with a ZizmorError `outputInvalid`, output
+ * past its bound or not UTF-8 JSON, a missing run record, a record for another job, an engine output that is not the
+ * named one or not a list of findings, and an engine that did not report the pinned version. A result for an unknown
+ * path, a bad location or an audit that did not run is listed as refused.
+ */
 export function normalizeZizmorRun(input: ZizmorNormalizeInput): ZizmorRunResult {
   const { job, outcome } = input;
   const unsent = unsentRows(job);

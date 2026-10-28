@@ -6,11 +6,12 @@
 //
 // The two input shapes below are structural subsets of PR 06's ResolvedRule and PackFile, so those types are
 // assignable to them without this branch importing that one.
-import { createHash } from 'node:crypto';
+import { sha256Id as sha256 } from '../../kernel/digest.js';
 import { PATTERN_ADAPTER } from './adapter.js';
 import { patternFail } from './errors.js';
 import { patternRuleOf, type PatternLanguage, type PatternRule } from './job.js';
 
+/** One rule as the coordinator resolved it from the admitted lock and pack: its pins and its definition. */
 export interface ResolvedRuleInput {
   readonly familyId: string;
   readonly revision: number;
@@ -36,6 +37,7 @@ export interface PackFileInput {
   readonly digest: string;
 }
 
+/** Why a resolved rule is not one this adapter runs: each is a catalog key. */
 export const PATTERN_UNSUPPORTED_REASONS = [
   'sentinel.pattern.unsupported.otherAdapter',
   'sentinel.pattern.unsupported.scope',
@@ -43,13 +45,14 @@ export const PATTERN_UNSUPPORTED_REASONS = [
   'sentinel.pattern.unsupported.capability',
   'sentinel.pattern.unsupported.language',
 ] as const;
+/** One of {@link PATTERN_UNSUPPORTED_REASONS}. */
 export type PatternUnsupportedReason = (typeof PATTERN_UNSUPPORTED_REASONS)[number];
 
 /** Capabilities this adapter can provide. A rule requiring anything else (framework order, interprocedural flow) is unsupported. */
 export const PATTERN_PROVIDES: ReadonlySet<string> = new Set(['source-bytes', 'pattern-match', 'source-span']);
 const LANGUAGES: ReadonlySet<string> = new Set(['typescript', 'javascript', 'java']);
-const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
+/** The rules the adapter runs, and every other resolved rule with why it does not. */
 export interface ResolvedPatternRules {
   readonly rules: readonly PatternRule[];
   readonly unsupported: readonly { readonly familyId: string; readonly reasonCode: PatternUnsupportedReason }[];

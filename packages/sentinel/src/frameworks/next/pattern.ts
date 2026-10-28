@@ -19,8 +19,10 @@ export type SegmentItem =
 /** A segment language: the union of these segment sequences. */
 export type SegmentLanguage = readonly (readonly SegmentItem[])[];
 
+/** Why a matcher source was not read: outside the supported subset, or not a valid matcher. */
 export type PatternReason = 'unsupported' | 'invalid';
 
+/** A matcher source as a language of segment sequences, or why it could not be read. */
 export type ParsedMatcherSource =
   | { readonly ok: true; readonly language: SegmentLanguage }
   | { readonly ok: false; readonly reason: PatternReason; readonly detail: string };
@@ -163,8 +165,10 @@ function step(a: Nfa, states: ReadonlySet<number>, sym: string): Set<number> {
   return closure(a, next);
 }
 
+/** How much of a route's request paths a matcher reaches: all, none or some. */
 export type Coverage = 'all' | 'none' | 'some';
 
+/** A matcher's coverage of one route, with an example request path it matches and one it does not. */
 export interface Decision {
   readonly coverage: Coverage;
   /** A request path of the route the language matches, and one it does not, when they exist. */

@@ -52,6 +52,11 @@ export function assertToolPin(ctx: DriverPrepare, adapterId: string, image: stri
     throw new DriverError('sentinel.drivers.contextInvalid', `${adapterId}: the tool pin is not the engine's image`);
 }
 
+/**
+ * The pattern check driver. Runs only {@link PATTERN_SUPPORTED_RULES} over the unit's captured source files and
+ * covers per file per rule from the engine's own timings. Refuses, with a DriverError, a context whose tool pin is not
+ * the pinned engine image or whose rule bytes are not the shipped ones; any other rule or scope is reported not run.
+ */
 export function patternDriver(): CheckDriver {
   return {
     adapterId: PATTERN_ADAPTER.id,

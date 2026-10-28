@@ -12,6 +12,7 @@ import { bindRules, DriverError, fileScope, nothingToRun, ruleFileBytes, ResultF
 import { assertToolPin } from './pattern.js';
 import type { CheckDriver, DriverNormalize, DriverRecord, SupportedRule } from './types.js';
 
+/** The one rule the advisories driver runs: the shipped known-advisory rule at its exact definition digest. */
 export const OSV_SUPPORTED_RULES: readonly SupportedRule[] = Object.freeze([
   Object.freeze({
     familyId: 'sentinel.deps.known-advisory',
@@ -68,6 +69,11 @@ function snapshotOf(record: unknown, pin: { databaseId: string; snapshotDigest: 
   return Object.freeze({ ...s });
 }
 
+/**
+ * The advisories check driver over held offline snapshots. Refuses, with a DriverError, a freshness bound that is not
+ * a positive integer and a context whose tool pin is not the pinned engine image. A rule it does not support, a scope
+ * that is not a dependency manifest and an ecosystem with no held snapshot are reported not run, never covered.
+ */
 export function osvDriver(options: { maxDatabaseAgeMs: number }): CheckDriver {
   if (!Number.isSafeInteger(options.maxDatabaseAgeMs) || options.maxDatabaseAgeMs < 1)
     throw new DriverError('sentinel.drivers.contextInvalid', 'the freshness bound is a positive integer');
