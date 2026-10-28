@@ -3,7 +3,7 @@
 // runtime's own parser read the materialised skill and its argument parser accept the skill-bearing argv.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, cpSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -13,6 +13,7 @@ import {
   brokeredInstructions,
   promoteStagePack,
   readPromotedPack,
+  recheckPacks,
   readStagePackLock,
   resolveSkill,
   resolveStageFile,
@@ -25,7 +26,8 @@ import { instructionIdentity } from '../dist/review/instructions.js';
 import { GENERAL_PROMPT } from '../dist/review/prompts.js';
 import { COPILOT_RUNNER, NativeRunFailure } from '../dist/review/runner.js';
 import { COPILOT_AGENT_PROFILE } from '../dist/review/providers/cli-copilot-profile.js';
-import { copilotAgentArguments } from '../dist/review/providers/cli-copilot-agent.js';
+import { copilotAgentArguments, verifyMaterialised } from '../dist/review/providers/cli-copilot-agent.js';
+import { reviewInstructionsFor } from '../dist/service/review-adapter.js';
 import { copilotPrivateState } from '../dist/review/providers/cli-copilot-call.js';
 
 const FIXTURES = new URL('./fixtures/stage-packs/', import.meta.url).pathname.replace(/\/$/, '');
@@ -303,5 +305,184 @@ test(
     } finally {
       await cleanupNativeCopilotSetup(setup);
     }
+  },
+);
+
+test('a brokered review spec takes the promoted prompt and skills, seals the binding, and the digest follows the bytes', (t) => {
+  const { trustDir, copy } = trust(t);
+  const promptPack = copy(STAGE, 'prompt-pack');
+  writeFileSync(join(promptPack, 'prompt.md'), GENERAL_PROMPT.text + '\n\nPromoted: name the role a route requires.\n');
+  const m = JSON.parse(readFileSync(join(promptPack, STAGE_PACK_MANIFEST), 'utf8'));
+  m.id = 'general-review';
+  m.files = [
+    ...m.files,
+    {
+      path: 'prompt.md',
+      digest:
+        'sha256:' +
+        createHash('sha256')
+          .update(readFileSync(join(promptPack, 'prompt.md')))
+          .digest('hex'),
+    },
+  ];
+  writeFileSync(join(promptPack, STAGE_PACK_MANIFEST), JSON.stringify(m));
+  const stagePack = promoteStagePack(trustDir, promptPack, { confirm: true });
+  const skillPack = promoteStagePack(trustDir, SKILL, { confirm: true });
+  const base = { kind: 'general', prompt: GENERAL_PROMPT } as any;
+  const stages = [
+    {
+      id: 'review',
+      kind: 'agent',
+      mode: 'brokered',
+      runner: 'copilot-cli',
+      model: 'gpt-6-luna',
+      fanOut: 'per-source',
+      prompt: 'stages/general-review@1#prompt.md',
+      skills: ['skills/invoice-approvals@1'],
+    },
+  ] as any;
+  const out = reviewInstructionsFor(base, { trustDir, stages });
+  assert.equal(out.prompt.id, 'general-review:prompt.md', 'the sealed spec names the promoted prompt it sends');
+  assert.match(out.prompt.text, /Promoted: name the role/);
+  assert.equal(instructionIdentity(out.instructions).skills.length, 1);
+  assert.deepEqual(out.packs, [
+    { ref: 'stages/general-review@1#prompt.md', digest: stagePack.digest },
+    { ref: 'skills/invoice-approvals@1', digest: skillPack.digest },
+  ]);
+  assert.deepEqual(reviewInstructionsFor(base, undefined).packs, undefined, 'no packs: the bundled prompt');
+  assert.equal(reviewInstructionsFor(base, undefined).prompt, GENERAL_PROMPT);
+  // The sealed binding is re-checked at preparation: a changed trust copy refuses.
+  recheckPacks(trustDir, out.packs!);
+  const copyPath = join(trustDir, 'stage-packs/skills/invoice-approvals@1/SKILL.md');
+  chmodSync(copyPath, 0o600);
+  writeFileSync(copyPath, 'replaced\n');
+  assert.throws(() => recheckPacks(trustDir, out.packs!), code('sentinel.review.packChanged'));
+  assert.throws(
+    () => reviewInstructionsFor(base, { trustDir, stages: [{ ...stages[0], mode: 'native' }] }),
+    code('sentinel.review.invalidInput'),
+  );
+});
+
+test('every materialised file must still hash to its sealed bytes immediately before launch', async (t) => {
+  const { dir } = trust(t);
+  const a = join(dir, 'a.md'),
+    b = join(dir, 'b.md');
+  writeFileSync(a, 'alpha\n');
+  writeFileSync(b, 'beta\n');
+  await verifyMaterialised([
+    { path: a, bytes: Buffer.from('alpha\n') },
+    { path: b, bytes: Buffer.from('beta\n') },
+  ]);
+  writeFileSync(b, 'beta, changed\n');
+  await assert.rejects(
+    verifyMaterialised([{ path: b, bytes: Buffer.from('beta\n') }]),
+    code('sentinel.provider.scratchChanged'),
+  );
+  rmSync(b);
+  symlinkSync(a, b);
+  await assert.rejects(
+    verifyMaterialised([{ path: b, bytes: Buffer.from('alpha\n') }]),
+    code('sentinel.provider.scratchChanged'),
+    'a link in place of a written file refuses',
+  );
+  rmSync(a);
+  await assert.rejects(
+    verifyMaterialised([{ path: a, bytes: Buffer.from('alpha\n') }]),
+    code('sentinel.provider.scratchChanged'),
+  );
+});
+
+test('a native stage naming a prompt is refused before dispatch, never run on the bundled instructions', async (t) => {
+  const { trustDir } = trust(t);
+  promoteStagePack(trustDir, STAGE, { confirm: true });
+  let calls = 0;
+  const native = (dir?: string) => ({
+    native: {
+      broker: {
+        runAgent: async () => {
+          calls++;
+          throw Error('must not be sent');
+        },
+      } as any,
+      envelope: {} as any,
+      binding: { model: 'gpt-6-luna', copilotProfile: { id: COPILOT_AGENT_PROFILE.id } } as any,
+      operationId: 'original-prompt-only',
+      ...(dir ? { trustDir: dir } : {}),
+    },
+  });
+  const promptOnly = {
+    ...stage,
+    instructions: undefined,
+    skills: undefined,
+    prompt: 'stages/review@1#instructions.md',
+  };
+  await assert.rejects(
+    COPILOT_RUNNER.run(promptOnly as any, inputs, native()),
+    code('sentinel.provider.invalidProfile'),
+  );
+  await assert.rejects(
+    COPILOT_RUNNER.run(promptOnly as any, inputs, native(trustDir)),
+    code('sentinel.review.packInvalid'),
+  );
+  assert.equal(calls, 0);
+});
+
+test(
+  'the instruction record is sealed before the broker call, and a failed seal dispatches nothing',
+  { skip: process.platform !== 'darwin' && 'the credential path probe needs the macOS login keychain' },
+  async (t) => {
+    const { trustDir } = trust(t);
+    promoteStagePack(trustDir, STAGE, { confirm: true });
+    const skillPack = promoteStagePack(trustDir, SKILL, { confirm: true });
+    const order: string[] = [];
+    let sealed: any;
+    const context = (retain: (r: any) => Promise<void>) => ({
+      native: {
+        broker: {
+          runAgent: async () => {
+            order.push('broker');
+            throw Object.assign(Error('stop'), { code: 'sentinel.provider.unreachable' });
+          },
+        } as any,
+        envelope: {} as any,
+        binding: { model: 'gpt-6-luna', copilotProfile: { id: COPILOT_AGENT_PROFILE.id } } as any,
+        operationId: 'original-sealed-stage',
+        trustDir,
+        retain,
+      },
+    });
+    await assert.rejects(
+      COPILOT_RUNNER.run(
+        stage,
+        inputs,
+        context(async (r) => {
+          order.push('sealed');
+          sealed = r;
+        }),
+      ),
+    );
+    assert.deepEqual(order, ['sealed', 'broker'], 'sealed first');
+    assert.equal(sealed.schema, 'sentinel-native-instructions/draft-1');
+    assert.equal(sealed.disclosure, 'private-only');
+    assert.equal(sealed.instructions.ref, 'stages/review@1#instructions.md');
+    assert.equal(
+      sealed.instructions.digest,
+      'sha256:' + createHash('sha256').update(sealed.instructions.bytes).digest('hex'),
+    );
+    assert.equal(sealed.skills[0].ref, 'skills/invoice-approvals@1');
+    assert.equal(sealed.skills[0].digest, skillPack.digest);
+    assert.match(Buffer.from(sealed.skills[0].files[0].bytes).toString(), /# Invoice approvals/);
+    order.length = 0;
+    await assert.rejects(
+      COPILOT_RUNNER.run(
+        stage,
+        inputs,
+        context(async () => {
+          order.push('seal-failed');
+          throw Error('the owner store refused');
+        }),
+      ),
+    );
+    assert.deepEqual(order, ['seal-failed'], 'no seal, no dispatch');
   },
 );

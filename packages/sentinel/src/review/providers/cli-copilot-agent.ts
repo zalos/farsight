@@ -3,7 +3,8 @@
 // projection and owned-file reads as the brokered turn (`cli-copilot-call.ts`); the difference is what the model may
 // do inside it and what is retained: the JSONL event stream and the `--share` Markdown transcript, both bounded.
 // The broker alone admits, reserves and settles; this module supplies confinement and decoding.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { dirname, join, posix } from 'node:path';
 import {
   nativeCopilotSetup,
@@ -126,6 +127,7 @@ export function copilotAgentArguments(l: {
   ]);
 }
 
+const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const MAX_EVENTS_BYTES = 8 * 1024 * 1024;
 const MAX_LINE_BYTES = 1024 * 1024;
 const MAX_EVENTS = 50000;
@@ -388,6 +390,20 @@ export function safeInputPath(path: string): string {
   return norm;
 }
 
+/** Each written file is still one regular, single-link file holding exactly its bytes; otherwise scratchChanged. */
+export async function verifyMaterialised(expected: readonly Readonly<{ path: string; bytes: Uint8Array }>[]) {
+  for (const e of expected) {
+    let now: Buffer | undefined;
+    try {
+      const st = await lstat(e.path);
+      now = st.isFile() && !st.isSymbolicLink() && st.nlink === 1 ? await readFile(e.path) : undefined;
+    } catch {
+      now = undefined;
+    }
+    if (!now || sha256(now) !== sha256(e.bytes))
+      throw new ProviderError('sentinel.provider.scratchChanged', 'a materialised file changed before launch');
+  }
+}
 const SIGNALS = new Set(['SIGKILL', 'SIGTERM', 'SIGABRT', 'SIGSEGV']);
 const AGENT_WORDS = Object.freeze({
   canceled: 'Copilot native run canceled',
@@ -439,6 +455,16 @@ export async function nativeCopilotAgentCall(authority: CopilotAgentAuthority): 
     }
     copilotBoundary(limits);
     await verifyNativeCopilotSetup(current, limits);
+    // Immediately before the process starts: every materialised file is re-read and must hash to the bytes the
+    // request carries (the instructions, each skill file, each input). A changed byte refuses before any launch.
+    await verifyMaterialised([
+      { path: join(work, '.github/copilot-instructions.md'), bytes: request.instructions },
+      ...(request.skills ?? []).flatMap((k) =>
+        k.files.map((f) => ({ path: join(work, '.github/skills', k.id, f.path), bytes: f.bytes })),
+      ),
+      ...request.files.map((f) => ({ path: join(work, f.relativePath), bytes: f.bytes })),
+    ]);
+    copilotBoundary(limits);
     decoder = new CopilotAgentDecoder(work, request.maxTurns);
     const stream = decoder;
     const shareNotice = Buffer.from(`Session exported to: ${sharePath}\n`);

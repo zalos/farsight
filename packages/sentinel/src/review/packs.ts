@@ -323,7 +323,11 @@ export function brokeredInstructions(
   trustDir: string,
   stage: { readonly prompt?: string; readonly skills?: readonly string[] },
   bundled: PromptArtifact,
-): Readonly<{ instructions: PreparedInstructions; packs: ReturnType<typeof stagePackDigests> }> {
+): Readonly<{
+  prompt: PromptArtifact;
+  instructions: PreparedInstructions;
+  packs: ReturnType<typeof stagePackDigests>;
+}> {
   const resolved = resolveStageInstructions(trustDir, { ...stage, mode: 'brokered' });
   const prompt: PromptArtifact = resolved.text
     ? Object.freeze({
@@ -333,7 +337,17 @@ export function brokeredInstructions(
       })
     : bundled;
   return Object.freeze({
+    prompt,
     instructions: prepareInstructions({ prompt, skills: resolved.skills.map((k) => k.selection) }),
     packs: stagePackDigests(resolved),
   });
+}
+
+/** Re-checks a sealed reference → digest binding against the trust folder; any change refuses with packChanged. */
+export function recheckPacks(trustDir: string, bindings: readonly Readonly<{ ref: string; digest: string }>[]): void {
+  for (const b of bindings) {
+    const m = REF.exec(b.ref) ?? invalid('a sealed pack reference is malformed');
+    const pack = readPromotedPack(trustDir, m[1] === 'stages' ? 'stage' : 'skill', m[2]!, Number(m[3]));
+    if (pack.digest !== b.digest) changed(`${b.ref} differs from the bytes this review sealed`);
+  }
 }
