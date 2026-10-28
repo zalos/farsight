@@ -9,7 +9,7 @@
 // wrapper → the sandboxed runner) is unchanged byte for byte. Both modes record the same provenance shape. The stage
 // input and provenance use the pipeline contract's agent field names.
 import type { Digest } from '../contracts/index.js';
-import type { AgentMode } from '../contracts/pipeline.js';
+import type { AgentMode, AgentRunnerId as DeclaredRunnerId } from '../contracts/pipeline.js';
 import { createHash } from 'node:crypto';
 import { canonicalDigest } from '../policy/digest.js';
 import { fail } from './providers/errors.js';
@@ -46,8 +46,11 @@ import {
 } from './native.js';
 import { resolveStageInstructions, stagePackDigests, type ResolvedStageInstructions } from './packs.js';
 
-/** The runners an agent stage can name (the pipeline contract's ids). */
-export type AgentRunnerId = 'copilot-cli' | 'claude-cli' | 'hosted-api';
+/**
+ * The runners Sentinel implements, each one of the pipeline contract's declarable runner ids, so a contract change to
+ * one of them fails this build. A declarable id with no runner here (`ollama`) is not one.
+ */
+export type AgentRunnerId = Extract<DeclaredRunnerId, 'copilot-cli' | 'claude-cli' | 'hosted-api'>;
 export type { AgentMode };
 
 /** The agent stage a runner receives (the `agent` kind of the pipeline's `StageDefinition`, same field names). */

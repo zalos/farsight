@@ -28,8 +28,8 @@ import { dirname, join } from 'node:path';
 import { canonicalDigest } from '../policy/digest.js';
 import { readPackDirectory } from '../rules/pack.js';
 import { reviewFail } from './errors.js';
-import type { SessionSpec } from './session.js';
-import type { AgentRunnerId, AgentStageDefinition } from '../contracts/pipeline.js';
+import type { NativeReviewStage, SessionSpec } from './session.js';
+import type { AgentStageDefinition, NamedStageOutput } from '../contracts/pipeline.js';
 import { prepareInstructions, type PreparedInstructions, type SkillSelection } from './instructions.js';
 import type { PromptArtifact } from './prompts.js';
 
@@ -392,7 +392,7 @@ export function reviewInstructionsFor(
 
 /** What a native review needs when its stage leaves something out: the runner, and its turn, time and token budget. */
 export interface NativeReviewDefaults {
-  readonly runner: AgentRunnerId;
+  readonly runner: NativeReviewStage['runner'];
   readonly turns: number;
   readonly seconds: number;
   readonly tokens: number;
@@ -416,9 +416,7 @@ export function nativeReviewFor(
     return reviewFail('sentinel.review.invalidInput', `the ${s.kind} review's stage names another runner`);
   if (stage?.prompt !== undefined)
     return reviewFail('sentinel.review.invalidInput', 'a native stage names instructions, never a prompt');
-  const named = (stage?.produces ?? []).filter(
-    (p): p is { name: string; schema: string } => typeof p === 'object' && p !== null,
-  );
+  const named = (stage?.produces ?? []).filter((p): p is NamedStageOutput => typeof p === 'object' && p !== null);
   if (stage?.produces && named.length !== 1)
     return reviewFail('sentinel.review.invalidInput', 'a native review stage declares one named output');
   const packed = Boolean(stage && (stage.instructions !== undefined || stage.skills?.length));

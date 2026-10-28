@@ -37,6 +37,7 @@ import {
 } from './evidence.js';
 import { reviewFail, type ReviewFrontierCode } from './errors.js';
 import type { ReviewRequestEnvelope, ReviewProviderSelection, NativeReviewWire } from '../contracts/instructions.js';
+import type { NamedStageOutput } from '../contracts/pipeline.js';
 import {
   instructionManifest,
   renderedInstructions,
@@ -131,7 +132,7 @@ export interface NativeReviewStage {
   /** Ordered skill pack references. */
   readonly skills?: readonly string[];
   /** The one named output, validated against its schema before publication. */
-  readonly produces: readonly Readonly<{ name: string; schema: string }>[];
+  readonly produces: readonly Readonly<NamedStageOutput>[];
   readonly budget: Readonly<{ turns: number; tokens: number; seconds: number; usd?: string }>;
 }
 
