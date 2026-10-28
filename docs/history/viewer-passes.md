@@ -1,0 +1,1009 @@
+# Farsight viewer passes — clarity phase to the outsider fix round
+
+Archived from `docs/AI-HANDOFF.md` on 2026-10-28 (2026-09-21 → 10-14). Dated records, verbatim apart from
+re-pointed relative links; read on demand, never loaded at session start. Index: [README.md](README.md).
+
+## Current state — 2026-10-10
+
+`main` is green. **The lanes round, its cleanup pass and swarm round 3's fixes are live** (items 15–18 below, PRs
+#74–#97: the journey overlay is retired and the Map is the one place a journey is read, with a chrome that holds
+still; the storyline draws as lanes; gates carry tiers and preconditions; every test number its scope and build
+state wins the journey verdict; a tour and an ask answered from the graph; a PR gets its affected set; two syncs
+compare; agents get tiers and budgets). Nothing is in flight. Echo (PR #84, item 17) merged on 2026-10-11 after its re-review; lane S (#99, in item 18)
+closed the cleanup pass.
+
+| | |
+|---|---|
+| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`fb503d7`** after the outsider round and its fix round (PRs #101, #105–#111, #98, item 19–20), before that **`c5a5c7a`** after the lanes round, the cleanup pass, swarm 3's fixes, Echo and the space pass (PRs #74–#99, items 15–18 below) on the swarm-fixes round (#62–#73), the 2026-10-05 round (#53–#61), the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
+| tests | **1474** on `fb503d7` — core 392 · work 65 · echo 170 · parsers 230 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 75 · server 382 · cli 64 · e2e **337/337** (`map-keys` ⌘K flaked once under load) · strings 3434 entries · 74 modules; before the round: **1353** — core 366 · work 65 · echo 103 · parsers 216 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 73 · server 370 · cli 64 (+ `pnpm test:scripts` 14), 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 324/324** (`journeys-organised`'s Map-head spec failed once under the full suite and passed alone — timing) (every spec that opened the journey page now opens a Map address) (the `codemap-projects`, `codemap-toolbar` and `settings-config` specs start their own two-source server; `journeys-organised`, `map-journey-links` and the small perf preset run in CI; `pnpm e2e:perf` is the full thousand-project table, on demand; the suite is timing-sensitive on a loaded machine — `settings-config`, `codemap-projects` where-is, `map-street` fold, `thousand-perf` ⌘K and `chrome` Settings each failed once under seven parallel lanes and passed alone) |
+| string/symbol lint | **3105 entries · 35 sprite symbols · 70 modules** (60 retired view words left with the overlay); the define test bans backticks, markdown, unfilled placeholders and catalog keys; a catalog module per area (`strings-gate.ts`, `strings-evidence.ts`, `strings-stops.ts`, `strings-state.ts`, `strings-lifecycle.ts`, `strings-export.ts`, …) registered like `strings-doors.ts` |
+| servers | the dogfood server on **4478** (workspace CLI) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace). **On 2026-10-14 both restarted on `fb503d7` and re-synced (4478 sync 73, 4477 sync 115 then restarted `--read-only`); both prefixes' global `farsight` print `commit fb503d7`.** Earlier: The `flags.map` and `journeyDrill` flags are retired (the Map always has its tab). Both restarted on `c5a5c7a` on 2026-10-11 and re-synced through `POST /api/sync` (4478 sync 72, 4477 sync 114, then 4477 restarted `--read-only`); both prefixes' global `farsight` print `commit c5a5c7a`; `farsight status` reads *up to date* on both; zero page errors on the front door, the lanes board in business, the compare panel, Settings, Changes, the readiness brief and the old-link redirect (`#/journeys/new-invoice?view=sheet&step=2` lands on `#/map/new-invoice?screen=2&layout=table`) of 4478. 4477 was started **without** `--read-only` so it could sync — restart it read-only before a swarm (a read-only server refuses `POST /api/sync`). macOS has no `setsid`: restart a server with `(nohup … &)` from its cwd and confirm `lsof` + `/api/version` before syncing. The reference app's own manifest declares two personas, six groups, placements on all 18 flows, two storylines and the correction journey as a **branch** of review; its design drift is **7**; it has no `gateTiers` or `lifecycle` block yet (see item 15's left-open). |
+| runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
+| trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
+
+**Live tracker tests** run only with `FARSIGHT_LIVE=1` and read their target from the environment:
+`FARSIGHT_JIRA_SITE` / `FARSIGHT_JIRA_USER` / `FARSIGHT_JIRA_KEYCHAIN` and `FARSIGHT_ADO_ORG` /
+`FARSIGHT_ADO_PROJECT` / `FARSIGHT_ADO_KEYCHAIN`. The defaults are the example values above, so without the env they
+skip with a reason. The Jira test writes one comment and one label on the test site; the ADO test only runs
+`validateOnly` dry runs. The recorded fixtures under `packages/work-jira/test/fixtures/` and
+`packages/work-azdo/test/fixtures/example-org/` were recorded live and then re-synthesized with placeholder names,
+ids, titles and bodies; the shapes are as recorded. A re-recording must be scrubbed the same way before it is committed.
+
+## What shipped most recently
+
+1. **The clarity phase** (2026-09-21 → 09-24): one count vocabulary and one denominator, evidence classes, deferred /
+   setup edges, externals, interface-typed dispatch, Journeys as the front door — 56 chunks, measured on the
+   reference app.
+2. **The viewer usability pass + the visual swarm and its four fix lanes** (2026-09-24).
+3. **MCP currency, e2e, fast travel, component stories** (2026-09-25). The header stays live while a journey is
+   open; MCP reaches gates-vs-rules, per-node unit/e2e coverage, impact-tests, change history (`graph_changes`) and
+   stories; Farsight has a Playwright e2e suite on the real server (**no MSW — ADR 8**) whose results appear in its
+   own graph; ⌘K arrives somewhere visible; `farsight status` stops crying wolf on same-code builds; components
+   embed their **live Storybook stories** (ADR 9). The pass swarm scored **6.3, 6× TRIAL**: nobody hit the header
+   bug, stories were the best-received feature, and **one number, one scope** became the top complaint.
+4. **Tooltips, one number one scope, and the business register's last code words** (2026-09-25, second pass).
+   A tooltip primitive (`lib/tooltip.js`: click, 2 s hover, `?`; simple tips from the catalog's define, rich tips
+   with tables and links; `numberTip()` = counts · over · from · breakdown · Grammar Book); a counts ledger
+   (`docs/COUNTS.md`) reconciling every reviewer contradiction on the reference app's graph into typed `Counted`s
+   from core; identifier tokens in the business register went to **0** on every view, held there by e2e specs; ⌘K
+   matches identifiers in every register and shows business names. The **story swarm** (all eight personas) then
+   asked *do I understand the reference app?* — mean **6.9, 8× TRIAL**; the weak answer is *where to go next* (1.9).
+5. **The next-step story, first pass — evidence that agrees with itself** (2026-09-27): a passed declared e2e case
+   is observed by its own declaration; one absence word per fact; defines in words; scripts are tooling; the glossary
+   meets class members; five small fixes (drift tip, impact counts each test once, ⌘K arrives on the thing picked,
+   RESTART compares builds).
+6. **Work items as a source — Jira and Azure DevOps, live** (2026-09-30, six lanes, build `d6dace1`).
+   Proposal `docs/proposals/work-items-sync.md` P0–P4 in one pass, centred on *what work changed what code*:
+   - **`packages/work`** — `farsight-work v1` (frozen, `schemas/farsight-work-v1.schema.json`, enum-pin test), secrets
+     resolved **in-process from the keychain** (`keychain:farsight/<provider>-<instance>`, never printed), the `work.db`
+     cache (replace-never-merge items, SCD2 revisions, links, outbox, audit), the sync engine (cursor, hydrate, periodic
+     reconcile, cached schema, freshness facts), the **three-verdict gate** (policy · tracker · credential, plus a dry run
+     beside them when the provider has one; default deny; agents confirm through a person), the key detector (Jira
+     `KEY-1` / `#KEY-1` / `[KEY-1]` / `…/browse/KEY-1`, ADO `AB#4711` / `#4711` / `_workitems/edit/4711`, branch names;
+     only keys of a configured source's projects count — `INV-01` screen names never do), `farsight work
+     sync|status|list|show|links|comment|assign|move|edit|link`. **`packages/work-fixture`** is the CI provider.
+   - **`packages/work-jira`** (api-token, discover by `schema.custom`, `search/jql` + changelog bulkfetch + comments,
+     ADF ↔ markdown, compare-before-write) and **`packages/work-azdo`** (PAT / az-cli, discover with state categories per
+     type — *Resolved* stays in-progress, a state the type does not define is said so — WIQL + batch, the reporting
+     revisions feed, comments on 7.2-preview, HTML ↔ markdown, `test /rev`, `validateOnly` dry runs). Both verified
+     **live**: Jira 14 items, incremental after an edit, a comment through the gate, a conflict caught; ADO 4 items
+     with history and comments, second sync via the feed, nothing changed on the org.
+   - **In the graph** — `work` nodes, `tracks` edges, the `work-key` technique (enum pins and schemas grown by one member
+     each); every sync indexes the **commit spine** (500 commits, incremental) with message bodies, branches whose names
+     carry a key, and the keys themselves (`commit_key`, `commit_branch`, `commit_node`); a commit is credited to the
+     function its changed lines start in; a `@work` doc tag joins `@covers`; settings `type: 'work'` sources are pulled by
+     `/api/sync`; the `/api/work*` routes (list, item with links/commits/touched/findings/allowed/preview, `diff?sha=`,
+     links-by-node, by-flow, sync, intent with dryRun/confirm/drop/rebase, outbox with `theirs`, audit, people, states;
+     503 without sqlite).
+   - **The HUD** — a WORK tab (*Bounty Board* / *Work*): source cards with mode, freshness sentence and capabilities in
+     words; list/board/sources views; the item pane with assign, move to, comment, title and description under the gate
+     (applied · waiting for your confirmation · conflict with both sides · denied with three verdicts); *what this work
+     changed* — commits with how the key was found, files, the unified diff per file with the touched parts as chips, a
+     *touched* count and *see what uses these*; findings (*done but its screen is not built*, *to do but N commits name
+     it*); chips on Portfolio and journey headers; ⌘K travels to work nodes. **MCP** — `work_items` (json = the frozen
+     list), `work_item`, `work_links`, `work_changes`, `work_sync`, and `work_comment|assign|transition|edit|label|link`
+     **registered only when a source grants agents the action**; `graph_overview` gains a work-items section.
+7. **The Map view — Neighbourhood · Street · Property** (2026-10-03, proposal `docs/proposals/map-view.md`, prototype
+   `prototypes/map-view/`, two lanes plus two follow-ups each, PRs #8–#13). A flag-gated surface (`flags.map`,
+   Settings → Experiments; a *Map* door on the Portfolio and a nav tab when on) that draws the journeys as one
+   whiteboard with three altitudes: **neighbourhood** — every journey as a district in bands by source, row-packed,
+   covers counter-scaled so names read at the fit, *leads to* / *requires* dimmed and *part of* on hover;
+   **street** — one journey's screens in step order with a lean chip row, and with plumbing on (`p`) a **pathway per
+   screen**: its calls stacked with a service colour bar (the spec title), beside each call the records, messages and
+   third parties it reads (cool) or writes (warm), folds past four calls or four data nodes, declared-not-called and
+   not-built drawn dashed; **property** — the screenshot whole as the hero (letterboxed, lightbox on click), a rail
+   of eight tabs with the summary's own counts (Overview · Gates & rules · APIs · UX · Tests · Route · Work · Changes),
+   clamped text, capped lists, a step bar with before / after / also-in, and a deterministic placeholder for a screen
+   without a picture. Pan, pinch, ⌘-scroll and keys; snap into a screen past ×1.6 near the centre; one explore card
+   for calls and data nodes. Everything reads `/api/design` and `/api/journey` (no server change; `lib/map-model.js`
+   and `lib/map-property-model.js` are pure and unit-tested); every number is a `Counted` with a tip (`docs/COUNTS.md`
+   § Map); ADR 10 (DOM in a transformed world, not a canvas). Verified on the fixture and, read-only, on the dogfood
+   graph (21 journeys, a screen with 10 calls and 273 cases): zero page errors. What the real graph still shows:
+   *leads to* curves cross between bands; names fall under 12 px past ~30 journeys at the cap; per-screen work chips
+   are not fetched; the explore card has no Impact yet.
+8. **Data stores — which store a record lives in, and externals the app uses as stores** (2026-10-03, later the same
+   day; proposal `docs/proposals/data-stores.md`, PRs #15–#18). `GraphNode.store: StoreRef { name, kind: sql · document
+   · files · erp · other, engine?, via: factory · sdk · datasource · jpa · config, ref? }` on table nodes and on
+   store-like externals (`erp`, `db`, `files` by default; `ExternalDecl.store` overrides); rules in that order, never a
+   guess (two SQL drivers → no store, with a note in `meta.stores`); `farsight.config.json` `stores[]` fills what code
+   left unnamed and never overrides it. A declared client class gets **one `http` edge per public method** with
+   `meta.method` from the literal on the path to `fetch`; `fetchMethod` no longer defaults to GET for a non-literal.
+   **Fetch wrappers** (`apiFetch(path, init)`, two levels deep) resolve to their callers' paths and literal methods;
+   an unknown method on a path served by several routes takes the GET route with `meta.methodAssumed` (MEDIUM, the
+   seam card says *method assumed*, candidates recorded) instead of a stub. Journey markers carry `op` for externals
+   (GET/HEAD reads, POST/PUT/PATCH/DELETE writes, else none) and `store`; `system.stores[]` and `counted.stores` are
+   new. The map's street prints `<store> · record` / `<store> · ERP`, bars by store kind, `reached` (new mode, plain
+   dim line) when no direction was recorded, stores in the legend, the store on the explore card, and the property's
+   *Data this screen reaches* grouped by store; `describe_node` prints the store line. Measured on the reference app
+   (read-only, in a scratchpad): all 21 tables named Postgres from the `pg` driver, the ERP an `erp` store with 14
+   edges split GET · POST · PATCH · DELETE, Blob Storage a `files` store; http edges to routes 61 → 69, unknown
+   stubs 3 → 3 (a mid-pass regression to 49 / 9 was caught by that measurement and fixed in #18). Row keys and table
+   ids are unchanged; the fixture graph is byte-identical apart from its `stores` config.
+
+9. **Map pass 2 — the swarm's findings, blast radius, dependencies and NX** (2026-10-03 → 10-04; proposals
+   `docs/proposals/map-pass-2026-10-03.md` and `docs/proposals/dependencies-and-nx.md`; eight lanes, PRs #20–#30).
+   From the eight-persona swarm on the Map (8 × TRIAL, fit 6.25, six of eight would open the Map first; reports
+   outside the repo): **Z** — the canvas engine normalises every input (a mouse notch, a trackpad step, a pinch and
+   the keys all take the same 1.25× step), zoom has soft **stops** (board · journey fitted · calls readable, the last
+   computed from an 11 px label), zoom-to-enter is *earned* (armed only past the calls stop, fired only when one
+   screen is centred and ≥ 60 % of the stage, after a visible hint), Fit fits the level you are on, a journey opens
+   centred under the toolbar with `▸ n more` edge cues, the toolbar is opaque, tips open on hover
+   (`lib/map-canvas.js` exposes `attachCanvas()` for the code map to adopt); **N** — one number with its scope:
+   `14 screens · 10 reached` with `screensReached` typed in core, the footer `screen 4 of 10 reached`, the evidence
+   word beside every tests count, owner and ERP reach on the cover, the Tests page vs code-map chip difference named
+   (`1429 cases · 10 coverage reports`), the Changes tab reading the commit spine for the screen's parts
+   (`GET /api/history/touching`); **L** — a legend (`?`), links routed square through the gaps with one label each,
+   wider columns so nothing truncates, chips that wrap then fold to `+n`, the business lens finished on data nodes
+   (*Postgres · database record*) and gates (*check* / *rule*), Portfolio's switch reads TABLE · BOARD; **K** — Tab
+   reaches every journey, screen, call and data node, Enter/Esc/`j k h l`/arrows, `⌘K` arrives on the Map, the link
+   carries the view (`?z&x&y` as the view's centre in world units) and the open card, `y` / *Copy link*, an *as of*
+   stamp; **I** — the **Affected mode**: `?affected=<node|package:|work:KEY|commit:sha>&ahops=N` from the explore
+   card, the property head and the Work/Changes rows; districts, screens, calls and data dim or carry hop badges at
+   every altitude; an *Affected* tab with four typed `Counted`s from core `affectedReach` (journeys · screens · calls ·
+   tests, partitioned by distance, scope `count.scope.affected`), the floor line and the cut points;
+   `GET /api/impact?reach=1`, `GET /api/history/commit?sha=`; **D** — **dependencies**: `package` nodes (third-party
+   and workspace, versions from the nearest manifest, `imports` edges with specifier and line, `module` nodes kept out
+   of search), `GET /api/deps` and `/deps/where`, `farsight deps list|where`, a package is an impact seed, the
+   tsconfig-paths comment bug fixed (star aliases now resolve); **X** — **NX projects and tags**: `GraphNode.project`
+   on every node under a project root, `meta.projects` (tool nx · workspaces · none, tag dimensions `scope:` → domain,
+   `type:` → type, configurable in `farsight.config.json projects`), a project graph with project → project import
+   counts, `GET /api/projects[/<name>]`, `examples/nx-workspace/` (2 apps, 5 libs, an e2e, two journeys); **C** —
+   the **code map by project and package**: GROUP by project / domain / type, scope filters incl. *depends on*,
+   package cards in copper, *App and its related* and *Where is <package> included* views (`?view=app&project=` ·
+   `?view=package&package=`), inspector sections for project and package, the Map's *Band by: source · domain*.
+   Measured read-only on the reference app: 21 NX projects (3 apps · 17 libs · 1 e2e) all tagged, 32 packages (17
+   workspace, each tied to its project), ERP store seed reaches 12 of 18 journeys, the busiest table 17 of 18 and 45
+   screens, zero page errors. Dependabot's three alerts (example manifests) cleared in #30.
+   **Swarm round 2** (2026-10-04, same eight personas on the merged pass, reports outside the repo): 8 × TRIAL, fit
+   6.25 → 6.5; Map 6.8 → 7.0 · Journeys 6.75 · Portfolio 6.4 · Code map 3.9 → 4.9; the journey-level numbers now
+   agree across views for every persona, the blast radius is credited by every role, *Where is a package included*
+   was called the best panel in the product. One **regression** found by all eight: the Map takes the journey
+   nearest the viewport centre, not the one clicked (a wide journey opened at its fitted-width floor loses to its
+   neighbour) — fixed in PR #32 together with the Affected mode's readability at board altitude (fit-to-
+   affected, a list with CSV/JSON), scope words on per-journey counts, the legend covering the toolbar, the zoom
+   anchor and first-notch tooltip, the stepper's feedback, Enter/`?`/`y`, pan bounds, and the code map's spec-file
+   boxes. **The project picker** (PR #34): `lib/multi-pick.js` (+ a pure, tested `multi-pick-model.js`) — a searchable
+   multi-select grouped Applications → Libraries → End-to-end → Other with type and tag words, keyboard and ARIA, chips
+   that fold past six; used by the scope menu's Projects / Tags / Depends-on, the Views menu's two pickers (single),
+   and ⌘K (projects match, applications first, arriving `?group=project&box=<name>`); project and tag filters now
+   ride in the link (`?project=`, `?tag=`) and in localStorage.
+10. **The code map's performance pass — one precomputed index, set algebra, the project graph folded once**
+    (2026-10-04, PRs #39–#40). The defect: the code map grouped by project or by a tag dimension hung the page for
+    minutes on the dogfood graph (21,175 nodes) — `cmapHide(n)` ran once per node and, grouped, called the GROUP-choices
+    fold over every node each time (≈7 ms × 21k × 2 passes ≈ 280 s per draw); card heights, rule badges and the
+    inspector also scanned every edge per card. **Measured on the live dogfood server, before → after:** ungrouped
+    2.2 s → 1.1 s; grouped by project *did not draw in 90 s* → **0.8 s**; a two-project filter and the app view ≈ 0.3 s
+    (the lane's measurement); zero page errors. **Viewer:** `lib/codemap-model.js` `buildCodemapIndex` (one pass over
+    nodes, one over edges: node → project key, project → nodes, dimension → value → projects, package → importers,
+    `validates` counts, test files, repo → projects), `groupChoicesFor` (O(projects)), `passFor` (a filter is set
+    algebra — projects ∪, tag values ∪ per dimension then ∩ across dimensions and with the project filter and the app
+    closure, packages kept via their importers, `dep` ∩), `groupKeyOf` (O(1)), `projectClosure` (the app's tree from
+    `meta.projects` so *App and its related* draws at once); one index per graph object and the choices cached per
+    graph + scope; `store.js indexGuards()` also builds `S.validatesByTarget` and `S.EDGES_OF`, so `select()`,
+    `itemHeight()` and `nodeCardHtml()` look up instead of scanning. A **Projects** chip in the code map toolbar
+    (`Projects · n` when picked) opens kind chips (Applications · Libraries · End-to-end · Other), the same searchable
+    multi-select as the scope menu (one filter, one `?project=`), and *Focus on an application* — the app view, drawn
+    from the page's graph first and labelled when the server answers. A regression guard: `codemap-perf.test.ts`
+    (a synthetic 20k-node graph, the index + choices + two filters + the fold under 2 s; `passFor` proven equal to the
+    old per-node predicate on the NX example + invoice app). **Core/server:** `projectGraph()` is folded once per
+    `GraphIndex` (a `WeakMap`, refolded when the index or `meta.projects` changes; `?repo=` narrows the kept rows),
+    closures walk an adjacency built once and are remembered, every `ProjectRow` carries `closure: string[]`,
+    `/api/projects/<name>` is a lookup (`projectNodeIds`). `/api/projects` on the dogfood graph: 15 ms first, under 1 ms
+    after. **NX's own project graph is read, never produced** (`parsers/src/shared/nx-graph.ts`): for an NX source the
+    first of `.nx/workspace-data/project-graph.json`, `.nx/cache/project-graph.json`, `node_modules/.cache/nx/project-graph.json`
+    or the file `farsight.config.json → projects.graphFile` names (source-relative; absolute, `..`, NUL, a symlink out of
+    the source, a non-file or > 20 MB each refused with a note; both the `nx graph --file` and the bare cache shapes;
+    `npm:` targets skipped; only names discovery found count, the rest a count in `notes`; nothing is ever spawned —
+    `docs/SECURITY.md` says so). Recorded as `meta.projects.dependencies` (`via: 'nx-graph'`) and `graphFile`; a project
+    no manifest typed takes NX's type; in the project graph a pair NX records gets `nx: true` + `nxType`, a pair only NX
+    knows is a dependency with `imports: 0` under the new part `count.part.depsNxGraph`; `graph_overview` prints
+    `nx graph: N dependencies read`. Imports read from the files stay the primary evidence (principle 2).
+
+11. **Journeys organised by persona and group, and many config files per source** (2026-10-04 evening; proposal
+    `docs/proposals/journey-organisation-and-config-files.md`, PRs #45–#48, three lanes). Four decisions taken with the
+    owner: the manifest declares and a config block overrides; a nested config scopes its own folder; two fixed levels
+    (persona → group → journeys); MCP reads and guides, never writes into a source.
+    - **Config files** (#46): every `farsight.config.json` in a source is read (`parsers/src/shared/config-files.ts`
+      `loadWorkspaceConfig`, root first, then by folder depth; the workspace excludes apply). A nested file's node
+      matchers (`tags`, `glossary`, `guards`, `entrypoints`, `setup`) apply only to nodes under its folder and
+      the nearer file's word wins; its paths (`plumbing`, `design`, `openapi`, `tests` reports, `storybook`, a
+      `path::Class` external import) are rebased to the source root and unioned; `tests.unit|integration|e2e` take
+      one block or a list and `results|coverage|report` take one glob or a list; `externals`/`stores` union with a
+      duplicate recorded as a conflict; `projects` and `tooling` are root-only (a nested value is a note). The six
+      readers consume one `WorkspaceConfig` and all honour `config: false`. `fragment.meta.config: ConfigMeta`
+      (files · conflicts · notes) → `meta.config[repo]`; MCP `config_files` and a `graph_overview` line, `farsight
+      config list`, `GET /api/config`. `examples/nx-workspace` has two nested configs and one deliberate glossary
+      conflict.
+    - **The model** (#47): `screens.json` gains `personas[]` and `groups[]` (ordered; a group with `persona` lives
+      under that persona only), a flow gains `persona: string | string[]`, `group`, `order`; order is `order`, then
+      the config's index, then **manifest order** (the alphabetical sort is gone on purpose; the pinned *start here*
+      stays marked, not moved). A `farsight.config.json → journeys` block (`personas`, `groups`, `flows` by id)
+      overrides field by field, root block first and the nearest nested block last; an id no manifest declares is a
+      note. Folded at ingest into `meta.journeys[repo]` (`core/journeys.ts journeysMetaOf`); `journeyTree(index,
+      metas, scope)` is the one pure fold behind `GET /api/journeys`, MCP `journeys { repo, persona, group, json }`,
+      `farsight journeys`, and the `graph_overview` journeys line; the `journey` tool prints *shown under*. An
+      undeclared persona string (the reference app's *"X and Y"*) is its own persona, flagged *not declared*, never
+      split. Every count is a `Counted` (`docs/COUNTS.md` § Journeys). `design_guide` documents all of it, nested
+      config files included. A multi-manifest fix: an earlier manifest no longer marks a later manifest's page *built,
+      not designed*.
+    - **The viewer** (#48): the Journeys front door shows *Journeys by who uses them* — persona heading with its
+      description and counts, collapsible groups in declared order (remembered per group), the journey cards, an *also
+      for …* chip, `?persona=` / `?group=` filters; the journey header reads *For <persona> · <group>*; the Portfolio
+      is one table per persona → group with a pin per persona; the Map bands by **persona** (a journey under two
+      personas draws its street once and a dashed *echo* card in the other band). `lib/journeys-tree.js` reads
+      `/api/journeys` first and `lib/journeys-model.js treeFrom()` folds the same tree from `/api/design` against an
+      older server (proven equal to `journeyTree()` by test). Verified on the dogfood server: 21 journeys · 5 personas
+      · 6 groups, zero page errors on the front door, the Portfolio and the Map.
+
+12. **The Map clarity pass — the board draws by altitude** (2026-10-04, late; PR #50, one lane, from the owner's
+    verdict *"the map looks a bit crowded"* and the lead's screenshot review of the live board). At **board** altitude
+    a journey is a **card**: its name, one status chip (*built* · *partly built · n of m* · *designed, not built*), an
+    *at risk* mark (stale and/or not every screen built — the AT RISK bar's own facts) and `→ n` (how many journeys it
+    leads to); the description and the full chip row live in the street head, from the journey altitude up. Cards are
+    2–4 screens wide and one height (`lib/map-model.js boardWidth()`), so **a cover no longer shares a width with its
+    street** — the board has its own layout and `ensureAlt()` swaps layouts at the level change keeping the journey
+    under the pointer fixed. Links at the board draw only for the hovered or focused journey (both ends lit, the rest
+    dimmed, no labels); from the journey altitude up they draw as before. Each band is a faint **panel** as wide as the
+    widest row with a counter-scaled header (the band word · *n journeys* · a persona's description). The toolbar folds:
+    *Band by* is one segmented control (a menu under 1500 px), the as-of stamp hides and the level buttons shorten under
+    1360 px. Also fixed: `+` / ⌘-scroll from the fit did nothing while the AT RISK headline showed (`boardScale()`
+    ignored its row). **Measured on a copy of the dogfood graph (21 journeys):** the board fits at ×0.21 at 1440×1000
+    (was ×0.12) and ×0.14 at 1280×720 (was ×0.08), every chip readable, zero page errors on 44 shots. Then PR #51: a
+    closed journey blurs the focus it still held at once (a hidden control kept it for a frame) and the focus spec polls.
+
+13. **The 2026-10-05 round — storylines, the Map and the journey as one, details that link out, a thousand projects**
+    (proposal `docs/proposals/round-2026-10-05.md`, PR #53; five lanes, PRs #54–#58). From the owner's asks: unify the
+    Map and the journey, make every detail click to expand or link, track "verticals" across features, another browser
+    performance round for hundreds to 1000+ NX projects, and the handoff's ranked list.
+    - **The fetch-helper regression** (#54): `fetch(url, helper(ctx, { method: 'POST' }))` keeps the literal from the
+      helper call's object-literal arguments (spreads, one nested call deep), a verb-named helper (`post`·`put`·`patch`·
+      `del`) is the fallback, a non-verb helper with no literal stays `methodAssumed`; wrappers pass it through.
+      Measured read-only on the reference app: drift **19 → 7**, http edges to routes 69 (literal methods 9 → 69,
+      assumed 11 → 0), unknown stubs 3; the invoice-app example's edges byte-identical.
+    - **Config follow-ups** (#55): nested `stores[]` scope to their folder (a listing beats a catch-all, then the nearer
+      file; conflicts recorded as kind `store`); a read-only **Config files** list on the Settings page
+      (`surfaces/settings-config.js` over `/api/config`, which now carries `counts`); `schemas/farsight-config.schema.json`
+      and `schemas/farsight-design.schema.json` (2020-12, hand-written, pinned by a test that validates every example and
+      checks the config schema's keys equal `CONFIG_FIELDS`); the nx example has four config files.
+    - **Storylines** (#56): the word for the owner's *verticals* — a named chain of journeys across features, declared in a
+      manifest's `storylines[]` or `farsight.config.json → journeys.storylines[]` (`{ id, name, description?, journeys[] }`,
+      the same override rule as personas and groups; an undeclared journey id is a note; a journey may be in several);
+      `JourneysMeta.storylines`, `JourneyTree.storylines[]` with `Counted`s (`count.unit.storylines`, `count.scope.storyline`),
+      `JourneyRow.storylines`; MCP `journeys { storyline }`, `graph_overview` counts them, the `journey` tool prints *in
+      storyline · step n of m*; `farsight journeys --storyline`. On the **Map** a *Storyline* picker (`?storyline=<id>`):
+      the board draws only that chain **as one band in order**, step numbers on the cards, a *then* link between steps at
+      every altitude; *All* restores the bands. Persona bands now start each **group on its own row with the group word
+      in a gutter**. The front door has a *Storylines* section (numbered status chips, *open on the Map*, *open the first
+      journey*); the journey header reads ‹ storyline · step n of m ›. The business register says *questline* and
+      *journey n of m*.
+    - **The Map and the journey as one, and every detail a door** (#57): `#/journeys/<flow>?view=timeline&step=n[&node=id]`
+      opens the blueprint timeline at step n with that marker selected; `#/map/<flow>?screen=n[&plumb=1&card=<kind>:<id>]`
+      frames the screen and opens the explore card — two pure, tested functions in `lib/route-url.js`; *see it on the Map*
+      in the journey header, *open the journey here* on street screens, the property head and the explore card; the
+      journey writes `step`/`node` into the address as the selection moves. `lib/detail-links.js detailLinks(kind, node,
+      ctx)` (lookups only, 0.7 µs each) is the one door builder: gates and rules → *open in the editor* (VS Code at the
+      line, code read from the new read-only `GET /api/source?node=`) · *see it on the code map*; route calls → *read the
+      contract* (`#/apis/<id>?op=`) · *read the spec file* · *open the handler in the editor*; records/stores/externals →
+      code map · schema file; tests → *see the cases* (`#/tests?flow=`) · the test file; work → the work board · the
+      tracker; screens → the page · the manifest · Figma; packages → *where is it included*. A door the graph cannot name is
+      not drawn; the business register drops every door into code. Journey gate rows expand in place to their code lines
+      and doors; Enter opens a focused detail's first door, `o` the editor. Board cards now show *stale* (muted) and *not
+      built* (amber) as two marks, and an 8-px reading floor (*n journeys · zoom in to read*).
+    - **A thousand projects** (#58): `scripts/synth-graph.mjs` (seeded; full = 1,000 projects over 20 sources, 244,880
+      nodes, 417,836 edges, 300 journeys in 40 manifests; `--preset small` for CI), `e2e/perf/` + `pnpm e2e:perf` printing
+      one table, `packages/server/test/thousand-perf.test.ts` holding the folds under budget. **Before → after on the full
+      preset (ms):** front door 428 → 217, persona filter 373 → 60; Map board 465 → 236, open a street 195 → 125 with heap
+      1252 → 753 MB, pan/zoom 52 fps; code map grouped by project *did not draw in 120 s* → 421, a filter → 371; Portfolio
+      368 → 154; APIs 348 → 140; Tests 9113 → 252; Changes 338 → 131; Work 351 → 133; ⌘K keystroke 587 → 45. How: the code
+      map builds only the cards near the viewport past 1,500 drawables and reads every height before writing; the status
+      bar's 245k-node scan, each node's group and the tag-chip counts are computed once per graph/scope; ⌘K matches over
+      text prepared once in idle time (`lib/search-model.js`, ranking proven equal to the old scan) and re-ranks a growing
+      query; `routeLinks` blocks only each district's own crossings; server `folds.ts` keeps answers per index (the
+      Portfolio rebuilt the 7 s tests catalogue 300×), `/api/tests?lean=1` (the full answer is 243 MB at this size),
+      `/api/journey?steps=0`; core coverage looks up a journey's nodes instead of scanning all (`testsSurface` 7.9 → 2.1 s).
+      **The ceiling that remains is the payload:** `/graph` is **411 MB** at this size (2.4–2.8 s to load, ~500 MB heap,
+      ~2 s server parse) — the server-side query API round.
+
+14. **The swarm-fixes round — the 2026-10-05 swarm's nine findings, in its order** (2026-10-06; proposal
+    `docs/proposals/swarm-fixes-2026-10-05.md`, PR #62; eight lanes, PRs #63–#71, every lane measured on a read-only copy
+    of the reference app's graph served by its own build, zero page errors on every shot).
+    - **One test verdict per cell** (#64): the contradictions were two extra folds, not the word — the *their own last
+      run* line printed the weakest status over every covering case (one skipped case among 145 said *skipped*) and
+      the tip's verdict folded over coverage reports, which record `unknown`. Core `testVerdict()` now puts `verdict`
+      on every coverage fold: the word is `evidenceWord` as before, `status` is read only over the refs that earned the
+      word (a declaration word only ever stands beside *passed*; a coverage report alone gives no status), `runs` is
+      every case by its own last run (passed · failed · skipped · flaky · no run recorded, summing to the cases).
+      A route and its handler at the same `file:line` are twins (`sameLocTwins`), so `route.ts:24` carries one verdict on
+      both surfaces. Every scoped foot has *open the list* and the Tests page reads `?flow=&seg=&action=` /
+      `?node=` (`GET /api/tests?flow=&seg=[&action=]`, `cases` opt-in); `farsight tests matrix` gains the runs column.
+    - **Stale said once and only when true** (#65): on the reference app *stale* is **true** — the Playwright run was
+      stamped on 2026-10-04 and the code moved after it — so the counts barely moved; what changed is that every
+      *stale* carries both sides (`core/freshness.ts` → `freshness` on every coverage fact: *the tests ran on commit X
+      (date); the code is at commit Y now*, or *the working tree changed after the run*), a current scope says
+      *current as of sync N*, and a run with no digest says *no source digest* with the stamp recipe, never *stale*.
+      The code side is `meta.tests[repo].head` (`setFreshnessMeta` per index in server/MCP/CLI). The Tests page is one
+      card per source × level × runner (the reference app's e2e level is a Playwright card and a Vitest card, each
+      with one answer). **Settings vs Changes:** `writeSpine()` printed only this sync's incremental read (`history 0
+      commits read`); it now prints `history N commits indexed · k new this sync` from `db.commitCount`, the rows
+      Changes counts.
+    - **One word per position, and the business register's last words** (#70): *step* is the storyline position
+      only (business *journey n of m*); the Sheet's columns are **stops** (`counted.actionStops` = actions + run again
+      + declared only + nothing to call — pinned by a core test, which is why *5 actions* and *6 columns* were both
+      right), the drawer head says *stop n of m · call*, the drill's *stop* and *beat* stay, the code register's
+      *983 steps* is *visits*, inspector words say *part*, plurals come from the catalog. Business register: gate
+      shapes are sentences (`journey.biz.gateShape.*`), `chore(memory):` prefixes drop from commit subjects, a store
+      read off a driver prints *database record*, plan ids drop, descriptions go through `plainWords`; ADR numbers
+      stay in every register as citations. Identifier tokens in view on the walked business screens 375 → ~199
+      whole-page, 0 on the storyboard, the storyline board and the Map street.
+    - **A gate answers its click** (#67): one gate card everywhere (journey lists, Sheet, ladder, drill, Map property,
+      code map inspector; `lib/gate-card.js` + a pure `gate-card-model.js`, `GET /api/gate?node=`, MCP `gate`, a
+      `## gate` section in `describe_node`): kind · name · `path:line` · doors on its head · *what it allows* (the
+      `@business` sentence, else the `@guard` words, else *nobody has written down what this allows* with who should and
+      where) · *where it stands* (n of m calls · n pages) · its code wrapped · the calls it guards with doors · the
+      tests that reach it with the one verdict; business keeps sentence, scope and tests. The doors are on every gate
+      row; the ▸ fold is gone. **Config checks** (core `config-check.ts`: a guard whose text reads the environment and
+      takes no request-like parameter; six of the reference app's 73) are listed and counted apart and never as a
+      screen's gates — the ops sign-in checks were reached from the page's `serverContext` → `loadWebEnv`, not from a
+      call; the submit journey went 28 → 25 gates & rules + 3 config checks. Two CI-only races fixed on the way: the
+      card survives the inspector redrawing under it (a `data-tip-anchor` the tooltip re-finds), and the specs click
+      the gate's name, not the row's centre (Linux font metrics put the centre on the ⧉ editor link).
+    - **Chrome** (#66, plus the focus fix #71): a cog with the word SETTINGS and a Settings row in ⋯; **READ-ONLY was a
+      constant chip with nothing behind it** — now `farsight serve --read-only` (and every `--as-of` serve) refuses
+      `PUT /api/settings`, `POST /api/sync`, `POST /api/work/*` (`guard.ts` `isWriteRoute`/`refuseWrite`),
+      `/api/version` reports `session: { readOnly, why }`, the chip shows only then and every `[data-write]` control is
+      greyed with a tip; the legend is closed by default, scrolls inside itself, has its own glyph and the `g` key; `?`
+      opens the keymap everywhere; the Map toolbar folds by measurement (the 1440 overflow was its fixed breakpoints);
+      the Sheet's *verified by* chip wraps inside its cell and gate names break between words; Experiments is one flag
+      per line; the chosen journey view is remembered per register so business lands on the Storyboard; Esc on an
+      empty journey asks first; the board takes focus when the Map opens and Tab from it goes to the first cover (the
+      band header's count was redrawn by the first walk — the flaky spec's cause); the light theme dims less.
+    - **Storylines, second pass** (#68): a **branch** is a storyline fact — a `journeys[]` entry
+      `{ id, branchOf, when, rejoins? }` in the manifest or the config override (`branchOf` a step of the same storyline,
+      `when` required, `rejoins` absent when the case leaves the storyline); the Map draws it on its own row under its
+      parent, dashed with a fork glyph, the condition on an amber link and a dashed return; the front door lists it
+      indented with *back to …*; the journey header reads *branch of … · when …*; MCP/CLI print it; counts break
+      down *n on the main path · n branches*; both JSON schemas and `design_guide` cover it. `?storyline=<unknown>`
+      says so with the declared ids as doors (`#/journeys?storyline=` and MCP/CLI too); ⌘K finds storylines (first
+      row, lands on `#/map?storyline=`); storyline cards on the Map and the front door carry the first journey's first
+      screen or the placeholder; each board card carries the one evidence chip and the band header *n of m journeys
+      with a run's evidence*. The reference app's manifest now declares the correction journey as a branch of review.
+    - **The two empty screens, and the record's status lifecycle from code** (#69): the mark-paid state screen is bound
+      to a form that only runs `onConfirm`, a function its parent handed it — the call was credited to the page
+      component alone, so the street (same edges) listed it under the page and the state screen had nothing to walk
+      into; the approval state is bound to a display-only component. New parser pass `callback-props.ts`: a component
+      that runs a function its parent handed it gets `calls` edges for what that function calls, following
+      pass-through parents, only along components rendered from one place (technique `callback-prop`, MEDIUM, added
+      to the frozen diff schema additively); a parent-computed value is credited only where the child branches on it.
+      On the reference app five state screens went from 0 calls · 0 gates to their call, 8–12 gates and 40–65 cases;
+      http edges to routes 69 → 69, unknown stubs 3 → 3, drift 7 → 7. **Lifecycle:** `GraphNode.lifecycle` on a record
+      when the code declares its statuses (a SQL CHECK, `z.enum`, a literal union, a `const … as const`) — statuses,
+      transitions with the writer that performs each (`from` only when the writer compared the prior status),
+      statuses no code writes — as `Counted`s (core `lifecycle.ts`), printed by `describe_node`, as a strip in the
+      journey header and the Map property's Overview with a door per move. The reference app's invoice: 11 statuses,
+      6 moves with a writer (draft → submitted → verified → approved → compiled → scheduled → paid), 5 nothing writes;
+      the storyline's order matches the moves.
+    - **Export** (#63): *Save* in the Map toolbar, the journey header and the Portfolio heading — PNG (the DOM copied
+      into an SVG `foreignObject` with the page's stylesheet, same-origin images and sprite glyphs inlined, drawn to a
+      canvas at ≥2×, empty rows cropped) and PDF (a minimal writer embedding the canvas; long side capped at A3), CSV
+      for the Portfolio; a three-line provenance footer (what it shows · source · sync · source commit · as of · lens ·
+      drawn by Farsight build · saved date); file name `farsight-<surface>-<source>[-<storyline|journey>]-sync<N>-<date>`.
+      Client-side only, no dependency, no route. The Map export fits the band first and saves the whole band; the
+      journey export switches to the Storyboard. Measured: the storyline board 3203×1657 in 0.24 s, the storyboard
+      2880×3400 in 1.1 s. **Pinned link:** Share → *Copy pinned link* uses the existing `@sync:N` hash grammar plus
+      `asof=<date>`; when the address pins a sync the server does not draw, a note beside the sync chip says *pinned to
+      sync N · this server shows sync M* (the server cannot draw an older sync on demand; only `--as-of` at start).
+
+15. **The lanes round, wave 1 — one surface, swimlanes, lifecycle views, scope on every number, gates for a business
+    reader** (2026-10-10; proposal `docs/proposals/round-2026-10-10.md`, PR #74; seven lanes, PRs #75–#82, every lane
+    measured on a read-only copy of the reference app's graph with zero page errors; the pitch with its before/after
+    mocks and the competitor study stay outside the repo). The inputs: the 2026-10-06 swarm's *a number whose scope
+    changes between surfaces*, a developer overview whose *journey at a glance* page (lanes per actor, arrows where an
+    action moves the record, a state table underneath) read better than the Map, and a study of two open-source
+    products (a knowledge-graph dashboard with a derived tour but model-written prose; an agent-memory server with tool
+    tiers and budgeted answers but no parsed code). The owner's decision: **the zoomable Map is the surface that stays;
+    the separate journey page retires (wave 2) and its views become stops and layouts of the Map.**
+    - **One surface, steps 1–2** (#78): the journey's pure folds moved to `lib/journey-model.js` (old names re-exported);
+      `surfaces/map-stops.js` — the level control reads **ALL · JOURNEY · SCREEN · ACTION · CODE**, the *action* stop
+      draws the drill's lanes of beats on the stage with a slim screen strip and a crumb strip (storyline › journey ·
+      step n of m › screen n of m › action n of m), *code* is the dock opening (in place · bottom · right), one
+      **LAYOUT** control whose choices change per stop (`registerMapLayout` — `chain · lanes` at ALL, `screens ·
+      table` at JOURNEY, `beats · ladder` at ACTION), the street head carries the journey's facts; `route-url.js`
+      `mapStopHash`/`mapStopOf` (`#/map/<flow>?screen=&action=&beat=&layout=&dock=`). Measured: the action stop draws
+      in 112–193 ms wall (32–34 ms to draw) for a screen with 11 actions; the table layout draws the widest journey
+      (23 stops) and reads at 1280 because the head scrolls with it.
+    - **The storyline as swimlanes** (#81): a `lanes` layout at the ALL stop — one lane per persona that owns a journey
+      (the tree's order) plus one per store the walk's write markers name; stages = the storyline's screens in step
+      order (step badge or fork glyph, first sentence, status chip, the test chip with its scope, a decision the code
+      holds); record pills per status the code moves into, in lifecycle order, naming the writer in hybrid/code;
+      solid *moves* arrows, *then* links, the branch arrow with its condition, dashed *seen* arrows only from a
+      declared hand-off; each move pill carries *needs n* (the preconditions, each with its evidence word) and an amber
+      *not checked* when the code never compares the status it leaves; the lifecycle strip, a legend and a footer
+      beneath; `storylines[].lanes[]` / `handoffs[]` in the manifest and config (an entry the graph cannot find is a
+      note); zoom into a stage enters that journey's street; export with the provenance footer. On the reference app
+      the main storyline (5 steps + 1 branch) draws as **2 persona lanes + 2 store lanes** (the code writes the
+      database and the ERP), fit ×0.26 at 1440×900, names at the 8 px floor.
+    - **One state machine, two views** (#75): a `lifecycle` config block (`views.<persona>` word → statuses,
+      `overlays[]`), applied once at ingest by `parsers/src/shared/lifecycle-config.ts`, nested-scoped; core
+      `lifecycleViews()`; the strip prints the persona's word (business), word + constant (hybrid), the constant
+      (code), `→` only where code moves straight from the previous status, muted *no code moves it yet*; a toggled
+      *what each one means* table (what <persona> sees · in the code · what moves it, the mover a door placed by a
+      read-only `GET /api/lifecycle?node=&flow=`); identifier tokens on the reference app's lifecycle strips 94 → 0.
+    - **Every test number carries its scope** (#79): `TestVerdict.scopeWord` and the failed · skipped · flaky counts;
+      one chip `lib/test-chip.js` on every surface (*n cases · over this journey / screen / action / part / gate ·
+      verdict · n skipped*); a designed, not-built screen has no verdict (*no test can reach a screen with no code*, the
+      cases reaching the routes it will call under `count.scope.route`); *distinct* on a journey total with the
+      per-screen table in its tip; the absence word is *no test is known to reach*; one declaration phrasing; the
+      matrix's level filter filters rows; `evidence_word` and `verdict` columns appended to the frozen matrix CSV;
+      `strings-evidence.ts`. Test numbers in view without a scope word on the reference app's submit screen: 31 → 0.
+    - **Gates a business reader cares about** (#82): `parsers/src/preconditions.ts` (a status/kind/flag comparison on
+      the written record or a record loaded with it whose arm refuses — a throw, a 4xx helper, a blocker list refused
+      one hop away, a transition table read inverted — becomes a `rule` tagged `precondition`, technique
+      `precondition` in the diff schema, `validates` the action; a role guard's constant argument lands in
+      `meta.requires`; a `@guard` that writes a status is an `action-gate`, never a gate on itself; `configCheckOf`
+      narrowed; a response schema is not a rule); core `gate-class.ts` (`gateClass` · `gateTierOf`: business · policy ·
+      technical), `query.ts` tier and class on every journey gate, `counted.gatesBusiness` + `gatesTechnical`
+      partition `gates`; `gateTiers` config block and `@guard[tier]`; the business register groups *who may · the
+      record must be · + n technical checks*; the gate card prints its tier and why; `moments[k].preconditions` on
+      `/api/journey` (the hand-off data). On the reference app: verify & approve 24 → 26 = **18 that matter · 8
+      technical**; approve's needs include *the vendor account is active (reached by tests)* — the owner's own example,
+      which was in the code and in no gate before.
+    - **A pull request gets its affected set, and a brief that prints** (#77): core `affectedRange()` (a commit range
+      or a PR → journeys touched with storyline position, the changed path's gates · record writes · calls, the
+      deduplicated tests with each case's own last run, a verdict line), the frozen **`farsight-affected v1`**;
+      `farsight affected --pr N | --from --to [--json] [--png] [--post --confirm] [--via gh]` posting one comment
+      (found again by a marker, edited in place) and one `farsight/affected` commit status through the three-verdict
+      gate (`packages/work` `decideGrants` shared with tracker writes; a `code-host` source; `keychain:farsight/github-
+      <org>`); MCP `affected` when a code-host source grants read; core `readiness()` + `GET /api/readiness` + the
+      `#/readiness/<id>` page (light, A4 print stylesheet, Save → PDF/CSV) + `farsight readiness`; a door on the Map's
+      storyline head and the front door's storyline card. Posted for real on a throwaway PR of this repo (closed).
+    - **Read-only greys every write, Settings is an address, the state of play** (#80): `lib/read-only.js` greys every
+      `[data-write]` control (Work's sync, the item pane's writes, Settings' inputs; 11 → 0 enabled under read-only);
+      `#/settings` under the top bar, an unknown address says so; core `state-of-play.ts` → `GET /api/state`,
+      `farsight state`, the top of MCP `graph_overview`, and the front door's two cards (*read this if · state of play*:
+      built and walkable · validated by a run · still open, every number a `Counted` with `recheck { cli, mcp }`); one
+      history sentence from one core function on the front door, Settings and Changes (*n commits read into history · k
+      ingested by a sync · m not yet*); the glossary strip from `ConfigMeta.glossary`.
+    - **Left open by the wave** (per lane, outside the repo in full): the reference app has no `lifecycle` or
+      `gateTiers` block (its words are humanized constants; a `@guard` label matching no class word defaults to
+      *authorisation*, which is why approve shows 18 and not ~9 — a handoff item for its session); the table layout
+      has no `j`/`k` walk and the ladder prints paths in business (U2); moves made by background workers carry no
+      needs (preconditions are read within two calls of an action); storylines across sources are not drawn as lanes;
+      the Affected mode does not paint the lanes; `journeyTree` keeps the first of two storylines with one id across
+      sources (the brief and the affected set build the tree per source; the front door shows one door); the PR
+      comment carries no image (no API for it); Azure DevOps posting is not built; precondition messages with a hole
+      print an ellipsis and keep their capitals; identity folds to one row per wording, not per persona.
+
+16. **The lanes round, waves 2–3 — one address, compare two syncs, what an agent gets** (2026-10-11; PRs #85–#87 on
+    the same proposal; every lane measured on a read-only copy of the reference app's graph with zero page errors).
+    - **One address — the journey overlay retires** (#87): every door that opened `#/journeys/<flow>` lands on the Map
+      at its stop (the front door's journey and storyline cards, entry points, ⌘K, Portfolio rows, the Tests page's
+      matrix rows and scoped cells, the readiness brief, the code map's project panel, the APIs page, the lifecycle
+      writer doors, the gate card and impact rows); `route-url.js overlayToMap` converts an old link in one
+      `replaceState` (no history entry), `step=` is read as `screen=` and rewritten, a new `part=<node>` names one part
+      of the walk; each register lands on its own stop (`fs-map-view.<lens>`: business the street with each screen's
+      own sentence, hybrid the table, code the first action's beats with the code open); the table took the Sheet's
+      and the header's jobs (`j`/`k` walk the parts into the table's dock, `d` moves it, the forks drawer, the cut
+      list and the count line on its head, `t`/`b` for the open part); the street head reads *For <persona> ·
+      <group>* with ‹ › to the storyline's neighbours; `surfaces/journeys.js` 4,992 → 432 lines (the front door), the
+      drawing the stops reuse in `lib/journey-draw.js`, ~90 dead functions deleted, the `#journey` markup gone from
+      `viewer.html`, one keymap, 60 retired view words out of the catalog, the storyboard export is the street export;
+      `flags.map` and `journeyDrill` retired (a workspace with the flag off could no longer read journeys); an entry
+      point that is not a designed flow draws as a journey of its own; an `action` is now its place within its screen
+      segment (the Tests page's unit). Measured: 28 doors each landing on its stop in the registers where it applies,
+      84 screenshots over every stop in three registers on three reference-app journeys, 0 page errors, 0 identifier
+      tokens on the business street and screen stops.
+    - **Compare two syncs on the storyline** (#86): `GET /graph?asof=` and `asof=` on `/api/journey`, `/api/journeys`,
+      `/api/design` answer from history for any sync it holds (closes the pinned-link item; a sync not held is 404 ·
+      *not indexed*); a `snapshot_meta` table so each sync keeps its storylines and test reports; core
+      `storyline-diff.ts` with a **closed set of five kinds** — built · gate (with tier) · writer · contract · verdict —
+      each a sentence in both registers (`strings-compare.ts`) with a door; every count a `Counted` over
+      `count.scope.compare`; the frozen `farsight-diff v1` grows additively (`storyline_*` kinds, `delta`, a
+      `storyline` block); `farsight diff --storyline <id> --from sync|previous|day|tag:|last-green --to … [--json]
+      [--business] [--fail-on …]` exits 1 on a matched kind (the CI check); MCP `storyline_diff` (`all` tier); a
+      Compare control beside the storyline picker (`?compare=a..b`), change chips on covers and lane stage cards, a
+      right-hand panel of sentences with doors, Save → a dated A → B PNG/PDF naming both syncs, the Changes page gains
+      one row per storyline; notes say when both syncs are at the same code commit (*these changes are what Farsight
+      reads*) or when the older sync predates lifecycles. Measured: fixture sync 1 → 2 = 7 changes; the reference app
+      sync 108 → 109 = 14 changes, all gates added or removed by the preconditions and tiers, 0 page errors.
+    - **What an agent gets** (#85): tool tiers (`FARSIGHT_TOOLS=core|all`, `mcp.tools` in settings wins; **core** =
+      `graph_overview · journeys · journey · describe_node · search_graph · trace_flow · impact_of · gate ·
+      test_coverage · tools · expand` + `affected` when a code-host source grants read; tools outside the tier are
+      registered then disabled so the menu still lists them; `graph_overview` ends with the tier line); **budgeted
+      answers** (`budget`, rough tokens = characters ÷ 4, default `mcp.budget` else 8000; cut at a section or a whole
+      journey segment, ending in `## left out` with the ids, `expand {"ids":[…]}`, the same call with a budget that
+      fits, and `excluded_by_budget` in JSON; JSON answers are never cut — frozen contracts); the **session-start
+      context** (`farsight://context` and `graph_overview {brief, since}`: one `<farsight-context …>` block — the state
+      of play, history with the agent count, what moved since the last session, the pinned lessons, the tier line; a
+      test proves no keychain reference reaches it); **copy as MCP call · curl · CLI** on the gate card, the Map
+      explore card, the property head, the code map inspector and the front door's numbers (`lib/copy-doors.js`);
+      **agent-made commits** (a `Co-Authored-By` from an assistant → `commit.agent`, in `farsight history --agents`,
+      `/api/history/commit`, Changes, the Map's Changes tab, `graph_changes`, a state-of-play line; session links are
+      never read); a **lessons editor** on Settings (`[data-write]`; a credential-shaped lesson is refused without
+      echo); empty states name the command on Work, Tests, Changes, APIs, the Map, the storyline picker and lessons.
+      Measured on the dogfood graph: 11 of 28 tools on in core; the reference app's widest journey (~44k tokens)
+      answered under 8k with `expand` returning the cut segments; this repo's spine: 246 of 269 commits made with an
+      agent.
+    - **Walk me through it, and ask** (#91): core `tour.ts` — `tourOf(index, storyline | flow, { persona, repo })`
+      gives one stop per screen in storyline order (branches after the main path) and one per hand-off (a move the
+      code makes to a record); every clause is a template from `strings-tour.ts` (business twins `tour.biz.*`) and
+      carries the node ids it cites, a `Counted` behind any number, the `testVerdict()` behind any evidence word and
+      the earlier stop it refers to; a move whose code checks nothing says so. Core `ask.ts` — a **grammar of four
+      shapes**, never a model (*where is <record> set to <status>, and what must be true first · what guards X · how
+      does A reach B · what proves Y*), `pathBetween()` over the edge indexes (`count.scope.path`), any other question
+      answered with the four shapes; one named extension point `phrase?` whose output would sit beside the cited lines
+      labelled *phrased by a model* (nothing passes one). `GET /api/tour`, `GET /api/ask`, MCP `ask` (core tier) and
+      `tour` (`all`, long answers), `farsight tour <id>`, `farsight ask "<question>"`; the viewer's WALK panel in the
+      dock (`lib/tour.js`, key `a`, the Map moves with each stop, *walk me through it* doors on the front door's
+      storyline and journey cards) and the ASK box (`lib/ask.js`, also under the state of play); `copy-doors.js`
+      gains `tour` and `ask`. Measured on the reference app's main storyline: 26 stops (19 screens · 7 hand-offs), 227
+      clauses, 0 uncited, 45 numbers each a sound `Counted`, 0 identifier tokens in business; *where is an invoice set
+      to approved, and what must be true first* names the writer with file:line, the move's own status check, the
+      identity-link and vendor-account preconditions each *reached by tests · 3 cases over this gate*, the proving
+      cases, and an 8-hop screen → table path.
+    - **Two fixes the lead's live check found** (#89, #90): a cold load of a Map journey address by its short name
+      (`#/map/new-invoice?…`, the old-link redirect) stayed at ALL JOURNEYS on the multi-source graph — the Map's
+      `entryTarget` knew only full node ids while the retired page resolved a name server-side; it now resolves
+      through `resolveEntryName` and rewrites the address to the full id. Then three address-write races dropped the
+      other parameters: the table wrote `screen=` only beside a selected part, a lens redraw wrote the table's address
+      while the name was still resolving, and a late table draw overwrote a stop below; the table now writes its
+      address once, keeps `screen=n` (scrolling that screen's columns into view, the crumb *screen n of m*), a lens
+      redraw writes nothing, and a late draw after an action opened is skipped; the two-source e2e cold-loads by id,
+      by name, through the redirect and with `action`, `dock` and `lens`. The 28-door measurement in #87 had used
+      full ids and in-app clicks, which is why neither showed.
+    - **Left open by waves 2–3:** the overlay's CSS is still in `viewer.html` (dead, not deleted); a journey head with
+      two lifecycle strips draws over its first screen card on the reference app (pre-existing); Esc in the instant a
+      door lands can keep `layout=table`; the compare panel sits over the board (fits under, not beside); a removed
+      gate's door opens on the served graph where it no longer exists; the journey tree is always the served graph's
+      even when the board draws an older sync; older syncs cannot name their Farsight build; `last-green` walks up to
+      30 syncs one by one; `refresh_graph` is outside core but some answers still name it; no `farsight context` CLI;
+      the dogfood workspace counts the invoice example's commits twice (it reads the repo root's log); the weekly
+      cycle's move to Paid has no tour stop (the precondition fold does not find it); the open tour stop is not in the
+      address and the panel has no persona picker; the lanes hand-off marks the pill but does not pan to it; a
+      journey name two sources share resolves to whichever the server picks first, and a name matching nothing lands
+      on the board with no sentence; on the street the board replaces `screen=` with `z/x/y` after a gesture; a WALK
+      button in the toolbar row moved the *link is the picture* landing by 1.3 px (cause not found; the button sits on
+      the crumbs row).
+
+17. **Echo optional memory foundation and review hardening** (2026-10-11; PR #84, `codex/echo-setup`,
+    based on main `227fb80`; not merged): separate package, workspace/global settings, one connected profile per
+    workspace, explicit managed saves and scoped prompt recall, standalone settings view, and Ollama verification.
+    Repository files require exact-byte approval in private user state before use; Echo-only keychain references
+    are pinned to an origin with transactional saves. The native engine is checksum-pinned in a private user cache
+    and hash-checked before execution. Generated hooks are locally ignored; `disconnect` restores unchanged files
+    byte for byte and preserves later unrelated edits. Only session-start and prompt events are registered. Memories
+    refuse credential-shaped input and report historical workspace/revision/date; truncation is visible. Shared
+    keychain transport retains separate Work/Echo policy. Source installs allow only esbuild dependency scripts;
+    network-dependent package verification is a separate optional CI job.
+    - **Verified:** full build/typecheck and package unit suites: **1,355 tests, 1,353 passed, 2 live-tracker skips**,
+      including **103 Echo tests**; script tests **14/14**, catalog lint, browser/MCP regressions **316/316**. The
+      standalone package passed clean install, synthetic save/recall, restart persistence, isolated stores, shared
+      recall through all three host runners, provenance, local switch-back, disconnect and owned-process shutdown.
+      An offline pnpm 9 fixture verified that the allowlist suppresses both direct and transitive dependency scripts.
+    - **Still open:** automatic capture, model-curated briefs, skills, team authorization, Farsight's combined brief,
+      long-term retention validation and release publication. Prompt recall does not call Ollama. Similar saves can
+      supersede earlier facts despite disabled scheduled forgetting/decay. The canonical Echo catalogs remain in
+      the shared catalog; Farsight's published runtime dependencies remain unchanged. See [ECHO.md](../ECHO.md) and
+      [the package README](../../packages/echo/README.md) for setup, explicit preview-upgrade trust and host trust steps.
+18. **The cleanup pass and swarm round 3** (2026-10-11; from the owner's verdict after using the merged round — *"a lot
+    of overflow issues; the guided-journey buttons should be fixed at the top; I liked the older drill view and the
+    lanes but can't find them"* — then the eight-persona swarm on the result and its two fixes lanes; PRs #93–#96).
+    - **The Map's chrome holds still** (#93): the journey head left the zoomable world for a chrome bar under the
+      toolbar (`map.js drawHead/headBarHtml`; the world's `HEAD` allowance 150 → 56; the table's duplicated head
+      gone); two stable toolbar rows — the levels in short words with the LAYOUT slot fixed, the tools right-aligned;
+      the crumb, the as-of stamp, the pickers (inline at ALL, a VIEW menu below) and **WALK at the right end of row 2
+      in one pixel box at every stop and width**; one dock (`lib/map-dock.js`: walk · inspector · table part ·
+      lifecycle table · compare · about; right by default, 360/320 px, the stage shrinks, never overlapped); the walk's
+      stop line and ‹ PREV · NEXT › pinned, ASK at the foot; LAYOUT at JOURNEY = **screens · lanes · table · drill**
+      (`drill` = the old action rail over the beats, `?layout=drill`; old `view=drill` links open it); `lanes` at ALL
+      with *All journeys* draws every storyline as a stacked band.
+    - **Nothing on the Map overflows** (#94): one fold (`lib/fold-row.js` + `fold-model.js`, `strings-fold.ts`) folds
+      every chip row by measurement with the verdict chip never folded; the table's cells wrap and `+n` carries a tip;
+      the beats grid fits then scrolls inside the stage (its real overflow was the code stop's `code` class matching
+      the stylesheet's code-block rule); `pathHtml` keeps a path's two ends with the full path in a tip; a 9 px reading
+      floor on the lanes and the street; 233 overlay-era `jrn-*` selectors deleted. Measured on the reference app's
+      graph copy (32 shots): clipped verdict chips 80 → 0, elements past the stage 36 → 0, the lanes' smallest text
+      6.6 → 9.2 px.
+    - **Swarm round 3** (same eight personas, cold, 4477 at `4f82349` sync 112, read-only; reports and
+      `_synthesis.md` outside the repo): **8 × TRIAL, fit 6.9** (round 2: 7.0), three leaning ADOPT. Credited by every
+      role: one surface from storyline to code with the chrome holding still, the readiness brief with its sign-off
+      line, the gate card and the *who may · the record must be* grouping, the lifecycle in words, the beats/table/
+      copy-as-call, Compare saying honestly that nothing changed. The score held because the scope defect moved up a
+      level: the journey verdict (*passed* on a partly built journey), the readiness header (*12 skipped* vs rows
+      summing to 46; HOLD on every row), position words with two denominators.
+    - **The fixes** (#96 chrome, #95 words): the READ-ONLY chip never folds; lane names wrap at spaces and pills print
+      whole; the Affected bar is a chrome row of its own (its CSS had made the column wrap, which is what pushed WALK
+      off-screen); the gate card scrolls and is re-placed when its code loads; LIST THESE lists the tests in the dock
+      with spec:line and CSV/JSON; the level's last stop is **LINES** (only the register says CODE); a click closes a
+      tip; the dock's lifecycle table stacks. The Changes empty state read a `rows` field `/api/history` never sends; a
+      partly built journey prints *partly built · n of m* first and its verdict *over the n built screens* (front
+      door *17 journeys passed* → *10 passed · 8 not fully built, so no journey verdict*); the runs line is one
+      sentence — on the reference app **389 passed · 9 skipped · 3 no run** of 401 (the synthesis's *29 of them
+      passed* were the declaring e2e cases); readiness holds only on a screen not built or the journey's own declared
+      case skipped/failed and names the case (still 0 ship · 6 hold: one storyline-wide e2e case declares every
+      journey and was skipped), the header says *distinct* with a per-row tip, the register sorts by tier then
+      fewest tests; Ask answers *did you mean* with the three nearest shapes, names the entity it picked among
+      several, and builds its placeholder from this graph's statuses; identity checks are tier **policy** (the *who
+      may* group stays), integrity checks **business**, the tier chip on every gate row; the business register hides
+      the copy doors and the model names; *conditions not in plain language* says its scope; *the sync before* skips
+      syncs that re-read the same code and an absent green run prints the absence word; the lifecycle's unmoved word
+      is *no code moves into* and the table prints *from*; AT RISK names its scope.
+    - **The Map uses its space** (#99; from the owner's second look — *"the lanes view is not a good use of space,
+      the steps text is too large and the keys use vertical space; the header takes a third of the screen"*): the head
+      is two lines plus a clamped description (chrome + head 188 → 153 px at 1920, 1440 and 1280 in all registers; line
+      1 name · *for* · storyline position · the status and verdict chips never fold, the rest `+n` whose click opens the
+      full row in the dock's *about* tab; line 2 the main record's lifecycle on one line with a glyph for the table and
+      `+n record ▸` for a second record); the lanes at the street's density (`LANE_K` 2 → 1 so ×1.0 is the stylesheet's
+      sizes, cards 236×96 with a one-line name, the status chip beside it, the test count and scope on one row and the
+      verdict on the next; lane heads at the HUD label size; pills one line record · move with the writer beneath; the
+      legend flat on the footer row; the lifecycle under the lanes only at ALL); the street floor keeps the picture
+      (44 → 95 px) with the name on one line and the verdict one chip; the action stop's screen strip is one line of
+      names; compare chips on lane cards are in the fold's keep set and `map-compare:89` waits on `data-laid`/`data-cmp`.
+      `e2e/tests/map-space.pw.spec.ts` asserts the head's budget at three widths, the lanes' fit, the legend's shape, the
+      floor's one-line verdicts and the WALK box.
+    - **Left open:** readiness waivers and a sign-off history; HTTP status pills in business; Compare not measured on
+      the reference app (the lane's graph copy had no history store); the screen panel's *WHAT REACHES* line
+      duplicates the Affected bar; the gate card can open over the top nav; the *row n* note in an empty lane is words,
+      not a link; the sweep's `-screen` shots click a `ONE SCREEN` label that no longer exists.
+
+19. **The outsider demo — can a stranger understand the reference app from Farsight alone?** (2026-10-13; three new
+    personas in `.claude/agents/review-outsider-{consultant,customer,board}.md` and their Codex twins, a demo guide that
+    lives in the reference app's own repository and knows only what Farsight shows; `docs/review-swarm.md` § *The
+    outsiders*; reports, 283 PNGs, the gap log and `_synthesis.md` outside the repo). The guide walked eight stops on
+    4477 (`c5a5c7a`, sync 114, read-only) and put eight seed questions to the screens and to ASK; three outsiders (a new
+    implementation consultant, a prospective customer's head of operations, a non-executive director) said the app back,
+    asked 39 questions, and the guide answered from 120 new PNGs. **Board: PARTLY · PARTLY · MOSTLY, understanding 7/10
+    and confidence 6/10 for all three.** Seed questions from the screens 1 · partly 6 · not at all 1; the 39 follow-ups
+    12 · 23 · 4; **ASK understood 0 of 8 as worded** (10 of 10 once reshaped). All three were correct on the roles, the
+    invoice path, the vendor path, four-eyes and the POC status. All three were **wrong from the business register on
+    the two first-order facts** and corrected only through hybrid, the code map inspector, ⌘K's test names and the
+    Tests page: *who may approve* (the role guard covers the approve action and a passed test refuses a reviewer, but the
+    approve column has no WHO MAY and the gate card reads *a check nobody has put in words*) and *what makes an invoice
+    Paid* (ASK, the lifecycle table and the lanes pill credit the payment intent; the code and the passed e2e say mark
+    paid). Operator screens draw in the Contractor lane; vendor approval is never credited with Pending → Active; the
+    invoice journeys' head shows the outbox lifecycle. What none could learn because Farsight has no slot for it: the
+    client persona (receives, approves, pays the consolidated invoice; two personas in the tree), what is configurable
+    and by whom, the money's counterparties (the payment partner, who verifies bank details), separation of duties,
+    the audit actions, the correction request's lifecycle, the domain glossary. The synthesis sorts the worklist into
+    four bins — Farsight defects (A), Farsight features missing (B), reference-app knowledge to add in its manifest,
+    config and tags (C), and reference-app product findings to pass to its session (D: a self-registered vendor is
+    queued to the ERP before approval, no reject path, no separation of duties, no amount limits).
+    **The eight personas then proposed how to address it** (`_proposals/` and `_worklist.md` outside the repo) and found
+    the root causes, which the lead verified in the code: the Paid move is credited to the payment intent because the
+    only PAID writer is called there under a constant the code sets to `false` (the parser reads the dead branch as live,
+    and every surface takes the *first* place a writer appears); WHO MAY is missing on the approve column because
+    `core/query.ts` merges a screen's gates by name onto the first occurrence and unions `requires` (the data is in
+    `meta.requires` already, and the guard carries a `@business` sentence the gate card never falls back to); the
+    readiness brief's *0 of 6 ship* is `foldRuns()` taking the weakest status across browser projects, so a desktop pass
+    plus a viewport-conditioned mobile skip reads as skipped. **The worklist:** Farsight wave 1 = F1 credit a status move
+    to the live path that writes it (constant-false branches inactive; never first-occurrence; positional-literal and
+    ternary writers) · F2 a gate at every action it guards with that site's `requires`, card titled by the app's words,
+    a register-parity test · F3 a skip with its own condition on one project is not a skip of the case, PASSED paired
+    with the brief's reason · F6 business words from what the app wrote; wave 2 = F4 the role × action table with the
+    pinning tests quoted · F5 `screens[].persona` / `personas[].routes` · F7 ASK shapes as worded with the rewording
+    shown; wave 3 = F8 `decisions[]` + off-platform steps (`by`) + party externals · F11 cited ADRs quoted. Recall pack 1
+    (slots exist) = lifecycle views from `displayStep` · `gateTiers` + `@guard`/`@business` on the role tables and the
+    duplicate match · a glossary keyed by table written against the code · `@covers` on the specs that pin controls;
+    pack 2 = the client persona on the existing `client-portal` surface + persona per OPS screen; pack 3 = qualified
+    decisions. Rejected by consensus: a configuration or environment view now, silent noun-mapping in ASK, reading
+    `displayStep` automatically, model-written summaries, counting role holders. Re-run bar: confidence ≥ 8, zero wrong
+    answers on who approves and what makes Paid, the outsiders driving the business register themselves first.
+
+20. **The outsider fix round — the worklist's Farsight side, in seven lanes** (2026-10-13 → 10-14; PRs #105–#111 plus
+    Dependabot #98; every lane measured on a read-only copy of the reference app's graph with zero page errors; the
+    briefs in the private round folder's `_lane-briefs/`). **Build `fb503d7`**, both servers restarted and re-synced
+    (4478 sync 73, 4477 read-only sync 115).
+    - **A status move is credited to the live path that writes it** (#111): a call under a constant-false flag is
+      `inactive` (`meta.whenFlag/whenValue/whenAt`, technique `flag-gate`), every live path to a writer is credited with
+      the direct one first (*also reached from n*), a status-named setter with a positional literal and a ternary of
+      literals are writers, a route file's own handler counts as the route, a writer met a second time still moves; a
+      *Switches* section (`count.unit.switches`); the one-fact harness (`server/test/one-fact.test.ts`) asks lifecycle · ASK
+      · tour · lanes · gate card the same question. On the reference app Paid is now credited to *Mark a distribution
+      paid* everywhere, with *Record the payment intent* printed as *switched off: PAYMENT_INTENT_MARKS_PAID = false*;
+      the vendor account's *Pending verification → Active* and the identity link's *Pending* have writers.
+    - **A gate at every action it guards, the card named in the app's words, the role × action table** (#107): the segment
+      fold places a guard under each action with that call site's `requires` (it merged by name onto the first); a role
+      list declared as a typed array is read; the gate card's name falls back to `@business` → `@guard` → *unnamed*; a
+      register-parity e2e; core `roles.ts` → `GET /api/roles` (+csv), MCP `roles` (core tier), `farsight roles`,
+      `#/roles`, a *who may do what* section on the gate card. Reference app: the approve column reads *WHO MAY · approver
+      role*; 27 rows; vendor approve = approver or admin, invoice approve = approver alone.
+    - **A case skipped on one browser project by its own condition passed where it ran** (#108): `foldRuns()` keeps the
+      projects and the skip reason; readiness holds only when no project passed and quotes the reason; PASSED is paired
+      with the brief's hold line. Reference app's invoice brief: 0 ship · 6 hold → **2 ship · 4 hold**, the holds now the
+      live-only cases, named.
+    - **A persona per screen** (#105): `screens[].persona`, `personas[].routes`, `personas[].signsInWith`, else the
+      sign-in guard's `@group`, else the journey; `screenPersonas` on `JourneyRow`, `summary.user[]`, lanes, WALK, street
+      head *For A · with B*; conflicts are notes. Reference app: operator screens in the Contractor lane 5 → 0 with no
+      declaration (the guard rule).
+    - **ASK reads a question as worded and shows its rewording** (#110): three new shapes (*who may*, *can … be
+      configured*, *what happens to … once it is …*), `readAs()` over a closed rule list with *I read that as: …* first, a
+      47-question corpus test; business words (a design id becomes the screen's name, holes read *(a value)*, refusals
+      in words, the readiness register in words). Reference app: the eight seed questions 0 → 8 of 8.
+    - **Declared decisions, off-platform steps, party externals, cited documents quoted** (#109): `decisions[]` joined to
+      `DECISION(<id>)` comments (`/api/decisions`, MCP `decisions`, `farsight decisions`, chips on the gate card, property,
+      WALK and lifecycle), `screens[].steps[].by: person|partner|external`, `externals[] kind: party`, `doc` nodes with the
+      first paragraph verbatim and `cites` edges. Reference app: 16 DECISION comments → 7 ids D3–D9 *named in code, not
+      declared*; 32 docs quoted (20 ADRs).
+    - **Housekeeping** (#106, #98): six dead overlay rules (the rest of `jrn-*` is live — the Map reuses the drawing); a
+      stale handoff line; the MCP SDK 1.31 bump; the two OpenTelemetry alerts come only through Echo's pinned engine and
+      need an upstream release or a forced override (left to Echo's owner); `pnpm install --offline` in a fresh worktree
+      takes 3 s.
+    - **Left open:** the Recall-side declarations (the handoff prompt is in the private folder, `_recall-handoff.md`); a
+      switch is read only from a bare-identifier test; the weekly-cycle head now leads with *distributions*; `roles` is
+      not a frozen contract; the `configure` ASK shape matches on words; a party lane's cards are shorter than persona
+      cards; the `?screen=2` cold-load race; e2e `map-keys` ⌘K and `map-street:410` each flaked once under load.
+
+## Next work, ranked
+
+**Nothing is in flight (2026-10-14; the outsider fix round, item 20, is merged, packed, installed under both prefixes and live on both servers). Next: the Recall session runs the handoff prompt (`_recall-handoff.md` in the private round folder — packs R1–R7), re-stamps and re-ingests, restarts 4477 read-only; then the outsider demo re-run (same three outsiders, driving the business register themselves first; bar: confidence ≥ 8, zero wrong answers on who approves and what makes Paid).** Echo's PR #84 merged after a second review found its four blocking
+items fixed (the reviews stay outside the repo); lane S (#99) closed the cleanup pass. Next, in order: (1) a handoff prompt to
+the reference-app session — install the build, add `gateTiers` and `lifecycle.<record>.views` blocks to its
+`farsight.config.json` (today approve shows *18 that matter* because its `@guard` labels default to *authorisation*,
+and its lifecycle words are humanized constants), re-run its suites with the reporters, restart its server
+`--read-only`; (2) **swarm round 3** — the same eight personas, cold, on that build and sync, asked *do you trust what
+it tells you* and *what do you want next* (target fit 7.5; *which scope* absent from every report; the five stops, the
+lanes, the tour and the compare are what is new since round 2); (3) the left-open lists above, the swarm's wanted features first (Ask free-form, readiness waivers and a sign-off
+history, Compare opening on a real change in business sentences, publish and subscribe, the Affected list from a
+PR in the UI). **Beside the round:** PR #84, *Farsight Echo*, an optional
+memory companion by another agent, was reviewed on 2026-10-11 (the review stays outside the repo); it merges after its
+blocking items are fixed and main re-merged. The server-side query API round (`/graph` at 245k nodes) stays next after
+the swarm.
+
+**Swarm round 2 (2026-10-06, the same eight personas, cold, on the reference app's own server at `81a455e`, sync 108,
+`--read-only`, after the application re-ran and stamped its own suites; reports and `_synthesis.md` outside the repo) —
+8 × TRIAL, fit mean 7.0 (6.5–7.5; was 6.4), the champion and the onboarding dev leaning ADOPT.** Credited by every role
+in their own words: one verdict for a journey across the Map, the journey, the Portfolio and Tests; *current as of sync
+108 — the tests ran on the code as it is now*; the gate card (*the best panel in the product* again); *step* as the
+storyline position; Settings named; the stamped exports; the branch. **What holds the scores is the same defect one
+level down — a number whose scope changes between surfaces without saying so.** Ranked, convergent first:
+
+1. **A scope word on every test number that can sit beside another** (7 roles) — the Map property's *323 cases ·
+   passed* beside the drawer's *NO TEST REACHES THIS PART · 125 reach the action*, impact's *2 tests* and the gate
+   card's *16* for one screen; *no test is known to reach*; one phrasing for the declaration verdict (four today);
+   the matrix cell's *0 tests · 29 passed*; skips on the chip when non-zero; the matrix's level filter filters the
+   rows; the CSV's `evidence_class`/`status` words equal the screen's.
+2. **A not-built screen never carries *passed*** (BA blocker, QA, newdev) — *Tracking — paid* is *designed, not built*
+   with *passed · 111 test cases*; the Paid journey's screen 3 has *0 actions · calls: none indexed* beside *22 cases*.
+3. **Commits, one sentence with both facts** (7) — Settings *282 commits indexed* vs Changes *242 of 282 never
+   ingested*: *read into history* and *ingested by a sync* are two facts; say both, the same on both surfaces.
+4. **Read-only means every write** (6) — Work's *Sync now*, *Sync & re-ingest*, *Add source* and its inputs, the
+   theme hint still look live under the banner.
+5. **Sums and arrows name their scope** (5) — per-screen counts beside journey totals need *distinct*; `→ n` differs
+   between the full board and the storyline board with one tip; *6 journeys* vs *journey 3 of 5* (the branch); the
+   gate card's *34 of 75 calls* beside a list of 68; *×9* in the list vs *16* on the card.
+6. **`step` is back on the Tests page** (6), *beats*, one screen's *3 stops*; **the lifecycle strip and the verdict
+   hover in business words** (5) — raw status constants are the first thing a business reader sees.
+7. **The gate card scrolls** (two roles could not reach its tests section); one gate word per panel (*gates & rules* ·
+   *checks and rules* · *guard* · CHECK); the Map's Gates tab counting 5 and listing none; setup switches still
+   listed as a screen's checks (the config-check rule misses a shape).
+8. **Layout at 1280** — the sticky journey header covers the first card; narrow Map cards drop chips with no `+n`;
+   `#/settings` and the property tab in the address; the keymap lists keys twice; a light print stylesheet for the
+   PDF; the `{owner}` placeholder in the owner tip; Esc out of a journey re-lays the board.
+
+**What they want next — 24 features, clustered, by how many roles asked:** **A** (6) the PR / diff → what it touches →
+the deduplicated tests to run, posted to the PR with the Affected link and the stamped PNG (`farsight affected --pr`;
+the champion's *release readiness brief* and the PO's *what happens if we change this* are the same engine with a
+business page); **B** (5) compare two syncs on the storyline — delta chips, a semantic diff (a route that lost a guard,
+a status that lost its writer, a step whose tests went green → skipped), a dated A → B PDF, a failing CI check, the
+Monday report; **D** (5) the readiness / audit pack per storyline (requirement → code → gate → contract → verifying
+case with verdict and date; a rules register to sign off; XLSX/PDF stamped); **C** (3) publish and subscribe —
+Confluence / a Jira epic panel refreshed on every sync, a weekly Teams/Slack digest; **G** (3) write-back — exploratory
+findings filed to the tracker, a *what-if* step drawn dashed, bypass paths drafted as negative tests; **F** (newdev) a
+guided tour from the storyline and plain-language questions answered with evidence links; **E** (staff) a CodeLens
+gate card with *run these tests*; **H** (exec) a cross-repository portfolio by owning team with a cost proxy. A and B
+share one engine (Affected over a commit range + the snapshot store); D is the page on top of both.
+
+**The order:** the eight trust items first (one lane each or paired — the next swarm catalogues them again
+otherwise), then the feature round A → B → D → C → E · F · G · H, and the server-side query API round
+(`/graph` 411 MB at 245k nodes) when the Map or the code map hits it.
+
+**The 2026-10-05 swarm (eight personas, cold, on the reference app's own server at `4a44f4c`, judging only from
+their own screenshots; reports outside the repo) — 8 × TRIAL, fit mean 6.4 (5.0–7.0): the storyline and the doors are
+credited by every role (*the best "how our business runs in software" picture*; *beats grep for the call chase*), and
+the same two things hold every score down. Ranked, convergent first (all nine worked in the swarm-fixes round, item
+14; what each left open is listed under *The swarm-fixes round left open*):**
+
+1. **One verdict per test cell** (6 roles) — *passed, by its own declaration · stale* beside *no test reaches this
+   step*, *last run: skipped* and a tip saying *verdict unknown*; one file:line with two verdicts on two surfaces; the
+   Tests matrix printing PASSED beside *skipped*. One evidence word computed once, printed the same everywhere.
+2. **Stale, said once and only when true** (5) — all 18 journeys, every Portfolio row and all three test levels say
+   *stale* / *no source digest* with no sentence saying against what; Settings *history 0 commits read* contradicts
+   Changes *242 of 282 never ingested*.
+3. **One word per position** (6) — *step* means the storyline position, the drawer's walk index (*STEP 232*), the
+   drill's *stop*, the code register's *983 steps*; action counts disagree with the sheet's columns.
+4. **A gate answers its click** (6) — today it turns amber or opens its service; the doors hide behind ▸; no gate →
+   the call it guards → the tests that reach it; config checks listed as a contractor screen's gates.
+5. **Chrome** (6–7) — Settings behind an unlabelled sun icon and absent from ⋯; a READ-ONLY session still offering
+   *Sync*, *Save*, *Add source*; the Map legend opening over the board on every visit; the Sheet's *verified by* row
+   overflowing; the Experiments row one word wide; the toolbar overflowing at 1440; `?` with four jobs; business
+   opening on the Sheet.
+6. **Storylines, second pass** — a branch kind for the correction journey (drawn as an ordinary step); an unknown
+   `?storyline=` says so; ⌘K finds storylines; thumbnails on the cards; test evidence on the storyline board; the
+   record's status lifecycle derived from the code. (The reference manifest's own step order — *Paid* before *Weekly
+   consolidation* — was the lead's error and is fixed there.)
+7. **Data holes the BA found** — the mark-paid and approval screens show *0 actions · 0 gates · calls: none indexed*
+   while the street lists `POST …/mark-paid` under them; the e2e card badged VITEST over Playwright files and saying
+   both *unknown* and *changed since the run*.
+8. **Export** (3) — PNG/PDF of the storyline board, the storyboard and the Portfolio; a pinned, dated link.
+9. **Business register, last ~30 words** — and ADR numbers kept as citation keys in every register.
+
+**The swarm-fixes round left open (2026-10-06), by lane:**
+
+- *Verdict:* a step no test reaches still prints *no test reaches this step* beside the action's own count (two
+  scopes by design since 2026-09-25; four reviewers read it as a contradiction — a sentence that names both scopes is
+  the fix); the Map property's per-case rows keep their own per-case labels; the scoped case list caps at 200 rows.
+- *Freshness:* *stale* is repo-wide because the digest covers the whole source (per-journey needs the commit spine's
+  touched files at fold time); the sentence names the two commits, not how many lie between; the AT RISK bar prints
+  its shared sentence only when every stale journey compares with one code commit.
+- *Words:* the front door's Designs/drift table and entry-point lists still print routes, design ids and file names
+  in the business register (46 tokens); Portfolio descriptions keep `CON-01 to CON-08`; *the runtime container* and
+  the API title are names the reference app wrote (rename or tag there); the `step=` URL parameter is a screen
+  ordinal (renaming it touches many specs); `history.ts`'s *run `farsight ingest`* note still prints raw backticks on
+  Changes; the business gate row has no tip with the team's original label.
+- *Gate:* the drill lanes do not draw config checks; the card cannot say which test exercises the refusal path (no
+  branch-level coverage); the card is not exportable and cannot seed Affected; a guard that reads its settings through
+  a helper is not recognised as a config check.
+- *Chrome:* a focused button that has a tip (`⋯ N`) opens it only on hover now (Enter presses the button); the work
+  pane's write controls are not greyed on a read-only server (the server refuses them, the pane does not say so
+  first); "nothing here" is still drawn three ways; the `mapLegendSeen` e2e fixture is dead; a reader who tabs directly
+  onto a band header's count loses focus when a walk redraws it.
+- *Storylines:* at board zoom the branch label can run past the band panel; the dashed return line is faint; the
+  legend does not list *branch* / *back to*; cross-source storylines.
+- *Data:* the approval (verified) state could say *its page makes N calls* instead of *calls: none*; handlers passed
+  through render props or spreads, a `fetch` written inside the handed function, and member-call handlers
+  (`mutation.mutate`) are not credited; lifecycles do not yet read Postgres `CREATE TYPE … AS ENUM`, Drizzle `pgEnum`
+  or an INSERT's literal status; the prior status is blank when the writer compares two records; one lifecycle per
+  record (the `status` column first); a property screen that reaches a record only through a repeated call shows no
+  lifecycle.
+- *Export:* the server cannot draw a pinned sync on demand (only `--as-of` at start); the Portfolio CSV is the cells'
+  text, not typed `Counted` columns; cross-origin images (Figma URLs) stay empty in the picture; pictures past the
+  canvas limits are scaled, not tiled; the Map export leaves the board fitted.
+- *CI:* the e2e suite is timing-sensitive under load (four specs failed once each on a loaded machine and passed
+  alone: `codemap-projects` where-is, `journey-ladder:60`, `map-journey-links:120`, `map-zoom` pinch); two races were
+  fixed this round (#71, #67) — the pinch test's timing lives in `lib/map-canvas.js`.
+
+**The 2026-10-05 round left open, first:** the `/graph` payload at scale (411 MB for 245k nodes) — a server-side query
+API with the index semantics the viewer folds today is the next ceiling and a round of its own; the Map reads its
+journeys one at a time (300 journeys > 30 s), `/api/tests` without `lean=1` is 243 MB, a code-map card click re-lays
+out the whole map (~0.4 s), the first ⌘K keystroke within 0.5 s of boot waits for the index; the street's number chips
+are not doors yet (a click opens the screen); a non-verb fetch helper that sets the method inside its own body is not
+followed; cross-source storylines; a design row has no address of its own on the front door; the reviewer swarm on
+this build (front door, Map with a storyline, the doors) is the next thing to run.
+
+**The Map clarity pass left open (2026-10-04):** *at risk* shows on 18 of 21 cards on the dogfood graph (most
+journeys there are stale — a second, quieter mark for *stale alone* may read better than one word for two facts);
+with many more journeys on a small window the card text shrinks with the fit (nothing keeps it above 8 px); the layout
+swap on a gesture is not animated (the neighbours snap); no e2e guard for the board-stop fix (the fixture shows no
+risk headline); the Map's `h`/`l` keys walk model order, not persona-band order.
+
+**The journey-organisation pass left open (2026-10-04), first because it is what the owner asked for:** declare
+`personas` and `groups` in the reference app's own manifest (outside this repo) — today its three persona strings
+are undeclared and every journey sits in *Other journeys*; the pass is only proven when *Access* leads each persona
+there. Then, smaller: a nested config's `stores[]` catch-all still names every unnamed table in the source (declarations
+are not scoped); a nested `storybook` without `configDir` is taken as `<dir>/.storybook`; the root file's own paths
+are not checked for escapes; the Settings page has no *Config files* list (`/api/config` is ready); a flow placed in a
+group that belongs to another persona drops to *Other journeys* with no note; two NX apps on the same route still
+collide under route-only matching; the Map's `h`/`l` keys walk model order, not persona-band order; the echo card's
+dashed border is faint at board zoom; a JSON schema for the config and the manifest (`schemas/`) would let editors
+validate the many files this pass creates.
+
+
+**Reported 2026-10-04 by the reference app's session, after 0.2.0 was installed there — a parser regression, first:**
+a `fetch(url, helper(ctx, { method: 'POST', … }))` call, where the method literal sits in an object-literal argument of a
+wrapper call rather than in fetch's own init, resolves to the **GET** route of the same path (the fallback is *no method
+→ GET*; `apiInit(ctx, { method: 'GET' })` happens to be right). On the reference app design drift went 7 → 19: twelve
+false *unreached POST / undeclared GET* pairs over five client functions (create submission, session from magic link,
+ops invoice, two vendor-account creates). The 2026-10-01 build resolved these correctly on the same code, so it is a
+regression of the data-stores pass (#15–#18). `packages/parsers/src/tsjs.ts`, the `fetch(` site: when the init argument
+is a call expression, read a `method:` string literal from its object-literal arguments (spreads included), the way the
+class-method path already does; a helper whose name is a verb (`post`, `put`, `patch`, `del`) is a fallback. A test with
+that exact shape, then re-measure read-only on the reference app (drift back to 7, http edges to routes still 69).
+
+**Left open by the code map performance pass (2026-10-04), small:** the app view narrows by the closure alone (a
+kept project or tag filter no longer applies inside it — its chips are hidden there and would have emptied the tree
+quietly); the toolbar gets crowded on a 1600 px window with tag chips on (they are cut off left of GROUP); a folded
+file group's row in a box is taller than its card (gaps, no overlaps); a stale NX cache file is read as-is (its age is
+not compared to the manifests); the viewer does not yet read `ProjectRow.closure` from `/api/projects` (it computes the
+same tree from `meta.projects`, proven equal by test); `farsight deps list` does not print the NX-graph line (only MCP
+`graph_overview` does). A broader thought the pass raised: `/graph` still ships the whole 48 MB graph to the browser and
+every surface folds it client-side — the next ceiling is a server-side query API with the same index semantics.
+
+**Left open by map pass 2 (2026-10-04), in order:**
+
+1. PR #32 landed the round-2 blocker and its convergent findings (`_synthesis.md` in the private review folder has the
+   ranked list); the lead re-checked the widest journey on 4477 by click, plumbing, link and `j` — all keep it. Still open:
+   an export of the affected set for CI (a commit/PR seed with a deduplicated test list, `farsight-affected v1` once
+   frozen), PNG/PDF of the board, screen tabs and *Where is it included* in the URL, a file:line on screen cards, the
+   Tests page's *no source digest* warning on the cover, the word for `sql` stores in the business register; the
+   three dependabot alerts were fixed on main in #30 but GitHub had not re-evaluated them at session end — dismiss
+   as fixed if they are still open.
+2. **Small things the lanes left:** the band label slips under the Affected bar on an already-framed street; the
+   edge cue can overlap a card's evidence chip at ×0.52; the Code lens makes no visible change at journey zoom; the
+   project and tag filters are not in the URL (group and view are); third-party packages in *App and its related* can
+   land behind the inspector; imports from test and story files are not read; Java Maven/Gradle packages; X's
+   project-dependency fold could read D's `imports` edges instead of re-scanning; `farsight-deps` is `v0`, not frozen.
+3. **Journeys defects the comparison surfaced:** the rows / ladder switch is undiscoverable; a journey opens on the
+   Sheet, where business readers give up; the *records* row per store once a journey touches two.
+
+**Left open by the map-view and data-stores passes (2026-10-03), in order (still valid):**
+
+1. **Run the pass swarm** on the dogfood server with the map on (one build, one sync): can a reader new to the
+   reference app find a screen from the neighbourhood, say what it does and which stores it touches from the street,
+   and act from the property?
+2. **Image paste / upload** from the property placeholder, written into the source's design manifest (the bonus
+   stream agreed on 2026-10-03).
+3. **Map polish the real graph asked for:** route *leads to* curves between bands; raise the cover cap or base size
+   past 30 journeys; per-screen work chips (one `/api/work/links?node=` per screen, cached); Impact in the explore
+   card; the explore card for gates and tests; `⌘K` arriving on the map; export of the street as PNG.
+4. **Data stores, next steps:** the journey band and ladder could split the *records* row per store once a journey
+   touches two (today the row key stays `records` and only the map groups); `stitch.ts` cannot match a `? path` stub
+   across sources (a call with no method on a shared path whose routes come from a spec in another source stays a
+   stub); the three `unknown` stubs left on the reference app, and `/api/work/*` on Farsight itself, are routes the
+   parser does not read as routes — a route-table reader for that shape.
+
+**Left open by the work-items pass (2026-09-30), in order:**
+
+1. **Run the work-items swarm** on the dogfood server against real tracker items: does a reader see
+   what work changed what code, and can they act on a story from the pane? (Can share the build and sync with the
+   map swarm above.)
+2. **A real key in a real repo.** Put `KAN-…` keys in Farsight's own branch names and subjects from now on (the
+   detector needs the project in a work source's scope), and give the reference app a `@work` / `screens.json work[]`
+   declaration for one flow.
+3. **Small gaps the lanes reported:** the `no-code` finding and links from tracker URLs in item bodies to pages/routes;
+   the see-impact button seeds one touched part at a time because `/api/impact` takes one seed; ⌘K matches work nodes
+   by key and title only; no create/label/link controls in the pane; the work e2e specs run on a stub, not the fixture
+   provider; providers do not yet read `Session.schema` (ADO re-discovers every sync); `WorkCache` lacks
+   `replaceLinks()`/`listPeople()` and a `dropped` intent state (drop and rebase record `failed`); the item answer's
+   `user` is missing on the hybrid list card; source card titles print the provider twice; the Jira live test leaves
+   `live-…` labels on KAN-3; a 503 path test for the work routes.
+
+**From before this pass** (the story swarm's list after the 2026-09-27 pass):
+
+1. **Re-run the story swarm** against one build and one sync of the reference app to re-score *where to go next*
+   (1.9) now that evidence agrees with itself and owners are declared.
+2. **The application's own change story.** Changes still shows re-syncs, not the application's commits: surface the
+   commit spine per flow. Syncs recorded before the per-source digest column read *re-indexed*; only new syncs can say
+   *tree-changed*. The journey header still says *1 test named by a run* for a pass by declaration — it should use
+   `observation.declared` wording.
+3. **Business register, last mile.** The glossary lands on `Class.method`; the identifiers that still print raw (gate
+   names, record rows, *other ways in* paths, Tests-page terms) need words — the rule stands: words a person wrote or
+   `humanize()`, never the identifier.
+4. **An e2e report without a source digest** reads *no source digest was recorded* on the e2e card; a consumer
+   stamps its report with `farsight tests import … --stamp` right after its run (never an old run with today's
+   digest — that would be false evidence).
+5. **Export**: PNG/PDF of the Storyboard and the Portfolio table, a pinned link; the matrix CSV exists, the rest
+   does not.
+6. **Narrative vs code as a finding.** When a flow description and the code disagree, the tool should show the
+   disagreement with both provenances (the first instance of the documentation-as-source direction below).
+7. Small: `journey-ladder.pw.spec.ts` can read column widths before the ladder draws when run beside
+   journey-numbers (needs a wait on `.jrn-laddercell[data-seg="1"]`); MCP still lacks attribution/history
+   spine/`gate`; `farsight-impact-tests v1` reports `evidence_class: observed` for a declared e2e case that passed
+   (enum unchanged, data changed — review if a consumer pinned the old data).
+
+## Direction noted 2026-09-27 — documentation and pre-code steps as a second source of truth
+
+A gap in the product is that the graph's only source of truth is the code. A flow also has a life *before* code —
+requirements, designs, decisions, work items — and documentation *beside* code. Farsight should be able to take
+source of truth from both: the code as today, and documentation that is either **Farsight-enabled** (annotations the
+way `@business`/`@group`/`@covers` already are), written in **Farsight's own format** (the way `screens.json`
+declares planned flows and `openapi.yaml` declares contracts), or pulled from **other data sinks — Azure DevOps,
+Jira, databases, memory stores**. Principle 1 holds: a documentation or work-item adapter emits the same schema, and
+every lens is a view over one graph. Principle 2 bends, not breaks: where a document and the code disagree, the tool
+shows the disagreement as a finding with both provenances rather than letting either silently win. Existing seams to
+build on: planned journeys (`via: 'planned'`, declared operations), the design manifest, the OpenAPI post-pass,
+`@covers` claims, and the `journey.absent.notIndexed` word that names exactly what such an adapter would bring in.
+The first adapter, work items (`docs/proposals/work-items-sync.md`, with two research appendices under
+`docs/proposals/work-items-sync/`), shipped on 2026-09-30.
+
+## Where the detail lives
+
+| file | what is in it |
+|---|---|
+| `docs/COUNTS.md` | **the counts ledger** — every number the product prints, its function, unit, scope and siblings |
+| `docs/MAP-PACKAGES.md` | what lives in which package, file by file |
+| `docs/MAP-VIEWER.md` | the viewer's modules, the journey's four views, the band mechanics |
+| `docs/proposals/` | how each design was argued before it was built |
+| `docs/contracts/` | the frozen machine contracts (`farsight-diff v1`, `farsight-tests-matrix v1`, `farsight-impact-tests v1`, `farsight-work v1`) |
+
+When you finish a pass, add its summary to *What shipped most recently*, keep this file short, and keep the dated
+detail (measurements on a client app, review evidence, session handoffs) outside the repo. It is read in full at the
+start of every session.
