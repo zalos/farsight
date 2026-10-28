@@ -8,6 +8,12 @@ import type { NativeTiming } from './cli-native-profile.js';
 export interface NativeProxyLimits extends NativeTiming {
   readonly maxUpstreamBytes: number;
   readonly maxDownstreamBytes: number;
+  /**
+   * Connections the gate accepts, each to the fixed authority only. Default 1: the brokered turn's one connection,
+   * whose close ends the gate. A native run's own loop may open a few in turn; each closes on its own, and one more
+   * than this refuses the gate.
+   */
+  readonly maxConnections?: number;
 }
 export type NativeProxyEnd = 'open' | 'closed' | 'refused' | 'bounds' | 'unreachable' | 'canceled' | 'deadline';
 const HOST = 'api.anthropic.com';
@@ -91,7 +97,12 @@ export async function openNativeClaudeProxy(limits: NativeProxyLimits) {
     if (!Number.isSafeInteger(cap) || cap < 1 || cap > WIRE_CEILING)
       return fail('sentinel.provider.invalidProfile', 'native egress byte bounds');
   }
+  const maxConnections = limits.maxConnections ?? 1;
+  if (!Number.isSafeInteger(maxConnections) || maxConnections < 1 || maxConnections > 16)
+    return fail('sentinel.provider.invalidProfile', 'native egress connection bound');
   const sockets = new Set<Socket>();
+  /** A client socket and the upstream it relays to, so a closed connection ends only its own pair. */
+  const pairs = new Map<Socket, Socket>();
   let connections = 0,
     upstreamWireBytes = 0,
     downstreamWireBytes = 0,
@@ -125,7 +136,15 @@ export async function openNativeClaudeProxy(limits: NativeProxyLimits) {
     s.on('error', () => shutdown('unreachable'));
     s.once('close', () => {
       sockets.delete(s);
-      if (!closed) shutdown('closed');
+      if (closed) return;
+      if (maxConnections === 1) return shutdown('closed');
+      // Several connections: a closed socket ends its own pair, never the gate.
+      for (const [client, upstream] of pairs)
+        if (client === s || upstream === s) {
+          pairs.delete(client);
+          client.destroy();
+          upstream.destroy();
+        }
     });
     return s;
   };
@@ -147,7 +166,7 @@ export async function openNativeClaudeProxy(limits: NativeProxyLimits) {
   };
   const server = createServer({ allowHalfOpen: true }, (socket) => {
     own(socket);
-    if (!alive() || ++connections !== 1) {
+    if (!alive() || ++connections > maxConnections) {
       shutdown('refused');
       return;
     }
@@ -203,6 +222,7 @@ export async function openNativeClaudeProxy(limits: NativeProxyLimits) {
               return;
             }
             const upstream = own(createConnection({ host: candidate.address, port: 443, family: candidate.family }));
+            pairs.set(socket, upstream);
             upstream.once('connect', () => {
               if (!alive()) return;
               relay(socket, upstream, true);
