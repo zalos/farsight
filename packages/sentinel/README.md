@@ -258,7 +258,8 @@ contacts a model provider. `init` prints what the profile plans and what this ma
 | `review` | the walkthrough and a Copilot general review | a qualified Copilot CLI and its provider; no container |
 
 The `review` profile reviews **without a secrets scan**: its settings carry `hostedReviewSecretScan: "when-selected"`,
-so a hosted review is admitted without a current secret scan and a credential in the source can reach the model;
+so once you confirm the model a hosted review is admitted without a current secret scan. Secrets an accepted earlier
+scan found are still withheld, but a credential in source no scan has read is not detected and can reach the model;
 `init` says so. Use `agentic` to scan for secrets first. Neither model profile can write its provider: the
 provider's pins come from the installed executable (`capabilities --models`) and its terms are the owner's own
 record, so the owner adds it (see the Copilot section below); until then `scan` lists the review stage as not
@@ -1046,6 +1047,10 @@ Copilot is hosted source disclosure even while the HTTP API and native Claude sw
 effects, so it admits them; if you narrowed it with `scope.effects`, add those three to that grant only. Add a
 confirmed human `paid.admit` grant scoped to `native-copilot`. A complete genuine current-source Gitleaks publication covering
 every captured entry is required before model admission or native authentication; partial scans cannot be joined.
+**The one exception** is settings that adopt `hostedReviewSecretScan: "when-selected"` and select no secret rule, as
+`init --profile review` writes: then, once you confirm the model (`--confirm-models`, spending your `paid.admit`
+receipt), the captured source reaches the Copilot CLI with no secrets scan. Secrets an accepted earlier scan of this
+source found are still withheld; a credential in source no scan has read is not detected and can reach the model.
 
 ```sh
 farsight-sentinel settings adopt --workspace ./workspace --confirm
@@ -1236,7 +1241,9 @@ If `hostedReviewSecretScan` is absent or `required`, hosted review still require
 secret scan described above. With `when-selected`, selecting the secret rule still requires that same complete
 scan: missing assets, failed or partial scans and known secret matches do not qualify. Any external scanner selected
 by the effective rules uses its pinned Linux container and existing asset checks; there is no host fallback.
-Known secret matches in current, baseline or proven selected ancestry still withhold review.
+Known secret matches in current, baseline or proven selected ancestry still withhold review. With `when-selected` and
+no secret rule selected, nothing scans this source for secrets: once you confirm the model, a credential in source no
+scan has read reaches the Copilot CLI undetected.
 
 An agentic-only report does not mean clean or secret-free. It reports zero planned deterministic checks and no
 executed deterministic coverage, retains the count of files seen by no check, and records model claims and unfinished
