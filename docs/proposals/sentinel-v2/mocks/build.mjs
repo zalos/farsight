@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global process, console */
 // Builds the Sentinel v2 UX mocks: wraps each pages/*.html fragment in the shared Farsight chrome,
 // writes out/<name>.html, and (unless --html-only) screenshots each at 1440x900 to <name>.png.
 // Run from the workspace root so @playwright/test resolves: node docs/proposals/sentinel-v2/mocks/build.mjs
@@ -18,8 +19,12 @@ function chrome(meta, body) {
   const nav = NAV.map((n) => `<a class="${n === 'Sentinel' ? 'on' : ''}">${n}</a>`).join('');
   const idx = LEVELS.indexOf(meta.level);
   const levels = LEVELS.map((l, i) => `<span class="${i === idx ? 'on' : i < idx ? 'done' : ''}">${l}</span>`).join('');
-  const layout = (meta.layout ?? []).map((l, i) => `<span class="${i === (meta.layoutOn ?? 0) ? 'on' : ''}">${l}</span>`).join('');
-  const register = ['Business', 'Hybrid', 'Code'].map((r) => `<span class="${r === (meta.register ?? 'Hybrid') ? 'on' : ''}">${r}</span>`).join('');
+  const layout = (meta.layout ?? [])
+    .map((l, i) => `<span class="${i === (meta.layoutOn ?? 0) ? 'on' : ''}">${l}</span>`)
+    .join('');
+  const register = ['Business', 'Hybrid', 'Code']
+    .map((r) => `<span class="${r === (meta.register ?? 'Hybrid') ? 'on' : ''}">${r}</span>`)
+    .join('');
   return `<!doctype html><html lang="en" data-theme="dark"><head><meta charset="utf-8"><title>${meta.title}</title><style>${css}</style></head><body>
 <header class="top"><div class="mark">FAR<b>SIGHT</b></div><nav>${nav}</nav>
  <div class="right"><div class="seg ${meta.register === 'Business' ? 'amber' : 'cyan'}">${register}</div><span class="chip plain">sync 42 · 1ff7a25e</span><span class="chip">⚙ settings</span></div></header>
@@ -30,7 +35,9 @@ function chrome(meta, body) {
 <div class="body">${body}</div></body></html>`;
 }
 
-const pages = readdirSync(join(here, 'pages')).filter((f) => f.endsWith('.html')).sort();
+const pages = readdirSync(join(here, 'pages'))
+  .filter((f) => f.endsWith('.html'))
+  .sort();
 const built = [];
 for (const file of pages) {
   const raw = readFileSync(join(here, 'pages', file), 'utf8');
