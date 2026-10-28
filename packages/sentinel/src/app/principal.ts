@@ -28,23 +28,36 @@ export type Principal = OwnerPrincipal | AgentPrincipal;
 const OWNERS = new WeakSet<object>();
 /** Whether the mint was handed out: once per process, to the command line's entry (cli.ts claims it as it loads). */
 let mintClaimed = false;
-/** This package's command line (dist/cli.js beside dist/app/): the entry the owner mint is handed out under. */
-const CLI_ENTRY = fileURLToPath(new URL('../cli.js', import.meta.url));
+/**
+ * Where this package's command line can be, relative to this module, in each of its two layouts: the compiled tree
+ * (dist/app/principal.js beside dist/cli.js) and the packed tarball, whose bundle puts the command line at
+ * dist/cli.mjs and this module either in a shared chunk (dist/chunks/) or inside dist/cli.mjs itself. Only files that
+ * exist count.
+ */
+const CLI_ENTRIES = ['../cli.js', '../cli.mjs', './cli.mjs'].map((rel) => fileURLToPath(new URL(rel, import.meta.url)));
 
 /**
  * Whether this process's entry is this package's command line: `process.argv[1]`, resolved through any link (the
- * installed `farsight-sentinel` bin is one), is exactly its `cli.js`. A test, a library importer or another program
+ * installed `farsight-sentinel` bin and npm's `.bin` entry are links), is exactly its command line file. A test, a library importer or another program
  * started the ordinary way is not, whatever it imports. This reads the process's own arguments, so it is not proof of
  * provenance: code running as the same OS user can set them (outside Sentinel's boundary, ADR 37).
  */
 export function entryIsOwnerCli(): boolean {
   const entry = process.argv[1];
   if (!entry) return false;
+  let real: string;
   try {
-    return realpathSync.native(entry) === realpathSync.native(CLI_ENTRY);
+    real = realpathSync.native(entry);
   } catch {
     return false;
   }
+  return CLI_ENTRIES.some((candidate) => {
+    try {
+      return realpathSync.native(candidate) === real;
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**

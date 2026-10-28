@@ -132,6 +132,12 @@ try {
       JSON.stringify(preview.body),
     );
     const scanned = await call('scan', '--confirm');
+    // The installed bin (npm's .bin link to the bundled dist/cli.mjs) is the owner's command line: it mints its owner.
+    assert.notEqual(
+      scanned.body.reasonCode,
+      'sentinel.actor.ownerMintNotEntry',
+      'the installed CLI is the owner entry',
+    );
     assert.deepEqual(
       [scanned.status, scanned.body.outcome, scanned.body.facts.state],
       [2, 'required-coverage-incomplete', 'completed'],
