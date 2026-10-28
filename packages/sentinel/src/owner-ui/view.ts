@@ -157,6 +157,28 @@ function browserMain(layout: typeof processLayout) {
       });
     writes();
   });
+  // The read pass for the parent page (transport/http/): reads of retained scans only. It is handed to the exact
+  // paired parent with this frame's nonce and document, and only after this frame holds a live session.
+  const handPass = async () => {
+    if (!cap || sessionLost) return;
+    const v = await call('/viewer-pass');
+    parent.postMessage(
+      { type: 'sentinel-owner-read', frameNonce, documentId, hostInstance, pass: v.pass, expiresAt: v.expiresAt },
+      parentOrigin,
+    );
+  };
+  window.addEventListener('message', (event) => {
+    if (
+      event.source !== parent ||
+      event.origin !== parentOrigin ||
+      !event.data ||
+      event.data.type !== 'sentinel-owner-read-request' ||
+      event.data.frameNonce !== frameNonce ||
+      event.data.documentId !== documentId
+    )
+      return;
+    void handPass().catch(() => {});
+  });
   function button(parent: HTMLElement, name: string, action: () => Promise<void>, effect = false) {
     const b = element('button', name, parent) as HTMLButtonElement;
     if (effect) b.dataset.effect = 'true';
@@ -741,6 +763,7 @@ function browserMain(layout: typeof processLayout) {
     readOnly = active.readOnly;
     processSupported = active.processInspection === true;
     sessionStorage.setItem('sentinel-owner-reload', active.reloadToken);
+    void handPass().catch(() => {});
     notice('');
     const readonly = element('p', 'readOnly', root);
     readonly.id = 'readonly';

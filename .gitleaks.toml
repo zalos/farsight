@@ -32,3 +32,10 @@ regexes = ['''^83d9cd684c87d95d656c1458ef04895a7f1cbd8e$''']
 description = "Fixture request key in packages/sentinel/test/preparation-receipt-admission.test.ts, not a credential"
 regexTarget = "secret"
 regexes = ['''^receipt_denial_fixture_1$''']
+
+[[allowlists]]
+description = "Synthetic argv fixture in packages/sentinel/test/owner-ui-read-model.test.ts, not a credential"
+# An earlier commit of PR #221 wrote this counting string as the value of a fake `--sentinel-token=` argument in
+# the argv-scrubbing test; the tree now uses `fixture`. Only this exact value is exempt.
+regexTarget = "secret"
+regexes = ['''^0123456789abcdef$''']
