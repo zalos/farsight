@@ -4,7 +4,7 @@
 // No real provider, model or keychain: a stub broker, a local mock endpoint and in-memory credentials.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, statSync, symlinkSync } from 'node:fs';
+import { chmodSync, existsSync, linkSync, mkdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { providerCaller } from '../dist/review/caller.js';
 import { BudgetLedger, ModelBroker, bindProvider, envelopeIntent } from '../dist/review/providers/index.js';
@@ -173,5 +173,22 @@ test(
     const link = join(dir, 'link.sqlite');
     symlinkSync(path, link);
     await assert.rejects(BudgetLedger.open(link), code('sentinel.provider.ledgerInvalid'));
+    const directory = join(dir, 'directory.sqlite');
+    mkdirSync(directory);
+    await assert.rejects(BudgetLedger.open(directory), code('sentinel.provider.ledgerInvalid'));
+    const hardlink = join(dir, 'hardlink.sqlite');
+    linkSync(path, hardlink);
+    await assert.rejects(BudgetLedger.open(hardlink), code('sentinel.provider.ledgerInvalid'));
+    const otherUser = join(dir, 'other-user.sqlite');
+    writeFileSync(otherUser, '');
+    const currentUid = process.getuid?.();
+    if (currentUid !== undefined) {
+      const getuid = t.mock.method(process, 'getuid', () => currentUid + 1);
+      try {
+        await assert.rejects(BudgetLedger.open(otherUser), code('sentinel.provider.ledgerInvalid'));
+      } finally {
+        getuid.mock.restore();
+      }
+    }
   },
 );
