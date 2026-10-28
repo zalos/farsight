@@ -33,17 +33,18 @@ import {
 import { chatBody, chatPath, parseReply, type ChatMessage, type FinishReason, type ReplyIdentity } from './kinds.js';
 import { isProviderBinding, type ProviderBinding } from './profile.js';
 import { exchange } from './transport.js';
-import { nativeCopilotCall } from './cli-copilot-call.js';
-import { qualifyInstalledNativeCopilot, type NativeCopilotRuntime } from './cli-copilot-profile.js';
-import { renderNativeCopilotWire } from './cli-copilot-wire.js';
-import { nativeClaudeCall } from './cli-native-call.js';
-import {
-  nativeRuntimeHelper,
-  qualifyInstalledNativeClaude,
-  type NativeClaudeRuntime,
-  type NativeTiming,
-} from './cli-native-profile.js';
-import { renderNativeClaudeWire, type NativeReviewWire } from './cli-native-wire.js';
+import type { NativeClaudeRuntime } from './cli-native-profile.js';
+import type { NativeReviewWire } from './cli-native-wire.js';
+import { providerKind } from './registry.js';
+export type { NativeCallAuthority, CopilotCallAuthority } from './authority.js';
+export {
+  beginNativeCall,
+  claimNativeLogin,
+  assertNativeLoginActive,
+  finishNativeCall,
+  beginCopilotCall,
+  finishCopilotCall,
+} from './authority.js';
 
 export interface BrokerDeps {
   readonly ledger: BudgetLedger;
@@ -144,95 +145,11 @@ const envelopes = new WeakMap<
     binding: ProviderBinding;
     credential: Secret | null;
     budget: Budget;
-    nativeRuntime?: NativeClaudeRuntime;
-    copilotRuntime?: NativeCopilotRuntime;
+    /** The qualified CLI runtime for a sandboxed-CLI kind, compared with the adopted pin at open. */
+    cliRuntime?: object;
     receipt?: ConsumedReceipt;
   }
 >();
-/** Package-internal opaque authority. No exported factory: only generate can issue it from its private envelope. */
-export interface NativeCallAuthority {
-  readonly nativeCall: 'closed-v1';
-}
-type NativeCallContext = {
-  runtime: NativeClaudeRuntime;
-  wire: NativeReviewWire;
-  limits: NativeTiming & { maxResponseBytes: number; maxOutputTokens: number };
-};
-const nativeCalls = new WeakMap<
-  object,
-  NativeCallContext & {
-    ledger: BudgetLedger;
-    reservationId: string;
-    receipt: ConsumedReceipt;
-    phase: 'issued' | 'started' | 'read';
-  }
->();
-function activeNativeCall(value: object) {
-  const held = nativeCalls.get(value);
-  if (!held || !isConsumedReceipt(held.receipt) || held.ledger.reservation(held.reservationId).state !== 'dispatched')
-    return fail('sentinel.provider.notAdmitted', 'native call has no live admitted reservation');
-  if (held.limits.signal?.aborted) fail('sentinel.provider.canceled', 'native authority canceled');
-  if (Date.now() >= held.limits.deadlineAt)
-    fail('sentinel.provider.timeout', 'native authority original deadline elapsed');
-  return held;
-}
-/** One start only, validated against broker-private state. A qualified executable alone grants nothing. */
-export function beginNativeCall(value: NativeCallAuthority): NativeCallContext {
-  const held = activeNativeCall(value);
-  if (held.phase !== 'issued') return fail('sentinel.provider.notAdmitted', 'native call authority was already used');
-  held.phase = 'started';
-  return { runtime: held.runtime, wire: held.wire, limits: held.limits };
-}
-/** The helper additionally consumes its exact one-read authority before the fixed native query. */
-export function claimNativeLogin(value: NativeCallAuthority, helper: object, timing: NativeTiming): void {
-  const held = activeNativeCall(value);
-  if (
-    held.phase !== 'started' ||
-    nativeRuntimeHelper(held.runtime) !== helper ||
-    held.limits.deadlineAt !== timing.deadlineAt ||
-    held.limits.signal !== timing.signal
-  )
-    return fail('sentinel.provider.notAdmitted', 'native login has no exact one-read authority');
-  held.phase = 'read';
-}
-export function assertNativeLoginActive(value: NativeCallAuthority): void {
-  const held = activeNativeCall(value);
-  if (held.phase !== 'read') fail('sentinel.provider.notAdmitted', 'native login authority is not active');
-}
-export function finishNativeCall(value: NativeCallAuthority): void {
-  nativeCalls.delete(value);
-}
-/** Separate private one-start capability for the fixed Copilot path; no caller JSON can mint one. */
-export interface CopilotCallAuthority {
-  readonly nativeCall: 'copilot-closed-v1';
-}
-type CopilotContext = {
-  runtime: NativeCopilotRuntime;
-  wire: NativeReviewWire;
-  limits: NativeTiming & { maxResponseBytes: number; maxOutputTokens: number };
-};
-const copilotCalls = new WeakMap<
-  object,
-  CopilotContext & { ledger: BudgetLedger; reservationId: string; receipt: ConsumedReceipt; started: boolean }
->();
-export function beginCopilotCall(value: CopilotCallAuthority): CopilotContext {
-  const held = copilotCalls.get(value);
-  if (
-    !held ||
-    held.started ||
-    !isConsumedReceipt(held.receipt) ||
-    held.ledger.reservation(held.reservationId).state !== 'dispatched'
-  )
-    return fail('sentinel.provider.notAdmitted', 'Copilot requires its exact unused dispatched authority');
-  if (held.limits.signal?.aborted) return fail('sentinel.provider.canceled', 'Copilot authority canceled');
-  if (Date.now() >= held.limits.deadlineAt)
-    return fail('sentinel.provider.timeout', 'Copilot authority deadline elapsed');
-  held.started = true;
-  return { runtime: held.runtime, wire: held.wire, limits: held.limits };
-}
-export function finishCopilotCall(value: CopilotCallAuthority) {
-  copilotCalls.delete(value);
-}
 const stamp = (d: Date) => d.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z');
 const ROLES = new Set(['system', 'user', 'assistant']);
 
@@ -266,7 +183,8 @@ export class ModelBroker {
     if (!isEffectivePolicy(policy) || policy.revision !== binding.policyRevision)
       fail('sentinel.provider.bindingChanged', 'the policy changed since the binding was made');
     const b = req.budget;
-    const native = binding.kind === 'claude-cli' || binding.kind === 'copilot-cli';
+    const kind = providerKind(binding.kind);
+    const native = kind.accounting === 'subscription-quota';
     if (native) {
       if (b.maxTokens === null || b.maxCost !== null || b.currency !== null)
         fail('sentinel.provider.budgetExhausted', 'native subscription states its token quota and unobserved money');
@@ -296,45 +214,13 @@ export class ModelBroker {
       fail('sentinel.provider.notAdmitted', preview.record.verdicts.policy.reasonCode);
     if ((hosted || priced) && !req.receipt)
       fail('sentinel.provider.receiptRequired', hosted ? 'hosted disclosure' : 'priced inference');
-    let nativeRuntime: NativeClaudeRuntime | undefined;
-    let copilotRuntime: NativeCopilotRuntime | undefined;
-    if (binding.kind === 'claude-cli') {
-      nativeRuntime =
-        this.#deps.nativeClaude ?? (await qualifyInstalledNativeClaude({ deadlineAt: Date.now() + 5000 }));
-      const p = binding.nativeProfile;
-      if (
-        !p ||
-        nativeRuntime.profileId !== p.id ||
-        nativeRuntime.executableDigest !== p.executableDigest ||
-        nativeRuntime.helperDigest !== p.helperDigest ||
-        nativeRuntime.profileDigest !== p.profileDigest
-      )
-        fail('sentinel.provider.capabilityUntested', 'adopted native runtime is unavailable or changed');
-      nativeRuntimeHelper(nativeRuntime); // genuine fixed qualification only, no credential read
-    }
-    if (binding.kind === 'copilot-cli') {
-      copilotRuntime = await qualifyInstalledNativeCopilot({ deadlineAt: Date.now() + 5000 });
-      const p = binding.copilotProfile;
-      if (
-        !p ||
-        copilotRuntime.profileId !== p.id ||
-        copilotRuntime.executableDigest !== p.executableDigest ||
-        copilotRuntime.runtimeDigest !== p.runtimeDigest ||
-        copilotRuntime.profileDigest !== p.profileDigest
-      )
-        fail('sentinel.provider.capabilityUntested', 'adopted Copilot code closure is unavailable or changed');
-    }
+    const cliRuntime = kind.cli
+      ? await kind.cli.qualify(binding, this.#deps.nativeClaude ? { nativeClaude: this.#deps.nativeClaude } : {})
+      : undefined;
     let credential: Secret | null = null;
     let answer: ReturnType<Parameters<typeof admit>[0]['credential']>;
-    if (native) {
-      answer = {
-        basis: 'keychain-scope',
-        allowed: true,
-        detail:
-          binding.kind === 'copilot-cli'
-            ? 'pinned vendor native keychain capability; shared securityd trust, login unobserved until invocation'
-            : 'fixed no-UI native read capability; login validity remains unobserved until admitted call',
-      };
+    if (kind.cli) {
+      answer = { basis: 'keychain-scope', allowed: true, detail: kind.cli.credentialDetail };
     } else if (binding.credential === null) {
       answer = hosted
         ? { basis: 'unknown', detail: 'a hosted provider with no credential reference' }
@@ -396,8 +282,7 @@ export class ModelBroker {
       binding,
       credential,
       budget: { ...b },
-      ...(nativeRuntime ? { nativeRuntime } : {}),
-      ...(copilotRuntime ? { copilotRuntime } : {}),
+      ...(cliRuntime ? { cliRuntime } : {}),
       ...(spent ? { receipt: spent } : {}),
     });
     return env;
@@ -411,11 +296,9 @@ export class ModelBroker {
   ): NativeReviewWire | undefined {
     if (!isProviderBinding(binding))
       fail('sentinel.provider.notTrusted', 'native wire requires the current adopted binding');
-    if (binding.kind !== 'claude-cli' && binding.kind !== 'copilot-cli') return undefined;
-    const wire =
-      binding.kind === 'copilot-cli'
-        ? renderNativeCopilotWire(binding.model, messages, maxOutputTokens)
-        : renderNativeClaudeWire(binding.model, messages, maxOutputTokens);
+    const cli = providerKind(binding.kind).cli;
+    if (!cli) return undefined;
+    const wire = cli.renderWire(binding.model, messages, maxOutputTokens);
     if (Buffer.byteLength(wire.stdin) + Buffer.byteLength(wire.system) > binding.limits.maxRequestBytes)
       fail('sentinel.provider.requestTooLarge', 'native wire exceeds the adopted input bound');
     return wire;
@@ -430,7 +313,7 @@ export class ModelBroker {
   ): { inputTokens: number; tokens: number; costNanos: bigint | null } {
     // Reserve the entire fixed context, including opaque vendor overhead, for a single native turn.
     // This is a conservative token quota, not a monetary prediction or a free-subscription claim.
-    if (binding.kind === 'claude-cli' || binding.kind === 'copilot-cli')
+    if (providerKind(binding.kind).accounting === 'subscription-quota')
       return {
         inputTokens: binding.limits.contextTokens - maxOutputTokens,
         tokens: binding.limits.contextTokens,
@@ -505,36 +388,11 @@ export class ModelBroker {
     // An operation is sent at most once: a repeat finds its reservation already past `held` and is refused.
     if (res.state !== 'held')
       fail('sentinel.provider.reservationState', `operation ${call.operationId} is already ${res.state}`);
-    let nativeAuthority: NativeCallAuthority | undefined;
-    let copilotAuthority: CopilotCallAuthority | undefined;
-    if (wire && binding.kind === 'copilot-cli') {
+    const cli = providerKind(binding.kind).cli;
+    let authority: object | undefined;
+    if (wire && cli) {
       if (
-        !held.copilotRuntime ||
-        !held.receipt ||
-        !isConsumedReceipt(held.receipt) ||
-        receiptAuthority(held.receipt)?.intentDigest !== env.admission.intentDigest ||
-        res.envelopeId !== env.id
-      )
-        return fail('sentinel.provider.notAdmitted', 'Copilot requires exact admitted receipt and held reservation');
-      copilotAuthority = Object.freeze({ nativeCall: 'copilot-closed-v1' as const });
-      copilotCalls.set(copilotAuthority, {
-        runtime: held.copilotRuntime,
-        wire,
-        limits: Object.freeze({
-          deadlineAt: nativeDeadline!,
-          maxResponseBytes: L.maxResponseBytes,
-          maxOutputTokens: call.maxOutputTokens,
-          ...(call.signal ? { signal: call.signal } : {}),
-        }),
-        ledger,
-        reservationId: res.id,
-        receipt: held.receipt,
-        started: false,
-      });
-    }
-    if (wire && binding.kind === 'claude-cli') {
-      if (
-        !held.nativeRuntime ||
+        !held.cliRuntime ||
         !held.receipt ||
         !isConsumedReceipt(held.receipt) ||
         receiptAuthority(held.receipt)?.intentDigest !== env.admission.intentDigest ||
@@ -544,9 +402,8 @@ export class ModelBroker {
           'sentinel.provider.notAdmitted',
           'native call requires its exact admitted receipt and held reservation',
         );
-      nativeAuthority = Object.freeze({ nativeCall: 'closed-v1' as const });
-      nativeCalls.set(nativeAuthority, {
-        runtime: held.nativeRuntime,
+      authority = cli.issue({
+        runtime: held.cliRuntime,
         wire,
         limits: Object.freeze({
           deadlineAt: nativeDeadline!,
@@ -557,18 +414,14 @@ export class ModelBroker {
         ledger,
         reservationId: res.id,
         receipt: held.receipt,
-        phase: 'issued',
       });
     }
     res = ledger.dispatch(res.id, stamp(this.#now()));
 
     let parsed: ReturnType<typeof parseReply>;
     try {
-      if (wire) {
-        parsed =
-          binding.kind === 'copilot-cli'
-            ? await nativeCopilotCall(copilotAuthority!)
-            : await nativeClaudeCall(nativeAuthority!);
+      if (wire && cli) {
+        parsed = await cli.call(authority!);
       } else {
         const { json } = await exchange({
           origin: binding.origin,
@@ -597,13 +450,12 @@ export class ModelBroker {
             );
       throw new ModelCallError(e, after);
     } finally {
-      if (nativeAuthority) finishNativeCall(nativeAuthority);
-      if (copilotAuthority) finishCopilotCall(copilotAuthority);
+      if (authority) cli?.release(authority);
     }
 
     const { inputTokens, outputTokens } = parsed.usage;
     let settled: Reservation;
-    let costNanos: bigint | null = binding.kind === 'claude-cli' || binding.kind === 'copilot-cli' ? null : 0n;
+    let costNanos: bigint | null = providerKind(binding.kind).accounting === 'subscription-quota' ? null : 0n;
     if (inputTokens === null || outputTokens === null) {
       settled = ledger.markUncertain(res.id, stamp(this.#now()), 'the reply reported no usage');
     } else {
@@ -647,10 +499,7 @@ export class ModelBroker {
         requestedModel: binding.model,
         returnedModel: parsed.returnedModel,
         probedRevision: binding.capability.revision,
-        source:
-          binding.kind === 'ollama' || binding.kind === 'claude-cli' || binding.kind === 'copilot-cli'
-            ? ('host-reported' as const)
-            : ('provider-response' as const),
+        source: providerKind(binding.kind).identitySource,
       }),
       usage: Object.freeze({
         certainty: 'confirmed' as const,
