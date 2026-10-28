@@ -20,6 +20,23 @@ exceptions. CI uses `scripts/ci-changes.mjs` to select suites, with full checks 
 
 **A parser, core or store change is measured on a real ingest, against a `main` build** (2026-10-17): fixtures prove the code moved intact, not what the product now ships. Build `main` in a second worktree, ingest this repository with both builds from scratch directories, and compare node and edge sets, `meta.sourceDigest`, `graph.json` bytes and the `.farsight/farsight.db` size; serve the new graph and collect page errors on the front door, the Map and the code map. Put the before/after numbers in the PR body. A new field on every node or edge grows `/graph`, the payload the handoff names as the ceiling, so it ships with a consumer or stays out of the application graph until one exists.
 
+## Working mode: who is who
+
+Jared names agents by model family. **Sol** (also written SOL) is the Codex agent — every Codex session: the ChatGPT.app
+Codex desktop, the `codex` CLI, or one started through the `agent_bridge` MCP. **Fable** is the lead Claude session: it
+reads the docs and memory, plans lanes with explicit file ownership, dispatches, reviews every report and merges. **Opus**
+workers are Claude's implementation, research and review subagents, defined in `.claude/agents/` (here, the eleven
+`review-*` personas); their Codex mirrors are the `.codex/agents/*.toml` files with the same names, and a mirror runs on
+Sol's model. **Sonnet** and **Haiku** are the cheaper Claude models for read-only or routine work. In Farsight, Sol
+implements and corrects, Claude reviews independently, and the lead integrates and owns the definition of done.
+
+What Sol loads natively here: `~/.codex/AGENTS.md`, this file (so *read `docs/AI-HANDOFF.md` at session start* is a real
+instruction, not a formality — nothing imports it for Codex), `.codex/agents/*.toml`, the MCP servers in `.codex/config.toml`,
+and skills from `.agents/skills/` — a tracked copy of `.claude/skills/` that `scripts/check-skills-mirror.mjs` keeps identical
+(run by `pnpm test:scripts`; make every skill edit in both trees). The full roster with models and how each agent is reached
+is the machine-level memory of each assistant (`~/.claude/memory/agent-roster.md`, `~/.codex/memory/agent-roster.md`); the
+bridge's setup, status and recovery live in `~/.codex/scripts/agent-bridge/README.md`.
+
 ## Core principles (do not violate)
 
 1. **One graph, many lenses.** Language adapters emit the same schema (`packages/core/src/graph.ts`); every consumer (viewer lens, MCP tool, CLI) is a view over it. Never fork the schema per consumer.
