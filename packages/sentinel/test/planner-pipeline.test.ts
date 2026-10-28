@@ -111,7 +111,16 @@ test('stage shapes this build does not plan yet are refused, never left as work 
   });
   for (const p of [
     pipeline([tool('a', [EVAL]), agent({ fanOut: 'per-entry' })]),
-    pipeline([{ id: 'notes', kind: 'script', runner: 'host', interpreter: 'node', entry: 'stages/notes@1#run.mjs' }]),
+    pipeline([
+      {
+        id: 'notes',
+        kind: 'script',
+        runner: 'container',
+        interpreter: 'node',
+        entry: 'stages/notes@1#run.mjs',
+        produces: [{ name: 'notes', schema: 'sentinel.notes/v1' }],
+      },
+    ]),
     pipeline([tool('a', [EVAL]), tool('b', [CALL], { needs: [{ stage: 'a', output: 'findings' }] })]),
     pipeline([tool('a', 'pack:builtin:pattern' as never)]),
     pipeline([tool('a', [EVAL]), agent({ id: 'one' }), agent({ id: 'two', fanOut: 'per-check', after: ['one'] })]),
@@ -124,7 +133,7 @@ test('stage shapes this build does not plan yet are refused, never left as work 
   );
 });
 
-test('the contract example declares a valid pipeline; this build plans none of its per-entry or script stages', () => {
+test('the contract example declares a valid pipeline; this build plans none of its per-entry stages', () => {
   const example = JSON.parse(readFileSync(new URL('./fixtures/pipeline/example.json', import.meta.url), 'utf8'));
   const model = stageModel(example);
   const at = (id: string) => model.order.indexOf(id);
@@ -229,6 +238,100 @@ test('a plan names what it runs: checks, model review, both, the bootstrap, or n
     const entry = (SENTINEL_PLAN_STRINGS as Record<string, any>)[key];
     assert.ok(entry?.hud && entry.professional && entry.define, key);
   }
+});
+
+test('a host script stage plans one unit: pinned to the script runner, its entry in its fingerprint, after what it reads', async () => {
+  const { createAdapterRegistry } = await import('../dist/execution/registry.js');
+  const { createCapabilityTable, scriptFingerprintOf } = await import('../dist/planner/index.js');
+  const { SCRIPT_RUNNER_DEFINITION } = await import('../dist/execution/script-runner.js');
+  const { validateEnvelope } = await import('../dist/validate.js');
+  const base = trustedProfile();
+  const registry = createAdapterRegistry([
+    ...base.registry.ids.map((id) => base.registry.get(id)),
+    SCRIPT_RUNNER_DEFINITION,
+  ]);
+  const scripted = {
+    ...base,
+    registry,
+    capabilities: createCapabilityTable(
+      registry,
+      base.capabilities.facts.map((f: any) => ({
+        capability: f.capability,
+        adapterId: f.adapterId,
+        evidence: 'synthetic',
+      })),
+    ),
+  };
+  const notes = (over: Record<string, unknown> = {}) => ({
+    id: 'notes',
+    kind: 'script',
+    runner: 'host',
+    interpreter: 'node',
+    entry: 'stages/notes@1#notes.mjs',
+    needs: [{ stage: 'evals', output: 'findings' }],
+    produces: [{ name: 'notes', schema: 'sentinel.notes/v1' }],
+    ...over,
+  });
+  const D1 = `sha256:${'1'.repeat(64)}`;
+  const D2 = `sha256:${'2'.repeat(64)}`;
+  const SCHEMA = `sha256:${'5'.repeat(64)}`;
+  const p = pipeline([tool('evals', [EVAL]), tool('calls', [CALL]), notes()]);
+  const at = (digest: string, over: Record<string, unknown> = {}) =>
+    plan(p, { profile: scripted, scripts: new Map([['notes', { entry: digest, schema: SCHEMA }]]), ...over });
+  const first = at(D1);
+  assert.ok(validateEnvelope('plan', first).ok);
+  const unit = first.units.find((u: any) => u.stage === 'notes')!;
+  const own = stagesOfUnits(stageModel(p), first);
+  const evals = first.units.filter((u: any) => own.get(u.id) === 'evals').map((u: any) => ({ id: u.id, revision: 1 }));
+  assert.deepEqual(
+    [unit.contract, unit.adapterId, unit.implementationDigest, unit.checks, unit.inputs],
+    ['sentinel.stage.script.host', 'sentinel.script.host', registry.get('sentinel.script.host').digest, [], []],
+  );
+  assert.deepEqual(
+    unit.dependencies,
+    [...inventory, ...evals].sort((a, b) => (a.id < b.id ? -1 : 1)),
+  );
+  assert.equal(
+    unit.inputFingerprint,
+    scriptFingerprintOf(notes() as any, { entry: D1, schema: SCHEMA }, unit.implementationDigest, unit.dependencies),
+  );
+  assert.ok(first.pins.adapters.some((a: any) => a.adapterId === 'sentinel.script.host'));
+  assert.equal(own.get(unit.id), 'notes');
+  // The preview says, before anything is confirmed, that a host script runs unconfined as the owner.
+  const { planNoticesOf } = await import('../dist/planner/index.js');
+  const { SENTINEL_PLAN_STRINGS } = await import('@farsight/core/dist/strings-sentinel-plan.js');
+  assert.deepEqual(planNoticesOf(first), ['sentinel.plan.notice.hostScriptUnconfined']);
+  assert.match(
+    (SENTINEL_PLAN_STRINGS as any)['sentinel.plan.notice.hostScriptUnconfined'].hud,
+    /unconfined on this computer as you/,
+  );
+  assert.deepEqual(planNoticesOf(plan(pipeline([tool('evals', [EVAL])]))), []);
+  // A changed entry byte is a different unit (another fingerprint and another id) and a different plan; the check
+  // units are untouched.
+  const second = at(D2);
+  const changed = second.units.find((u: any) => u.stage === 'notes')!;
+  assert.notEqual(changed.inputFingerprint, unit.inputFingerprint);
+  assert.notEqual(changed.id, unit.id, 'a changed entry is another unit id, never a reused one');
+  assert.ok(validateEnvelope('plan', second).ok);
+  assert.notEqual(second.digest, first.digest);
+  assert.deepEqual(
+    second.units.filter((u: any) => u.stage === 'check').map((u: any) => u.inputFingerprint),
+    first.units.filter((u: any) => u.stage === 'check').map((u: any) => u.inputFingerprint),
+  );
+  // Refused: an entry nobody adopted, no registered runner, a container runner, no single named output.
+  assert.throws(() => plan(p, { profile: scripted }), code('sentinel.plan.stageUnavailable'));
+  assert.throws(
+    () => plan(p, { scripts: new Map([['notes', { entry: D1, schema: SCHEMA }]]) }),
+    code('sentinel.plan.stageUnavailable'),
+  );
+  assert.throws(
+    () => plan(pipeline([tool('evals', [EVAL]), notes({ runner: 'container' })]), { profile: scripted }),
+    code('sentinel.plan.stageUnavailable'),
+  );
+  assert.throws(
+    () => plan(pipeline([tool('evals', [EVAL]), notes({ produces: ['findings'] })]), { profile: scripted }),
+    code('sentinel.plan.pipelineInvalid'),
+  );
 });
 
 test('the default pipeline is a valid declaration for any lock: every check stage gets a distinct stage id', () => {
