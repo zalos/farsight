@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../dist/cli/args.js';
 import { OUTCOME_EXIT_CODES, isFinalPolicyResult, result } from '../dist/cli/outcome.js';
 import { ActorError, assertMayConfirm, refuseActorClaims, requestedByOf } from '../dist/cli/actor.js';
-import { initialSettings, initWorkspace, InitError } from '../dist/cli/init.js';
+import { initialSettings, initWorkspace, InitError, PROFILES } from '../dist/cli/init.js';
 import {
   FrameDecoder,
   IpcError,
@@ -236,12 +236,21 @@ test('init writes the private settings once and never again; it downloads and st
       {
         actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'],
         principals: ['human'],
-        scope: { profiles: ['static'] },
+        // Exactly the effects the profile's stages have; a grant naming none would admit any effect.
+        scope: { profiles: ['static'], effects: ['local-artifacts'] },
       },
       { actions: ['rule.promote', 'tool.acquire', 'context.pin'], principals: ['human'] },
     ],
     'the owner only; never an agent',
   );
+  // Each profile's grant names its own stages' effects: a model profile's include what calling the model does.
+  assert.deepEqual(Object.fromEntries(PROFILES.map((p: string) => [p, initialSettings(p).grants[0]!.scope!.effects])), {
+    static: ['local-artifacts'],
+    scanners: ['local-artifacts', 'tool-execution'],
+    secrets: ['local-artifacts', 'tool-execution'],
+    agentic: ['local-artifacts', 'network', 'paid-inference', 'source-disclosure', 'tool-execution'],
+    review: ['local-artifacts', 'network', 'paid-inference', 'source-disclosure'],
+  });
   assert.equal(statSync(path).mode & 0o777, 0o600);
   assert.equal(statSync(join(ws, '.farsight/sentinel')).mode & 0o777, 0o700);
   // Twice: the owner's edits survive byte for byte.

@@ -225,7 +225,7 @@ the folder you want to scan:
 npm install -g <pinned farsight-sentinel tarball URL>   # a GitHub Release asset once one is published (PR 26);
                                                         # until then a local build of scripts/pack-sentinel.mjs
 cd /path/to/your/workspace
-farsight-sentinel init                     # .farsight/sentinel/settings.json and pipeline.json (0600); again: kept
+farsight-sentinel init [--profile <name>]  # .farsight/sentinel/settings.json and pipeline.json (0600); again: kept
 farsight-sentinel scan                     # what it would adopt, promote and run, every model and budget; exit 4
 farsight-sentinel scan --confirm           # one confirmation: adopt, promote, plan and run (--detach: in the service)
 farsight-sentinel report                   # the newest scan's report; scans lists them, status and wait read the newest
@@ -243,12 +243,28 @@ farsight-sentinel rerun <runId> [--stage <unit,...>]   # a linked run over the e
 farsight-sentinel retry <runId>            # the same, selecting the units that did not publish
 ```
 
-`init` writes the settings file only when it is missing: PR 06's defaults plus one grant letting the owner (a
-person, never an agent) capture and run the `static` profile. Settings name credentials by keychain reference
-only (`keychain:farsight/<name>`). Nothing downloads a tool, installs a scanner, starts a container or contacts a
-model provider. The default `static` preset is a **foundation preview**: one original coded check (SQL text assembled from strings in
-TypeScript, JavaScript and Java) shows the whole path working; it is not scanner or framework coverage, and its
-report says so. A background run survives the command that started it: the owner's service (`serve`, started on
+`init` writes the settings file and the pipeline file, each only when it is missing: the policy's defaults plus one
+grant letting the owner (a person, never an agent) capture and run, scoped to exactly the effects the profile's
+stages have (a grant that named no effects would admit every effect). Settings name credentials by keychain
+reference only (`keychain:farsight/<name>`). Nothing downloads a tool, installs a scanner, starts a container or
+contacts a model provider. `init` prints what the profile plans and what this machine needs for it:
+
+| `--profile` | stages after capture, parse and inventory | needs | grant effects |
+|---|---|---|---|
+| `static` (default) | the foundation preview check | Node 24 | local artifacts |
+| `scanners` | the five pinned scanners | a container runtime and their adopted images | + tool execution |
+| `secrets` | the current-tree secret scan | a container runtime and the adopted Gitleaks image | + tool execution |
+| `agentic` | secrets, patterns, the walkthrough, a Copilot general review of their findings | containers for the two scanners; a qualified Copilot CLI and its provider | + tool execution, paid inference, source disclosure, network |
+| `review` | the walkthrough and a Copilot general review | a qualified Copilot CLI and its provider; no container | + paid inference, source disclosure, network |
+
+The `review` profile reviews **without a secrets scan**: its settings carry `hostedReviewSecretScan: "when-selected"`,
+so a hosted review is admitted without a current secret scan and a credential in the source can reach the model;
+`init` says so. Use `agentic` to scan for secrets first. Neither model profile can write its provider: the
+provider's pins come from the installed executable (`capabilities --models`) and its terms are the owner's own
+record, so the owner adds it (see the Copilot section below); until then `scan` lists the review stage as not
+configured. The `static` preset is a **foundation preview**: one original coded check (SQL text assembled from
+strings in TypeScript, JavaScript and Java) shows the whole path working; it is not scanner or framework coverage,
+and its report says so. A background run survives the command that started it: the owner's service (`serve`, started on
 demand, stopping when idle) holds the store, a duplicate start joins the same run, and a run interrupted by the
 service stopping resumes with `resume <planId> --confirm`. Only the owner's `--confirm` hands a run over; another
 client of the service gets what the adopted grants give agents, which by default is nothing. `retry` and
@@ -949,6 +965,41 @@ known-unsent, definitively-refused and unknown dispatch. A fresh request can rep
 when the genuine service also confirms no retained preparation exists. Lost responses, legacy unknown records,
 accepted or resumable work stay protected; reconnect never automatically replays them.
 
+## The pipeline file
+
+`.farsight/sentinel/pipeline.json` declares the stages a scan runs, in the `sentinel-pipeline/draft-1` schema: an
+`id`, a `revision`, optional `flags`, and `stages`. Every stage has an `id`, a `kind` and `needs` (the stages, or
+`{ "stage", "output" }` outputs, it waits for and reads); `after` orders without reading; `fanOut` is `per-run`,
+`per-source`, `per-check` or `per-entry`; `required: true` makes its coverage required. The kinds:
+
+- `builtin`: `capture`, `parse`, `inventory`, `walkthrough`, `report`. The first three are the bootstrap every
+  pipeline keeps.
+- `tool`: a registered scanner `adapter` and the rule families it runs (`rules`: a list, or `pack:builtin:<name>`).
+- `agent`: a model stage. `mode` is `brokered` (Sentinel runs the loop) or `native` (the CLI runs its own over the
+  stage's declared inputs); `runner` is `copilot-cli`, `claude-cli`, `hosted-api` or `ollama`; `model`, optionally
+  `provider`, `prompt`, `instructions` and `skills` (pack references, `stages/<pack>@<version>#<file>`), and a
+  `budget`. `per-run` and `per-source` plan the general review, `per-check` the guided one. The adopted settings'
+  provider binding is what runs; the scan preview says when it names another runner or model than the stage.
+- `script`: an owner-promoted entry file (`entry`, a pack reference) run by `interpreter` (`node` or `sh`) with
+  `args`, its declared inputs in a scratch folder and an empty environment. `runner: host` runs on this computer,
+  unconfined, and only while the adopted settings set `hostScripts: true` (the `stage.host-scripts` feature); the
+  report names that weaker isolation. `runner: container` is not available in this build.
+
+```sh
+farsight-sentinel pipeline show                 # the pipeline, how far it is trusted, every problem with it here
+farsight-sentinel pipeline validate [--file f]  # check a file against this workspace, as show and plan do
+farsight-sentinel pipeline adopt [--confirm]    # pin its exact bytes and the packs it names, as the owner
+farsight-sentinel stage promote <folder> [--confirm]   # promote a stage or skill pack (its files, by digest)
+farsight-sentinel stage show <stage> [--run <runId>]   # one stage of the newest (or a named) scan: units, state
+farsight-sentinel rerun <runId> --stage <stage>        # a linked child running that stage and what depends on it
+```
+
+A problem is `refused` (plan stops: an unknown adapter, rule or pack, a disabled feature, a cycle) or `unavailable`
+(reported, the stage held, the plan goes on: a tool not adopted, a rule not promoted, a runner no provider binds).
+`scan` prints both before anything runs. The pipeline `init` writes for `static`, `scanners` or `secrets`, byte for
+byte, plans as that profile's defaults (with any review the settings configure); any other file plans as declared,
+and the run records which, so `status` and the report say what was run.
+
 ## Copilot CLI foreground review
 
 The fixed Copilot profile uses GitHub Copilot CLI 1.0.103 on macOS arm64 and explicit model `gpt-6-luna`.
@@ -990,8 +1041,9 @@ provider below, retain the other initialized settings, and replace owner-reviewe
 }
 ```
 
-Copilot is hosted source disclosure even while the HTTP API and native Claude switches are off. Extend only
-the owner's `run.start` grant with `paid-inference`, `source-disclosure` and `network`, and add a confirmed human
+Copilot is hosted source disclosure even while the HTTP API and native Claude switches are off. The owner's
+`run.start` grant must list `paid-inference`, `source-disclosure` and `network`: `init --profile agentic` and
+`--profile review` already write them; for another profile add them to that grant only. Add a confirmed human
 `paid.admit` grant scoped to `native-copilot`. A complete genuine current-source Gitleaks publication covering
 every captured entry is required before model admission or native authentication; partial scans cannot be joined.
 
@@ -1147,8 +1199,9 @@ private trace content/output at 8 MiB with a shared 20-second read deadline, and
 
 ### Agentic-only review without external scanners
 
-Capture, parsing, retained inputs and general model review do not need Docker or a local model. In the existing
-owner settings, keep the configured Copilot provider and its exact model pins, and explicitly select:
+Capture, parsing, retained inputs and general model review do not need Docker or a local model. `init --profile
+review` writes this setup (the walkthrough and a Copilot general review, no scanner); for an existing workspace,
+keep the configured Copilot provider and its exact model pins, and explicitly select:
 
 ```json
 {
