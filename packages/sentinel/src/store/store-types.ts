@@ -1,6 +1,7 @@
 // Draft types for the Sentinel ledger and its seams with the ownership lock and the object store. The ledger is the
 // only writer of the database; nothing here exposes a connection, a statement or a transaction callback.
 import type { ArtifactId, AttemptUsage, Count, Digest, Id, Ordinal, Timestamp, WorkRef } from '../contracts/index.js';
+import { SentinelError } from '../kernel/errors.js';
 
 /**
  * What the ledger needs from the store owner (the ownership lock implements it; this is a structural subset so the
@@ -20,6 +21,7 @@ export interface LedgerOwner {
   registerResource(resource: { close(): void }): unknown;
 }
 
+/** Why the ledger refused: each is a catalog key in core strings-sentinel-storage-errors.ts. */
 export const LEDGER_ERROR_CODES = [
   'sentinel.store.sqliteUnsupported',
   'sentinel.store.notLedger',
@@ -46,15 +48,17 @@ export const LEDGER_ERROR_CODES = [
   'sentinel.store.snapshotStale',
   'sentinel.store.corruptRecord',
 ] as const;
+/** One of {@link LEDGER_ERROR_CODES}. */
 export type LedgerErrorCode = (typeof LEDGER_ERROR_CODES)[number];
 
-/** A stable ledger failure. The message is safe context, never raw input bytes or a filesystem secret. */
-export class LedgerError extends Error {
-  readonly code: LedgerErrorCode;
+/**
+ * A stable ledger failure; the message is `<code>: <message>`. The message is safe context, never raw input bytes or a
+ * filesystem secret.
+ */
+export class LedgerError extends SentinelError<LedgerErrorCode> {
   constructor(code: LedgerErrorCode, message: string, options?: { cause?: unknown }) {
-    super(`${code}: ${message}`, options);
+    super(code, `${code}: ${message}`, { cause: options?.cause });
     this.name = 'LedgerError';
-    this.code = code;
   }
 }
 
@@ -63,6 +67,7 @@ export class LedgerError extends Error {
 /** How an object's bytes are stored. The artifact ID always hashes the raw (decoded) bytes. */
 /** `gzip` is any verified gzip member, whatever level wrote it; the writer's level is the object store's choice. */
 export const ARTIFACT_CODECS = ['identity', 'gzip'] as const;
+/** One of {@link ARTIFACT_CODECS}. */
 export type ArtifactCodec = (typeof ARTIFACT_CODECS)[number];
 
 /**
@@ -70,6 +75,7 @@ export type ArtifactCodec = (typeof ARTIFACT_CODECS)[number];
  * class any reference ever gave it and never decreases.
  */
 export const ARTIFACT_PRIVACY = ['metadata', 'source-derived', 'source'] as const;
+/** One of {@link ARTIFACT_PRIVACY}. */
 export type ArtifactPrivacy = (typeof ARTIFACT_PRIVACY)[number];
 
 /** Largest decoded object the store accepts (16 MiB). */
@@ -122,6 +128,7 @@ export interface IdempotencyRef {
   key: Id;
 }
 
+/** One publication: the work and attempt, the staging registration, and one receipt per staged artifact. */
 export interface PublishInput {
   work: WorkRef;
   attemptId: Id;
@@ -155,6 +162,7 @@ export interface AdmitSnapshotInput {
   idempotency?: IdempotencyRef;
 }
 
+/** One plan revision to admit: its run, revision, kind, digest, predecessor and the pins it binds. */
 export interface AdmitPlanInput {
   runId: Id;
   revision: Ordinal;
@@ -180,6 +188,7 @@ export interface AdmitPlanInput {
   idempotency?: IdempotencyRef;
 }
 
+/** An admitted plan revision as the ledger records it. */
 export interface PlanRecord {
   runId: Id;
   revision: Ordinal;
@@ -203,6 +212,7 @@ export interface AttemptRecords {
   receipts: ObjectReceipt[];
 }
 
+/** An admitted snapshot as the ledger records it: its manifest, materialization, inventory digest and sequence. */
 export interface SnapshotRecord {
   snapshotId: Id;
   manifest: ArtifactId;
@@ -212,6 +222,7 @@ export interface SnapshotRecord {
   admittedAt: Timestamp;
 }
 
+/** An accepted publication: its work and attempt, the result digest the ledger computed, its sequence and time. */
 export interface PublicationReceipt {
   work: WorkRef;
   attemptId: Id;
@@ -221,9 +232,12 @@ export interface PublicationReceipt {
   acceptedAt: Timestamp;
 }
 
+/** How an attempt can end other than by publishing. */
 export const ATTEMPT_END_STATES = ['failed', 'interrupted', 'canceled', 'canceled-after-spend'] as const;
+/** One of {@link ATTEMPT_END_STATES}. */
 export type AttemptEndState = (typeof ATTEMPT_END_STATES)[number];
 
+/** An attempt that ends without publishing: how it ended, when, and the work's state afterwards. */
 export interface EndAttemptInput {
   work: WorkRef;
   attemptId: Id;
@@ -254,6 +268,7 @@ export interface AttemptError {
 /** A work revision's held or released state, set by the coordinator from the plan's dependency decisions. */
 export type WorkTransition = 'ready' | 'blocked' | 'disabled-by-policy';
 
+/** Every kind of event the ledger appends. */
 export const LEDGER_EVENT_KINDS = [
   'epoch-opened',
   'run-created',
@@ -276,8 +291,10 @@ export const LEDGER_EVENT_KINDS = [
   'evidence-accepted',
   'evidence-abandoned',
 ] as const;
+/** One of {@link LEDGER_EVENT_KINDS}. */
 export type LedgerEventKind = (typeof LEDGER_EVENT_KINDS)[number];
 
+/** One appended ledger event: its sequence, kind, run, work, epoch and payload. */
 export interface LedgerEvent {
   sequence: Count;
   kind: LedgerEventKind;
@@ -288,6 +305,7 @@ export interface LedgerEvent {
   payload: Record<string, unknown>;
 }
 
+/** One page of ledger events and where the next begins. */
 export interface EventPage {
   events: LedgerEvent[];
   /** Pass as `after` to continue; equals the last event's sequence, or the request's `after` when empty. */
@@ -295,6 +313,7 @@ export interface EventPage {
   more: boolean;
 }
 
+/** The most events one page returns. */
 export const MAX_EVENT_PAGE = 500;
 
 /**
@@ -334,6 +353,7 @@ export interface Migration {
   sql: string;
 }
 
+/** How a ledger is opened: the build label for migrations, the clock, the object verifier and test failpoints. */
 export interface OpenLedgerOptions {
   /** Recorded beside each applied migration. */
   build?: string;
@@ -347,6 +367,7 @@ export interface OpenLedgerOptions {
   failpoint?: (point: LedgerFailpoint) => void;
 }
 
+/** A named point inside a ledger transaction where a test can inject a failure. */
 export type LedgerFailpoint =
   | 'backup:before'
   | 'backup:after-copy'
@@ -356,6 +377,7 @@ export type LedgerFailpoint =
   | 'snapshot:before-commit'
   | 'plan:before-commit';
 
+/** What opening a ledger migrated: the schema versions before and after, and the verified backup taken. */
 export interface MigrationReport {
   from: Count;
   to: Count;

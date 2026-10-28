@@ -7,6 +7,7 @@ import type { FileIdentity } from './paths.js';
 
 const owners = new WeakMap<object, StoreOwner>();
 
+/** Binds a store from openStore to its owner, once; a second binding throws. */
 export function bindOwner(store: object, owner: StoreOwner): void {
   if (owners.has(store)) throw new Error('a store is bound to its owner once');
   owners.set(store, owner);

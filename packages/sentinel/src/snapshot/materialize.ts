@@ -27,11 +27,13 @@ import { contentId } from './inventory.js';
 import { inventoryDigestOf, validateMaterialization, type Materialization } from './materialization.js';
 import { foldPath } from './policy.js';
 
+/** How restore writes files: read-only by default, and never executable. */
 export interface RestoreOptions {
   /** Leave files 0400 and folders 0500 (default true); otherwise files 0600 and folders 0700. Never executable. */
   readonly readOnly?: boolean;
 }
 
+/** One restored source: where it is and how many files and folders it holds. */
 export interface RestoredSource {
   readonly sourceId: string;
   /** `<target>/<sourceId>`. */
@@ -40,6 +42,7 @@ export interface RestoredSource {
   readonly directories: number;
 }
 
+/** A restored snapshot: its record, envelope and materialization, and where each source was written. */
 export interface RestoredSnapshot {
   readonly record: SnapshotRecord;
   readonly snapshot: SnapshotEnvelope;
@@ -48,12 +51,14 @@ export interface RestoredSnapshot {
   readonly sources: readonly RestoredSource[];
 }
 
+/** A snapshot read and verified from the store without being written out. */
 export interface OpenedSnapshot {
   readonly record: SnapshotRecord;
   readonly snapshot: SnapshotEnvelope;
   readonly materialization: Materialization;
 }
 
+/** What restore reads from the store: artifacts and the ledger. */
 export type RestoreStore = Pick<SentinelStore, 'readArtifact' | 'ledger'>;
 
 async function readCanonical(store: RestoreStore, id: ArtifactId): Promise<unknown> {

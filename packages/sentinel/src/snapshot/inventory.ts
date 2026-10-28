@@ -1,15 +1,20 @@
 // The capture's running inventory: every enumerated entry, the bytes to store, the entry budget and the byte quota.
-import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ArtifactId, CaptureEntry } from '../contracts/index.js';
 import type { CaptureReasonCode } from './errors.js';
 import { foldPath, isGenerated, lfsPointer, type CapturePolicy } from './policy.js';
+import { sha256Hex, sha256Id } from '../kernel/digest.js';
+import { SentinelError } from '../kernel/errors.js';
 
 /** Raised when bytes changed between two reads of one capture; a working copy is then captured again. */
-export class CaptureChanged extends Error {
+/**
+ * A file or folder changed while it was being captured. The capture retries; when every attempt saw a change it
+ * refuses with `sentinel.capture.unstable`, the code this error carries.
+ */
+export class CaptureChanged extends SentinelError<'sentinel.capture.unstable'> {
   constructor(detail: string) {
-    super(detail);
+    super('sentinel.capture.unstable', detail);
     this.name = 'CaptureChanged';
   }
 }
@@ -30,9 +35,10 @@ export interface PendingContent {
   read(): Buffer;
 }
 
-export const contentId = (bytes: Uint8Array): ArtifactId =>
-  `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+/** The artifact id of captured bytes: their content address. */
+export const contentId = (bytes: Uint8Array): ArtifactId => sha256Id(bytes);
 
+/** What a capture has read so far: every entry, the bytes waiting to be stored, the folders listed and file facts. */
 export class Inventory {
   readonly entries: CaptureEntry[] = [];
   readonly contents = new Map<ArtifactId, PendingContent>();
@@ -287,8 +293,7 @@ export function resolveLfs(
     const named = lstatSync(path);
     if (named.isSymbolicLink() || named.dev !== st.dev || named.ino !== st.ino)
       return { reason: 'sentinel.capture.lfsStoreUnsafe' };
-    if (off !== st.size || createHash('sha256').update(buf).digest('hex') !== pointer.oid)
-      return { reason: 'sentinel.capture.lfsObjectMismatch' };
+    if (off !== st.size || sha256Hex(buf) !== pointer.oid) return { reason: 'sentinel.capture.lfsObjectMismatch' };
     return { bytes: buf };
   } catch {
     return { reason: 'sentinel.capture.lfsStoreUnsafe' };

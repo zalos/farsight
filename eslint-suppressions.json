@@ -231,7 +231,7 @@
   },
   "packages/sentinel/src/validate.ts": {
     "boundaries/dependencies": {
-      "count": 2
+      "count": 1
     }
   },
   "scripts/sentinel-feasibility-frameworks.mjs": {

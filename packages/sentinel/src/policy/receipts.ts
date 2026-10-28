@@ -16,6 +16,7 @@ import { createPrivateFileOnce, readPrivateFile } from './user-state.js';
 import { snapshot } from './immutable.js';
 
 const MAX_RECEIPT_BYTES = 16 * 1024;
+/** The code a receipt folder that is not private refuses with. */
 export const STORE = 'sentinel.receipt.storeUnsafe' as const;
 
 /** The digest a receipt and an admission bind to. */
@@ -55,9 +56,11 @@ export interface ReceiptBinding {
 }
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+/** A timestamp in the contracts' nine-digit fractional form. */
 export const stamp = (d: Date) => d.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z');
 
 // Package-internal shared validator; concrete books fix their schema and authority boundary.
+/** The shared receipt validator: reads, checks and spends receipts in one private folder; subclasses fix the schema. */
 export class ReceiptReader<R extends ReceiptEnvelope | OwnerUiReceiptEnvelope> {
   readonly #dir: string;
 

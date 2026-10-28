@@ -8,8 +8,9 @@ import { canonicalDigest } from '../policy/digest.js';
 import { policyFail } from '../policy/errors.js';
 import { intentDigest, receiptAuthority, type ConsumedReceipt } from '../policy/receipts.js';
 import { isValidatedPack, type ValidatedPack } from './pack.js';
-import { deepFreeze } from '../policy/immutable.js';
+import { deepFreeze } from '../kernel/freeze.js';
 
+/** What an owner may promote into the rule lock: a validated pack, a pinned tool, or a held database. */
 export type PromotionCandidate =
   | { kind: 'pack'; pack: ValidatedPack }
   | { kind: 'tool'; tool: Omit<LockedTool, 'promotion'> }

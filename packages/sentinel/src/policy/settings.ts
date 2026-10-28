@@ -126,6 +126,7 @@ export function isEffectivePolicy(value: unknown): value is EffectivePolicy {
   return typeof value === 'object' && value !== null && effective.has(value);
 }
 
+/** What effectivePolicy combines: the adopted settings, the repository's request file, their digests and trust. */
 export interface PolicyInputs {
   trust: SettingsTrust;
   /** Adopted settings only; anything else is ignored and the defaults apply. */

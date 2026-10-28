@@ -239,6 +239,10 @@ export async function openLedger(owner: LedgerOwner, options: OpenLedgerOptions 
   }
 }
 
+/**
+ * The run, work, attempt and publication ledger over one SQLite file owned by one coordinator. Every change rechecks
+ * the owner and the epoch inside its transaction and refuses, with a LedgerError, anything out of order.
+ */
 export class Ledger {
   readonly #db: DatabaseSync;
   readonly #owner: LedgerOwner;

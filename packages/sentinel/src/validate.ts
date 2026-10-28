@@ -61,7 +61,7 @@ import type {
   PipelineDefinition,
   PipelineAdoptionEnvelope,
 } from './contracts/index.js';
-import { digestOf } from './store/ledger-json.js';
+import { digestOf } from './kernel/digest.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf, reviewUnitIdOf, scriptUnitIdOf } from './planner/identity.js';
 import { OWNER_ACTIONS } from './contracts/index.js';
 
