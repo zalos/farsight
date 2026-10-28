@@ -40,6 +40,7 @@ import { ExecutionError } from './errors.js';
 import type { AdmittedPlan } from './plans.js';
 import { checkProfileRegistry } from './profile.js';
 import { NOT_SELECTED, unitsToRun } from './selection.js';
+import { SCRIPT_CONTRACT } from '../planner/pipeline.js';
 import type { AdapterRegistry, TrustedAdapter } from './registry.js';
 import { orderPlan } from './scheduler.js';
 import { inputFingerprintOf, type CapturedInput } from './supervisor.js';
@@ -303,10 +304,12 @@ export async function executablePlan(
       adapter = registry.get(unit.adapterId);
       if (adapter.digest !== unit.implementationDigest)
         refuse(`work ${key(w)} names implementation ${unit.implementationDigest}, not adapter ${adapter.id}`);
+      // A declared script stage's unit runs the script runner operation; every other unit the operation of its stage.
+      const operation = unit.contract === SCRIPT_CONTRACT ? 'script' : unit.stage;
       if (
         unit.stage === 'check'
           ? adapter.kind === 'operation'
-          : adapter.kind !== 'operation' || adapter.operation !== unit.stage
+          : adapter.kind !== 'operation' || adapter.operation !== operation
       ) {
         refuse(`work ${key(w)} is a ${unit.stage} stage and ${adapter.id} is not its operation`);
       }
