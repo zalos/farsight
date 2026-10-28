@@ -384,8 +384,8 @@ test(
     assert.equal(piped.requestedMaxOutputTokens, 512);
     await assert.rejects(
       COPILOT_RUNNER.run({ ...stage, mode: 'native' }, [], {}),
-      (e: any) => e.code === 'sentinel.provider.capabilityUntested',
-      'native stays deferred: no qualified native profile here',
+      (e: any) => e.code === 'sentinel.provider.invalidProfile',
+      'a native stage is never run as a brokered session; it needs its own admitted envelope',
     );
   },
 );
@@ -474,7 +474,7 @@ test('every contract provider kind is one registry entry, and no review module s
   assert.deepEqual(
     AGENT_RUNNERS.map((r) => [r.id, [...r.modes]]),
     [
-      ['copilot-cli', ['brokered']],
+      ['copilot-cli', ['brokered', 'native']],
       ['claude-cli', ['brokered']],
       ['hosted-api', ['brokered']],
     ],
