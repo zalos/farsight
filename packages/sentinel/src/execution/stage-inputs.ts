@@ -15,6 +15,7 @@
 // planned without one (every run before declared pipelines, and every run planned from the implied default) reads as
 // its implied default pipeline: the default pipeline over the rules it pins and the reviews it holds.
 import type { ArtifactId, Id, WorkRef } from '../contracts/common.js';
+import type { EffectivePolicy } from '../policy/settings.js';
 import type { PipelineDefinition, StageInputBinding, StageOutputType } from '../contracts/pipeline.js';
 import type { AgentRunnerId } from '../contracts/pipeline.js';
 import { PREVIEW_FINDINGS_SCHEMA } from '../adapters/preview-detector.js';
@@ -37,9 +38,15 @@ export function outputSchemasOf(output: StageOutputType | 'walkthrough' | string
     source: [CAPTURE_RECORD_SCHEMA],
     parse: [PARSER_RESULT_SCHEMA, PARSER_INDEX_SCHEMA],
     inventory: [INVENTORY_RECORD_SCHEMA],
-    findings: ['sentinel-driver-finding/draft-1', PREVIEW_FINDINGS_SCHEMA, 'sentinel-paths/draft-1'],
+    // A scanner's report is part of its findings: a clean scan publishes its report and no finding record.
+    findings: [
+      'sentinel-driver-report/draft-1',
+      'sentinel-driver-finding/draft-1',
+      PREVIEW_FINDINGS_SCHEMA,
+      'sentinel-paths/draft-1',
+    ],
     coverage: [COVERAGE_SCHEMA],
-    observations: ['sentinel-observation/draft-1'],
+    observations: ['sentinel-review-record/draft-1', 'sentinel-observation/draft-1'],
     'walkthrough-md': [PATHS_OUTPUT_SCHEMA],
     walkthrough: [PATHS_OUTPUT_SCHEMA],
     report: [],
@@ -89,6 +96,37 @@ export function impliedPipelineOf(admitted: Pick<AdmittedPlan, 'plan' | 'policy'
   });
 }
 
+/**
+ * The default pipeline for planning terms: one check stage per adapter the policy's locked rules run under, and an
+ * agent stage for each review stage the adopted settings configure (its runner from the configured provider's kind).
+ * Planning it reproduces the derived plan; a run planned from it records no declaration.
+ */
+export function defaultPipelineFor(
+  rules: readonly { readonly familyId: string; readonly adapterId: Id }[],
+  policy: Pick<EffectivePolicy, 'rules' | 'settings'>,
+): PipelineDefinition {
+  const selected = new Set(policy.rules);
+  const configured = policy.settings.reviewModels;
+  const bindings = [...(configured?.stages ?? []), ...(configured?.segments ?? [])];
+  const reviews = (['guided', 'general'] as const).flatMap((kind) => {
+    const binding = bindings.find((b) => b.stage === kind);
+    if (!binding) return [];
+    const kindOf = policy.settings.providers.find((p) => p.id === binding.providerId)?.kind ?? '';
+    return [
+      {
+        kind,
+        runner: RUNNER_OF[kindOf] ?? ('hosted-api' as const),
+        model: binding.modelId,
+        provider: binding.providerId,
+      },
+    ];
+  });
+  return defaultPipelineOf({
+    checks: rules.filter((r) => selected.has(r.familyId)).map((r) => ({ adapterId: r.adapterId, rules: [r.familyId] })),
+    reviews,
+  });
+}
+
 /** The declaration a run's admitted revision was planned from: recorded, or implied. */
 export function pipelineOf(admitted: Pick<AdmittedPlan, 'plan' | 'policy' | 'profile'>): PipelineDefinition {
   return admitted.profile.pipeline ?? impliedPipelineOf(admitted);
@@ -103,11 +141,63 @@ export function runStages(admitted: Pick<AdmittedPlan, 'plan' | 'policy' | 'prof
   return { model, owner: stagesOfUnits(model, admitted.plan) };
 }
 
+/** Why one upstream artifact may not reach a consumer. */
+export type UpstreamWithheld = 'secret-scanner-output' | 'unreadable' | 'withheld-evidence' | 'secret-match-name';
+
+/**
+ * The read boundary every upstream artifact passes before an agent or a script may read it, fail-closed: the bytes
+ * of a secret scanner's own output never pass; anything that is not a bounded UTF-8 JSON document cannot be
+ * inspected, so it does not pass; a document carrying withheld evidence (a withheld location or detail, which marks
+ * bytes near a secret) does not pass; nor does one naming a file an accepted secret match withheld (`names`, the
+ * canonical fold's privacy names for this run and its selected ancestry). Returns null when the artifact passes.
+ */
+export function foldUpstreamBytes(
+  bytes: Uint8Array,
+  producer: { readonly adapterId: Id | null },
+  names: ReadonlySet<string>,
+): UpstreamWithheld | null {
+  if (producer.adapterId === 'secrets-gitleaks') return 'secret-scanner-output';
+  if (bytes.byteLength > MAX_DOCUMENT_BYTES) return 'unreadable';
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder('utf8', { fatal: true }).decode(bytes));
+  } catch {
+    return 'unreadable';
+  }
+  let withheld: UpstreamWithheld | null = null;
+  const walk = (v: unknown, depth: number): void => {
+    if (withheld) return;
+    if (depth > 64) {
+      withheld = 'unreadable';
+      return;
+    }
+    if (typeof v === 'string') {
+      if (names.has(v)) withheld = 'secret-match-name';
+      return;
+    }
+    if (!v || typeof v !== 'object') return;
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x, depth + 1);
+      return;
+    }
+    const o = v as Record<string, unknown>;
+    if (o.location === 'withheld' || o.state === 'withheld' || o.withheld === true) {
+      withheld = 'withheld-evidence';
+      return;
+    }
+    for (const x of Object.values(o)) walk(x, depth + 1);
+  };
+  walk(value, 0);
+  return withheld;
+}
+
 /**
  * The typed inputs of one declared stage, resolved against what this run accepted. Each input names the producers
- * (the producing stage's units of this revision, or the reused bootstrap work for a bootstrap stage) and, once every
- * producer published, the exact artifacts of the declared type. `waiting`: a producer has not published yet;
- * `missing`: a producer ended without publishing, or the stage has no unit to publish it.
+ * (the producing stage's units of this revision, or the reused bootstrap work for a bootstrap stage). `resolved`:
+ * every producer published at least one artifact of the declared type, and those are the artifacts, each through
+ * the read boundary (foldUpstreamBytes) and the run's canonical secret fold. `waiting`: a producer has not published
+ * yet. `missing`: a producer ended without publishing, published nothing of that type, or the stage has no unit.
+ * Any upstream artifact the fold withholds refuses the consumer (stageInputWithheld): no partial input is bound.
  */
 export async function resolveStageInputs(
   store: SentinelStore,
@@ -119,7 +209,7 @@ export async function resolveStageInputs(
   const typed = model.inputs.get(stage);
   if (!typed) throw new ExecutionError('sentinel.execution.planInvalid', { reason: `stage ${stage} is not declared` });
   const owner = stagesOfUnits(model, admitted.plan);
-  const out: StageInputBinding[] = [];
+  const out: Array<StageInputBinding & { from: Map<ArtifactId, Id | null> }> = [];
   for (const input of typed) {
     const role = model.roles.get(input.stage)!;
     const named = model.stages
@@ -134,40 +224,56 @@ export async function resolveStageInputs(
         : admitted.plan.units
             .filter((u) => owner.get(u.id) === input.stage)
             .map((u) => ({ id: u.id, revision: u.revision }));
-    const artifacts = new Set<ArtifactId>();
+    const from = new Map<ArtifactId, Id | null>();
     let state: StageInputBinding['state'] = producers.length ? 'resolved' : 'missing';
     for (const p of producers) {
       const publication = store.ledger.getPublication(p);
       if (publication) {
+        let found = 0;
         for (const o of publication.outputs)
-          if (schemas.has(o.schema) || (o.schema === RAW_JSON && schemas.has(await documentSchemaOf(store, o.id))))
-            artifacts.add(o.id as ArtifactId);
+          if (schemas.has(o.schema) || (o.schema === RAW_JSON && schemas.has(await documentSchemaOf(store, o.id)))) {
+            from.set(o.id as ArtifactId, admitted.plan.units.find((u) => u.id === p.id)?.adapterId ?? null);
+            found++;
+          }
+        // Published without the declared output: it will never publish it in this run.
+        if (found === 0) state = 'missing';
         continue;
       }
       const row = store.ledger.getWork(p);
-      const ended = row && ['failed', 'blocked', 'disabled-by-policy'].includes(row.state);
+      const ended = row && ['failed', 'blocked', 'disabled-by-policy', 'published'].includes(row.state);
       if (ended) state = 'missing';
       else if (state === 'resolved') state = 'waiting';
     }
     out.push({
       decl: { stage: input.stage, output: input.output },
       state,
-      artifacts: state === 'resolved' ? [...artifacts].sort() : [],
+      artifacts: state === 'resolved' ? [...from.keys()].sort() : [],
       producers: [...producers].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : a.revision - b.revision)),
       secretFold: 'not-applicable',
+      from,
     });
   }
-  if (!out.some((i) => i.artifacts.length)) return out;
-  // The fold runs over every resolved upstream artifact before any consumer may read one.
+  const strip = ({ from: _from, ...binding }: (typeof out)[number]): StageInputBinding => binding;
+  if (!out.some((i) => i.artifacts.length)) return out.map(strip);
+  // The canonical fold over the run (and its selected ancestry and baseline), then each artifact's own read boundary.
   const { selectedSecretPrivacy } = await import('../reports/selected-privacy.js');
   const privacy = await selectedSecretPrivacy(store, admitted.plan.runId, admitted, true);
   store.assertHeld();
-  if (privacy.hasMatches)
-    throw new ExecutionError('sentinel.execution.stageInputWithheld', {
-      stage,
-      inputs: out.filter((i) => i.artifacts.length).map((i) => `${(i.decl as { stage: string }).stage}`),
-    });
-  return out.map((i) => (i.artifacts.length ? { ...i, secretFold: 'applied' as const } : i));
+  const names = new Set(privacy.names);
+  const withheld: string[] = [];
+  for (const input of out) {
+    const d = input.decl as { stage: string; output: string };
+    for (const id of input.artifacts) {
+      const reason = privacy.hasMatches
+        ? 'secret-match'
+        : foldUpstreamBytes(await store.readArtifact(id), { adapterId: input.from.get(id) ?? null }, names);
+      if (reason) withheld.push(`${d.stage}.${d.output} ${reason}`);
+    }
+  }
+  store.assertHeld();
+  if (withheld.length)
+    throw new ExecutionError('sentinel.execution.stageInputWithheld', { stage, inputs: [...new Set(withheld)] });
+  return out.map((i) => strip(i.artifacts.length ? { ...i, secretFold: 'applied' as const } : i));
 }
 
 /**

@@ -9,7 +9,13 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore } from '../dist/store/index.js';
-import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, workspaceOf } from '../dist/service/local.js';
+import {
+  adoptedPolicy,
+  adoptWorkspaceSettings,
+  followWorkspaceRun,
+  promoteRulePack,
+  workspaceOf,
+} from '../dist/service/local.js';
 import { executeRun, planWorkspaceCanonical } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
 import { initWorkspace } from '../dist/cli/init.js';
@@ -17,6 +23,7 @@ import { loadPlan } from '../dist/execution/plans.js';
 import { checkProfileForPlan, withPipeline } from '../dist/execution/profile.js';
 import { expandStageTokens } from '../dist/execution/selection.js';
 import {
+  foldUpstreamBytes,
   impliedPipelineOf,
   outputSchemasOf,
   pipelineOf,
@@ -63,6 +70,7 @@ test(
       'export const one = (id: string) => db.query("SELECT 1 WHERE id = ?", [id]);\n',
     );
     const ws = workspaceOf(path, { ...process.env, XDG_STATE_HOME: join(dir, 'state') });
+    let runId: string;
     initWorkspace({ workspace: path });
     adoptWorkspaceSettings(ws, { confirm: true, now: new Date() });
     promoteRulePack(ws, {
@@ -89,6 +97,7 @@ test(
         scratchRoot: work,
         now: new Date(),
       });
+      runId = planned.disclosure.runId;
       const admitted = await loadPlan(store, planned.disclosure.runId, planned.disclosure.revision);
       assert.ok(admitted.plan.pins.rules.every((r) => r.familyId === PREVIEW_RULE));
 
@@ -112,13 +121,22 @@ test(
       );
       assert.deepEqual(expandStageTokens(admitted, [one]).units, [one]);
 
+      // The preview stage also declares an output it never publishes, to read it as a producer that published
+      // without the requested type.
+      const declared = {
+        ...implied,
+        stages: implied.stages.map((s: any) =>
+          s.id === 'preview' ? { ...s, produces: [{ name: 'notes', schema: 'sentinel.notes/v1' }] } : s,
+        ),
+      };
       const model = stageModel(
         reading(
-          implied,
+          declared,
           [
             { stage: 'preview', output: 'findings' },
             { stage: 'preview', output: 'coverage' },
             { stage: 'ci', output: 'findings' },
+            { stage: 'preview', output: 'notes' },
           ],
           [{ id: 'ci', kind: 'tool', adapter: 'zizmor', rules: ['sentinel.ci.workflow-audit'], needs: ['inventory'] }],
         ),
@@ -131,6 +149,7 @@ test(
           ['waiting', 0, 3, 'not-applicable'],
           ['waiting', 0, 3, 'not-applicable'],
           ['missing', 0, 0, 'not-applicable'],
+          ['waiting', 0, 3, 'not-applicable'],
         ],
       );
 
@@ -160,6 +179,8 @@ test(
       assert.ok(coverage.length > 0);
       assert.deepEqual(after[1]!.artifacts, coverage);
       assert.deepEqual([after[2]!.state, after[2]!.artifacts], ['missing', []]);
+      // Every producer published, none of them a `sentinel.notes/v1` document: missing, never resolved to nothing.
+      assert.deepEqual([after[3]!.state, after[3]!.artifacts, after[3]!.producers.length], ['missing', [], 3]);
       assert.ok(outputSchemasOf('findings').includes(PREVIEW_FINDINGS_SCHEMA));
 
       // A unit of a run planned without a recorded pipeline is bound exactly as before: no stage inputs.
@@ -176,8 +197,67 @@ test(
         () => checkProfileForPlan(withPipeline(admitted.profile, other), admitted.plan),
         (e: any) => e.code === 'sentinel.execution.planInvalid' && /not made from the pipeline/.test(e.message),
       );
+
+      // `rerun --stage preview` through the service: the stage expands to its units, the preview names what runs
+      // after it, and confirming plans one linked child; an undeclared stage is refused.
+      store.close();
+      const now = new Date();
+      const unknown = await followWorkspaceRun(ws, { mode: 'rerun', runId, stages: ['nowhere'], confirm: true, now });
+      assert.deepEqual(
+        [unknown.outcome, unknown.reasonCode, unknown.facts.unknown],
+        ['configuration-failure', 'sentinel.service.stageUnknown', ['nowhere']],
+      );
+      const stages = (s: any) => [
+        s.selected.map((x: any) => [x.stage, x.units.length]),
+        s.downstream.map((x: any) => x.stage),
+      ];
+      const child = await followWorkspaceRun(ws, { mode: 'rerun', runId, stages: ['preview'], confirm: true, now });
+      assert.equal(child.outcome, 'prepared', JSON.stringify(child));
+      assert.equal(child.facts.parentId, runId);
+      assert.notEqual(child.facts.runId, runId, 'a linked child run, the parent unchanged');
+      assert.deepEqual(stages(child.facts.stages), [[['preview', 3]], ['report']]);
+      // Asking again joins the same child.
+      const again = await followWorkspaceRun(ws, { mode: 'rerun', runId, stages: ['preview'], confirm: true, now });
+      assert.deepEqual([again.outcome, again.facts.runId], ['kept', child.facts.runId]);
+      assert.deepEqual((child.facts.preview as any).selected, previewUnits.map((u) => u.id).sort());
     } finally {
       removeScratch(work);
     }
   },
 );
+
+test('every upstream artifact passes the fail-closed read boundary before an agent or a script may read it', () => {
+  const clean = { id: 'producer-unit', adapterId: 'sentinel.preview.detector' };
+  const json = (v: unknown) => Buffer.from(JSON.stringify(v));
+  const names = new Set(['src/secrets.env']);
+  const doc = { schema: 'sentinel-preview-findings/draft-1', findings: [{ path: 'src/users.ts', line: 1 }] };
+  assert.equal(
+    foldUpstreamBytes(json(doc), clean, names),
+    null,
+    'an inspectable document with nothing withheld passes',
+  );
+  // Withheld evidence anywhere in it: a withheld location, a withheld detail, a withheld flag.
+  const withheldLocation = {
+    location: 'withheld',
+    snapshotId: 'snap-1',
+    sourceId: 'workspace',
+    entry: 4,
+    content: `sha256:${'a'.repeat(64)}`,
+  };
+  for (const v of [
+    { ...doc, findings: [{ evidence: [withheldLocation] }] },
+    { records: [{ state: 'withheld', reasonCode: 'sentinel.report.withheld.secret' }] },
+    { nested: { deeper: [{ withheld: true }] } },
+  ])
+    assert.equal(foldUpstreamBytes(json(v), clean, names), 'withheld-evidence', JSON.stringify(v));
+  // A file an accepted secret match withheld, named anywhere in it.
+  assert.equal(foldUpstreamBytes(json({ ...doc, files: ['src/secrets.env'] }), clean, names), 'secret-match-name');
+  // What cannot be inspected does not pass: not UTF-8, not JSON, too deep.
+  assert.equal(foldUpstreamBytes(Buffer.from([0xff, 0xfe, 0x7b]), clean, names), 'unreadable');
+  assert.equal(foldUpstreamBytes(Buffer.from('not json'), clean, names), 'unreadable');
+  let deep: unknown = 1;
+  for (let i = 0; i < 80; i++) deep = [deep];
+  assert.equal(foldUpstreamBytes(json(deep), clean, names), 'unreadable');
+  // A secret scanner's own output never reaches a consumer, whatever it holds.
+  assert.equal(foldUpstreamBytes(json(doc), { adapterId: 'secrets-gitleaks' }, names), 'secret-scanner-output');
+});
