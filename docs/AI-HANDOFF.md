@@ -1,5 +1,48 @@
 # Farsight — shared Codex / Claude memory
 
+## Sentinel v2 thin slice and the demo build — 2026-10-28
+
+Merged today, in order: #227 put SCANS · PIPELINE · STAGE in the viewer; #237 gave one `scan` command the
+`SentinelService` facade and a composite `run.start` receipt; #243 fixed the load-dependent preparation-clock test
+at the boundary; #241 moved store, snapshot, rules and policy onto the kernel; #244 added [DEMO.md](DEMO.md);
+#238 made the CI selector load modules by literal paths. #245 re-landed the stage editor on `main`: #239 had been
+squashed into #237's branch by mistake and reverted there.
+
+#242 added migration 7 and the store side of private artifact retention for a failed attempt, with no coordinator
+write yet. #246 retired the owner-ui companion page: the view is the owner surface, `farsight serve` prints
+`127.0.0.1`, the companion lookup names the paired origin, and `owner-ui` waits up to 30 s for the service.
+
+#249 added the walk-free, no-Docker `review` profile. After the owner's `paid.admit` receipt, it makes one Copilot
+general review of captured source with `hostedReviewSecretScan: when-selected`; the README and `init` say plainly
+that the source reaches the model without a secrets scan. `checkPipeline` refuses an input no planned unit produces
+(`sentinel.pipeline.inputUnproduced`); bootstrap outputs resolve through reused work's ledger dependencies. The
+preview names each declared stage's model or says *not configured*; only `scan --confirm` admits the model.
+
+#250 added DEMO.md §4b and verified that profile live from a fresh clone: `scan` exited 4, `scan --confirm` exited 2
+in about 35 s, and the report named `copilot-cli brokered · model gpt-6-luna · 3 turns · … · cost unobserved ·
+subscription`. The review remains unfinished at its three-turn cap with zero observations on every run; the report
+says so. The owner paused the Docker agentic route (V-3). The demo is the CLI and this no-Docker review path on
+another Mac, following DEMO.md with Node 24, pnpm 9 or npm 10, git-lfs and a logged-in Copilot CLI 1.0.105.
+
+#251 made build and pack work with npm as well as pnpm: root `workspaces`, 37 internal dependencies on
+npm-compatible ranges, `link-workspace-packages=true`, `scripts/workspace-run.mjs` and the `npm-build` CI job.
+All 1,896 dist files were byte-identical under pnpm; Sentinel's npm source tests still hit #200.
+
+Open after the demo: #248 (native observations and provenance in the report and the unfinished-review progress
+line) and #252 (brokered cost basis, a private 0600 budget ledger, failed-native-attempt retention and the
+missing-login cause) are in flight. PA's second PR is local and unopened: `run.rerun`, the option-A flip, explicit
+`init` grant effects that re-record three golden digests, the local `ollama` runner and `adoptPipeline` refusing
+non-CLI receipts. Still open are the capabilities PR (`capabilities --models` for 1.0.105 and Claude native), the
+declared host-script stage through `scan` with `<output>.schema.json` in its pack, P-3b reuse of retained checks on
+rerun, and a durable pre-attempt refusal reason using a closed structured set at the store boundary. The fixed
+`preparation-admission` and `preparation-publication-crash` cases may stay in `serial-suite.txt`. Dependabot
+#236/#195 (zod 3→4) awaits the owner's call.
+
+Before every merge, check `gh pr view <n> --json baseRefName` is `main`: a stacked PR can squash into its parent.
+Never run bare `pnpm install` in a worktree; use `--ignore-scripts` there, then run `pnpm install` in the primary
+checkout after merge to restore the shared lefthook path. The preparation-clock race was load-dependent, not a code
+regression.
+
 ## Phase 0 complete — 2026-10-27
 
 #208 `cdf7ab9e`: formatted code-parser and mcp (37 JS/TS files); AST-identical, with identical real-ingest node and edge sets.

@@ -44,3 +44,7 @@ e2e/perf/test-results/
 
 # npm is a supported local build path; pnpm-lock.yaml remains the only committed lockfile.
 /package-lock.json
+
+# model-budget migration fixture sidecars left after a test run
+packages/sentinel/test/fixtures/model-budget/legacy-6c.db-shm
+packages/sentinel/test/fixtures/model-budget/legacy-6c.db-wal
