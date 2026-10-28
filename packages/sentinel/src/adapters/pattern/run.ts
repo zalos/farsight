@@ -10,6 +10,7 @@ import { PATTERN_ADAPTER, type PatternAdapterBuild } from './adapter.js';
 import { buildPatternJob, type PatternRule, type PatternTarget } from './job.js';
 import { normalizePatternRun, type PatternRunResult } from './normalize.js';
 
+/** One attempt run directly through an execution service: its rules, targets and scratch. */
 export interface PatternAttempt {
   attemptId: Id;
   work: WorkRef;
@@ -25,6 +26,10 @@ export interface PatternAttempt {
   qualifyingArchitecture?: string;
 }
 
+/**
+ * Builds the job, runs the pinned worker through `service` and normalizes the outcome. The adapter's own tests and
+ * conformance runs use it; production runs go through the coordinator and the canonical driver instead.
+ */
 export async function runPatternAttempt(service: ExecutionService, attempt: PatternAttempt): Promise<PatternRunResult> {
   const jobDir = mkdtempSync(join(attempt.scratch, 'pattern-job-'));
   try {

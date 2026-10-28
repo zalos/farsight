@@ -11,6 +11,7 @@ import { GITLEAKS_PRODUCTION_BUILD, type GitleaksAdapterBuild } from './adapter.
 import { buildSecretsJob, type SecretsSnapshot, type SecretsTarget } from './job.js';
 import { normalizeSecretsRun, type SecretsScanResult } from './normalize.js';
 
+/** One attempt run directly through an execution service: the snapshot, the source, its targets and scratch. */
 export interface SecretsAttempt {
   attemptId: Id;
   work: WorkRef;
@@ -55,6 +56,10 @@ function readSealed(dir: string, artifact: ArtifactId): Uint8Array | undefined {
   }
 }
 
+/**
+ * Builds the job, runs the pinned worker through `service` and normalizes the outcome. The adapter's own tests and
+ * conformance runs use it; production runs go through the coordinator and the gitleaks driver instead.
+ */
 export async function runSecretsAttempt(
   service: ExecutionService,
   attempt: SecretsAttempt,
