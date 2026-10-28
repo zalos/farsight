@@ -63,3 +63,7 @@ export const reviewUnitIdOf = (u: {
   segmentId: string;
   specDigest: string;
 }) => `work-review-${shortHash(u)}`;
+
+/** A script stage's unit id: its run and plan revision and its declared stage. */
+export const scriptUnitIdOf = (u: { runId: string; revision: number; stage: string }): string =>
+  `work-script-${shortHash({ runId: u.runId, revision: u.revision, stage: u.stage })}`;

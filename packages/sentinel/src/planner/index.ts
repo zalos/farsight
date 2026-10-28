@@ -74,6 +74,9 @@ export {
   defaultPipelineOf,
   planShapeOf,
   PLAN_SHAPE_KEYS,
+  SCRIPT_CONTRACT,
+  scriptFingerprintOf,
+  scriptOutputOf,
 } from './pipeline.js';
 export type {
   StageModel,

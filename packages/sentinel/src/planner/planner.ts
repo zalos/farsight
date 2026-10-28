@@ -19,11 +19,21 @@ import { validateEnvelope } from '../validate.js';
 import type { NodeKind } from '@farsight/graph';
 import { PlanError, type PlanReasonCode } from './errors.js';
 import { capabilityOf, isCapabilityTable } from './capabilities.js';
-import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf, deepFreeze, isTrustedView, reviewUnitIdOf } from './identity.js';
+import {
+  bootstrapUnitIdOf,
+  checkIdOf,
+  checkUnitIdOf,
+  deepFreeze,
+  isTrustedView,
+  reviewUnitIdOf,
+  scriptUnitIdOf,
+} from './identity.js';
 import {
   crossStageDependencies,
   declaredAnalysis,
   requireBootstrap,
+  scriptFingerprintOf,
+  SCRIPT_CONTRACT,
   stageModel,
   type AgentUnitSeed,
   type DeclaredAnalysis,
@@ -394,12 +404,21 @@ export function planPipelineBootstrap(
  * fan-out. The revision is sealed once.
  */
 export function planPipelineAnalysis(
-  request: AnalysisRequest & { readonly pipeline: PipelineDefinition; readonly agents?: readonly AgentUnitSeed[] },
+  request: AnalysisRequest & {
+    readonly pipeline: PipelineDefinition;
+    readonly agents?: readonly AgentUnitSeed[];
+    /** Each script stage's entry, by the digest of the bytes the owner adopted (keyed by stage id). */
+    readonly scripts?: ReadonlyMap<string, Digest>;
+  },
 ): PlanRevision {
-  const { pipeline, agents, ...rest } = request;
+  const { pipeline, agents, scripts, ...rest } = request;
   const model = stageModel(pipeline);
   requireBootstrap(model);
-  return planAnalysisOf(rest, { analysis: declaredAnalysis(model), agents: agents ?? [] });
+  return planAnalysisOf(rest, {
+    analysis: declaredAnalysis(model),
+    agents: agents ?? [],
+    scripts: scripts ?? new Map(),
+  });
 }
 
 /** At most this many review units in one revision (the review side's bound, review/plan.ts). */
@@ -407,7 +426,11 @@ const MAX_AGENT_UNITS = 32;
 
 function planAnalysisOf(
   request: AnalysisRequest,
-  declared: { readonly analysis: DeclaredAnalysis; readonly agents: readonly AgentUnitSeed[] } | null,
+  declared: {
+    readonly analysis: DeclaredAnalysis;
+    readonly agents: readonly AgentUnitSeed[];
+    readonly scripts: ReadonlyMap<string, Digest>;
+  } | null,
 ): PlanRevision {
   const runId = checkId(request.runId, 'run id');
   const revision = request.revision ?? 1;
@@ -881,6 +904,53 @@ function planAnalysisOf(
   );
   // Declared ordering between analysis stages: a unit also depends on every unit of the check stages its stage needs
   // or runs after. The derived plan has none, so its dependencies are the published bootstrap alone, as always.
+  // Script stages, in dependency order: one unit each, waiting for the published bootstrap and every unit of the check
+  // and script stages it needs or runs after. Its own work is its entry, pinned by digest in its input fingerprint;
+  // what runs it is the registered script runner operation.
+  const scriptUnits: PlannedWork[] = [];
+  if (declared) {
+    const scripts = declared.analysis.scripts();
+    const runnerId = scripts.length
+      ? profile.registry.ids.find((id) => {
+          const a = profile.registry.get(id);
+          return a.kind === 'operation' && a.operation === 'script';
+        })
+      : undefined;
+    for (const stage of scripts) {
+      if (!runnerId)
+        throw new PlanError('sentinel.plan.stageUnavailable', `${stage.id}: no script runner is registered`);
+      const entryDigest = declared.scripts.get(stage.id);
+      if (entryDigest === undefined || !DIGEST.test(entryDigest))
+        throw new PlanError('sentinel.plan.stageUnavailable', `${stage.id}: its entry ${stage.entry} is not adopted`);
+      const runner = profile.registry.get(runnerId);
+      const dependencies = [
+        ...new Map(
+          [
+            ...request.bootstrap.map((r) => ({ id: r.id, revision: r.revision })),
+            ...crossStageDependencies(declared.analysis, stage.id, unitsByStage),
+          ].map((r) => [`${r.id}@${r.revision}`, r]),
+        ).values(),
+      ].sort(byKey((r) => `${r.id}@${r.revision}`));
+      const unit: PlannedWork = {
+        id: scriptUnitIdOf({ runId, revision, stage: stage.id }),
+        revision: 1,
+        stage: stage.id,
+        contract: SCRIPT_CONTRACT,
+        implementationDigest: runner.digest,
+        sourceId: null,
+        adapterId: runner.id,
+        dependencies,
+        inputFingerprint: scriptFingerprintOf(stage, entryDigest, runner.digest, dependencies),
+        checks: [],
+        scopes: [],
+        inputs: [],
+        inputSetDigest: digestOf([]),
+      };
+      scriptUnits.push(unit);
+      unitsByStage.set(stage.id, [{ id: unit.id, revision: 1 }]);
+      if (!usedAdapters.has(runner.id)) usedAdapters.set(runner.id, runner.digest);
+    }
+  }
   if (declared) {
     const familyOfCheck = new Map(checks.map((c) => [c.id, c.familyId]));
     for (const w of work) {
@@ -891,6 +961,7 @@ function planAnalysisOf(
       w.dependencies = [...all.values()].sort(byKey((r) => `${r.id}@${r.revision}`));
     }
   }
+  work.push(...scriptUnits);
   work.sort(byKey((w) => w.id));
   const reused = [...request.bootstrap]
     .map((r) => ({ id: r.id, revision: r.revision }))

@@ -27,6 +27,7 @@ import { ExecutionError } from './errors.js';
 import { CAPTURE_IMPLEMENTATION_URL } from '../snapshot/capture.js';
 import { PARSE_IMPLEMENTATION_URL } from '../snapshot/parser.js';
 import { INVENTORY_IMPLEMENTATION_URL } from './bootstrap.js';
+import { SCRIPT_RUNNER_IMPLEMENTATION_URL } from './script-runner.js';
 
 /**
  * Limits for one attempt. The ceilings are PR 01's accepted resource defaults (feasibility-decisions.json
@@ -115,7 +116,8 @@ export interface BuiltInAdapterDefinition {
 
 export type BootstrapOperation = 'capture' | 'parse' | 'inventory';
 
-export type CoordinatorOperation = BootstrapOperation | 'review-guided' | 'review-general';
+/** `script`: a declared host script stage's runner (script-runner.ts). */
+export type CoordinatorOperation = BootstrapOperation | 'review-guided' | 'review-general' | 'script';
 
 export interface OperationAdapterDefinition {
   id: Id;
@@ -233,9 +235,14 @@ function trusted(def: AdapterDefinition): TrustedAdapter {
   if (typeof def.version !== 'string' || !def.version || def.version.length > 64) invalid('version');
   if (def.kind === 'operation') {
     const reviewing = def.operation === 'review-guided' || def.operation === 'review-general';
-    if (!reviewing && !Object.hasOwn(OPERATION_MODULES, def.operation ?? '')) invalid('operation');
+    const scripting = def.operation === 'script';
+    if (!reviewing && !scripting && !Object.hasOwn(OPERATION_MODULES, def.operation ?? '')) invalid('operation');
     const moduleDigest = moduleDigestOf(
-      reviewing ? reviewOperationPath() : fileURLToPath(OPERATION_MODULES[def.operation as BootstrapOperation]),
+      reviewing
+        ? reviewOperationPath()
+        : scripting
+          ? fileURLToPath(SCRIPT_RUNNER_IMPLEMENTATION_URL)
+          : fileURLToPath(OPERATION_MODULES[def.operation as BootstrapOperation]),
     );
     const body = { id: def.id, version: def.version, kind: def.kind, operation: def.operation, moduleDigest };
     return Object.freeze({

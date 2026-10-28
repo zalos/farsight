@@ -21,6 +21,7 @@ import { verifyPlanRevision } from './planner.js';
 import { deepFreeze } from './identity.js';
 import type { PlanRevision, PlannedWork } from './types.js';
 import type { BuiltinPlanStage } from '../contracts/plan.js';
+import { SCRIPT_CONTRACT } from './pipeline.js';
 
 const invalid = (detail: string) => new PlanError('sentinel.plan.invalidInput', detail);
 const mismatch = (detail: string) => new PlanError('sentinel.plan.pinMismatch', detail);
@@ -174,16 +175,19 @@ export function workEnvelopesFor(given: PlanRevision, conversion: WorkConversion
   const tools = new Set(plan.pins.tools.map((t) => t.adapterId));
   return plan.units.map((u) => {
     const { manifest, id: manifestId } = manifestIn(plan, index, u);
-    // Units carry built-in stage ids (a declared stage is derived from them, planner/pipeline.ts); review runs as check.
+    // A review and a declared script stage's unit run under the check stage's grant; the others under their own.
+    const script = u.contract === SCRIPT_CONTRACT;
     const resources = (conversion.execution.resources as Readonly<Record<string, ResourcePolicy | undefined>>)[
-      u.stage === 'review-guided' || u.stage === 'review-general' ? 'check' : u.stage
+      u.stage === 'review-guided' || u.stage === 'review-general' || script ? 'check' : u.stage
     ];
     if (!resources) throw invalid(`the profile grants no resources to the ${u.stage} stage`);
     const kind: StageKind = u.review
       ? 'agentic'
-      : u.adapterId !== null && tools.has(u.adapterId)
-        ? 'external-tool'
-        : 'coded';
+      : script
+        ? 'script'
+        : u.adapterId !== null && tools.has(u.adapterId)
+          ? 'external-tool'
+          : 'coded';
     const common = {
       schema: 'sentinel-work/draft-1' as const,
       id: u.id,
