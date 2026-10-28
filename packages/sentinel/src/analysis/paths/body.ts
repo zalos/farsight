@@ -32,9 +32,14 @@ const NOT_CALLS = new Set([
 ]);
 /** Identifier characters, Unicode included: `π()` is a call. */
 const ID_CHAR = /[\p{ID_Continue}$\u200c\u200d]/u;
+/** A character an identifier can start with, Unicode included. */
 const ID_START = /[\p{ID_Start}$_]/u;
 const IDENT = /[\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*/gu;
 
+/**
+ * What a function body's text shows that the parser's call edges may not: how many places could be calls, and how many
+ * known function names appear without being called.
+ */
 export interface BodyScan {
   /** Places that could be a call: `x(`, `x)(`, `x](`, `x>(`, `x.(`, `x/(`, a tagged template, `new`. */
   readonly callSites: number;
@@ -42,6 +47,11 @@ export interface BodyScan {
   readonly valueReferences: number;
 }
 
+/**
+ * Scans one function body's text, past its declaration header, for places that could be calls (a call, a tagged
+ * template, `new`) and for references to `functionNames` that are not called there. It counts and never resolves; a
+ * keyword before a parenthesis is not a call.
+ */
 export function scanBody(text: string, functionNames: ReadonlySet<string>, ownName: string | undefined): BodyScan {
   let callSites = 0;
   // A declaration header names the function and its parameters; it is not a call.

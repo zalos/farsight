@@ -1,5 +1,11 @@
 // Fixed worker-wide accounting. These are decoded input/cache and traversal ceilings, not a hard heap/RSS limit.
 // Every query shares one budget and absolute deadline; exhaustion refuses the whole output, never a partial result.
+import { SentinelError } from '../../kernel/errors.js';
+
+/**
+ * The path worker's ceilings, shared by every query of one invocation: reads, decoded and cached bytes, visited nodes,
+ * traversal steps and output bytes.
+ */
 export const PATH_EXECUTION_LIMITS = Object.freeze({
   reads: 1024,
   decodedBytes: 64 * 1024 * 1024,
@@ -8,14 +14,22 @@ export const PATH_EXECUTION_LIMITS = Object.freeze({
   steps: 4_000_000,
   outputBytes: 4 * 1024 * 1024,
 });
+/** One invocation's limits, each at most its `PATH_EXECUTION_LIMITS` ceiling. */
 export type PathExecutionLimits = Readonly<Record<keyof typeof PATH_EXECUTION_LIMITS, number>>;
-export class PathBudgetError extends Error {
-  readonly code = 'sentinel.paths.budgetExceeded';
+/**
+ * A path invocation that ran out of a limit, its deadline or its signal, or was given invalid limits:
+ * `sentinel.paths.budgetExceeded`, with which one in `reason`. The whole output is refused, never cut.
+ */
+export class PathBudgetError extends SentinelError<'sentinel.paths.budgetExceeded'> {
   constructor(readonly reason: keyof PathExecutionLimits | 'deadline' | 'canceled' | 'invalid-limits') {
-    super('sentinel.paths.budgetExceeded');
+    super('sentinel.paths.budgetExceeded', 'sentinel.paths.budgetExceeded');
     this.name = 'PathBudgetError';
   }
 }
+/**
+ * One invocation's shared budget and absolute deadline. Every read, decoded byte, visit, step and output byte is
+ * counted; exceeding a limit, passing the deadline or an aborted signal throws `PathBudgetError`.
+ */
 export class PathExecutionBudget {
   readonly #limits: PathExecutionLimits;
   readonly #signal?: AbortSignal;
