@@ -23,6 +23,10 @@ test('paired library version changes are explicit and leave the application vers
     assert.throws(() => libraryVersion(root, '../bad'), /version/);
     libraryVersion(root, '0.2.0');
     assert.equal(libraryVersion(root), '0.2.0');
+    assert.equal(
+      JSON.parse(readFileSync(join(root, 'packages/code-parser/package.json'), 'utf8')).dependencies['@farsight/graph'],
+      '^0.2.0',
+    );
     assert.equal(JSON.parse(readFileSync(app, 'utf8')).version, '9.0.0');
     assert.match(readFileSync(stamp, 'utf8'), /'0.2.0'/);
   } finally {

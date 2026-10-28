@@ -5,8 +5,17 @@ Thanks for helping. This page is the short version; the project contract (princi
 
 ## Setup
 
-- Node 24+ (`.nvmrc` — `nvm use`) and pnpm 9 (`packageManager` in `package.json`).
-- `pnpm install --frozen-lockfile && pnpm build`. **Build before tests**: every test imports compiled `dist/`.
+- Node 24+ (`.nvmrc` — `nvm use`) and pnpm 9 (`packageManager` in `package.json`) for contributor/CI parity; npm 10 also builds and packs a fresh clone.
+- Install and build with one manager. **Build before tests**: every test imports compiled `dist/`.
+
+  ```sh
+  pnpm install --frozen-lockfile
+  # or: npm install
+  pnpm build
+  # or: npm run build
+  ```
+
+- Only `pnpm-lock.yaml` is committed; npm’s lockfile is ignored. Use `npm install`, not `npm ci`, and a fresh clone when changing managers. Root `build`, `typecheck`, `test` and `pack:cli|sentinel|echo|parser` work with `npm run` too. npm orders workspace scripts by dependencies; pnpm keeps its native recursive scheduler.
 - Workspace dependency install scripts are allowlisted with `pnpm.onlyBuiltDependencies: ["esbuild"]`. Echo's
   dependency tree is still resolved by the workspace install, but other dependencies' build scripts are not
   approved. Echo's pinned engine is installed only by its explicit `install-runtime` command.
@@ -46,14 +55,23 @@ Thanks for helping. This page is the short version; the project contract (princi
 
 ```sh
 pnpm format            # write formatter output for areas already removed from the temporary ignore block
+# or: npm run format
 pnpm format:check      # JS/TS; existing areas remain ignored until their style PR
+# or: npm run format:check
 pnpm lint             # fail on new ESLint errors; existing counts are frozen
+# or: npm run lint
 pnpm lint:report      # include structure warnings; pnpm lint --prune-suppressions removes fixed debt
+# or: npm run lint:report
 pnpm build
+# or: npm run build
 pnpm -r typecheck
+# or: npm run typecheck
 pnpm -r test
+# or: npm run test
 pnpm lint:strings      # every user-facing string goes through the catalog with both registers; glyphs via sym()
+# or: npm run lint:strings
 pnpm e2e               # Playwright against a real `farsight serve` on a fixture graph
+# or: npm run e2e
 ```
 
 Per-PR checklist:
@@ -67,7 +85,7 @@ Per-PR checklist:
 
 Linked worktrees share one hooks directory: never add Git LFS hook names (`pre-push`, `post-checkout`, `post-commit`,
 `post-merge`) to `lefthook.yml`; keep `no_auto_install: true` so a commit cannot rewrite everyone's hooks.
-Never pop a `lefthook auto backup` stash entry. Run `pnpm install` in a new worktree before committing.
+Never pop a `lefthook auto backup` stash entry. In linked worktrees, install dependencies with `pnpm install --ignore-scripts`; install hooks only from the lasting primary checkout. Both managers’ normal install runs the same hook installer in a fresh clone.
 
 ## Where things live
 

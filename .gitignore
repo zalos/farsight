@@ -41,3 +41,6 @@ packages/work-fixture/fixtures/**/applied.jsonl
 # the perf suite's table (pnpm e2e:perf) — measured per machine, never committed
 e2e/perf/results.json
 e2e/perf/test-results/
+
+# npm is a supported local build path; pnpm-lock.yaml remains the only committed lockfile.
+/package-lock.json

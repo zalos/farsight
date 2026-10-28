@@ -53,7 +53,7 @@ const MANIFEST = {
     './schemas/*': './schemas/*',
     './package.json': './package.json',
   },
-  dependencies: { '@farsight/core': 'workspace:*' },
+  dependencies: { '@farsight/core': '*' },
 };
 
 function workspace({ build = true } = {}) {

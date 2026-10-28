@@ -20,7 +20,7 @@ const packageConsumer = (name) => {
   const manifest = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
   assert.equal(
     manifest.scripts['test:sentinel:package'],
-    'pnpm pack:sentinel && node scripts/test-sentinel-consumers.mjs',
+    'node scripts/workspace-run.mjs --root pack:sentinel && node scripts/test-sentinel-consumers.mjs',
   );
   return CONSUMERS.includes(name);
 };

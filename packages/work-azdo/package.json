@@ -10,8 +10,8 @@
     "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts"
   },
   "dependencies": {
-    "@farsight/core": "workspace:*",
-    "@farsight/work": "workspace:*"
+    "@farsight/core": "*",
+    "@farsight/work": "*"
   },
   "engines": {
     "node": ">=24"

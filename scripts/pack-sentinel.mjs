@@ -16,7 +16,7 @@
 // other workspace package, or a module the tarball does not declare, is refused: it would not
 // resolve for a consumer.
 //
-//   pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs [--expect-version X.Y.Z]
+//   npm run pack:sentinel [--expect-version X.Y.Z]
 //   → build/sentinel/farsight-sentinel-<sentinel version>.tgz
 import { build } from 'esbuild';
 import {
@@ -77,7 +77,7 @@ if (expected && expected !== sentinel.version)
 const missing = missingBuildOutputs(root, sentinel.name, [join(root, 'packages', 'core', 'dist', 'version.js')]);
 if (missing.length) {
   fail(
-    'compiled packages are missing. Run `pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs`.',
+    'compiled packages are missing. Run `pnpm --filter @farsight/sentinel... build` or `npm run pack:sentinel`.',
     missing.map((path) => 'missing: ' + (isAbsolute(path) ? relative(root, path) : path)),
   );
 }
@@ -101,7 +101,7 @@ if (untyped.length)
 const missingTypes = jsExports.map(([, , types]) => rel(types)).filter((types) => !existsSync(join(dir, types)));
 if (missingTypes.length)
   fail(
-    'declarations are missing. Run `pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs`.',
+    'declarations are missing. Run `npm run pack:sentinel`.',
     missingTypes.map((types) => `missing: packages/sentinel/${types}`),
   );
 const schemaDir = join(dir, 'schemas');
@@ -174,7 +174,7 @@ const dependencies = {};
 for (const member of buildClosure(root, sentinel.name).closure) {
   for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
     for (const [name, spec] of Object.entries(member.manifest[field] ?? {})) {
-      if (typeof spec !== 'string' || spec.startsWith('workspace:')) continue;
+      if (typeof spec !== 'string' || name.startsWith('@farsight/') || spec.startsWith('workspace:')) continue;
       if (dependencies[name] && dependencies[name] !== spec)
         fail(`${name} is required as both ${dependencies[name]} and ${spec}; align the ranges.`);
       dependencies[name] = spec;
@@ -304,7 +304,7 @@ for (let i = 0; i < queue.length; i++) {
 }
 if (brokenRelative.length)
   fail(
-    'a declaration imports a sibling declaration that is not built. Run `pnpm --filter @farsight/sentinel... build`.',
+    'a declaration imports a sibling declaration that is not built. Build the workspace first (`pnpm build` or `npm run build`).',
     brokenRelative.map((s) => `missing: ${s}`),
   );
 const unresolvable = [...specifiers].filter((s) => {

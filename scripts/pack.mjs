@@ -5,6 +5,7 @@
  * standalone package.json, then `npm pack`s it into a tarball.
  *
  *   pnpm build && node scripts/pack.mjs
+ *   npm run build && node scripts/pack.mjs
  *   npm install -g ./build/farsight-cli-*.tgz
  *   node scripts/pack.mjs --check   # preflight and a full staged bundle; replaces nothing
  *
@@ -28,14 +29,14 @@ const workspaceVersion = workspacePkg.version;
 // HEAD, the last commit that touched the code, and whether the code is dirty) —
 // so a server run from the workspace and this tarball, built from one clean
 // commit, are one build to `farsight status` however many seconds apart they were
-// compiled. Needs `pnpm build` first, as the usage above says.
+// compiled. Needs a workspace build first, as the usage above says.
 const versionModule = join(root, 'packages', 'core', 'dist', 'version.js');
 // Only the CLI's own workspace dependency closure must be built: an optional package
 // outside it (Sentinel, Echo) may be absent or unbuilt. Checked before build/ is touched.
 const missing = missingBuildOutputs(root, '@farsight/cli', [versionModule]);
 if (missing.length) {
   console.error(
-    'pack: compiled packages are missing. Run `pnpm build && node scripts/pack.mjs` from the repository root.',
+    'pack: compiled packages are missing. Run `pnpm build && node scripts/pack.mjs` or `npm run build && node scripts/pack.mjs` from the repository root.',
   );
   for (const path of missing) console.error('  missing: ' + (isAbsolute(path) ? relative(root, path) : path));
   process.exit(1);
@@ -126,7 +127,7 @@ try {
     ? error.errors.map((e) => `${e.location?.file ?? ''} ${e.text}`.trim()).join('\n  ')
     : error?.message;
   console.error(
-    `pack: the bundle or the tarball failed; prior artifacts in build/ are unchanged. Run \`pnpm build\` and retry.\n  ${detail}`,
+    `pack: the bundle or the tarball failed; prior artifacts in build/ are unchanged. Build the workspace and retry.\n  ${detail}`,
   );
   process.exit(1);
 }

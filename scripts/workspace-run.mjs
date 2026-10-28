@@ -1,0 +1,72 @@
+#!/usr/bin/env node
+// pnpm keeps its native recursive scheduler; npm builds the same dependency graph in topological order.
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { workspacePackages } from './pack-preflight.mjs';
+
+const FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
+const ROOT = fileURLToPath(new URL('../', import.meta.url));
+
+function manager(args, { root = ROOT, env = process.env, run = spawnSync } = {}) {
+  const result = env.npm_execpath
+    ? run(process.execPath, [env.npm_execpath, ...args], { cwd: root, env, stdio: 'inherit' })
+    : run('npm', args, { cwd: root, env, stdio: 'inherit', shell: process.platform === 'win32' });
+  if (result.error) throw result.error;
+  return result.status ?? 1;
+}
+
+/** Run a root pack script with the manager that started this lifecycle, including from package consumers. */
+export function runRoot(script, options) {
+  if (!/^pack:(?:cli|sentinel|echo|parser)$/.test(script)) throw new Error('Unknown root pack script');
+  return manager(['run', script], options);
+}
+
+/** The selected packages (all by default), dependencies first; refuse a cycle before running any script. */
+export function workspaceOrder(packages, entry) {
+  const ordered = [],
+    done = new Set(),
+    active = new Set();
+  const visit = (name) => {
+    if (done.has(name)) return;
+    if (active.has(name)) throw new Error(`Workspace dependency cycle at ${name}`);
+    const pkg = packages.get(name);
+    if (!pkg) throw new Error(`Missing workspace package: ${name}`);
+    active.add(name);
+    for (const field of FIELDS)
+      for (const dep of Object.keys(pkg.manifest[field] ?? {})) {
+        if (packages.has(dep)) visit(dep);
+        else if (dep.startsWith('@farsight/')) throw new Error(`Missing workspace package: ${dep}`);
+      }
+    active.delete(name);
+    done.add(name);
+    ordered.push({ name, ...pkg });
+  };
+  for (const name of entry ? [entry] : [...packages.keys()].sort()) visit(name);
+  return ordered;
+}
+
+/** Preserve pnpm's existing commands; npm runs each package's script through its own lifecycle environment. */
+export function runWorkspace(task, entry, { root = ROOT, env = process.env, run = spawnSync } = {}) {
+  if (!['build', 'typecheck', 'test'].includes(task))
+    throw new Error('Usage: workspace-run.mjs build|typecheck|test [@farsight/package]');
+  const ordered = workspaceOrder(workspacePackages(root), entry);
+  if (!ordered.length) throw new Error('No workspace packages');
+  const invoke = (args) => manager(args, { root, env, run });
+  if (env.npm_config_user_agent?.startsWith('pnpm/'))
+    return invoke(entry ? ['--filter', `${entry}...`, task] : ['-r', task]);
+  for (const { name, manifest } of ordered) {
+    if (!manifest.scripts?.[task]) continue;
+    const status = invoke(['run', task, '--workspace', name]);
+    if (status !== 0) return status;
+  }
+  return 0;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    process.exitCode = process.argv[2] === '--root' ? runRoot(process.argv[3]) : runWorkspace(...process.argv.slice(2));
+  } catch (error) {
+    console.error(`workspace-run: ${error.message}`);
+    process.exitCode = 1;
+  }
+}

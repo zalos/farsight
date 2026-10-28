@@ -49,7 +49,7 @@ test(
   needsStore,
   async (t) => {
     const dir = scratch(t, 'sentinel-next-consumer-');
-    run('pnpm', ['pack', '--pack-destination', dir], pkgDir);
+    run('npm', ['pack', '--pack-destination', dir], pkgDir);
     const tgz = readdirSync(dir).find((f) => f.endsWith('.tgz'))!;
     const app = join(dir, 'consumer');
     const installed = join(app, 'node_modules/@farsight/sentinel');
@@ -63,7 +63,9 @@ test(
     for (const dep of Object.keys(shipped.dependencies)) {
       const target = join(app, 'node_modules', dep);
       mkdirSync(join(target, '..'), { recursive: true });
-      symlinkSync(realpathSync(join(pkgDir, 'node_modules', dep)), target);
+      const local = join(pkgDir, 'node_modules', dep);
+      const resolved = existsSync(local) ? local : join(pkgDir, '../../node_modules', dep);
+      symlinkSync(realpathSync(resolved), target);
     }
     assert.ok(
       !Object.values(shipped.dependencies as Record<string, string>).some((v) => v.startsWith('workspace:')),
