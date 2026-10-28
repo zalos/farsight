@@ -926,8 +926,12 @@ const plan: Check<PlanEnvelope> = (v, out) => {
       )
         out.add(err(`/units/${i}/id`, 'review id binds its exact admitted segment and spec'));
     } else if (w.contract === 'sentinel.stage.script.host') {
-      if (w.sourceId !== null || w.id !== scriptUnitIdOf({ runId: v.runId, revision: v.revision, stage: w.stage }))
-        out.add(err(`/units/${i}/id`, 'a script unit id is the digest of its run, revision and declared stage'));
+      if (
+        w.sourceId !== null ||
+        w.id !==
+          scriptUnitIdOf({ runId: v.runId, revision: v.revision, stage: w.stage, inputFingerprint: w.inputFingerprint })
+      )
+        out.add(err(`/units/${i}/id`, 'a script unit id is the digest of its run, revision, stage and fingerprint'));
     } else if (
       w.id !== bootstrapUnitIdOf({ runId: v.runId, revision: v.revision, stage: w.stage, sourceId: w.sourceId })
     ) {

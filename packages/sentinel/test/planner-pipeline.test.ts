@@ -274,9 +274,10 @@ test('a host script stage plans one unit: pinned to the script runner, its entry
   });
   const D1 = `sha256:${'1'.repeat(64)}`;
   const D2 = `sha256:${'2'.repeat(64)}`;
+  const SCHEMA = `sha256:${'5'.repeat(64)}`;
   const p = pipeline([tool('evals', [EVAL]), tool('calls', [CALL]), notes()]);
   const at = (digest: string, over: Record<string, unknown> = {}) =>
-    plan(p, { profile: scripted, scripts: new Map([['notes', digest]]), ...over });
+    plan(p, { profile: scripted, scripts: new Map([['notes', { entry: digest, schema: SCHEMA }]]), ...over });
   const first = at(D1);
   assert.ok(validateEnvelope('plan', first).ok);
   const unit = first.units.find((u: any) => u.stage === 'notes')!;
@@ -292,13 +293,26 @@ test('a host script stage plans one unit: pinned to the script runner, its entry
   );
   assert.equal(
     unit.inputFingerprint,
-    scriptFingerprintOf(notes() as any, D1, unit.implementationDigest, unit.dependencies),
+    scriptFingerprintOf(notes() as any, { entry: D1, schema: SCHEMA }, unit.implementationDigest, unit.dependencies),
   );
   assert.ok(first.pins.adapters.some((a: any) => a.adapterId === 'sentinel.script.host'));
   assert.equal(own.get(unit.id), 'notes');
-  // A changed entry byte is a different unit and a different plan; the check units are untouched.
+  // The preview says, before anything is confirmed, that a host script runs unconfined as the owner.
+  const { planNoticesOf } = await import('../dist/planner/index.js');
+  const { SENTINEL_PLAN_STRINGS } = await import('@farsight/core/dist/strings-sentinel-plan.js');
+  assert.deepEqual(planNoticesOf(first), ['sentinel.plan.notice.hostScriptUnconfined']);
+  assert.match(
+    (SENTINEL_PLAN_STRINGS as any)['sentinel.plan.notice.hostScriptUnconfined'].hud,
+    /unconfined on this computer as you/,
+  );
+  assert.deepEqual(planNoticesOf(plan(pipeline([tool('evals', [EVAL])]))), []);
+  // A changed entry byte is a different unit (another fingerprint and another id) and a different plan; the check
+  // units are untouched.
   const second = at(D2);
-  assert.notEqual(second.units.find((u: any) => u.stage === 'notes')!.inputFingerprint, unit.inputFingerprint);
+  const changed = second.units.find((u: any) => u.stage === 'notes')!;
+  assert.notEqual(changed.inputFingerprint, unit.inputFingerprint);
+  assert.notEqual(changed.id, unit.id, 'a changed entry is another unit id, never a reused one');
+  assert.ok(validateEnvelope('plan', second).ok);
   assert.notEqual(second.digest, first.digest);
   assert.deepEqual(
     second.units.filter((u: any) => u.stage === 'check').map((u: any) => u.inputFingerprint),
@@ -306,7 +320,10 @@ test('a host script stage plans one unit: pinned to the script runner, its entry
   );
   // Refused: an entry nobody adopted, no registered runner, a container runner, no single named output.
   assert.throws(() => plan(p, { profile: scripted }), code('sentinel.plan.stageUnavailable'));
-  assert.throws(() => plan(p, { scripts: new Map([['notes', D1]]) }), code('sentinel.plan.stageUnavailable'));
+  assert.throws(
+    () => plan(p, { scripts: new Map([['notes', { entry: D1, schema: SCHEMA }]]) }),
+    code('sentinel.plan.stageUnavailable'),
+  );
   assert.throws(
     () => plan(pipeline([tool('evals', [EVAL]), notes({ runner: 'container' })]), { profile: scripted }),
     code('sentinel.plan.stageUnavailable'),

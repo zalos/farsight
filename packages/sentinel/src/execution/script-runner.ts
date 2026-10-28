@@ -13,13 +13,17 @@
 // output schema. A failed validation is a failed attempt, never a partial publication. The document and the stage's
 // provenance (entry digest, interpreter name, version and digest, argv, environment names) are what it publishes.
 //
-// Host execution is the weaker isolation class, and the provenance says so (`where: 'host'`): the child shares this
-// account, its file system and its network. It is given nothing to read but its folder, and nothing it writes
-// outside stdout is kept, but nothing confines it to that. The supervisor's limits on memory and processes are not
+// A host script is unconfined by design (the lead's ruling of 2026-10-28): it runs as the owner, with the owner's file
+// system and network, like any script the owner runs, and only while the adopted settings turn `stage.host-scripts`
+// on. Its provenance says so (`where: 'host'`, `confinement: 'none'`). It is started with nothing to read but its
+// folder and nothing it writes outside stdout is kept, but nothing confines it to that. It runs in its own process
+// group: at its deadline, at its output bound and when the interpreter exits, the whole group is killed, so a
+// descendant can neither outlive the attempt nor hold it open. The supervisor's memory and process limits are not
 // applied to it; only the deadline and the output bound are.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { Ajv } from 'ajv';
 import { join } from 'node:path';
 import type { ArtifactId, Digest, Id, Timestamp, WorkRef } from '../contracts/common.js';
 import type { ScriptProvenance, ScriptStageDefinition, StageInputBinding } from '../contracts/pipeline.js';
@@ -43,32 +47,53 @@ export const SCRIPT_RUNNER_DEFINITION = Object.freeze({
 });
 export const SCRIPT_PROVENANCE_SCHEMA = 'sentinel-script-provenance/draft-1';
 export const SCRIPT_INPUTS_SCHEMA = 'sentinel-script-inputs/draft-1';
+/** How long output still in flight is read after the interpreter exits. */
+const EXIT_GRACE_MS = 250;
 /** Captured stderr is bounded and never published; it only shortens a failure's detail. */
 const MAX_STDERR_BYTES = 65_536;
 const sha256 = (b: Uint8Array): Digest => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
-/** The interpreter a script runs under, as found on this computer. */
+/** The interpreter a script runs under, measured on this computer: its absolute path, its bytes' digest, its version. */
 interface Interpreter {
   name: 'node' | 'sh';
   path: string;
   version: string;
-  digest: Digest | null;
+  digest: Digest;
 }
+/** What `/bin/sh` is called when it answers no version: it is identified by its digest alone, and says so. */
+export const SH_UNVERSIONED = 'no version reported; identified by its digest';
 const interpreters = new Map<string, Interpreter>();
-function interpreterOf(name: 'node' | 'sh'): Interpreter {
-  const known = interpreters.get(name);
-  if (known) return known;
+/**
+ * The interpreter's measured identity, refused when it cannot be measured: an unreadable binary has no digest, and a
+ * script never runs under an interpreter whose bytes are unknown. Node's version is this running Node's; `/bin/sh`'s
+ * is what `sh --version` answers, in an empty environment, or SH_UNVERSIONED.
+ */
+export function interpreterOf(name: 'node' | 'sh'): Interpreter {
   const path = name === 'node' ? process.execPath : '/bin/sh';
-  let digest: Digest | null;
+  let key: string;
+  let bytes: Buffer;
   try {
-    digest = sha256(readFileSync(path));
+    const st = statSync(path);
+    key = `${name}\u0000${path}\u0000${st.size}\u0000${st.mtimeMs}`;
+    const known = interpreters.get(key);
+    if (known) return known;
+    bytes = readFileSync(path);
   } catch {
-    digest = null;
+    throw new ExecutionError('sentinel.execution.interpreterUnmeasured', { interpreter: name });
   }
-  const found: Interpreter = { name, path, version: name === 'node' ? process.version : 'posix-sh', digest };
-  interpreters.set(name, found);
+  let version = process.version;
+  if (name === 'sh') {
+    const asked = spawnSync(path, ['--version'], { env: {}, timeout: 2000, encoding: 'utf8', stdio: 'pipe' });
+    const line = asked.status === 0 ? (asked.stdout ?? '').split('\n')[0]!.trim() : '';
+    version = line ? line.slice(0, 200) : SH_UNVERSIONED;
+  }
+  const found: Interpreter = { name, path, version, digest: sha256(bytes) };
+  interpreters.set(key, found);
   return found;
 }
+
+/** The largest output schema a stage pack may hold. */
+const MAX_SCHEMA_BYTES = 262_144;
 
 export interface HostScriptRequest {
   readonly store: SentinelStore;
@@ -79,6 +104,9 @@ export interface HostScriptRequest {
   /** The entry bytes the owner supplied, and the digest the run's profile pins for them. */
   readonly entry: Uint8Array;
   readonly entryDigest: Digest;
+  /** The declared output schema's JSON Schema bytes, and the digest the run's profile pins for them. */
+  readonly outputSchema: Uint8Array;
+  readonly outputSchemaDigest: Digest;
   /** The stage's resolved typed inputs (every one resolved, folded for secrets). */
   readonly inputs: readonly StageInputBinding[];
   readonly scratchRoot: string;
@@ -87,13 +115,32 @@ export interface HostScriptRequest {
   readonly maxOutputBytes: number;
 }
 
-/** Refuses entry bytes that are not the ones the run pins, before anything is written or started. */
-export function checkEntry(entry: Uint8Array | undefined, digest: Digest): Uint8Array {
-  if (!entry || sha256(entry) !== digest)
+/** Refuses an entry or a schema whose bytes are not the ones the run pins, before anything is written or started. */
+export function checkEntry(
+  bytes: Uint8Array | undefined,
+  digest: Digest,
+  what: 'entry' | 'output schema' = 'entry',
+): Uint8Array {
+  if (!bytes || sha256(bytes) !== digest)
     throw new ExecutionError('sentinel.execution.inputMismatch', {
-      reason: 'the script entry is not the bytes the run pins',
+      reason: `the script ${what} is not the bytes the run pins`,
     });
-  return entry;
+  return bytes;
+}
+
+/** Compiles the declared output schema, refusing one that is not a bounded JSON Schema document. */
+function outputValidator(bytes: Uint8Array, id: string): (doc: unknown) => boolean {
+  try {
+    if (bytes.byteLength > MAX_SCHEMA_BYTES) throw new Error('too large');
+    const schema = JSON.parse(new TextDecoder('utf8', { fatal: true }).decode(bytes)) as object;
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) throw new Error('not an object');
+    const compiled = new Ajv({ allErrors: false, strict: false, validateSchema: true }).compile(schema);
+    return (doc) => compiled(doc) === true;
+  } catch {
+    throw new ExecutionError('sentinel.execution.inputMismatch', {
+      reason: `the output schema ${id} is not a JSON Schema document`,
+    });
+  }
 }
 
 const now = (): Timestamp => new Date().toISOString();
@@ -107,6 +154,10 @@ export async function runHostScript(request: HostScriptRequest): Promise<Prepare
       reason: `script stage ${stage.id} declares exactly one named output`,
     });
   const entry = checkEntry(request.entry, request.entryDigest);
+  const validates = outputValidator(
+    checkEntry(request.outputSchema, request.outputSchemaDigest, 'output schema'),
+    output.schema,
+  );
   const interpreter = interpreterOf(stage.interpreter);
   const dir = join(request.scratchRoot, `script.${randomUUID()}`);
   mkdirSync(dir, { mode: 0o700 });
@@ -152,9 +203,16 @@ export async function runHostScript(request: HostScriptRequest): Promise<Prepare
     } catch {
       throw new ExecutionError('sentinel.execution.outputMismatch', { reason: 'the script printed no JSON document' });
     }
-    if (!doc || typeof doc !== 'object' || Array.isArray(doc) || (doc as { schema?: unknown }).schema !== output.schema)
+    // The document names its schema and validates against the pinned schema; nothing else is published.
+    if (
+      !doc ||
+      typeof doc !== 'object' ||
+      Array.isArray(doc) ||
+      (doc as { schema?: unknown }).schema !== output.schema ||
+      !validates(doc)
+    )
       throw new ExecutionError('sentinel.execution.outputMismatch', {
-        reason: `the script's output is not a ${output.schema} document`,
+        reason: `the script's output is not a valid ${output.schema} document`,
       });
     const docId = store.objects.identifyCanonicalJson(doc).id as ArtifactId;
     const endedAt = now();
@@ -171,7 +229,14 @@ export async function runHostScript(request: HostScriptRequest): Promise<Prepare
       wrote: [docId],
       invocation: request.invocation,
       entryDigest: request.entryDigest,
-      interpreter: { name: interpreter.name, version: interpreter.version, digest: interpreter.digest },
+      interpreter: {
+        name: interpreter.name,
+        version: interpreter.version,
+        digest: interpreter.digest,
+        path: interpreter.path,
+      },
+      confinement: 'none',
+      outputSchema: { id: output.schema, digest: request.outputSchemaDigest },
       argv,
       environmentNames: [],
       image: null,
@@ -199,7 +264,11 @@ export async function runHostScript(request: HostScriptRequest): Promise<Prepare
   }
 }
 
-/** The child under its deadline and output bound, with an empty environment and no stdin. */
+/**
+ * The child in its own process group, under its deadline and output bound, with an empty environment and no stdin.
+ * The attempt settles when the interpreter exits, whatever its descendants do: the group is killed then (and at the
+ * deadline or the output bound), and a stream a descendant still holds open is not waited for beyond a short grace.
+ */
 function spawnBounded(
   command: string,
   argv: readonly string[],
@@ -207,19 +276,49 @@ function spawnBounded(
   request: HostScriptRequest,
 ): Promise<{ exitCode: number | null; signal: string | null; stdout: Buffer }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, [...argv], { cwd, env: {}, stdio: ['ignore', 'pipe', 'pipe'], shell: false });
+    const child = spawn(command, [...argv], {
+      cwd,
+      env: {},
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: false,
+      detached: true,
+    });
     const out: Buffer[] = [];
     let outBytes = 0;
     let errBytes = 0;
     let refusal: ExecutionError | undefined;
+    let exited: { code: number | null; signal: string | null } | undefined;
+    let settled = false;
+    const killGroup = () => {
+      try {
+        if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        /* the group has ended */
+      }
+    };
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(grace);
+      request.signal.removeEventListener('abort', onAbort);
+      killGroup();
+      child.stdout.destroy();
+      child.stderr.destroy();
+      if (refusal) reject(refusal);
+      else if (exited) resolve({ exitCode: exited.code, signal: exited.signal, stdout: Buffer.concat(out) });
+      else reject(new ExecutionError('sentinel.execution.commandFailed', { reason: 'the script did not exit' }));
+    };
     const stop = (why: ExecutionError) => {
       refusal ??= why;
-      child.kill('SIGKILL');
+      killGroup();
+      settle();
     };
     const timer = setTimeout(
       () => stop(new ExecutionError('sentinel.execution.deadlineExceeded', { deadlineMs: request.deadlineMs })),
       request.deadlineMs,
     );
+    let grace: ReturnType<typeof setTimeout> | undefined;
     const onAbort = () => stop(new ExecutionError('sentinel.execution.canceled', { reason: 'the run was stopped' }));
     request.signal.addEventListener('abort', onAbort, { once: true });
     child.stdout.on('data', (chunk: Buffer) => {
@@ -235,11 +334,15 @@ function spawnBounded(
     child.on('error', () =>
       stop(new ExecutionError('sentinel.execution.commandFailed', { reason: 'the interpreter could not start' })),
     );
-    child.on('close', (code, signal) => {
-      clearTimeout(timer);
-      request.signal.removeEventListener('abort', onAbort);
-      if (refusal) reject(refusal);
-      else resolve({ exitCode: code, signal, stdout: Buffer.concat(out) });
+    // The interpreter's exit ends the attempt: its descendants are killed with the group, and the output it wrote is
+    // read until its stream closes or a short grace passes (a descendant cannot hold the attempt open).
+    child.on('exit', (code, signal) => {
+      exited = { code, signal };
+      killGroup();
+      grace = setTimeout(settle, EXIT_GRACE_MS);
+    });
+    child.on('close', () => {
+      if (exited) settle();
     });
   });
 }

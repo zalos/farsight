@@ -653,6 +653,12 @@ export const PLAN_SHAPE_KEYS: Readonly<Record<PlanShape, string>> = Object.freez
 
 // ---- script stages ----
 
+/** What a script stage's unit is pinned to: its entry's bytes and its output schema's bytes, by digest. */
+export interface ScriptPins {
+  readonly entry: Digest;
+  readonly schema: Digest;
+}
+
 /** The contract a script stage's unit carries; its unit stage is the declared stage id. */
 export const SCRIPT_CONTRACT = 'sentinel.stage.script.host';
 
@@ -665,12 +671,12 @@ export function scriptOutputOf(stage: Pick<ScriptStageDefinition, 'id' | 'produc
 
 /**
  * The input fingerprint of a script stage's unit: the stage as declared (interpreter, runner, arguments, inputs and
- * output), its entry by digest, the runner operation by digest and the units it waits for. A changed entry byte is a
- * different unit.
+ * output), its entry and output schema by digest, the runner operation by digest and the units it waits for. A
+ * changed entry or schema byte is a different unit (its id derives from this fingerprint).
  */
 export function scriptFingerprintOf(
   stage: ScriptStageDefinition,
-  entryDigest: Digest,
+  pins: ScriptPins,
   runnerDigest: Digest,
   dependencies: readonly WorkRef[],
 ): Digest {
@@ -678,11 +684,20 @@ export function scriptFingerprintOf(
     stage: stage.id,
     runner: stage.runner,
     interpreter: stage.interpreter,
-    entry: { ref: stage.entry, digest: entryDigest },
+    entry: { ref: stage.entry, digest: pins.entry },
+    outputSchema: pins.schema,
     args: [...(stage.args ?? [])],
     needs: structuredClone(stage.needs ?? []),
     produces: structuredClone(stage.produces ?? []),
     implementation: runnerDigest,
     dependencies: dependencies.map((d) => [d.id, d.revision]),
   }) as Digest;
+}
+
+/**
+ * What a plan preview must say before it is confirmed, as catalog keys: a revision holding a host script stage runs
+ * unconfined on this computer as the owner.
+ */
+export function planNoticesOf(plan: Pick<PlanRevision, 'units'>): string[] {
+  return plan.units.some((u) => u.contract === SCRIPT_CONTRACT) ? ['sentinel.plan.notice.hostScriptUnconfined'] : [];
 }

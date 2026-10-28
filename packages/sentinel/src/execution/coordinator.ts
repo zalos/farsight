@@ -72,7 +72,7 @@ import {
 } from './plan.js';
 import { loadPlan } from './plans.js';
 import { stageInputsForUnit } from './stage-inputs.js';
-import { checkEntry, runHostScript, SCRIPT_CONTRACT } from './script-runner.js';
+import { checkEntry, interpreterOf, runHostScript, SCRIPT_CONTRACT } from './script-runner.js';
 import { featureEnabled } from '../policy/features.js';
 import type { ScriptStageDefinition } from '../contracts/pipeline.js';
 import type { StageInputBinding } from '../contracts/pipeline.js';
@@ -1205,6 +1205,7 @@ export class Coordinator {
     stage: ScriptStageDefinition;
     digest: string;
     entry: Uint8Array;
+    schema: { id: string; digest: string; bytes: Uint8Array };
   } {
     const profile = this.#plan.admitted.profile;
     const stage = profile.pipeline?.stages.find((s) => s.id === unit.stage && s.kind === 'script') as
@@ -1220,7 +1221,11 @@ export class Coordinator {
       throw new ExecutionError('sentinel.execution.isolationUnavailable', {
         reason: 'a script-runner container is not available in this build',
       });
-    return { stage, digest: pinned.digest, entry: checkEntry(this.#scripts?.get(pinned.digest), pinned.digest) };
+    const entry = checkEntry(this.#scripts?.get(pinned.digest), pinned.digest);
+    const schema = checkEntry(this.#scripts?.get(pinned.schema.digest), pinned.schema.digest, 'output schema');
+    // The interpreter must be measurable (path, digest, version) before anything is recorded.
+    interpreterOf(stage.interpreter);
+    return { stage, digest: pinned.digest, entry, schema: { ...pinned.schema, bytes: schema } };
   }
 
   async #operation(work: Readonly<WorkEnvelope>, ordinal: number, id: Id): Promise<Id> {
@@ -1263,6 +1268,7 @@ export class Coordinator {
               runner: script.stage.runner,
               entry: script.stage.entry,
               entryDigest: script.digest,
+              outputSchema: { id: script.schema.id, digest: script.schema.digest },
               interpreter: script.stage.interpreter,
               args: [...(script.stage.args ?? [])],
               environmentNames: [],
@@ -1277,7 +1283,16 @@ export class Coordinator {
         ? [{ value: review.admission, schema: 'sentinel-admission/draft-1', privacy: 'source-derived' as const }]
         : []),
       // The exact entry the attempt runs is retained with its start, so the run keeps what ran without its pack.
-      ...(script ? [{ bytes: script.entry, schema: 'sentinel-script-entry/draft-1', privacy: 'source' as const }] : []),
+      ...(script
+        ? [
+            { bytes: script.entry, schema: 'sentinel-script-entry/draft-1', privacy: 'source' as const },
+            {
+              bytes: script.schema.bytes,
+              schema: 'sentinel-script-output-schema/draft-1',
+              privacy: 'metadata' as const,
+            },
+          ]
+        : []),
     ]);
     try {
       this.#store.ledger.startAttempt(
@@ -1335,6 +1350,8 @@ export class Coordinator {
               invocation,
               entry: script.entry,
               entryDigest: script.digest,
+              outputSchema: script.schema.bytes,
+              outputSchemaDigest: script.schema.digest,
               inputs: stageInputs ?? [],
               scratchRoot: this.#scratchRoot,
               signal,

@@ -35,6 +35,7 @@ import {
   scriptFingerprintOf,
   SCRIPT_CONTRACT,
   stageModel,
+  type ScriptPins,
   type AgentUnitSeed,
   type DeclaredAnalysis,
 } from './pipeline.js';
@@ -407,8 +408,8 @@ export function planPipelineAnalysis(
   request: AnalysisRequest & {
     readonly pipeline: PipelineDefinition;
     readonly agents?: readonly AgentUnitSeed[];
-    /** Each script stage's entry, by the digest of the bytes the owner adopted (keyed by stage id). */
-    readonly scripts?: ReadonlyMap<string, Digest>;
+    /** Each script stage's entry and output schema, by the digests of the bytes the owner adopted (by stage id). */
+    readonly scripts?: ReadonlyMap<string, ScriptPins>;
   },
 ): PlanRevision {
   const { pipeline, agents, scripts, ...rest } = request;
@@ -429,7 +430,7 @@ function planAnalysisOf(
   declared: {
     readonly analysis: DeclaredAnalysis;
     readonly agents: readonly AgentUnitSeed[];
-    readonly scripts: ReadonlyMap<string, Digest>;
+    readonly scripts: ReadonlyMap<string, ScriptPins>;
   } | null,
 ): PlanRevision {
   const runId = checkId(request.runId, 'run id');
@@ -919,9 +920,12 @@ function planAnalysisOf(
     for (const stage of scripts) {
       if (!runnerId)
         throw new PlanError('sentinel.plan.stageUnavailable', `${stage.id}: no script runner is registered`);
-      const entryDigest = declared.scripts.get(stage.id);
-      if (entryDigest === undefined || !DIGEST.test(entryDigest))
-        throw new PlanError('sentinel.plan.stageUnavailable', `${stage.id}: its entry ${stage.entry} is not adopted`);
+      const pins = declared.scripts.get(stage.id);
+      if (!pins || !DIGEST.test(pins.entry) || !DIGEST.test(pins.schema))
+        throw new PlanError(
+          'sentinel.plan.stageUnavailable',
+          `${stage.id}: its entry ${stage.entry} and output schema are not adopted`,
+        );
       const runner = profile.registry.get(runnerId);
       const dependencies = [
         ...new Map(
@@ -931,8 +935,9 @@ function planAnalysisOf(
           ].map((r) => [`${r.id}@${r.revision}`, r]),
         ).values(),
       ].sort(byKey((r) => `${r.id}@${r.revision}`));
+      const inputFingerprint = scriptFingerprintOf(stage, pins, runner.digest, dependencies);
       const unit: PlannedWork = {
-        id: scriptUnitIdOf({ runId, revision, stage: stage.id }),
+        id: scriptUnitIdOf({ runId, revision, stage: stage.id, inputFingerprint }),
         revision: 1,
         stage: stage.id,
         contract: SCRIPT_CONTRACT,
@@ -940,7 +945,7 @@ function planAnalysisOf(
         sourceId: null,
         adapterId: runner.id,
         dependencies,
-        inputFingerprint: scriptFingerprintOf(stage, entryDigest, runner.digest, dependencies),
+        inputFingerprint,
         checks: [],
         scopes: [],
         inputs: [],

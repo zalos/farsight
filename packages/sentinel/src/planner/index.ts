@@ -77,6 +77,7 @@ export {
   SCRIPT_CONTRACT,
   scriptFingerprintOf,
   scriptOutputOf,
+  planNoticesOf,
 } from './pipeline.js';
 export type {
   StageModel,
@@ -85,4 +86,5 @@ export type {
   DeclaredAnalysis,
   StageSelection,
   DefaultReview,
+  ScriptPins,
 } from './pipeline.js';
