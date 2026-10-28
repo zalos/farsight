@@ -87,4 +87,17 @@ test('every kind has fields, and the drawer offers the contract’s four kinds',
   assert.deepEqual(m.STAGE_KINDS, ['builtin', 'tool', 'script', 'agent']);
   for (const kind of m.STAGE_KINDS) assert.ok(m.STAGE_FIELDS[kind].length > 0, kind);
   assert.ok(m.SHARED_FIELDS.some((f: any) => f.key === 'needs'));
+  // the choices are the contract's closed sets (packages/sentinel/src/contracts/pipeline.ts)
+  const choices = (kind: string, key: string) => m.STAGE_FIELDS[kind].find((f: any) => f.key === key).choices;
+  assert.deepEqual(choices('agent', 'runner'), ['copilot-cli', 'claude-cli', 'hosted-api', 'ollama']);
+  assert.deepEqual(choices('agent', 'mode'), ['brokered', 'native']);
+  assert.deepEqual(choices('script', 'runner'), ['container', 'host']);
+  assert.deepEqual(choices('builtin', 'operation'), [
+    'capture',
+    'parse',
+    'inventory',
+    'walkthrough',
+    'framework-controls',
+    'report',
+  ]);
 });

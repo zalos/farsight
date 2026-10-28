@@ -530,7 +530,7 @@ function verdictsHtml() {
     if (!c) return '';
     if (c.state === 'checked') return keyChip('ok', 'sentinel.viewer.edit.checked');
     if (c.state === 'written') return keyChip('ok', 'sentinel.viewer.edit.written');
-    return keyChip('err', c.reasonCode || 'sentinel.viewer.edit.refused');
+    return detailChip('err', c.reasonCode || 'sentinel.viewer.edit.refused', c.detail);
   }
   const row = SN.place.stop === 'scans' ? null : SN.scan?.scan;
   if (!row) return '';
@@ -1289,6 +1289,20 @@ function toolsHtml() {
   );
 }
 
+/**
+ * A service word with its `{detail}` filled: the safe detail the service gave (stage ids, field paths), in the code
+ * registers; the business register drops a parenthesised detail, which can name a scanner or a rule by its id.
+ */
+function detailWords(key, detail) {
+  const text = t(key);
+  if (!text.includes('{detail}')) return text;
+  const d = typeof detail === 'string' ? detail.slice(0, 240) : '';
+  const paren = /\s*\(\{detail\}\)/;
+  if (!d || biz()) return text.replace(paren, '').split('{detail}').join(d);
+  return text.split('{detail}').join(d);
+}
+const detailChip = (cls, key, detail) => chip(cls, esc(detailWords(key, detail)), defAttrs(key));
+
 /** What the last check said would happen to a stage: reused, run again, added, changed. */
 function changeOf(id) {
   return SN.check?.preview?.stages?.find((x) => x.id === id) || null;
@@ -1319,7 +1333,8 @@ function editRowHtml(stage, i, problems, touched) {
     '</span><span class="snt-enm">' +
     esc(stage.id) +
     '</span>' +
-    keyChip(k.cls, k.key, runner && typeof runner === 'string' ? ' · ' + esc(runner) : '') +
+    keyChip(k.cls, k.key) +
+    (!biz() && runner && typeof runner === 'string' ? chip('plain', esc(runner)) : '') +
     (change ? keyChip('', whereKey(change.where)) : '') +
     (touched ? keyChip('warn', 'sentinel.viewer.edit.edited') : '') +
     (problems?.length ? keyChip('err', 'sentinel.viewer.edit.problem') : '') +
@@ -1369,7 +1384,9 @@ function editHtml() {
     (own.length
       ? '<div class="snt-eprob">' + own.map((x) => problemHtml(x)).join('') + '</div>'
       : SN.check?.state === 'refused' || SN.check?.state === 'failed'
-        ? '<div class="snt-eprob">' + keyChip('err', SN.check.reasonCode || 'sentinel.viewer.edit.refused') + '</div>'
+        ? '<div class="snt-eprob">' +
+          detailChip('err', SN.check.reasonCode || 'sentinel.viewer.edit.refused', SN.check.detail) +
+          '</div>'
         : '') +
     (SN.check?.state === 'written'
       ? '<div class="snt-note">' +
@@ -1412,12 +1429,7 @@ function editHtml() {
 
 function problemHtml(x) {
   const key = typeof x.code === 'string' && x.code.startsWith('sentinel.') ? x.code : 'sentinel.viewer.edit.problem';
-  return (
-    '<div class="snt-pr">' +
-    keyChip(x.class === 'refused' ? 'err' : 'warn', key) +
-    (biz() || !x.detail ? '' : ' <span class="mono">' + esc(String(x.detail)) + '</span>') +
-    '</div>'
-  );
+  return '<div class="snt-pr">' + detailChip(x.class === 'refused' ? 'err' : 'warn', key, x.detail) + '</div>';
 }
 
 const listText = (v) =>
@@ -1640,6 +1652,7 @@ function pipelineResult(v) {
   SN.check = {
     state: v.state,
     reasonCode: typeof v.reasonCode === 'string' ? v.reasonCode : null,
+    detail: typeof v.detail === 'string' ? v.detail : null,
     problems: Array.isArray(v.problems) ? v.problems.filter((x) => x && typeof x === 'object') : [],
     preview: v.preview && Array.isArray(v.preview.stages) ? v.preview : null,
   };

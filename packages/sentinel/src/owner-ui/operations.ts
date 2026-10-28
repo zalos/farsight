@@ -344,6 +344,8 @@ export class OwnerUiOperations {
           reasonCode: checked?.reasonCode ?? null,
           problems: facts.problems ?? [],
           preview: facts.preview ?? null,
+          // a pipeline the service cannot parse says where, in safe words (stage ids, field paths; never a value)
+          detail: typeof facts.detail === 'string' ? facts.detail.slice(0, 240) : null,
         };
         if (refused || !facts.preview) return { ...answer, unavailable: true };
         const preview: Preview = {

@@ -47,6 +47,13 @@ function browserMain(layout: typeof processLayout) {
     const key = name.startsWith('sentinel.') ? name : 'sentinel.ownerUi.' + name;
     return words[key]?.[register] ?? words['sentinel.ownerUi.failed']?.[register] ?? key;
   };
+  /** A word with its `{detail}` filled from the service's safe detail, or the parenthesis dropped when there is none. */
+  const detailed = (name: string, detail: unknown) => {
+    const w = text(name);
+    if (!w.includes('{detail}')) return w;
+    const d = typeof detail === 'string' ? detail.slice(0, 240) : '';
+    return d ? w.split('{detail}').join(d) : w.replace(/\s*\(\{detail\}\)/, '').replace('{detail}', '');
+  };
   const element = (tag: string, word?: string, parent?: HTMLElement) => {
     const e = document.createElement(tag);
     if (word) {
@@ -683,6 +690,7 @@ function browserMain(layout: typeof processLayout) {
   function tellPipeline(answer: {
     state: 'checked' | 'refused' | 'written' | 'failed';
     reasonCode?: string | null;
+    detail?: unknown;
     problems?: unknown;
     preview?: unknown;
     written?: unknown;
@@ -695,6 +703,7 @@ function browserMain(layout: typeof processLayout) {
         hostInstance,
         state: answer.state,
         reasonCode: typeof answer.reasonCode === 'string' ? answer.reasonCode : null,
+        detail: typeof answer.detail === 'string' ? answer.detail.slice(0, 240) : null,
         problems: Array.isArray(answer.problems) ? answer.problems : [],
         preview: answer.preview && typeof answer.preview === 'object' ? answer.preview : null,
         written: answer.written && typeof answer.written === 'object' ? answer.written : null,
@@ -707,10 +716,11 @@ function browserMain(layout: typeof processLayout) {
     e.replaceChildren();
     const checked = answer.preview ?? answer;
     if (answer.unavailable || !answer.confirmation) {
-      notice(text(checked.reasonCode || 'pipelineRefused'), true);
+      notice(detailed(checked.reasonCode || 'pipelineRefused', checked.detail), true);
       tellPipeline({
         state: 'refused',
         reasonCode: checked.reasonCode,
+        detail: checked.detail,
         problems: checked.problems,
         preview: checked.preview,
       });
@@ -733,7 +743,7 @@ function browserMain(layout: typeof processLayout) {
     for (const problem of checked.problems ?? []) {
       const li = element('li', undefined, list);
       li.className = 'warn';
-      li.textContent = (problem.stage ? String(problem.stage) + ' · ' : '') + text(problem.code);
+      li.textContent = (problem.stage ? String(problem.stage) + ' · ' : '') + detailed(problem.code, problem.detail);
     }
     const confirm = button(
       e,
@@ -754,8 +764,13 @@ function browserMain(layout: typeof processLayout) {
             written: { fileDigest: done.facts.fileDigest, digest: done.facts.digest, trust: done.facts.trust },
           });
         } else {
-          notice(text(done.reasonCode || 'failed'), true);
-          tellPipeline({ state: 'refused', reasonCode: done.reasonCode, problems: done.facts?.problems });
+          notice(detailed(done.reasonCode || 'failed', done.facts?.detail), true);
+          tellPipeline({
+            state: 'refused',
+            reasonCode: done.reasonCode,
+            detail: done.facts?.detail,
+            problems: done.facts?.problems,
+          });
         }
       },
       true,
@@ -763,6 +778,7 @@ function browserMain(layout: typeof processLayout) {
     confirm.id = 'confirm';
     confirm.className = 'primary';
     writes();
+    e.scrollIntoView({ block: 'nearest' });
   }
   function showPreview(answer: any) {
     const e = document.getElementById('preview')!;

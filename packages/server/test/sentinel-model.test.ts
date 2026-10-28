@@ -19,6 +19,7 @@ const blank = {
   layout: 'list',
   pick: null,
   act: null,
+  edit: false,
 };
 
 test('the address names the stop, the scan by its run id, the stage, the open unit, the layout and the pick', () => {
@@ -83,6 +84,26 @@ test('the address names the stop, the scan by its run id, the stage, the open un
     `#/sentinel/${RUN}/s`,
     'the first unit is not written',
   );
+});
+
+test("the edit mode is the PIPELINE stop of the workspace's pipeline file, drawn as its ladder, with the picked stage", () => {
+  assert.deepEqual(m.sentinelPlace('#/sentinel?edit=1'), { ...blank, stop: 'pipeline', layout: 'ladder', edit: true });
+  assert.deepEqual(m.sentinelPlace('#/sentinel?edit=1&pick=report&layout=table'), {
+    ...blank,
+    stop: 'pipeline',
+    layout: 'ladder',
+    edit: true,
+    pick: 'report',
+  });
+  assert.equal(m.sentinelPlace(`#/sentinel/${RUN}?edit=1`).edit, false, 'a scan is never the edit mode');
+  assert.equal(m.sentinelPlace('#/sentinel?edit=yes').edit, false);
+  assert.equal(m.sentinelHash({ edit: true }), '#/sentinel?edit=1');
+  assert.equal(m.sentinelHash({ edit: true, pick: 'review-2' }), '#/sentinel?edit=1&pick=review-2');
+  const back = m.sentinelPlace(m.sentinelHash({ edit: true, pick: 'report' }));
+  assert.deepEqual([back.stop, back.edit, back.pick], ['pipeline', true, 'report']);
+  // where a declared stage runs, as the service's preview names it
+  assert.equal(m.whereKey('host'), 'sentinel.viewer.where.host');
+  assert.equal(m.whereKey('sandboxed-cli'), 'sentinel.viewer.where.sandboxedCli');
 });
 
 test('the not-built stops and layouts are named, and never reachable', () => {

@@ -1091,3 +1091,8 @@ What a try ran is read from its own retained invocation record (`sentinel-invoca
 its work, the owner epoch and the pinned adapter before any field is used; never from today's registry, which only
 says whether it still holds the exact pinned adapter. A worker's argv leaves with host paths and token arguments
 scrubbed.
+
+The PIPELINE stop's edit mode (`GET /api/sentinel/pipeline`, `sentinel-viewer-pipeline/draft-1`, lane L-UX U-3) prints
+**no count**: a row's and the drawer's *Stage n* is the stage's place in the file's declaration order, a position like
+*stage n of m*, not a number of anything; what a check says (*reuses* · *changed* · *runs again* · *added*, *problem*)
+is a word per stage, never a tally; a budget field is the value the file holds, printed as written.
