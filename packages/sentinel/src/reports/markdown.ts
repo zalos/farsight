@@ -80,10 +80,13 @@ export function provenanceLine(doc: ReportEnvelope, p: Provenance): string {
   }
 }
 
+/** The severities a finding can carry; a model's claim carries none of them unless it was rated. */
+export const RATED: ReadonlySet<string> = new Set(['critical', 'high', 'medium', 'low', 'info']);
+
 /** The review section's lines for one observation, before its evidence. */
 export function reviewLines(doc: ReportEnvelope, r: NonNullable<ReportEnvelope['reviews']>[number]): string[] {
   return [
-    `${r.stage} · ${wordOf(doc, `sentinel.report.severity.${r.severity}`, 'business')} · ${wordOf(doc, 'sentinel.report.review.model', 'business')} ${r.model.requestedModel}${r.model.returnedModel && r.model.returnedModel !== r.model.requestedModel ? ` (reported ${r.model.returnedModel})` : ''} · ${r.model.source}`,
+    `${r.stage} · ${wordOf(doc, RATED.has(r.severity) ? `sentinel.report.severity.${r.severity}` : 'sentinel.report.review.unrated', 'business')} · ${wordOf(doc, 'sentinel.report.review.model', 'business')} ${r.model.requestedModel}${r.model.returnedModel && r.model.returnedModel !== r.model.requestedModel ? ` (reported ${r.model.returnedModel})` : ''} · ${r.model.source}`,
     ...(r.ruleFamilyId ? [`rule family ${r.ruleFamilyId}`] : []),
     ...(r.message !== undefined ? [r.message] : []),
     `observation ${r.id} · prompt ${short(r.promptDigest)}`,

@@ -24,6 +24,7 @@ export const SENTINEL_REPORT_STRINGS: Record<string, StringEntry> = {
   'sentinel.count.reviewObservationsOne': one('1 model observation', 'sentinel.count.reviewObservations'),
   'sentinel.report.review.heading': same('Model observations', 'What a model review stage proposed about the code, each claim with the lines it cites and the model that made it. A proposal to check, not a finding.'),
   'sentinel.report.review.proposed': same('proposed by a model: a cited claim, not a finding and not coverage', 'A model read the cited code and proposed this. Nothing in the report treats it as established: it is not grouped with findings, it covers no check, and a person decides what it is worth.'),
+  'sentinel.report.review.unrated': same('not rated', 'A model\'s claim carries no severity of its own: it is a proposal for a person to rate, never a finding with a rating.'),
   'sentinel.report.review.model': same('model', 'The model that made the claim: the one asked for, the one the provider reported, and how that identity is known.'),
   'sentinel.report.provenance.heading': same('How each stage ran', 'For every piece of work that published: what ran, which version, where it ran, how long it took, what it read and wrote, and for a model stage the tokens and the cost.'),
   'sentinel.report.provenance.where.in-process': same('in this process', 'Sentinel\'s own code, run inside the process that ran the scan.'),

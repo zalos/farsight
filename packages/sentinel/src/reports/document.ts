@@ -373,8 +373,14 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
       limitationKeys: [...o.limitationKeys],
     });
   }
-  if (reviews) for (const key of ['heading', 'proposed', 'model']) used.add(`sentinel.report.review.${key}`);
-  const provenance = input.provenance ? structuredClone([...input.provenance]) : undefined;
+  if (reviews) for (const key of ['heading', 'proposed', 'model', 'unrated']) used.add(`sentinel.report.review.${key}`);
+  // A host interpreter's absolute path names this computer's folders (a home folder, a user name): private only.
+  const provenance = input.provenance
+    ? structuredClone([...input.provenance]).map((p) => {
+        if (p.kind === 'script' && !profile.embedSource) delete p.interpreter.path;
+        return p;
+      })
+    : undefined;
   if (provenance) {
     used.add('sentinel.report.provenance.heading');
     for (const p of provenance) {

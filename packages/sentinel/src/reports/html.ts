@@ -216,9 +216,7 @@ ${
         .join('')}`
     : ''
 }
-${reviews}
-${provenance}
-<h2 id="gaps">Gaps in the checks</h2>
+${reviews ? `${reviews}\n` : ''}${provenance ? `${provenance}\n` : ''}<h2 id="gaps">Gaps in the checks</h2>
 ${gaps}
 <h2 id="words">Words used in this report</h2>
 <table><tbody>${definitions}</tbody></table>

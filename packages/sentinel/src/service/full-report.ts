@@ -682,6 +682,16 @@ const TRUSTED = new RegExp(
       PLACE + String.raw`\.counts\.[A-Za-z]+\.` + COUNT,
       PLACE + String.raw`\.screens\.\*\.(?:via|evidenceArtifact)`,
       PLACE + String.raw`\.personas\.\*\.(?:declared|evidenceArtifact)`,
+      // A model observation's generated identity; its statement, its excerpts and the reported model are screened.
+      String.raw`reviews\.\*\.(?:id|stage|attemptId|promptDigest|ruleFamilyId|severity|limitationKeys\.\*|unit\.(?:id|revision)|model\.(?:requestedModel|source))`,
+      String.raw`reviews\.\*\.evidence\.\*\.(?:id|state|reasonCode|content)`,
+      // Provenance is the ledger's own record of what ran; a host path, an argument and a reported model are screened.
+      String.raw`provenance\.\*\.(?:kind|stage|attempt|where|startedAt|endedAt|invocation|read\.\*|wrote\.\*|unit\.id)`,
+      String.raw`provenance\.\*\.(?:operation|moduleDigest|sentinelVersion|adapterId|adapterVersion|workerDigest|image\.(?:reference|id))`,
+      String.raw`provenance\.\*\.(?:rules\.\*\.(?:familyId|definitionDigest)|databases\.\*\.(?:databaseId|snapshotDigest))`,
+      String.raw`provenance\.\*\.(?:entryDigest|interpreter\.(?:name|version|digest)|confinement|outputSchema\.(?:id|digest)|environmentNames\.\*)`,
+      String.raw`provenance\.\*\.(?:mode|runner|runnerVersion|executableDigest|model\.(?:requested|identitySource)|promptDigest|skillDigests\.\*|wires\.\*|transcript)`,
+      String.raw`provenance\.\*\.(?:tokens\.certainty|cost\.(?:basis|amount|currency|reason))`,
     ].join('|') +
     ')$',
 );
@@ -745,6 +755,16 @@ export function withholdSecretRun(
     places.push(h.place);
   }
   for (const g of doc.gaps ?? []) places.push(g.place);
+  // A model observation keeps its generated identity: its statement is dropped, its citations withheld like a finding's.
+  for (const r of doc.reviews ?? []) {
+    delete r.message;
+    r.evidence = r.evidence.map((e: any) =>
+      e.state === 'withheld' && e.reasonCode === 'sentinel.report.withheld.secret'
+        ? { id: e.id, state: 'withheld', reasonCode: e.reasonCode, content: e.content }
+        : { id: e.id, state: 'withheld', reasonCode: SECRET_RUN_WITHHELD, content: e.content },
+    );
+    r.limitationKeys = [...new Set([...r.limitationKeys, SECRET_RUN_WITHHELD])].sort();
+  }
   for (const place of places)
     place.limitationKeys = [...new Set([...place.limitationKeys, SECRET_RUN_WITHHELD])].sort();
   const opaque = new Map<string, string>();
