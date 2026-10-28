@@ -1,0 +1,91 @@
+{
+  "profile": "copilot-1.0.105-darwin-arm64-seatbelt-v6",
+  "launch": {
+    "args": [
+      "-c",
+      "ulimit -H -c 0 && ulimit -S -c 0 && exec /usr/bin/sandbox-exec \"$@\"",
+      "sentinel-copilot",
+      "-p",
+      "(version 1)(deny default)\n(allow process-fork)\n(allow process-exec (literal \"<executable>\"))\n(allow process-info* (target same-sandbox))(allow signal (target same-sandbox))(allow sysctl-read)\n(allow file-read* (literal \"/\") (subpath \"/System\") (subpath \"/usr/lib\") (subpath \"/Library/Apple\") (literal \"<executable>\") (subpath \"<owned>\") (literal \"/dev/null\") (literal \"/dev/urandom\") (literal \"/dev/random\"))\n(deny file-read* (subpath \"<owned>/runtime/builtin-skills\") (subpath \"<owned>/runtime/builtin\") (subpath \"<owned>/runtime/plugins\"))\n(allow file-read-metadata (vnode-type DIRECTORY))\n(allow file-write* (subpath \"<owned>/home\") (subpath \"<owned>/state\") (subpath \"<owned>/tmp\") (literal \"/dev/null\"))\n(allow mach-priv-task-port (target same-sandbox))\n(allow file-read* (subpath \"<home>/Library/Keychains\") (subpath \"/private/var/protected/trustd\"))\n(allow mach-lookup (global-name \"com.apple.SecurityServer\") (global-name \"com.apple.trustd\") (global-name \"com.apple.trustd.agent\"))\n(allow mach-lookup (global-name \"com.apple.securityd\") (global-name \"com.apple.securityd.xpc\") (global-name \"com.apple.logd\") (global-name \"com.apple.system.logger\") (global-name \"com.apple.system.opendirectoryd.libinfo\") (global-name \"com.apple.system.opendirectoryd.membership\"))\n(allow file-ioctl (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/random\") (literal \"/dev/urandom\"))\n(allow network-outbound (remote ip \"localhost:<port>\"))",
+      "<executable>",
+      "--no-auto-update",
+      "--model",
+      "gpt-6-luna",
+      "--context",
+      "default",
+      "-s",
+      "--usage-output-file",
+      "<owned>/state/usage.json",
+      "--excluded-tools",
+      "builtin:*",
+      "mcp:*",
+      "custom:*",
+      "--deny-tool",
+      "shell",
+      "--deny-tool",
+      "write",
+      "--disable-builtin-mcps",
+      "--no-custom-instructions",
+      "--no-ask-user",
+      "--disable-client-telemetry",
+      "--sync-session=off",
+      "--no-experimental",
+      "--no-bash-env",
+      "--disallow-temp-dir",
+      "--log-level",
+      "none",
+      "--no-color",
+      "--max-ai-credits",
+      "30"
+    ],
+    "cwd": "<owned>/home",
+    "env": {
+      "PATH": "/usr/bin:/bin",
+      "HOME": "<home>",
+      "COPILOT_HOME": "<owned>/state",
+      "COPILOT_CLI_DIST_DIR": "<owned>/runtime",
+      "TMPDIR": "<owned>/tmp",
+      "XDG_CACHE_HOME": "<owned>/state",
+      "CI": "1",
+      "TERM": "dumb",
+      "NO_COLOR": "1",
+      "COPILOT_AUTO_UPDATE": "false",
+      "USE_TGREP": "false",
+      "HTTPS_PROXY": "http://127.0.0.1:<port>",
+      "HTTP_PROXY": "http://127.0.0.1:<port>",
+      "NO_PROXY": ""
+    },
+    "stdio": [
+      "pipe",
+      "pipe",
+      "pipe"
+    ],
+    "stdin": "{\"encoding\":\"sentinel-copilot-chat/v1\",\"messages\":[{\"content\":\"original retained-wire Sentinel prompt\\nAnswer with one JSON object.\",\"role\":\"system\"},{\"content\":\"original captured scope: src/original.ts\",\"role\":\"user\"}],\"requestedMaxOutputTokens\":512}",
+    "state": {
+      "config.json": "{\"lastLoggedInUser\":{\"host\":\"https://github.com\",\"login\":\"original-fixture-user\"},\"loggedInUsers\":[{\"host\":\"https://github.com\",\"login\":\"original-fixture-user\"}]}",
+      "settings.json": "{\"disableAllHooks\":true,\"memory\":false,\"continueOnAutoMode\":false,\"storeTokenPlaintext\":false,\"extensions\":{\"mode\":\"disabled\"},\"skills\":{\"disabled\":[\"*\"]}}"
+    },
+    "work": {}
+  },
+  "reply": {
+    "content": "original visible brokered reply",
+    "identity": {
+      "requestedModel": "gpt-6-luna",
+      "returnedModel": "gpt-6-luna",
+      "probedRevision": null,
+      "source": "host-reported"
+    },
+    "usage": {
+      "certainty": "confirmed",
+      "inputTokens": 1234,
+      "outputTokens": 56,
+      "monetaryCost": null,
+      "currency": null,
+      "basis": "subscription-quota"
+    }
+  },
+  "reservation": {
+    "state": "settled",
+    "reserved": 272000
+  }
+}

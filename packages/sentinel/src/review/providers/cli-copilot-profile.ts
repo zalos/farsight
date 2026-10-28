@@ -1,11 +1,13 @@
 // Fixed external Copilot distribution. The native launcher alone does not pin its extracted JavaScript/native modules.
 // No vendor bytes are distributed by Sentinel; a bounded verified copy supplies one exact private runtime.
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { constants } from 'node:fs';
 import { open, lstat, realpath, opendir, mkdtemp, mkdir, chmod, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, dirname, relative } from 'node:path';
 import { COPILOT_CODE_MANIFEST } from './cli-copilot-manifest.js';
+import { COPILOT_1_0_105_CODE_MANIFEST } from './cli-copilot-manifest-1.0.105.js';
 import { canonicalDigest } from '../../policy/digest.js';
 import { fail, ProviderError } from './errors.js';
 import type { NativeTiming } from './cli-native-profile.js';
@@ -44,6 +46,48 @@ export const COPILOT_NATIVE_PROFILE = Object.freeze({
   softAiCredits: 30,
   contextReservation: 272000,
 });
+/** The brokered v6 profile re-qualified on Copilot 1.0.105: same sandbox and flags, the 1.0.105 code pins. */
+export const COPILOT_1_0_105_PROFILE = Object.freeze({
+  ...COPILOT_NATIVE_PROFILE,
+  id: 'copilot-1.0.105-darwin-arm64-seatbelt-v6',
+  version: '1.0.105',
+  executableDigest: 'sha256:5fd7d15ff02deb08a58593b1b488015bb52c1686014b80b5509e28263cb3ad70',
+  executableBytes: 181873376,
+  runtimeDigest: 'sha256:aad20f2ab2d430999091a36d937e6c667d3dbba16a86cd38d90bda609cbb34c7',
+  runtimeBytes: 212852371,
+  runtimeFiles: 265,
+});
+/**
+ * The native agent mode on Copilot 1.0.105: the CLI runs its own loop over a scratch tree holding only the stage's
+ * inputs, with only the read tools available, the JSONL event stream and the `--share` Markdown transcript retained.
+ * Same sandbox, proxy and account projection as v6. The tool names come from the one debug dry run: `view` reads a
+ * file and `glob` lists paths, both in-process; `rg` is left out because it executes the bundled ripgrep binary,
+ * which the deny-default profile refuses (only the pinned executable may be executed).
+ */
+export const COPILOT_AGENT_PROFILE = Object.freeze({
+  ...COPILOT_1_0_105_PROFILE,
+  id: 'copilot-1.0.105-darwin-arm64-native-v1',
+  mode: 'native' as const,
+  toolRestriction: 'available-read-tools/1',
+  readTools: 'view,glob',
+  instructions: 'scratch-github-copilot-instructions/1',
+  wire: 'sentinel-copilot-agent/v1',
+  output: 'jsonl-events/1',
+  transcript: 'jsonl-and-share-markdown/1',
+  decoder: 'fatal-utf8-jsonl-final-answer-and-owned-usage/1',
+});
+export type CopilotProfile =
+  typeof COPILOT_NATIVE_PROFILE | typeof COPILOT_1_0_105_PROFILE | typeof COPILOT_AGENT_PROFILE;
+/** Every qualified Copilot profile; 1.0.103's record is kept beside the 1.0.105 re-qualification. */
+export const COPILOT_PROFILES: readonly CopilotProfile[] = Object.freeze([
+  COPILOT_NATIVE_PROFILE,
+  COPILOT_1_0_105_PROFILE,
+  COPILOT_AGENT_PROFILE,
+]);
+/** The mode a profile runs: the v6 profiles are brokered turns, native-v1 is the CLI's own loop. */
+export const copilotProfileMode = (p: CopilotProfile): 'brokered' | 'native' =>
+  'mode' in p && p.mode === 'native' ? 'native' : 'brokered';
+export const copilotProfileById = (id: string): CopilotProfile | undefined => COPILOT_PROFILES.find((p) => p.id === id);
 export interface NativeCopilotRuntime {
   readonly profileId: string;
   readonly executableDigest: string;
@@ -61,16 +105,31 @@ interface Member {
   bytes: number;
   digest: string;
 }
-const runtimes = new WeakMap<object, { executable: string; runtimeDir: string; identity: FileIdentity }>(),
-  setups = new WeakMap<object, string>();
+const runtimes = new WeakMap<
+    object,
+    { executable: string; runtimeDir: string; identity: FileIdentity; profile: CopilotProfile; installation: string }
+  >(),
+  setups = new WeakMap<object, { root: string; profile: CopilotProfile }>();
 const q = (s: string) => JSON.stringify(s);
-const expectedMembers = new Map(COPILOT_CODE_MANIFEST.map((row) => [row.path, row]));
-const expectedDirectories = new Set(
-  COPILOT_CODE_MANIFEST.flatMap((row) => {
-    const parts = row.path.split('/');
-    return parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join('/'));
-  }),
-);
+interface CodeManifest {
+  readonly members: ReadonlyMap<string, { path: string; bytes: number; digest: string }>;
+  readonly directories: ReadonlySet<string>;
+}
+const manifestOf = (rows: readonly { path: string; bytes: number; digest: string }[]): CodeManifest => ({
+  members: new Map(rows.map((row) => [row.path, row])),
+  directories: new Set(
+    rows.flatMap((row) => {
+      const parts = row.path.split('/');
+      return parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join('/'));
+    }),
+  ),
+});
+const MANIFESTS: ReadonlyMap<string, CodeManifest> = new Map([
+  ['1.0.103', manifestOf(COPILOT_CODE_MANIFEST)],
+  ['1.0.105', manifestOf(COPILOT_1_0_105_CODE_MANIFEST)],
+]);
+const manifestFor = (p: CopilotProfile) =>
+  MANIFESTS.get(p.version) ?? fail('sentinel.provider.capabilityUntested', 'no code manifest for this Copilot');
 export function copilotBoundary(t: NativeTiming) {
   if (t.signal?.aborted) fail('sentinel.provider.canceled', 'Copilot setup canceled');
   if (!Number.isSafeInteger(t.deadlineAt) || Date.now() >= t.deadlineAt)
@@ -126,7 +185,13 @@ async function readMember(path: string, t: NativeTiming, ceiling: number, copyTo
   }
 }
 /** Fixed bounded manifest, never a caller-defined package or a user configuration directory. */
-async function runtimeMembers(root: string, t: NativeTiming, copyRoot?: string): Promise<Member[]> {
+async function runtimeMembers(
+  root: string,
+  t: NativeTiming,
+  profile: CopilotProfile,
+  copyRoot?: string,
+): Promise<Member[]> {
+  const manifest = manifestFor(profile);
   const original = await checkedRoot(root),
     rows: Member[] = [];
   let seen = 0,
@@ -145,12 +210,12 @@ async function runtimeMembers(root: string, t: NativeTiming, copyRoot?: string):
           member = relative(root, absolute);
         if (s.isSymbolicLink()) fail('sentinel.provider.capabilityUntested', 'Copilot package links refused');
         if (s.isDirectory()) {
-          if (!expectedDirectories.has(member))
+          if (!manifest.directories.has(member))
             fail('sentinel.provider.capabilityUntested', 'unknown Copilot code directory');
           if (copyRoot) await mkdir(join(copyRoot, member), { mode: 0o700 });
           await walk(absolute);
         } else if (s.isFile()) {
-          const expected = expectedMembers.get(member);
+          const expected = manifest.members.get(member);
           if (!expected || s.size !== expected.bytes)
             fail('sentinel.provider.capabilityUntested', 'unknown or changed Copilot code member');
           if (rows.length >= 512 || (total += s.size) > 268435456)
@@ -175,17 +240,13 @@ async function runtimeMembers(root: string, t: NativeTiming, copyRoot?: string):
     createHash('sha256')
       .update(rows.map((r) => r.path + '\0' + r.bytes + '\0' + r.digest + '\n').join(''))
       .digest('hex');
-  if (
-    rows.length !== COPILOT_NATIVE_PROFILE.runtimeFiles ||
-    total !== COPILOT_NATIVE_PROFILE.runtimeBytes ||
-    digest !== COPILOT_NATIVE_PROFILE.runtimeDigest
-  )
+  if (rows.length !== profile.runtimeFiles || total !== profile.runtimeBytes || digest !== profile.runtimeDigest)
     fail('sentinel.provider.capabilityUntested', 'Copilot complete code closure is unavailable or changed');
   return rows;
 }
-async function readExecutable(path: string, t: NativeTiming) {
+async function readExecutable(path: string, t: NativeTiming, profile: CopilotProfile) {
   const s = await lstat(path);
-  if (!s.isFile() || s.isSymbolicLink() || s.size !== COPILOT_NATIVE_PROFILE.executableBytes)
+  if (!s.isFile() || s.isSymbolicLink() || s.size !== profile.executableBytes)
     fail('sentinel.provider.capabilityUntested', 'Copilot executable size/type not pinned');
   return readMember(path, t, 268435456);
 }
@@ -193,21 +254,22 @@ export async function qualifyNativeCopilot(
   executablePath: string,
   runtimeDir: string,
   t: NativeTiming,
+  profile: CopilotProfile = COPILOT_NATIVE_PROFILE,
+  installation = 'explicit',
 ): Promise<NativeCopilotRuntime> {
   copilotBoundary(t);
   if (process.platform !== 'darwin' || process.arch !== 'arm64' || !isAbsolute(executablePath))
     return fail('sentinel.provider.capabilityUntested', 'Copilot platform unavailable');
+  if (!COPILOT_PROFILES.includes(profile))
+    return fail('sentinel.provider.capabilityUntested', 'unknown Copilot profile');
   try {
     const executable = await realpath(executablePath),
-      code = await readExecutable(executable, t);
-    if (
-      code.bytes !== COPILOT_NATIVE_PROFILE.executableBytes ||
-      code.digest !== COPILOT_NATIVE_PROFILE.executableDigest
-    )
+      code = await readExecutable(executable, t, profile);
+    if (code.bytes !== profile.executableBytes || code.digest !== profile.executableDigest)
       fail('sentinel.provider.capabilityUntested', 'Copilot executable is not pinned');
-    await runtimeMembers(runtimeDir, t);
+    await runtimeMembers(runtimeDir, t, profile);
     const body = {
-      ...COPILOT_NATIVE_PROFILE,
+      ...profile,
       securityd: 'trusted-pinned-vendor-not-service-confinement',
       destinations: COPILOT_DESTINATIONS,
     };
@@ -217,12 +279,23 @@ export async function qualifyNativeCopilot(
       runtimeDigest: body.runtimeDigest,
       profileDigest: canonicalDigest(body),
     });
-    runtimes.set(runtime, { executable, runtimeDir, identity: code.identity });
+    runtimes.set(runtime, { executable, runtimeDir, identity: code.identity, profile, installation });
     return runtime;
   } catch (e) {
     if (e instanceof ProviderError) throw e;
     return fail('sentinel.provider.capabilityUntested', 'Copilot pinned external runtime unavailable');
   }
+}
+/** The profile a genuine qualification matched; undefined for anything else. */
+export const copilotRuntimeProfile = (runtime: object): CopilotProfile | undefined => runtimes.get(runtime)?.profile;
+/**
+ * Which installation a genuine qualification matched (`configured`, `path`, `homebrew-cask`, `known-location`) and
+ * the executable's path on this machine. Provenance data for the owner's private record; never an admission input.
+ */
+export function copilotRuntimeInstallation(runtime: object): Readonly<{ source: string; executable: string }> {
+  const held = runtimes.get(runtime);
+  if (!held) return fail('sentinel.provider.notTrusted', 'Copilot runtime is not qualified');
+  return Object.freeze({ source: held.installation, executable: held.executable });
 }
 export const COPILOT_DESTINATIONS = Object.freeze([
   'api.github.com',
@@ -233,27 +306,77 @@ export const COPILOT_DESTINATIONS = Object.freeze([
   'api.enterprise.githubcopilot.com',
   'copilot-proxy.githubusercontent.com',
 ]);
-/** Discovery reads code only. No command, login, credential/config file, alternate PATH candidate or download. */
-export async function qualifyInstalledNativeCopilot(t: NativeTiming): Promise<NativeCopilotRuntime> {
+/** Machine locations a pinned Copilot executable is installed at besides PATH: Homebrew's cask and its links. */
+function knownLocations(profile: CopilotProfile): readonly { path: string; source: string }[] {
+  return [
+    { path: `/opt/homebrew/Caskroom/copilot-cli/${profile.version}/copilot`, source: 'homebrew-cask' },
+    { path: `/usr/local/Caskroom/copilot-cli/${profile.version}/copilot`, source: 'homebrew-cask' },
+    { path: '/opt/homebrew/bin/copilot', source: 'known-location' },
+    { path: '/usr/local/bin/copilot', source: 'known-location' },
+  ];
+}
+/** The npm package installs a JavaScript loader that runs its sibling native launcher. */
+async function nativeLauncher(candidate: string): Promise<string> {
+  const executable = await realpath(candidate);
+  return executable.endsWith('/npm-loader.js')
+    ? join(dirname(executable), 'node_modules/@github/copilot-darwin-arm64/copilot')
+    : executable;
+}
+/**
+ * Discovery reads code only: no command, login, credential/config file or download. The executable is resolved by its
+ * recorded digest, not by PATH order: an explicit `SENTINEL_COPILOT_EXECUTABLE`, then each `copilot` on PATH (npm's
+ * loader resolved to its native launcher), then the known Homebrew locations. Only exact pinned bytes qualify, so a
+ * candidate can never widen what runs; the first match is recorded as the installation used.
+ */
+export async function qualifyInstalledNativeCopilot(
+  t: NativeTiming,
+  profile: CopilotProfile = COPILOT_NATIVE_PROFILE,
+): Promise<NativeCopilotRuntime> {
   const path = process.env.PATH ?? '',
     dirs = path.split(':');
   if (path.length > 8192 || dirs.length > 32 || dirs.some((d) => !isAbsolute(d)))
     fail('sentinel.provider.capabilityUntested', 'Copilot discovery path bound');
-  for (const dir of dirs) {
+  const configured = process.env.SENTINEL_COPILOT_EXECUTABLE;
+  if (configured !== undefined && (!isAbsolute(configured) || configured.length > 4096))
+    fail('sentinel.provider.capabilityUntested', 'configured Copilot executable is not an absolute path');
+  const candidates = [
+    ...(configured ? [{ path: configured, source: 'configured' }] : []),
+    ...dirs.map((dir) => ({ path: join(dir, 'copilot'), source: 'path' })),
+    ...knownLocations(profile),
+  ];
+  const tried = new Set<string>();
+  for (const c of candidates) {
     copilotBoundary(t);
-    const candidate = join(dir, 'copilot');
+    let executable: string;
     try {
-      await lstat(candidate);
+      await lstat(c.path);
+      executable = await nativeLauncher(c.path);
+      if (tried.has(executable)) continue;
+      tried.add(executable);
+      const s = await lstat(executable);
+      if (!s.isFile() || s.isSymbolicLink() || s.size !== profile.executableBytes) continue;
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      return fail('sentinel.provider.capabilityUntested', 'first Copilot candidate unavailable');
+      if (e instanceof ProviderError) throw e;
+      continue;
     }
-    let executable = await realpath(candidate);
-    if (executable.endsWith('/npm-loader.js'))
-      executable = join(dirname(executable), 'node_modules/@github/copilot-darwin-arm64/copilot');
-    return qualifyNativeCopilot(executable, join(homedir(), 'Library/Caches/copilot/pkg/darwin-arm64/1.0.103'), t);
+    try {
+      return await qualifyNativeCopilot(
+        executable,
+        join(homedir(), `Library/Caches/copilot/pkg/darwin-arm64/${profile.version}`),
+        t,
+        profile,
+        c.source,
+      );
+    } catch (e) {
+      if (
+        e instanceof ProviderError &&
+        (e.code === 'sentinel.provider.canceled' || e.code === 'sentinel.provider.timeout')
+      )
+        throw e;
+      // Same size, other bytes, or its package cache is absent: keep looking for the exact pin.
+    }
   }
-  return fail('sentinel.provider.capabilityUntested', 'Copilot is not installed');
+  return fail('sentinel.provider.capabilityUntested', 'no installed Copilot matches the adopted pin');
 }
 /** Where one Copilot process runs: the pinned executable, its private owned root, the owner's HOME and the proxy. */
 export interface CopilotLayout {
@@ -309,7 +432,7 @@ export async function nativeCopilotSetup(runtime: NativeCopilotRuntime, proxyPor
   if (!held || !Number.isSafeInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535)
     return fail('sentinel.provider.notTrusted', 'Copilot setup requires genuine qualification');
   copilotBoundary(t);
-  const before = await readExecutable(held.executable, t);
+  const before = await readExecutable(held.executable, t, held.profile);
   if (before.digest !== runtime.executableDigest || !same(before.identity, held.identity))
     fail('sentinel.provider.capabilityUntested', 'Copilot executable changed');
   const ownerHome = homedir();
@@ -317,11 +440,11 @@ export async function nativeCopilotSetup(runtime: NativeCopilotRuntime, proxyPor
   const ownedRoot = await realpath(await mkdtemp('/private/tmp/sentinel-copilot-'));
   try {
     for (const d of ['runtime', 'home', 'state', 'tmp']) await mkdir(join(ownedRoot, d), { mode: 0o700 });
-    await runtimeMembers(held.runtimeDir, t, join(ownedRoot, 'runtime'));
+    await runtimeMembers(held.runtimeDir, t, held.profile, join(ownedRoot, 'runtime'));
     const policy = copilotSeatbeltPolicy({ executable: held.executable, ownedRoot, ownerHome, proxyPort });
     const env = copilotEnvironment({ ownedRoot, ownerHome, proxyPort });
     const setup = Object.freeze({ executable: held.executable, policy, env, ownedRoot });
-    setups.set(setup, ownedRoot);
+    setups.set(setup, { root: ownedRoot, profile: held.profile });
     return setup;
   } catch (e) {
     await rm(ownedRoot, { recursive: true, force: true });
@@ -330,20 +453,20 @@ export async function nativeCopilotSetup(runtime: NativeCopilotRuntime, proxyPor
 }
 /** Recheck the complete private copy and executable immediately before process creation. */
 export async function verifyNativeCopilotSetup(setup: object, t: NativeTiming) {
-  const root = setups.get(setup);
-  if (!root) return fail('sentinel.provider.notAdmitted', 'Copilot setup is not genuine');
-  await runtimeMembers(join(root, 'runtime'), t);
-  const code = await readExecutable((setup as { executable: string }).executable, t);
-  if (code.digest !== COPILOT_NATIVE_PROFILE.executableDigest || code.bytes !== COPILOT_NATIVE_PROFILE.executableBytes)
+  const held = setups.get(setup);
+  if (!held) return fail('sentinel.provider.notAdmitted', 'Copilot setup is not genuine');
+  await runtimeMembers(join(held.root, 'runtime'), t, held.profile);
+  const code = await readExecutable((setup as { executable: string }).executable, t, held.profile);
+  if (code.digest !== held.profile.executableDigest || code.bytes !== held.profile.executableBytes)
     fail('sentinel.provider.capabilityUntested', 'Copilot executable changed before launch');
   copilotBoundary(t);
 }
 export async function cleanupNativeCopilotSetup(setup: object) {
-  const root = setups.get(setup);
-  if (!root) return;
+  const held = setups.get(setup);
+  if (!held) return;
   setups.delete(setup);
-  await chmod(join(root, 'runtime'), 0o700).catch(() => {});
-  await rm(root, { recursive: true, force: true, maxRetries: 0 });
+  await chmod(join(held.root, 'runtime'), 0o700).catch(() => {});
+  await rm(held.root, { recursive: true, force: true, maxRetries: 0 });
 }
 
 /** Data-only projection. Native machine state is credential-free by vendor schema; only the selected identity survives. */
@@ -468,4 +591,40 @@ export async function readNativeCopilotSelector(t: NativeTiming): Promise<Readon
       throw e;
     return selectorFailure();
   }
+}
+
+/** Whether the vendor's native login can be reached from this process: never a token, only two closed classes. */
+export interface CopilotCredentialPath {
+  /** The selected account metadata (host and login) projects uniquely from the Copilot home. */
+  readonly selector: 'selected' | 'unavailable';
+  /** The owner's login keychain answers from this process's session (a service child in the login session does). */
+  readonly keychain: 'reachable' | 'locked' | 'unavailable';
+}
+/**
+ * Probes the credential path once, for a qualification record: the selector projection (metadata only) and whether
+ * the login keychain answers here, through `security show-keychain-info`, which reports lock state and reads no item.
+ * Its output is discarded; only the exit class is kept. Nothing here reads, copies or prints a credential.
+ */
+export async function probeCopilotCredentialPath(t: NativeTiming): Promise<CopilotCredentialPath> {
+  let selector: CopilotCredentialPath['selector'] = 'selected';
+  try {
+    await readNativeCopilotSelector(t);
+  } catch (e) {
+    if (
+      e instanceof ProviderError &&
+      (e.code === 'sentinel.provider.canceled' || e.code === 'sentinel.provider.timeout')
+    )
+      throw e;
+    selector = 'unavailable';
+  }
+  const keychainFile = join(homedir(), 'Library/Keychains/login.keychain-db');
+  const probe = spawnSync('/usr/bin/security', ['show-keychain-info', keychainFile], {
+    env: { PATH: '/usr/bin:/bin', HOME: homedir() },
+    stdio: ['ignore', 'ignore', 'ignore'],
+    timeout: Math.max(1, Math.min(5000, t.deadlineAt - Date.now())),
+    shell: false,
+  });
+  const keychain: CopilotCredentialPath['keychain'] =
+    probe.status === 0 ? 'reachable' : probe.status === 36 || probe.status === 51 ? 'locked' : 'unavailable';
+  return Object.freeze({ selector, keychain });
 }
