@@ -1,0 +1,77 @@
+<!-- {"title":"Sentinel · Path","level":"Path","layout":["ladder","code","diff"],"layoutOn":0,"register":"Code","crumb":"<b>invoice-app</b> <span class=sep>›</span> scan <b>#42</b> <span class=sep>›</span> entry <b class=mono>POST /invoices/:id/approve</b> <span class=sep>›</span> hop <b>5 of 7</b> · db.ts:48","verdicts":"<span class='chip err'>1 high · on this path</span><span class='chip k-agent'>1 observation</span><span class='chip ok'>3 tests reach · passed</span><span class='chip'>1 boundary</span>"} -->
+<style>
+.walk{display:grid;grid-template-columns:28px minmax(0,1fr);gap:0 14px;max-width:1000px}
+.hop{display:contents}
+.hop .rail{position:relative}
+.hop .rail::before{content:'';position:absolute;left:13px;top:0;bottom:0;width:2px;background:var(--line)}
+.hop .rail .n{position:absolute;left:3px;top:9px;width:22px;height:22px;border-radius:50%;background:var(--panel);border:2px solid var(--line);font:11px var(--hud);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.hop.gate .rail .n{border-color:var(--auth);color:var(--auth)}
+.hop.bad .rail .n{border-color:var(--err);color:var(--err)}
+.hop.ext .rail .n{border-style:dashed;border-color:var(--warn);color:var(--warn)}
+.hc{background:var(--panel);border:1px solid var(--line);border-radius:6px;margin:2px 0;overflow:hidden}
+.hc .hd{display:flex;align-items:center;gap:10px;padding:5px 12px;font-size:12.5px}
+.hc .hd .where{font:11px var(--mono);color:var(--muted);margin-left:auto}
+.hc .hd .kind{font:11px var(--hud);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);width:64px}
+.hc pre.code{border:0;border-top:1px solid var(--line-soft);border-radius:0;font-size:11px;line-height:1.4;padding:7px 12px}
+.hc.fold .hd{cursor:default}
+.pin{display:flex;gap:10px;align-items:flex-start;padding:6px 12px;border-top:1px solid var(--line-soft);font-size:12px}
+.pin.err{background:rgba(224,108,95,.08)} .pin.obs{background:rgba(167,139,224,.08)}
+.pin .chip{flex:none}
+.pin .t{color:var(--ink)} .pin .d{color:var(--muted);font-size:11.5px}
+.tbl{color:var(--tbl)} .ext{color:var(--warn)}
+</style>
+<div class="stage">
+ <div class="walk">
+  <div class="hop"><div class="rail"><span class="n">1</span></div><div class="hc"><div class="hd"><span class="kind">route</span><span class="mono">router.post('/invoices/:id/approve', …)</span><span class="where">routes.ts:34</span></div></div></div>
+  <div class="hop gate"><div class="rail"><span class="n">2</span></div><div class="hc"><div class="hd"><span class="kind">gate</span><span class="mono">requireScope('billing:admin')</span><span class="chip" style="color:var(--auth)">policy · who may</span><span class="where">auth.ts:10</span></div>
+   <pre class="code"><span class="k">export function</span> <span class="f">requireScope</span>(scope: string) {
+  <span class="k">return</span> (req, res, next) =&gt; {
+    <span class="k">if</span> (!(req.auth?.scopes ?? []).includes(scope)) { res.status(403).json({ error: <span class="s">`missing scope ${scope}`</span> }); <span class="k">return</span>; }
+    next();
+  };
+}</pre>
+   <div class="pin"><span class="chip ok">3 tests</span><span class="t">a caller without the scope is refused · <span class="d">approvals.test.ts:12 · passed on 1ff7a25e</span></span></div></div></div>
+  <div class="hop"><div class="rail"><span class="n">3</span></div><div class="hc"><div class="hd"><span class="kind">handler</span><span class="mono">approveInvoice(req.params.id)</span><span class="where">routes.ts:35</span></div></div></div>
+  <div class="hop"><div class="rail"><span class="n">4</span></div><div class="hc"><div class="hd"><span class="kind">function</span><span class="mono">approveInvoice(id)</span><span class="chip amber">business · only an approver can approve</span><span class="where">approvals.ts:15</span></div>
+   <pre class="code"><span class="k">export async function</span> <span class="f">approveInvoice</span>(id: string) {
+  <span class="k">await</span> <span class="f">withTx</span>(<span class="k">async</span> () =&gt; {
+    <span class="k">await</span> db.approvals.insert({ invoiceId: id, approvedAt: <span class="k">new</span> Date() });
+    <span class="k">await</span> db.invoices.update({ id }, { status: <span class="s">'approved'</span> });   <span class="c">// moves invoice → approved</span>
+  });
+  <span class="k">return</span> <span class="f">receiptFor</span>(id);
+}
+<span class="hl2"><span class="k">export async function</span> <span class="f">withTx</span>(fn: () =&gt; Promise&lt;void&gt;) { <span class="k">return</span> fn(); }        <span class="c">// approvals.ts:30</span></span></pre>
+   <div class="pin obs"><span class="chip k-agent">observation</span><span class="t">withTx opens no transaction, so the two writes can commit separately. <span class="d">copilot · gpt-6-luna · cites walk:L61, walk:L44 · medium · not a scanner finding</span></span></div></div></div>
+  <div class="hop bad"><div class="rail"><span class="n">5</span></div><div class="hc"><div class="hd"><span class="kind">record</span><span class="mono">db.invoices.update({ id }, { status })</span><span class="where">db.ts:48</span></div>
+   <pre class="code">update(where: Partial&lt;Row&gt;, patch: Partial&lt;Row&gt;) {
+<span class="hl">  <span class="k">const</span> sql = <span class="s">`UPDATE ${this.table} SET ${sets(patch)} WHERE id = '${where.id}'`</span>;   <span class="c">// id is interpolated</span></span>
+  <span class="k">return</span> pool.query(sql);
+}</pre>
+   <div class="pin err"><span class="chip err">high</span><span class="t">SQL built by string concatenation with a request value. <span class="d">semgrep · sentinel-rules/sql-concat · CWE-89 · reached from 3 routes · no test covers the refusal</span></span></div></div></div>
+  <div class="hop"><div class="rail"><span class="n">6</span></div><div class="hc fold"><div class="hd"><span class="kind">table</span><span class="mono tbl">invoices</span><span class="chip">postgres · database record</span><span class="dim" style="font-size:11.5px">status: draft → submitted → approved → paid · 11 statuses</span><span class="where">migrations/001.sql</span></div></div></div>
+  <div class="hop ext"><div class="rail"><span class="n">7</span></div><div class="hc fold"><div class="hd"><span class="kind">external</span><span class="mono ext">erpClient.post('/approvals')</span><span class="chip warn">boundary · not followed</span><span class="dim" style="font-size:11.5px">leaves the application · the walk stops here</span><span class="where">erpClient.ts:22</span></div></div></div>
+ </div>
+ <div class="foot"><span>the whole path, top to bottom · hops fold to their signature, open to their body · every pin cites its producer</span><span style="margin-left:auto"><span class="door">read as markdown</span> · <span class="door">see it on the map</span> · <span class="door">open in the editor</span></span></div>
+</div>
+<aside class="dock">
+ <div class="tabs"><span class="on">Finding</span><span>Decision</span><span>History</span></div>
+ <div class="pane">
+  <div class="row"><span class="chip err">high</span><span class="chip">cwe-89</span><span class="chip">semgrep · sql-concat</span></div>
+  <h2>SQL built by string concatenation</h2>
+  <p class="muted" style="margin:0;font-size:12.5px">The <code>id</code> from the request is written straight into the statement. A crafted id changes the query.</p>
+  <dl class="kv">
+   <dt>where</dt><dd class="mono">db.ts:48 · update()</dd>
+   <dt>reached from</dt><dd>POST …/approve · POST …/finalize · PATCH /invoices/:id</dd>
+   <dt>behind</dt><dd>requireScope(billing:admin) on 2 of 3 · none on PATCH</dd>
+   <dt>screens</dt><dd>Invoice detail · New invoice</dd>
+   <dt>business</dt><dd>An approver's request could change any invoice, not only the one approved.</dd>
+   <dt>found by</dt><dd>stage 3 · semgrep 1.181.0 · rule rev 0.4.0</dd>
+   <dt>first seen</dt><dd>scan #31 · 2026-10-09 · <span class="dim">same fingerprint</span></dd>
+   <dt>tests</dt><dd>no test covers the refusal path · <span class="dim">3 reach the route</span></dd>
+  </dl>
+  <h3>decision</h3>
+  <div class="row"><span class="btn">accept risk · with expiry</span><span class="btn">not applicable · say why</span></div>
+  <div class="note">A decision is bound to this evidence. New evidence on this path reopens it.</div>
+  <div class="row" style="margin-top:auto"><span class="btn primary">copy as mcp call</span><span class="btn ghost">sarif</span></div>
+ </div>
+</aside>
