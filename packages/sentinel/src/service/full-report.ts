@@ -686,6 +686,8 @@ const TRUSTED = new RegExp(
       PLACE + String.raw`\.personas\.\*\.(?:declared|evidenceArtifact)`,
       // A model observation's generated identity; its statement, its excerpts and the reported model are screened.
       String.raw`reviews\.\*\.(?:id|stage|attemptId|promptDigest|ruleFamilyId|severity|limitationKeys\.\*|unit\.(?:id|revision)|model\.(?:requestedModel|source))`,
+      String.raw`reviews\.\*\.progress\.outcome`,
+      String.raw`reviews\.\*\.progress\.(?:turns|filesRead|modelInspected)\.` + COUNT,
       String.raw`reviews\.\*\.evidence\.\*\.(?:id|state|reasonCode|content)`,
       // Provenance is the ledger's own record of what ran; a host path, an argument and a reported model are screened.
       String.raw`provenance\.\*\.(?:kind|stage|attempt|where|startedAt|endedAt|invocation|read\.\*|wrote\.\*|unit\.id)`,

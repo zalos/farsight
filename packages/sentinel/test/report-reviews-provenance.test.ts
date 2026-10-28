@@ -420,13 +420,21 @@ test('a brokered-only review retains its four report renderings', needsStore, as
 });
 
 test(
-  'a run with an accepted secret match withholds every model statement and citation, and keeps provenance',
+  'a run with an accepted secret match withholds every model statement and citation, but keeps progress and provenance',
   needsStore,
   async () => {
     const review = {
       observation: await modelObservation(),
       stage: 'review-general',
       unit: { id: 'w-review', revision: 2 },
+      progress: {
+        outcome: 'completed',
+        turnsUsed: 3,
+        turnCap: 12,
+        filesRead: 1,
+        filesGiven: 6,
+        source: 'brokered',
+      },
     };
     const out = await generateReport(
       (await baseInput('private', { reviews: [review], provenance: PROVENANCE })) as any,
@@ -436,6 +444,10 @@ test(
     assert.ok(valid.ok, JSON.stringify(valid));
     const r = doc.reviews[0];
     assert.equal(Object.hasOwn(r, 'message'), false);
+    assert.deepEqual(r.progress, out.document.reviews[0].progress, 'generated progress survives secret withholding');
+    assert.equal(r.progress.outcome, 'completed');
+    assert.match(renderMarkdown(doc), /3 of 12 model exchanges used.*1 of 6 files opened for this review/);
+    assert.match(renderHtml(doc), /3 of 12 model exchanges used.*1 of 6 files opened for this review/);
     assert.deepEqual(
       r.evidence.map((e: any) => [e.state, e.reasonCode, Object.hasOwn(e, 'location'), Object.hasOwn(e, 'excerpt')]),
       [['withheld', SECRET_RUN_WITHHELD, false, false]],
