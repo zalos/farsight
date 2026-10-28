@@ -51,6 +51,7 @@ export const SENTINEL_FINDINGS_STRINGS: Record<string, StringEntry> = {
   'sentinel.compare.scopeNarrowed': same('the current check looked at less', 'The current check of this rule did not cover every file the issue was in.'),
   'sentinel.compare.baselineConditionsUnknown': same('the earlier check is not known', 'The earlier report does not say how this rule was checked, so a current result cannot be compared with it.'),
   'sentinel.compare.conditionsDiffer': same('the environment or limits differ', 'The current check used a different environment or limits from the earlier one.'),
+  'sentinel.compare.fingerprintVersion': same('fingerprints of different versions are not compared', 'Each issue fingerprint carries the version of the scheme that made it. Findings fingerprinted under different versions are never matched with each other, because their identities do not mean the same thing.'),
   'sentinel.compare.comparableCheckClean': same('rechecked under the same conditions', 'A complete current check with the same rule, engine, capabilities, environment and limits covered the issue\'s files and did not find it.'),
   // ---- placement ----
   'sentinel.place.noContext': same('no application context', 'No saved application context was given for this source, so findings cannot be placed on screens or journeys. The report is still complete about what was checked.'),

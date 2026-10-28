@@ -85,6 +85,14 @@ export const isSecretObservation = (o: ObservationEnvelope): boolean =>
   (o.rule?.familyId ?? '').startsWith('sentinel.secrets.') ||
   o.limitationKeys.some((k) => k.startsWith('sentinel.secrets.'));
 
+/** The role of evidence `i` of `n`: a lone citation is `single`; otherwise the first is the source, the last the sink. */
+function roleOf(i: number, n: number): AnchorRole {
+  if (n === 1) return 'single';
+  if (i === 0) return 'source';
+  if (i === n - 1) return 'sink';
+  return 'step';
+}
+
 function producerOf(o: ObservationEnvelope): string {
   const p = o.producer;
   return p.kind === 'imported' ? `imported:${p.provenanceArtifact}` : `${p.kind}:${p.adapterId}`;
@@ -116,7 +124,7 @@ export async function normalizeObservation(
   const n = o.evidence.length;
   for (let i = 0; i < n; i++) {
     const e = o.evidence[i]!;
-    const role: AnchorRole = n === 1 ? 'single' : i === 0 ? 'source' : i === n - 1 ? 'sink' : 'step';
+    const role = roleOf(i, n);
     if ('location' in e) {
       // A withheld location is never read or turned into a path: its identity is an opaque key for the file, the cited
       // content and the span. Identical bytes in two files are two locations, never one.

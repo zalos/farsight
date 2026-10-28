@@ -7,6 +7,8 @@
 // code does; it is not preemptive I/O or memory enforcement. objectMembers is per object; jsonValues, decoded
 // UTF-8 string bytes and work bound the aggregate document.
 
+import { SentinelError } from '../kernel/errors.js';
+
 /** Why a whole import is refused. Fixed codes and a bounded opaque diagnostic path: never a member name or value from the report. */
 export const IMPORT_REFUSAL_CODES = Object.freeze([
   'sentinel.import.fileUnreadable',
@@ -28,6 +30,7 @@ export const IMPORT_REFUSAL_CODES = Object.freeze([
   'sentinel.import.producerMismatch',
   'sentinel.import.outputTooLarge',
 ] as const);
+/** One of `IMPORT_REFUSAL_CODES`. */
 export type ImportRefusalCode = (typeof IMPORT_REFUSAL_CODES)[number];
 
 /** Why one part of an accepted document is not a fact. The document is still read; this part stays unknown. */
@@ -65,6 +68,7 @@ export const IMPORT_UNKNOWN_CODES = Object.freeze([
   'sentinel.import.uriRejected',
   'sentinel.import.producerUnknown',
 ] as const);
+/** One of `IMPORT_UNKNOWN_CODES`. */
 export type ImportUnknownCode = (typeof IMPORT_UNKNOWN_CODES)[number];
 
 /** What every normalized import says about itself, whatever it contains. */
@@ -77,11 +81,13 @@ export const IMPORT_LIMITATION_KEYS = Object.freeze([
   'sentinel.import.unbound',
 ] as const);
 
+/** The report formats an import reads: SARIF 2.1.0 and ZAP's traditional JSON, plain and plus. */
 export const IMPORT_FORMATS = Object.freeze([
   'sarif-2.1.0',
   'zap-traditional-json',
   'zap-traditional-json-plus',
 ] as const);
+// No JSDoc here: the import-view schema is generated from this type, and a doc block would become its description.
 export type ImportFormat = (typeof IMPORT_FORMATS)[number];
 
 /** The adapter's own identity: a different version may read the same bytes differently, so it is part of the output. */
@@ -89,6 +95,7 @@ export const IMPORT_ADAPTER = Object.freeze({ id: 'sentinel.import.reports', ver
 
 /** The three attributes a Set-Cookie line can show. Integrity and confidentiality are never derived from a report. */
 export const COOKIE_PROPERTIES = Object.freeze(['cookie-secure', 'cookie-http-only', 'cookie-same-site'] as const);
+// No JSDoc here: the import-view schema is generated from this type, and a doc block would become its description.
 export type CookieProperty = (typeof COOKIE_PROPERTIES)[number];
 
 /** Hard ceilings, global per import. No caller, manifest or report can raise them. */
@@ -113,27 +120,33 @@ export const IMPORT_CEILINGS = Object.freeze({
   unknowns: 50_000,
   ignored: 4_096,
 });
+/** One import's limits, each at most its `IMPORT_CEILINGS` value. */
 export type ImportLimits = { -readonly [K in keyof typeof IMPORT_CEILINGS]: number };
 
-export class ImportRefusal extends Error {
+/**
+ * Diagnostics never echo member names, including names supplied to `ImportRefusal` directly. Only numeric positions
+ * survive; all member segments are opaque. Bound before splitting as well as on the stored property.
+ */
+function opaquePointer(pointer: string | null): string | null {
+  if (pointer === null) return null;
+  return pointer.slice(0, 256).split('/').map(opaqueSegment).join('/').slice(0, 256);
+}
+/** One pointer segment: the leading empty segment and numeric positions survive; any other segment is `*`. */
+function opaqueSegment(part: string, i: number): string {
+  if (i === 0 && part === '') return '';
+  if (/^[0-9]{1,10}$/.test(part)) return part;
+  return '*';
+}
+/**
+ * A whole import refused, by `ImportRefusalCode`, with the opaque position it was refused at when there is one. The
+ * message is the code, followed by ` at <pointer>` when a pointer is given.
+ */
+export class ImportRefusal extends SentinelError<ImportRefusalCode> {
   readonly pointer: string | null;
 
-  constructor(
-    readonly code: ImportRefusalCode,
-    pointer: string | null = null,
-  ) {
-    // Diagnostics never echo member names, including names supplied to this constructor directly. Only numeric
-    // positions survive; all member segments are opaque. Bound before splitting as well as on the stored property.
-    const safe =
-      pointer === null
-        ? null
-        : pointer
-            .slice(0, 256)
-            .split('/')
-            .map((part, i) => (i === 0 && part === '' ? '' : /^[0-9]{1,10}$/.test(part) ? part : '*'))
-            .join('/')
-            .slice(0, 256);
-    super(safe === null ? code : `${code} at ${safe}`);
+  constructor(code: ImportRefusalCode, pointer: string | null = null) {
+    const safe = opaquePointer(pointer);
+    super(code, safe === null ? code : `${code} at ${safe}`);
     this.pointer = safe;
     this.name = 'ImportRefusal';
   }
@@ -203,7 +216,10 @@ export class ImportBudget {
   }
 }
 
+// No JSDoc here: the import-view schema is generated from this type, and a doc block would become its description.
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [k: string]: Json };
+/** A JSON object. */
 export type JsonObject = { readonly [k: string]: Json };
+/** True for a JSON object: not null and not an array. */
 export const isObject = (v: Json | undefined): v is JsonObject =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
