@@ -2352,5 +2352,109 @@
       }
     ],
     "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a retained attempt that links its transcript twice",
+    "base": "attemptretained-native",
+    "ops": [
+      {
+        "set": "/links/1/role",
+        "value": "transcript"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/links"
+  },
+  {
+    "name": "a retained attempt without its instructions",
+    "base": "attemptretained-native",
+    "ops": [
+      {
+        "delete": "/links/2"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/links"
+  },
+  {
+    "name": "a retained attempt without its transcript",
+    "base": "attemptretained-native",
+    "ops": [
+      {
+        "delete": "/links/0"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/links"
+  },
+  {
+    "name": "a retained attempt with instructions for another stage",
+    "base": "attemptretained-native",
+    "ops": [
+      {
+        "set": "/instructionRecord/stage",
+        "value": "review-guided"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/instructionRecord/stage"
+  },
+  {
+    "name": "a retained attempt with a relative executable path",
+    "base": "attemptretained-native",
+    "ops": [
+      {
+        "set": "/provenance/installation/executablePath",
+        "value": "bin/claude"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/provenance/installation/executablePath"
+  },
+  {
+    "name": "a retained attempt that completed with unconfirmed usage",
+    "base": "attemptretained-native",
+    "ops": [
+      {
+        "set": "/provenance/tokens/certainty",
+        "value": "uncertain"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/completed"
+  },
+  {
+    "name": "a retained attempt whose confirmed usage contradicts incomplete status",
+    "base": "attemptretained-native",
+    "ops": [
+      {
+        "set": "/completed",
+        "value": false
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/completed"
+  },
+  {
+    "name": "a retained attempt linked by path, not handle",
+    "base": "attemptretained-native",
+    "ops": [
+      {
+        "set": "/links/0/handle",
+        "value": "/tmp/transcript.jsonl"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a retained attempt whose link is not source",
+    "base": "attemptretained-native",
+    "ops": [
+      {
+        "set": "/links/0/privacy",
+        "value": "metadata"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
   }
 ]

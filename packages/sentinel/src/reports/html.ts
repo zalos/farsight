@@ -123,15 +123,22 @@ ${f.evidence.map((e) => evidenceHtml(doc, e)).join('\n')}
     ? `<table><thead><tr><th>Check</th><th>Status</th><th>Why</th></tr></thead><tbody>${doc.gaps.map((g) => `<tr id="${anchor('gap', g.checkId)}"><td class="code">${esc(g.checkId)}</td><td>${esc(g.status)}</td><td>${esc(g.explanation.business)}<div class="code">${esc(g.explanation.code)}</div></td></tr>`).join('')}</tbody></table>`
     : doc.completeness === 'complete'
       ? '<p>Every planned check covered its scope.</p>'
-      : '<p>Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.</p>';
-  const reviews = doc.reviews
-    ? `<h2 id="reviews">${esc(wordOf(doc, 'sentinel.report.review.heading', 'business'))}</h2><p>${esc(wordOf(doc, 'sentinel.report.review.proposed', 'business'))}.</p>${doc.reviews
-        .map((r) => {
-          const [head, ...rest] = reviewLines(doc, r);
-          return `<section class="card" id="${anchor('review', r.id)}"><h3><span class="sev sev-${esc(r.severity)}">${esc(head!)}</span></h3><ul>${rest.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>${r.evidence.map((e) => evidenceHtml(doc, e)).join('\n')}</section>`;
-        })
-        .join('\n')}`
-    : '';
+      : doc.reviewFailures?.length
+        ? `<p>${esc(wordOf(doc, 'sentinel.report.review.unfinished', 'business'))}</p>`
+        : '<p>Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.</p>';
+  const reviews =
+    doc.reviews || doc.reviewFailures?.length
+      ? `<h2 id="reviews">${esc(wordOf(doc, 'sentinel.report.review.heading', 'business'))}</h2>${doc.reviews?.length ? `<p>${esc(wordOf(doc, 'sentinel.report.review.proposed', 'business'))}.</p>` : ''}${(
+          doc.reviews ?? []
+        )
+          .map((r) => {
+            const [head, ...rest] = reviewLines(doc, r);
+            return `<section class="card" id="${anchor('review', r.id)}"><h3><span class="sev sev-${esc(r.severity)}">${esc(head!)}</span></h3><ul>${rest.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>${r.evidence.map((e) => evidenceHtml(doc, e)).join('\n')}</section>`;
+          })
+          .join(
+            '\n',
+          )}${(doc.reviewFailures ?? []).map((f) => `<section class="card"><h3>${esc(f.stage)}</h3><p>${esc(wordOf(doc, f.reasonCode, 'business'))}</p></section>`).join('\n')}`
+      : '';
   const provenance = doc.provenance
     ? `<h2 id="provenance">${esc(wordOf(doc, 'sentinel.report.provenance.heading', 'business'))}</h2><ul>${doc.provenance.map((p) => `<li>${esc(provenanceLine(doc, p))}</li>`).join('')}</ul>`
     : '';
@@ -160,7 +167,7 @@ ${f.evidence.map((e) => evidenceHtml(doc, e)).join('\n')}
 <div class="meta">Report <span class="code">${esc(doc.id)}</span> · run <span class="code">${esc(doc.run.id)}</span> · snapshot <span class="code">${esc(doc.run.snapshotId)}</span> · plan revision ${doc.run.planRevision} · as of ${esc(doc.evaluatedAt)} · ledger sequence ${doc.ledgerSequence}</div>
 <div class="meta">Disclosure: ${esc(doc.disclosure.profile)} · completeness: ${esc(doc.completeness)}${doc.baseline ? ` · compared with <span class="code">${esc(doc.baseline.reportId)}</span>` : ''}</div>
 </header>
-<nav><ul><li><a href="#counts">Counts</a></li><li><a href="#findings">Findings</a></li>${doc.historical ? '<li><a href="#historical">Baseline findings</a></li>' : ''}${doc.reviews ? `<li><a href="#reviews">${esc(wordOf(doc, 'sentinel.report.review.heading', 'business'))}</a></li>` : ''}${doc.provenance ? `<li><a href="#provenance">${esc(wordOf(doc, 'sentinel.report.provenance.heading', 'business'))}</a></li>` : ''}<li><a href="#gaps">Gaps</a></li><li><a href="#words">Words</a></li></ul></nav>
+<nav><ul><li><a href="#counts">Counts</a></li><li><a href="#findings">Findings</a></li>${doc.historical ? '<li><a href="#historical">Baseline findings</a></li>' : ''}${doc.reviews || doc.reviewFailures?.length ? `<li><a href="#reviews">${esc(wordOf(doc, 'sentinel.report.review.heading', 'business'))}</a></li>` : ''}${doc.provenance ? `<li><a href="#provenance">${esc(wordOf(doc, 'sentinel.report.provenance.heading', 'business'))}</a></li>` : ''}<li><a href="#gaps">Gaps</a></li><li><a href="#words">Words</a></li></ul></nav>
 <main>
 <h2 id="counts">Counts</h2>
 <ul class="counts">${counts}</ul>

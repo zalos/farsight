@@ -36,6 +36,12 @@ export const SENTINEL_REVIEW_STRINGS: Record<string, StringEntry> = {
   'sentinel.review.frontier.deadline': same('stopped at the review\'s deadline', 'The review ran out of time. Its scope is unfinished.'),
   'sentinel.review.frontier.invalidReplies': same('stopped after too many rejected replies', 'The model kept replying outside the grammar or with invalid citations. Its scope is unfinished.'),
   'sentinel.review.frontier.modelError': same('stopped because the model call failed', 'The provider could not be reached or refused the call before it was sent. Its scope is unfinished.'),
+  'sentinel.review.frontier.copilotLogin': {
+    hud: 'the Copilot CLI cannot use a login — start `copilot` and run `/login`',
+    professional: 'Copilot needs a login — open Copilot and use /login',
+    define: 'The pinned Copilot CLI could not use a login in this run. No token, account name or native error text is recorded here. Sign in with the CLI, then start a new run; this review did not finish.',
+  },
+  'sentinel.report.review.unfinished': same('a model review did not finish; read its reason above', 'A model review is unfinished. Its reason is recorded in Model observations.'),
   'sentinel.review.frontier.uncertainUsage': same('stopped after a call whose usage is unknown', 'A call may have been charged without its answer arriving. It is not sent again; the review stops and its scope is unfinished.'),
   'sentinel.review.frontier.notCaptured': same('not captured, so not reviewed', 'The file was recorded without its bytes, so no model could read it.'),
   'sentinel.review.frontier.tooLarge': same('too large for one review partition', 'The file is larger than a partition may hold, so it was not given to a model.'),

@@ -9,16 +9,41 @@ import { envelopeIntent } from '../review/providers/broker.js';
 import { adoptedPolicy, OWNER, receiptBook } from './local.js';
 import { createAdapterRegistry, type AdapterRegistry, type AdapterDefinition } from '../execution/registry.js';
 import type { ExecutionProfileRecord } from '../execution/profile.js';
+import type { PlanWork } from '../contracts/index.js';
 import { BudgetLedger } from '../review/providers/budget.js';
 import { ModelBroker } from '../review/providers/broker.js';
 import { keychainSource } from '../review/providers/credentials.js';
 import { REVIEW_ADAPTERS, type ReviewRuntime } from '../review/dispatch.js';
 export { REVIEW_ADAPTERS } from '../review/dispatch.js';
 import { ExecutionError } from '../execution/errors.js';
+import { COPILOT_LOGIN_FRONTIER } from '../review/errors.js';
+import { NATIVE_REVIEW_SCHEMA } from '../review/native-dispatch.js';
 export const hasConfiguredReviews = (p: EffectivePolicy) =>
   Boolean(
     p.settings.reviewModels && (p.settings.reviewModels.stages.length || p.settings.reviewModels.segments.length),
   );
+/** Only an authenticated published review can explain a completed run's Copilot login refusal. */
+export async function reviewLoginFailureIn(store: SentinelStore, units: readonly PlanWork[]): Promise<boolean> {
+  const published = units.filter((unit) => {
+    if (!unit.review) return false;
+    const publication = store.ledger.getPublication(unit);
+    return publication && !publication.outputs.some((output) => output.schema === NATIVE_REVIEW_SCHEMA);
+  });
+  if (!published.length) return false;
+  if (published.length > 32) throw new ExecutionError('sentinel.execution.planInvalid', {});
+  const { readPublishedInstructions } = await import('../review/instructions.js');
+  const deadlineAt = Date.now() + 20_000;
+  const signal = AbortSignal.timeout(20_000);
+  for (const unit of published) {
+    const trace = await readPublishedInstructions(store, unit, { deadlineAt, signal });
+    if (
+      trace.record.outcome === 'unfinished' &&
+      trace.record.frontiers.some((frontier) => frontier.reasonCode === COPILOT_LOGIN_FRONTIER)
+    )
+      return true;
+  }
+  return false;
+}
 export const reviewRegistry = (base: AdapterRegistry) =>
   createAdapterRegistry([...base.ids.map((id) => base.get(id) as AdapterDefinition), ...REVIEW_ADAPTERS]);
 export function reviewProfile(record: ExecutionProfileRecord, registry: AdapterRegistry): ExecutionProfileRecord {

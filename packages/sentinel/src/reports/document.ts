@@ -140,6 +140,7 @@ export interface ReportInput {
     readonly unit: WorkRef;
     readonly progress?: ReviewProgressInput;
   }[];
+  readonly reviewFailures?: readonly { readonly stage: string; readonly unit: WorkRef; readonly reasonCode: string }[];
   /** One provenance record per published attempt. Absent: the document has no provenance section. */
   readonly provenance?: readonly Provenance[];
   /** A comparison computed with `compareAssessments` over these findings and a baseline's. */
@@ -448,6 +449,12 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
     });
   }
   if (reviews) for (const key of ['heading', 'proposed', 'model', 'unrated']) used.add(`sentinel.report.review.${key}`);
+  const reviewFailures = input.reviewFailures?.length ? structuredClone([...input.reviewFailures]) : undefined;
+  if (reviewFailures) {
+    used.add('sentinel.report.review.heading');
+    used.add('sentinel.report.review.unfinished');
+    for (const failure of reviewFailures) used.add(failure.reasonCode);
+  }
   // A host interpreter's absolute path names this computer's folders (a home folder, a user name): private only.
   const provenance = input.provenance
     ? structuredClone([...input.provenance]).map((p) => {
@@ -721,7 +728,10 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
     },
     // Complete only when every planned check covered its scope and every captured file was seen and listed.
     completeness:
-      gaps.length || input.inventory.seenByNoStage > 0 || input.inventory.unknownScopeBoundaries > 0
+      gaps.length ||
+      reviewFailures?.length ||
+      input.inventory.seenByNoStage > 0 ||
+      input.inventory.unknownScopeBoundaries > 0
         ? 'partial'
         : 'complete',
     baseline: input.comparison ? { reportId: input.comparison.baselineReportId } : null,
@@ -733,6 +743,7 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
     ...(structuralPaths ? { structuralPaths } : {}),
     ...(input.comparison ? { historical } : {}),
     ...(reviews ? { reviews } : {}),
+    ...(reviewFailures ? { reviewFailures } : {}),
     ...(provenance ? { provenance } : {}),
     definitions,
     artifactClosure: [...closure].sort(),

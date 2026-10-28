@@ -216,6 +216,31 @@
           "description": "Model observations, by stage and unit: a cited class beside the findings, never folded into them.",
           "maxItems": 1024
         },
+        "reviewFailures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "stage": {
+                "$ref": "#/definitions/ShortText"
+              },
+              "unit": {
+                "$ref": "#/definitions/WorkRef"
+              },
+              "reasonCode": {
+                "$ref": "#/definitions/CatalogKey"
+              }
+            },
+            "required": [
+              "stage",
+              "unit",
+              "reasonCode"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Authenticated unfinished model stages whose fixed failure reason a report can state without native text.",
+          "maxItems": 32
+        },
         "provenance": {
           "type": "array",
           "items": {

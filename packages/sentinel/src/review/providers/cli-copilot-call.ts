@@ -12,7 +12,7 @@ import { openNativeCopilotProxy } from './cli-copilot-proxy.js';
 import { NativeCopilotDecoder, NativeCopilotStderrClassifier } from './cli-copilot-wire.js';
 import { beginCopilotCall, finishCopilotCall, type CopilotCallAuthority } from './authority.js';
 import { freshSandboxedState, readOwnedFile, superviseSandboxedCli } from './sandboxed-cli.js';
-import { NativeCopilotError, type NativeCopilotDiagnostic, ProviderError } from './errors.js';
+import { NativeCopilotError, type NativeCopilotDiagnostic, ProviderError, type Spend } from './errors.js';
 import type { ParsedReply } from './kinds.js';
 export function copilotInvocationArguments(usagePath: string, model: string): readonly string[] {
   return Object.freeze([
@@ -56,6 +56,30 @@ export function cleanCopilotExit(
 ): boolean {
   return code === 0 && signal === null && spawned === true && stderrBytes === 0;
 }
+/** An exact pinned CLI login refusal. No proxy connection proves no request was sent; otherwise spend stays uncertain. */
+export function classifyCopilotLoginRefusal(
+  state: Readonly<{
+    code: number | null;
+    signal: string | null;
+    spawned: boolean;
+    stdoutBytes: number;
+    frames: number;
+    connections: number;
+    upstreamBytes: number;
+  }>,
+  stderr: NativeCopilotStderrClassifier,
+): Spend | null {
+  if (
+    state.code !== 1 ||
+    state.signal !== null ||
+    !state.spawned ||
+    state.stdoutBytes !== 0 ||
+    state.frames !== 0 ||
+    !stderr.noAuthenticationInformation
+  )
+    return null;
+  return state.connections === 0 && state.upstreamBytes === 0 ? 'none' : 'possible';
+}
 /** The owner-created fixed private state: only the validated selected-account pair is projected; nothing else. */
 export function copilotPrivateState(
   selector: Readonly<NativeCopilotSelector>,
@@ -94,7 +118,8 @@ export async function nativeCopilotCall(authority: CopilotCallAuthority): Promis
   const proxy = await openNativeCopilotProxy({ ...limits, maxUpstreamBytes: 4194304, maxDownstreamBytes: 4194304 });
   let setup: Awaited<ReturnType<typeof nativeCopilotSetup>> | undefined,
     phase: NativeCopilotDiagnostic['phase'] = 'setup',
-    reason: NativeCopilotDiagnostic['reason'] = 'output-unavailable';
+    reason: NativeCopilotDiagnostic['reason'] = 'output-unavailable',
+    loginRefusal: Spend | null = null;
   let decoder: NativeCopilotDecoder | undefined;
   const state = freshSandboxedState();
   const stderrClassifier = new NativeCopilotStderrClassifier();
@@ -139,17 +164,24 @@ export async function nativeCopilotCall(authority: CopilotCallAuthority): Promis
     }
     if (!cleanCopilotExit(state.code, state.signal, state.spawned, state.stderrBytes)) {
       phase = 'exit';
-      reason =
-        state.code === 1 &&
-        stream.bytes === 0 &&
-        stream.observation().frames === 0 &&
-        stderrClassifier.noAuthenticationInformation
-          ? 'native-auth-unavailable'
-          : 'process-exit';
+      const p = proxy.observation();
+      loginRefusal = classifyCopilotLoginRefusal(
+        {
+          code: state.code,
+          signal: state.signal,
+          spawned: state.spawned,
+          stdoutBytes: stream.bytes,
+          frames: stream.observation().frames,
+          connections: p.connections,
+          upstreamBytes: p.upstreamWireBytes,
+        },
+        stderrClassifier,
+      );
+      reason = loginRefusal ? 'native-auth-unavailable' : 'process-exit';
       throw new ProviderError(
-        'sentinel.provider.malformedResponse',
-        'Copilot exited without accepted completion',
-        'possible',
+        loginRefusal ? 'sentinel.provider.credentialUnavailable' : 'sentinel.provider.malformedResponse',
+        loginRefusal ? 'Copilot login is unavailable' : 'Copilot exited without accepted completion',
+        loginRefusal ?? 'possible',
       );
     }
     copilotBoundary(limits);
@@ -177,36 +209,43 @@ export async function nativeCopilotCall(authority: CopilotCallAuthority): Promis
     const prior = e instanceof NativeCopilotError ? e.nativeCopilot : undefined,
       stream = decoder?.observation(),
       p = proxy.observation();
-    throw new NativeCopilotError(error.code, possibleSpend ? 'possible' : error.spend, {
-      schema: 'sentinel-copilot-failure/1',
-      phase: prior?.phase ?? phase,
-      reason:
-        prior?.reason ??
-        (error.code === 'sentinel.provider.credentialUnavailable'
-          ? 'native-selector-unavailable'
-          : error.code === 'sentinel.provider.timeout'
-            ? 'deadline'
-            : error.code === 'sentinel.provider.canceled'
-              ? 'canceled'
-              : error.code === 'sentinel.provider.responseTooLarge'
-                ? 'response-bound'
-                : reason),
-      exitCode: state.code,
-      signal:
-        state.signal === null
-          ? null
-          : SIGNALS.has(state.signal)
-            ? (state.signal as NativeCopilotDiagnostic['signal'])
-            : 'other',
-      eventClass: stream?.eventClass ?? 'none',
-      frames: stream?.frames ?? 0,
-      stdoutBytes: stream?.bytes ?? 0,
-      stderrBytes: state.stderrBytes,
-      connections: p.connections,
-      upstreamBytes: p.upstreamWireBytes,
-      downstreamBytes: p.downstreamWireBytes,
-      proxyEnded: p.endedBy,
-    });
+    // The exact pinned login refusal with no proxy connection proves no model call was sent.
+    throw new NativeCopilotError(
+      error.code,
+      loginRefusal === 'none' ? 'none' : possibleSpend ? 'possible' : error.spend,
+      {
+        schema: 'sentinel-copilot-failure/1',
+        phase: prior?.phase ?? phase,
+        reason:
+          prior?.reason ??
+          (loginRefusal
+            ? 'native-auth-unavailable'
+            : error.code === 'sentinel.provider.credentialUnavailable'
+              ? 'native-selector-unavailable'
+              : error.code === 'sentinel.provider.timeout'
+                ? 'deadline'
+                : error.code === 'sentinel.provider.canceled'
+                  ? 'canceled'
+                  : error.code === 'sentinel.provider.responseTooLarge'
+                    ? 'response-bound'
+                    : reason),
+        exitCode: state.code,
+        signal:
+          state.signal === null
+            ? null
+            : SIGNALS.has(state.signal)
+              ? (state.signal as NativeCopilotDiagnostic['signal'])
+              : 'other',
+        eventClass: stream?.eventClass ?? 'none',
+        frames: stream?.frames ?? 0,
+        stdoutBytes: stream?.bytes ?? 0,
+        stderrBytes: state.stderrBytes,
+        connections: p.connections,
+        upstreamBytes: p.upstreamWireBytes,
+        downstreamBytes: p.downstreamWireBytes,
+        proxyEnded: p.endedBy,
+      },
+    );
   } finally {
     finishCopilotCall(authority);
     await proxy.close();

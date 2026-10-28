@@ -26,7 +26,11 @@ import {
   projectNativeCopilotSelector,
   readNativeCopilotSelector,
 } from '../dist/review/providers/cli-copilot-profile.js';
-import { nativeCopilotCall, copilotInvocationArguments } from '../dist/review/providers/cli-copilot-call.js';
+import {
+  nativeCopilotCall,
+  copilotInvocationArguments,
+  classifyCopilotLoginRefusal,
+} from '../dist/review/providers/cli-copilot-call.js';
 import { openNativeCopilotProxy, nativeCopilotClientHello } from '../dist/review/providers/cli-copilot-proxy.js';
 import { parseSettings, effectivePolicy } from '../dist/policy/settings.js';
 import { bindProvider } from '../dist/review/providers/profile.js';
@@ -371,6 +375,21 @@ test('exact pinned no-auth template classification is streaming and rejects same
   const d = new NativeCopilotStderrClassifier();
   d.push(message);
   assert.equal(JSON.stringify(d), '{}', 'no raw native bytes or internal state are exposed');
+  const stubbedCli = {
+    code: 1,
+    signal: null,
+    spawned: true,
+    stdoutBytes: 0,
+    frames: 0,
+    connections: 0,
+    upstreamBytes: 0,
+  };
+  assert.equal(classifyCopilotLoginRefusal(stubbedCli, d), 'none', 'the stubbed CLI sent no request');
+  assert.equal(classifyCopilotLoginRefusal({ ...stubbedCli, connections: 1 }, d), 'possible');
+  assert.equal(classifyCopilotLoginRefusal({ ...stubbedCli, stdoutBytes: 1 }, d), null);
+  const nativeText = new NativeCopilotStderrClassifier();
+  nativeText.push(Buffer.concat([message, Buffer.from('original-private-token')]));
+  assert.equal(classifyCopilotLoginRefusal(stubbedCli, nativeText), null);
 });
 
 test('selected native metadata projection preserves only unique supported host/login and never unrelated or other-account data', () => {

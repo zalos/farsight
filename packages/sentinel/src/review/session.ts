@@ -19,6 +19,7 @@ import type {
   ReviewRecordEnvelope,
   ScopedReason,
   ServedCitation,
+  StageCost,
 } from '../contracts/index.js';
 import { MAX_ENVELOPE_BYTES } from '../contracts/index.js';
 import { canonicalDigest as digestOf } from '../policy/digest.js';
@@ -35,7 +36,7 @@ import {
   type ToolRequest,
   type ToolResult,
 } from './evidence.js';
-import { reviewFail, type ReviewFrontierCode } from './errors.js';
+import { COPILOT_LOGIN_FRONTIER, reviewFail, type ReviewFrontierCode } from './errors.js';
 import type { ReviewRequestEnvelope, ReviewProviderSelection, NativeReviewWire } from '../contracts/instructions.js';
 import type { NamedStageOutput } from '../contracts/pipeline.js';
 import {
@@ -72,12 +73,19 @@ export interface ModelCaller {
     expectedWireDigest?: string;
     signal?: AbortSignal;
   }): Promise<CallerReply>;
+  /**
+   * What the settled calls cost, as a stage's provenance states it, from their confirmed usage; `unsettled` when a call
+   * may have been charged without its usage arriving. A mock caller has none, so its record states no cost.
+   */
+  costOf?(usage: readonly Readonly<{ inputTokens: number; outputTokens: number }>[], unsettled: boolean): StageCost;
 }
 
 /** Thrown by a caller; `spend: 'possible'` means the provider may have charged for it. */
 export interface CallerFailure {
   readonly code?: string;
   readonly spend?: 'none' | 'possible';
+  /** Closed native diagnostic only; never native stderr, an account or a credential. */
+  readonly nativeCopilot?: Readonly<{ reason: string }>;
 }
 
 // ---- specification and records ----
@@ -522,6 +530,10 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
       });
     } catch (error) {
       const e = (error ?? {}) as CallerFailure;
+      const copilotLogin =
+        e.spend === 'none' &&
+        (e.nativeCopilot?.reason === 'native-selector-unavailable' ||
+          e.nativeCopilot?.reason === 'native-auth-unavailable');
       // An operation the ledger already holds (a crash between its call and its checkpoint) is never re-sent: its
       // spend is uncertain until the owner reconciles it. A fenced epoch hands the session to the next coordinator.
       const code: ReviewFrontierCode =
@@ -531,9 +543,11 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
             ? 'sentinel.review.frontier.canceled'
             : e.code === 'sentinel.provider.epochFenced'
               ? 'sentinel.review.frontier.fenced'
-              : e.code === 'sentinel.provider.reservationState' || e.spend === 'possible'
-                ? 'sentinel.review.frontier.uncertainUsage'
-                : 'sentinel.review.frontier.modelError';
+              : copilotLogin
+                ? COPILOT_LOGIN_FRONTIER
+                : e.code === 'sentinel.provider.reservationState' || e.spend === 'possible'
+                  ? 'sentinel.review.frontier.uncertainUsage'
+                  : 'sentinel.review.frontier.modelError';
       if (code === 'sentinel.review.frontier.fenced') throw error;
       await save({
         ...cp,
@@ -626,16 +640,17 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
       operations: [...cp.operations, { ...op, outcome: 'tool' }],
     });
   }
-  return finish(spec, cp, broker, opts.caller.kind, now());
+  return finish(spec, cp, broker, opts.caller, now());
 }
 
 function finish(
   spec: SessionSpec,
   cp: ReviewCheckpoint,
   broker: EvidenceBroker,
-  callerKind: 'mock' | 'provider',
+  caller: ModelCaller,
   at: number,
 ): SessionResult {
+  const callerKind = caller.kind;
   const { sourceId, snapshotId } = spec.scope;
   const scopeId = (p: string) => `${sourceId}:${p}`;
   const served = broker.state();
@@ -662,6 +677,7 @@ function finish(
       frontiers.push({ scopeId: `${sourceId}:${spec.sessionId}`, reasonCode: 'sentinel.review.frontier.withheld' });
   if (cp.stopped) frontiers.push({ scopeId: `${sourceId}:${spec.sessionId}`, reasonCode: cp.stopped });
   const settled = cp.operations.filter((o) => o.state === 'settled');
+  const unsettled = cp.operations.some((o) => o.state === 'unsettled');
   const completed = cp.final !== null;
   const observations: ObservationEnvelope[] = [];
   if (completed && cp.final!.verdict === 'finding' && cp.identity) {
@@ -743,7 +759,15 @@ function finish(
       inputBytes: cp.inputBytes,
       inputTokens: settled.reduce((a, o) => a + (o.usage?.inputTokens ?? 0), 0),
       outputTokens: settled.reduce((a, o) => a + (o.usage?.outputTokens ?? 0), 0),
-      usage: cp.operations.some((o) => o.state === 'unsettled') ? ('unknown' as const) : ('confirmed' as const),
+      usage: unsettled ? ('unknown' as const) : ('confirmed' as const),
+      ...(caller.costOf
+        ? {
+            cost: caller.costOf(
+              settled.map((o) => o.usage ?? { inputTokens: 0, outputTokens: 0 }),
+              unsettled,
+            ),
+          }
+        : {}),
     },
     refusals: served.refusals.length,
     rejectedReplies: cp.invalid,

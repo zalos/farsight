@@ -191,15 +191,18 @@ export function renderMarkdown(doc: ReportEnvelope): string {
     lines.push(`## ${md(wordOf(doc, 'sentinel.paths.report.heading', 'business'))}`, '');
     for (const p of structuralText(doc)) lines.push(`### ${md(p.source)}`, '', ...p.lines.map((l) => `- ${md(l)}`), '');
   }
-  if (doc.reviews) {
+  if (doc.reviews || doc.reviewFailures?.length) {
     lines.push(`## ${md(wordOf(doc, 'sentinel.report.review.heading', 'business'))}`, '');
-    lines.push(`${md(wordOf(doc, 'sentinel.report.review.proposed', 'business'))}.`, '');
-    for (const r of doc.reviews) {
+    if (doc.reviews?.length) lines.push(`${md(wordOf(doc, 'sentinel.report.review.proposed', 'business'))}.`, '');
+    for (const r of doc.reviews ?? []) {
       lines.push(`### <a id="${anchor('review', r.id)}"></a>${md(reviewLines(doc, r)[0]!)}`, '');
       for (const l of reviewLines(doc, r).slice(1)) lines.push(`- ${md(l)}`);
       for (const e of r.evidence) lines.push(...evidenceLines(doc, e));
       lines.push('');
     }
+    for (const failure of doc.reviewFailures ?? [])
+      lines.push(`- ${md(failure.stage)}: ${md(wordOf(doc, failure.reasonCode, 'business'))}`);
+    if (doc.reviewFailures?.length) lines.push('');
   }
   if (doc.provenance) {
     lines.push(`## ${md(wordOf(doc, 'sentinel.report.provenance.heading', 'business'))}`, '');
@@ -211,7 +214,9 @@ export function renderMarkdown(doc: ReportEnvelope): string {
     lines.push(
       doc.completeness === 'complete'
         ? 'Every planned check covered its scope.'
-        : 'Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.',
+        : doc.reviewFailures?.length
+          ? wordOf(doc, 'sentinel.report.review.unfinished', 'business')
+          : 'Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.',
       '',
     );
   for (const g of doc.gaps)

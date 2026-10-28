@@ -652,6 +652,8 @@ function runLines(r: CommandResult, command: string): string[] {
       }),
     ];
   if (!f.runId || f.state === undefined) return [];
+  if (r.reasonCode === 'sentinel.review.frontier.copilotLogin')
+    return [word('sentinel.cli.copilotLoginRun', { run: String(f.runId) })];
   return [
     f.previewFindings === undefined
       ? word('sentinel.cli.runState', { run: String(f.runId), state: String(f.state) })

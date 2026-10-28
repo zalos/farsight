@@ -312,8 +312,10 @@ export async function acceptedReviewPublication(
     admission.intentDigest !== digestOf(expectedIntent) ||
     admission.policyRevision !== policyRevision ||
     admission.outcome !== 'admitted' ||
-    admission.requestedBy?.principal !== 'human' ||
-    admission.requestedBy?.channel !== 'owner-cli'
+    !(
+      (admission.requestedBy?.principal === 'human' && admission.requestedBy?.channel === 'owner-cli') ||
+      (admission.requestedBy?.principal === 'human' && admission.requestedBy?.channel === 'owner-ui')
+    )
   )
     return reviewFail('sentinel.review.integrity', 'review admission did not permit this producer');
   if (pub.outputs.length > 512)

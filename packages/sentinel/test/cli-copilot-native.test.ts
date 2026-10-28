@@ -3,6 +3,7 @@
 // no model call. The genuine controls (SENTINEL_COPILOT_CODE=1) qualify the installed 1.0.105 bytes and run its
 // sandboxed `--help` and pure argument parser over the copied runtime, with no authentication.
 import { test } from 'node:test';
+import { validateEnvelope } from '../dist/index.js';
 import assert from 'node:assert/strict';
 import { spawnSync, spawn } from 'node:child_process';
 import { writeFileSync, chmodSync, existsSync, readFileSync, mkdirSync, mkdtempSync, realpathSync } from 'node:fs';
@@ -545,6 +546,16 @@ test(
       source: 'path',
       executablePath: '<redacted>',
     });
+    // The refusal carries its private record for the store, under its contract, its bytes linked by handle.
+    assert.ok(failure.record && validateEnvelope('attemptretained', failure.record.record).ok);
+    assert.deepEqual(
+      [failure.record.record.failure, failure.record.record.provenance.installation?.executablePath],
+      [failure.code, '/original/bin/copilot'],
+    );
+    assert.deepEqual(
+      failure.record.record.links.map((l: any) => l.role),
+      ['transcript', 'share', 'instructions'],
+    );
     const overBudget = Object.assign(new Error('over budget'), {
       code: 'sentinel.provider.budgetExhausted',
       agentResult: settledResult('{"observations":[],"inspected":[]}'),
@@ -601,6 +612,9 @@ test(
     assert.deepEqual(stopped.retained.provenance.tokens, { input: null, output: null, certainty: 'uncertain' });
     assert.deepEqual(stopped.retained.provenance.cost, { basis: 'unobserved', reason: 'usage-unknown' });
     assert.equal(stopped.retained.provenance.installation?.executablePath, '/original/bin/copilot');
+    assert.ok(stopped.record && validateEnvelope('attemptretained', stopped.record.record).ok);
+    assert.equal(stopped.record.record.completed, false);
+    assert.equal(stopped.record.artifacts[1]!.id, stopped.record.record.links[0]!.handle);
   },
 );
 
