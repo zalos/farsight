@@ -23,7 +23,7 @@ import {
   type CopilotCredentialPath,
 } from './providers/cli-copilot-profile.js';
 import { CLAUDE_NATIVE_PROFILE, qualifyInstalledNativeClaude } from './providers/cli-native-profile.js';
-import { safeInputPath, type CopilotAgentResult } from './providers/cli-copilot-agent.js';
+import { safeInputPath, type CopilotAgentPartial, type CopilotAgentResult } from './providers/cli-copilot-agent.js';
 import type { ModelBroker, ModelEnvelope } from './providers/broker.js';
 import type { ProviderBinding } from './providers/profile.js';
 import { reviewFail } from './errors.js';
@@ -203,9 +203,11 @@ async function runCopilotNative(
     );
   const started = Date.now(),
     grantedMs = seconds! * 1000;
+  type Installation = Readonly<{ source: string; executable: string }> | null;
+  /** One shape for every run: a settled one (confirmed usage) or one that stopped before settling (uncertain). */
   const provenanceOf = (
-    result: CopilotAgentResult,
-    installation: Readonly<{ source: string; executable: string }> | null,
+    seen: Readonly<{ turns: number; reportedModel: string | null; usage: CopilotAgentResult['usage'] | null }>,
+    installation: Installation,
   ): AgentRunProvenance =>
     Object.freeze({
       mode: 'native' as const,
@@ -218,28 +220,44 @@ async function runCopilotNative(
         : null,
       model: Object.freeze({
         requested: context.binding.model,
-        reported: result.reportedModel,
+        reported: seen.reportedModel,
         identitySource: 'host-reported' as const,
       }),
       promptDigest: canonicalDigest({ instructions: Buffer.from(instructions).toString('base64'), task }) as Digest,
       skillDigests: Object.freeze([]),
-      turns: result.turns,
-      tokens: Object.freeze({
-        input: result.usage.inputTokens,
-        output: result.usage.outputTokens,
-        certainty: 'confirmed' as const,
+      turns: seen.turns,
+      tokens: seen.usage
+        ? Object.freeze({
+            input: seen.usage.inputTokens,
+            output: seen.usage.outputTokens,
+            certainty: 'confirmed' as const,
+          })
+        : Object.freeze({ input: null, output: null, certainty: 'uncertain' as const }),
+      cost: Object.freeze({
+        basis: 'unobserved' as const,
+        reason: seen.usage ? ('subscription' as const) : ('usage-unknown' as const),
       }),
-      cost: Object.freeze({ basis: 'unobserved' as const, reason: 'subscription' as const }),
       deadline: Object.freeze({ grantedMs, usedMs: Date.now() - started }),
       where: 'sandboxed-cli' as const,
     });
-  // A run that completed and settled but is then refused (another model answered, the stage's token budget was
-  // exceeded, the answer fails its schema) keeps its transcript and provenance in a private failed-attempt record;
-  // no stage output is published from it.
+  // Every native run that is refused keeps its inspection ledger and provenance in a private failed-attempt record,
+  // and publishes no stage output. A run that completed and settled (another model answered, the token budget was
+  // exceeded, the answer fails its schema) keeps its whole stream and share transcript, with confirmed usage; a run
+  // that stopped before completing (a denied tool, a malformed stream, the deadline) keeps the bounded partial stream
+  // the monitor captured, with usage uncertain.
   const failed = (
     error: { code: string },
-    result: CopilotAgentResult,
-    installation: Readonly<{ source: string; executable: string }> | null,
+    seen: Readonly<{
+      finalAnswer: string | null;
+      reportedModel: string | null;
+      turns: number;
+      tools: CopilotAgentResult['tools'];
+      filesRead: readonly string[];
+      events: Uint8Array;
+      share: Uint8Array;
+      usage: CopilotAgentResult['usage'] | null;
+    }>,
+    installation: Installation,
   ): never => {
     throw new NativeRunFailure(
       error.code,
@@ -247,14 +265,15 @@ async function runCopilotNative(
         disclosure: 'private-only' as const,
         withholding: 'accepted-secret-fold-before-read' as const,
         failure: error.code,
-        finalAnswer: result.finalAnswer,
-        filesRead: result.filesRead,
-        tools: result.tools,
-        transcript: result.events,
-        share: result.share,
+        completed: seen.usage !== null,
+        finalAnswer: seen.finalAnswer,
+        filesRead: seen.filesRead,
+        tools: seen.tools,
+        transcript: seen.events,
+        share: seen.share,
         instructions,
         task,
-        provenance: provenanceOf(result, installation),
+        provenance: provenanceOf(seen, installation),
       }),
       error,
     );
@@ -272,8 +291,28 @@ async function runCopilotNative(
       ...(context.signal ? { signal: context.signal } : {}),
     });
   } catch (e) {
-    const settled = (e as { agentResult?: CopilotAgentResult }).agentResult;
-    if (settled) return failed(e as { code: string }, settled, null);
+    const refused = e as {
+      code: string;
+      agentResult?: CopilotAgentResult;
+      agentPartial?: CopilotAgentPartial;
+      agentInstallation?: Readonly<{ source: string; executable: string }>;
+    };
+    if (refused.agentResult) return failed(refused, refused.agentResult, refused.agentInstallation ?? null);
+    if (refused.agentPartial)
+      return failed(
+        refused,
+        {
+          finalAnswer: null,
+          reportedModel: null,
+          turns: refused.agentPartial.turns,
+          tools: refused.agentPartial.tools,
+          filesRead: refused.agentPartial.filesRead,
+          events: refused.agentPartial.stream,
+          share: new Uint8Array(0),
+          usage: null,
+        },
+        refused.agentInstallation ?? null,
+      );
     throw e;
   }
   let value: unknown;
@@ -284,7 +323,7 @@ async function runCopilotNative(
       new Set(reply.result.filesRead),
     );
   } catch (e) {
-    return failed(e as { code: string }, reply.result, reply.installation);
+    return failed(e as { code: string }, { ...reply.result, events: reply.result.events }, reply.installation);
   }
   const provenance = provenanceOf(reply.result, reply.installation);
   return Object.freeze({
@@ -316,7 +355,9 @@ export interface NativeFailedAttempt {
   /** The accepted-secret withholding fold runs over this record before any owner read. */
   readonly withholding: 'accepted-secret-fold-before-read';
   readonly failure: string;
-  readonly finalAnswer: string;
+  /** Whether the run completed and settled (confirmed usage) before it was refused, or stopped before that. */
+  readonly completed: boolean;
+  readonly finalAnswer: string | null;
   readonly filesRead: readonly string[];
   readonly tools: readonly Readonly<{ tool: string; path: string | null }>[];
   readonly transcript: Uint8Array;

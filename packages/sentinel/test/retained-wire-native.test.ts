@@ -25,7 +25,7 @@ import {
   COPILOT_AGENT_PROFILE,
   qualifyInstalledNativeCopilot,
 } from '../dist/review/providers/cli-copilot-profile.js';
-import { COPILOT_RUNNER, publicProvenance } from '../dist/review/runner.js';
+import { COPILOT_RUNNER, NativeRunFailure, publicProvenance } from '../dist/review/runner.js';
 
 const genuine = process.env.SENTINEL_COPILOT_CODE === '1';
 const record = process.env.SENTINEL_RETAINED_WIRE_RECORD === '1';
@@ -379,5 +379,88 @@ test(
       transcriptBytes: result.transcript.byteLength,
       share: Buffer.from(result.share).toString('utf8'),
     });
+  },
+);
+
+test(
+  'a genuine native run the monitor stops keeps its partial stream and installation; an over-budget one its whole run',
+  { skip: !genuine && 'needs the installed Copilot 1.0.105 bytes; no login' },
+  async (t) => {
+    const stage = {
+      id: 'review',
+      kind: 'agent' as const,
+      mode: 'native' as const,
+      runner: 'copilot-cli' as const,
+      model,
+      produces: [{ name: 'observations', schema: 'sentinel.review-observations/v1' }],
+      budget: { turns: 3, tokens: 20000, seconds: 120 },
+    };
+    const inputs = [{ relativePath: 'src/auth.ts', bytes: Buffer.from('export const a = 1;\n') }];
+    const ev = (type: string, data: Record<string, unknown>) => JSON.stringify({ type, data }) + '\n';
+    {
+      const { broker, envelope, binding, ledger } = await admitted(t, COPILOT_AGENT_PROFILE);
+      intercept(t, 'sentinel-copilot-agent', [], (args) => ({
+        stdout: Buffer.from(
+          ev('model.call_start', { model }) +
+            ev('tool.execution_start', { toolName: 'view', arguments: { path: `${after(args, '-C')}/src/auth.ts` } }) +
+            ev('tool.execution_start', { toolName: 'bash', arguments: { command: 'cat ~/.ssh/id_rsa' } }),
+        ),
+        stderr: Buffer.alloc(0),
+      }));
+      const stopped = await COPILOT_RUNNER.run(stage, inputs, {
+        native: { broker, envelope, binding, operationId: 'original-stopped-stage' },
+      }).then(
+        () => assert.fail('a denied tool publishes nothing'),
+        (e: any) => e,
+      );
+      assert(stopped instanceof NativeRunFailure, String(stopped?.code));
+      assert.equal(stopped.retained.completed, false);
+      assert.deepEqual(stopped.retained.filesRead, ['src/auth.ts']);
+      assert.match(Buffer.from(stopped.retained.transcript).toString(), /"toolName":"bash"/);
+      assert.equal(stopped.retained.provenance.tokens.certainty, 'uncertain');
+      assert.match(stopped.retained.provenance.installation?.executablePath ?? '', /\/copilot$/);
+      assert.equal(ledger.totals(envelope.id).byState.uncertain, 1, 'the reservation stays uncertain, never released');
+    }
+    {
+      const { broker, envelope, binding } = await admitted(t, COPILOT_AGENT_PROFILE);
+      intercept(t, 'sentinel-copilot-agent', [], (args) => {
+        writeFileSync(
+          after(args, '--usage-output-file'),
+          JSON.stringify({
+            currentModel: model,
+            totalUserRequests: 1,
+            modelMetrics: {
+              [model]: { requests: { count: 1, cost: 1 }, usage: { inputTokens: 30000, outputTokens: 10 } },
+            },
+          }),
+          { mode: 0o600 },
+        );
+        writeFileSync(after(args, '--share'), '# Copilot CLI Session\n', { mode: 0o600 });
+        return {
+          stdout: Buffer.from(
+            ev('model.call_start', { model }) +
+              ev('assistant.message', {
+                model,
+                phase: 'final_answer',
+                content: '{"observations":[],"inspected":[]}',
+              }) +
+              JSON.stringify({ type: 'result', exitCode: 0 }) +
+              '\n',
+          ),
+          stderr: Buffer.from(`Session exported to: ${after(args, '--share')}\n`),
+        };
+      });
+      const over = await COPILOT_RUNNER.run(stage, inputs, {
+        native: { broker, envelope, binding, operationId: 'original-over-budget-stage' },
+      }).then(
+        () => assert.fail('an over-budget run publishes nothing'),
+        (e: any) => e,
+      );
+      assert(over instanceof NativeRunFailure);
+      assert.equal(over.code, 'sentinel.provider.budgetExhausted');
+      assert.equal(over.retained.completed, true);
+      assert.deepEqual(over.retained.provenance.tokens, { input: 30000, output: 10, certainty: 'confirmed' });
+      assert.match(over.retained.provenance.installation?.executablePath ?? '', /\/copilot$/);
+    }
   },
 );
