@@ -714,7 +714,8 @@ function browserMain(layout: typeof processLayout) {
   function showPipeline(answer: any) {
     const e = document.getElementById('preview')!;
     e.replaceChildren();
-    const checked = answer.preview ?? answer;
+    // offered a confirmation, the answer is { preview: <the service's answer>, confirmation }; refused, it is the answer
+    const checked = answer.confirmation ? answer.preview : answer;
     if (answer.unavailable || !answer.confirmation) {
       notice(detailed(checked.reasonCode || 'pipelineRefused', checked.detail), true);
       tellPipeline({

@@ -120,6 +120,18 @@ test(
         .waitFor();
       assert.equal(await page.locator('.snt-erow:not(.gone)').count(), before.stages.length);
       await page.screenshot({ path: join(evidence, 'edit-1440.png') });
+      // A refusal through the real frame: an empty model stage is not a pipeline; nothing is written, no confirmation.
+      await page.locator('.snt-eadd [data-enew="agent"]').click();
+      await page.locator('.snt-tools [data-act="echeck"]').click();
+      await page
+        .locator('.snt-verdicts')
+        .getByText(/the pipeline file is not a valid pipeline \(\/stages\/\d+: required: must have required property/)
+        .waitFor({ timeout: 15000 });
+      assert.equal(await frame.getByRole('button', { name: 'Confirm writing the pipeline', exact: true }).count(), 0);
+      assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), before);
+      await page.locator('.snt-tools [data-act="ediscard"]').click();
+      await page.locator('.snt-erow:not(.gone)', { hasText: 'report' }).click();
+      await page.locator('.snt-dock [data-ebudget="seconds"]').waitFor();
       // The edit: the report stage gets a time ceiling, in the drawer.
       const seconds = page.locator('.snt-dock [data-ebudget="seconds"]');
       await seconds.fill('120');
