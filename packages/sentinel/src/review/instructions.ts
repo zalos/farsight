@@ -204,12 +204,16 @@ export interface RetainedInstructionTrace {
   readonly contents: readonly InstructionArtifact[];
   readonly observations: readonly import('../contracts/observation.js').ObservationEnvelope[];
 }
-/** Owner-only replay of this accepted review publication, never an arbitrary artifact-id/file reader or shareable view. */
-export async function readPublishedInstructions(
+/**
+ * What every accepted model review publication is held to, brokered or native: the exact admitted unit, its succeeded
+ * attempt and published work, the fixed coordinator operation and invocation, the owner's admission of exactly this
+ * intent, and a bounded reader of the publication's own outputs. Package-internal.
+ */
+export async function acceptedReviewPublication(
   store: import('../store/index.js').SentinelStore,
   work: import('../contracts/common.js').WorkRef,
   options?: Readonly<{ signal?: AbortSignal; deadlineAt?: number }>,
-): Promise<RetainedInstructionTrace> {
+) {
   const { boundOwner } = await import('../store/owner-binding.js'),
     { validateEnvelope } = await import('../validate.js'),
     { loadPlan } = await import('../execution/plans.js'),
@@ -316,7 +320,7 @@ export async function readPublishedInstructions(
     return reviewFail('sentinel.review.integrity', 'retained instruction publication exceeds its bound');
   const outputs = new Map(pub.outputs.map((o) => [o.id, o])),
     cache = new Map<ArtifactId, Buffer>();
-  let total = 0;
+  const io = { total: 0 };
   const read = async (id: ArtifactId) => {
     if (cache.has(id)) return cache.get(id)!;
     if (!outputs.has(id))
@@ -325,10 +329,10 @@ export async function readPublishedInstructions(
     if (
       !representations.length ||
       representations.some((r) => !Number.isSafeInteger(r.rawSize) || r.rawSize < 0) ||
-      total + representations[0]!.rawSize > 8 * 1024 * 1024
+      io.total + representations[0]!.rawSize > 8 * 1024 * 1024
     )
       return reviewFail('sentinel.review.integrity', 'retained instruction bytes exceed their bound');
-    total += representations[0]!.rawSize;
+    io.total += representations[0]!.rawSize;
     const bytes = await store.readArtifact(id);
     fence();
     cache.set(id, bytes);
@@ -341,6 +345,17 @@ export async function readPublishedInstructions(
       return reviewFail('sentinel.review.integrity', 'retained instruction JSON is unavailable');
     }
   };
+  const reviewed = unit as typeof unit & { review: NonNullable<typeof unit.review> };
+  return { row, pub, attempt, admitted, unit: reviewed, outputs, cache, io, read, json, fence, validateEnvelope };
+}
+/** Owner-only replay of this accepted review publication, never an arbitrary artifact-id/file reader or shareable view. */
+export async function readPublishedInstructions(
+  store: import('../store/index.js').SentinelStore,
+  work: import('../contracts/common.js').WorkRef,
+  options?: Readonly<{ signal?: AbortSignal; deadlineAt?: number }>,
+): Promise<RetainedInstructionTrace> {
+  const { row, pub, attempt, admitted, unit, outputs, cache, io, read, json, fence, validateEnvelope } =
+    await acceptedReviewPublication(store, work, options);
   const recordIds = pub.outputs.filter((o) => o.schema === 'sentinel-review-record/draft-1');
   if (recordIds.length !== 1) return reviewFail('sentinel.review.integrity', 'one exact review record is required');
   const record = await json(recordIds[0]!.id),
@@ -405,9 +420,9 @@ export async function readPublishedInstructions(
   const captured = store.ledger.getSnapshot(record.snapshotId);
   if (!captured) return reviewFail('sentinel.review.integrity', 'retained source snapshot unavailable');
   const sizes = store.ledger.objectsOf(captured.manifest);
-  if (!sizes.length || total + sizes[0]!.rawSize > 8 * 1024 * 1024)
+  if (!sizes.length || io.total + sizes[0]!.rawSize > 8 * 1024 * 1024)
     return reviewFail('sentinel.review.integrity', 'retained snapshot exceeds trace read bound');
-  total += sizes[0]!.rawSize;
+  io.total += sizes[0]!.rawSize;
   const manifestBytes = await store.readArtifact(captured.manifest);
   fence();
   let capture: any;
@@ -494,9 +509,9 @@ export async function readPublishedInstructions(
         return reviewFail('sentinel.review.integrity', 'model evidence is outside its assigned captured scope');
       if (!cache.has(ev.content)) {
         const sizes = store.ledger.objectsOf(ev.content);
-        if (!sizes.length || total + sizes[0]!.rawSize > 8388608)
+        if (!sizes.length || io.total + sizes[0]!.rawSize > 8388608)
           return reviewFail('sentinel.review.integrity', 'model evidence exceeds the trace read bound');
-        total += sizes[0]!.rawSize;
+        io.total += sizes[0]!.rawSize;
         const bytes = await store.readArtifact(ev.content);
         fence();
         if (bytes.length !== file.bytes || sha(bytes) !== file.content)
