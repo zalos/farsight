@@ -10,7 +10,7 @@
   "dependencies": {
     "@farsight/core": "*",
     "@modelcontextprotocol/sdk": "^1.32.0",
-    "zod": "^3.24.0",
+    "zod": "^4.6.6",
     "@farsight/parsers": "*",
     "@farsight/work": "*",
     "@farsight/work-fixture": "*",
