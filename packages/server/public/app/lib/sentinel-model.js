@@ -110,13 +110,33 @@ export function durationWords(ms) {
   if (ms == null || !Number.isFinite(ms) || ms < 0) return '';
   if (ms < 1000) return ms + ' ms';
   const s = ms / 1000;
-  if (s < 10) return s.toFixed(1) + ' s';
-  if (s < 60) return Math.round(s) + ' s';
-  const m = Math.floor(s / 60),
-    rs = Math.round(s - m * 60);
+  if (s < 9.95) return s.toFixed(1) + ' s';
+  // whole seconds first, so 119.9 s reads 2 m 00 s and never 1 m 60 s
+  const total = Math.round(s);
+  if (total < 60) return total + ' s';
+  const m = Math.floor(total / 60),
+    rs = total - m * 60;
   if (m < 60) return m + ' m ' + String(rs).padStart(2, '0') + ' s';
-  const hh = Math.floor(m / 60);
-  return hh + ' h ' + String(m - hh * 60).padStart(2, '0') + ' m';
+  const mins = Math.round(total / 60),
+    hh = Math.floor(mins / 60);
+  return hh + ' h ' + String(mins - hh * 60).padStart(2, '0') + ' m';
+}
+
+/**
+ * A size in bytes in the words a reader reads (`412 bytes`, `5.4 KiB`, `2 GiB`); the exact count stays in the tip.
+ * @param {number|null} n
+ */
+export function bytesWords(n) {
+  if (n == null || !Number.isFinite(n) || n < 0) return '';
+  if (n < 1024) return n + (n === 1 ? ' byte' : ' bytes');
+  const units = ['KiB', 'MiB', 'GiB', 'TiB'];
+  let v = n / 1024,
+    i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return (v < 10 && Math.round(v * 10) % 10 ? v.toFixed(1) : String(Math.round(v))) + ' ' + units[i];
 }
 
 /**

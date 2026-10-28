@@ -20,6 +20,7 @@ import {
   sentinelPlace,
   sentinelHash,
   durationWords,
+  bytesWords,
   costWords,
   statusClass,
   statusKey,
@@ -256,6 +257,8 @@ const chip = (cls, words, tip) =>
 const word = (key) => esc(t(key));
 const keyChip = (cls, key, extra = '') => chip(cls, word(key) + extra, defAttrs(key));
 const cnt = (c, opts) => countedHtml(c, API, opts);
+/** A size: the reader's words (`5.4 KiB`), the exact count and its scope in the tip; outside business only. */
+const bytesHtml = (c) => (c && !biz() ? cnt(c, { words: bytesWords(c.n) }) : '');
 const fill = (key, vars) => Object.entries(vars).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), t(key));
 function whenWords(iso) {
   const d = new Date(iso);
@@ -648,7 +651,7 @@ function invocationKv(inv, absent) {
   if (!inv) return kv('sentinel.viewer.field.ran', word(absent || 'sentinel.viewer.absent.notRecorded'));
   const limits = inv.limits
     ? [
-        cnt(inv.limits.memory),
+        bytesHtml(inv.limits.memory),
         measureHtml(inv.limits.cpus),
         cnt(inv.limits.processes),
         durationHtml(inv.limits.timeout),
@@ -786,15 +789,18 @@ function wordsHtml(part) {
   );
 }
 
+/** ` · ` and the part, or nothing when the part prints nothing in the register on screen. */
+const andThen = (html) => (html ? ' · ' + html : '');
+
 function turnHtml(turn) {
   const sent = turn.sent
-    ? word(turn.sent.key) + (turn.sent.files ? ' · ' + cnt(turn.sent.files) : '') + placeWords(turn.sent)
+    ? word(turn.sent.key) + andThen(cnt(turn.sent.files)) + placeWords(turn.sent)
     : word('sentinel.viewer.absent.notRecorded');
   const reply = turn.reply
     ? word(turn.reply.key) +
       placeWords(turn.reply) +
       (turn.reply.verdict ? ' · ' + esc(turn.reply.verdict) : '') +
-      (turn.reply.claims ? ' · ' + cnt(turn.reply.claims) : '')
+      andThen(cnt(turn.reply.claims))
     : word('sentinel.viewer.absent.notRecorded');
   const tok = (c) => (c && !biz() ? cnt(c) : '');
   return (
@@ -896,6 +902,8 @@ function taskLabel(st) {
   const r = st.reviewed;
   if (r && r.kind === 'rule')
     return biz() ? word('sentinel.viewer.reviewed.rule') : mono(r.rule + (r.path ? ' · ' + r.path : ''));
+  // a general review reads a set of files: its count, never just the first file's name
+  if (r && r.kind === 'files') return cnt(r.files);
   return st.label && !biz() ? mono(st.label) : cnt(st.counts.files);
 }
 
@@ -906,7 +914,8 @@ function taskLabel(st) {
 function unitDetailHtml(open) {
   const outs = open.outputs
     .map((o) => {
-      const head = word(o.key) + (o.size && !biz() ? ' · ' + cnt(o.size) : '') + (!biz() ? ' · ' + mono(o.schema) : '');
+      const head =
+        word(o.key) + (o.size && !biz() ? ' · ' + bytesHtml(o.size) : '') + (!biz() ? ' · ' + mono(o.schema) : '');
       if (o.text === null || biz())
         return '<div class="snt-out">' + head + (o.withheld ? ' · ' + keyChip('warn', o.withheld) : '') + '</div>';
       return (

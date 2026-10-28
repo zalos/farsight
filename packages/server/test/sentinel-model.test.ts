@@ -101,6 +101,13 @@ test('durations and costs read as the mocks do, and an unobserved price is never
   assert.equal(m.durationWords(4100), '4.1 s');
   assert.equal(m.durationWords(48000), '48 s');
   assert.equal(m.durationWords(130000), '2 m 10 s');
+  assert.equal(m.durationWords(119999), '2 m 00 s', 'never 1 m 60 s');
+  assert.equal(m.durationWords(9980), '10 s');
+  assert.equal(m.bytesWords(412), '412 bytes');
+  assert.equal(m.bytesWords(1), '1 byte');
+  assert.equal(m.bytesWords(5549), '5.4 KiB');
+  assert.equal(m.bytesWords(2147483648), '2 GiB');
+  assert.equal(m.bytesWords(null), '');
   assert.equal(m.durationWords(3_900_000), '1 h 05 m');
   assert.equal(m.durationWords(null), '');
   assert.deepEqual(m.costWords({ basis: 'recorded', amount: '0.09', currency: 'USD' }), {
