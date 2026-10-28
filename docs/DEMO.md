@@ -2,13 +2,15 @@
 
 A numbered runbook for showing Farsight and Sentinel on a machine that has never had either: build the two packages
 from this repository, install them into one folder, open the viewer on an example application, scan it, and let a
-GitHub Copilot model review part of it. Every command below was run end to end, in this order, on a clean npm prefix;
-the output quoted is what that run printed.
+GitHub Copilot model review part of it. Every command below was run end to end, in this order, on a clean npm prefix.
+In the command blocks, lines that start with `#   ` are what the command printed, with `…` where a path or a digest
+was shortened; a comment on a command's own line is a note (its time, its exit code).
 
 > **Verified** end to end on `main` `e4f49098` and again on `69842407` (2026-10-28), each from a fresh clone into a
 > clean npm prefix, macOS on Apple silicon, Node 24.21.0, Copilot CLI 1.0.105, no Docker; steps 2 and 4c again on
-> `3f82c972` (the viewer's SCANS · PIPELINE · STAGE ladder, #227); steps 2 and 4a, and 4b up to the model
-> confirmation, again on `4fd4e251` (the `scan` command, #237). This file is re-run and updated as later changes land.
+> `3f82c972` (the viewer's SCANS · PIPELINE · STAGE ladder, #227); steps 2 and 4a, 4b up to the model confirmation,
+> and mistakes 1, 2, 3a and 3b again on `4fd4e251` (the `scan` command, #237). This file is re-run and updated as later
+> changes land.
 
 | step | what you do | time |
 |---|---|---|
@@ -16,7 +18,7 @@ the output quoted is what that run printed.
 | 2 | clone, build, pack, install both packages into one folder | about 70 s with a warm pnpm store; a few minutes on a new machine |
 | 3 | ingest the example, open the viewer | under 1 min |
 | 4 | Sentinel: initialise, adopt, a first scan, then the Copilot review | 2 to 3 min (the review itself about 40 s) |
-| 5 | if something refuses: the four likely mistakes | — |
+| 5 | if something refuses: the likely mistakes | — |
 
 ## 1. Prerequisites
 
@@ -89,9 +91,10 @@ from `~/farsight-demo` so that its history (`.farsight/farsight.db`) stays out o
 
 ## 4. Sentinel
 
-Open a second terminal (Node 24 first on PATH, the prefix's `bin` too) and work in the example's folder:
+Open a second terminal and work in the example's folder:
 
 ```sh
+nvm use 24
 export PATH="$HOME/farsight-demo/prefix/bin:$PATH"
 cd ~/farsight-demo/app
 ```
@@ -106,8 +109,14 @@ farsight-sentinel init                                              # 0.2 s
 #   next: review both files, then run scan: it shows what it would adopt (the settings and pipeline, as settings
 #   adopt --confirm), the rule packs this profile uses that it would promote (rules promote
 #   builtin:foundation-preview --confirm) and what it would run; scan --confirm does all of it as their owner
-farsight-sentinel settings adopt --confirm                          # settings sha256:… · pipeline sha256:… · prepared
-farsight-sentinel rules promote builtin:foundation-preview --confirm  # pack sentinel-foundation-preview 0.1.0 · … · prepared
+farsight-sentinel settings adopt --confirm                          # 0.3 s
+#   settings sha256:…
+#   pipeline sha256:…
+#     preview: a rule the pipeline selects is not promoted yet (sentinel.preview.sql-string-concat is not in the owner's promoted rule lock)
+#   prepared
+farsight-sentinel rules promote builtin:foundation-preview --confirm  # 0.4 s
+#   pack sentinel-foundation-preview 0.1.0 · candidate sha256:… · replaces lock sha256:… · now lock sha256:…
+#   prepared
 farsight-sentinel scan                                              # 0.2 s; exit 4
 #   1. capture (builtin) · runs in-process · local-artifacts
 #   2. parse (builtin) · runs child · local-artifacts
@@ -180,12 +189,15 @@ EOF
 - **The terms** are what you, the owner, record about the vendor's retention and training terms; `unknown` is honest
   when you have not reviewed them.
 - **The grants**: the `run.start` grant gains the three effects a hosted model needs, and `paid.admit` lets you confirm
-  a model call to this provider. Without them the review is refused (mistake 3).
+  a model call to this provider. Without either, the run is refused before anything runs (mistakes 3a and 3b).
 
 Then:
 
 ```sh
-farsight-sentinel settings adopt --confirm                          # prepared
+farsight-sentinel settings adopt --confirm
+#   settings sha256:…
+#   pipeline sha256:…
+#   prepared
 farsight-sentinel plan
 #   plan run-<id2> · sha256:… · pinned checks and model review · effects: local-artifacts, paid-inference,
 #   source-disclosure, network · Foundation preview: …
@@ -205,7 +217,7 @@ to confirm as the owner: farsight-sentinel run run-<id2> --confirm --confirm-mod
 waiting for the owner to confirm: the background service needs the owner's confirmation for this: add --confirm
 ```
 
-(the last line still says *add --confirm*; the line above it is the one to type). The full report ends with **How each stage ran**, one
+(the last line still says *add --confirm*; the line above it is the one to type). The full report includes **How each stage ran**, one
 line per stage; the review's line carries the model, the turns, the tokens and the cost (the numbers vary from run
 to run):
 
@@ -228,8 +240,13 @@ the viewer's exact origin. Wait for the service's *serving …* line before star
 while the service is still opening exits with *the command could not finish (sentinel.service.operationUnavailable)*.
 
 ```sh
+# third terminal
+nvm use 24 && export PATH="$HOME/farsight-demo/prefix/bin:$PATH" && cd ~/farsight-demo/app
 farsight-sentinel serve --idle-ms 600000
 #   serving …/farsight-demo/app; stops after 600000 ms with nothing to do
+
+# fourth terminal, once the line above has appeared
+nvm use 24 && export PATH="$HOME/farsight-demo/prefix/bin:$PATH" && cd ~/farsight-demo/app
 farsight-sentinel owner-ui --workspace . --farsight-origin http://127.0.0.1:4581
 #   Launch the owner companion for this workspace, then reconnect.      (it keeps running)
 ```
@@ -257,7 +274,8 @@ Stop everything with Ctrl-C in each terminal (the service also stops by itself a
 
 - **No Docker** (this runbook): `init` with the default `static` profile, plus the Copilot provider above. A review
   stage you add to `pipeline.json` by hand is checked at `plan` but not yet planned; the review runs from the
-  settings' `reviewModels` binding. A `review` profile for this case is coming with P-4b.
+  settings' `reviewModels` binding. A `review` profile for this case is **pending (P-4b)**; this runbook does not use
+  it yet.
 - **With Docker**: the `agentic` profile adds the pinned Gitleaks and Semgrep scanners; it needs those images already
   installed, `farsight-sentinel assets adopt-tool secrets-gitleaks --confirm` and `… pattern-semgrep --confirm`, and a
   current Gitleaks publication before a hosted review may run. As written today it also names a Claude `triage` stage
@@ -265,14 +283,15 @@ Stop everything with Ctrl-C in each terminal (the service also stops by itself a
   package ships; until P-4b drops them, remove the `triage` stage and the `prompt`/`skills` lines from `pipeline.json`.
   This path has not been dry-run here yet.
 
-## 5. If something refuses: the four likely mistakes
+## 5. If something refuses: the likely mistakes
 
 | mistake | what you see | exit | what to do |
 |---|---|---|---|
 | **1. Copilot is not logged in** | exactly the success lines of step 4b: `run … · completed · preview findings: 0` and *required checks did not complete: foundation preview complete: this is not required coverage*. Only `report <id> --full` differs: the review line reads `model luna · 1 turns · tokens unknown · cost unobserved · subscription`, and `report <id> --instructions --json` names `sentinel.review.frontier.modelError` | 2 | `copilot login`, then `plan` and `run … --confirm --confirm-models` again |
 | **2. Settings not adopted** (or `init` never ran) | `plan`: *configuration or infrastructure failure: this workspace's settings are not adopted* (exit 3). `scan` lists the adoption it would do (exit 4); before `init`, `scan` says *configuration or infrastructure failure: the Sentinel settings file could not be read* (exit 3) | 3 or 4 | `farsight-sentinel init` if needed, then `settings adopt --confirm` and `rules promote builtin:foundation-preview --confirm` (or `scan --confirm`, which does both) |
-| **3. No model grant** (the `paid.admit` grant or the run.start effects missing) | the 30 preview checks run, then `run … · completed · preview findings: 0` and *configuration or infrastructure failure: a planned check failed to execute*; `report <id> --full` has no review line, and `--instructions --json` says `sentinel.review.integrity`, which is misleading | 3 | add both grant edits from step 4b, `settings adopt --confirm`, `plan`, `run` again |
-| **4. Node 22 on PATH** | *SQLite {found} has not been qualified for the Sentinel store on {host} (qualified there: {qualified}) (SQLite 3.47.2 has not been qualified for the Sentinel store on darwin-arm64 (qualified there: 3.53.3, 3.53.4))* | 3 | `nvm use 24` in that shell; npm installs the package under Node 22 without complaint, but it only runs under Node 24 |
+| **3a. The run.start grant lacks the model effects** (`scope.effects` names `local-artifacts` only) | `run … --confirm --confirm-models`: *configuration or infrastructure failure: no trusted grant allows this action*, in under a second; nothing runs | 3 | set `grants[0].scope.effects` as in step 4b, `settings adopt --confirm`, `plan`, `run` again |
+| **3b. No `paid.admit` grant for the provider** | the same line, *configuration or infrastructure failure: no trusted grant allows this action*, in under a second; nothing runs, and `report run-<id> --full` answers *the run has no completed analysis to report* | 3 | append the `paid.admit` grant as in step 4b, `settings adopt --confirm`, `plan`, `run` again |
+| **4. Node 22 on PATH** | *SQLite {found} has not been qualified for the Sentinel store on {host} (qualified there: {qualified}) (SQLite 3.51.3 has not been qualified for the Sentinel store on darwin-arm64 (qualified there: 3.53.3, 3.53.4))*; the SQLite version is the one the Node 22 release bundles (3.47.2 on 22.14.0, 3.51.3 on 22.22.3) | 3 | `nvm use 24` in that shell; npm installs the package under Node 22 without complaint, but it only runs under Node 24 |
 
 A changed `pipeline.json` or `settings.json` is refused until adopted again (*the pipeline changed since it was
 adopted*). While `farsight-sentinel serve` runs (step 4c), `plan`, `scan`, `status`, `report` and `report --full` go
