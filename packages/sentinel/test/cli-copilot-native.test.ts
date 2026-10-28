@@ -272,7 +272,7 @@ test('the 1.0.103 record is kept beside the 1.0.105 re-qualification and its nat
   assert.deepEqual([...CLAUDE_RUNNER.modes], ['brokered']);
   assert.equal(agentRunner('copilot-cli'), COPILOT_RUNNER);
   assert.throws(
-    () => agentRunner('hosted-api'),
+    () => agentRunner('unregistered-runner'),
     (e: any) => e.code === 'sentinel.provider.invalidProfile',
   );
 });

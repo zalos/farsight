@@ -1,15 +1,19 @@
-// AgentRunner: one interface over the CLIs an `agent` stage can run on (Copilot CLI, Claude Code).
+// AgentRunner: one interface over what an `agent` stage can run on — Copilot CLI, Claude Code, and the HTTP model
+// APIs (Ollama, an OpenAI-compatible endpoint) behind their own flag.
 //
 // A runner qualifies its installed code (digest-pinned bytes, never a login or a model call) and runs one stage. Two
-// modes: `brokered`, where Sentinel runs the loop, one admitted CLI turn at a time through the model broker and the
-// review session (`session.ts`, `providers/broker.ts`); and `native`, where the CLI runs its own loop over a scratch
-// tree holding only the stage's declared inputs. Both modes record the same provenance shape, so a report and the
-// viewer draw them alike. The stage input and the provenance use the pipeline contract's agent field names
-// (`AgentStageDefinition`, `AgentProvenance`); they are local types until that contract is imported here.
+// modes: `brokered`, where Sentinel runs the loop, one admitted turn at a time through the model broker; and
+// `native`, where a CLI runs its own loop over a scratch tree holding only the stage's declared inputs. Brokered is
+// pure delegation over the review session: `run()` calls `runSession` with the caller, checkpoints and reader its
+// caller built, so the admitted path (dispatch → runner → session → providerCaller → broker → registry → the CLI
+// wrapper → the sandboxed runner) is unchanged byte for byte. Both modes record the same provenance shape. The stage
+// input and provenance use the pipeline contract's agent field names.
 import type { Digest } from '../contracts/index.js';
 import type { AgentMode } from '../contracts/pipeline.js';
 import { canonicalDigest } from '../policy/digest.js';
 import { fail } from './providers/errors.js';
+import { providerKind } from './providers/registry.js';
+import { runSession, type RunSessionOptions, type SessionResult, type SessionSpec } from './session.js';
 import {
   COPILOT_AGENT_PROFILE,
   copilotProfileById,
@@ -25,8 +29,8 @@ import type { ProviderBinding } from './providers/profile.js';
 import { reviewFail } from './errors.js';
 import { NATIVE_REVIEW_INSTRUCTIONS, nativeOutputSchema, nativeTask, parseFinalAnswer } from './native.js';
 
-/** The CLI runners an agent stage can name here; `hosted-api` stays behind its flag and has no runner yet. */
-export type AgentRunnerId = 'copilot-cli' | 'claude-cli';
+/** The runners an agent stage can name (the pipeline contract's ids). */
+export type AgentRunnerId = 'copilot-cli' | 'claude-cli' | 'hosted-api';
 export type { AgentMode };
 
 /** The agent stage a runner receives (the `agent` kind of the pipeline's `StageDefinition`, same field names). */
@@ -89,7 +93,13 @@ export interface AgentQualification {
   readonly credentialPath?: CopilotCredentialPath;
 }
 
-export interface AgentRunResult {
+/** A brokered run's result is the review session's own record, observations and private artifacts. */
+export interface BrokeredRunResult {
+  readonly mode: 'brokered';
+  readonly session: SessionResult;
+}
+export interface NativeRunResult {
+  readonly mode: 'native';
   /** The validated output, under the stage's declared output name. */
   readonly output: Readonly<{ name: string; schema: string; value: unknown }>;
   /** The CLI's JSONL event stream: every tool call and read, as printed. */
@@ -103,9 +113,15 @@ export interface AgentRunResult {
   readonly task: string;
   readonly provenance: AgentRunProvenance;
 }
+export type AgentRunResult = BrokeredRunResult | NativeRunResult;
 
+/** What a brokered run needs: the session its caller prepared over an admitted envelope. */
+export interface BrokeredRunContext {
+  readonly spec: SessionSpec;
+  readonly options: RunSessionOptions;
+}
 /** What a native run needs from its caller: an admitted envelope, the current binding and a stable operation id. */
-export interface AgentRunContext {
+export interface NativeRunContext {
   readonly broker: ModelBroker;
   readonly envelope: ModelEnvelope;
   /** The current genuine binding; compared with the envelope's on dispatch. */
@@ -114,6 +130,10 @@ export interface AgentRunContext {
   readonly signal?: AbortSignal;
   /** Promoted instruction bytes for this stage; absent means the bundled native review instructions. */
   readonly instructions?: Uint8Array;
+}
+export interface AgentRunContext {
+  readonly brokered?: BrokeredRunContext;
+  readonly native?: NativeRunContext;
 }
 
 export interface AgentRunner {
@@ -131,20 +151,12 @@ export interface AgentRunner {
 
 const timingOf = (t?: { deadlineAt: number; signal?: AbortSignal }) => t ?? { deadlineAt: Date.now() + 5000 };
 
-/** The refusal shared by every mode a runner does not run itself. */
-function unsupported(stage: AgentStageInput, runner: AgentRunner): never {
-  if (stage.runner !== runner.id) fail('sentinel.provider.invalidProfile', 'the stage names another runner');
-  if (stage.mode === 'brokered')
-    fail('sentinel.provider.invalidProfile', 'a brokered stage runs as a review session through the model broker');
-  return fail('sentinel.provider.capabilityUntested', 'no qualified native profile for this runner');
-}
-
 /** Copilot native mode: the stage's budget, inputs and output schema in; a validated output and provenance out. */
 async function runCopilotNative(
   stage: AgentStageInput,
   inputs: readonly AgentInputFile[],
-  context: AgentRunContext,
-): Promise<AgentRunResult> {
+  context: NativeRunContext,
+): Promise<NativeRunResult> {
   if (stage.runner !== 'copilot-cli') fail('sentinel.provider.invalidProfile', 'the stage names another runner');
   const turns = stage.budget?.turns,
     tokens = stage.budget?.tokens,
@@ -224,6 +236,7 @@ async function runCopilotNative(
     where: 'sandboxed-cli' as const,
   });
   return Object.freeze({
+    mode: 'native' as const,
     output: Object.freeze({ name: named[0]!.name, schema: named[0]!.schema, value }),
     transcript: reply.result.events,
     share: reply.result.share,
@@ -232,6 +245,29 @@ async function runCopilotNative(
     instructions,
     task,
     provenance,
+  });
+}
+
+/** Brokered: exactly the review session today's dispatch ran. Native: the runner's own native run, if it has one. */
+async function delegate(
+  runner: AgentRunner,
+  stage: AgentStageInput,
+  inputs: readonly AgentInputFile[],
+  context: AgentRunContext,
+  native?: (stage: AgentStageInput, inputs: readonly AgentInputFile[], c: NativeRunContext) => Promise<NativeRunResult>,
+): Promise<AgentRunResult> {
+  if (stage.kind !== 'agent' || stage.runner !== runner.id)
+    fail('sentinel.provider.invalidProfile', 'the stage names another runner');
+  if (!runner.modes.includes(stage.mode) || (stage.mode === 'native' && !native))
+    return fail('sentinel.provider.capabilityUntested', 'no qualified native profile for this runner');
+  if (stage.mode === 'native') {
+    if (!context.native) return fail('sentinel.provider.invalidProfile', 'a native stage needs its admitted envelope');
+    return native!(stage, inputs, context.native);
+  }
+  if (!context.brokered) return fail('sentinel.provider.invalidProfile', 'a brokered stage needs its prepared session');
+  return Object.freeze({
+    mode: 'brokered' as const,
+    session: await runSession(context.brokered.spec, context.brokered.options),
   });
 }
 
@@ -251,10 +287,8 @@ export const COPILOT_RUNNER: AgentRunner = Object.freeze({
       credentialPath: await probeCopilotCredentialPath(timingOf(timing)),
     });
   },
-  run(stage: AgentStageInput, inputs: readonly AgentInputFile[], context: AgentRunContext) {
-    if (stage.mode === 'native') return runCopilotNative(stage, inputs, context);
-    return Promise.resolve().then(() => unsupported(stage, COPILOT_RUNNER));
-  },
+  run: (stage: AgentStageInput, inputs: readonly AgentInputFile[], context: AgentRunContext) =>
+    delegate(COPILOT_RUNNER, stage, inputs, context, runCopilotNative),
 });
 
 export const CLAUDE_RUNNER: AgentRunner = Object.freeze({
@@ -271,18 +305,35 @@ export const CLAUDE_RUNNER: AgentRunner = Object.freeze({
       modes: CLAUDE_RUNNER.modes,
     });
   },
-  run(stage: AgentStageInput) {
-    return Promise.resolve().then(() => unsupported(stage, CLAUDE_RUNNER));
-  },
+  run: (stage: AgentStageInput, inputs: readonly AgentInputFile[], context: AgentRunContext) =>
+    delegate(CLAUDE_RUNNER, stage, inputs, context),
+});
+
+/**
+ * The HTTP model APIs (Ollama, OpenAI-compatible): brokered only, through the same session and broker. There is no
+ * installed code to qualify; an HTTP provider is qualified by the owner's capability probe of its exact origin.
+ */
+export const HTTP_API_RUNNER: AgentRunner = Object.freeze({
+  id: 'hosted-api' as const,
+  modes: Object.freeze(['brokered'] as const),
+  qualify: () =>
+    Promise.resolve().then(() =>
+      fail('sentinel.provider.capabilityUntested', 'an HTTP provider is qualified by its capability probe'),
+    ),
+  run: (stage: AgentStageInput, inputs: readonly AgentInputFile[], context: AgentRunContext) =>
+    delegate(HTTP_API_RUNNER, stage, inputs, context),
 });
 
 const RUNNERS = new Map<string, AgentRunner>([
   [COPILOT_RUNNER.id, COPILOT_RUNNER],
   [CLAUDE_RUNNER.id, CLAUDE_RUNNER],
+  [HTTP_API_RUNNER.id, HTTP_API_RUNNER],
 ]);
 /** Every runner, in a fixed order. */
-export const AGENT_RUNNERS: readonly AgentRunner[] = Object.freeze([COPILOT_RUNNER, CLAUDE_RUNNER]);
+export const AGENT_RUNNERS: readonly AgentRunner[] = Object.freeze([COPILOT_RUNNER, CLAUDE_RUNNER, HTTP_API_RUNNER]);
 /** The runner a stage names; an unknown runner is refused, never defaulted. */
 export function agentRunner(id: string): AgentRunner {
   return RUNNERS.get(id) ?? fail('sentinel.provider.invalidProfile', 'unknown agent runner');
 }
+/** The runner a provider kind's turns run on, from the registry; an unregistered kind is refused. */
+export const runnerForKind = (kind: string): AgentRunner => agentRunner(providerKind(kind).runner);

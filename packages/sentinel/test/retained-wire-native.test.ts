@@ -350,12 +350,12 @@ test(
       },
       { relativePath: 'src/routes.ts', bytes: Buffer.from('export const routes = [];\n') },
     ];
-    const result = await COPILOT_RUNNER.run(stage, inputs, {
-      broker,
-      envelope,
-      binding,
-      operationId: 'original-native-stage',
+    const ran = await COPILOT_RUNNER.run(stage, inputs, {
+      native: { broker, envelope, binding, operationId: 'original-native-stage' },
     });
+    assert.equal(ran.mode, 'native');
+    if (ran.mode !== 'native') return;
+    const result = ran;
     assert.equal(launches.length, 1, 'one sandboxed process for the whole native stage');
     assert.deepEqual(result.filesRead, ['src/auth.ts'], 'the transcript lists the files read');
     const totals = ledger.totals(envelope.id);
