@@ -268,15 +268,6 @@ export interface RetainedAttempt {
   sequence: Count;
 }
 
-/** A pre-attempt refusal of held work. Its detail is private source context, never a credential. */
-export interface WorkRefusal {
-  work: WorkRef;
-  code: string;
-  detail: Readonly<Record<string, unknown>>;
-  privacy: 'source';
-  sequence: number;
-}
-
 /** An ended attempt's recorded failure. */
 export interface AttemptError {
   /** A catalog key (sentinel.<area>.<word>). */

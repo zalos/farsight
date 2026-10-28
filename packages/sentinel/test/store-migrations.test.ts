@@ -297,8 +297,8 @@ test('migrations 1 to 7 keep their exact bytes and checksums', () => {
       [
         7,
         'attempt-retention',
-        '947815559eb822ab12be80d7e6a5e3d4335d222e7941736a011a3d07b67835a8',
-        'sha256:80d8b3bcd909619eb3b734dec1c46bc58601e850be7f93a45339ca7ca196c18b',
+        '17907212d6bb4147123173251a07e7fc533071ffcf761fa22e387eb82991b83b',
+        'sha256:f8ce550ca08e715365eb12bb040dd8129f29614a96c5bacc76c1a37894f04b6d',
       ],
     ],
   );

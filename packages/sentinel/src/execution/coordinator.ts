@@ -967,7 +967,7 @@ export class Coordinator {
           codeOf(error),
           detailOf(error),
         );
-      else this.#unstarted(ref, codeOf(error), detailOfUnstarted(error));
+      else this.#unstarted(ref, codeOf(error), detailOf(error));
     } finally {
       if (outcome) {
         try {
@@ -1175,7 +1175,7 @@ export class Coordinator {
     // Refused before any worker acted (an unknown adapter, a mismatched input, a pending create): not retried here.
     if (!this.#cancelRequested && !this.#pauseRequested) {
       this.#failedUnstarted.set(key(ref), code);
-      this.#holdRefusedModelUnit(ref, code, detail);
+      this.#holdRefusedModelUnit(ref, code);
     }
   }
 
@@ -1184,16 +1184,13 @@ export class Coordinator {
    * withheld or missing) is held in the ledger with that reason, so status and the report can say why it did not
    * run; the refusal is never only in this process's memory. Other units keep their unstarted handling.
    */
-  #holdRefusedModelUnit(ref: WorkRef, code: string, detail?: Readonly<Record<string, unknown>>): void {
+  #holdRefusedModelUnit(ref: WorkRef, code: string): void {
     try {
       const unit = this.#plan.unitOf(ref).unit;
       if (!(unit.review || unit.contract === SCRIPT_CONTRACT) || !CATALOG.test(code)) return;
       const row = this.#store.ledger.getWork(ref);
       if (row && ['pending', 'ready'].includes(row.state))
-        this.#store.ledger.setWorkState(ref, 'blocked', {
-          reasonCode: code.slice(0, 128),
-          refusalDetail: detail ? privateRefusalDetail(detail) : {},
-        });
+        this.#store.ledger.setWorkState(ref, 'blocked', { reasonCode: code.slice(0, 128) });
     } catch {
       /* the run ended or the store is gone: the in-memory refusal above still ends this unit here */
     }
@@ -1537,36 +1534,10 @@ const codeOf = (e: unknown): string =>
   'sentinel.execution.workerExited';
 const detailOf = (e: unknown): Readonly<Record<string, unknown>> | undefined =>
   isExecutionError(e) ? e.detail : undefined;
-const detailOfUnstarted = (e: unknown): Readonly<Record<string, unknown>> | undefined =>
-  e instanceof Error &&
-  e.name === 'ProviderError' &&
-  CATALOG.test(String((e as { code?: unknown }).code)) &&
-  ['none', 'possible'].includes(String((e as { spend?: unknown }).spend))
-    ? { reason: e.message }
-    : detailOf(e);
-
 /** The detail as recorded: safe structured context only, cut to a bound rather than refused. */
 function boundedDetail(detail: Readonly<Record<string, unknown>>): Record<string, unknown> {
   const plain = JSON.parse(JSON.stringify(detail)) as Record<string, unknown>;
   return canonicalJsonBytes(plain).byteLength <= MAX_DETAIL_BYTES
     ? plain
     : { truncated: true, keys: Object.keys(plain).slice(0, 16) };
-}
-
-/** Only safe structured context crosses the durable pre-attempt refusal boundary. */
-function privateRefusalDetail(detail: Readonly<Record<string, unknown>>): Record<string, unknown> {
-  const field = /credential|password|secret|token|api.?key|authorization|bearer/i;
-  const text = /bearer\s+\S+|\bsk-[A-Za-z0-9]{12,}\b|\bgh[pousr]_[A-Za-z0-9]{12,}\b/i;
-  const clean = (value: unknown): unknown => {
-    if (typeof value === 'string') return text.test(value) ? '[withheld]' : value;
-    if (Array.isArray(value)) return value.map(clean);
-    if (value && typeof value === 'object')
-      return Object.fromEntries(
-        Object.entries(value)
-          .filter(([key]) => !field.test(key))
-          .map(([key, v]) => [key, clean(v)]),
-      );
-    return value;
-  };
-  return clean(boundedDetail(detail)) as Record<string, unknown>;
 }

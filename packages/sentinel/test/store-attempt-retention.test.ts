@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { realpathSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { openStore } from '../dist/store/index.js';
 import { openLedger } from '../dist/store/ledger.js';
 import { LEDGER_MIGRATIONS } from '../dist/store/migrations.js';
@@ -122,48 +123,6 @@ test('a failed attempt keeps its private record and links after the source is go
       false,
     );
   }
-});
-
-test('a pre-attempt refusal keeps its catalog code and source-private detail after a store restart', async (t) => {
-  const dir = realpathSync.native(scratch(t));
-  let store = await openStore(join(dir, 'store'));
-  t.after(() => store.close());
-  store.ledger.createRun(runEnvelope(store.epoch) as never);
-  store.ledger.createWork(workEnvelope(store.epoch, { state: 'pending' }) as never);
-  const code = 'sentinel.provider.credentialUnavailable';
-  const detail = { reason: 'native login is missing', provider: 'native' };
-  assert.throws(
-    () =>
-      store.ledger.setWorkState(WORK, 'blocked', {
-        reasonCode: code,
-        refusalDetail: { credentialValue: 'synthetic credential' },
-      }),
-    (e: any) => e?.code === 'sentinel.store.invalidInput',
-  );
-  assert.equal(store.ledger.getWork(WORK)?.state, 'pending');
-  const held = store.ledger.setWorkState(WORK, 'blocked', { reasonCode: code, refusalDetail: detail });
-  assert.equal(store.ledger.countAttempts(WORK), 0, 'no attempt was fabricated');
-  store.close();
-  store = await openStore(join(dir, 'store'));
-  assert.equal(store.ledger.getWork(WORK)?.reason, code);
-  assert.deepEqual(store.ledger.refusalOf(WORK), {
-    work: WORK,
-    code,
-    detail,
-    privacy: 'source',
-    sequence: held.sequence,
-  });
-  assert.throws(
-    () =>
-      store.ledger.setWorkState(WORK, 'ready', {
-        refusalDetail: { reason: 'must remain blocked' },
-      }),
-    (e: any) => e?.code === 'sentinel.store.invalidInput',
-  );
-  store.ledger.setWorkState(WORK, 'ready');
-  assert.equal(store.ledger.refusalOf(WORK), undefined, 'an old refusal is not the current reason');
-  store.ledger.setWorkState(WORK, 'blocked', { reasonCode: code });
-  assert.equal(store.ledger.refusalOf(WORK), undefined, 'an unannotated new hold does not reuse the old detail');
 });
 
 test('retention rolls back with the attempt end and refuses mismatched staging', async (t) => {
@@ -334,4 +293,33 @@ test('a ledger below migration 7 refuses retention', async (t) => {
     code('sentinel.store.wrongState'),
   );
   assert.equal(ledger.retainedOf('missing'), undefined);
+});
+
+test('an end under schema 6 replays its idempotency result after migration 7', async (t) => {
+  const dir = scratch(t);
+  const owner = new FakeOwner(dir, 'epoch-1');
+  const baseline = process.env.SENTINEL_BASELINE_PACKAGE;
+  const oldLedger = baseline
+    ? (await import(pathToFileURL(join(baseline, 'dist/store/ledger.js')).href)).openLedger
+    : openLedger;
+  const first = await oldLedger(owner, baseline ? {} : { migrations: LEDGER_MIGRATIONS.slice(0, 6) });
+  assert.equal(first.migration.to, 6, 'the first end uses the schema 6 store');
+  seed(first, owner.epoch);
+  const input = {
+    work: WORK,
+    attemptId: 'attempt-retained',
+    state: 'failed' as const,
+    endedAt: END,
+    workState: 'failed' as const,
+    error,
+    idempotency: { clientId: 'schema-six-client', key: 'end-once' },
+  };
+  const ended = first.endAttempt(input);
+  first.close();
+  const upgraded = await openLedger(new FakeOwner(dir, 'epoch-2'));
+  t.after(() => upgraded.close());
+  assert.equal(upgraded.migration.from, 6);
+  assert.equal(upgraded.migration.to, 7);
+  assert.deepEqual(upgraded.endAttempt(input), ended);
+  assert.equal(upgraded.getAttempt(input.attemptId)?.state, 'failed');
 });
