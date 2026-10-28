@@ -12,6 +12,7 @@ import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.j
 import { bindProvider, type ProviderBinding, type ProviderSelection } from './profile.js';
 import { fail } from './errors.js';
 import { cliKind, providerKind } from './registry.js';
+import { featureEnabled } from '../../policy/features.js';
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 // Closed dispatch classification from the registry: an unregistered kind is refused, never treated as a CLI.
@@ -107,7 +108,7 @@ export function resolveReviewModel(
   if (
     provider?.disclosure === 'hosted' &&
     isApiKind(provider.kind) &&
-    policy.settings.hostedApiReviewEnabled !== true
+    !featureEnabled(policy.settings, 'review.hosted-api')
   ) {
     fail('sentinel.provider.featureDisabled', 'the adopted hosted review feature is off');
   }

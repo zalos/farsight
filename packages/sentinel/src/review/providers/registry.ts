@@ -8,6 +8,7 @@ import type { ProviderSettings, ModelSettings, SettingsEnvelope } from '../../co
 import type { ConsumedReceipt } from '../../policy/receipts.js';
 import type { BudgetLedger } from './budget.js';
 import { fail } from './errors.js';
+import { featureEnabled } from '../../policy/features.js';
 import type { ChatMessage, IdentityStrength, ParsedReply } from './kinds.js';
 import type { ModelLimits, ProviderBinding, ProviderKind } from './profile.js';
 import { OLLAMA_WIRE, OPENAI_COMPATIBLE_WIRE, type HttpKindWire } from './http-kinds.js';
@@ -68,7 +69,7 @@ export interface CliKind {
 export interface ProviderKindEntry {
   readonly kind: ProviderKind;
   readonly transport: 'http' | 'sandboxed-cli';
-  /** An HTTP API kind: a hosted one is refused unless the adopted `hostedApiReviewEnabled` is on. CLIs are not. */
+  /** An HTTP API kind: a hosted one is refused unless the `review.hosted-api` feature is on. CLIs are not. */
   readonly apiKind: boolean;
   /** Who reports the answering model's identity. */
   readonly identitySource: IdentityStrength;
@@ -125,7 +126,7 @@ const CLAUDE_CLI = Object.freeze<CliKind>({
   release: (authority: object) => finishNativeCall(authority as Parameters<typeof finishNativeCall>[0]),
   capsTurnDeadline: false,
   releaseGate: Object.freeze({
-    open: (settings: SettingsEnvelope) => settings.nativeClaudeReviewEnabled === true,
+    open: (settings: SettingsEnvelope) => featureEnabled(settings, 'runner.claude-cli'),
     code: 'sentinel.provider.nativeClaudeDisabled' as const,
     detail: 'native Claude execution is deferred until separately enabled and qualified',
   }),
