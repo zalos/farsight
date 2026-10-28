@@ -52,6 +52,7 @@ const code = (c: string) => (e: any) => e?.code === c;
 const D = (s: string) => 'sha256:' + createHash('sha256').update(s).digest('hex');
 const SELECTOR = { host: 'https://github.com', login: 'original-fixture-user' };
 const SKILL = fileURLToPath(new URL('./fixtures/stage-packs/skills/invoice-approvals', import.meta.url));
+const UPSTREAM = 'export const upstream = (t: string) => t;\n';
 const AUTH = 'export const check = (a: string, b: string) =>\n  a == b;\n';
 
 const limits = (contextTokens: number) => ({
@@ -123,7 +124,12 @@ const claudeProvider = () => ({
 });
 
 /** A workspace with the foundation preview and the general review on `provider`, adopted, and its store. */
-async function workspace(t: any, provider: any, extra: Record<string, unknown> = {}) {
+async function workspace(
+  t: any,
+  provider: any,
+  extra: Record<string, unknown> = {},
+  files: Readonly<Record<string, string>> = {},
+) {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-native-dispatch-')));
   t.after(() => {
     unlock(dir);
@@ -132,6 +138,10 @@ async function workspace(t: any, provider: any, extra: Record<string, unknown> =
   const path = join(dir, 'ws');
   mkdirSync(join(path, 'src'), { recursive: true });
   writeFileSync(join(path, 'src/auth.ts'), AUTH);
+  for (const [rel, text] of Object.entries(files)) {
+    mkdirSync(join(path, rel, '..'), { recursive: true });
+    writeFileSync(join(path, rel), text);
+  }
   const ws = workspaceOf(path, { ...process.env, XDG_STATE_HOME: join(dir, 'state') });
   initWorkspace({ workspace: path });
   const file = join(path, '.farsight/sentinel/settings.json');
@@ -272,8 +282,11 @@ function intercept(t: { after(fn: () => void): void }, launches: string[][]) {
     writeFileSync(share, '# Copilot CLI Session\n\noriginal share transcript\n', { mode: 0o600 });
     const ev = (type: string, data: Record<string, unknown>) => JSON.stringify({ type, data }) + '\n';
     const answer = JSON.stringify({
-      observations: [{ path: 'src/auth.ts', line: 2, kind: 'risk', claim: 'The token is compared with ==.' }],
-      inspected: ['src/auth.ts'],
+      observations: [
+        { path: 'src/auth.ts', line: 2, kind: 'risk', claim: 'The token is compared with ==.' },
+        { path: 'upstream/auth.ts', line: 1, kind: 'note', claim: 'A captured file that merely sits under upstream/.' },
+      ],
+      inspected: ['src/auth.ts', 'upstream/auth.ts'],
     });
     const child = new EventEmitter() as EventEmitter & Record<string, unknown>;
     const stdin = new PassThrough(),
@@ -288,6 +301,8 @@ function intercept(t: { after(fn: () => void): void }, launches: string[][]) {
           ev('model.call_start', { model: 'gpt-6-luna' }),
           ev('assistant.message', { model: 'gpt-6-luna', content: '', toolRequests: [{ name: 'view' }] }),
           ev('tool.execution_start', { toolName: 'view', arguments: { path: `${work}/src/auth.ts` } }),
+          ev('tool.execution_complete', { success: true }),
+          ev('tool.execution_start', { toolName: 'view', arguments: { path: `${work}/upstream/auth.ts` } }),
           ev('tool.execution_complete', { success: true }),
           ev('assistant.turn_end', { turnId: '0' }),
           ev('assistant.turn_start', { turnId: '1' }),
@@ -328,7 +343,8 @@ test(
       else process.env.COPILOT_HOME = prior;
     });
     const runtime = await qualifyInstalledNativeCopilot({ deadlineAt: Date.now() + 30000 }, COPILOT_AGENT_PROFILE);
-    const w = await workspace(t, copilotProvider(runtime.profileDigest));
+    // A captured source file literally under `upstream/`: an ordinary input, cited and read back by its position.
+    const w = await workspace(t, copilotProvider(runtime.profileDigest), {}, { 'upstream/auth.ts': UPSTREAM });
     const launches: string[][] = [];
     intercept(t, launches);
     const work = scratchUnder(w.store);
@@ -355,9 +371,10 @@ test(
       // The native record binds the admitted unit and what came back.
       assert.equal(record.specDigest, unit.review.specDigest);
       assert.equal(record.attemptId, pub.attemptId);
-      assert.deepEqual(record.filesRead, ['src/auth.ts']);
+      assert.deepEqual(record.filesRead, ['src/auth.ts', 'upstream/auth.ts']);
+      assert.deepEqual(record.upstream, [], 'no bound upstream artifact');
       assert.deepEqual(record.secondaryModels, []);
-      assert.deepEqual(record.output.value.inspected, ['src/auth.ts']);
+      assert.deepEqual(record.output.value.inspected, ['src/auth.ts', 'upstream/auth.ts']);
       assert.deepEqual(
         record.observations,
         observations.map((o: any) => o.id),
@@ -390,12 +407,22 @@ test(
       assert.equal(instructions.schema, NATIVE_INSTRUCTIONS_SCHEMA);
       assert.deepEqual(
         instructions.inputs.map((i: any) => i.relativePath),
-        ['src/auth.ts'],
+        ['src/auth.ts', 'upstream/auth.ts'],
+      );
+      assert.deepEqual(
+        provenance.read,
+        unit.inputs.map((i: any) => i.content),
+        'every allowed input, none dropped',
       );
       assert.match(instructions.task.text, /src\/auth\.ts/);
-      // One cited observation: a model claim on the captured bytes of line 2.
-      assert.equal(observations.length, 1);
-      const [obs] = observations;
+      // Two cited observations: one on line 2 of src/auth.ts, one on the captured upstream/auth.ts.
+      assert.equal(observations.length, 2);
+      const obs = observations.find((o: any) => o.evidence[0].relativePath === 'src/auth.ts')!;
+      const under = observations.find((o: any) => o.evidence[0].relativePath === 'upstream/auth.ts')!;
+      assert.equal(
+        Buffer.from(UPSTREAM).subarray(under.evidence[0].span.startByte, under.evidence[0].span.endByte).toString(),
+        UPSTREAM.trimEnd(),
+      );
       assert.equal(obs.producer.kind, 'model-review');
       assert.equal(obs.producer.model.returnedModel, 'gpt-6-luna');
       assert.equal(obs.originalSeverity, 'risk');
@@ -742,6 +769,55 @@ test(
         removeScratch(lease2);
       }
       assert.equal(opened, 1, 'the native pin reaches the envelope');
+    } finally {
+      removeScratch(work);
+    }
+  },
+);
+
+test(
+  'a native stage reads at most 1024 inputs: 1024 run with every one in the provenance, 1025 refuse before launch',
+  needsStore,
+  async (t) => {
+    const w = await workspace(t, copilotProvider(D('synthetic-copilot-profile')));
+    const work = scratchUnder(w.store);
+    try {
+      const planned = await plan(w, work);
+      const { plan: admitted } = await loadPlan(w.store, planned.disclosure.runId, planned.disclosure.revision);
+      const unit = admitted.units.find((u: any) => u.review)!;
+      const spec = await readReviewSpec(w.store, unit);
+      assert.equal(spec.scope.files.length, 1);
+      let runs = 0;
+      const stub = stubRunner(() => 'src/auth.ts');
+      const counted = { ...stub, run: (...args: any[]) => (runs++, (stub.run as any)(...args)) };
+      const run = (upstream: number) =>
+        runNativeReview({
+          store: w.store,
+          unit,
+          attemptId: 'attempt-original',
+          spec,
+          runtime: { broker: {}, ledger: { reservationOf: () => null } } as any,
+          envelope: { id: 'menv-original' } as any,
+          binding: () => ({ model: 'gpt-6-luna' }) as any,
+          runner: counted as any,
+          signal: new AbortController().signal,
+          deadlineAt: Date.now() + 60000,
+          stageInputs: [
+            {
+              decl: { stage: 'preview', output: 'findings' },
+              state: 'resolved',
+              artifacts: Array(upstream).fill(spec.scope.files[0]!.content),
+              producers: [],
+              secretFold: 'applied',
+            },
+          ] as any,
+        });
+      const at = await run(1023);
+      assert.equal(runs, 1, 'the 1024th input still runs');
+      const provenance = at.records.find((r: any) => r.schema === AGENT_PROVENANCE_SCHEMA)!.value as any;
+      assert.equal(provenance.read.length, 1024, 'every allowed input is named, none dropped');
+      await assert.rejects(run(1024), code('sentinel.review.invalidInput'));
+      assert.equal(runs, 1, 'the 1025th refuses before the runner, so no probe, reservation or launch');
     } finally {
       removeScratch(work);
     }

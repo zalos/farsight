@@ -30,6 +30,8 @@ export const NATIVE_INSTRUCTIONS_SCHEMA = 'sentinel-native-instructions/draft-1'
 const TRANSCRIPT_SCHEMA = 'application/x-ndjson';
 const SHARE_SCHEMA = 'text/markdown';
 const MAX_UPSTREAM_BYTES = 4 * 1024 * 1024;
+/** Inputs one native stage may read: its provenance names every one (`AgentProvenance.read`, at most 1024). */
+export const MAX_NATIVE_INPUTS = 1024;
 
 const sha = (b: Uint8Array) => ('sha256:' + createHash('sha256').update(b).digest('hex')) as ArtifactId;
 const stamp = (ms: number) => new Date(ms).toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z');
@@ -103,7 +105,18 @@ export async function runNativeReview(r: NativeReviewRun): Promise<PreparedOutpu
         return reviewFail('sentinel.review.invalidInput', 'the bound upstream artifacts exceed a native stage input');
       inputs.push({ relativePath: `upstream/${i}-${j}-${id.slice(7, 23)}.json`, bytes: Uint8Array.from(bytes) });
       upstream.push(id);
+      // Every allowed input is named in the provenance, so a larger set refuses here, before anything runs.
+      if (inputs.length > MAX_NATIVE_INPUTS)
+        return reviewFail(
+          'sentinel.review.invalidInput',
+          `a native stage reads at most ${MAX_NATIVE_INPUTS} inputs, so its provenance can name every one`,
+        );
     }
+  if (inputs.length > MAX_NATIVE_INPUTS)
+    return reviewFail(
+      'sentinel.review.invalidInput',
+      `a native stage reads at most ${MAX_NATIVE_INPUTS} inputs, so its provenance can name every one`,
+    );
   store.assertHeld();
   const remaining = Math.floor((r.deadlineAt - Date.now()) / 1000);
   if (remaining < 1) return reviewFail('sentinel.review.invalidInput', 'the unit deadline leaves no time to run');
@@ -249,8 +262,9 @@ function publishNative(
     startedAt: stamp(started),
     endedAt: stamp(ended),
     durationMs: Math.max(0, ended - started),
-    read: [...spec.scope.files.map((f) => f.content as ArtifactId), ...upstream].slice(0, 1024),
-    wrote: [...artifacts.map((a) => a.id), ...observationIds].slice(0, 1024),
+    // Every input the attempt was allowed to read, never truncated: the dispatch refuses a larger set before launch.
+    read: [...spec.scope.files.map((f) => f.content as ArtifactId), ...upstream],
+    wrote: [...artifacts.map((a) => a.id), ...observationIds],
     invocation: null,
     mode: 'native',
     runner: p.runner,
@@ -291,6 +305,8 @@ function publishNative(
     share: share?.id ?? null,
     instructions: instructions.id,
     packs: ran.packs,
+    // The bound upstream artifacts, in the order the run received them after the captured files.
+    upstream: [...upstream],
     observations: observations.map((o) => o.id),
     provenance: provenanceId,
   };
@@ -339,6 +355,8 @@ export interface NativeReviewRecord {
   readonly share: ArtifactId | null;
   readonly instructions: ArtifactId;
   readonly packs: readonly Readonly<{ ref: string; digest: string }>[];
+  /** The bound upstream artifacts the run read after its captured files, in order. */
+  readonly upstream: readonly ArtifactId[];
   readonly observations: readonly string[];
   readonly provenance: ArtifactId;
 }
@@ -422,15 +440,20 @@ export async function readPublishedNativeReview(
   if (outputs.get(record.instructions)?.schema !== NATIVE_INSTRUCTIONS_SCHEMA)
     return integrity('the native instruction record is not retained');
   const instructions = (await json(record.instructions)) as Record<string, any>;
+  // By sealed position, never by name: the captured files first, in scope order, then each bound upstream artifact.
   const scoped = spec.scope.files.map((f) => [f.relativePath, f.content]);
-  const sent = Array.isArray(instructions.inputs)
-    ? instructions.inputs.filter((i: any) => !String(i?.relativePath).startsWith('upstream/'))
-    : [];
+  const sent: any[] = Array.isArray(instructions.inputs) ? instructions.inputs : [];
+  const upstream = Array.isArray(record.upstream) ? record.upstream : [];
   if (
     canonicalDigest(instructions) !== record.instructions ||
     instructions.schema !== NATIVE_INSTRUCTIONS_SCHEMA ||
     instructions.stage !== record.stage ||
-    canonicalDigest(sent.map((i: any) => [i.relativePath, i.digest])) !== canonicalDigest(scoped) ||
+    sent.length !== scoped.length + upstream.length ||
+    sent.length > MAX_NATIVE_INPUTS ||
+    canonicalDigest(sent.slice(0, scoped.length).map((i: any) => [i.relativePath, i.digest])) !==
+      canonicalDigest(scoped) ||
+    canonicalDigest(sent.slice(scoped.length).map((i: any) => i.digest)) !== canonicalDigest(upstream) ||
+    canonicalDigest(provenance.read) !== canonicalDigest([...scoped.map(([, content]) => content), ...upstream]) ||
     typeof instructions.task?.text !== 'string' ||
     sha(Buffer.from(instructions.task.text)) !== instructions.task.digest
   )
