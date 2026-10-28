@@ -166,7 +166,7 @@
   },
   "packages/sentinel/src/review/runner.ts": {
     "boundaries/dependencies": {
-      "count": 4
+      "count": 7
     }
   },
   "packages/sentinel/src/review/session.ts": {
