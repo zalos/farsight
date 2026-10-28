@@ -7,6 +7,8 @@ import { fail } from './errors.js';
 import { nativeRuntimeHelper, type NativeClaudeRuntime, type NativeTiming } from './cli-native-profile.js';
 import type { NativeCopilotRuntime } from './cli-copilot-profile.js';
 import type { NativeReviewWire } from './cli-native-wire.js';
+import { Secret } from './credentials.js';
+import { nativeClaudeTokenFromSecret, type NativeClaudeToken } from './cli-native-auth.js';
 
 export type NativeLimits = NativeTiming & { maxResponseBytes: number; maxOutputTokens: number };
 
@@ -143,4 +145,61 @@ export function beginCopilotAgentCall(value: CopilotAgentAuthority): CopilotAgen
 }
 export function finishCopilotAgentCall(value: CopilotAgentAuthority) {
   copilotAgentCalls.delete(value);
+}
+
+/**
+ * The one-start capability for one native-mode Claude Code run. It holds the owner's long-lived token, read by the
+ * broker from the adopted keychain reference; `begin` turns it into a one-send descriptor handle and never returns
+ * the value itself.
+ */
+export interface ClaudeAgentAuthority {
+  readonly nativeCall: 'claude-agent-v1';
+}
+type ClaudeAgentContext = {
+  runtime: NativeClaudeRuntime;
+  request: import('./cli-native-agent.js').ClaudeAgentRequest;
+  limits: NativeTiming;
+};
+const claudeAgentCalls = new WeakMap<
+  object,
+  ClaudeAgentContext & {
+    credential: Secret;
+    ledger: BudgetLedger;
+    reservationId: string;
+    receipt: ConsumedReceipt;
+    started: boolean;
+  }
+>();
+export function issueClaudeAgentCall(
+  context: ClaudeAgentContext & {
+    credential: Secret | null;
+    ledger: BudgetLedger;
+    reservationId: string;
+    receipt: ConsumedReceipt;
+  },
+): ClaudeAgentAuthority {
+  if (!(context.credential instanceof Secret))
+    return fail('sentinel.provider.credentialUnavailable', 'a native Claude run needs the adopted token reference');
+  const authority = Object.freeze({ nativeCall: 'claude-agent-v1' as const });
+  claudeAgentCalls.set(authority, { ...context, credential: context.credential, started: false });
+  return authority;
+}
+export function beginClaudeAgentCall(value: ClaudeAgentAuthority): ClaudeAgentContext & { token: NativeClaudeToken } {
+  const held = claudeAgentCalls.get(value);
+  if (
+    !held ||
+    held.started ||
+    !isConsumedReceipt(held.receipt) ||
+    held.ledger.reservation(held.reservationId).state !== 'dispatched'
+  )
+    return fail('sentinel.provider.notAdmitted', 'Claude native run requires its exact unused dispatched authority');
+  if (held.limits.signal?.aborted) return fail('sentinel.provider.canceled', 'Claude native authority canceled');
+  if (Date.now() >= held.limits.deadlineAt)
+    return fail('sentinel.provider.timeout', 'Claude native authority deadline elapsed');
+  held.started = true;
+  const token = nativeClaudeTokenFromSecret(held.credential.reveal(), held.limits.deadlineAt, held.limits.signal);
+  return { runtime: held.runtime, request: held.request, limits: held.limits, token };
+}
+export function finishClaudeAgentCall(value: ClaudeAgentAuthority) {
+  claudeAgentCalls.delete(value);
 }

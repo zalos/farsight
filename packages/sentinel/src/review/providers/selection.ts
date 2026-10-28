@@ -70,9 +70,9 @@ function check(config: ReviewModelsSettings) {
 export function assertNativeClaudeReviewEnabled(policy: EffectivePolicy, providerId: string): void {
   if (!isEffectivePolicy(policy))
     fail('sentinel.provider.notTrusted', 'review execution needs the genuine current policy');
-  const kind = policy.settings.providers.find((p) => p.id === providerId)?.kind;
-  const gate = kind === undefined ? undefined : cliKind(kind)?.releaseGate;
-  if (gate && !gate.open(policy.settings)) fail(gate.code, gate.detail);
+  const provider = policy.settings.providers.find((p) => p.id === providerId);
+  const gate = provider === undefined ? undefined : cliKind(provider.kind)?.releaseGate;
+  if (gate && !gate.open(policy.settings, provider!)) fail(gate.code, gate.detail);
 }
 
 /** Deterministic execution never chooses or probes a model. Agentic resolution alone makes no call or receipt. */
