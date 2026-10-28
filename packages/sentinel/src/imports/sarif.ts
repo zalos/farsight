@@ -243,6 +243,11 @@ function optionalString(o: JsonObject, k: string, pointer: string, max = 1024): 
   return bounded(v, max);
 }
 
+/**
+ * Reads a SARIF 2.1.0 log into the collector: each result as a tool claim with unbound locations, and each inline or
+ * cached web request and response as an exchange. Refuses `sentinel.import.formatMismatch` for another version, and
+ * treats a property the specification does not define as malformed. Returns the log's schema claim and tools.
+ */
 export function readSarif(doc: Json, c: Collector): Json {
   if (!isObject(doc) || doc.version !== '2.1.0') throw new ImportRefusal('sentinel.import.formatMismatch', '/version');
   const log = object(c, doc, 'log', '');
@@ -333,16 +338,8 @@ export function readSarif(doc: Json, c: Collector): Json {
         c.exchange(
           p,
           indexed ? 'sarif-indexed' : 'sarif-inline',
-          req === undefined
-            ? null
-            : 'reason' in req
-              ? { ok: false, reason: req.reason }
-              : request(c, req.value, `${p}/webRequest`),
-          res === undefined
-            ? null
-            : 'reason' in res
-              ? { ok: false, reason: res.reason }
-              : response(c, res.value, `${p}/webResponse`),
+          requestOf(c, req, `${p}/webRequest`),
+          responseOf(c, res, `${p}/webResponse`),
         );
       }
     });
@@ -537,6 +534,18 @@ export function classifyUri(uri: string): { status: 'relative' | 'absolute' | 'r
 
 type Resolved = { value: JsonObject; indexed: boolean } | { reason: ImportUnknownCode };
 
+/** A result's request: none when it has no `webRequest`, its unknown reason when it did not resolve, else read. */
+function requestOf(c: Collector, req: Resolved | undefined, p: string): RequestInfo | null {
+  if (req === undefined) return null;
+  if ('reason' in req) return { ok: false, reason: req.reason };
+  return request(c, req.value, p);
+}
+/** A result's response: none when it has no `webResponse`, its unknown reason when it did not resolve, else read. */
+function responseOf(c: Collector, res: Resolved | undefined, p: string): ResponseInfo | null {
+  if (res === undefined) return null;
+  if ('reason' in res) return { ok: false, reason: res.reason };
+  return response(c, res.value, p);
+}
 /** An inline web object, or the same run's cached one it names by index; the inline properties must equal the cache's. */
 function resolve(
   c: Collector,
