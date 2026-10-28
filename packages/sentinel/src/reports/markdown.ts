@@ -52,6 +52,11 @@ function evidenceLines(doc: ReportEnvelope, e: ReportEvidence): string[] {
   return [`- Evidence ${md(e.id)} at ${where}:`, '', fence(e.excerpt), ''];
 }
 
+/**
+ * Renders a report document as Markdown with the document's counts, findings, comparison, decisions, inspections,
+ * structural paths, gaps and definitions. Untrusted text is escaped and excerpts are fenced so source cannot end the
+ * block.
+ */
 export function renderMarkdown(doc: ReportEnvelope): string {
   const lines: string[] = [];
   lines.push(`# Sentinel report ${md(doc.id)}`, '');

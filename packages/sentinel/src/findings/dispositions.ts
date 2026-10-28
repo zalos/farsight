@@ -33,11 +33,16 @@ import {
   type DecisionProposalInput,
 } from './decision-data.js';
 
+/** A proposed disposition with the basis and deployment assertions it was proposed against, as the journal holds it. */
 export interface DecisionProposal {
   readonly disposition: ProposedDisposition;
   readonly basis: DecisionBasis;
   readonly assertions: readonly DeploymentAssertion[];
 }
+/**
+ * An approved disposition with its basis and assertions. It has authority only as read from a journal
+ * (`approvedDecisionAuthority`).
+ */
 export interface ApprovedDecision {
   readonly disposition: ApprovedDisposition;
   readonly basis: DecisionBasis;
@@ -303,6 +308,13 @@ function append(s: Store, state: State, payload: Pick<Entry, 'proposal' | 'appro
   if (!createPrivateFileOnce(s.directory, nameOf(e.sequence), bytes, STORE))
     fail('sentinel.decision.staleState', 'the journal changed; review and confirm the new state');
 }
+/**
+ * The append-only private owner journal of one workspace's decisions. Each entry is a numbered create-once file chained
+ * to the digest of the one before; every read replays the whole chain and checks each approval against its spent owner
+ * receipt. A broken chain, entry or receipt refuses the read with `sentinel.decision.corruptHistory`, or with
+ * `sentinel.decision.invalidInput` for an entry whose fields do not fit. Transports only propose; approval is
+ * `approveForOwner`.
+ */
 export class DecisionJournal {
   /** Owner-private user state, outside captured checkouts. The workspace identity is a digest of its real identity. */
   constructor(directory: string, workspace: string, receipts: ReceiptBook) {
@@ -311,6 +323,12 @@ export class DecisionJournal {
     read(s);
     stores.set(this, s);
   }
+  /**
+   * Appends a proposal, never an approval. Refuses `sentinel.decision.invalidInput` for malformed input,
+   * `sentinel.decision.notFound` for a supersession that names no approved decision of this finding,
+   * `sentinel.decision.scopeExceeded` at the journal's bounds and `sentinel.decision.staleState` when another writer
+   * appended first.
+   */
   propose(
     given: DecisionProposalInput,
     basisInput: DecisionBasis,
@@ -361,9 +379,11 @@ export class DecisionJournal {
     append(s, state, { proposal: p, approval: null });
     return p;
   }
+  /** Every proposal in the journal, as read now. */
   proposals(): readonly DecisionProposal[] {
     return Object.freeze([...read(stores.get(this)!).proposals.values()]);
   }
+  /** Every approved decision, as one complete current read: the only collection `evaluateDecisions` accepts. */
   approved(): readonly ApprovedDecision[] {
     const store = stores.get(this)!,
       state = read(store),
@@ -371,6 +391,10 @@ export class DecisionJournal {
     histories.set(out, { store, head: state.head });
     return out;
   }
+  /**
+   * The receipt binding an owner must confirm to approve proposal `id` in the journal's current state:
+   * `sentinel.decision.notFound` for an unknown proposal, `sentinel.decision.staleState` for one already approved.
+   */
   approvalBinding(id: string, policyRevision: string): ReceiptBinding {
     const s = stores.get(this)!,
       state = read(s),
@@ -380,6 +404,7 @@ export class DecisionJournal {
     return binding(s, state, p, policyRevision);
   }
 }
+/** What an approval attempt did: denied, awaiting the owner's confirmation, or applied with the approved decision. */
 export type DecisionApprovalOutcome =
   | { readonly outcome: 'denied' | 'awaiting-confirmation'; readonly admission: AdmissionEnvelope }
   | { readonly outcome: 'applied'; readonly admission: AdmissionEnvelope; readonly decision: ApprovedDecision };
