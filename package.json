@@ -31,6 +31,7 @@
     "format:check": "prettier --check --cache .",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint/ --quiet .",
     "lint:report": "eslint --cache --cache-location node_modules/.cache/eslint/ .",
+    "lint:boundaries": "node scripts/lint-boundaries.mjs",
     "verify:format": "node scripts/ast-equivalence.mjs"
   },
   "devDependencies": {
