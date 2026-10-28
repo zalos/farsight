@@ -29,7 +29,7 @@ import { featureEnabled } from '../policy/features.js';
 import { canonicalDigest } from '../policy/digest.js';
 import { sentinelPlanWord } from '@farsight/core/dist/strings-sentinel-plan.js';
 import { PlanError } from '../planner/errors.js';
-import { requireBootstrap, stageModel } from '../planner/pipeline.js';
+import { BUILTIN_CHECK_OPERATIONS, requireBootstrap, stageModel, TOOL_ADAPTERS } from '../planner/pipeline.js';
 
 /** The pipeline file's place in a workspace, beside the settings. */
 export const PIPELINE_PATH = '.farsight/sentinel/pipeline.json';
@@ -59,6 +59,7 @@ export const PIPELINE_ERROR_CODES = [
   'sentinel.pipeline.notAdopted',
   'sentinel.pipeline.changed',
   'sentinel.pipeline.adoptionUnauthorized',
+  'sentinel.pipeline.inputUnproduced',
 ] as const;
 export type PipelineErrorCode = (typeof PIPELINE_ERROR_CODES)[number];
 
@@ -258,6 +259,8 @@ export interface PipelineEnvironment {
   readonly locked?: ReadonlyMap<RuleFamilyId, string>;
   /** The adapters whose pinned tool and offline assets the owner adopted. */
   readonly installed?: ReadonlySet<string>;
+  /** The rule families the policy selects: with `locked`, which check and walkthrough stages plan any work. */
+  readonly rules?: ReadonlySet<RuleFamilyId>;
 }
 
 const RUNNER_FEATURE: Readonly<Record<string, FeatureFlagName>> = {
@@ -395,11 +398,62 @@ export function checkPipeline(pipeline: PipelineDefinition, env: PipelineEnviron
     edges,
   );
   if (cycle) refuse('sentinel.pipeline.cycle', cycle[0]!, `the stages wait on each other: ${cycle.join(' → ')}`);
+  inputsProduced(pipeline, byId, env, refuse);
   // What the planner itself refuses, read from the planner (one source of truth, never a copy of its rules): a pipeline
   // the checks above pass but the planner cannot plan, such as one with no parse or inventory stage, or two stages that
   // both capture. Only when nothing above refused it, so one problem is never reported twice in two words.
   if (!problems.some((p) => p.class === 'refused')) plannerProblem(pipeline, refuse);
   return Object.freeze(problems);
+}
+
+/**
+ * Every stage output an agent or script stage reads is one some planned work can publish. A report plans no unit, so
+ * it never does. A check stage (a tool, a walkthrough, the framework controls) plans work only for a rule family the
+ * policy selects and the lock holds under its adapter; that is decided only when the environment knows both. A
+ * stage reading what nothing publishes would wait for nothing, so it is refused here, before anything runs.
+ */
+function inputsProduced(
+  pipeline: PipelineDefinition,
+  byId: ReadonlyMap<StageId, StageDefinition>,
+  env: PipelineEnvironment,
+  refuse: Refuse,
+): void {
+  const { locked, rules: selected } = env;
+  // Whether the producer can publish what a reader resolves: never, for a report (it plans no unit); for a check
+  // stage (a tool, a walkthrough or the framework controls) only when the lock holds a rule the policy selects under
+  // its adapter, which is decided only when the environment knows both (undefined: not decided here).
+  const publishes = (p: StageDefinition): boolean | undefined => {
+    if (p.kind === 'builtin' && p.operation === 'report') return false;
+    const adapter =
+      p.kind === 'tool'
+        ? (TOOL_ADAPTERS[p.adapter] ?? p.adapter)
+        : p.kind === 'builtin'
+          ? BUILTIN_CHECK_OPERATIONS[p.operation]
+          : undefined;
+    if (adapter === undefined) return true;
+    if (!locked || !selected) return undefined;
+    const families =
+      p.kind === 'tool' ? (typeof p.rules === 'string' ? (env.rulePack?.(p.rules) ?? []) : p.rules) : null;
+    return [...locked].some(
+      ([f, a]) => a === adapter && selected.has(f) && (families === null || families.includes(f)),
+    );
+  };
+  // Only a stage that reads another stage's output waits for it: an agent or a script stage (a report gathers what
+  // was published, and a check stage reads the bootstrap).
+  for (const s of pipeline.stages.filter((x) => x.kind === 'agent' || x.kind === 'script'))
+    for (const producerId of new Set(
+      (s.needs ?? []).flatMap((n) => (typeof n === 'string' ? (n.startsWith('farsight.') ? [] : [n]) : [n.stage])),
+    )) {
+      const producer = byId.get(producerId);
+      if (!producer || producer.id === s.id || publishes(producer) !== false) continue;
+      refuse(
+        'sentinel.pipeline.inputUnproduced',
+        s.id,
+        producer.kind === 'builtin' && producer.operation === 'report'
+          ? `stage ${s.id} reads ${producerId}, a report, which publishes nothing a stage can read`
+          : `stage ${s.id} reads ${producerId}, which plans no work under these settings: no rule it runs is both selected and promoted`,
+      );
+    }
 }
 
 /** The planner's own refusal of a declaration, as a problem: its stage model first, then its bootstrap rule. */

@@ -23,7 +23,6 @@ import { effectivePolicy } from '../policy/settings.js';
 import type { ReceiptBinding } from '../policy/receipts.js';
 import { admitOwnerUi } from '../policy/admission.js';
 import { canonicalDigest } from '../policy/digest.js';
-import { OwnerUiProcess } from './process.js';
 import { OwnerUiScans } from './scans.js';
 import { OwnerUiAuthority, activeOwnerUiProof, assertOwnerUiProof, type OwnerUiAction } from './authority.js';
 import { OwnerUiReceiptBook, issueOwnerUiReceipt } from './receipts.js';
@@ -71,7 +70,6 @@ interface Preview {
 }
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 export class OwnerUiOperations {
-  readonly #process: OwnerUiProcess;
   readonly #scans: OwnerUiScans;
   readonly #store: SentinelStore;
   readonly #ws: Workspace;
@@ -81,7 +79,6 @@ export class OwnerUiOperations {
   readonly #previews = new Map<string, Preview>();
   constructor(store: SentinelStore, ws: Workspace, handle: Handle, confirmation: Confirmation) {
     this.#store = store;
-    this.#process = new OwnerUiProcess(store);
     this.#scans = new OwnerUiScans(store, ws);
     this.#ws = ws;
     this.#authority = new OwnerUiAuthority(store, ws);
@@ -109,7 +106,6 @@ export class OwnerUiOperations {
       receiptSchema: 'sentinel-owneruireceipt/draft-1',
       settingsSave: false,
       modelAdmission: false,
-      processInspection: true,
     };
   }
   /** The admission the panel's own receipt is issued under: a deterministic operation, or a model envelope it opens. */
@@ -186,31 +182,25 @@ export class OwnerUiOperations {
               ? ['runId', 'action']
               : op === 'owner-ui.control'
                 ? ['previewId']
-                : op === 'owner-ui.runs'
+                : op === 'owner-ui.review-capabilities'
                   ? []
-                  : op === 'owner-ui.select'
-                    ? ['key']
-                    : op === 'owner-ui.process'
+                  : op === 'owner-ui.scans'
+                    ? []
+                    : op === 'owner-ui.scan'
                       ? ['runId']
-                      : op === 'owner-ui.review-capabilities'
-                        ? []
-                        : op === 'owner-ui.scans'
-                          ? []
-                          : op === 'owner-ui.scan'
-                            ? ['runId']
-                            : op === 'owner-ui.stage'
-                              ? ['runId', 'stage']
-                              : op === 'owner-ui.unit'
-                                ? ['runId', 'stage', 'unit']
-                                : op === 'owner-ui.scan-report'
-                                  ? ['runId', 'format']
-                                  : op === 'owner-ui.pipeline'
-                                    ? []
-                                    : op === 'owner-ui.pipeline-preview'
-                                      ? ['pipeline', 'expectDigest']
-                                      : op === 'owner-ui.pipeline-write'
-                                        ? ['previewId']
-                                        : null;
+                      : op === 'owner-ui.stage'
+                        ? ['runId', 'stage']
+                        : op === 'owner-ui.unit'
+                          ? ['runId', 'stage', 'unit']
+                          : op === 'owner-ui.scan-report'
+                            ? ['runId', 'format']
+                            : op === 'owner-ui.pipeline'
+                              ? []
+                              : op === 'owner-ui.pipeline-preview'
+                                ? ['pipeline', 'expectDigest']
+                                : op === 'owner-ui.pipeline-write'
+                                  ? ['previewId']
+                                  : null;
     if (!base) throw new OwnerUiError();
     const f = bodyFields(
       body,
@@ -219,15 +209,6 @@ export class OwnerUiOperations {
     );
     if (typeof f.proof !== 'string' || !/^([a-f0-9]{64})$/.test(f.proof) || !Number.isSafeInteger(f.revision))
       throw new OwnerUiError();
-    if (op === 'owner-ui.runs' || op === 'owner-ui.select' || op === 'owner-ui.process')
-      return this.#authority.with<unknown>(f.proof, f.revision, null, () => {
-        const proof = activeOwnerUiProof()!;
-        return op === 'owner-ui.runs'
-          ? this.#process.runs(proof)
-          : op === 'owner-ui.select'
-            ? this.#process.resolve(proof, f.key)
-            : this.#process.details(proof, runId(f.runId), context.signal);
-      });
     // The viewer's read model (transport/http/): read-only, under the same paired proof and view revision as every
     // other read here, and never an action; a report is rendered through the existing retained report delivery.
     if (op === 'owner-ui.scans' || op === 'owner-ui.scan' || op === 'owner-ui.stage' || op === 'owner-ui.unit')
@@ -559,7 +540,6 @@ export class OwnerUiOperations {
     return this.#authority.retaining;
   }
   close() {
-    this.#process.close();
     this.#scans.close();
     this.#authority.close();
     this.#previews.clear();

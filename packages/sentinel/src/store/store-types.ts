@@ -252,7 +252,20 @@ export interface EndAttemptInput {
   error?: AttemptError;
   /** The usage observed at the end; `canceled-after-spend` needs confirmed usage, here or from the start. */
   usage?: AttemptUsage;
+  /** Private artifacts staged for this failed or canceled attempt before any bytes were written. */
+  retained?: { stageId: StageId; receipts: ObjectReceipt[]; record: ArtifactId };
   idempotency?: IdempotencyRef;
+}
+
+/** Metadata only: the object store and its disclosure policy own the bytes. */
+export interface RetainedAttempt {
+  attemptId: Id;
+  work: WorkRef;
+  state: 'failed' | 'canceled' | 'canceled-after-spend';
+  code: string;
+  record: { id: ArtifactId; schema: string; privacy: ArtifactPrivacy };
+  linked: Array<{ id: ArtifactId; schema: string; privacy: ArtifactPrivacy }>;
+  sequence: Count;
 }
 
 /** An ended attempt's recorded failure. */
@@ -373,6 +386,7 @@ export type LedgerFailpoint =
   | 'backup:after-copy'
   | 'migrate:after-sql'
   | 'publish:before-commit'
+  | 'end:before-commit'
   | 'staging:before-commit'
   | 'snapshot:before-commit'
   | 'plan:before-commit';

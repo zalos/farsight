@@ -29,6 +29,7 @@ import {
   costWords,
   statusClass,
   statusKey,
+  reviewState,
   policyClass,
   kindChip,
   whereKey,
@@ -78,6 +79,11 @@ const SN = {
   /** the companion's origin, once `/api/sentinel/companion` named one and the page was served to frame it */
   origin: null,
   companion: false,
+  /**
+   * When this server has no companion under the origin the page was opened at, but has one for the same port under
+   * the other loopback spelling (`localhost` ⇄ `127.0.0.1`): that origin, to send the reader there. Never framed.
+   */
+  pairedWith: null,
   frame: null,
   /** the frame's identity, learned from its context request */
   child: null,
@@ -172,6 +178,17 @@ function message(event) {
     SN.pass = v.pass;
     SN.passWaiters.splice(0).forEach((w) => w(v.pass));
     if (first) void load();
+    return;
+  }
+  if (v.type === 'sentinel-owner-action-result') {
+    // A run action the owner confirmed in the panel: read the scans again, whatever the outcome.
+    if (
+      SN.child &&
+      v.frameNonce === SN.child.frameNonce &&
+      v.documentId === SN.child.documentId &&
+      v.hostInstance === S.VERSION?.session?.instance
+    )
+      void load();
     return;
   }
   if (v.type === 'sentinel-owner-pipeline-result') {
@@ -377,6 +394,17 @@ function statusChip(status, scan, extra = '') {
   return keyChip('snt-st ' + statusClass(status), statusKey(status, scan), extra);
 }
 
+/**
+ * A review's chip: its work's status, except that finished work whose review the record calls unfinished says
+ * *unfinished* with its turns (*3 of 3 turns*), and a stage whose reviews disagree says how many are unfinished.
+ */
+function outcomeChip(status, review, turns) {
+  const said = reviewState(status, review && review.outcome);
+  if (!said) return statusChip(status);
+  if (said === 'mixed') return chip('snt-st warn', cnt(review.unfinished));
+  return keyChip('snt-st warn', 'sentinel.viewer.review.unfinished') + (turns ? chip('plain', cnt(turns)) : '');
+}
+
 function chromeHtml() {
   const p = SN.place;
   const at = SENTINEL_STOPS.findIndex((s) => s.id === p.stop);
@@ -507,7 +535,8 @@ function crumbHtml() {
         esc(row.source.commit.slice(0, 8)) +
         (row.source.dirty ? '*' : '') +
         '</span>';
-    if (!biz())
+    // the planner's capability profile is an internal name (not the profile the pipeline came from): code only
+    if (lensNow() === 'code')
       h += dot + word('sentinel.viewer.crumb.profile') + ' <span class="mono">' + esc(row.pipeline.profile) + '</span>';
     h += dot + cnt(row.counts.stages);
   }
@@ -658,7 +687,7 @@ function cardHtml(stage, compact) {
     '</div>' +
     (prov.length ? '<div class="snt-prov">' + esc(prov.join(' · ')) + '</div>' : '') +
     '<div class="snt-stc">' +
-    statusChip(stage.status) +
+    outcomeChip(stage.status, stage.review, stage.counts.turns) +
     durationHtml(stage.duration) +
     counts +
     (stage.cost.basis !== 'none' ? costHtml(stage.cost) : '') +
@@ -799,6 +828,11 @@ function ioList(list) {
   );
 }
 
+/** A runner's words: the editor's, with the HTTP runner named for where its model server was (here or hosted). */
+function runnerKey(r) {
+  return choiceKey('agentRunner', r.id === 'hosted-api' && r.local ? 'ollama' : r.id);
+}
+
 function stageDockHtml(stage) {
   if (!stage) return '<p class="snt-sub">' + word('sentinel.viewer.dock.pick') + '</p>';
   const p = stage.provenance;
@@ -818,22 +852,32 @@ function stageDockHtml(stage) {
     .filter(Boolean)
     .map((c) => cnt(c))
     .join(' · ');
-  const runner = p.provider
-    ? esc(p.provider.id)
-    : impl.adapter
-      ? esc(impl.adapter + (impl.version ? ' ' + impl.version : ''))
-      : '';
+  // a model stage's runner is the command line or service it ran through and how (the report's words); the adopted
+  // provider entry it was bound to is an identifier, on its own row in the code registers
+  const runner = p.runner
+    ? word(runnerKey(p.runner)) +
+      ' · ' +
+      word(choiceKey('mode', p.runner.mode)) +
+      (code ? ' <span class="mono">' + esc(p.runner.id) + '</span>' : '')
+    : p.provider || stage.kind === 'agent'
+      ? word('sentinel.viewer.absent.notRecorded') // no admitted native spec and no request wire names it
+      : code && impl.adapter
+        ? esc(impl.adapter + (impl.version ? ' ' + impl.version : ''))
+        : '';
   return (
     '<h2>' +
     word(stage.name) +
     '</h2><div class="snt-row">' +
     keyChip(k.cls, k.key) +
-    statusChip(stage.status) +
+    outcomeChip(stage.status, stage.review, stage.counts.turns) +
     durationHtml(stage.duration) +
     chip('', esc(fill('sentinel.viewer.dock.position', { n: stage.number, m: SN.scan?.stages?.length ?? '' }))) +
     '</div><dl class="snt-kv">' +
     kv('sentinel.viewer.field.where', word(whereKey(p.where))) +
-    (code ? kv('sentinel.viewer.field.runner', runner) : '') +
+    kv('sentinel.viewer.field.runner', runner) +
+    (code && p.provider
+      ? kv('sentinel.viewer.field.provider', '<span class="mono">' + esc(p.provider.id) + '</span>')
+      : '') +
     kv('sentinel.viewer.field.model', model) +
     (code && p.prompt
       ? kv(
@@ -859,6 +903,7 @@ function stageDockHtml(stage) {
     kv('sentinel.viewer.field.cost', costHtml(stage.cost)) +
     kv('sentinel.viewer.field.tries', cnt(stage.counts.attempts)) +
     kv('sentinel.viewer.field.inputs', stage.counts.inputs.n ? cnt(stage.counts.inputs) : '') +
+    kv('sentinel.viewer.field.inspected', stage.counts.inspected ? cnt(stage.counts.inspected) : '') +
     (code ? invocationKv(p.invocation, p.invocationAbsent) : '') +
     (code
       ? kv(
@@ -962,6 +1007,21 @@ function turnHtml(turn) {
     reply +
     wordsHtml(turn.text?.reply) +
     '</div></div>'
+  );
+}
+
+/** What the open review's record concluded: its outcome with its turns, and the files the model read of those given. */
+function reviewHeadHtml(step) {
+  return (
+    '<div class="snt-row">' +
+    outcomeChip(step.status, step.review, step.counts.turns) +
+    (reviewState(step.status, step.review.outcome)
+      ? ''
+      : step.counts.turns
+        ? chip('plain', cnt(step.counts.turns))
+        : '') +
+    (step.counts.inspected ? chip('plain', cnt(step.counts.inspected)) : '') +
+    '</div>'
   );
 }
 
@@ -1105,7 +1165,7 @@ function stageStopHtml() {
             ' · ' +
             taskLabel(st) +
             '</td><td>' +
-            statusChip(st.status) +
+            outcomeChip(st.status, st.review, st.counts.turns) +
             '</td><td>' +
             durationHtml(st.duration) +
             '</td><td>' +
@@ -1133,7 +1193,7 @@ function stageStopHtml() {
         '</span><span class="snt-ent-c">' +
         (st.counts.modelObservations?.n
           ? chip('k-agent', cnt(st.counts.modelObservations, { words: String(st.counts.modelObservations.n) }))
-          : statusChip(st.status)) +
+          : outcomeChip(st.status, st.review, st.counts.turns)) +
         '</span></button>',
     )
     .join('');
@@ -1148,16 +1208,61 @@ function stageStopHtml() {
     (s.review === 'withheld'
       ? '<div class="snt-note warn">' + word('sentinel.viewer.absent.withheld') + '</div>'
       : '') +
-    (step ? (step.review ? reviewHtml(step.review) : attemptsHtml(step)) : '') +
+    (step ? (step.review ? reviewHeadHtml(step) + reviewHtml(step.review) : attemptsHtml(step)) : '') +
     (open ? unitDetailHtml(open) : '') +
     '</div></div>'
   );
+}
+
+/**
+ * The companion is paired with this server's other loopback spelling: the line says so and links there, at the
+ * same Sentinel address. The companion stays pinned to its exact origin (ADR 48); this page only points to it.
+ */
+function pairedWithHtml() {
+  const href = SN.pairedWith + '/' + (location.hash || '#/sentinel');
+  const [before, after = ''] = t('sentinel.viewer.pairedWith').split('{origin}');
+  return (
+    '<div class="snt-empty" data-paired-with="' +
+    esc(SN.pairedWith) +
+    '">' +
+    esc(before) +
+    '<a href="' +
+    esc(href) +
+    '"' +
+    defAttrs('sentinel.viewer.pairedWith') +
+    '>' +
+    esc(SN.pairedWith) +
+    '</a>' +
+    esc(after) +
+    '</div>'
+  );
+}
+
+/** The other loopback spelling of this page's own origin, when the companion lookup named exactly that; else null. */
+function pairedWithOf(value) {
+  if (typeof value?.pairedWith !== 'string') return null;
+  try {
+    const u = new URL(value.pairedWith),
+      here = new URL(location.href);
+    const loopback = ['127.0.0.1', 'localhost'];
+    return u.protocol === 'http:' &&
+      u.origin === value.pairedWith &&
+      loopback.includes(u.hostname) &&
+      loopback.includes(here.hostname) &&
+      u.hostname !== here.hostname &&
+      u.port === here.port
+      ? u.origin
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function bodyHtml() {
   const p = SN.place;
   const empty = (key, cls = '') => '<div class="snt-empty ' + cls + '">' + word(key) + '</div>';
   if (SN.error) return empty(SN.error, 'err');
+  if (!SN.companion && SN.pairedWith) return pairedWithHtml();
   if (!SN.companion) return empty('sentinel.ownerUi.launch');
   if (!SN.pass) return empty('sentinel.viewer.pairing');
   if (p.stop === 'scans') return SN.scans ? scansHtml() : empty('sentinel.viewer.loading');
@@ -1214,9 +1319,11 @@ function draw() {
   stagePane.innerHTML = dock.active !== 'stage' ? '' : p.edit ? editorDockHtml(p.pick) : stageDockHtml(stage);
   const owner = root.querySelector('[data-pane="owner"]');
   owner.hidden = dock.active !== 'owner';
-  owner.querySelector('.snt-sub').textContent = t(
-    SN.companion ? 'sentinel.viewer.dock.ownerNote' : 'sentinel.ownerUi.launch',
-  );
+  owner.querySelector('.snt-sub').textContent = SN.companion
+    ? t('sentinel.viewer.dock.ownerNote')
+    : SN.pairedWith
+      ? t('sentinel.viewer.pairedWith').split('{origin}').join(SN.pairedWith)
+      : t('sentinel.ownerUi.launch');
   if (SN.frame && SN.frame.parentNode !== owner) owner.appendChild(SN.frame);
   root.classList.toggle('busy', SN.loading);
 }
@@ -1263,6 +1370,44 @@ function edited(next) {
   draw();
 }
 
+/** A run's controls and the states that allow each (contracts/run.ts); the service still decides at its preview. */
+const RUN_CONTROLS = [
+  // a prepared scan is recorded as running before its checks start: Start is offered while nothing is running
+  {
+    action: 'start',
+    key: 'sentinel.viewer.tool.start',
+    when: (row, stages) =>
+      ['planned', 'paused'].includes(row.state) ||
+      (row.state === 'running' && !stages.some((st) => st.status === 'running')),
+  },
+  { action: 'pause', key: 'sentinel.viewer.tool.pause', when: (row) => row.state === 'running' },
+  {
+    action: 'cancel',
+    key: 'sentinel.viewer.tool.cancel',
+    when: (row) => ['planned', 'running', 'pausing', 'paused'].includes(row.state),
+  },
+];
+
+/**
+ * Start, pause or cancel one scan: the owner panel previews it and the owner confirms it there, with the panel's own
+ * control receipt — the same preview and confirmation the Scan flow uses. This page only asks.
+ */
+function control(action) {
+  if (readOnlyWhy() || !SN.frame?.contentWindow || !SN.child || !SN.place.scan) return;
+  SN.dockTab = 'owner';
+  draw();
+  SN.frame.contentWindow.postMessage(
+    {
+      type: 'sentinel-owner-control',
+      frameNonce: SN.child.frameNonce,
+      documentId: SN.child.documentId,
+      action,
+      runId: SN.place.scan,
+    },
+    SN.origin,
+  );
+}
+
 /** The tools beside Scan: edit the pipeline, or (in the edit mode) check and discard; a finished scan's reports. */
 function toolsHtml() {
   const p = SN.place;
@@ -1295,6 +1440,22 @@ function toolsHtml() {
     );
   }
   const row = p.stop !== 'scans' && SN.scan?.scan?.id === p.scan ? SN.scan.scan : null;
+  // A scan's run controls: what its state allows, previewed and confirmed in the owner panel, never here.
+  const offPair = readOnlyWhy() ? 'sys.readonly.control' : !SN.pass || !SN.child ? 'sentinel.viewer.pairing' : null;
+  const controls = !row
+    ? ''
+    : RUN_CONTROLS.filter((c) => c.when(row, SN.scan?.stages || []))
+        .map(
+          (c) =>
+            '<button type="button" class="map-tb" data-act="control" data-action="' +
+            c.action +
+            '"' +
+            (offPair ? off(offPair) : tipAttrs({ key: c.key, noFocus: true })) +
+            '>' +
+            word(c.key) +
+            '</button>',
+        )
+        .join('');
   const reports =
     row && !scanLive(row)
       ? ['html', 'md']
@@ -1311,6 +1472,7 @@ function toolsHtml() {
           .join('')
       : '';
   return (
+    controls +
     reports +
     '<button type="button" class="map-tb" data-act="edit"' +
     tipAttrs({ key: 'sentinel.viewer.edit.open', noFocus: true }) +
@@ -1827,6 +1989,7 @@ function onClick(e) {
     if (a === 'scan') scan(act);
     if (a === 'edit') go({ edit: true, pick: SN.place.pick || SN.place.stage });
     if (a === 'report') void download(act.dataset.format);
+    if (a === 'control' && ['start', 'pause', 'cancel'].includes(act.dataset.action)) control(act.dataset.action);
     if (a === 'echeck') void checkPipeline();
     if (a === 'ediscard') {
       withdrawCheck();
@@ -1980,6 +2143,7 @@ export async function mountSentinel(_route, el) {
     if (SN.el !== el) return;
     if (!value.available || typeof value.ownerOrigin !== 'string') {
       SN.companion = false;
+      SN.pairedWith = pairedWithOf(value);
       forgetScanAction();
       draw();
       return;
@@ -1995,6 +2159,7 @@ export async function mountSentinel(_route, el) {
       throw Error('origin');
     SN.origin = u.origin;
     SN.companion = true;
+    SN.pairedWith = null;
     // The owner panel: pairs itself, hands this page its read pass, and confirms what this page cannot.
     if (!SN.frame) {
       SN.frame = document.createElement('iframe');
@@ -2008,6 +2173,7 @@ export async function mountSentinel(_route, el) {
   } catch {
     if (SN.el !== el) return;
     SN.companion = false;
+    SN.pairedWith = null;
     forgetScanAction();
     SN.error = 'sentinel.ownerUi.hostUnavailable';
     draw();
@@ -2060,6 +2226,7 @@ export function unmountSentinel() {
   SN.passWaiters.splice(0);
   SN.origin = null;
   SN.companion = false;
+  SN.pairedWith = null;
   SN.el = null;
 }
 

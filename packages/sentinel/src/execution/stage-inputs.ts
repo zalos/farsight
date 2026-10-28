@@ -192,8 +192,26 @@ export function foldUpstreamBytes(
 }
 
 /**
+ * The bootstrap work behind an analysis revision: the work it reuses (the published inventory, in this run or the
+ * parent's) and every work it depends on, read from the ledger. A revision reuses only the bootstrap work it
+ * depends on directly, so the capture and the parse are found through the inventory, never assumed absent.
+ */
+function bootstrapWorkOf(store: SentinelStore, reused: readonly WorkRef[]): WorkRef[] {
+  const seen = new Map<string, WorkRef>();
+  const queue = [...reused];
+  while (queue.length && seen.size < 1024) {
+    const ref = queue.shift()!;
+    const key = `${ref.id}@${ref.revision}`;
+    if (seen.has(key)) continue;
+    seen.set(key, { id: ref.id, revision: ref.revision });
+    for (const d of store.ledger.getWork(ref)?.envelope.dependencies ?? []) queue.push(d);
+  }
+  return [...seen.values()];
+}
+
+/**
  * The typed inputs of one declared stage, resolved against what this run accepted. Each input names the producers
- * (the producing stage's units of this revision, or the reused bootstrap work for a bootstrap stage). `resolved`:
+ * (the producing stage's units of this revision, or the bootstrap work behind it for a bootstrap stage). `resolved`:
  * every producer published at least one artifact of the declared type, and those are the artifacts, each through
  * the read boundary (foldUpstreamBytes) and the run's canonical secret fold. `waiting`: a producer has not published
  * yet. `missing`: a producer ended without publishing, published nothing of that type, or the stage has no unit.
@@ -218,7 +236,7 @@ export async function resolveStageInputs(
     const schemas = new Set(named ? [named.schema] : outputSchemasOf(input.output));
     const producers: WorkRef[] =
       role.role === 'bootstrap'
-        ? admitted.plan.reused.filter(
+        ? bootstrapWorkOf(store, admitted.plan.reused).filter(
             (r) => store.ledger.getWork(r)?.envelope.stage.contract === `sentinel.stage.${role.operation}`,
           )
         : admitted.plan.units

@@ -239,6 +239,12 @@ separately reviewed prune. Retained provenance is protected: every artifact a re
 (its influence manifest, invocation, outputs and diagnostics) is a root, so completed work is never a candidate
 while its records are kept.
 
+Migration 7 keeps a failed or canceled attempt's private record and its linked artifacts in the append-only
+`attempt_retained` table. The attempt's final diagnostics names the record, and `endAttempt` accepts its verified
+staging set in the same transaction as the end. `retainedOf` exposes only artifact metadata; a separate owner reader
+must apply disclosure and withholding before reading bytes. These artifacts remain collection roots for as long as
+the attempt row exists. Prune is explicit and owner-run; this store version schedules no automatic deletion.
+
 Qualification is bounded, and anything outside it is refused rather than assumed. The runtime's release policy lists
 exact host and SQLite pairs (`qualificationFor`); a store opens only for a listed pair, in a canonical owner-only
 folder on a file system the path checks identify as local. Measured: darwin-arm64 with SQLite 3.53.3 (Node 24.19.0)
@@ -2119,6 +2125,8 @@ instruction text, hidden model authority or provider call is added. Endpoint/cod
 where the qualified inspection does not supply them. Full and baseline comparison reports are explicitly
 regenerated through the existing canonical renderer for the exact selected runs. Linked whole-run preparation
 keeps its existing owner receipt; per-work browser rerun, settings editing and custom stages remain unavailable.
+(Retired with the companion's own page by the owner-panel retirement below: the Sentinel view's ladder reads the
+scans, stages and reports instead.)
 
 ADR48 viewer read-model extension (2026-10-28): the owner companion also serves a read-only model of retained scans
 to Farsight's own Sentinel surface, cross-origin, without Farsight's server importing Sentinel (ADR 18). The paired
@@ -2232,3 +2240,25 @@ spent receipt and re-check at each start that a book's consume returned it; the 
 issue. *Why:* the owner reads the same composite in the panel that the command line prints, so one confirmation there
 is the same consent; the pipeline write is bound to exact bytes and leaves adoption, the act that changes what a scan
 runs, with the owner command line.
+
+ADR48 owner-panel retirement (lane L-UX U-4, 2026-10-28; owner decision 3). *What changed:* the companion's own page is
+retired in favour of the Sentinel view in Farsight (SCANS · PIPELINE · STAGE, read from the read model on the same
+loopback origin). The frame stays, as the owner panel and nothing else: it pairs, hands the view its read pass, and
+previews and confirms what the view asks of it — a scan (the fresh-capture preview, then its start), a run's start,
+pause or cancel by run id, and a pipeline write — with the same owner-UI receipts, session, authority and host
+fences as before. Gone with the page: its run status and controls, retained-run list and selection, baseline and
+comparison reports, the process graph and its expanded work pages, in-frame report reading, the configuration
+section, and the linked-rerun preview; the companion routes only it used (`/runs`, `/select`, `/baseline`,
+`/process`, `/inspect`, `/page`, `/report`, `/delivery`, `GET /capabilities`); the owner-ui operations `owner-ui.runs`,
+`owner-ui.select` and `owner-ui.process` with `owner-ui/process.ts` and `process-layout.ts`; and the page's catalog
+words. The capability document no longer sets the optional `processInspection`. `farsight-sentinel owner-ui` prints the
+Sentinel view's address in the paired Farsight, and started before the service has opened it waits for it (thirty
+seconds at most, saying so once) rather than exiting. `farsight serve` prints the origin it binds,
+`http://127.0.0.1:<port>`; when a page reaches the same server under the other loopback spelling (`localhost` ⇄
+`127.0.0.1`, same port), `/api/sentinel/companion` answers `{ available: false, pairedWith: <origin> }` and the view
+links there. *Unchanged:* the companion pairs with one exact Farsight origin, and is framed and answers reads under it
+only — the other spelling frames nothing and gets no read pass; the read routes the view reads (`/api/sentinel/...`),
+every receipt and admission rule above, and the owner CLI. *Why:* one
+place reads a scan (the view, in the three registers, with every number a `Counted`), and the owner-origin frame keeps
+only what must stay off the application host — the confirmations. A comparison report and a rerun from the browser
+are the owner CLI's until the view has its own (P-4b for the rerun).

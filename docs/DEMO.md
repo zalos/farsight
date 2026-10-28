@@ -9,8 +9,10 @@ was shortened; a comment on a command's own line is a note (its time, its exit c
 > **Verified** end to end on `main` `e4f49098` and again on `69842407` (2026-10-28), each from a fresh clone into a
 > clean npm prefix, macOS on Apple silicon, Node 24.21.0, Copilot CLI 1.0.105, no Docker; steps 2 and 4c again on
 > `3f82c972` (the viewer's SCANS · PIPELINE · STAGE ladder, #227); steps 2 and 4a, 4b up to the model confirmation,
-> and mistakes 1, 2, 3a and 3b again on `4fd4e251` (the `scan` command, #237). This file is re-run and updated as later
-> changes land.
+> and mistakes 1, 2, 3a and 3b again on `4fd4e251` (the `scan` command, #237); steps 2 to 4c with the `review` profile
+> on #249's head `430fef90`, and steps 2 to 4b end to end as written on `671c6861`, with one live Copilot review; the
+> serve line, the waiting companion and the dock's runner, provider and unfinished words in 4c again on main
+> `59213a6c` (#246). This file is re-run and updated as later changes land.
 
 | step | what you do | time |
 |---|---|---|
@@ -82,7 +84,7 @@ farsight ingest app --repo invoice-app --out graph.json
 
 cd app                             # serve from the folder Sentinel will scan: the Sentinel tab looks for its companion there
 farsight serve ../graph.json --port 4581
-#   farsight: http://localhost:4581  (graph: …/graph.json, workspace: …/farsight-demo/app)
+#   farsight: http://127.0.0.1:4581  (graph: …/graph.json, workspace: …/farsight-demo/app)
 ```
 
 Leave it running and open **http://127.0.0.1:4581** (use `127.0.0.1`, not `localhost`: the Sentinel companion in step 4
@@ -141,18 +143,40 @@ do them itself. **Exit 2 is the honest result**, not a failure: the static profi
 (SQL text assembled from strings) over every source file, and Sentinel never calls that required coverage. The report
 says so. There is no run id to copy: `report` reads the latest scan (`report run-<id>` reads any other).
 
-### 4b. The Copilot review
+### 4b. The Copilot review (the `review` profile)
+
+The `review` profile declares the review in `pipeline.json`: capture, parse, inventory, one Copilot general review
+of the captured source (`copilot-cli`, `gpt-6-luna`, three turns, 120 s) and the report, with no scanner, no
+container and no secrets scan first. `init` never writes over a file, so in the same folder remove the two files the static profile
+wrote; the scans already taken stay in the store.
+
+```sh
+rm .farsight/sentinel/settings.json .farsight/sentinel/pipeline.json
+farsight-sentinel init --profile review                             # 0.5 s
+#   created …/app/.farsight/sentinel/settings.json from the default settings
+#   created …/app/.farsight/sentinel/pipeline.json from the review profile
+#   profile: review — a Copilot review of the captured source, with no scanner and no container
+#   this profile reviews without a secrets scan: once you confirm the model, the captured source reaches it with no secret scan first
+#   needs: Node 24 or later; a qualified Copilot CLI, signed in, and its provider in the settings; no container runtime
+#   …
+farsight-sentinel scan                                              # exit 4
+#   first, as the owner: adopt the settings sha256:… and the pipeline sha256:…
+#   …
+#   4. review (agent) · runs sandboxed-cli · source-disclosure, network, paid-inference, local-artifacts
+#   …
+#     review: no adopted provider binds this model stage (no adopted copilot-cli provider binds the model gpt-6-luna)
+#   model for review: copilot-cli gpt-6-luna · not configured: no adopted provider binds the general review
+```
 
 `init` does not write a model provider: the provider's pins and terms are the owner's own statements. Add them to
-`.farsight/sentinel/settings.json`, adopt again and plan a new run. The block below is the package README's *Copilot
-CLI foreground review* section with the pins filled in for Copilot 1.0.105; the script edits the file in place:
+`.farsight/sentinel/settings.json` with the package README's *Copilot CLI foreground review* block, the pins filled in
+for Copilot 1.0.105; the script edits the file in place:
 
 ```sh
 node --input-type=module - <<'EOF'
 import { readFileSync, writeFileSync } from 'node:fs';
 const file = '.farsight/sentinel/settings.json';
 const s = JSON.parse(readFileSync(file, 'utf8'));
-s.hostedReviewSecretScan = 'when-selected'; // no Docker here, so no secrets scanner runs before the review
 s.providers = [{
   id: 'native-copilot', kind: 'copilot-cli', endpoint: 'https://api.githubcopilot.com',
   credential: null, disclosure: 'hosted',
@@ -176,7 +200,6 @@ s.providers = [{
   }],
 }];
 s.reviewModels = { stages: [{ stage: 'general', providerId: 'native-copilot', modelId: 'luna' }], segments: [] };
-s.grants[0].scope.effects = ['local-artifacts', 'paid-inference', 'source-disclosure', 'network'];
 s.grants.push({ actions: ['paid.admit'], principals: ['human'], confirm: 'always', scope: { providers: ['native-copilot'] } });
 writeFileSync(file, JSON.stringify(s, null, 2) + '\n');
 EOF
@@ -188,56 +211,71 @@ EOF
   1.0.103 profile only.
 - **The terms** are what you, the owner, record about the vendor's retention and training terms; `unknown` is honest
   when you have not reviewed them.
-- **The grants**: the `run.start` grant gains the three effects a hosted model needs, and `paid.admit` lets you confirm
-  a model call to this provider. Without either, the run is refused before anything runs (mistakes 3a and 3b).
+- **`reviewModels`** binds the general review to this provider and model; without it the preview still says *not
+  configured*.
+- **The grants.** The `run.start` grant `init` writes names no effects, so it already admits the three a hosted model
+  needs (`paid-inference`, `source-disclosure`, `network`). The `paid.admit` grant lets you confirm a model call to
+  this provider; without it the scan is refused before anything runs (mistake 3b).
 
-Then:
+Then preview and run it. `scan --confirm` is the one confirmation: it adopts the settings and the pipeline, promotes
+the rule pack the first time, plans and runs, model call included, because the preview named the model and its budget.
 
 ```sh
-farsight-sentinel settings adopt --confirm
-#   settings sha256:…
-#   pipeline sha256:…
-#   prepared
-farsight-sentinel plan
-#   plan run-<id2> · sha256:… · pinned checks and model review · effects: local-artifacts, paid-inference,
-#   source-disclosure, network · Foundation preview: …
-#   stages: the static profile's defaults (settings-configured reviews included); declare them in pipeline.json to pin them
-farsight-sentinel run run-<id2> --confirm --confirm-models          # about 40 s; exit 2 again
-#   run run-<id2> · completed · preview findings: 0
-#   required checks did not complete: foundation preview complete: this is not required coverage
-farsight-sentinel report run-<id2> --full
+farsight-sentinel scan                                              # 0.3 s; exit 4
+#   first, as the owner: adopt the settings sha256:… and the pipeline sha256:…
+#   then, as the owner: promote the foundation-preview rule pack
+#   1. capture (builtin) · runs in-process · local-artifacts
+#   2. parse (builtin) · runs child · local-artifacts
+#   3. inventory (builtin) · runs child · local-artifacts
+#   4. review (agent) · runs sandboxed-cli · source-disclosure, network, paid-inference, local-artifacts
+#   5. report (builtin) · runs in-process · local-artifacts
+#   stages: as declared in pipeline.json (sha256:…)
+#   model for review: copilot-cli gpt-6-luna through native-copilot · budget 816000 tokens
+#   to confirm as the owner, the model calls above included: farsight-sentinel scan --confirm
+#   waiting for the owner to confirm: the scan waits for the owner to confirm it; nothing was captured or run
+farsight-sentinel scan --confirm                                    # about 35 s; exit 2
+#   plan run-<id> · sha256:…
+#   run run-<id> · completed
+#   next: farsight-sentinel report
+#   the scan finished and its checks covered their scope; this build does not judge findings against the owner's
+#   policy, so the scan is not reported satisfied
+farsight-sentinel report --full                                     # 0.5 s
 ```
 
-`--confirm-models` is the separate confirmation for the model call. Without it `run` stops at exit 4 and shows what
-it would call and the exact line to type:
+`scan` takes no `--confirm-models` (*unknown option for this command: --confirm-models*, exit 3); that flag belongs to
+`run`. Exit 2 is again the honest result: the review makes no coverage and this build does not evaluate a finding
+policy. Use `report --full` for a review scan: the short `report` reads only a preview or scanner result and answers
+*the run did not complete* here.
+
+The full report includes **How each stage ran**, one line per stage; the review's line carries the model, the turns,
+the tokens and the cost (the numbers vary from run to run):
 
 ```text
-model for review-general: native-copilot luna through native-copilot · budget 816000 tokens
-to confirm as the owner: farsight-sentinel run run-<id2> --confirm --confirm-models
-waiting for the owner to confirm: the background service needs the owner's confirmation for this: add --confirm
-```
-
-(the last line still says *add --confirm*; the line above it is the one to type). The full report includes **How each stage ran**, one
-line per stage; the review's line carries the model, the turns, the tokens and the cost (the numbers vary from run
-to run):
-
-```text
-- review-general (work-review-…) · through a sandboxed command-line tool · copilot-cli brokered · model gpt-6-luna ·
-  3 turns · 12042 tokens in · 326 out (confirmed) · cost unobserved · subscription · 23849 ms
+- review (work-review-…) · through a sandboxed command-line tool · copilot-cli brokered · model gpt-6-luna · 3 turns ·
+  12392 tokens in · 431 out (confirmed) · cost unobserved · subscription · 28215 ms
 ```
 
 *Cost unobserved · subscription* is the honest word for a Copilot subscription: Sentinel records the tokens it was told
-and no money. What the model read and proposed is in the private record,
-`farsight-sentinel report run-<id2> --instructions --json` (it holds source excerpts: do not share it). On the example
-the brokered review uses its three turns to list the files and read two of them (`src/server/routes.ts` and
-`src/server/auth.ts`) and ends **unfinished**, with no observations; the report's *Model observations* section is then
-empty. Keep the demo to what that shows: which model ran where, under what grant, at what cost, with what it read.
+and no money. What the model read and proposed is in the private record, `farsight-sentinel report run-<id>
+--instructions --json` (it holds source excerpts: do not share it). On the example the brokered review uses its three
+turns to list the files and read one or two of them, and ends **unfinished**, with no observations; the report's *Model
+observations* section is then empty. Keep the demo to what that shows: which model ran where, under what grant, at what
+cost, with what it read.
+
+#### Before #249: the static profile with a settings-bound review
+
+On a build without the `review` profile, keep the static profile's files and add the same fragment with two more
+lines (`s.hostedReviewSecretScan = 'when-selected';` and
+`s.grants[0].scope.effects = ['local-artifacts', 'paid-inference', 'source-disclosure', 'network'];`), then
+`settings adopt --confirm`, `plan`, and `run run-<id> --confirm --confirm-models` (about 40 s, exit 2); the review's
+report line is named `review-general`. A later change refuses a review that only the settings declare
+(`reviewNotDeclared`), so this way stops working then.
 
 ### 4c. Sentinel in the viewer
 
 Start Sentinel's owner service in a third terminal and its companion in a fourth (same PATH, same folder), bound to
-the viewer's exact origin. Wait for the service's *serving …* line before starting the companion: a companion started
-while the service is still opening exits with *the command could not finish (sentinel.service.operationUnavailable)*.
+the viewer's exact origin. A companion started before the service has opened waits for it, up to 30 s, and says so:
+*Waiting up to 30 s for this workspace’s Sentinel service; start it with farsight-sentinel serve in this folder.*
 
 ```sh
 # third terminal
@@ -245,49 +283,49 @@ nvm use 24 && export PATH="$HOME/farsight-demo/prefix/bin:$PATH" && cd ~/farsigh
 farsight-sentinel serve --idle-ms 600000
 #   serving …/farsight-demo/app; stops after 600000 ms with nothing to do
 
-# fourth terminal, once the line above has appeared
+# fourth terminal
 nvm use 24 && export PATH="$HOME/farsight-demo/prefix/bin:$PATH" && cd ~/farsight-demo/app
-farsight-sentinel owner-ui --workspace . --farsight-origin http://127.0.0.1:4581
-#   Launch the owner companion for this workspace, then reconnect.      (it keeps running)
+farsight-sentinel owner-ui --workspace . --farsight-origin http://127.0.0.1:4581   # it keeps running
+#   Open Sentinel in Farsight: http://127.0.0.1:4581/#/sentinel
 ```
 
 Open **SENTINEL** in the viewer (or press *Reconnect* if it was already open). The tab pairs with the companion
 once per launch: keep to that one browser tab; a second tab or browser shows *This pairing link has already been used
 or is no longer available*, and the fix is to stop and relaunch `owner-ui`, then *Reconnect*.
 
-- **SCANS** lists the two runs, newest first: `#2 · 5 stages · 1 agentic · cost unobserved · 56 s` with
-  `0 FINDINGS`, `0 MODEL OBSERVATIONS`, `PREVIEW · NOT COVERAGE`, and `#1 · 4 stages · 0 agentic · no model cost`.
-- Click **#2** for **PIPELINE**: five cards top to bottom (capture, parse, inventory, the preview check, *Review the
-  code*), each with what it read and produced. The dock on the right shows the picked stage; for the review it reads
-  `RUNNER native-copilot`, `MODEL requested gpt-6-luna · reported gpt-6-luna`, `PROMPT sentinel.review.general · rev 1`,
-  `SKILLS none`, `TURNS 3 turns`, `TOKENS 12044 tokens in · 335 tokens out`, `COST cost unobserved`.
+- **SCANS** lists the scans, newest first: the review scan (`1 agentic · cost unobserved`) above the static one
+  (`0 agentic · no model cost`), each with its findings, model observations and policy chip.
+- Click the review scan for **PIPELINE**: the stages that did work, top to bottom (capture, parse, inventory, *Review
+  the code*; the report draws no card), each with what it read and produced.
+  The crumb reads `profile static-scanners` for this scan, which is wrong. The dock on the right shows the picked
+  stage; for the review it reads `RUNNER Copilot command line · Brokered` (with `copilot-cli` outside the business
+  register), `PROVIDER native-copilot`, `MODEL requested gpt-6-luna · reported gpt-6-luna`,
+  `PROMPT sentinel.review.general · rev 1`, `SKILLS none`, `TOKENS 12403 tokens in · 253 tokens out`,
+  `COST cost unobserved`, and the review's card says `UNFINISHED` with `3 of 3 turns`.
 - Press **OPEN THE STAGE** in the dock for **STAGE**: the review's instructions, then each turn (Sentinel's message and
   its tokens in, the model's request and its tokens out: *asked for the file list*, *asked to read lines
   src/server/auth.ts:1–40*), and what it left. The address is `#/sentinel/<run id>/sentinel.stage.review.general`.
-- The owner panel (the dock's second tab) is the companion page: capture, checks and retained inputs and outputs.
-- **SCAN** at the top right is greyed while the adopted settings name a model review: a run that calls a model starts
-  only from the command line (step 4b). *Rerun this stage* is greyed too on this build.
+- The toolbar also has **REPORT · HTML**, **REPORT · MARKDOWN** and **EDIT PIPELINE** (#245); editing a stage and
+  rerunning it from here is not part of this runbook. On `3f82c972` **SCAN** was greyed while the adopted settings
+  named a model review (a run that calls a model starts from the command line, step 4b); not re-checked since.
 
 Stop everything with Ctrl-C in each terminal (the service also stops by itself after the idle time).
 
 ### Profiles on other machines
 
-- **No Docker** (this runbook): `init` with the default `static` profile, plus the Copilot provider above. A review
-  stage you add to `pipeline.json` by hand is checked at `plan` but not yet planned; the review runs from the
-  settings' `reviewModels` binding. A `review` profile for this case is **pending (P-4b)**; this runbook does not use
-  it yet.
+- **No Docker** (this runbook): the `static` profile for a first scan, then `init --profile review` plus the Copilot
+  provider (step 4b; the profile comes with #249).
 - **With Docker**: the `agentic` profile adds the pinned Gitleaks and Semgrep scanners; it needs those images already
   installed, `farsight-sentinel assets adopt-tool secrets-gitleaks --confirm` and `… pattern-semgrep --confirm`, and a
-  current Gitleaks publication before a hosted review may run. As written today it also names a Claude `triage` stage
+  current Gitleaks publication before a hosted review may run. Before #249 it also named a Claude `triage` stage
   (refused on a Copilot-only machine with *a stage needs a feature that is off*) and five prompt and skill packs no
-  package ships; until P-4b drops them, remove the `triage` stage and the `prompt`/`skills` lines from `pipeline.json`.
-  This path has not been dry-run here yet.
+  package ships; #249 drops them. This path is described, not run: the Docker route is paused for this demo.
 
 ## 5. If something refuses: the likely mistakes
 
 | mistake | what you see | exit | what to do |
 |---|---|---|---|
-| **1. Copilot is not logged in** | exactly the success lines of step 4b: `run … · completed · preview findings: 0` and *required checks did not complete: foundation preview complete: this is not required coverage*. Only `report <id> --full` differs: the review line reads `model luna · 1 turns · tokens unknown · cost unobserved · subscription`, and `report <id> --instructions --json` names `sentinel.review.frontier.modelError` | 2 | `copilot login`, then `plan` and `run … --confirm --confirm-models` again |
+| **1. Copilot is not logged in** (observed with `run` before #249) | exactly the success lines of the run: `run … · completed · preview findings: 0` and *required checks did not complete: foundation preview complete: this is not required coverage*. Only `report <id> --full` differs: the review line reads `model luna · 1 turns · tokens unknown · cost unobserved · subscription`, and `report <id> --instructions --json` names `sentinel.review.frontier.modelError` | 2 | `copilot login`, then `plan` and `run … --confirm --confirm-models` again |
 | **2. Settings not adopted** (or `init` never ran) | `plan`: *configuration or infrastructure failure: this workspace's settings are not adopted* (exit 3). `scan` lists the adoption it would do (exit 4); before `init`, `scan` says *configuration or infrastructure failure: the Sentinel settings file could not be read* (exit 3) | 3 or 4 | `farsight-sentinel init` if needed, then `settings adopt --confirm` and `rules promote builtin:foundation-preview --confirm` (or `scan --confirm`, which does both) |
 | **3a. The run.start grant lacks the model effects** (`scope.effects` names `local-artifacts` only) | `run … --confirm --confirm-models`: *configuration or infrastructure failure: no trusted grant allows this action*, in under a second; nothing runs | 3 | set `grants[0].scope.effects` as in step 4b, `settings adopt --confirm`, `plan`, `run` again |
 | **3b. No `paid.admit` grant for the provider** | the same line, *configuration or infrastructure failure: no trusted grant allows this action*, in under a second; nothing runs, and `report run-<id> --full` answers *the run has no completed analysis to report* | 3 | append the `paid.admit` grant as in step 4b, `settings adopt --confirm`, `plan`, `run` again |

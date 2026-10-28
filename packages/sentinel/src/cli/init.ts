@@ -33,8 +33,8 @@ import { profilePipeline, PROFILES, PROFILE_PACKS } from '../app/pipeline-profil
 export { SETTINGS_PATH, DEFAULT_SETTINGS };
 
 /**
- * What init writes for a profile: PR 06's defaults plus two grants for the owner (a human, never an agent): capture,
- * run, pause and cancel that profile, and promote rule packs (an owner action, which still needs the owner's own
+ * What init writes for a profile: the policy's defaults plus two grants for the owner (a human, never an agent):
+ * capture, run, pause and cancel, and promote rule packs (an owner action, which still needs the owner's own
  * confirmation every time). No provider, no budget, no agent action; the file grants nothing until it is adopted.
  */
 export function initialSettings(profile: string) {
@@ -55,7 +55,12 @@ export function initialSettings(profile: string) {
           ? GITLEAKS_SUPPORTED_RULES.map((r) => r.familyId)
           : profile === 'agentic'
             ? [...GITLEAKS_SUPPORTED_RULES, ...PATTERN_SUPPORTED_RULES].map((r) => r.familyId)
-            : [PREVIEW_RULE],
+            : profile === 'review'
+              ? []
+              : [PREVIEW_RULE],
+    // The review profile has no secret scan, so a hosted review is admitted without one: the owner's choice, adopted
+    // with these settings (ADR 48). Every other profile keeps the default, a complete current secret scan first.
+    ...(profile === 'review' ? { hostedReviewSecretScan: 'when-selected' as const } : {}),
     grants: [
       {
         actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'],

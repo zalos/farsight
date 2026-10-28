@@ -1534,7 +1534,6 @@ const codeOf = (e: unknown): string =>
   'sentinel.execution.workerExited';
 const detailOf = (e: unknown): Readonly<Record<string, unknown>> | undefined =>
   isExecutionError(e) ? e.detail : undefined;
-
 /** The detail as recorded: safe structured context only, cut to a bound rather than refused. */
 function boundedDetail(detail: Readonly<Record<string, unknown>>): Record<string, unknown> {
   const plain = JSON.parse(JSON.stringify(detail)) as Record<string, unknown>;
