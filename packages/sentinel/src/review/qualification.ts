@@ -8,7 +8,7 @@
 export type QualificationControl = 'isolation' | 'zeroContact' | 'replay';
 
 export interface RunnerQualificationRecord {
-  readonly runner: 'copilot-cli' | 'claude-cli';
+  /** The pinned profile, which names its runner, version, mode and platform. */
   readonly profileId: string;
   readonly platform: 'darwin-arm64';
   /** Each control as last measured: the sandbox refusals, no contact outside the fixed proxy, recorded wires. */
@@ -24,7 +24,6 @@ const passed = Object.freeze({ isolation: 'passed', zeroContact: 'passed', repla
 /** Every record, in a fixed order. A profile id with no record here is unqualified. */
 export const RUNNER_QUALIFICATIONS: readonly RunnerQualificationRecord[] = Object.freeze([
   Object.freeze({
-    runner: 'copilot-cli' as const,
     profileId: 'copilot-1.0.103-darwin-arm64-seatbelt-v6',
     platform: 'darwin-arm64' as const,
     controls: passed,
@@ -36,7 +35,6 @@ export const RUNNER_QUALIFICATIONS: readonly RunnerQualificationRecord[] = Objec
     }),
   }),
   Object.freeze({
-    runner: 'copilot-cli' as const,
     profileId: 'copilot-1.0.105-darwin-arm64-native-v1',
     platform: 'darwin-arm64' as const,
     controls: passed,
@@ -48,7 +46,6 @@ export const RUNNER_QUALIFICATIONS: readonly RunnerQualificationRecord[] = Objec
     }),
   }),
   Object.freeze({
-    runner: 'claude-cli' as const,
     profileId: 'claude-code-2.1.282-darwin-arm64-native-v1',
     platform: 'darwin-arm64' as const,
     controls: passed,

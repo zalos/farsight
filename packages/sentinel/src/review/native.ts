@@ -133,7 +133,7 @@ export const COPILOT_TASK_LAYOUT: NativeTaskLayout = Object.freeze({
 });
 export const CLAUDE_TASK_LAYOUT: NativeTaskLayout = Object.freeze({
   instructions: 'Follow your system instructions.',
-  skillsDir: '.claude/skills',
+  skillsDir: '.claude/sentinel-stage/skills',
 });
 export function nativeTask(
   stageId: string,

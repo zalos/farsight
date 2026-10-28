@@ -27,9 +27,10 @@ export const CLAUDE_NATIVE_PROFILE = Object.freeze({
 });
 /**
  * The native agent mode on Claude Code 2.1.282: `claude -p` runs its own loop over a scratch tree holding only the
- * stage's inputs and promoted skills (`.claude/skills/`), with `Read` and `Glob` the only tools (`Grep` runs the
- * bundled ripgrep, which the deny-default profile refuses), `--restricted` confining file tools to the working
- * directories, no hooks, no MCP, never `--bare`. The login is the owner's long-lived token, read in-process from the
+ * stage's inputs and promoted skills (one session plugin under `.claude/sentinel-stage/`), with `Read` and `Glob`
+ * the only tools (`Grep` runs the bundled ripgrep, which the deny-default profile refuses) beside the output tool
+ * `--json-schema` adds, `--restricted` confining file tools to the working directories, no hooks, no MCP, never
+ * `--bare`. The login is the owner's long-lived token, read in-process from the
  * adopted `keychain:farsight/…` reference and handed to the CLI on an anonymous descriptor; the config, home and
  * temporary folders are private and the only writable ones.
  */
@@ -38,7 +39,9 @@ export const CLAUDE_AGENT_PROFILE = Object.freeze({
   id: 'claude-code-2.1.282-darwin-arm64-native-v1',
   mode: 'native' as const,
   tools: 'Read,Glob',
-  skills: 'scratch-claude-skills/1',
+  skills: 'scratch-session-plugin-skills/1',
+  env: 'owned-config-home-tmp-and-cli-tmp/1',
+  reads: 'base-and-system-icu/1',
   auth: 'owner-keychain-token-fd3/1',
   output: 'stream-json-and-result/1',
   writes: 'owned-config-home-tmp/1',
@@ -258,14 +261,16 @@ export const claudeRuntimeProfile = (runtime: object): ClaudeProfile | undefined
 
 /**
  * The native-v1 seatbelt profile: the brokered one's reads (system, the executable, the owned root holding the
- * scratch tree), writes only to the owned config, home and temporary folders, egress only to the owned proxy. No
- * HOME, no keychain: the login arrives on the anonymous descriptor.
+ * scratch tree) and the system ICU data, writes only to the owned config, home and temporary folders, egress only to
+ * the owned proxy. No HOME, no keychain: the login arrives on the anonymous descriptor.
  */
 export function claudeAgentSeatbeltPolicy(l: { executable: string; ownedRoot: string; proxyPort: number }): string {
   return seatbelt([
     ...seatbeltHead(l.executable),
     SEATBELT_PROCESS_INFO,
     seatbeltBaseReads(l.executable, l.ownedRoot),
+    // The system ICU data: without it the 2.1.282 runtime traps on its first Intl use (help, print mode).
+    '(allow file-read* (subpath "/usr/share/icu"))',
     `${SEATBELT_DIRECTORY_METADATA}(allow file-write* (subpath ${JSON.stringify(l.ownedRoot + '/config')}) (subpath ${JSON.stringify(l.ownedRoot + '/home')}) (subpath ${JSON.stringify(l.ownedRoot + '/tmp')}) (literal "/dev/null"))`,
     `${SEATBELT_TASK_PORT}(allow user-preference-read)`,
     `(allow mach-lookup ${SEATBELT_SYSTEM_SERVICES})`,
@@ -280,6 +285,8 @@ export function claudeAgentEnvironment(l: { ownedRoot: string; proxyPort: number
     HOME: `${l.ownedRoot}/home`,
     CLAUDE_CONFIG_DIR: `${l.ownedRoot}/config`,
     TMPDIR: `${l.ownedRoot}/tmp`,
+    // Its own temporary folder (settings, sockets) is `/tmp/claude-<uid>` unless this names another.
+    CLAUDE_CODE_TMPDIR: `${l.ownedRoot}/tmp`,
     TERM: 'dumb',
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     DISABLE_TELEMETRY: '1',

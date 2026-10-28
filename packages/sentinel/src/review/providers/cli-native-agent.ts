@@ -17,6 +17,7 @@ import {
   safeInputPath,
   verifyMaterialised,
   type CopilotAgentPartial,
+  type CopilotAgentRequest,
   type CopilotAgentResult,
 } from './cli-copilot-agent.js';
 
@@ -35,6 +36,16 @@ export const CLAUDE_DENIED_TOOLS = Object.freeze([
   'TodoWrite',
 ]);
 
+/**
+ * Where promoted skills live in the scratch tree: one session-only plugin (`--plugin-dir`) inside the working
+ * directory, so the CLI lists them and `Read` can open them. On 2.1.282 `--restricted` ignores project skills under
+ * `.claude/skills/` (measured), while a session plugin still loads; no input may sit under `.claude/`.
+ */
+export const CLAUDE_STAGE_PLUGIN = '.claude/sentinel-stage';
+/** The plugin manifest Sentinel writes beside the skills: fixed bytes, a name and nothing else the CLI would load. */
+export const CLAUDE_STAGE_PLUGIN_MANIFEST =
+  JSON.stringify({ name: 'sentinel-stage', version: '1.0.0', description: 'Promoted Sentinel stage skills' }) + '\n';
+
 /** The fixed native-mode argv after the executable. The task is piped on stdin; the token is on descriptor 3. */
 export function claudeAgentArguments(l: {
   systemPromptPath: string;
@@ -43,6 +54,8 @@ export function claudeAgentArguments(l: {
   maxTurns: number;
   maxUsd?: string;
   jsonSchema: string;
+  /** The stage plugin's folder, when the stage has promoted skills. */
+  pluginDir?: string;
 }): readonly string[] {
   return Object.freeze([
     '--print',
@@ -71,10 +84,9 @@ export function claudeAgentArguments(l: {
     '{"mcpServers":{}}',
     '--settings',
     '{"disableAllHooks":true}',
-    // Promoted skills load from the scratch tree's `.claude/skills/`; `--restricted` ignores every settings file, and
-    // no input may carry a name the CLI reads as its own instructions (`safeInputPath`).
-    '--setting-sources',
-    'project',
+    // `--restricted` ignores every settings file; promoted skills arrive as the one session plugin, and no input may
+    // carry a name the CLI reads as its own instructions or configuration (`safeInputPath`).
+    ...(l.pluginDir ? ['--plugin-dir', l.pluginDir] : []),
     '--no-session-persistence',
     '--max-turns',
     String(l.maxTurns),
@@ -114,10 +126,17 @@ export class ClaudeAgentError extends ProviderError {
 }
 
 /**
+ * The tool `--json-schema` adds: the model hands its final answer to it, and the CLI validates that answer against
+ * the schema before it ends the run (the 2.1.282 binary names it `StructuredOutput`). It reads and runs nothing.
+ */
+export const CLAUDE_OUTPUT_TOOL = 'StructuredOutput';
+
+/**
  * The stream-json transcript, decoded as it arrives: strict UTF-8, one JSON object per line, bounded. Each assistant
  * message (one model request) counts against the turn budget; any tool other than `Read {file_path, offset?,
- * limit?}` and `Glob {pattern, path?}`, or any path outside the scratch tree, stops the run at once. The `result`
- * event carries the answer (`structured_output` when the schema was enforced, else the text) and the usage.
+ * limit?}`, `Glob {pattern, path?}` and the output tool, or any path outside the scratch tree, stops the run at once.
+ * The `result` event carries the answer (`structured_output`, which the CLI validated against the schema) and the
+ * usage.
  */
 export class ClaudeAgentDecoder {
   #pending = Buffer.alloc(0);
@@ -175,6 +194,11 @@ export class ClaudeAgentDecoder {
       }
       for (const block of Array.isArray(message?.content) ? message!.content : []) {
         if (obj(block)?.type !== 'tool_use') continue;
+        if (block.name === CLAUDE_OUTPUT_TOOL) {
+          if (!obj(block.input)) this.#bad('disallowed-tool');
+          this.#tools.push(Object.freeze({ tool: CLAUDE_OUTPUT_TOOL, path: null }));
+          continue;
+        }
         this.#tools.push(Object.freeze({ tool: block.name, path: this.#toolPath(block.name, obj(block.input)) }));
       }
       return;
@@ -242,12 +266,24 @@ export class ClaudeAgentDecoder {
     if (!usage || fields.some((k) => !count(usage[k]))) return this.#bad('usage');
     if (!this.#model || !models || !Object.hasOwn(models, this.#model))
       return this.#bad('identity', 'sentinel.provider.identityMismatch');
-    let answer: string;
-    if (r.structured_output !== undefined) answer = JSON.stringify(r.structured_output);
-    else if (typeof r.result === 'string') answer = r.result;
-    else return this.#bad('result');
+    // The schema-checked answer only: a run that ended without one (text alone) did not answer in its schema.
+    if (obj(r.structured_output) === undefined) return this.#bad('result');
+    const answer = JSON.stringify(r.structured_output);
     if (!answer.trim() || answer.length > MAX_ANSWER) return this.#bad('result');
-    const input = usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens;
+    // Every model the run used counts against the stage, a small background model included: the larger of the
+    // main loop's usage and the per-model sum.
+    let input = usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens,
+      output = usage.output_tokens as number;
+    let modelIn = 0,
+      modelOut = 0;
+    for (const m of Object.values(models)) {
+      const u = obj(m);
+      const parts = ['inputTokens', 'cacheReadInputTokens', 'cacheCreationInputTokens', 'outputTokens'];
+      if (!u || parts.some((k) => u[k] !== undefined && !count(u[k]))) return this.#bad('usage');
+      modelIn += (u.inputTokens ?? 0) + (u.cacheReadInputTokens ?? 0) + (u.cacheCreationInputTokens ?? 0);
+      modelOut += u.outputTokens ?? 0;
+    }
+    if (modelIn + modelOut > input + output) [input, output] = [modelIn, modelOut];
     const filesRead = this.partial().filesRead;
     return Object.freeze({
       finalAnswer: answer,
@@ -255,7 +291,7 @@ export class ClaudeAgentDecoder {
       turns: count(r.num_turns) ? r.num_turns : this.#messages.size,
       tools: Object.freeze([...this.#tools]),
       filesRead,
-      usage: Object.freeze({ inputTokens: input, outputTokens: usage.output_tokens, requests: this.#messages.size }),
+      usage: Object.freeze({ inputTokens: input, outputTokens: output, requests: this.#messages.size }),
     });
   }
 }
@@ -289,7 +325,8 @@ export async function nativeClaudeAgentCall(authority: ClaudeAgentAuthority): Pr
       ...limits,
       maxUpstreamBytes: 4 * 1024 * 1024,
       maxDownstreamBytes: 4 * 1024 * 1024,
-      maxConnections: 8,
+      // The startup alone opens about a dozen in turn to the one authority (measured against a refusing listener).
+      maxConnections: 16,
     });
     setup = await nativeClaudeAgentSetup(runtime, proxy.port, limits);
     const current = setup,
@@ -303,20 +340,26 @@ export async function nativeClaudeAgentCall(authority: ClaudeAgentAuthority): Pr
       await mkdir(dirname(join(work, rel)), { recursive: true, mode: 0o700 });
       await writeFile(join(work, rel), sealed(f.bytes, request.digests.files[i]!), { flag: 'wx', mode: 0o400 });
     }
-    for (const skill of request.skills ?? []) {
+    const plugin = join(work, CLAUDE_STAGE_PLUGIN),
+      manifest = join(plugin, '.claude-plugin/plugin.json'),
+      skills = request.skills ?? [];
+    if (skills.length) {
+      await mkdir(dirname(manifest), { recursive: true, mode: 0o700 });
+      await writeFile(manifest, Buffer.from(CLAUDE_STAGE_PLUGIN_MANIFEST), { flag: 'wx', mode: 0o400 });
+    }
+    for (const skill of skills) {
       if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(skill.id))
         fail('sentinel.provider.invalidProfile', 'a skill id is a pack id');
       for (const f of skill.files) {
-        const target = join(work, '.claude/skills', skill.id, safeInputPath(f.path));
+        const target = join(plugin, 'skills', skill.id, safeInputPath(f.path));
         await mkdir(dirname(target), { recursive: true, mode: 0o700 });
         await writeFile(target, sealed(f.bytes, f.digest), { flag: 'wx', mode: 0o400 });
       }
     }
     await verifyMaterialised([
       { path: prompt, digest: request.digests.instructions },
-      ...(request.skills ?? []).flatMap((k) =>
-        k.files.map((f) => ({ path: join(work, '.claude/skills', k.id, f.path), digest: f.digest })),
-      ),
+      ...(skills.length ? [{ path: manifest, digest: sha(Buffer.from(CLAUDE_STAGE_PLUGIN_MANIFEST)) }] : []),
+      ...skills.flatMap((k) => k.files.map((f) => ({ path: join(plugin, 'skills', k.id, f.path), digest: f.digest }))),
       ...request.files.map((f, i) => ({ path: join(work, f.relativePath), digest: request.digests.files[i]! })),
     ]);
     decoder = new ClaudeAgentDecoder(work, request.maxTurns);
@@ -334,6 +377,7 @@ export async function nativeClaudeAgentCall(authority: ClaudeAgentAuthority): Pr
           maxTurns: request.maxTurns,
           ...(request.maxUsd ? { maxUsd: request.maxUsd } : {}),
           jsonSchema: request.jsonSchema,
+          ...(skills.length ? { pluginDir: plugin } : {}),
         }),
         cwd: work,
         env: current.env,

@@ -23,12 +23,27 @@ import {
   qualifyInstalledNativeCopilot,
   type CopilotCredentialPath,
 } from './providers/cli-copilot-profile.js';
-import { CLAUDE_NATIVE_PROFILE, qualifyInstalledNativeClaude } from './providers/cli-native-profile.js';
+import {
+  CLAUDE_AGENT_PROFILE,
+  claudeProfileById,
+  claudeRuntimeInstallation,
+  nativeRuntimeHelper,
+  qualifyInstalledNativeClaude,
+} from './providers/cli-native-profile.js';
+import { probeNativeLogin, type NativeLoginProbe } from './providers/cli-native-helper.js';
 import { safeInputPath, type CopilotAgentPartial, type CopilotAgentResult } from './providers/cli-copilot-agent.js';
 import type { ModelBroker, ModelEnvelope } from './providers/broker.js';
 import type { ProviderBinding } from './providers/profile.js';
 import { reviewFail } from './errors.js';
-import { NATIVE_REVIEW_INSTRUCTIONS, nativeOutputSchema, nativeTask, parseFinalAnswer } from './native.js';
+import {
+  CLAUDE_TASK_LAYOUT,
+  COPILOT_TASK_LAYOUT,
+  NATIVE_REVIEW_INSTRUCTIONS,
+  nativeOutputSchema,
+  nativeTask,
+  parseFinalAnswer,
+  type NativeTaskLayout,
+} from './native.js';
 import { resolveStageInstructions, stagePackDigests, type ResolvedStageInstructions } from './packs.js';
 
 /** The runners an agent stage can name (the pipeline contract's ids). */
@@ -99,7 +114,15 @@ export interface AgentQualification {
   /** The exact resolved executable path: private to the owner's qualification record, never in a public artifact. */
   readonly executablePath?: string;
   /** The credential path as probed once here: whether this process (a CLI or a service child) can reach the login. */
-  readonly credentialPath?: CopilotCredentialPath;
+  readonly credentialPath?: CopilotCredentialPath | ClaudeCredentialPath;
+}
+
+/** Claude's two login paths, as classes: never an item, a token or a path. */
+export interface ClaudeCredentialPath {
+  /** The vendor login the brokered profile's fixed helper reads: `reachable`, or the helper's refusal class. */
+  readonly vendorLogin: 'reachable' | Extract<NativeLoginProbe, { reachable: false }>['reason'];
+  /** The native profile's credential: the owner's token under an adopted reference, read by the broker at admission. */
+  readonly native: 'adopted-reference';
 }
 
 /** A brokered run's result is the review session's own record, observations and private artifacts. */
@@ -178,13 +201,62 @@ export interface AgentRunner {
 
 const timingOf = (t?: { deadlineAt: number; signal?: AbortSignal }) => t ?? { deadlineAt: Date.now() + 5000 };
 
-/** Copilot native mode: the stage's budget, inputs and output schema in; a validated output and provenance out. */
-async function runCopilotNative(
+/** What differs between the two CLIs' native modes; the run itself is one function over these. */
+interface NativeFlavor {
+  readonly runner: 'copilot-cli' | 'claude-cli';
+  /** The task's wording and where the scratch tree holds instructions and skills. */
+  readonly layout: NativeTaskLayout;
+  /** The adopted pin's profile, or undefined when the binding names none this runner knows. */
+  pinned(binding: ProviderBinding): Readonly<{ id: string; version: string; executableDigest: string }> | undefined;
+  readonly fallbackProfileId: string;
+  /** Refuses with `credentialUnavailable`, before any reservation or launch, when the login cannot be reached. */
+  probe(timing: { deadlineAt: number; signal?: AbortSignal }): Promise<void>;
+  /** The CLI enforces the output schema and a dollar ceiling itself (`--json-schema`, `--max-budget-usd`). */
+  readonly enforces: boolean;
+}
+
+const COPILOT_FLAVOR: NativeFlavor = Object.freeze({
+  runner: 'copilot-cli' as const,
+  layout: COPILOT_TASK_LAYOUT,
+  pinned: (b: ProviderBinding) => (b.copilotProfile ? copilotProfileById(b.copilotProfile.id) : undefined),
+  fallbackProfileId: COPILOT_AGENT_PROFILE.id,
+  // The vendor's login must be reachable from this process (a foreground CLI or a service child in the owner's
+  // login session); a locked or absent login refuses here, before any reservation or launch.
+  async probe(timing: { deadlineAt: number; signal?: AbortSignal }) {
+    const credential = await probeCopilotCredentialPath(timing);
+    if (credential.selector !== 'selected' || credential.keychain !== 'reachable')
+      fail(
+        'sentinel.provider.credentialUnavailable',
+        `the Copilot login is not reachable from this process (selector ${credential.selector}, keychain ${credential.keychain})`,
+      );
+  },
+  enforces: false,
+});
+
+const CLAUDE_FLAVOR: NativeFlavor = Object.freeze({
+  runner: 'claude-cli' as const,
+  layout: CLAUDE_TASK_LAYOUT,
+  pinned: (b: ProviderBinding) => (b.nativeProfile ? claudeProfileById(b.nativeProfile.id) : undefined),
+  fallbackProfileId: CLAUDE_AGENT_PROFILE.id,
+  // The owner's token was read by the broker from the adopted reference when the envelope was admitted; an
+  // unreadable reference denied admission there. Nothing is read again here.
+  probe: () => Promise.resolve(),
+  enforces: true,
+});
+
+/** A native run: the stage's budget, inputs and output schema in; a validated output and provenance out. */
+async function runNative(
+  flavor: NativeFlavor,
   stage: AgentStageInput,
   inputs: readonly AgentInputFile[],
   context: NativeRunContext,
 ): Promise<NativeRunResult> {
-  if (stage.runner !== 'copilot-cli') fail('sentinel.provider.invalidProfile', 'the stage names another runner');
+  if (stage.runner !== flavor.runner) fail('sentinel.provider.invalidProfile', 'the stage names another runner');
+  if (
+    stage.budget?.usd !== undefined &&
+    (!flavor.enforces || !/^(0|[1-9][0-9]{0,5})(\.[0-9]{1,2})?$/.test(stage.budget.usd))
+  )
+    return reviewFail('sentinel.review.nativeBudget');
   const turns = stage.budget?.turns,
     tokens = stage.budget?.tokens,
     seconds = stage.budget?.seconds;
@@ -235,19 +307,10 @@ async function runCopilotNative(
     paths,
     schema,
     resolved.skills.map((k) => k.id),
+    flavor.layout,
   );
-  const pinned = context.binding.copilotProfile ? copilotProfileById(context.binding.copilotProfile.id) : undefined;
-  // The vendor's login must be reachable from this process (a foreground CLI or a service child in the owner's login
-  // session); a locked or absent login refuses here, before any reservation or launch.
-  const credential = await probeCopilotCredentialPath({
-    deadlineAt: Date.now() + 5000,
-    ...(context.signal ? { signal: context.signal } : {}),
-  });
-  if (credential.selector !== 'selected' || credential.keychain !== 'reachable')
-    fail(
-      'sentinel.provider.credentialUnavailable',
-      `the Copilot login is not reachable from this process (selector ${credential.selector}, keychain ${credential.keychain})`,
-    );
+  const pinned = flavor.pinned(context.binding);
+  await flavor.probe({ deadlineAt: Date.now() + 5000, ...(context.signal ? { signal: context.signal } : {}) });
   const started = Date.now(),
     grantedMs = seconds! * 1000;
   type Installation = Readonly<{ source: string; executable: string }> | null;
@@ -258,9 +321,9 @@ async function runCopilotNative(
   ): AgentRunProvenance =>
     Object.freeze({
       mode: 'native' as const,
-      runner: 'copilot-cli' as const,
+      runner: flavor.runner,
       runnerVersion: pinned?.version ?? null,
-      profileId: pinned?.id ?? COPILOT_AGENT_PROFILE.id,
+      profileId: pinned?.id ?? flavor.fallbackProfileId,
       executableDigest: (pinned?.executableDigest ?? null) as Digest | null,
       installation: installation
         ? Object.freeze({ source: installation.source, executablePath: installation.executable })
@@ -371,6 +434,8 @@ async function runCopilotNative(
       tokens: tokens!,
       deadlineAt: started + grantedMs,
       ...(context.signal ? { signal: context.signal } : {}),
+      ...(flavor.enforces ? { jsonSchema: JSON.stringify(schema.jsonSchema) } : {}),
+      ...(flavor.enforces && stage.budget?.usd !== undefined ? { maxUsd: stage.budget.usd } : {}),
     });
   } catch (e) {
     const refused = e as {
@@ -535,25 +600,35 @@ export const COPILOT_RUNNER: AgentRunner = Object.freeze({
     });
   },
   run: (stage: AgentStageInput, inputs: readonly AgentInputFile[], context: AgentRunContext) =>
-    delegate(COPILOT_RUNNER, stage, inputs, context, runCopilotNative),
+    delegate(COPILOT_RUNNER, stage, inputs, context, (st, i, c) => runNative(COPILOT_FLAVOR, st, i, c)),
 });
 
 export const CLAUDE_RUNNER: AgentRunner = Object.freeze({
   id: 'claude-cli' as const,
-  modes: Object.freeze(['brokered'] as const),
+  modes: Object.freeze(['brokered', 'native'] as const),
   async qualify(timing?: { deadlineAt: number; signal?: AbortSignal }): Promise<AgentQualification> {
-    const runtime = await qualifyInstalledNativeClaude(timingOf(timing));
+    const runtime = await qualifyInstalledNativeClaude(timingOf(timing), CLAUDE_AGENT_PROFILE);
+    const installation = claudeRuntimeInstallation(runtime);
+    // The class of each login path, read once: the vendor login through the fixed helper (what the brokered profile
+    // uses), and the native profile's adopted token reference, which only the broker reads, at admission.
+    const vendor = await probeNativeLogin(nativeRuntimeHelper(runtime), timingOf(timing));
     return Object.freeze({
       runner: 'claude-cli' as const,
       profileId: runtime.profileId,
-      version: CLAUDE_NATIVE_PROFILE.version,
+      version: CLAUDE_AGENT_PROFILE.version,
       executableDigest: runtime.executableDigest as Digest,
       profileDigest: runtime.profileDigest as Digest,
       modes: CLAUDE_RUNNER.modes,
+      installation: installation.source,
+      executablePath: installation.executable,
+      credentialPath: Object.freeze({
+        vendorLogin: vendor.reachable ? ('reachable' as const) : vendor.reason,
+        native: 'adopted-reference' as const,
+      }),
     });
   },
   run: (stage: AgentStageInput, inputs: readonly AgentInputFile[], context: AgentRunContext) =>
-    delegate(CLAUDE_RUNNER, stage, inputs, context),
+    delegate(CLAUDE_RUNNER, stage, inputs, context, (st, i, c) => runNative(CLAUDE_FLAVOR, st, i, c)),
 });
 
 /**

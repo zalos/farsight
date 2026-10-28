@@ -101,6 +101,8 @@ export interface CliKind {
     release(authority: object): void;
     /** The qualified installation that runs: its category and exact executable path (private provenance). */
     installation(runtime: object): Readonly<{ source: string; executable: string }>;
+    /** Whether the reported model is the requested one; exact equality when absent. */
+    sameModel?(requested: string, reported: string): boolean;
   }>;
   /** A release gate the adopted settings must open before a stage may select this CLI. */
   readonly releaseGate?: Readonly<{
@@ -212,6 +214,10 @@ const CLAUDE_CLI = Object.freeze<CliKind>({
     call: (authority: object) => nativeClaudeAgentCall(authority as ClaudeAgentAuthority),
     release: (authority: object) => finishClaudeAgentCall(authority as ClaudeAgentAuthority),
     installation: (runtime: object) => claudeRuntimeInstallation(runtime),
+    // An alias answers as its own dated snapshot (`claude-x-y` as `claude-x-y-20261001`); nothing looser.
+    sameModel: (requested: string, reported: string) =>
+      reported === requested ||
+      (reported.startsWith(requested + '-') && /^\d{8}$/.test(reported.slice(requested.length + 1))),
   }),
   issue: (c) => issueNativeCall({ ...c, runtime: c.runtime as NativeClaudeRuntime }),
   call: (authority: object) => nativeClaudeCall(authority as Parameters<typeof nativeClaudeCall>[0]),
