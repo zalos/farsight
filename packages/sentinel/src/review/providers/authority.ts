@@ -105,3 +105,42 @@ export function beginCopilotCall(value: CopilotCallAuthority): CopilotContext {
 export function finishCopilotCall(value: CopilotCallAuthority) {
   copilotCalls.delete(value);
 }
+
+/** The one-start capability for one native-mode Copilot run; the broker issues it after dispatching the reservation. */
+export interface CopilotAgentAuthority {
+  readonly nativeCall: 'copilot-agent-v1';
+}
+type CopilotAgentContext = {
+  runtime: NativeCopilotRuntime;
+  request: import('./cli-copilot-agent.js').CopilotAgentRequest;
+  limits: NativeTiming;
+};
+const copilotAgentCalls = new WeakMap<
+  object,
+  CopilotAgentContext & { ledger: BudgetLedger; reservationId: string; receipt: ConsumedReceipt; started: boolean }
+>();
+export function issueCopilotAgentCall(
+  context: CopilotAgentContext & { ledger: BudgetLedger; reservationId: string; receipt: ConsumedReceipt },
+): CopilotAgentAuthority {
+  const authority = Object.freeze({ nativeCall: 'copilot-agent-v1' as const });
+  copilotAgentCalls.set(authority, { ...context, started: false });
+  return authority;
+}
+export function beginCopilotAgentCall(value: CopilotAgentAuthority): CopilotAgentContext {
+  const held = copilotAgentCalls.get(value);
+  if (
+    !held ||
+    held.started ||
+    !isConsumedReceipt(held.receipt) ||
+    held.ledger.reservation(held.reservationId).state !== 'dispatched'
+  )
+    return fail('sentinel.provider.notAdmitted', 'Copilot native run requires its exact unused dispatched authority');
+  if (held.limits.signal?.aborted) return fail('sentinel.provider.canceled', 'Copilot native authority canceled');
+  if (Date.now() >= held.limits.deadlineAt)
+    return fail('sentinel.provider.timeout', 'Copilot native authority deadline elapsed');
+  held.started = true;
+  return { runtime: held.runtime, request: held.request, limits: held.limits };
+}
+export function finishCopilotAgentCall(value: CopilotAgentAuthority) {
+  copilotAgentCalls.delete(value);
+}
