@@ -537,13 +537,20 @@ function modelLines(models: unknown): string[] {
           ];
         const declared = m.declared as { runner?: unknown; model?: unknown } | undefined;
         return [
-          word('sentinel.cli.scanModel', {
-            stage,
-            runner: String(m.runner ?? m.providerId),
-            model: String(m.model ?? m.modelId),
-            provider: String(m.providerId),
-            budget: budgetWords(m.budget),
-          }),
+          m.runner === null || m.runner === undefined || m.model === null || m.model === undefined
+            ? word('sentinel.cli.scanModelBinding', {
+                stage,
+                model: String(m.modelId),
+                provider: String(m.providerId),
+                budget: budgetWords(m.budget),
+              })
+            : word('sentinel.cli.scanModel', {
+                stage,
+                runner: String(m.runner),
+                model: String(m.model),
+                provider: String(m.providerId),
+                budget: budgetWords(m.budget),
+              }),
           ...(declared
             ? [
                 word('sentinel.cli.scanModelDeclared', {
@@ -612,12 +619,17 @@ function runLines(r: CommandResult, command: string): string[] {
               f.modelReviews as {
                 kind: string;
                 selection: { providerId: string; modelId: string };
+                runner?: string | null;
+                model?: string | null;
                 terms?: { budget?: unknown };
               }[]
             ).map((m) => ({
               stage: m.kind,
               providerId: m.selection.providerId,
               modelId: m.selection.modelId,
+              // The runner and the model the provider names; the binding's own ids only when the settings lost them.
+              runner: m.runner ?? null,
+              model: m.model ?? null,
               budget: m.terms?.budget,
             }))
           : f.models,

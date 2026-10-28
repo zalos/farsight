@@ -1037,10 +1037,18 @@ export async function runPlan(
     const admittedReview = await loadPlan(store, plan.runId, plan.revision),
       reviews = admittedReview.plan.units
         .filter((u) => u.review)
-        .map((u) => ({
+        .map((u) => {
+          // The runner and the model as the adopted provider names them, beside the binding's ids: what is called.
+          const provider = policy.settings.providers.find((x) => x.id === u.review!.selection.providerId);
+          const model = provider?.models?.find((x) => x.id === u.review!.selection.modelId);
+          return { u, runner: provider?.kind ?? null, model: model?.model ?? null };
+        })
+        .map(({ u, runner, model }) => ({
           kind: u.stage,
           segmentId: u.review!.segmentId,
           selection: u.review!.selection,
+          runner,
+          model,
           terms: u.review!.terms,
           instructions: u.review!.instructionDigest,
           skills: 'none-selected',
