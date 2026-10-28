@@ -182,10 +182,10 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'frameworks/next/config.js': ['dynamic:oxc-parser'],
   'frameworks/next/errors.js': ['@farsight/core/dist/strings-sentinel-next.js'],
   // Fixed native CLI boundary: exact helper and executable, anonymous token FD, owned fixed TLS egress only.
-  'review/providers/cli-copilot-call.js': ['node:child_process', 'node:fs', 'node:fs/promises'],
+  'review/providers/cli-copilot-call.js': ['node:fs/promises'],
   'review/providers/cli-copilot-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:os', 'node:path'],
   'review/providers/cli-copilot-proxy.js': ['node:dns/promises', 'node:net'],
-  'review/providers/cli-native-call.js': ['node:child_process', 'node:fs/promises'],
+  'review/providers/cli-native-call.js': ['node:fs/promises'],
   'review/providers/cli-native-helper.js': [
     'node:child_process',
     'node:crypto',
@@ -196,6 +196,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   ],
   'review/providers/cli-native-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:path'],
   'review/providers/cli-native-proxy.js': ['node:dns/promises', 'node:net'],
+  // The one sandboxed CLI runner both native CLIs build on: the only process start in review/ outside the helper.
+  'review/providers/sandboxed-cli.js': ['node:child_process', 'node:fs', 'node:fs/promises'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   // The Spring pack: tree-sitter's Java grammar, loaded on first analysis only; graph is pure JSON helpers.
   'frameworks/spring/pack.js': ['@farsight/graph', 'node:crypto'],

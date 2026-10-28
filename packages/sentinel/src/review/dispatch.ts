@@ -19,7 +19,7 @@ import { resolveReviewModel } from './providers/selection.js';
 import { readReviewSpec } from './plan.js';
 import { providerCaller } from './caller.js';
 import { LedgerCheckpointStore } from './checkpoints.js';
-import { runSession } from './session.js';
+import { runnerForKind } from './runner.js';
 import { reviewFail } from './errors.js';
 import { usageOf } from './operation.js';
 export const REVIEW_IMPLEMENTATION_URL = import.meta.url;
@@ -160,13 +160,29 @@ export async function runAdmittedReview(
       return bad();
     return r.binding;
   };
-  const result = await runSession(
-    { ...spec, attemptId },
+  // The admitted turn loop runs through the stage's agent runner; brokered mode is exactly the session below.
+  const binding = prepared.resolved.binding,
+    runner = runnerForKind(binding.kind);
+  const { session: result } = await runner.run(
     {
-      caller: providerCaller(runtime.broker, envelope, current, { deadlineAt }),
-      checkpoints: new LedgerCheckpointStore(runtime.ledger, store.epoch),
-      read: (id) => store.readArtifact(id),
-      signal,
+      id: unit.stage,
+      kind: 'agent',
+      mode: 'brokered',
+      runner: runner.id,
+      model: binding.model,
+      budget: { turns: spec.budget.maxSteps, seconds: Math.ceil(spec.budget.deadlineMs / 1000) },
+    },
+    [],
+    {
+      brokered: {
+        spec: { ...spec, attemptId },
+        options: {
+          caller: providerCaller(runtime.broker, envelope, current, { deadlineAt }),
+          checkpoints: new LedgerCheckpointStore(runtime.ledger, store.epoch),
+          read: (id) => store.readArtifact(id),
+          signal,
+        },
+      },
     },
   );
   store.assertHeld();
