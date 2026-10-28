@@ -26,6 +26,7 @@ import {
   qualifyInstalledNativeCopilot,
 } from '../dist/review/providers/cli-copilot-profile.js';
 import { COPILOT_RUNNER, NativeRunFailure, publicProvenance } from '../dist/review/runner.js';
+import { promoteStagePack } from '../dist/review/packs.js';
 
 const genuine = process.env.SENTINEL_COPILOT_CODE === '1';
 const record = process.env.SENTINEL_RETAINED_WIRE_RECORD === '1';
@@ -462,5 +463,57 @@ test(
       assert.deepEqual(over.retained.provenance.tokens, { input: 30000, output: 10, certainty: 'confirmed' });
       assert.match(over.retained.provenance.installation?.executablePath ?? '', /\/copilot$/);
     }
+  },
+);
+
+test(
+  'a native stage with a promoted skill hands the OS the skill in its scratch tree, --add-dir and only those skills on',
+  { skip: !genuine && 'needs the installed Copilot 1.0.105 bytes; no login' },
+  async (t) => {
+    const { broker, envelope, binding } = await admitted(t, COPILOT_AGENT_PROFILE);
+    const trustDir = join(scratch(t, 'retained-wire-packs-'), 'trust');
+    mkdirSync(trustDir, { mode: 0o700 });
+    const packs = new URL('./fixtures/stage-packs/', import.meta.url).pathname;
+    const skill = promoteStagePack(trustDir, join(packs, 'skills/invoice-approvals'), { confirm: true });
+    const launches: Launch[] = [];
+    intercept(t, 'sentinel-copilot-agent', launches, (args) => {
+      writeFileSync(after(args, '--usage-output-file'), USAGE(1), { mode: 0o600 });
+      writeFileSync(after(args, '--share'), '# Copilot CLI Session\n', { mode: 0o600 });
+      const ev = (type: string, data: Record<string, unknown>) => JSON.stringify({ type, data }) + '\n';
+      return {
+        stdout: Buffer.from(
+          ev('model.call_start', { model }) +
+            ev('assistant.message', { model, phase: 'final_answer', content: '{"observations":[],"inspected":[]}' }) +
+            JSON.stringify({ type: 'result', exitCode: 0 }) +
+            '\n',
+        ),
+        stderr: Buffer.from(`Session exported to: ${after(args, '--share')}\n`),
+      };
+    });
+    const ran = await COPILOT_RUNNER.run(
+      {
+        id: 'review',
+        kind: 'agent',
+        mode: 'native',
+        runner: 'copilot-cli',
+        model,
+        skills: ['skills/invoice-approvals@1'],
+        produces: [{ name: 'observations', schema: 'sentinel.review-observations/v1' }],
+        budget: { turns: 3, tokens: 20000, seconds: 120 },
+      },
+      [{ relativePath: 'src/approvals.ts', bytes: Buffer.from('export const approve = () => 1;\n') }],
+      { native: { broker, envelope, binding, operationId: 'original-skill-stage', trustDir, retain: async () => {} } },
+    );
+    assert.equal(ran.mode, 'native');
+    const launch = normalize(launches[0]!, launches[0]!, homedir());
+    const skillDigest = 'sha256:' + createHash('sha256').update(skill.files[0]!.bytes).digest('hex');
+    assert.equal(launch.work['.github/skills/invoice-approvals/SKILL.md'], `400 ${skillDigest}`);
+    assert.deepEqual(launch.args.slice(launch.args.indexOf('--add-dir'), launch.args.indexOf('--add-dir') + 2), [
+      '--add-dir',
+      '<owned>/work',
+    ]);
+    assert.deepEqual(JSON.parse(launch.state['settings.json']!).skills, { disabled: [] });
+    assert.match(launch.stdin, /\.github\/skills\/invoice-approvals\/SKILL\.md/);
+    if (ran.mode === 'native') assert.deepEqual(ran.provenance.skillDigests, [skill.digest]);
   },
 );

@@ -1,0 +1,12 @@
+{
+  "schema": "sentinel-stage-pack/draft-1",
+  "kind": "skill",
+  "id": "invoice-approvals",
+  "revision": 1,
+  "files": [
+    {
+      "path": "SKILL.md",
+      "digest": "sha256:fd183d87cb3d49f0505441f9de6de5973e70f2d433b3c42a9f7139d009c1c34e"
+    }
+  ]
+}
