@@ -296,6 +296,7 @@ export function scanPreviewOf(ws: Workspace, by: Principal, now: Date = new Date
             trust: loaded.trust,
             // A profile's own pipeline plans as the default for the settings (service/local.ts pipelinePathOf).
             path: path!,
+            // Each problem as plan will see it under these settings (refused: the scan is refused above).
             problems,
           }
         : null,
@@ -395,11 +396,23 @@ function declaredModels(pipeline: PipelineDefinition, settings: Readonly<Setting
       });
     for (const b of bound) {
       const m = boundModel(settings, s.id, b.segmentId, b.providerId, b.modelId);
-      const differs = m.runner !== s.runner || m.model !== s.model;
+      const provider = settings.providers.find((p) => p.id === b.providerId);
+      const differs = runnerServing(provider) !== s.runner || m.model !== s.model;
       out.push({ ...m, review, ...(differs ? { declared: { runner: s.runner, model: s.model } } : {}) });
     }
   }
   return out;
+}
+
+/**
+ * The pipeline runner an adopted provider serves (app/pipeline.ts runnerConfigured reads the same): a CLI kind its own
+ * runner, an Ollama provider that keeps the source here the local model server, any other HTTP provider the hosted
+ * APIs.
+ */
+function runnerServing(p: Readonly<SettingsEnvelope>['providers'][number] | undefined): string | null {
+  if (!p) return null;
+  if (p.kind === 'claude-cli' || p.kind === 'copilot-cli') return p.kind;
+  return p.kind === 'ollama' && p.disclosure === 'local-only' ? 'ollama' : 'hosted-api';
 }
 
 /** The pipeline's problems under these settings once the setup is done: the packs it promotes count as locked. */
