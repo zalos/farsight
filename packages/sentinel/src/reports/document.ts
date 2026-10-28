@@ -31,7 +31,12 @@ import { contextProblem, type PinnedContext } from './context.js';
 import { placeFiles, placeNodes, unplaced } from './place.js';
 import { camel, labelKey, labelPartKey } from './words.js';
 
+/** The `source` every count in a report document names: this fold, at its version. */
 export const REPORT_SOURCE = 'sentinel report fold draft-1';
+/**
+ * The disclosure profiles: `private` embeds source excerpts, `shareable` keeps locations only. Neither ever embeds or
+ * locates a secret, and withheld evidence never changes a finding, a coverage verdict or a count.
+ */
 export const DISCLOSURE_PROFILES = Object.freeze({
   private: Object.freeze({ embedSource: true, locations: true, note: 'source excerpts embedded; secrets never' }),
   shareable: Object.freeze({
@@ -40,12 +45,18 @@ export const DISCLOSURE_PROFILES = Object.freeze({
     note: 'no source excerpts; locations kept; secrets never',
   }),
 });
+/** The name of a disclosure profile. */
 export type DisclosureProfile = keyof typeof DISCLOSURE_PROFILES;
 
 const MAX_EXCERPT_CHARS = 2000;
 const MAX_EVIDENCE = 64;
 const digest = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJson(v)).digest('hex')}`;
 
+/**
+ * A report document the fold refuses: `sentinel.report.invalidInput` (an unknown profile, a comparison that misses a
+ * finding, coverage that is repeated or for an unplanned check), `sentinel.report.invalidDocument` (the result does not
+ * fit its contract) or `sentinel.report.tooLarge` (more SARIF results than the export allows).
+ */
 export class ReportError extends Error {
   constructor(
     readonly code: 'sentinel.report.invalidInput' | 'sentinel.report.invalidDocument' | 'sentinel.report.tooLarge',
@@ -65,6 +76,7 @@ export interface BaselineFindingSummary {
   readonly place?: FindingPlace;
 }
 
+/** One check the admitted plan holds, with the captured files it was to cover. */
 export interface PlannedCheck {
   readonly checkId: string;
   readonly sourceId: string;
@@ -72,6 +84,9 @@ export interface PlannedCheck {
   readonly files: readonly string[];
 }
 
+/**
+ * Everything `buildReport` folds into one document. It reads nothing else, so the same input gives the same document.
+ */
 export interface ReportInput {
   readonly id: string;
   readonly run: ReportEnvelope['run'];
@@ -108,6 +123,7 @@ export interface ReportInput {
   };
 }
 
+/** A built report: the validated document, the findings it was built from, and the artifacts it names. */
 export interface ReportBuild {
   readonly document: ReportEnvelope;
   /** The findings as correlated, for a comparison or a later run's baseline. */
@@ -134,6 +150,15 @@ function lineOf(bytes: Uint8Array, offset: number): number {
   return line;
 }
 
+/**
+ * Builds the `sentinel-report/draft-1` document. Findings are correlated from the observations (or taken from
+ * `precomputed`), placed only through a pinned context bound to this run's snapshot and source, and their evidence is
+ * embedded or withheld by the disclosure profile; a secret is always withheld (`sentinel.report.withheld.secret`).
+ * Every planned check without complete coverage becomes a gap, every count carries its scope, and every catalog word
+ * used travels with its definition. Throws `ReportError`: `sentinel.report.invalidInput` for an unknown profile, a
+ * comparison that does not cover every finding or lacks a baseline summary, or coverage that is repeated or for an
+ * unplanned check; `sentinel.report.invalidDocument` when the result does not validate against its contract.
+ */
 export async function buildReport(input: ReportInput, precomputed?: readonly Finding[]): Promise<ReportBuild> {
   if (!DISCLOSURE_PROFILES[input.disclosure])
     throw new ReportError('sentinel.report.invalidInput', 'unknown disclosure profile');

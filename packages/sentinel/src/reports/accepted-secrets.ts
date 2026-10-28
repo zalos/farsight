@@ -21,6 +21,15 @@ const isRecord = (v: unknown): v is Record<string, any> => v !== null && typeof 
 const sha = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 const fileScope = (sourceId: string, path: string) => `${sourceId}:${path}`;
 
+/**
+ * Checks one accepted Gitleaks record against what the run admitted and returns it as an observation. The record must
+ * name this run, snapshot, unit, attempt and adapter digest; be assigned exactly its unit's checks, under one rule
+ * family and the rule it claims; name a known detector; carry only the redacted name or content message; and cite
+ * withheld locations that resolve to files its unit was assigned, with spans inside their captured bytes. Anything else
+ * is refused through `ctx.refuse` (the full report raises `sentinel.report.evidenceUnbound`, the selected-privacy
+ * reader `sentinel.execution.bootstrapEvidence`). Returns the observation, the `sourceId:path` of every file whose name
+ * matched, and every long token on the matched lines, all of which a report treats as secret.
+ */
 export async function secretObservation(
   v: any,
   ctx: {

@@ -68,11 +68,20 @@ const SCANNER_ADAPTERS = new Set(['pattern-semgrep', 'advisories-osv', 'iac-triv
 const FINDING_SCHEMA = 'sentinel-driver-finding/draft-1';
 const COVERAGE_SCHEMA = 'sentinel-coverage/draft-1';
 const DRIVER_REPORT_SCHEMA = 'sentinel-driver-report/draft-1';
+/** The renderings a full report is delivered in: Markdown, JSON (the canonical document), offline HTML and SARIF. */
 export const REPORT_FORMATS = ['md', 'json', 'html', 'sarif'] as const;
+/** One of `REPORT_FORMATS`. */
 export type ReportFormat = (typeof REPORT_FORMATS)[number];
 /** The largest application graph a context pin reads. */
 export const MAX_CONTEXT_BYTES = 64 * 1024 * 1024;
 
+/**
+ * A full report that cannot be made or delivered: `sentinel.report.runNotReportable` (not a completed analysis run),
+ * `sentinel.report.evidenceUnbound` (an accepted record does not bind to this run, its bytes or its contract),
+ * `sentinel.report.contextInvalid` (an unreadable application graph), `sentinel.report.outExists` (the output file
+ * exists), `sentinel.report.viewChanged` (the ledger moved during both generations; the only retryable code) or
+ * `sentinel.report.deliveryLimit` (a rendering over its byte limit).
+ */
 export class FullReportError extends Error {
   readonly retryable: boolean;
   constructor(
@@ -965,6 +974,7 @@ async function sideOf(store: SentinelStore, a: RunAssessment) {
   return { findings, checks };
 }
 
+/** An owner-supplied application graph file, and the repository name its nodes use. */
 export interface ContextFile {
   /** The application graph file the owner supplies: an object with `nodes` and `edges` (Farsight's graph.json). */
   readonly path: string;
@@ -972,6 +982,12 @@ export interface ContextFile {
   readonly repo?: string;
 }
 
+/**
+ * What a full report reads: the store, a completed run, the workspace root (a context's inputs are its files as they
+ * are now), the trust directory (rule words, the report key for withheld citations and owner decisions come from it),
+ * the disclosure profile, an optional baseline run, the evaluation time, and an optional context with the owner's
+ * `context.pin` receipt.
+ */
 export interface FullReportRequest {
   readonly store: SentinelStore;
   readonly runId: string;
@@ -1091,6 +1107,7 @@ export function contextIntentFor(
   return { inputs, intent: contextPinIntent({ snapshot, sourceId, repo, graph, inputs })! };
 }
 
+/** The executed identity a report was assessed at: run, plan revision, snapshot and ledger sequence. */
 export interface ReportAssessmentIdentity {
   readonly runId: string;
   readonly planRevision: number;
@@ -1105,6 +1122,10 @@ interface ReportDocument {
   readonly context: { readonly binding: PinnedContext['binding']; readonly reasons: readonly string[] } | null;
   readonly withheldForSecrets: boolean;
 }
+/**
+ * A full report in every rendering, with the identities it was assessed at, the comparison, the context's binding, and
+ * whether accepted secret matches withheld its source and context text.
+ */
 export interface FullReport extends ReportDocument {
   readonly json: string;
   readonly markdown: string;
@@ -1273,6 +1294,10 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
   return { ...built, json, markdown, html, sarif };
 }
 
+/**
+ * One rendering of a full report, with the digests of the document and of the rendering, its size in bytes, the read
+ * budget it used and the ledger sequence it was generated at.
+ */
 export interface FullReportFormat extends ReportDocument {
   readonly format: ReportFormat;
   readonly text: string;
@@ -1355,6 +1380,10 @@ export async function fullReportFormat(
   return Object.freeze({ ...bounded.value, readUsage: bounded.usage });
 }
 
+/**
+ * The id of a run's report, or of its comparison with a baseline: derived from the run ids alone, so a regenerated
+ * report keeps its id.
+ */
 export const reportIdOf = (runId: string, baselineRunId?: string) =>
   baselineRunId ? `report.${sha(`${runId}\u0000${baselineRunId}`).slice(7, 39)}` : `report.${sha(runId).slice(7, 39)}`;
 
