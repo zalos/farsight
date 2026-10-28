@@ -69,18 +69,24 @@ checks acquisition), the packer behind `pnpm pack:sentinel` with every export of
 package's command, which the installed consumers run. From those it follows every import, export, dynamic import,
 `require` and `import.meta` file reference, workspace packages and the published `farsight-sentinel` name through
 their `exports`, and compiled `dist/` paths named as strings (the workers, launch gate and drivers), each mapped to
-its source: about 580 files today.
+its source: about 590 files today.
 
-A load it cannot follow fails closed. An `import()`, `require()` or `require.resolve()` of anything but one string
-literal, or a `new URL(…, import.meta.url)` of a computed path, generated code in a string included, selects the whole
-area it could point into: a package source's own `src/`; a package script's `src/` and `scripts/`; a package test's
-`src/` and `test/fixtures/` (the workers and data a test loads by path); and for a root script, `scripts/` and the
-`src/` and `scripts/` of every package the workflow builds, whose `dist/` it can load by path. The selector prints
-those loads by file and line, with the area each selects, in its output and step summary, and the scanner workflow's
-selection step prints them too. Today there are 18: the Trivy checks script and the framework controls closure in
-Sentinel, four test files that start workers by path, the packer and three consumers. So every source and script of
-the five built packages (code-parser, core, graph, parsers, sentinel), Sentinel's test fixtures and every root script
-start the workflow; making one of those loads a literal narrows its area back to what it imports.
+A load it cannot follow fails closed. The detector follows each load's brackets across lines: an `import()`,
+`require()` or `require.resolve()` of anything but one string literal, a `new URL(…, import.meta.url)` of a
+computed path, and an import generated in a template (`import x from ${…}`); prose and comment lines are not loads.
+A load whose target is still one literal once its wrappers (`JSON.stringify`, `pathToFileURL`, `.href`, a
+`'file://' +`) are off is followed like an import: a URL against the module, a resolved specifier, a `dist/` path
+joined to a base (the source of that path in every built package that has one), or a module the same file writes from
+a literal. Any other selects the whole area it could point into: a package source's own `src/`; a package script's
+`src/` and `scripts/`; a package test's `src/` and `test/fixtures/` (the workers and data a test loads by path);
+and for a root script, `scripts/` and the `src/` and `scripts/` of every package the workflow builds, whose
+`dist/` it can load by path. The selector prints those loads by file and line, with the area each selects, in its
+output and step summary, and the scanner workflow's selection step prints them too. Today there are 10, all in
+Sentinel: the Trivy checks script, five asset hooks, the framework controls closure and three test files that start
+workers by path. So every Sentinel source and script and its test fixtures start the workflow. The root scripts load
+only literal targets (the packer imports each asset hook and core's build identity by path, the consumers name the
+tarball's files), so a root script outside the closure, or a source no step loads, does not; making one of the
+remaining loads a literal narrows its area back to what it imports.
 
 Otherwise a change reaches the workflow when it is one of the closure's files or lies in a folder a reached test reads
 whole (`examples/invoice-app`, which the full-report tests ingest, and the advisory and IaC fixtures); when it is test

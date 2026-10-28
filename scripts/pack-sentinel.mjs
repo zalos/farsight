@@ -34,13 +34,23 @@ import { builtinModules } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, relative } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { assertTarball, buildClosure, missingBuildOutputs, npmPackEnv } from './pack-preflight.mjs';
 
 import { stageNativeCliHelper } from './sentinel-native-helper.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dir = join(root, 'packages', 'sentinel');
+// Sentinel's asset hooks (packages/sentinel/scripts/package-assets*.mjs), each a literal import of the file at
+// join(dir, 'scripts', name), the path the pack loads it from.
+const ASSET_HOOKS = new Map([
+  ['package-assets-drivers.mjs', () => import('../packages/sentinel/scripts/package-assets-drivers.mjs')],
+  ['package-assets-gitleaks.mjs', () => import('../packages/sentinel/scripts/package-assets-gitleaks.mjs')],
+  ['package-assets-osv.mjs', () => import('../packages/sentinel/scripts/package-assets-osv.mjs')],
+  ['package-assets-trivy.mjs', () => import('../packages/sentinel/scripts/package-assets-trivy.mjs')],
+  ['package-assets-zizmor.mjs', () => import('../packages/sentinel/scripts/package-assets-zizmor.mjs')],
+  ['package-assets.mjs', () => import('../packages/sentinel/scripts/package-assets.mjs')],
+]);
 const fail = (message, details = []) => {
   console.error('pack-sentinel: ' + message);
   for (const line of details) console.error('  ' + line);
@@ -313,7 +323,7 @@ if (unresolvable.length) {
 // the tarball succeed, and other packages' outputs in build/ are never touched.
 const version = sentinel.version;
 // The build identity, by the rule farsight-cli's packer uses (core's gitIdentity; core is in Sentinel's closure).
-const { gitIdentity } = await import(pathToFileURL(join(root, 'packages', 'core', 'dist', 'version.js')).href);
+const { gitIdentity } = await import('../packages/core/dist/version.js');
 const git = gitIdentity(root);
 const buildIdentity = {
   name: 'farsight-sentinel',
@@ -384,11 +394,14 @@ try {
       };
   }
   // Non-code assets the package owns (in-container workers and their digest manifests), each staged by its own hook,
-  // scripts/package-assets*.mjs, in name order.
+  // scripts/package-assets*.mjs, in name order. Each hook is imported by a literal path, so the CI selector follows
+  // it (scripts/ci-changes.mjs); a hook in the folder that ASSET_HOOKS does not name stops the pack.
   for (const hook of (existsSync(join(dir, 'scripts')) ? readdirSync(join(dir, 'scripts')) : [])
     .filter((f) => /^package-assets.*\.mjs$/.test(f))
     .sort()) {
-    const staged = await (await import(pathToFileURL(join(dir, 'scripts', hook)).href)).stageAssets(dir, out);
+    const load = ASSET_HOOKS.get(hook);
+    if (!load) fail(`packages/sentinel/scripts/${hook} is an asset hook scripts/pack-sentinel.mjs does not name.`);
+    const staged = await (await load()).stageAssets(dir, out);
     for (const f of staged.files) if (!files.includes(f)) files.push(f);
     Object.assign(exportsMap, staged.exports);
   }

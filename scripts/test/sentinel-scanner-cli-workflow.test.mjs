@@ -87,19 +87,28 @@ test('the scanner workflow runs for what its steps execute: review dispatch and 
     'examples/invoice-app/screens.json',
     'scripts/test-sentinel-evidence-consumer.mjs',
     'scripts/sentinel-evidence-provenance.mjs',
-    // in the area of a load the walk cannot follow: Sentinel's sources and scripts (its Trivy checks script and the
-    // framework controls closure import computed paths), its test fixtures (the test helpers' workers), every built
-    // package's sources and the root scripts (the consumers and the packer)
+    // reached through the packer's and consumers' literal loads: the asset hooks, core's build identity, the
+    // installed framework driver and the evidence consumer's private hooks
+    'packages/sentinel/scripts/package-assets-drivers.mjs',
+    'packages/core/src/version.ts',
+    'packages/sentinel/src/frameworks/controls/driver.ts',
+    'packages/sentinel/src/evidence/test-hooks.ts',
+    // in the area of a load the walk cannot follow: Sentinel's sources and scripts (its Trivy checks script, its asset
+    // hooks and the framework controls closure import computed paths) and its test fixtures (the test helpers' workers)
     'packages/sentinel/src/review/evaluation.ts',
     'packages/sentinel/src/review/providers/owner.ts',
     'packages/sentinel/test/fixtures/model-review/a.json',
-    'packages/parsers/src/lifecycle.ts',
-    'scripts/test-sentinel-package.mjs',
   ])
     assert.equal(selected([path]), true, path);
-  // what no step runs or imports: test files the workflow does not run, another package's tests, the viewer, the
-  // server, the CLI and Echo, and the other examples
+  // what no step runs or imports: test files the workflow does not run, another package's tests, sources and scripts
+  // no step loads (the parsers' files nothing imports, the release and e2e scripts), the viewer, the server, the CLI
+  // and Echo, and the other examples
   for (const path of [
+    'packages/parsers/src/lifecycle.ts',
+    'scripts/test-sentinel-package.mjs',
+    'scripts/release.mjs',
+    'scripts/pack-echo.mjs',
+    'scripts/test/release.test.mjs',
     'packages/sentinel/test/review-packs.test.ts',
     'packages/sentinel/test/cli-copilot-native.test.ts',
     'packages/sentinel/test/owner-ui-browser.test.ts',
@@ -285,8 +294,11 @@ test('a load the walk cannot follow selects its whole area and is listed with it
   const { unresolved } = scannerCliClosure();
   const trivy = unresolved.find(({ site }) => site.startsWith('packages/sentinel/scripts/acquire-trivy-checks.mjs:'));
   assert.deepEqual(trivy?.area, ['packages/sentinel/src/', 'packages/sentinel/scripts/']);
-  const packer = unresolved.find(({ site }) => site.startsWith('scripts/pack-sentinel.mjs:'));
-  assert.ok(packer?.area.includes('scripts/') && packer.area.includes('packages/core/src/'), 'a root script');
+  // no root script loads a computed path any more: the packer's and consumers' loads are literal
+  assert.deepEqual(
+    unresolved.filter(({ site }) => site.startsWith('scripts/')),
+    [],
+  );
   const { scannerLoads } = detectChecks({ base: undefined, head: undefined, event: 'pull_request' });
   assert.deepEqual(scannerLoads, [], 'an unavailable range selects every check and lists nothing');
 });
