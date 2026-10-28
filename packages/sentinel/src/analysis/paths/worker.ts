@@ -12,11 +12,16 @@ import { sha256Hex } from '../../kernel/digest.js';
 const P = 'sentinel-worker/draft-1',
   ID = /^sha256:([0-9a-f]{64})$/;
 /**
- * The bounded-paths child process: reads its start message, then only the sealed ids it was given, answers every query
- * under one shared budget and the unit's remaining deadline, writes one output named by its digest and reports it.
- * A malformed or oversized message ends it with status 3; a refusal (a budget exceeded, or a read the job did not
- * seal) is reported as a diagnostic with `sentinel.paths.budgetExceeded` or `sentinel.paths.unbound`, then it exits
- * with status 3.
+ * The bounded-paths child process: answers its hello's welcome and start, then reads only the sealed ids it was given,
+ * answers every query under one shared budget and the unit's remaining deadline, writes one output named by its digest
+ * and reports it. Its exit codes:
+ * - 0 after a cancel (before the welcome, before the start, or after it with a cancel acknowledgement) or when its
+ *   input ends;
+ * - 9 when the message after its hello is not a welcome;
+ * - 3 for input past 1 MiB or more than four queued messages, a line that is not JSON, a start that is not this
+ *   adapter's valid start (its job a sealed digest among at most 1,024 inputs), a deadline that is not finite, and a
+ *   refusal, which it first reports as a diagnostic with `sentinel.paths.budgetExceeded` (a budget, its deadline or a
+ *   cancel) or `sentinel.paths.unbound` (any other failure, such as a read the job did not seal).
  */
 export async function runBoundedPathsWorker(): Promise<void> {
   const input = process.env.SENTINEL_INPUT!,

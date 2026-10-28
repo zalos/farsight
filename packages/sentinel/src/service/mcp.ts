@@ -118,8 +118,15 @@ function legacyProjection(op: string, value: any): unknown {
 }
 /**
  * The MCP server over stdio for this workspace: a read-and-control channel to the running owner service, never the
- * owner. Each tool forwards one operation the service's negotiated capabilities offer and returns its projection;
- * without a running service a tool answers `sentinel.service.operationUnavailable`.
+ * owner. At startup it connects to that service and reads its capabilities; when no service runs or its capabilities do
+ * not validate, it refuses with `sentinel.service.operationUnavailable` before any tool exists. It then lists one tool
+ * per operation the service offers, plus the control and preparation tools when the service negotiates them for the
+ * same store and epoch, and returns 0 when its input ends. A tool call answers the operation's projection, or an
+ * error result with its code: `sentinel.service.operationUnavailable` for a tool or operation the service no longer
+ * offers or a connection that cannot be made again, `sentinel.service.requestInvalid` for arguments outside the tool's
+ * schema, `sentinel.ipc.canceled` when the caller cancels, `sentinel.service.controlOutcomeUnknown` or
+ * `sentinel.preparation.outcomeUnknown` once a control or preparation was sent and its answer was lost, and otherwise
+ * the failure's own code when the catalog has it, else `sentinel.service.operationUnavailable`.
  */
 export async function runMcp(ws: Workspace): Promise<number> {
   let client: ServiceClient | undefined;
