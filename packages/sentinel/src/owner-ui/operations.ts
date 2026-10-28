@@ -3,7 +3,16 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import type { SentinelStore } from '../store/index.js';
 import type { Workspace } from '../service/local.js';
-import { runWriteBinding, printed } from '../service/local.js';
+import {
+  runWriteBinding,
+  printed,
+  envelopeBinding,
+  pipelineWriteBinding,
+  pipelineBytesOf,
+  showWorkspacePipeline,
+} from '../service/local.js';
+import { bindProvider } from '../review/providers/profile.js';
+import { loadPipeline } from '../app/pipeline-adoption.js';
 import { currentPlan } from '../service/canonical.js';
 import type { RequestedBy } from '../cli/actor.js';
 import { result } from '../cli/outcome.js';
@@ -55,7 +64,12 @@ interface Preview {
   readonly binding: ReceiptBinding;
   readonly revision: number;
   readonly expiresAt: number;
+  /** A start that calls models: each envelope it opens, confirmed with it as one composite (`paid.admit`). */
+  readonly envelopes?: readonly ReceiptBinding[];
+  /** A pipeline write: exactly the object written, and the file digest the owner's view read (null: no file). */
+  readonly pipeline?: { readonly value: unknown; readonly expectDigest: string | null };
 }
+const DIGEST = /^sha256:[0-9a-f]{64}$/;
 export class OwnerUiOperations {
   readonly #process: OwnerUiProcess;
   readonly #scans: OwnerUiScans;
@@ -98,7 +112,8 @@ export class OwnerUiOperations {
       processInspection: true,
     };
   }
-  #preflight(binding: ReceiptBinding) {
+  /** The admission the panel's own receipt is issued under: a deterministic operation, or a model envelope it opens. */
+  #preflight(binding: ReceiptBinding, kind: 'operation' | 'model' = 'operation') {
     const adopted = ownerUiPolicy(this.#ws);
     if ('refusal' in adopted) return { refusal: adopted.refusal };
     if (adopted.policy.revision !== binding.policyRevision) throw new OwnerUiError('sentinel.ownerUi.changed');
@@ -111,8 +126,14 @@ export class OwnerUiOperations {
         policy: adopted.policy,
         requestedBy: proof.requestedBy,
         now: new Date(),
-        capability: () => ({ available: true, detail: 'exact implemented deterministic owner service operation' }),
-        credential: () => ({ basis: 'local-only', detail: 'no provider/model admission is included' }),
+        capability: () =>
+          kind === 'model'
+            ? { available: true, detail: 'exact configured model capability' }
+            : { available: true, detail: 'exact implemented deterministic owner service operation' },
+        credential: () =>
+          kind === 'model'
+            ? { basis: 'unknown' as const, detail: 'read when the envelope opens' }
+            : { basis: 'local-only' as const, detail: 'no provider/model admission is included' },
       },
       proof,
       true,
@@ -175,7 +196,13 @@ export class OwnerUiOperations {
                                 ? ['runId', 'stage', 'unit']
                                 : op === 'owner-ui.scan-report'
                                   ? ['runId', 'format']
-                                  : null;
+                                  : op === 'owner-ui.pipeline'
+                                    ? []
+                                    : op === 'owner-ui.pipeline-preview'
+                                      ? ['pipeline', 'expectDigest']
+                                      : op === 'owner-ui.pipeline-write'
+                                        ? ['previewId']
+                                        : null;
     if (!base) throw new OwnerUiError();
     const f = bodyFields(
       body,
@@ -285,6 +312,70 @@ export class OwnerUiOperations {
         );
       }
     }
+    // The workspace's pipeline file, for the PIPELINE stop's editor: read only, as the owner's CLI `pipeline show`
+    // reads it (its trust, digest and problems), with the declared object and the digest of the file's own bytes.
+    if (op === 'owner-ui.pipeline')
+      return this.#authority.with<unknown>(f.proof, f.revision, null, () => this.#pipelineRead());
+    // A pipeline the owner edited in the browser, checked and previewed by the service's own `pipeline.write` with no
+    // receipt: it validates, says what a run would rerun against the adopted pipeline, and writes nothing.
+    if (op === 'owner-ui.pipeline-preview') {
+      if (!f.pipeline || typeof f.pipeline !== 'object' || Array.isArray(f.pipeline)) throw new OwnerUiError();
+      if (!(f.expectDigest === null || (typeof f.expectDigest === 'string' && DIGEST.test(f.expectDigest))))
+        throw new OwnerUiError();
+      return this.#authority.with(f.proof, f.revision, 'settings.adopt', async () => {
+        const checked: any = await this.#handle(
+          'pipeline.write',
+          { pipeline: f.pipeline, expectDigest: f.expectDigest },
+          by,
+          context,
+        );
+        const facts = (checked?.facts ?? {}) as Record<string, unknown>;
+        const refused = Array.isArray(facts.problems) && facts.problems.some((p: any) => p?.class === 'refused');
+        const answer = {
+          outcome: checked?.outcome ?? null,
+          reasonCode: checked?.reasonCode ?? null,
+          problems: facts.problems ?? [],
+          preview: facts.preview ?? null,
+        };
+        if (refused || !facts.preview) return { ...answer, unavailable: true };
+        const preview: Preview = {
+          id: 'owner-preview-' + randomBytes(16).toString('hex'),
+          runId: '',
+          action: 'settings.adopt',
+          binding: this.#pipelineBinding(f.pipeline, f.expectDigest as string | null),
+          revision: f.revision as number,
+          expiresAt: Date.now() + 30000,
+          pipeline: { value: f.pipeline, expectDigest: f.expectDigest as string | null },
+        };
+        this.#remember(f.proof as string, preview);
+        return { ...answer, id: preview.id, expiresAt: new Date(preview.expiresAt).toISOString() };
+      });
+    }
+    if (op === 'owner-ui.pipeline-write') {
+      const preview = this.#previews.get(f.proof as string);
+      this.#previews.delete(f.proof as string);
+      if (
+        !preview?.pipeline ||
+        preview.id !== f.previewId ||
+        preview.revision !== f.revision ||
+        Date.now() >= preview.expiresAt
+      )
+        throw new OwnerUiError('sentinel.ownerUi.changed');
+      const { value, expectDigest } = preview.pipeline;
+      return this.#authority.with(f.proof, f.revision, 'settings.adopt', async () => {
+        const binding = this.#pipelineBinding(value, expectDigest);
+        if (canonicalDigest(binding) !== canonicalDigest(preview.binding))
+          throw new OwnerUiError('sentinel.ownerUi.changed');
+        // The receipt names exactly these bytes replacing exactly the file the owner's view read; the service spends
+        // it once and writes the file, and adopts nothing (adoption stays the CLI owner's act).
+        const receipt = issueOwnerUiReceipt(
+          new OwnerUiReceiptBook(join(this.#ws.trustDir, 'receipts'), activeOwnerUiProof()!),
+          binding,
+          new Date(),
+        );
+        return this.#handle('pipeline.write', { pipeline: value, expectDigest, receiptId: receipt.id }, by, context);
+      });
+    }
     if (op === 'owner-ui.control-preview') {
       const id = runId(f.runId);
       if (typeof f.action !== 'string' || !['start', 'pause', 'cancel'].includes(f.action)) throw new OwnerUiError();
@@ -292,15 +383,15 @@ export class OwnerUiOperations {
       return this.#authority.with(f.proof, f.revision, action, async () => {
         const plan = await currentPlan(this.#store, id);
         if (!plan || plan.kind !== 'analysis') throw new OwnerUiError('sentinel.service.planUnknown');
-        if (action === 'run.start' && plan.effects.includes('paid-inference'))
-          return {
-            unavailable: true,
-            outcome: controlOutcome(
-              result('run', 'configuration-failure', { reasonCode: 'sentinel.review.foregroundRequired' }),
-            ),
-          };
         const adopted = ownerUiPolicy(this.#ws);
         if ('refusal' in adopted) return { unavailable: true, outcome: controlOutcome(adopted.refusal) };
+        // A start that calls models is the composite the owner confirms once here (ADR 48 as amended by U-3): the
+        // service's own start preview names its stages and each model with its budget, and one envelope receipt per
+        // model is confirmed with the start.
+        const paid = action === 'run.start' && plan.effects.includes('paid-inference');
+        const envelopes = paid ? this.#envelopes(plan, adopted.policy) : [];
+        if ('refusal' in envelopes) return { unavailable: true, outcome: controlOutcome(envelopes.refusal) };
+        const composite: any = paid ? await this.#handle('start.preview', { runId: id }, by, context) : null;
         const binding = {
             ...runWriteBinding(this.#ws, action as 'run.start' | 'run.pause' | 'run.cancel', plan, {
               storeId: this.#store.storeId,
@@ -317,17 +408,30 @@ export class OwnerUiOperations {
           binding,
           revision: f.revision as number,
           expiresAt: Date.now() + 30000,
+          ...(paid ? { envelopes } : {}),
         };
-        if (this.#previews.size >= 4 && !this.#previews.has(f.proof as string))
-          this.#previews.delete(this.#previews.keys().next().value!);
-        this.#previews.set(f.proof as string, preview);
+        for (const e of envelopes as readonly ReceiptBinding[]) {
+          const checked = this.#preflight(e, 'model');
+          if (checked.refusal) return { unavailable: true, outcome: controlOutcome(checked.refusal) };
+        }
+        this.#remember(f.proof as string, preview);
+        const facts = (composite?.facts ?? {}) as Record<string, unknown>;
         return {
           id: preview.id,
           runId: id,
           action,
           effects: binding.intent.effects,
           expiresAt: new Date(preview.expiresAt).toISOString(),
-          modelAdmission: false,
+          modelAdmission: paid,
+          ...(paid
+            ? {
+                composite: {
+                  stages: Array.isArray(facts.stages) ? facts.stages : [],
+                  models: Array.isArray(facts.models) ? facts.models : [],
+                  envelopes: (envelopes as readonly ReceiptBinding[]).length,
+                },
+              }
+            : {}),
         };
       });
     }
@@ -338,10 +442,10 @@ export class OwnerUiOperations {
     return this.#authority.with(f.proof, f.revision, preview.action, async () => {
       const plan = await currentPlan(this.#store, preview.runId);
       if (!plan) throw new OwnerUiError('sentinel.service.planUnknown');
-      if (preview.action === 'run.start' && plan.effects.includes('paid-inference'))
-        return controlOutcome(
-          result('run', 'configuration-failure', { reasonCode: 'sentinel.review.foregroundRequired' }),
-        );
+      const paid = preview.action === 'run.start' && plan.effects.includes('paid-inference');
+      // The composite confirmed in the preview, and nothing else: a start whose models or envelopes changed since is
+      // a changed view, never a narrower or wider start.
+      if (paid !== !!preview.envelopes) throw new OwnerUiError('sentinel.ownerUi.changed');
       const binding = {
         ...runWriteBinding(this.#ws, preview.action as 'run.start' | 'run.pause' | 'run.cancel', plan, {
           storeId: this.#store.storeId,
@@ -353,17 +457,31 @@ export class OwnerUiOperations {
         throw new OwnerUiError('sentinel.ownerUi.changed');
       const preflight = this.#preflight(binding);
       if (preflight.refusal) return controlOutcome(preflight.refusal);
-      const receipt = issueOwnerUiReceipt(
-        new OwnerUiReceiptBook(join(this.#ws.trustDir, 'receipts'), activeOwnerUiProof()!),
-        binding,
-        new Date(),
-      );
+      let envelopes: readonly ReceiptBinding[] = [];
+      if (paid) {
+        const policy = ownerUiPolicy(this.#ws);
+        if ('refusal' in policy) return controlOutcome(policy.refusal);
+        const now = this.#envelopes(plan, policy.policy);
+        if ('refusal' in now) return controlOutcome(now.refusal);
+        if (canonicalDigest(now) !== canonicalDigest(preview.envelopes))
+          throw new OwnerUiError('sentinel.ownerUi.changed');
+        for (const e of now) {
+          const checked = this.#preflight(e, 'model');
+          if (checked.refusal) return controlOutcome(checked.refusal);
+        }
+        envelopes = now;
+      }
+      const book = new OwnerUiReceiptBook(join(this.#ws.trustDir, 'receipts'), activeOwnerUiProof()!);
+      const receipt = issueOwnerUiReceipt(book, binding, new Date());
+      // One receipt per model envelope, each bound to exactly the store, run, plan digest and binding the review opens.
+      const envelopeReceipts = envelopes.map((e) => issueOwnerUiReceipt(book, e, new Date()).id);
       return controlOutcome(
         await this.#handle(
           preview.action,
           {
             ...(preview.action === 'run.start' ? { planId: preview.runId } : { runId: preview.runId }),
             receiptId: receipt.id,
+            ...(envelopeReceipts.length ? { envelopeReceipts } : {}),
           },
           by,
           context,
@@ -371,6 +489,62 @@ export class OwnerUiOperations {
       );
     });
   }
+  /** At most four pending confirmations, one per paired session. */
+  #remember(proof: string, preview: Preview) {
+    if (this.#previews.size >= 4 && !this.#previews.has(proof))
+      this.#previews.delete(this.#previews.keys().next().value!);
+    this.#previews.set(proof, preview);
+  }
+
+  /** The write of a pipeline file: exactly these bytes replacing exactly the file the owner's view read, under the policy. */
+  #pipelineBinding(pipeline: unknown, expectDigest: string | null): ReceiptBinding {
+    const adopted = ownerUiPolicy(this.#ws);
+    if ('refusal' in adopted) throw new OwnerUiError('sentinel.preparation.unavailable');
+    return {
+      ...pipelineWriteBinding(this.#ws, pipelineBytesOf(pipeline), expectDigest),
+      policyRevision: adopted.policy.revision,
+    };
+  }
+
+  /**
+   * The model envelopes a start opens, as the owner's CLI binds them (`confirmForService`): the plan's one binding
+   * resolved again under the current policy and required to be the admitted one, each bound to this store and run.
+   */
+  #envelopes(
+    plan: NonNullable<Awaited<ReturnType<typeof currentPlan>>>,
+    policy: ReturnType<typeof effectivePolicy>,
+  ): readonly ReceiptBinding[] | { refusal: ReturnType<typeof result> } {
+    const refusal = {
+      refusal: result('run', 'configuration-failure', { reasonCode: 'sentinel.provider.bindingChanged' }),
+    };
+    if (plan.modelConflict || !plan.model?.modelId) return refusal;
+    let binding: ReturnType<typeof bindProvider>;
+    try {
+      binding = bindProvider(policy, plan.model.providerId, plan.model.modelId);
+    } catch {
+      return refusal;
+    }
+    if (binding.digest !== plan.model.bindingDigest) return refusal;
+    return [envelopeBinding(binding, plan, this.#store.storeId, policy.revision, plan.model.budget)];
+  }
+
+  /** The workspace's pipeline file and what the owner's CLI `pipeline show` says of it. Reads only. */
+  #pipelineRead() {
+    const shown = showWorkspacePipeline(this.#ws);
+    const loaded = loadPipeline({ workspace: this.#ws.path, trustDir: this.#ws.trustDir, readOnly: true });
+    const facts = (shown.facts ?? {}) as Record<string, unknown>;
+    return {
+      schema: 'sentinel-viewer-pipeline/draft-1',
+      trust: facts.trust ?? loaded.trust,
+      reasonCode: shown.reasonCode ?? null,
+      pipeline: loaded.read?.pipeline ?? null,
+      fileDigest: loaded.read?.fileDigest ?? null,
+      digest: facts.digest ?? null,
+      problems: Array.isArray(facts.problems) ? facts.problems : [],
+      readOnly: true,
+    };
+  }
+
   get retaining() {
     return this.#authority.retaining;
   }
