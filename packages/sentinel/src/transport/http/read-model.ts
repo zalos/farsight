@@ -9,7 +9,8 @@
 // implementation, an image, a prompt) are provenance and are carried; the viewer prints them outside the business
 // register only. When the scan's accepted evidence holds a secret match, every file name, prompt text, model message
 // and request detail is withheld here, as the report withholds them (`withheld: true`).
-import type { Counted, CountPart } from '@farsight/core/dist/counts.js';
+// Core's `Counted` shape, through the contract that already declares it, so an installed package resolves its types.
+import type { ReportCount as Counted, ReportCountPart as CountPart } from '../../contracts/report.js';
 
 export const READ_MODEL_SCHEMAS = Object.freeze({
   scans: 'sentinel-viewer-scans/draft-1',
@@ -429,7 +430,7 @@ const SCOPE = Object.freeze({
   scans: 'sentinel.viewer.scope.scans',
   scan: 'sentinel.viewer.scope.scan',
   stage: 'sentinel.viewer.scope.stage',
-  step: 'sentinel.viewer.scope.step',
+  step: 'sentinel.viewer.scope.task',
   turn: 'sentinel.viewer.scope.turn',
 });
 
@@ -765,7 +766,7 @@ function stageCard(
     },
     counts: {
       steps: count(stage.units.length, 'sentinel.viewer.count.units', SCOPE.stage, 'plan units by stage', {
-        bizUnit: 'sentinel.viewer.count.steps',
+        bizUnit: 'sentinel.viewer.count.tasks',
         breakdown: statusBreakdown(statuses),
       }),
       attempts: count(attempts.length, 'sentinel.viewer.count.attempts', SCOPE.stage, 'ledger attempts', {

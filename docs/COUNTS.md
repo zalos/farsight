@@ -1040,3 +1040,37 @@ from `PreparationController.preview.adoptedSettings.mandatoryRules`. Both use th
 `sentinel.preparation.scope.configuration` and their matching two-register unit keys
 `sentinel.preparation.count.selectedRules` / `.mandatoryRules`. They are core `Counted` shapes and do not count
 captured files, executable checks, supported adapters or findings. No exact source-scope claim is made before capture.
+
+### Sentinel read model for the viewer (`sentinel-viewer-scans/draft-1`, `-scan/draft-1`, `-stage/draft-1`)
+
+The SCANS · PIPELINE · STAGE answers Sentinel's loopback host serves the viewer (`GET /api/sentinel/scans`,
+`/scans/<n>`, `/scans/<n>/stages/<stage>`, `/scans/<n>/report[/<format>]`; lane L-UX U-1). The pure fold is
+`packages/sentinel/src/transport/http/read-model.ts`; the records it reads are gathered inside the held owner service by
+`packages/sentinel/src/owner-ui/scans.ts`. **One source per number, named, never refolded:** a count another fold already
+prints is copied as that fold printed it (its own `source` and `scope`); the read model folds only what nothing else
+counts. Every `source` below names the fold; the read model's own sources start `sentinel viewer read model draft-1 ·`.
+A scan is the number of a run in the newest 64 the ledger lists (the owner panel's own window, `process.ts`), oldest
+first; with more retained runs the answer says `more` and the numbers count within the window.
+
+| number | unit (business) | scope | what it counts, and from where |
+|---|---|---|---|
+| scans listed | `sentinel.viewer.count.scans` | `sentinel.viewer.scope.scans` | Runs the ledger lists, newest first, at most 64 (`ledger.listRuns`) |
+| stages of a scan | `sentinel.viewer.count.stages` | `sentinel.viewer.scope.scan` | Work units of the bootstrap and current plan revisions grouped by their stage contract (the stage id until the declared pipeline, P-3), partitioned by status (`sentinel.viewer.count.part.*`: done · reused · running · waiting · held · failed · not run) |
+| agentic stages | `sentinel.viewer.count.agentic` (`.checkedByModel`) | `sentinel.viewer.scope.scan` | Stages whose work kind is agentic (a model review) |
+| findings | `sentinel.count.findings` (`sentinel.count.issues`) | `sentinel.scope.report` | **Copied** from the shareable report fold's `counts.findings` (`fullReportFormat`, the same document `report` prints); absent with `sentinel.viewer.absent.notFinished`, `.reportUnavailable` or `.notCounted` |
+| captured files seen by no check | `sentinel.count.seenByNoStage` | `sentinel.scope.inventory` | **Copied** from the same report's `counts.seenByNoStage`; its `of` is every captured file. The read model counts no captured files of its own |
+| folders never listed | `sentinel.count.unknownBoundaries` | `sentinel.scope.inventory` | **Copied** from the same report's `counts.unknownScopeBoundaries` (the full report's number, not the preview report's) |
+| required checks covered | `sentinel.viewer.count.requiredCovered` (*n of m*) | `sentinel.viewer.scope.scan` | `canonicalResult` facts `requiredComplete` of `requiredChecks`, the numbers `run` and `status` print; absent for a preview (`sentinel.service.previewNotCoverage`) or an unfinished scan |
+| model observations | `sentinel.viewer.count.modelObservations` (`.modelNotes`) | scan · stage · task | Observations in the accepted review records (`readPublishedInstructions`), each once; 0 when no stage is agentic; withheld under a secret match. The report does not project them yet (#194); when P-6 does, this copies the report's |
+| work units (tasks) of a stage | `sentinel.viewer.count.units` (`.tasks`) | `sentinel.viewer.scope.stage` | The stage's work units, partitioned by status like the stages |
+| attempts | `sentinel.viewer.count.attempts` (`.tries`) | stage · task | Ledger attempts of the stage's units (`ledger.listAttempts`); reused work carries none here (its tries are the earlier scan's) |
+| captured files read | `sentinel.viewer.count.inputs` | stage · task | The plan units' pinned inputs, each file once per unit that reads it |
+| findings of a stage | `sentinel.count.findings` (`sentinel.count.issues`) | `sentinel.viewer.scope.stage` | A partition of the report's findings by the adapter the plan pins for each finding's rule (`pins.rules`); the stages' parts sum to the scan's findings |
+| tokens in · out | `sentinel.viewer.count.tokensIn` · `.tokensOut` (no business words) | stage · task · `sentinel.viewer.scope.turn` | Attempt usage the provider reported, summed (stage, task); one review operation's usage (turn). Absent, never 0, when no try reported it |
+| turns | `sentinel.viewer.count.turns` (`.exchanges`) | stage · task | Operations in the accepted review records |
+| citations | `sentinel.viewer.count.citations` | `sentinel.viewer.scope.task` | Evidence locations one model observation cites |
+
+Two measures carry their scope and source the same way: a **duration** (`ms`; scan: created to completed; stage and
+task: first try's start to last try's end, absent while running) and a **cost** (`basis`: `none` when no model ran,
+`recorded` when every model try was priced at the owner's rates — the amounts added exactly as decimals —, `unobserved`
+when any was not (a subscription CLI), `mixed` across currencies; never `0` for an unobserved price).

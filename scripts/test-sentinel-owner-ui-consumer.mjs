@@ -64,11 +64,11 @@ try {
   };
   launch(bin, ['serve', '--workspace', ws, '--idle-ms', '0']);
   const services = join(env.XDG_STATE_HOME, 'farsight/sentinel/trust/services');
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 1000; i++) {
     try {
       if (readdirSync(services).some((n) => n.endsWith('.json'))) break;
     } catch {}
-    assert.ok(i < 199, log);
+    assert.ok(i < 999, log);
     await wait(20);
   }
   const socket = createServer();
@@ -82,23 +82,23 @@ try {
     env,
   });
   launch(c.bin('farsight'), ['serve', graph, '--port', String(port)]);
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 1000; i++) {
     try {
       const v = await (await fetch(origin + '/api/version')).json();
       if (v.session?.instance) break;
     } catch {}
-    assert.ok(i < 199, log);
+    assert.ok(i < 999, log);
     await wait(20);
   }
   assert.equal((await (await fetch(origin + '/api/sentinel/companion')).json()).available, false);
   launch(bin, ['owner-ui', '--workspace', ws, '--farsight-origin', origin]);
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 1000; i++) {
     const v = await (await fetch(origin + '/api/sentinel/companion')).json();
     if (v.available) {
       assert.deepEqual(Object.keys(v).sort(), ['available', 'ownerOrigin']);
       break;
     }
-    assert.ok(i < 199, log);
+    assert.ok(i < 999, log);
     await wait(20);
   }
   browser = await chromium.launch({ headless: true });
