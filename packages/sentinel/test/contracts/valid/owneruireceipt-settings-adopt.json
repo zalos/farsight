@@ -1,0 +1,22 @@
+{
+  "schema": "sentinel-owneruireceipt/draft-1",
+  "id": "receipt-0003",
+  "actor": {
+    "channel": "owner-ui",
+    "principal": "human"
+  },
+  "action": "settings.adopt",
+  "intentDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "stateDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "policyRevision": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "issuedAt": "2026-10-22T10:00:00.000000000Z",
+  "expiresAt": "2026-10-22T10:00:30.000000000Z",
+  "issuer": {
+    "workspaceDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "storeId": "store-1",
+    "ownerEpoch": "epoch-1",
+    "hostInstance": "host-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sessionDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "contextRevision": 1
+  }
+}
