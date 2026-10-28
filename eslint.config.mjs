@@ -14,10 +14,12 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 // Sentinel's layers (docs/proposals/sentinel-v2/README.md §6): imports point down only, a layer may import its own
 // layer and the ones below it. Each key is a folder or a root file of packages/sentinel/src; `review/providers` is
 // the future `providers/` and is listed before `review` so its files are not also `review`. `app`, `stages` and
-// `providers` are folders the plan adds. The rule reports and never fails (`pnpm lint` runs errors only, so it does
-// not even run there; `pnpm lint:report` shows it). The gate is packages/sentinel/test/import-matrix.test.ts, which
-// lints with this block, compares the upward edges with the known debt in import-matrix.json and fails on a new one,
-// on a new member of the import cycle, and on a folder this table does not name.
+// `providers` are folders the plan adds. The rule is an error. Every upward import that existed when it arrived is
+// frozen in eslint-suppressions.json, file by file with its count, so a new one anywhere fails `pnpm lint`, inside a
+// folder pair that already has debt too; an import that is removed leaves its suppression unused until it is pruned
+// (`pnpm lint --prune-suppressions`). packages/sentinel/test/import-matrix.test.ts checks what lint cannot: that this
+// table names every folder, that the rule reports exactly the edges the table says point up, and that the import
+// cycle gains no member.
 export const SENTINEL_LAYERS = Object.freeze({
   kernel: 0,
   contracts: 1,
@@ -64,7 +66,7 @@ const sentinelPolicies = Object.keys(SENTINEL_LAYERS).map((name) => ({
 }));
 /** The message the import-matrix test parses: keep `sentinel layers: <from> → <to>` at its start. */
 export const SENTINEL_LAYER_MESSAGE =
-  'sentinel layers: {{from.type}} → {{to.type}} points up; imports point down only (docs/proposals/sentinel-v2/README.md §6, known debt in packages/sentinel/test/import-matrix.json)';
+  'sentinel layers: {{from.type}} → {{to.type}} points up; imports point down only (docs/proposals/sentinel-v2/README.md §6, the debt it found is frozen in eslint-suppressions.json)';
 
 const unused = {
   args: 'after-used',
@@ -147,7 +149,7 @@ export default defineConfig([
   },
   { files: ['**/*.cjs'], languageOptions: { sourceType: 'commonjs', globals: globals.node } },
 
-  // Sentinel's layers, report-only (see SENTINEL_LAYERS).
+  // Sentinel's layers; today's upward imports are frozen as known debt (see SENTINEL_LAYERS).
   {
     files: [`${SENTINEL_SRC}/**/*.ts`],
     plugins: { boundaries },
@@ -161,7 +163,7 @@ export default defineConfig([
     },
     rules: {
       'boundaries/dependencies': [
-        'warn',
+        'error',
         { default: 'disallow', policies: sentinelPolicies, message: SENTINEL_LAYER_MESSAGE },
       ],
     },

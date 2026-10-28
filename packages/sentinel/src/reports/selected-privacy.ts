@@ -14,6 +14,13 @@ import { secretObservation } from './accepted-secrets.js';
 const refuse = (reason: string): never => {
   throw new ExecutionError('sentinel.execution.bootstrapEvidence', { reason });
 };
+/**
+ * Reads, for privacy only, the accepted Gitleaks publications of a run's proven same-capture selected ancestry, and of
+ * the run itself with `includeCurrent`: the names of files whose name matched, and whether any secret matched. Each
+ * publication is checked as the full report reads it; a missing, malformed or unbound record refuses with
+ * `sentinel.execution.bootstrapEvidence`. These records never become the run's findings, coverage or counts. A run with
+ * no selection or path request reads nothing unless `includeCurrent` is set.
+ */
 export async function selectedSecretPrivacy(
   store: SentinelStore,
   runId: string,
@@ -178,6 +185,7 @@ export async function selectedSecretPrivacy(
   return { names: [...names].sort((a, b) => b.length - a.length), hasMatches };
 }
 
+/** The matched file names `selectedSecretPrivacy` finds, longest first. */
 export async function selectedSecretNames(
   store: SentinelStore,
   runId: string,

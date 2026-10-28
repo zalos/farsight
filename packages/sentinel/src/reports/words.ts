@@ -2,13 +2,18 @@
 // live catalog or the product: what a recipient reads is what the document pinned.
 import type { ReportCount, ReportEnvelope } from '../contracts/index.js';
 
+/** Which of a definition's two texts to read. */
 export type Register = 'business' | 'code';
 
+/**
+ * The document's own text for a catalog key in one register, or the key itself when the document does not define it.
+ */
 export function wordOf(doc: ReportEnvelope, key: string, register: Register): string {
   const d = doc.definitions?.find((x) => x.key === key);
   return d ? d.text[register] : key;
 }
 
+/** The document's own definition of a catalog key, when it carries one. */
 export function defineOf(doc: ReportEnvelope, key: string): string | undefined {
   return doc.definitions?.find((x) => x.key === key)?.define;
 }
@@ -40,6 +45,7 @@ export const COUNT_ORDER = [
 
 /** Catalog keys are camel-case: `changed-evidence` → `changedEvidence`. */
 export const camel = (s: string) => s.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
-/** The catalog key of a comparison label's word, and of its count part. */
+/** The catalog key of a comparison label's word. */
 export const labelKey = (label: string) => `sentinel.compare.label.${camel(label)}`;
+/** The catalog key of a comparison label's count part. */
 export const labelPartKey = (label: string) => `sentinel.count.part.${camel(label)}`;

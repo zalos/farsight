@@ -28,6 +28,10 @@ import {
 import { ownerDecisionAfterRetainedAppend } from './owner-decision-test-hooks.js';
 import { decisionProjection } from './owner-evaluation.js';
 
+/**
+ * The owner decision command's bounds: input bytes, rendered output bytes, the page size (default and most) and the
+ * cursor length.
+ */
 export const DECISION_CLI_LIMITS = Object.freeze({
   inputBytes: 64 * 1024,
   outputBytes: 32 * 1024 * 1024,
@@ -39,9 +43,15 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const DECISION = /^decision-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const refused = (command: string, code: string) =>
   result(command, 'refused', { reasonCode: 'sentinel.decision.' + code });
+/** The result of one owner decision command, before it is written out. */
 export interface OwnerDecisionOutput {
   readonly result: CommandResult;
 }
+/**
+ * Renders a command result as one JSON line or as text in the catalog's words. A rendering larger than
+ * `DECISION_CLI_LIMITS.outputBytes` is replaced by a `delivery-failed` result with `sentinel.decision.deliveryRefused`
+ * that keeps only the decision id and its publication state.
+ */
 export function decisionWire(output: OwnerDecisionOutput, json: boolean): { result: CommandResult; text: string } {
   const encode = (r: CommandResult) =>
     json
