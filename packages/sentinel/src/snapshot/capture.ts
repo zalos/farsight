@@ -13,6 +13,7 @@
 // A failure before admission aborts every stage it registered: the bytes written become unreferenced and wait for
 // an explicit prune. Nothing here opens the ledger database or the owner lock; it uses the facade only.
 import { withAdmissionFence } from '../store/admission-fence.js';
+import { createHash } from 'node:crypto';
 import { lstatSync, realpathSync } from 'node:fs';
 import { isAbsolute, sep } from 'node:path';
 import type { ArtifactId, CaptureEntry, Id, SnapshotEnvelope, SnapshotSource } from '../contracts/index.js';
@@ -36,12 +37,9 @@ import {
 } from './materialization.js';
 import { digestOf, isRecordablePath, resolvePolicy, type CapturePolicy } from './policy.js';
 import { enumerateWorktree } from './worktree.js';
-import { sha256Hex } from '../kernel/digest.js';
 
-/** What a capture reads: a committed tree (from Git objects, never the checkout) or the working copy as it is. */
 export type CaptureModeRequest = 'committed-tree' | 'working-copy';
 
-/** One source to capture: its id, a stable repository name, the owner-authorised root and committed-tree options. */
 export interface CaptureSourceRequest {
   readonly sourceId: Id;
   /** A stable identity for the repository (a remote URL or a local name). Never resolved or contacted. */
@@ -60,7 +58,6 @@ export interface CaptureSourceRequest {
   readonly submodules?: readonly SubmoduleRequest[];
 }
 
-/** One capture: its mode, its sources, the capture policy and the stage size, with test seams for the clock. */
 export interface CaptureRequest {
   readonly mode: CaptureModeRequest;
   readonly sources: readonly CaptureSourceRequest[];
@@ -73,7 +70,6 @@ export interface CaptureRequest {
   readonly onStaged?: (stageIds: readonly string[]) => void;
 }
 
-/** A published capture: the snapshot envelope, its ledger record, its stored manifest and materialization. */
 export interface CaptureResult {
   readonly snapshot: SnapshotEnvelope;
   /** The ledger's record of the admitted snapshot. */
@@ -415,7 +411,7 @@ function buildEnvelope(
     entries,
   );
   const inventoryDigest = inventoryDigestOf(captureMode, policyDigest, e.sources, entries, facts);
-  const id = `snap-${sha256Hex(`${inventoryDigest}|${createdAt}|${attempt}`).slice(0, 32)}`;
+  const id = `snap-${createHash('sha256').update(`${inventoryDigest}|${createdAt}|${attempt}`).digest('hex').slice(0, 32)}`;
   return {
     schema: 'sentinel-snapshot/draft-1',
     id,

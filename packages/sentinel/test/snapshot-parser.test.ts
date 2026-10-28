@@ -318,6 +318,7 @@ test('the parser module uses only the public parser, never application ingestion
     '@farsight/code-parser/adapters/tsjs',
     '@farsight/core/dist/strings-sentinel-parser.js',
     '@farsight/graph',
+    'node:crypto',
     'node:fs',
     'node:path',
   ]);

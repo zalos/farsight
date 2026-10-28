@@ -281,7 +281,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // node:sqlite is imported lazily, by the first store open, never at module load.
   'store/runtime.js': ['dynamic:node:sqlite'],
   // Source capture reads files and Git objects itself: no child process, so no git, hook, filter or fetch.
-  'snapshot/capture.js': ['node:fs', 'node:path'],
+  'snapshot/capture.js': ['node:crypto', 'node:fs', 'node:path'],
   'snapshot/errors.js': ['@farsight/core/dist/strings-sentinel-capture.js'],
   'snapshot/git.js': ['node:crypto', 'node:fs', 'node:path', 'node:zlib'],
   'snapshot/inventory.js': ['node:fs', 'node:path'],
@@ -293,6 +293,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
     'dynamic:@farsight/code-parser',
     'dynamic:@farsight/code-parser/adapters/java',
     'dynamic:@farsight/code-parser/adapters/tsjs',
+    'node:crypto',
     'node:fs',
     'node:path',
   ],
