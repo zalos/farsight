@@ -1514,15 +1514,15 @@ The WALK prints a stop of kind `offPlatform` after the screen's hand-offs (core 
 The Sentinel tab is a ladder with the Map's shape: a chrome that holds still and one dock on the right. **Row 1**: the
 five stops SCANS · PIPELINE · STAGE · ENTRY POINTS · PATH (`.map-lvls`, the last two greyed *not yet built* — a press
 goes nowhere), the LAYOUT slot (`list · compare` at SCANS with compare greyed, `ladder · table` at PIPELINE,
-`tasks · table` at STAGE) and the tools (**Scan**, Refresh). **Row 2**: the crumb (workspace › scan #n · when · source
+`detail · table` at STAGE) and the tools (**Scan**, Refresh). **Row 2**: the crumb (workspace › scan #n · when · source
 commit and profile outside the business register · the stage tally; at STAGE *stage n of m* and its kind) and the
 verdict chips (required coverage, the report's findings, model observations when a stage is agentic, the policy word).
 
 | stop | draws | the dock |
 |---|---|---|
-| scans (`#/sentinel`) | every retained scan, newest first: number, when, findings, model observations, policy word, stages, agentic stages, cost, duration | the owner panel |
-| pipeline (`#/sentinel/<n>[?layout=table][&pick=<stage>]`) | the stages top to bottom on a rail; a level of two or more stages draws as one row side by side; each card its kind, provenance line (code and hybrid only), status and time, findings or observations, cost, what it read and its primary outputs | the picked stage (else the running one, else the first agent): where it ran, runner, model requested and reported, prompt and skills, turns, tokens (not in business), cost, tries, implementation digest and whether this installation still holds it, everything it read and produced; *Open the stage*, *Rerun this stage* greyed with its reason |
-| stage (`#/sentinel/<n>/<stage>[?layout=table]`) | its tasks on the left (the file each covered; *n files* in business); on the right a model task's instructions (the prompt, folded), each turn by the reply grammar (*asked to read lines*, *answered*, a refusal's reason) with its tokens, and the cited observations; a tool task's tries | the stage |
+| scans (`#/sentinel[?before=<n>]`) | one page of retained scans, newest first: #number, when, findings, model observations, policy word, stages, agentic stages, cost, duration; *Older scans* / *Newest scans* page by number | the owner panel |
+| pipeline (`#/sentinel/<run id>[?layout=table][&pick=<stage>]`) | the stages top to bottom on a rail; a level of two or more stages draws as one row side by side; each card its kind, provenance line (code and hybrid only: adapter and version, the image its try ran), status and time, findings or observations, cost, what it read and its primary outputs | the picked stage (else the running one, else the first agent): where it ran, runner, model requested and reported, prompt and skills, turns, tokens (not in business), cost, tries, what ran (from its first check's try: image, scrubbed command, environment names, limits), implementation digest and whether this installation still holds it, everything it read and produced; *Open the stage*, *Rerun this stage* greyed with its reason |
+| stage (`#/sentinel/<run id>/<stage>[?unit=<k>][&layout=table]`) | its checks or reviews on the left (the file each covered, a guided review's rule; *n files* in business); on the right the open one (`unit=`, read on its own): a review's instructions (the prompt, folded), each exchange by the reply grammar (*asked to read lines*, *answered*, a refusal's reason) with its tokens and, outside business, its retained words behind *read the words*, and the cited observations; a check's tries, what its try ran and what it left (each output's size and, when its class and the scan allow, its text) | the stage |
 
 Every number is a `Counted` from the read model (docs/COUNTS.md § Sentinel read model) printed through
 `lib/counted.js`; a duration and a cost carry their scope as a tip; a cost never prints `$0` for an unobserved price.
@@ -1534,8 +1534,8 @@ rows, the picked stage, the card's outputs and the Scan button's state.
 **Where the data comes from.** Farsight's server imports no Sentinel code (ADR 18). The page discovers the companion
 origin from `GET /api/sentinel/companion` (and the served page's `data-sentinel-owner-origin`), mounts the companion's
 own frame in the dock's *Owner panel* pane (built once and only shown or hidden: moving an iframe reloads it, and the
-frame's page is its pairing), and reads the read model cross-origin — `GET <companion>/api/sentinel/scans`, `/scans/<n>`,
-`/scans/<n>/stages/<stage>` — with the **read pass** the paired frame posts it (`sentinel-owner-read`, bound to the
+frame's page is its pairing), and reads the read model cross-origin — `GET <companion>/api/sentinel/scans`,
+`/scans/before/<n>`, `/scans/<run id>`, `/scans/<run id>/stages/<stage>`, `.../units/<k>` — with the **read pass** the paired frame posts it (`sentinel-owner-read`, bound to the
 frame's nonce and document; renewed with `sentinel-owner-read-request` after a 401). The pass reads and nothing else.
 A scan still running is read again every 2 s, so the ladder fills in as it runs.
 

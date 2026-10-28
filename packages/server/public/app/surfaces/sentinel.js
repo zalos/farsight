@@ -27,11 +27,11 @@ import {
   kindChip,
   whereKey,
   shortDigest,
+  imageWords,
   provenanceParts,
   ladderRows,
   pickedStage,
   cardOutputs,
-  pluralKey,
   scanLive,
   scanState,
 } from '../lib/sentinel-model.js';
@@ -54,7 +54,8 @@ const SN = {
   scans: null,
   scan: null,
   stage: null,
-  stepAt: 1,
+  /** the check or review the STAGE stop has open (the read model's unit answer) */
+  unit: null,
   error: null,
   loading: false,
   timer: null,
@@ -207,23 +208,28 @@ async function load() {
   SN.loading = true;
   draw();
   try {
-    if (place.stop === 'scans') SN.scans = await read('scans');
-    else if (place.stop === 'pipeline') SN.scan = await read('scans/' + place.scan);
+    const at = place.scan ? 'scans/' + encodeURIComponent(place.scan) : '';
+    if (place.stop === 'scans') SN.scans = await read(place.before ? 'scans/before/' + place.before : 'scans');
+    else if (place.stop === 'pipeline') SN.scan = await read(at);
     else {
-      const [scan, stage] = await Promise.all([
-        read('scans/' + place.scan),
-        read('scans/' + place.scan + '/stages/' + encodeURIComponent(place.stage)),
-      ]);
+      const stageAt = at + '/stages/' + encodeURIComponent(place.stage);
+      const [scan, stage] = await Promise.all([read(at), read(stageAt)]);
       SN.scan = scan;
       SN.stage = stage;
+      // The open check or review, read on its own: its tries, what ran, what it left and every exchange's words.
+      const k = Math.min(Math.max(place.unit || 1, 1), stage.units.length || 1);
+      SN.unit = stage.units.length ? await read(stageAt + '/units/' + k) : null;
     }
     if (place.stop !== 'scans' && !SN.scans) SN.scans = await read('scans').catch(() => null);
     SN.error = null;
   } catch (e) {
     SN.error = (e && e.code) || 'sentinel.ownerUi.failed';
     // what the failed read was for is not drawn from an older answer
-    if (place.stop === 'stage') SN.stage = null;
-    if (place.stop !== 'scans') SN.scan = SN.scan && SN.scan.scan.number === place.scan ? SN.scan : null;
+    if (place.stop === 'stage') {
+      SN.stage = null;
+      SN.unit = null;
+    }
+    if (place.stop !== 'scans') SN.scan = SN.scan && SN.scan.scan.id === place.scan ? SN.scan : null;
   }
   if (gen !== SN.generation) return;
   SN.loading = false;
@@ -251,13 +257,6 @@ const word = (key) => esc(t(key));
 const keyChip = (cls, key, extra = '') => chip(cls, word(key) + extra, defAttrs(key));
 const cnt = (c, opts) => countedHtml(c, API, opts);
 const fill = (key, vars) => Object.entries(vars).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), t(key));
-/** `fill` with the singular words when n is one. */
-const fillN = (key, n) =>
-  fill(
-    pluralKey(key, n, (k) => !!S.STRINGS?.[k]),
-    { n },
-  );
-
 function whenWords(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -375,16 +374,16 @@ function crumbHtml() {
   let h = ws ? '<b>' + esc(ws) + '</b>' : '';
   if (p.stop === 'scans') {
     h += (h ? sep : '') + word('sentinel.viewer.crumb.scans');
-    if (SN.scans) h += dot + cnt(SN.scans.counts.scans);
+    if (SN.scans) h += dot + cnt(SN.scans.counts.shown);
     return h;
   }
-  const row = SN.scan?.scan;
+  const row = SN.scan?.scan?.id === p.scan ? SN.scan.scan : null;
   h +=
     (h ? sep : '') +
     '<a href="' +
     esc(sentinelHash({ scan: p.scan })) +
     '">' +
-    esc(fill('sentinel.viewer.crumb.scan', { n: p.scan })) +
+    esc(row ? fill('sentinel.viewer.crumb.scan', { n: row.number }) : t('sentinel.viewer.crumb.scans')) +
     '</a>';
   if (row) {
     h += dot + esc(whenWords(row.createdAt));
@@ -450,10 +449,10 @@ function scansHtml() {
         .join('<span class="snt-sep">·</span>');
       const meta = [esc(whenWords(r.createdAt))];
       if (!biz() && r.source?.commit) meta.push('<span class="mono">' + esc(r.source.commit.slice(0, 8)) + '</span>');
-      if (r.parent) meta.push(esc(fill('sentinel.viewer.scans.rerunOf', { n: r.parent })));
+      if (r.parent?.number) meta.push(esc(fill('sentinel.viewer.scans.rerunOf', { n: r.parent.number })));
       return (
         '<a class="snt-scan-row" href="' +
-        esc(sentinelHash({ scan: r.number })) +
+        esc(sentinelHash({ scan: r.id })) +
         '"><span class="snt-num">#' +
         r.number +
         '</span><span class="snt-when">' +
@@ -470,12 +469,29 @@ function scansHtml() {
       );
     })
     .join('');
+  // The list pages backwards by scan number: older scans are a door, never silently dropped.
+  const pages = [
+    SN.place.before
+      ? '<a class="map-tb" href="' +
+        esc(sentinelHash({})) +
+        '"' +
+        defAttrs('sentinel.viewer.scans.newest') +
+        '>' +
+        word('sentinel.viewer.scans.newest') +
+        '</a>'
+      : '',
+    s.page?.older
+      ? '<a class="map-tb" href="' +
+        esc(sentinelHash({ before: s.page.older })) +
+        '"' +
+        defAttrs('sentinel.viewer.scans.older') +
+        '>' +
+        word('sentinel.viewer.scans.older') +
+        '</a>'
+      : '',
+  ].join('');
   return (
-    head +
-    '<div class="snt-scans">' +
-    rows +
-    '</div>' +
-    (s.more ? '<p class="snt-sub">' + word('sentinel.viewer.scans.more') + '</p>' : '')
+    head + '<div class="snt-scans">' + rows + '</div>' + (pages ? '<div class="snt-pages">' + pages + '</div>' : '')
   );
 }
 
@@ -609,6 +625,49 @@ function kv(key, value) {
   return value ? '<dt' + defAttrs(key) + '>' + word(key) + '</dt><dd>' + value + '</dd>' : '';
 }
 
+const mono = (text) => '<span class="mono">' + esc(text) + '</span>';
+
+/** A CPU share, in its words, with its scope's tip (a measure, not a count: it need not be whole). */
+function measureHtml(m) {
+  if (!m) return '';
+  return (
+    '<span class="snt-dur"' +
+    tipAttrs({ key: m.scope, noFocus: true }) +
+    '>' +
+    esc(fill(m.unit, { n: m.value })) +
+    '</span>'
+  );
+}
+
+/**
+ * What one try ran, from its authenticated invocation record (code and hybrid registers only): the image actually
+ * run, the command with host paths and tokens already scrubbed by the read model, the environment names (never
+ * values) and the limits; or why there is none to show.
+ */
+function invocationKv(inv, absent) {
+  if (!inv) return kv('sentinel.viewer.field.ran', word(absent || 'sentinel.viewer.absent.notRecorded'));
+  const limits = inv.limits
+    ? [
+        cnt(inv.limits.memory),
+        measureHtml(inv.limits.cpus),
+        cnt(inv.limits.processes),
+        durationHtml(inv.limits.timeout),
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+  return (
+    kv('sentinel.viewer.field.ran', esc(fill('sentinel.viewer.dock.fromTry', { n: inv.attempt }))) +
+    (inv.operation ? kv('sentinel.viewer.field.operation', mono(inv.operation)) : '') +
+    (inv.image ? kv('sentinel.viewer.field.image', mono(imageWords(inv.image))) : '') +
+    (inv.argv.length ? kv('sentinel.viewer.field.command', mono(inv.argv.join(' '))) : '') +
+    (inv.environmentNames.length
+      ? kv('sentinel.viewer.field.environment', mono(inv.environmentNames.join(', ')))
+      : '') +
+    kv('sentinel.viewer.field.limits', limits)
+  );
+}
+
 function ioList(list) {
   return list.map((io) => keyChip('plain', io.key, io.count ? ' (' + io.count.n + ')' : '')).join('') || '—';
 }
@@ -666,7 +725,7 @@ function stageDockHtml(stage) {
     kv('sentinel.viewer.field.cost', costHtml(stage.cost)) +
     kv('sentinel.viewer.field.tries', cnt(stage.counts.attempts)) +
     kv('sentinel.viewer.field.inputs', stage.counts.inputs.n ? cnt(stage.counts.inputs) : '') +
-    (code && p.image ? kv('sentinel.viewer.field.image', '<span class="mono">' + esc(p.image) + '</span>') : '') +
+    (code ? invocationKv(p.invocation, p.invocationAbsent) : '') +
     (code
       ? kv(
           'sentinel.viewer.field.implementation',
@@ -714,17 +773,28 @@ function placeWords(x) {
   return ' · <span class="mono">' + esc(x.path + (x.lines ? ':' + x.lines.join('–') : '')) + '</span>';
 }
 
+/** An exchange's retained words, verbatim and bounded (code and hybrid registers; the business register reads the gist). */
+function wordsHtml(part) {
+  if (!part || biz()) return '';
+  return (
+    '<details class="snt-words"><summary>' +
+    word('sentinel.viewer.turn.words') +
+    (part.truncated ? ' · ' + word('sentinel.viewer.turn.cut') : '') +
+    '</summary><pre class="snt-pre">' +
+    esc(part.text) +
+    '</pre></details>'
+  );
+}
+
 function turnHtml(turn) {
   const sent = turn.sent
-    ? word(turn.sent.key) +
-      (turn.sent.files != null ? ' · ' + esc(fillN('sentinel.viewer.turn.files', turn.sent.files)) : '') +
-      placeWords(turn.sent)
+    ? word(turn.sent.key) + (turn.sent.files ? ' · ' + cnt(turn.sent.files) : '') + placeWords(turn.sent)
     : word('sentinel.viewer.absent.notRecorded');
   const reply = turn.reply
     ? word(turn.reply.key) +
       placeWords(turn.reply) +
       (turn.reply.verdict ? ' · ' + esc(turn.reply.verdict) : '') +
-      (turn.reply.claims != null ? ' · ' + esc(fillN('sentinel.viewer.turn.claims', turn.reply.claims)) : '')
+      (turn.reply.claims ? ' · ' + cnt(turn.reply.claims) : '')
     : word('sentinel.viewer.absent.notRecorded');
   const tok = (c) => (c && !biz() ? cnt(c) : '');
   return (
@@ -734,6 +804,7 @@ function turnHtml(turn) {
     tok(turn.counts.tokensIn) +
     '</span></div><div class="snt-msg">' +
     sent +
+    wordsHtml(turn.text?.sent) +
     '</div></div>' +
     '<div class="snt-turn model"><div class="snt-who"><b>' +
     esc(fill('sentinel.viewer.turn.replyHead', { n: turn.number })) +
@@ -741,6 +812,7 @@ function turnHtml(turn) {
     tok(turn.counts.tokensOut) +
     '</span></div><div class="snt-msg">' +
     reply +
+    wordsHtml(turn.text?.reply) +
     '</div></div>'
   );
 }
@@ -821,9 +893,43 @@ function attemptsHtml(step) {
 }
 
 function taskLabel(st) {
-  return st.label && !biz()
-    ? '<span class="mono">' + esc(st.label) + '</span>'
-    : esc(fillN('sentinel.viewer.unit.files', st.files));
+  const r = st.reviewed;
+  if (r && r.kind === 'rule')
+    return biz() ? word('sentinel.viewer.reviewed.rule') : mono(r.rule + (r.path ? ' · ' + r.path : ''));
+  return st.label && !biz() ? mono(st.label) : cnt(st.counts.files);
+}
+
+/**
+ * What the open check or review left, from the unit answer: what its try ran (code and hybrid), then each retained
+ * output with its size and, where its class and the scan allow, its text verbatim behind a disclosure.
+ */
+function unitDetailHtml(open) {
+  const outs = open.outputs
+    .map((o) => {
+      const head = word(o.key) + (o.size && !biz() ? ' · ' + cnt(o.size) : '') + (!biz() ? ' · ' + mono(o.schema) : '');
+      if (o.text === null || biz())
+        return '<div class="snt-out">' + head + (o.withheld ? ' · ' + keyChip('warn', o.withheld) : '') + '</div>';
+      return (
+        '<details class="snt-out"><summary>' +
+        head +
+        (o.truncated ? ' · ' + word('sentinel.viewer.turn.cut') : '') +
+        '</summary><pre class="snt-pre">' +
+        esc(o.text) +
+        '</pre></details>'
+      );
+    })
+    .join('');
+  return (
+    (!biz() && !open.unit.review
+      ? '<h3>' +
+        word('sentinel.viewer.field.ran') +
+        '</h3><dl class="snt-kv">' +
+        invocationKv(open.invocation, open.invocationAbsent) +
+        '</dl>'
+      : '') +
+    (outs ? '<h3>' + word('sentinel.viewer.field.left') + '</h3>' + outs : '') +
+    (open.outputsMore ? '<p class="snt-sub">' + word('sentinel.viewer.unit.more') + '</p>' : '')
+  );
 }
 
 function stageStopHtml() {
@@ -858,7 +964,8 @@ function stageStopHtml() {
         .join('') +
       '</tbody></table>'
     );
-  const at = Math.min(Math.max(SN.stepAt || 1, 1), steps.length || 1);
+  const at = Math.min(Math.max(SN.place.unit || 1, 1), steps.length || 1);
+  const open = SN.unit && SN.unit.unit.number === at ? SN.unit : null;
   const list = steps
     .map(
       (st) =>
@@ -877,7 +984,7 @@ function stageStopHtml() {
         '</span></button>',
     )
     .join('');
-  const step = steps.find((x) => x.number === at);
+  const step = open ? open.unit : steps.find((x) => x.number === at);
   return (
     '<div class="snt-cols"><div class="snt-list"><div class="snt-label">' +
     cnt(s.stage.counts.units) +
@@ -889,6 +996,7 @@ function stageStopHtml() {
       ? '<div class="snt-note warn">' + word('sentinel.viewer.absent.withheld') + '</div>'
       : '') +
     (step ? (step.review ? reviewHtml(step.review) : attemptsHtml(step)) : '') +
+    (open ? unitDetailHtml(open) : '') +
     '</div></div>'
   );
 }
@@ -995,8 +1103,7 @@ function onClick(e) {
   }
   const step = target.closest('[data-step]');
   if (step) {
-    SN.stepAt = Number(step.dataset.step);
-    draw();
+    go({ ...SN.place, unit: Number(step.dataset.step) });
     return;
   }
   const card = target.closest('[data-stage]');
@@ -1033,8 +1140,17 @@ function scan(button) {
  * same way the Scan button does — greyed with its reason when it cannot, never a dead click.
  */
 export function sentinelScanDoorHtml() {
+  const why = readOnlyWhy();
+  if (why)
+    return (
+      '<span class="map-tb snt-door" style="margin-right:6px;opacity:.45" aria-disabled="true"' +
+      tipAttrs({ key: 'sys.readonly.control', noFocus: true }) +
+      '>' +
+      word('sentinel.viewer.tool.scan') +
+      '</span>'
+    );
   return (
-    '<a class="map-tb" href="' +
+    '<a class="map-tb snt-door" style="margin-right:6px" href="' +
     esc('#/sentinel?do=scan') +
     '"' +
     tipAttrs({ key: 'sentinel.viewer.scan.door', noFocus: true }) +
@@ -1053,8 +1169,8 @@ export async function mountSentinel(_route, el) {
   SN.scans = null;
   SN.scan = null;
   SN.stage = null;
+  SN.unit = null;
   SN.error = null;
-  SN.stepAt = 1;
   SN.dockTab = 'stage';
   el.innerHTML =
     '<div class="snt"><div class="snt-chrome"></div><div class="snt-body"><div class="snt-stage"></div>' +
@@ -1118,7 +1234,6 @@ export function sentinelUpdate(reason) {
   }
   const place = sentinelPlace(location.hash);
   const moved = JSON.stringify(place) !== JSON.stringify(SN.place);
-  if (moved && place.stage !== SN.place.stage) SN.stepAt = 1;
   SN.place = place;
   if (moved || reason === 'sync') void load();
   else draw();
@@ -1275,4 +1390,8 @@ body.surface-sentinel .surface{overflow:hidden}
 .snt-obs h4{margin:0 0 4px;font:10.5px var(--hud);letter-spacing:.1em;text-transform:uppercase;color:var(--k-agent)}
 .snt-obs p{margin:0 0 6px;font-size:12.5px}
 .snt .mono{font-family:var(--mono)}
+.snt-pages{display:flex;gap:6px;margin-top:10px}
+.snt-out{font-size:12px;color:var(--ink);padding:5px 0;border-bottom:1px solid var(--line-soft);overflow-wrap:anywhere}
+.snt-out summary,.snt-words summary{cursor:pointer;color:var(--muted)}
+.snt-words{margin-top:4px}
 `;

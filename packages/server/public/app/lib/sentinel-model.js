@@ -4,9 +4,11 @@
 // loopback host serves (packages/sentinel/src/transport/http/read-model.ts), and packages/server/test calls them with
 // literals. Words are catalog keys here, never prose: the surface prints them with t() in the register on screen.
 //
-// The address: `#/sentinel` (SCANS) · `#/sentinel/<n>` (PIPELINE of scan n) · `#/sentinel/<n>/<stage>` (STAGE), with
-// `layout=` the stop's layout and `pick=` the stage the PIPELINE dock shows. ENTRY POINTS and PATH are drawn greyed,
-// *not yet built*, with no address of their own.
+// The address: `#/sentinel` (SCANS; `before=<n>` an older page) · `#/sentinel/<run id>` (PIPELINE of that scan) ·
+// `#/sentinel/<run id>/<stage>` (STAGE; `unit=<k>` the check or review opened), with `layout=` the stop's layout and
+// `pick=` the stage the PIPELINE dock shows. A scan is addressed by its run id, as the read model addresses it; its
+// number (#n) is a display ordinal the answers carry. ENTRY POINTS and PATH are drawn greyed, *not yet built*, with no
+// address of their own.
 
 /** The five stops, in order; the last two are not built yet. */
 export const SENTINEL_STOPS = Object.freeze([
@@ -34,6 +36,7 @@ export const SENTINEL_LAYOUTS = Object.freeze({
 });
 
 const NUMBER = /^[1-9][0-9]{0,8}$/;
+const RUN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const STAGE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 /** A path segment decoded, or null when it is not valid percent-encoding. */
@@ -52,21 +55,24 @@ function decoded(seg) {
  */
 export function sentinelPlace(hash) {
   const h = String(hash || '');
-  const out = { stop: 'scans', scan: null, stage: null, layout: null, pick: null, act: null };
+  const out = { stop: 'scans', scan: null, stage: null, unit: null, before: null, layout: null, pick: null, act: null };
   if (!h.startsWith('#/sentinel')) return out;
   const qi = h.indexOf('?');
   const path = (qi >= 0 ? h.slice(0, qi) : h).replace(/@sync:\d+$/, '');
   const q = new URLSearchParams(qi >= 0 ? h.slice(qi + 1) : '');
   const segs = path.slice(2).split('/').filter(Boolean);
   if (segs[0] !== 'sentinel') return out;
-  if (segs[1] && NUMBER.test(segs[1])) {
-    out.scan = Number(segs[1]);
+  const run = segs[1] ? decoded(segs[1]) : null;
+  if (run && RUN.test(run)) {
+    out.scan = run;
     out.stop = 'pipeline';
     if (segs[2]) {
       const stage = decoded(segs[2]);
       if (stage && STAGE.test(stage)) {
         out.stage = stage;
         out.stop = 'stage';
+        const unit = q.get('unit');
+        if (unit && NUMBER.test(unit)) out.unit = Number(unit);
       }
     }
   }
@@ -77,6 +83,8 @@ export function sentinelPlace(hash) {
   if (out.stop === 'pipeline' && pick && STAGE.test(pick)) out.pick = pick;
   // a door that asks for a scan (the Settings source row's): the SCANS stop opens the owner panel's preview once
   if (out.stop === 'scans' && q.get('do') === 'scan') out.act = 'scan';
+  const before = q.get('before');
+  if (out.stop === 'scans' && before && NUMBER.test(before)) out.before = Number(before);
   return out;
 }
 
@@ -84,7 +92,7 @@ export function sentinelPlace(hash) {
 export function sentinelHash(place) {
   let h = '#/sentinel';
   if (place.scan) {
-    h += '/' + place.scan;
+    h += '/' + encodeURIComponent(place.scan);
     if (place.stage) h += '/' + encodeURIComponent(place.stage);
   }
   const stop = place.stage ? 'stage' : place.scan ? 'pipeline' : 'scans';
@@ -92,6 +100,8 @@ export function sentinelHash(place) {
   const first = (SENTINEL_LAYOUTS[stop] || [])[0];
   if (place.layout && first && place.layout !== first.id) q.push('layout=' + encodeURIComponent(place.layout));
   if (stop === 'pipeline' && place.pick) q.push('pick=' + encodeURIComponent(place.pick));
+  if (stop === 'stage' && place.unit && place.unit > 1) q.push('unit=' + place.unit);
+  if (stop === 'scans' && place.before) q.push('before=' + place.before);
   return h + (q.length ? '?' + q.join('&') : '');
 }
 
@@ -215,10 +225,21 @@ export function provenanceParts(stage, lens) {
     if (p.skills && p.skills.length) parts.push('skills ' + p.skills.map((s) => s.name + '/' + s.revision).join(', '));
   } else {
     if (impl.adapter) parts.push(impl.adapter + (impl.version ? ' ' + impl.version : ''));
-    if (p.image) parts.push(p.image.replace(/@sha256:([0-9a-f]{6})[0-9a-f]+$/, '@sha256:$1…'));
+    const image = p.invocation && p.invocation.image;
+    if (image) parts.push(imageWords(image));
     else if (impl.digest) parts.push('digest ' + shortDigest(impl.digest));
   }
   return parts.filter(Boolean);
+}
+
+/**
+ * A container image as its invocation record names it: the reference written, the image id actually run (shortened)
+ * and its architecture — `ghcr.io/x/gitleaks:8.30.1 · 2f9c…  · arm64`.
+ */
+export function imageWords(image) {
+  if (!image) return '';
+  const id = shortDigest(image.id);
+  return [image.reference, id ? id + '…' : '', image.architecture].filter(Boolean).join(' · ');
 }
 
 /** The stage ids of a scan answer by level, each level's stages in order; a level of two or more ran side by side. */

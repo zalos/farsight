@@ -9,63 +9,80 @@ import { dirname, join } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
 const m = await import(join(here, '..', 'public', 'app', 'lib', 'sentinel-model.js'));
 
-test('the address names the stop, the scan, the stage, the layout and the picked stage', () => {
-  assert.deepEqual(m.sentinelPlace('#/sentinel'), {
-    stop: 'scans',
-    scan: null,
-    stage: null,
-    layout: 'list',
-    pick: null,
-    act: null,
-  });
+const RUN = 'run-' + 'a'.repeat(32);
+const blank = {
+  stop: 'scans',
+  scan: null,
+  stage: null,
+  unit: null,
+  before: null,
+  layout: 'list',
+  pick: null,
+  act: null,
+};
+
+test('the address names the stop, the scan by its run id, the stage, the open unit, the layout and the pick', () => {
+  assert.deepEqual(m.sentinelPlace('#/sentinel'), blank);
   assert.equal(m.sentinelPlace('#/sentinel?do=scan').act, 'scan', 'a door may ask the SCANS stop for a scan');
-  assert.equal(m.sentinelPlace('#/sentinel/2?do=scan').act, null, 'only the SCANS stop takes it');
+  assert.equal(m.sentinelPlace(`#/sentinel/${RUN}?do=scan`).act, null, 'only the SCANS stop takes it');
   assert.equal(m.sentinelHash(m.sentinelPlace('#/sentinel?do=scan')), '#/sentinel', 'the address never keeps it');
-  assert.deepEqual(m.sentinelPlace('#/sentinel/3'), {
+  assert.deepEqual(m.sentinelPlace('#/sentinel?before=12'), { ...blank, before: 12 }, 'an older page of scans');
+  assert.deepEqual(m.sentinelPlace(`#/sentinel/${RUN}`), {
+    ...blank,
     stop: 'pipeline',
-    scan: 3,
-    stage: null,
+    scan: RUN,
     layout: 'ladder',
-    pick: null,
-    act: null,
   });
-  assert.deepEqual(m.sentinelPlace('#/sentinel/3?layout=table&pick=sentinel.stage.capture'), {
+  assert.deepEqual(m.sentinelPlace(`#/sentinel/${RUN}?layout=table&pick=sentinel.stage.capture`), {
+    ...blank,
     stop: 'pipeline',
-    scan: 3,
-    stage: null,
+    scan: RUN,
     layout: 'table',
     pick: 'sentinel.stage.capture',
-    act: null,
   });
-  assert.deepEqual(m.sentinelPlace('#/sentinel/3/sentinel.stage.review.general'), {
+  assert.deepEqual(m.sentinelPlace(`#/sentinel/${RUN}/sentinel.stage.review.general?unit=3`), {
+    ...blank,
     stop: 'stage',
-    scan: 3,
+    scan: RUN,
     stage: 'sentinel.stage.review.general',
+    unit: 3,
     layout: 'detail',
-    pick: null,
-    act: null,
   });
-  // a layout the stop does not have, or one not built, is the stop's default; a bad number is the list
-  assert.equal(m.sentinelPlace('#/sentinel/3?layout=lanes').layout, 'ladder');
+  // a layout the stop does not have, or one not built, is the stop's default; an id the grammar refuses is the list
+  assert.equal(m.sentinelPlace(`#/sentinel/${RUN}?layout=lanes`).layout, 'ladder');
   assert.equal(m.sentinelPlace('#/sentinel?layout=compare').layout, 'list');
-  assert.equal(m.sentinelPlace('#/sentinel/0').stop, 'scans');
-  assert.equal(m.sentinelPlace('#/sentinel/run-1234').stop, 'scans');
-  assert.equal(m.sentinelPlace('#/sentinel/2/..%2F').stop, 'pipeline');
+  assert.equal(m.sentinelPlace('#/sentinel/.hidden').stop, 'scans');
+  assert.equal(m.sentinelPlace('#/sentinel/%E0%A4%A').stop, 'scans');
+  assert.equal(m.sentinelPlace(`#/sentinel/${RUN}/..%2F`).stop, 'pipeline');
+  assert.equal(m.sentinelPlace(`#/sentinel/${RUN}/x?unit=0`).unit, null);
   assert.equal(m.sentinelPlace('#/map').stop, 'scans');
   for (const place of [
     { scan: null },
-    { scan: 4 },
-    { scan: 4, layout: 'table' },
-    { scan: 4, pick: 'sentinel.stage.check.secrets-gitleaks' },
-    { scan: 4, stage: 'sentinel.stage.review.guided', layout: 'table' },
+    { scan: RUN },
+    { scan: RUN, layout: 'table' },
+    { scan: RUN, pick: 'sentinel.stage.check.secrets-gitleaks' },
+    { scan: RUN, stage: 'sentinel.stage.review.guided', layout: 'table' },
+    { scan: RUN, stage: 'sentinel.stage.review.guided', unit: 4 },
+    { before: 9 },
   ]) {
     const back = m.sentinelPlace(m.sentinelHash(place));
-    assert.equal(back.scan, place.scan);
-    assert.equal(back.stage, place.stage ?? null);
-    if (place.layout) assert.equal(back.layout, place.layout);
-    if (place.pick) assert.equal(back.pick, place.pick);
+    assert.equal(back.scan, place.scan ?? null);
+    assert.equal(back.stage, (place as any).stage ?? null);
+    if ((place as any).layout) assert.equal(back.layout, (place as any).layout);
+    if ((place as any).pick) assert.equal(back.pick, (place as any).pick);
+    if ((place as any).unit) assert.equal(back.unit, (place as any).unit);
+    if ((place as any).before) assert.equal(back.before, (place as any).before);
   }
-  assert.equal(m.sentinelHash({ scan: 4, layout: 'ladder' }), '#/sentinel/4', 'the default layout is not written');
+  assert.equal(
+    m.sentinelHash({ scan: RUN, layout: 'ladder' }),
+    `#/sentinel/${RUN}`,
+    'the default layout is not written',
+  );
+  assert.equal(
+    m.sentinelHash({ scan: RUN, stage: 's', unit: 1 }),
+    `#/sentinel/${RUN}/s`,
+    'the first unit is not written',
+  );
 });
 
 test('the not-built stops and layouts are named, and never reachable', () => {
@@ -113,7 +130,8 @@ const stage = (id: string, number: number, over: any = {}) => ({
       digest: 'sha256:' + '7'.repeat(64),
       registry: 'current',
     },
-    image: null,
+    invocation: null,
+    invocationAbsent: 'sentinel.viewer.invocation.none',
     provider: null,
     model: null,
     prompt: null,
@@ -153,14 +171,18 @@ test('the business register prints no provenance; code and hybrid print what ran
     provenance: {
       ...s.provenance,
       kind: 'tool',
-      image: 'ghcr.io/example/gitleaks@sha256:' + 'ab'.repeat(32),
+      invocation: {
+        attempt: 1,
+        image: { reference: 'ghcr.io/example/gitleaks:8.30.1', id: 'sha256:' + 'ab'.repeat(32), architecture: 'arm64' },
+      },
       implementation: { ...s.provenance.implementation, adapter: 'secrets-gitleaks', version: '8.30.1' },
     },
   });
   assert.deepEqual(m.provenanceParts(tool, 'hybrid'), [
     'secrets-gitleaks 8.30.1',
-    'ghcr.io/example/gitleaks@sha256:ababab…',
+    'ghcr.io/example/gitleaks:8.30.1 · abababab… · arm64',
   ]);
+  assert.equal(m.imageWords(null), '');
   const agent = stage('r', 3, {
     kind: 'agent',
     provenance: {
