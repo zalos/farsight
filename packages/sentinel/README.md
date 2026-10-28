@@ -244,18 +244,18 @@ farsight-sentinel retry <runId>            # the same, selecting the units that 
 ```
 
 `init` writes the settings file and the pipeline file, each only when it is missing: the policy's defaults plus one
-grant letting the owner (a person, never an agent) capture and run, scoped to exactly the effects the profile's
-stages have (a grant that named no effects would admit every effect). Settings name credentials by keychain
-reference only (`keychain:farsight/<name>`). Nothing downloads a tool, installs a scanner, starts a container or
+grant letting the owner (a person, never an agent) capture and run. That grant names no effects, so it admits every
+effect a plan has; a model stage still needs its provider in the settings and a separate confirmed `paid.admit`
+grant. Settings name credentials by keychain reference only (`keychain:farsight/<name>`). Nothing downloads a tool, installs a scanner, starts a container or
 contacts a model provider. `init` prints what the profile plans and what this machine needs for it:
 
-| `--profile` | stages after capture, parse and inventory | needs | grant effects |
-|---|---|---|---|
-| `static` (default) | the foundation preview check | Node 24 | local artifacts |
-| `scanners` | the five pinned scanners | a container runtime and their adopted images | + tool execution |
-| `secrets` | the current-tree secret scan | a container runtime and the adopted Gitleaks image | + tool execution |
-| `agentic` | secrets, patterns, the walkthrough, a Copilot general review of their findings | containers for the two scanners; a qualified Copilot CLI and its provider | + tool execution, paid inference, source disclosure, network |
-| `review` | the walkthrough and a Copilot general review | a qualified Copilot CLI and its provider; no container | + paid inference, source disclosure, network |
+| `--profile` | stages after capture, parse and inventory | needs |
+|---|---|---|
+| `static` (default) | the foundation preview check | Node 24 |
+| `scanners` | the five pinned scanners | a container runtime and their adopted images |
+| `secrets` | the current-tree secret scan | a container runtime and the adopted Gitleaks image |
+| `agentic` | secrets, patterns, the walkthrough, a Copilot general review of their findings | containers for the two scanners; a qualified Copilot CLI and its provider |
+| `review` | the walkthrough and a Copilot general review | a qualified Copilot CLI and its provider; no container |
 
 The `review` profile reviews **without a secrets scan**: its settings carry `hostedReviewSecretScan: "when-selected"`,
 so a hosted review is admitted without a current secret scan and a credential in the source can reach the model;
@@ -1042,9 +1042,9 @@ provider below, retain the other initialized settings, and replace owner-reviewe
 ```
 
 Copilot is hosted source disclosure even while the HTTP API and native Claude switches are off. The owner's
-`run.start` grant must list `paid-inference`, `source-disclosure` and `network`: `init --profile agentic` and
-`--profile review` already write them; for another profile add them to that grant only. Add a confirmed human
-`paid.admit` grant scoped to `native-copilot`. A complete genuine current-source Gitleaks publication covering
+`run.start` grant must admit `paid-inference`, `source-disclosure` and `network`: the grant `init` writes names no
+effects, so it admits them; if you narrowed it with `scope.effects`, add those three to that grant only. Add a
+confirmed human `paid.admit` grant scoped to `native-copilot`. A complete genuine current-source Gitleaks publication covering
 every captured entry is required before model admission or native authentication; partial scans cannot be joined.
 
 ```sh
