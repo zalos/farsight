@@ -227,6 +227,7 @@ test(
       canonical = 0,
       json = 0;
     const kinds = new Map<string, number>();
+    let sealed = 0;
     for (const file of objectFiles(join(ws.storePath, 'objects'))) {
       const name = /([0-9a-f]{64})\.(raw|gzip)$/.exec(file);
       if (!name) continue;
@@ -244,10 +245,18 @@ test(
       const k = sameEverywhere(value, `retained ${name[1]}`);
       if (k !== raw.toString('utf8')) continue;
       canonical++;
+      // A record sealed by its own digest (a plan revision): the seal is the same under every implementation.
+      const { digest, ...rest } = value as { digest?: unknown };
+      if (typeof digest === 'string' && digest === digestOf(rest)) {
+        assert.equal(`sha256:${sha(ledgerCanonicalJson(rest))}`, digest, `retained ${name[1]}: its seal`);
+        assert.equal(`sha256:${sha(objectsCanonicalJson(rest))}`, digest, `retained ${name[1]}: its seal`);
+        sealed++;
+      }
       const schema = (value as { schema?: unknown })?.schema;
       const kind = typeof schema === 'string' ? schema : `a JSON ${Array.isArray(value) ? 'array' : typeof value}`;
       kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
     }
+    t.diagnostic(`${sealed} of them are sealed by their own digest; every seal is the same under each implementation`);
     t.diagnostic(
       `${total} retained objects; ${json} are JSON, all agree; ${canonical} are canonical JSON, byte for byte`,
     );
@@ -258,6 +267,7 @@ test(
         .join(' · '),
     );
     assert.ok(canonical >= 10, `only ${canonical} retained canonical objects were found`);
+    assert.ok(sealed >= 1, 'a run retains at least its plan revisions, sealed by their own digest');
   },
 );
 
