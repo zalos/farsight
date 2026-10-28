@@ -8,6 +8,8 @@
 // - An agent principal is what every connection to the local service is, the owner's own CLI included: built by the
 //   transport from the channel it accepted, never the owner channel. It confirms nothing; owner authority reaches it
 //   only as an owner receipt issued by the command line after its --confirm.
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { requestedByOf, ActorError, type RequestedBy, type ServiceChannel } from './actor.js';
 
 export interface OwnerPrincipal {
@@ -24,13 +26,33 @@ export type Principal = OwnerPrincipal | AgentPrincipal;
 const OWNERS = new WeakSet<object>();
 /** Whether the mint was handed out: once per process, to the command line's entry (cli.ts claims it as it loads). */
 let mintClaimed = false;
+/** This package's command line (dist/cli.js beside dist/app/): the only entry an owner can exist under. */
+const CLI_ENTRY = fileURLToPath(new URL('../cli.js', import.meta.url));
 
 /**
- * Hands the owner mint to the command line's own entry, once per process: cli.ts claims it when it loads, before any
- * command runs, and keeps it module-private. Any later claim (a second importer, a transport, a library caller) is
- * refused with `sentinel.actor.ownerMintClaimed`, so no other module can make a genuine owner.
+ * Whether this process's entry is this package's command line: `process.argv[1]`, resolved through any link (the
+ * installed `farsight-sentinel` bin is one), is exactly its `cli.js`. A test, a library importer, `node -e` or another
+ * program is not, whatever it imports.
+ */
+export function entryIsOwnerCli(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync.native(entry) === realpathSync.native(CLI_ENTRY);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hands the owner mint to the command line's own entry, once per process. An owner exists only in a process whose
+ * entry is the owner's command line: in any other process the claim is refused (`sentinel.actor.ownerMintNotEntry`),
+ * so a library importer, a test or another program cannot make one even first. In the command line's own process,
+ * cli.ts claims it as it loads, before any command runs, and keeps it module-private; any later claim (a second
+ * importer, a transport) is refused with `sentinel.actor.ownerMintClaimed`.
  */
 export function claimOwnerMint(): () => OwnerPrincipal {
+  if (!entryIsOwnerCli()) throw new ActorError('sentinel.actor.ownerMintNotEntry');
   if (mintClaimed) throw new ActorError('sentinel.actor.ownerMintClaimed');
   mintClaimed = true;
   return () => {

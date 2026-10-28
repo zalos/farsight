@@ -75,6 +75,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'app/pipeline.js': ['@farsight/core/dist/credential-shapes.js', '@farsight/core/dist/strings-sentinel-plan.js'],
   'app/pipeline-adoption.js': ['node:fs', 'node:path'],
   'app/service.js': ['node:crypto', 'node:fs', 'node:path'],
+  'app/principal.js': ['node:fs', 'node:url'],
   'service/preparation-key-lock.js': ['node:path'],
   'service/preparation-client.js': ['node:crypto', 'node:path'],
   'service/preparation-projection.js': ['@farsight/core/dist/strings.js'],
