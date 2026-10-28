@@ -33,6 +33,7 @@ export interface DriverDatabase {
   readonly record: unknown;
 }
 
+/** What a scanner kernel is given to prepare one check unit: the admitted unit, its sealed inputs, rules and assets. */
 export interface DriverPrepare {
   readonly run: { readonly id: Id; readonly snapshotId: Id };
   readonly unit: Readonly<PlanWork>;
@@ -48,8 +49,10 @@ export interface DriverPrepare {
   readonly now: Date;
 }
 
+/** What an extra sealed input of a prepared job is: the worker, its job, its rules, a database or a bundle. */
 export type PreparedRole = 'worker' | 'job' | 'rules' | 'database' | 'bundle';
 
+/** A prepared job: the extra sealed inputs the worker needs, and the context normalize reads back. */
 export interface DriverPrepared {
   /** Extra sealed inputs, journaled with the invocation record before the worker starts. */
   readonly artifacts: readonly { readonly id: ArtifactId; readonly path: string; readonly role: PreparedRole }[];
@@ -69,6 +72,7 @@ export type ResultBinding = Pick<
   'protocol' | 'type' | 'attemptId' | 'work' | 'coordinatorEpoch' | 'seq' | 'inputFingerprint'
 >;
 
+/** What a kernel is given to normalize one finished attempt: its context, the verified outcome and outputs. */
 export interface DriverNormalize {
   readonly context: unknown;
   readonly outcome: Readonly<WorkerOutcome>;
@@ -87,12 +91,14 @@ export interface DriverRecord {
   readonly schema: string;
 }
 
+/** A normalized attempt: the worker's result with the driver's coverage facts, and the records to publish. */
 export interface DriverNormalized {
   /** The worker's result with its binding unchanged and its coverage facts replaced by the driver's. */
   readonly result: ResultMessage;
   readonly records: readonly DriverRecord[];
 }
 
+/** A scanner kernel: pure preparation and normalization for one adapter, never a process, a download or a checkout. */
 export interface CheckDriver {
   readonly adapterId: Id;
   /** The only rules this driver runs; any other pinned rule is never covered. */

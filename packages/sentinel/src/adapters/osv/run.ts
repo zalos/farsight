@@ -12,6 +12,7 @@ import { OSV_ADAPTER, type OsvAdapterBuild } from './adapter.js';
 import { buildOsvJob, type DependencyTarget, type SnapshotInput } from './job.js';
 import { normalizeOsvRun, type OsvRunResult } from './normalize.js';
 
+/** One attempt run directly through an execution service: its targets, snapshots, scratch and freshness bound. */
 export interface OsvAttempt {
   attemptId: Id;
   work: WorkRef;
@@ -27,6 +28,10 @@ export interface OsvAttempt {
   qualifyingArchitecture?: string;
 }
 
+/**
+ * Builds the job, runs the pinned worker through `service` and normalizes the outcome. The adapter's own tests and
+ * conformance runs use it; production runs go through the coordinator and the canonical driver instead.
+ */
 export async function runOsvAttempt(service: ExecutionService, attempt: OsvAttempt): Promise<OsvRunResult> {
   const jobDir = mkdtempSync(join(attempt.scratch, 'osv-job-'));
   try {

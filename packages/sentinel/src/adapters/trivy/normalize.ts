@@ -11,11 +11,11 @@
 //   A Dockerfile or Terraform file it did not log, at exit 0, is an omission gap, not a pass; YAML it did not log is
 //   not a Kubernetes manifest. Inline ignore comments (which the engine honours), a remote module it could not load
 //   and variable files it did not read leave a file partial.
-import { createHash } from 'node:crypto';
+import { sha256Id as sha256 } from '../../kernel/digest.js';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { WorkerOutcome } from '../../execution/supervisor.js';
 import { canonicalDigest } from '../../policy/digest.js';
-import { deepFreeze } from '../../policy/immutable.js';
+import { deepFreeze } from '../../kernel/freeze.js';
 import {
   TRIVY_CHECKS_BUNDLE,
   TRIVY_ENGINE,
@@ -27,6 +27,7 @@ import {
 import { trivyFail } from './errors.js';
 import type { TrivyFileKind, TrivyJob, TrivyJobTarget } from './job.js';
 
+/** Why a file's coverage is what it is: each is a catalog key. */
 export const TRIVY_COVERAGE_REASONS = [
   'sentinel.trivy.coverage.complete',
   'sentinel.trivy.coverage.inlineIgnore',
@@ -52,7 +53,9 @@ export const TRIVY_COVERAGE_REASONS = [
   'sentinel.trivy.coverage.outputTruncated',
   'sentinel.trivy.coverage.platformUnmeasured',
 ] as const;
+/** One of {@link TRIVY_COVERAGE_REASONS}. */
 export type TrivyCoverageReason = (typeof TRIVY_COVERAGE_REASONS)[number];
+/** Why a result the engine reported was refused rather than kept: each is a catalog key. */
 export const TRIVY_REFUSAL_REASONS = [
   'sentinel.trivy.refused.unknownTarget',
   'sentinel.trivy.refused.notScanned',
@@ -61,19 +64,26 @@ export const TRIVY_REFUSAL_REASONS = [
   'sentinel.trivy.refused.locationInvalid',
   'sentinel.trivy.refused.inputMismatch',
 ] as const;
+/** One of {@link TRIVY_REFUSAL_REASONS}. */
 export type TrivyRefusalReason = (typeof TRIVY_REFUSAL_REASONS)[number];
+/** The fixed categories a failed engine run is reported under; the engine's own log never leaves the container. */
 export const TRIVY_ENGINE_FAILURES = [
   'sentinel.trivy.engine.engineError',
   'sentinel.trivy.engine.killed',
   'sentinel.trivy.engine.unknown',
 ] as const;
+/** One of {@link TRIVY_ENGINE_FAILURES}. */
 export type TrivyEngineFailure = (typeof TRIVY_ENGINE_FAILURES)[number];
+/** The severities the engine reports, as it spells them. */
 export const TRIVY_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'] as const;
+/** One of {@link TRIVY_SEVERITIES}. */
 export type TrivySeverity = (typeof TRIVY_SEVERITIES)[number];
 
+/** One file's coverage word: complete only when no limitation applies. */
 export type TrivyCoverageStatus =
   'complete' | 'partial' | 'error' | 'not-applicable' | 'bundle-missing' | 'unsupported';
 
+/** One file's coverage: its status and every limitation. */
 export interface TrivyCoverage {
   readonly relativePath: string;
   readonly artifact: ArtifactId;
@@ -101,6 +111,7 @@ export interface TrivyFinding {
   readonly bundle: string;
 }
 
+/** A normalized run: the engine, bundle and platform, findings, per-file coverage and what was refused. */
 export interface TrivyRunResult {
   readonly adapter: string;
   readonly engine: string;
@@ -119,6 +130,7 @@ export interface TrivyRunResult {
   readonly refused: readonly { readonly reasonCode: TrivyRefusalReason; readonly relativePath: string | null }[];
 }
 
+/** What normalizing one run needs: the job, the verified outcome and outputs, and the sealed targets. */
 export interface TrivyNormalizeInput {
   job: TrivyJob;
   jobDigest: ArtifactId;
@@ -133,7 +145,6 @@ const CHECK_ID = /^[A-Z][A-Z0-9]{0,15}-[0-9A-Z]{1,8}$/;
 const PATH = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$|^\.$/;
 const INLINE_IGNORE = /(?:trivy|tfsec):ignore/;
 const REMOTE_SOURCE = /^\s*source\s*=\s*"(?!\.\.?\/)[^"]*"/m;
-const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '.');
 
 const UNSENT: Record<string, { status: TrivyCoverageStatus; reason: TrivyCoverageReason }> = {
@@ -204,6 +215,12 @@ function unsentRows(job: TrivyJob): TrivyCoverage[] {
   });
 }
 
+/**
+ * Reads one finished attempt into findings and per-file coverage. Refuses, with a TrivyError `outputInvalid`, output
+ * past its bound or not UTF-8 JSON, a missing run record, a record for another job or another checks bundle, and an
+ * engine output that is not the named one or not a report of the pinned engine. A result for a file that was not sent
+ * or scanned, or that does not come from the bundle, is listed as refused.
+ */
 export function normalizeTrivyRun(input: TrivyNormalizeInput): TrivyRunResult {
   const { job, outcome } = input;
   const unsent = unsentRows(job);

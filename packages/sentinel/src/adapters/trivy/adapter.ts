@@ -3,7 +3,7 @@
 // nothing else, behind an original shell shim, run only through PR 07's isolated execution service. Holds the pins and
 // the support statement; job.ts builds an attempt's inputs, normalize.ts reads its outputs, bundle.ts is the separate,
 // owner-confirmed checks-bundle download.
-import { createHash } from 'node:crypto';
+import { sha256Id } from '../../kernel/digest.js';
 import type { ExternalAdapterDefinition } from '../../execution/registry.js';
 import { TRIVY_WORKER_SOURCE } from './worker-source.js';
 
@@ -56,12 +56,14 @@ export const TRIVY_IMAGE_PLATFORMS = Object.freeze([
       'native Ubuntu 24.04.5 x86_64, Docker Engine 28.0.4 linux/amd64; 2026-10-22; https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627; tested merge 0d6daa8cd369835fe6ec8ec5a89b4d25cb23edc5',
   }),
 ]);
+/** The architectures the pinned engine image was measured on; any other is unqualified. */
 export const TRIVY_MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(
   TRIVY_IMAGE_PLATFORMS.filter((p) => p.state === 'measured').map((p) => p.architecture),
 );
 
 /** The configuration scanners selected; every other kind Trivy reads is out of scope and said so. */
 export const TRIVY_MISCONFIG_SCANNERS = Object.freeze(['dockerfile', 'kubernetes', 'terraform'] as const);
+/** One of {@link TRIVY_MISCONFIG_SCANNERS}: the configuration kinds the engine is asked to check. */
 export type TrivyConfigType = (typeof TRIVY_MISCONFIG_SCANNERS)[number];
 
 /**
@@ -88,6 +90,7 @@ export const TRIVY_MAX_OUTPUT_BYTES = 8_388_608;
 /** The worker's own bound on the engine run, inside the supervisor's deadline. */
 export const TRIVY_ENGINE_TIMEOUT_SECONDS = 100;
 
+/** One build of the adapter: its registry definition and the exact worker bytes and digest the definition pins. */
 export interface TrivyAdapterBuild {
   readonly definition: ExternalAdapterDefinition;
   readonly workerBytes: Buffer;
@@ -114,7 +117,7 @@ export function buildTrivyAdapter(
       .replace('[BUNDLE_LAYER]', TRIVY_CHECKS_BUNDLE.layer),
     'utf8',
   );
-  const workerDigest = `sha256:${createHash('sha256').update(workerBytes).digest('hex')}`;
+  const workerDigest = sha256Id(workerBytes);
   const definition = Object.freeze({
     id: options.id ?? 'iac-trivy',
     version: TRIVY_ENGINE.version,
@@ -127,7 +130,9 @@ export function buildTrivyAdapter(
 }
 
 const PRODUCTION = buildTrivyAdapter();
+/** The production worker's bytes, the shell script the container runs. */
 export const TRIVY_WORKER_BYTES = PRODUCTION.workerBytes;
+/** The production worker's content address; the registry definition pins it. */
 export const TRIVY_WORKER_DIGEST = PRODUCTION.workerDigest;
 /** The trusted registry definition; not registered in the production registry until integration. */
 export const TRIVY_ADAPTER: ExternalAdapterDefinition = PRODUCTION.definition;

@@ -5,6 +5,7 @@
 // that is unresolved, which callers treat as unknown; nothing is evaluated.
 import { identifierName, isNode, memberPath, stringValue, unwrap, walk, type JsFile, type JsNode } from './syntax.js';
 
+/** What a top-level name in a file is bound to, as far as the pack reads it statically. */
 export type Binding =
   /** A top-level `const` declarator (or a `let`/`var` never assigned again) and its initializer. */
   | {
@@ -26,6 +27,7 @@ export type Binding =
     }
   | { readonly kind: 'unresolved'; readonly file: JsFile; readonly name: string; readonly at: JsNode };
 
+/** Where an import specifier leads: one captured file, a package by name, or nowhere the pack can tell. */
 export type ModuleTarget =
   | { readonly kind: 'file'; readonly file: JsFile }
   | { readonly kind: 'package'; readonly name: string }
@@ -86,6 +88,7 @@ export function topLevelNames(program: JsNode): Set<string> {
   return out;
 }
 
+/** The module graph of the captured files: top-level bindings, exports and imports, read statically and never run. */
 export class ModuleIndex {
   private readonly modules = new Map<JsFile, FileModule>();
   private readonly byPath = new Map<string, JsFile>();

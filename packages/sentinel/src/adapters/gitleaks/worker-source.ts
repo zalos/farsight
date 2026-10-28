@@ -19,6 +19,10 @@
 // job index and the raw rendering is deleted), and a run record with the exit code, a fixed failure category and
 // digests. Gitleaks' stdout is discarded; its stderr stays in the tmpfs and only its digest is reported,
 // because a tool message can quote input. A fatal shim error writes one catalog code to stderr and exits 3.
+/**
+ * The worker's source text; `[MAX_REPORT]`, `[SECS]`, `[MAX_MB]` and `[ENGINE_ARGS]` are filled by
+ * buildGitleaksAdapter.
+ */
 export const GITLEAKS_WORKER_SOURCE = `# Sentinel Gitleaks worker (sentinel-gitleaks-worker/1). Original; POSIX sh and busybox applets only.
 set -u
 P='sentinel-worker/draft-1'

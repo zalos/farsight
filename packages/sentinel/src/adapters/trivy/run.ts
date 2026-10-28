@@ -12,6 +12,7 @@ import { TRIVY_ADAPTER, type TrivyAdapterBuild } from './adapter.js';
 import { buildTrivyJob, type BundleInput, type ConfigTarget } from './job.js';
 import { normalizeTrivyRun, notRunResult, type TrivyRunResult } from './normalize.js';
 
+/** One attempt run directly through an execution service: its targets, the held bundle and scratch. */
 export interface TrivyAttempt {
   attemptId: Id;
   work: WorkRef;
@@ -27,6 +28,11 @@ export interface TrivyAttempt {
   qualifyingArchitecture?: string;
 }
 
+/**
+ * Builds the job, runs the pinned worker through `service` and normalizes the outcome; with no bundle nothing runs and
+ * every file is a gap. The adapter's own tests and conformance runs use it; production runs go through the
+ * coordinator and the canonical driver instead.
+ */
 export async function runTrivyAttempt(service: ExecutionService, attempt: TrivyAttempt): Promise<TrivyRunResult> {
   const jobDir = mkdtempSync(join(attempt.scratch, 'trivy-job-'));
   try {

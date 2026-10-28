@@ -1,14 +1,17 @@
 // The Next pack's support manifest (PR 14): exactly what this pack reads, for which installed versions. It is data,
 // and its canonical digest is the pack digest every control-facts envelope pins, so changing a supported version or
 // a rule of the subset invalidates every earlier fact. A version outside `versions` is never analyzed.
-import { digestOf } from '../../store/ledger-json.js';
-import { deepFreeze } from '../../planner/identity.js';
+import { digestOf } from '../../kernel/digest.js';
+import { deepFreeze } from '../../kernel/freeze.js';
 
+/** The pack's identity. */
 export const NEXT_PACK_ID = 'sentinel.framework.next';
 /** Bumped whenever the pack's semantics change without a manifest change. */
 export const NEXT_PACK_REVISION = 7;
+/** The schema of the pack's result document. */
 export const NEXT_ANALYSIS_SCHEMA = 'sentinel-next-analysis/draft-1' as const;
 
+/** The supported subset, as data: exact package versions and integrities, and the forms the pack reads. */
 export const NEXT_SUPPORT = deepFreeze({
   pack: NEXT_PACK_ID,
   revision: NEXT_PACK_REVISION,
