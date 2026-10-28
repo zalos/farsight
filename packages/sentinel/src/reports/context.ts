@@ -14,6 +14,10 @@ import { canonicalJson } from '@farsight/graph';
 import type { ActionIntent, ArtifactId, SnapshotEnvelope } from '../contracts/index.js';
 import { intentDigest, receiptAuthority } from '../policy/receipts.js';
 
+/**
+ * The application graph a context pins: Farsight's graph.json nodes and edges, with the meta its journeys live in. Only
+ * nodes located in the pinned repository are checked against the capture.
+ */
 export interface ContextGraph {
   readonly nodes: readonly {
     readonly id: string;
@@ -32,11 +36,16 @@ export interface ContextGraph {
   readonly meta?: { readonly journeys?: unknown; readonly [k: string]: unknown };
 }
 
+/** One file a context was built from, with the content id of the bytes its builder read. */
 export interface ContextInput {
   readonly relativePath: string;
   readonly content: ArtifactId;
 }
 
+/**
+ * What `pinApplicationContext` checks: one snapshot source, the graph built from it, every file it was built from, and
+ * the owner's spent `context.pin` receipt for exactly that document.
+ */
 export interface ContextRequest {
   readonly snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>;
   /** The snapshot source the context describes. */
@@ -53,6 +62,9 @@ export interface ContextRequest {
   readonly authorization?: unknown;
 }
 
+/**
+ * Why a finding, gap or context has no place, or a mismatched one: the closed set of `sentinel.place.*` catalog codes.
+ */
 export type PlaceReason =
   | 'sentinel.place.noContext'
   | 'sentinel.place.noJourneys'
@@ -76,6 +88,10 @@ export interface ContextBinding {
 }
 
 declare const pinnedContextBrand: unique symbol;
+/**
+ * A verified application context, or the reasons there is none. Only `pinApplicationContext` makes one; the graph is a
+ * frozen copy, present only when `binding` is `matched`, and the receipt records what was verified either way.
+ */
 export interface PinnedContext {
   /** A pin is a runtime capability; copying its public fields does not copy its authority. */
   readonly [pinnedContextBrand]: true;
@@ -120,6 +136,7 @@ function retainedArtifact(id: ArtifactId, bytes: Uint8Array): { readonly id: Art
   });
 }
 
+/** The placement projection's version, recorded in every source-binding receipt. */
 const PROJECTION_VERSION = 'sentinel-place/draft-1';
 export { PROJECTION_VERSION };
 const idOf = (bytes: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
@@ -166,6 +183,16 @@ export function contextPinIntent(
   };
 }
 
+/**
+ * Pins an application graph to one snapshot source. `matched` needs every input to be a captured included file with the
+ * same content id, every node located in `repo` to sit in an input, every captured `farsight.config.json` and
+ * `screens.json` to be an input, at least one journey (`flow`) node, and the owner's spent `context.pin` receipt for
+ * exactly this document. A failed input check is `mismatched` (`sentinel.place.inputNotCaptured`,
+ * `sentinel.place.inputMismatch`, `sentinel.place.inputOmitted`, `sentinel.place.unboundNode`). No graph is
+ * `unavailable` with `sentinel.place.noContext`, as is a graph with no journeys (`sentinel.place.noJourneys`) or
+ * without that receipt (`sentinel.place.notOwnerConfirmed`). A context that does not bind is reported in the binding
+ * and its reasons, not thrown; nothing here reads a file or fetches anything.
+ */
 export function pinApplicationContext(request: ContextRequest): PinnedContext {
   const { snapshot, sourceId, repo } = request;
   const snapshotId = snapshot.id;
