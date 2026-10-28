@@ -18,6 +18,15 @@ import {
 import { ownerHistoryOf, type OwnerHistory, type OwnerProposal } from './owner-journal.js';
 import { fail } from './decision-data.js';
 
+/**
+ * Projects one owner decision on an accepted finding at `now`. Its historical basis is derived again and its support
+ * read again; the decision is valid only while approved, unexpired, not superseded and over the same source evidence,
+ * and a mitigation is never valid, since this is source-only adjudication. The rationale and basis digest are withheld
+ * when the current, baseline or historical ancestry has accepted secret matches. Refuses `sentinel.decision.notFound`
+ * for an unknown decision, `sentinel.decision.invalidInput` for a time before the proposal,
+ * `sentinel.decision.unauthorized` when its support changed, and `sentinel.decision.staleState` when the history or the
+ * finding changed.
+ */
 export async function decisionProjection(
   history: OwnerHistory,
   basis: AcceptedFindingBasis,
