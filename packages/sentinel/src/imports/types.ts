@@ -30,6 +30,7 @@ export const IMPORT_REFUSAL_CODES = Object.freeze([
   'sentinel.import.producerMismatch',
   'sentinel.import.outputTooLarge',
 ] as const);
+/** One of `IMPORT_REFUSAL_CODES`. */
 export type ImportRefusalCode = (typeof IMPORT_REFUSAL_CODES)[number];
 
 /** Why one part of an accepted document is not a fact. The document is still read; this part stays unknown. */
@@ -67,6 +68,7 @@ export const IMPORT_UNKNOWN_CODES = Object.freeze([
   'sentinel.import.uriRejected',
   'sentinel.import.producerUnknown',
 ] as const);
+/** One of `IMPORT_UNKNOWN_CODES`. */
 export type ImportUnknownCode = (typeof IMPORT_UNKNOWN_CODES)[number];
 
 /** What every normalized import says about itself, whatever it contains. */
@@ -79,11 +81,13 @@ export const IMPORT_LIMITATION_KEYS = Object.freeze([
   'sentinel.import.unbound',
 ] as const);
 
+/** The report formats an import reads: SARIF 2.1.0 and ZAP's traditional JSON, plain and plus. */
 export const IMPORT_FORMATS = Object.freeze([
   'sarif-2.1.0',
   'zap-traditional-json',
   'zap-traditional-json-plus',
 ] as const);
+/** One of `IMPORT_FORMATS`. */
 export type ImportFormat = (typeof IMPORT_FORMATS)[number];
 
 /** The adapter's own identity: a different version may read the same bytes differently, so it is part of the output. */
@@ -91,6 +95,7 @@ export const IMPORT_ADAPTER = Object.freeze({ id: 'sentinel.import.reports', ver
 
 /** The three attributes a Set-Cookie line can show. Integrity and confidentiality are never derived from a report. */
 export const COOKIE_PROPERTIES = Object.freeze(['cookie-secure', 'cookie-http-only', 'cookie-same-site'] as const);
+/** One of `COOKIE_PROPERTIES`. */
 export type CookieProperty = (typeof COOKIE_PROPERTIES)[number];
 
 /** Hard ceilings, global per import. No caller, manifest or report can raise them. */
@@ -115,6 +120,7 @@ export const IMPORT_CEILINGS = Object.freeze({
   unknowns: 50_000,
   ignored: 4_096,
 });
+/** One import's limits, each at most its `IMPORT_CEILINGS` value. */
 export type ImportLimits = { -readonly [K in keyof typeof IMPORT_CEILINGS]: number };
 
 /**
@@ -210,7 +216,10 @@ export class ImportBudget {
   }
 }
 
+/** A JSON value as the strict parser returns it. */
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [k: string]: Json };
+/** A JSON object. */
 export type JsonObject = { readonly [k: string]: Json };
+/** True for a JSON object: not null and not an array. */
 export const isObject = (v: Json | undefined): v is JsonObject =>
   typeof v === 'object' && v !== null && !Array.isArray(v);

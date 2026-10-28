@@ -9,6 +9,7 @@ import { canonicalJson, digestOf } from '../store/ledger-json.js';
 import { LedgerError } from '../store/store-types.js';
 import { currentImportPolicy, ownerContextOf, type ImportOwnerContext } from './owner-context.js';
 
+/** The largest retained receipt, and the largest receipt-and-admission audit, an import keeps or reads back. */
 export const AUDIT_BYTES = 16384;
 function readAuditFile(path: string, maxBytes: number): Buffer | undefined {
   // Read-only, nonblocking regular-file observations. We do not repair temporary aliases or reconstruct a spend.
@@ -61,12 +62,18 @@ function readAuditFile(path: string, maxBytes: number): Buffer | undefined {
     closeSync(fd);
   }
 }
+/** Refuses a retained import whose authority or payload cannot be authenticated: `sentinel.store.corruptRecord`. */
 export function auditUnavailable(): never {
   throw new LedgerError('sentinel.store.corruptRecord', 'the retained import authority or payload is unavailable');
 }
+/** Refuses (`auditUnavailable`) an audit whose canonical JSON exceeds `AUDIT_BYTES`. */
 export function boundedAudit(value: unknown): void {
   if (Buffer.byteLength(canonicalJson(value)) > AUDIT_BYTES) auditUnavailable();
 }
+/**
+ * The admission request for a report-import binding: the human owner on the owner CLI, under the current import policy
+ * at the binding's revision, local-only, contacting no provider or target.
+ */
 export function admissionRequest(context: ImportOwnerContext, binding: ReceiptBinding, now: Date): AdmissionRequest {
   const policy = currentImportPolicy(context, binding.policyRevision);
   return {

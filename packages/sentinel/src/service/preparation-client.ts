@@ -23,6 +23,7 @@ const invalid = (): never => {
   throw new PreparationError('sentinel.preparation.invalid');
 };
 const bookFor = (ws: Workspace) => new ReceiptBook(join(ws.trustDir, 'receipts'));
+/** The file name, in the trust directory, that keeps this workspace's preparation request key for one store. */
 function savedPath(ws: Workspace, storeId: string): string {
   return `preparation-client-${canonicalDigest({ workspace: workspaceIdentity(ws.path), storeId }).slice(7)}.json`;
 }
@@ -58,13 +59,22 @@ function savedRecord(ws: Workspace, storeId: string): { requestKey: string; disp
     return invalid();
   return { requestKey: v.requestKey, dispatch: legacy ? 'unknown' : v.dispatch };
 }
+/** The saved request key for this workspace and store, or null when none is saved. */
 function savedKey(ws: Workspace, storeId: string): string | null {
   return savedRecord(ws, storeId)?.requestKey ?? null;
 }
+/**
+ * True when `key` is the saved key and it is known to have been unsent or definitively refused, so no accepted
+ * preparation can exist for it.
+ */
 function absentKeyReplaceable(ws: Workspace, storeId: string, key: string): boolean {
   const record = savedRecord(ws, storeId);
   return record?.requestKey === key && record.dispatch !== 'unknown';
 }
+/**
+ * Saves the request key and what is known about its dispatch, atomically and owner-private; a malformed key or dispatch
+ * is `sentinel.preparation.invalid`.
+ */
 function saveKey(ws: Workspace, storeId: string, key: string, dispatch: DispatchState = 'unknown'): void {
   if (!KEY.test(key) || !['unsent', 'unknown', 'refused'].includes(dispatch)) return invalid();
   const bytes = canonicalJsonBytes({
@@ -78,6 +88,7 @@ function saveKey(ws: Workspace, storeId: string, key: string, dispatch: Dispatch
   if (bytes.length > 1024) return invalid();
   writePrivateFileAtomic(ws.trustDir, savedPath(ws, storeId), bytes, 'sentinel.receipt.storeUnsafe');
 }
+/** True when an outcome found no preparation and refused or failed, so its key was never accepted. */
 function definitivelyRefused(value: PreparationOutcome): boolean {
   return (
     value.status?.found !== true &&
@@ -159,6 +170,12 @@ async function priorRequestOutcome(
     return project({ ...old, outcome: 'refused', reasonCode: 'sentinel.preparation.busy' }, { requestKeySaved: true });
   return undefined;
 }
+/**
+ * The owner CLI's `prepare` command through the running service: `preview` and `status` read, `accept`, `resume` and
+ * `cancel` need the owner's confirmation and a receipt. An accept generates and saves its request key before it is
+ * sent, so a lost answer can be found again. Arguments that do not fit the action are `sentinel.preparation.invalid`;
+ * once a write was sent and its answer is lost, the outcome is `sentinel.preparation.outcomeUnknown`.
+ */
 export async function prepareCommand(
   ws: Workspace,
   options: { action?: string; confirm: boolean; requestKey?: string; parentId?: string },

@@ -21,6 +21,10 @@ import { abandonReportImport } from './abandon.js';
 import { readAcceptedReportImport } from './reader.js';
 import { importOwnerContext, ownerContextOf } from './owner-context.js';
 
+/**
+ * The evidence command's bounds: acknowledgement bytes, delivered output bytes, the page size (default and most) and
+ * the cursor length.
+ */
 export const IMPORT_CLI_LIMITS = Object.freeze({
   ackBytes: 16 * 1024,
   outputBytes: 32 * 1024 * 1024,
@@ -61,6 +65,10 @@ function refused(
 function count(n: number, unit: string): ReportCount {
   return { n, unit, scope: 'sentinel.evidence.countScope', source: 'accepted report-import normalized projection' };
 }
+/**
+ * The owner-local public form of an authenticated import view: its counts as Counted totals over the accepted import,
+ * each with the command that reads it again. Throws when the result does not fit the `importview` contract.
+ */
 export function publicImportView(view: Awaited<ReturnType<typeof readAcceptedReportImport>>): ImportViewEnvelope {
   const doc: ImportViewEnvelope = {
     ...view,
@@ -210,6 +218,7 @@ function ack(
   if (Buffer.byteLength(JSON.stringify(value)) > IMPORT_CLI_LIMITS.ackBytes) throw Error('ack unavailable');
   return value;
 }
+/** One evidence command's result, and its readable text when it has one. */
 export interface EvidenceCliOutput {
   readonly result: CommandResult;
   readonly text?: string;

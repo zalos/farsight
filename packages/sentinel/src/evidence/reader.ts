@@ -31,6 +31,10 @@ import { importOwnerContext, ownerContextOf, type ImportOwnerContext } from './o
 import { evidencePoint } from './test-hooks.js';
 
 declare const brand: unique symbol;
+/**
+ * The opaque handle `validateAcceptedImport` returns for an authenticated accepted import; only `reportImportView`
+ * reads it, and a copy has no authority.
+ */
 export interface AcceptedImportedReport {
   readonly [brand]: true;
 }
@@ -397,6 +401,10 @@ export async function reportImportView(value: AcceptedImportedReport, options: {
   readRetainedSourceProof(c.store, s.proof, i.ancestor, { signal: c.signal, deadlineAt: c.deadlineAt });
   return result;
 }
+/**
+ * Authenticates the accepted import of `candidateDigest` from its retained records for this owner and returns its view,
+ * withheld when the run, its baseline or `baselineRunId` has an accepted secret match or is canceled.
+ */
 export async function readAcceptedReportImport(
   store: SentinelStore,
   ws: Workspace,

@@ -148,6 +148,11 @@ function fields(value: unknown, required: readonly string[], optional: readonly 
   return out;
 }
 
+/**
+ * The one durable preparation in the held owner service: previews a configuration, accepts it into a private journal
+ * record, and runs discovery, capture and bootstrap in the service, independent of the request that accepted it.
+ * Status, resume and cancel find a preparation by its request key; a key never authorizes replay or recovery.
+ */
 export class PreparationController {
   readonly #store: SentinelStore;
   readonly #ws: Workspace;

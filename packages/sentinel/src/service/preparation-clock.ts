@@ -5,7 +5,9 @@ import type { SentinelStore } from '../store/index.js';
 import { boundOwner } from '../store/owner-binding.js';
 import { SentinelError } from '../kernel/errors.js';
 
+/** The longest a preparation may run from acceptance: ten minutes. */
 export const PREPARATION_LIMIT_MS = 600_000;
+/** Why a preparation stopped. */
 export type PreparationErrorCode =
   | 'sentinel.preparation.expired'
   | 'sentinel.preparation.canceled'
@@ -22,6 +24,7 @@ export class PreparationError extends SentinelError<PreparationErrorCode> {
     this.name = 'PreparationError';
   }
 }
+/** One preparation's clock: its acceptance time and deadlines, and a check that it may still run. */
 export interface PreparationClock {
   readonly acceptedAt: string;
   readonly deadlineAt: string;
@@ -31,6 +34,14 @@ export interface PreparationClock {
 }
 const clocks = new WeakMap<object, { store: SentinelStore; epoch: string; tighten: (deadline: number) => void }>();
 
+/**
+ * A cooperative clock over one preparation's original window, bound to the held store. `stillWithin` throws
+ * `sentinel.preparation.canceled` once `signal` aborts (or the expiry the abort carries),
+ * `sentinel.preparation.expired` past the earlier of the deadline and the run deadline, and
+ * `sentinel.preparation.invalid` when the wall clock goes back; it keeps throwing the first failure. Refuses
+ * `sentinel.preparation.invalid` for times that are malformed, out of order, longer than `PREPARATION_LIMIT_MS` or in
+ * the future.
+ */
 export function preparationClock(
   store: SentinelStore,
   given: {

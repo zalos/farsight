@@ -243,6 +243,11 @@ function optionalString(o: JsonObject, k: string, pointer: string, max = 1024): 
   return bounded(v, max);
 }
 
+/**
+ * Reads a SARIF 2.1.0 log into the collector: each result as a tool claim with unbound locations, and each inline or
+ * cached web request and response as an exchange. Refuses `sentinel.import.formatMismatch` for another version, and
+ * treats a property the specification does not define as malformed. Returns the log's schema claim and tools.
+ */
 export function readSarif(doc: Json, c: Collector): Json {
   if (!isObject(doc) || doc.version !== '2.1.0') throw new ImportRefusal('sentinel.import.formatMismatch', '/version');
   const log = object(c, doc, 'log', '');
