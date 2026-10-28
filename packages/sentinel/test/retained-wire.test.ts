@@ -8,6 +8,8 @@
 //
 // The genuine part needs the pinned 1.0.103 launcher first on PATH and its package cache (SENTINEL_COPILOT_CODE=1,
 // as the other local Copilot code controls). SENTINEL_RETAINED_WIRE_RECORD=1 rewrites the golden from the code.
+// The portable part runs everywhere: the shared runner's pure builders must rebuild the same golden from placeholder
+// paths, and the Claude golden (evaluated from the unchanged source) pins the other CLI's profile the same way.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
@@ -21,7 +23,22 @@ import { DEFAULT_SETTINGS, parseSettings, effectivePolicy, ReceiptBook } from '.
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
 import { canonicalDigest } from '../dist/policy/digest.js';
 import { BudgetLedger, ModelBroker, bindProvider, envelopeIntent } from '../dist/review/providers/index.js';
-import { COPILOT_NATIVE_PROFILE, qualifyInstalledNativeCopilot } from '../dist/review/providers/cli-copilot-profile.js';
+import {
+  COPILOT_NATIVE_PROFILE,
+  qualifyInstalledNativeCopilot,
+  copilotSeatbeltPolicy,
+  copilotEnvironment,
+} from '../dist/review/providers/cli-copilot-profile.js';
+import { copilotInvocationArguments, copilotPrivateState } from '../dist/review/providers/cli-copilot-call.js';
+import { renderNativeCopilotWire } from '../dist/review/providers/cli-copilot-wire.js';
+import {
+  CLAUDE_NATIVE_PROFILE,
+  claudeSeatbeltPolicy,
+  claudeEnvironment,
+} from '../dist/review/providers/cli-native-profile.js';
+import { claudeInvocationArguments } from '../dist/review/providers/cli-native-call.js';
+import { sandboxArgv } from '../dist/review/providers/sandboxed-cli.js';
+import { PROVIDER_KIND_ENTRIES, providerKind } from '../dist/review/providers/registry.js';
 
 const GOLDEN = new URL('./fixtures/retained-wire/copilot-1.0.103-brokered.json', import.meta.url);
 const model = COPILOT_NATIVE_PROFILE.model;
@@ -289,3 +306,83 @@ test(
     assert.deepEqual(observed, golden);
   },
 );
+
+const PORT = 65432;
+const placeholders = (s: string) =>
+  s.split(`localhost:${PORT}`).join('localhost:<port>').split(`127.0.0.1:${PORT}`).join('127.0.0.1:<port>');
+
+test('the shared runner rebuilds the retained Copilot launch from its layout, byte for byte', () => {
+  const golden = JSON.parse(readFileSync(GOLDEN, 'utf8'));
+  const layout = { executable: '<executable>', ownedRoot: '<owned>', ownerHome: '<home>', proxyPort: PORT };
+  const policy = placeholders(copilotSeatbeltPolicy(layout));
+  const env = Object.fromEntries(Object.entries(copilotEnvironment(layout)).map(([k, v]) => [k, placeholders(v)]));
+  const argv = sandboxArgv(
+    'sentinel-copilot',
+    policy,
+    '<executable>',
+    copilotInvocationArguments('<owned>/state/usage.json', model),
+  );
+  assert.deepEqual([...argv], golden.launch.args);
+  assert.deepEqual(env, golden.launch.options.env);
+  const files = copilotPrivateState(SELECTOR);
+  assert.equal(files.config, golden.launch.state['config.json'].bytes);
+  assert.equal(files.settings, golden.launch.state['settings.json'].bytes);
+  assert.equal(renderNativeCopilotWire(model, MESSAGES, 512).stdin, golden.launch.stdin);
+  assert.equal(canonicalDigest(renderNativeCopilotWire(model, MESSAGES, 512)), golden.wireDigest);
+});
+
+test('the shared runner rebuilds the unchanged Claude seatbelt profile, environment and argv', () => {
+  const golden = JSON.parse(
+    readFileSync(new URL('./fixtures/retained-wire/claude-2.1.282-brokered.json', import.meta.url), 'utf8'),
+  );
+  assert.equal(CLAUDE_NATIVE_PROFILE.id, golden.profile);
+  assert.equal(
+    placeholders(claudeSeatbeltPolicy({ executable: '<executable>', ownedRoot: '<owned>', proxyPort: PORT })),
+    golden.policy,
+  );
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.entries(claudeEnvironment({ ownedRoot: '<owned>', proxyPort: PORT })).map(([k, v]) => [
+        k,
+        placeholders(v),
+      ]),
+    ),
+    golden.env,
+  );
+  assert.deepEqual(
+    [
+      ...sandboxArgv(
+        'sentinel-native-cli',
+        '<policy>',
+        '<executable>',
+        claudeInvocationArguments('<owned>/system.txt', '<model>'),
+      ),
+    ],
+    golden.args,
+  );
+});
+
+test('every contract provider kind is one registry entry, and no review module switches on a kind name', () => {
+  assert.deepEqual(
+    PROVIDER_KIND_ENTRIES.map((e) => e.kind),
+    ['ollama', 'openai-compatible', 'claude-cli', 'copilot-cli'],
+  );
+  for (const e of PROVIDER_KIND_ENTRIES) {
+    assert.equal(providerKind(e.kind), e);
+    assert.equal(e.transport === 'sandboxed-cli', e.cli !== undefined);
+    assert.equal(e.transport === 'http', e.http !== undefined);
+    assert.equal(e.apiKind, e.transport === 'http');
+  }
+  assert.throws(
+    () => providerKind('anthropic'),
+    (e: any) => e.code === 'sentinel.provider.invalidProfile',
+  );
+  const root = new URL('../src/', import.meta.url);
+  const files = [
+    ...readdirSync(new URL('review/', root), { recursive: true, encoding: 'utf8' }).map((f) => 'review/' + f),
+    'service/review-adapter.ts',
+  ].filter((f) => f.endsWith('.ts') && !['review/providers/registry.ts', 'review/runner.ts'].includes(f));
+  const literal = /'(?:ollama|openai-compatible|claude-cli|copilot-cli)'/;
+  const offenders = files.filter((f) => literal.test(readFileSync(new URL(f, root), 'utf8')));
+  assert.deepEqual(offenders, [], 'a provider kind name outside the registry is a switch the registry should own');
+});
