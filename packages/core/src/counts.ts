@@ -70,6 +70,14 @@ export const COUNT_SCOPES = [
   'sentinel.scope.report', // one saved Sentinel report at its pinned ledger sequence and evaluation time
   'sentinel.scope.finding', // the placement of one Sentinel finding: its screens, journeys and personas, each once
   'sentinel.scope.inventory', // a Sentinel snapshot's captured inventory, before any check ran
+  'sentinel.viewer.scope.scans', // every scan one workspace's Sentinel store keeps, numbered in the order it made them
+  'sentinel.viewer.scope.scan', // one retained scan: every stage its plan admitted and the work it recorded
+  'sentinel.viewer.scope.stage', // one stage of one scan: its checks or reviews and every try of each
+  'sentinel.viewer.scope.check', // one check (a tool's or Sentinel's own unit of work) of one stage
+  'sentinel.viewer.scope.review', // one review (a model's unit of work) of one stage, every try and exchange
+  'sentinel.viewer.scope.turn', // one request to the model and its reply
+  'sentinel.viewer.scope.output', // one retained output of one check or review
+  'sentinel.viewer.scope.attempt', // one try, as its retained invocation record names it
 
   'journey.scopeAll', // the whole journey, each thing once however many screens meet it
   'journey.scopeHere', // one screen of a journey
