@@ -24,7 +24,7 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 |---|---|---|
 | **affected checks** | test `scripts/ci-changes.mjs` and select suites from the changed paths | 5 min |
 | **lint** | `pnpm install --frozen-lockfile` → `pnpm format:check` → `pnpm lint`; a PR whose title starts with `style` also compares JS/TS ASTs against its merge base | 10 min |
-| **validate** | `pnpm install --frozen-lockfile` → `pnpm build` (`tsc -p` type-checks each package with the config `typecheck` uses, so there is no separate typecheck step) → the graph contract check → the unit tests of the packages the change reaches (below; every package when the selector says so) → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests when Echo is reached | 20 min |
+| **validate** | `pnpm install --frozen-lockfile` → `pnpm build` (`tsc -p` type-checks each package with the config `typecheck` uses, so there is no separate typecheck step) → the graph contract check → the unit tests of the packages the change reaches (below; every package when the selector says so), Sentinel's unit suite only (`SENTINEL_TEST_SUITE=unit`; its process suite is sentinel-service's) → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests when Echo is reached | 20 min |
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm e2e:typecheck` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `SENTINEL_REPORT_BROWSER=1` offline report delivery and print (exactly one case, zero skips) → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`; the table is the `e2e-perf-results` artifact) | 30 min |
 | **secrets** | gitleaks over the pushed or PR commits (below) | 10 min |
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
@@ -32,7 +32,7 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 | **echo-package** | when relevant, `pnpm install --frozen-lockfile` → `pnpm test:echo:package` | 15 min |
 | **sentinel-isolation** (not yet required) | when relevant, `pnpm install --frozen-lockfile` → `docker pull` of the one pinned canary image by digest (provisioning; the code under test never pulls) → `pnpm --filter '@farsight/sentinel...' build` → `SENTINEL_ISOLATION=1` worker-protocol and real-container canaries (network, host-file, effective identity, memory, CPU, process, file-size and temporary-storage enforcement, malformed output, deadline, cancel, failed start, ambiguous-create reconciliation, cleanup ownership) and real-container crash recovery (a coordinator killed after a create whose reply is lost, before a create whose container appears late, while canceling, and within one epoch after a create without a confirmed answer), one repetition each as smoke; the pinned Gitleaks image (`docker pull` by digest) for its conformance suite and the public CLI's canonical secret scan (`test/gitleaks-cli.test.ts`), then the packed tarball installed by npm alone runs the same scan (`scripts/test-sentinel-secrets-consumer.mjs`). A missing or unqualified container runtime fails it, and so does any skipped test | 30 min |
 | **sentinel-recovery** (not yet required) | when relevant, `pnpm install --frozen-lockfile` → `pnpm --filter '@farsight/sentinel...' build` → `SENTINEL_RECOVERY_SMOKE=1`: one real SIGKILL of a coordinator process at each boundary (before a worker is started, after it is started, after its attempt is recorded, before staging, after staging, after the objects, after publication) one orphaned worker and one worker whose coordinator died before its start (it must exit on its own at end of stdin, having written nothing), each recovered by a fresh process with every output accepted exactly once, plus the in-process coordinator suite. A missing prerequisite fails it, and so does any skipped test. The 20-repetition matrix is the separate **sentinel-recovery-full** workflow (`SENTINEL_RECOVERY_FULL=1`): every process boundary, then the four real-container crash cases 20 times each (with the pinned canary image and `SENTINEL_ISOLATION=1`), with no owned container left and two unrelated containers untouched; a release gate run by hand and on every push to `release/**` | 20 min |
-| **sentinel-service** (not yet required) | when Sentinel is selected, `pnpm install --frozen-lockfile` → `pnpm --filter '@farsight/sentinel...' build` → the CLI, owner socket, detached service, kill-and-resume and rule-lock suites (`cli-prework`, `service-detached`, `service-policy`, `service-mcp-controls`, `service-planned-pause`, `cli-preview-e2e`, `cli-rules`, `preview-slice`, `trusted-profile`, `receipts-publish`) on native amd64 as the runner's non-root user under umask 022. Running as root, on another architecture, or any skipped test fails it | 20 min |
+| **sentinel-service** (not yet required) | whenever validate tests Sentinel (the selector's `service` output), `pnpm install --frozen-lockfile` → `pnpm --filter '@farsight/sentinel...' build` → Sentinel's process suite, the CLI, owner socket, detached service, kill-and-resume, rule-lock and owner UI host files listed in `packages/sentinel/test/process-suite.txt` (`scripts/sentinel-tests.mjs --suite process`), on native amd64 as the runner's non-root user under umask 022. Running as root, on another architecture, or any skipped test fails it | 20 min |
 | **sentinel-package** (not yet required) | when relevant, `pnpm install --frozen-lockfile` → `pnpm pack:cli` (builds only the CLI's closure, so Sentinel stays unbuilt; the job fails if `packages/sentinel/dist` exists) → `scripts/test-farsight-package.mjs` → `pnpm test:cli:package:absent` → `pnpm test:sentinel:package` (below) → npm-only acceptance of both tarballs (`scripts/npm-acceptance.mjs`, six clean consumers) | 15 min |
 
 ### Native installed scanner CLI acceptance
@@ -85,8 +85,8 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 | `packages/sentinel/README.md`, `scripts/test-sentinel-package.mjs` | `sentinel-package` |
 | `scripts/pack-sentinel.mjs` | `sentinel-package` + `validate` (Sentinel's review-package unit test packs the tarball) |
 | `scripts/npm-acceptance.mjs` | `validate` (script tests) + `sentinel-package` (packed tarball acceptance) |
-| `packages/sentinel/` outside `test/` | `validate` + `sentinel-package` + `sentinel-isolation` + `sentinel-recovery` + `e2e` (the e2e job also runs the offline report browser gate) |
-| `packages/sentinel/test/` | `validate` + `sentinel-isolation` + `sentinel-recovery` + `e2e` (offline report browser gate) |
+| `packages/sentinel/` outside `test/` | `validate` + `sentinel-package` + `sentinel-service` + `sentinel-isolation` + `sentinel-recovery` + `e2e` (the e2e job also runs the offline report browser gate) |
+| `packages/sentinel/test/` | `validate` + `sentinel-service` + `sentinel-isolation` + `sentinel-recovery` + `e2e` (offline report browser gate) |
 | `e2e/`, `scripts/e2e.mjs`, `scripts/e2e-perf.mjs` | `e2e` (including its typecheck and small perf suite) |
 | `scripts/synth-graph.mjs` | `e2e` + `validate` (the server's search and fold tests import the synthetic workspace) |
 | Package `test/` folders, `scripts/test/`, changelog/release/release-manifest/verify-release/hook-install/commit-lint scripts | `validate` |
@@ -129,6 +129,12 @@ The outputs carry only strict values: each check `true` or `false`, a scope from
 names of the shape `@farsight/<lowercase-name>`. A workspace package named otherwise selects every check, and an
 output that fails these rules is written as every check and every package, so no value can add an output record.
 The test step refuses a name that is not a workspace package rather than pass pnpm a filter that matches nothing.
+
+`sentinel-service` runs exactly when validate tests Sentinel, because it runs the part of Sentinel's tests validate
+leaves out: when every package is tested (`scripts/`, `schemas/`, `examples/` and every path that runs every check),
+and for Sentinel's own paths, its workspace closure (code-parser, core, graph) and the parsers, whose dist its report
+tests ingest. It does not run for a viewer, server, CLI, Echo or work change, nor for Sentinel's packaging files
+alone.
 
 Markdown inside fixtures is test input, not automatically documentation. Graph and core are Echo build dependencies, so its
 whole package is watched, not just a few currently imported helpers. PRs compare merge-base → head, excluding
@@ -191,7 +197,14 @@ dependencies. Both packers build in a staging directory under `build/` and repla
 (`build/farsight-cli*`, `build/sentinel/`) after the bundle and the tarball succeed: a missing compiled module
 anywhere in the closure fails the pack with every prior artifact, and other packages' outputs, left in place.
 `node scripts/pack.mjs --check` runs the preflight and the full staged bundle and replaces nothing.
-Sentinel's fast schema tests are its package `test` script, so they run in `validate` with every other package.
+Sentinel's tests are two suites (`scripts/sentinel-tests.mjs`). The process suite is the files
+`packages/sentinel/test/process-suite.txt` lists, the ones that spawn the CLI, the detached owner service, its
+sockets and the owner UI host; `sentinel-service` runs it with zero skips. The unit suite is every other
+`test/*.test.ts`, the 22 Docker-gated files included (their container cases skip without `SENTINEL_ISOLATION=1`);
+validate runs it. Both run at `--test-concurrency` equal to the machine's available parallelism. A listed file that
+does not exist, a duplicate or a malformed line fails both suites before anything runs. Locally, `pnpm --filter
+@farsight/sentinel test` (and so `pnpm -r test`) runs both suites in one run; `test:unit` and `test:process` run one
+each. A new test file is in the unit suite until it is listed.
 The package hook also runs the installed SDK control consumer: adopted grants, real owner CLI confirmation,
 same-run pause/resume/cancel and lost accepted response followed by status without replay. The native service list
 includes its genuine SDK control tests and retains the zero-skip guard.

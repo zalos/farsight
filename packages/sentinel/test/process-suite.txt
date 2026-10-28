@@ -1,0 +1,36 @@
+# Sentinel's process suite: the test files that spawn the CLI, the detached owner service, its sockets and the owner
+# UI host. The sentinel-service CI job runs exactly these on native amd64 as a non-root user, with zero skips;
+# validate runs every other test/*.test.ts (scripts/sentinel-tests.mjs --suite unit). One path per line, relative to
+# packages/sentinel; a listed file that does not exist fails both suites.
+test/cli-prework.test.ts
+test/service-detached.test.ts
+test/service-reliability.test.ts
+test/service-policy.test.ts
+test/cli-preview-e2e.test.ts
+test/cli-rules.test.ts
+test/preview-slice.test.ts
+test/trusted-profile.test.ts
+test/receipts-publish.test.ts
+test/service-mcp-controls.test.ts
+test/service-planned-pause.test.ts
+test/preparation-seams.test.ts
+test/preparation-admission.test.ts
+test/preparation-receipt-admission.test.ts
+test/preparation-journal.test.ts
+test/preparation-profile.test.ts
+test/preparation-service.test.ts
+test/preparation-recovery.test.ts
+test/preparation-publication-crash.test.ts
+test/preparation-public.test.ts
+test/service-readonly.test.ts
+test/service-readonly-transport.test.ts
+test/service-readonly-lifecycle.test.ts
+test/owner-ui-session.test.ts
+test/owner-ui-host.test.ts
+test/owner-ui-descriptor.test.ts
+test/owner-ui-service.test.ts
+test/owner-ui-model-start.test.ts
+test/owner-ui-lifecycle.test.ts
+test/owner-ui-process.test.ts
+test/service-report-delivery.test.ts
+test/store-read-budget.test.ts

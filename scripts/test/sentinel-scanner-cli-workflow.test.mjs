@@ -1,9 +1,20 @@
 // The native command gate reuses the existing package/isolation selector union and exact adapter pins.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { selectChecks, detectChecks } from '../ci-changes.mjs';
+import { suiteFiles } from '../sentinel-tests.mjs';
 const root = new URL('../../', import.meta.url);
+// The sentinel-service job runs Sentinel's process suite, the files packages/sentinel/test/process-suite.txt lists.
+const processSuite = suiteFiles('process');
+const serviceJob = () => {
+  const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
+  const service = ci.slice(ci.indexOf('    name: sentinel-service'), ci.indexOf('\n  e2e:'));
+  assert.ok(service.includes('node ../../scripts/sentinel-tests.mjs --suite process'), 'the job runs the listed suite');
+  return service;
+};
 const workflow = readFileSync(new URL('.github/workflows/sentinel-scanner-cli.yml', root), 'utf8');
 const selected = (paths) => {
   const checks = selectChecks(paths);
@@ -96,11 +107,7 @@ test('framework inspection privacy and genuine installed delivery remain mandato
 });
 
 test('SDK run controls remain in the native service zero-skip list and installed package hook', () => {
-  const serviceWorkflow = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
-  const service = serviceWorkflow.slice(
-    serviceWorkflow.indexOf('    name: sentinel-service'),
-    serviceWorkflow.indexOf('\n  e2e:'),
-  );
+  const service = serviceJob();
   for (const file of [
     'service-mcp-controls',
     'service-planned-pause',
@@ -114,7 +121,7 @@ test('SDK run controls remain in the native service zero-skip list and installed
     'preparation-publication-crash',
     'preparation-public',
   ])
-    assert.ok(service.includes(`test/${file}.test.ts`));
+    assert.ok(processSuite.includes(`test/${file}.test.ts`), file);
   for (const counter of ['skipped', 'fail', 'cancelled'])
     assert.ok(service.includes(`grep -qx '# ${counter} 0' service.tap`));
   const manifest = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
@@ -167,8 +174,9 @@ test('owner decisions retain installed command and native privacy acceptance', (
 // Browser checks use the already provisioned e2e browser, while pure validate never launches one.
 test('owner UI service and installed browser acceptance stay explicitly selected with no skips', () => {
   const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
+  serviceJob();
   for (const name of ['session', 'host', 'descriptor', 'service', 'model-start', 'lifecycle', 'process'])
-    assert.ok(ci.includes(`test/owner-ui-${name}.test.ts`));
+    assert.ok(processSuite.includes(`test/owner-ui-${name}.test.ts`), name);
   assert.ok(ci.includes("SENTINEL_OWNER_UI_BROWSER: '1'"));
   assert.ok(ci.includes('packages/sentinel/test/owner-ui-browser.test.ts'));
   assert.ok(ci.includes("grep -q '^# skipped 0$' sentinel-owner-ui.tap"));
@@ -177,4 +185,72 @@ test('owner UI service and installed browser acceptance stay explicitly selected
   assert.ok(source.includes('npmConsumer('));
   assert.doesNotMatch(source, /packages\/sentinel\/dist|from[\s]*['"](?:\.\.\/)?packages\//);
   assert.equal(selected(['scripts/test-sentinel-owner-ui-consumer.mjs']), true);
+});
+
+test("Sentinel's two suites partition its test files; validate runs the unit suite, sentinel-service the process suite", async () => {
+  const { nodeArgs, parseArgs, processSuite: listed, sentinelDir } = await import('../sentinel-tests.mjs');
+  const unit = suiteFiles('unit');
+  const every = suiteFiles('all');
+  assert.ok(processSuite.length >= 30, `${processSuite.length} files in the process suite`);
+  assert.deepEqual([...unit, ...processSuite].sort(), every, 'every test file is in exactly one suite');
+  assert.equal(new Set([...unit, ...processSuite]).size, every.length);
+  assert.deepEqual(listed(), processSuite);
+  // the service job requires zero skips, so no Docker-gated file belongs in its suite; they stay in the unit suite
+  for (const file of processSuite)
+    assert.doesNotMatch(readFileSync(join(sentinelDir(), file), 'utf8'), /SENTINEL_ISOLATION/, file);
+
+  const manifest = JSON.parse(readFileSync(new URL('packages/sentinel/package.json', root), 'utf8'));
+  assert.equal(manifest.scripts.test, 'node ../../scripts/sentinel-tests.mjs', 'pnpm -r test runs both suites');
+  assert.equal(manifest.scripts['test:unit'], 'node ../../scripts/sentinel-tests.mjs --suite unit');
+  assert.equal(manifest.scripts['test:process'], 'node ../../scripts/sentinel-tests.mjs --suite process');
+  const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
+  const validate = ci.slice(ci.indexOf('    name: validate'), ci.indexOf('\n  # Required when selected'));
+  assert.match(validate, /SENTINEL_TEST_SUITE: unit\n\s+run: node scripts\/ci-changes\.mjs --run-tests/);
+  assert.match(serviceJob(), /if: \$\{\{ !cancelled\(\) && needs\.changes\.outputs\.service != 'false' \}\}/);
+
+  assert.deepEqual(parseArgs([], {}), { suite: 'all', concurrency: undefined, list: false, extra: [] });
+  assert.equal(parseArgs([], { SENTINEL_TEST_SUITE: 'unit' }).suite, 'unit');
+  assert.equal(parseArgs(['--suite', 'process'], { SENTINEL_TEST_SUITE: 'unit' }).suite, 'process');
+  assert.deepEqual(parseArgs(['--concurrency', '3', '--', '--test-timeout=1', '--test-reporter=tap']), {
+    suite: 'all',
+    concurrency: 3,
+    list: false,
+    extra: ['--test-timeout=1', '--test-reporter=tap'],
+  });
+  assert.throws(() => parseArgs(['--suites', 'unit']), /Unknown option/);
+  assert.throws(() => suiteFiles('units'), /Unknown suite/);
+  assert.deepEqual(nodeArgs(['test/a.test.ts'], { concurrency: 4, extra: ['--test-timeout=9'] }), [
+    '--disable-warning=ExperimentalWarning',
+    '--experimental-strip-types',
+    '--test',
+    '--test-concurrency=4',
+    '--test-timeout=9',
+    'test/a.test.ts',
+  ]);
+  assert.throws(() => nodeArgs([], { concurrency: 0 }), /Bad concurrency/);
+  assert.throws(() => nodeArgs([], { concurrency: Number('x') }), /Bad concurrency/);
+});
+
+test('the process suite list fails loudly: a missing file, a duplicate, a bad line or an empty list', async () => {
+  const { processSuite: listed } = await import('../sentinel-tests.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'farsight-sentinel-suites-'));
+  try {
+    mkdirSync(join(dir, 'test'));
+    for (const name of ['a', 'b']) writeFileSync(join(dir, 'test', `${name}.test.ts`), '');
+    const list = (text) => writeFileSync(join(dir, 'test', 'process-suite.txt'), text);
+    list('# header\n\ntest/a.test.ts\n  test/b.test.ts  \n');
+    assert.deepEqual(listed(dir), ['test/a.test.ts', 'test/b.test.ts']);
+    list('test/a.test.ts\ntest/gone.test.ts\n');
+    assert.throws(() => listed(dir), /process-suite\.txt:2: no such file: test\/gone\.test\.ts/);
+    list('test/a.test.ts\ntest/a.test.ts\n');
+    assert.throws(() => listed(dir), /process-suite\.txt:2: listed twice/);
+    list('test/a.test.ts --test-only\n');
+    assert.throws(() => listed(dir), /not a test\/<name>\.test\.ts path/);
+    list('../other/test/a.test.ts\n');
+    assert.throws(() => listed(dir), /not a test\/<name>\.test\.ts path/);
+    list('# only a comment\n');
+    assert.throws(() => listed(dir), /lists no files/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
