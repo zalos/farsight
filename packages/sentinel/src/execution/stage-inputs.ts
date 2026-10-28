@@ -46,7 +46,8 @@ export function outputSchemasOf(output: StageOutputType | 'walkthrough' | string
       'sentinel-paths/draft-1',
     ],
     coverage: [COVERAGE_SCHEMA],
-    observations: ['sentinel-review-record/draft-1', 'sentinel-observation/draft-1'],
+    // A brokered review publishes its review record; a native one its native review record (review/native-dispatch.ts).
+    observations: ['sentinel-review-record/draft-1', 'sentinel-native-review/draft-1', 'sentinel-observation/draft-1'],
     'walkthrough-md': [PATHS_OUTPUT_SCHEMA],
     walkthrough: [PATHS_OUTPUT_SCHEMA],
     report: [],
@@ -68,11 +69,17 @@ async function documentSchemaOf(store: SentinelStore, id: string): Promise<strin
   }
 }
 
-/** The provider kinds whose runner the contract names; the others are recorded as the hosted-API runner. */
-const RUNNER_OF: Readonly<Record<string, AgentRunnerId>> = Object.freeze({
-  'claude-cli': 'claude-cli',
-  'copilot-cli': 'copilot-cli',
-});
+/**
+ * The runner an adopted provider's turns run on, as a pipeline names it: the CLI of that kind, a local model server
+ * (an Ollama provider whose disclosure keeps the source on this machine), or otherwise a hosted model API.
+ */
+export function runnerOfProvider(
+  p: { readonly kind: string; readonly disclosure?: string } | undefined,
+): AgentRunnerId {
+  if (p?.kind === 'claude-cli' || p?.kind === 'copilot-cli') return p.kind;
+  if (p?.kind === 'ollama' && p.disclosure === 'local-only') return 'ollama';
+  return 'hosted-api';
+}
 
 /**
  * The pipeline a plan with no recorded declaration was planned from: the default pipeline over the rules it pins (one
@@ -87,8 +94,8 @@ export function impliedPipelineOf(admitted: Pick<AdmittedPlan, 'plan' | 'policy'
     if (!u.review) continue;
     const kind = u.stage === 'review-guided' ? 'guided' : 'general';
     if (reviews.has(kind)) continue;
-    const kindOf = providers.find((p) => p.id === u.review!.selection.providerId)?.kind ?? '';
-    reviews.set(kind, { kind, runner: RUNNER_OF[kindOf] ?? 'hosted-api', model: u.review.selection.modelId });
+    const provider = providers.find((p) => p.id === u.review!.selection.providerId);
+    reviews.set(kind, { kind, runner: runnerOfProvider(provider), model: u.review.selection.modelId });
   }
   return defaultPipelineOf({
     checks: plan.pins.rules.map((r) => ({ adapterId: r.adapterId, rules: [r.familyId] })),
@@ -111,11 +118,11 @@ export function defaultPipelineFor(
   const reviews = (['guided', 'general'] as const).flatMap((kind) => {
     const binding = bindings.find((b) => b.stage === kind);
     if (!binding) return [];
-    const kindOf = policy.settings.providers.find((p) => p.id === binding.providerId)?.kind ?? '';
+    const provider = policy.settings.providers.find((p) => p.id === binding.providerId);
     return [
       {
         kind,
-        runner: RUNNER_OF[kindOf] ?? ('hosted-api' as const),
+        runner: runnerOfProvider(provider),
         model: binding.modelId,
         provider: binding.providerId,
       },
