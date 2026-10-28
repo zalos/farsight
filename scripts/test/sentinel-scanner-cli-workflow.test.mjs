@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scannerCliClosure, selectChecks, detectChecks } from '../ci-changes.mjs';
+import { scannerCliClosure, scannerLoadsText, selectChecks, detectChecks } from '../ci-changes.mjs';
 import { suiteFiles } from '../sentinel-tests.mjs';
 import { CONSUMERS } from '../test-sentinel-consumers.mjs';
 // pnpm test:sentinel:package packs once and runs every installed consumer through the parallel runner.
@@ -87,27 +87,31 @@ test('the scanner workflow runs for what its steps execute: review dispatch and 
     'examples/invoice-app/screens.json',
     'scripts/test-sentinel-evidence-consumer.mjs',
     'scripts/sentinel-evidence-provenance.mjs',
-  ])
-    assert.equal(selected([path]), true, path);
-  // what no step runs or imports: agent review's evaluation and owner provider, test files the workflow does not run
-  // and the fixtures only they read, another package's tests, and the viewer, the server, the CLI and Echo
-  for (const path of [
+    // in the area of a load the walk cannot follow: Sentinel's sources and scripts (its Trivy checks script and the
+    // framework controls closure import computed paths), its test fixtures (the test helpers' workers), every built
+    // package's sources and the root scripts (the consumers and the packer)
     'packages/sentinel/src/review/evaluation.ts',
     'packages/sentinel/src/review/providers/owner.ts',
+    'packages/sentinel/test/fixtures/model-review/a.json',
+    'packages/parsers/src/lifecycle.ts',
+    'scripts/test-sentinel-package.mjs',
+  ])
+    assert.equal(selected([path]), true, path);
+  // what no step runs or imports: test files the workflow does not run, another package's tests, the viewer, the
+  // server, the CLI and Echo, and the other examples
+  for (const path of [
     'packages/sentinel/test/review-packs.test.ts',
     'packages/sentinel/test/cli-copilot-native.test.ts',
     'packages/sentinel/test/owner-ui-browser.test.ts',
-    'packages/sentinel/test/fixtures/model-review/a.json',
     'packages/parsers/test/tsjs.test.ts',
     'packages/server/public/app/surfaces/sentinel.js',
     'packages/server/src/index.ts',
     'packages/cli/src/cli.ts',
     'packages/echo/src/cli.ts',
     'examples/nx-workspace/package.json',
-    'scripts/test-sentinel-package.mjs',
   ])
     assert.equal(selected([path]), false, path);
-  assert.equal(selected(['packages/sentinel/src/review/evaluation.ts', 'packages/sentinel/src/execution/x.ts']), true);
+  assert.equal(selected(['packages/server/src/index.ts', 'packages/sentinel/src/execution/x.ts']), true);
 });
 
 test("the scanner closure is derived from the workflow's steps and their imports, not a list of folders", () => {
@@ -146,6 +150,58 @@ test("the scanner closure is derived from the workflow's steps and their imports
     rmSync(empty, { recursive: true, force: true });
   }
 });
+test('a load the walk cannot follow selects its whole area and is listed with its importer', () => {
+  const fake = mkdtempSync(join(tmpdir(), 'farsight-scanner-computed-'));
+  const write = (path, text) => {
+    mkdirSync(join(fake, path, '..'), { recursive: true });
+    writeFileSync(join(fake, path), text);
+  };
+  const manifest = (name) => JSON.stringify({ name, version: '0.0.0', main: './dist/index.js' });
+  const closureOf = (test) => {
+    write('.github/workflows/sentinel-scanner-cli.yml', 'run: node --test test/scan.test.ts\n');
+    write('packages/sentinel/package.json', manifest('@farsight/sentinel'));
+    write('packages/parsers/package.json', manifest('@farsight/parsers'));
+    write('packages/sentinel/src/index.ts', 'export {};\n');
+    write('packages/sentinel/src/hidden.ts', 'export const hidden = true;\n');
+    write('packages/server/src/index.ts', 'export {};\n');
+    write('packages/sentinel/test/scan.test.ts', test);
+    return scannerCliClosure(fake);
+  };
+  const reaches = (closure, path) =>
+    selectChecks([path], { root: fake, packageInputs: new Set(), isolationInputs: new Set(), scannerInputs: closure })
+      .scannerCli;
+  try {
+    // hidden.ts is reached only through an import whose path is built from a variable
+    const computed = closureOf("const name = 'hidden';\nawait import(`../dist/${name}.js`);\n");
+    assert.ok(!computed.files.has('packages/sentinel/src/hidden.ts'), 'the walk cannot follow it');
+    assert.deepEqual(computed.unresolved, [
+      {
+        site: 'packages/sentinel/test/scan.test.ts:2',
+        area: ['packages/sentinel/src/', 'packages/sentinel/test/fixtures/'],
+      },
+    ]);
+    assert.equal(reaches(computed, 'packages/sentinel/src/hidden.ts'), true, 'an edit to it selects the workflow');
+    assert.equal(reaches(computed, 'packages/server/src/index.ts'), false, 'outside the area');
+    assert.match(scannerLoadsText(computed.unresolved), /packages\/sentinel\/test\/scan\.test\.ts:2 select /);
+
+    // the same test with a literal import: nothing is unresolved, and hidden.ts is outside the closure
+    const literal = closureOf("await import('../dist/index.js');\n// await import(`${name}`) in a comment\n");
+    assert.deepEqual(literal.unresolved, []);
+    assert.equal(reaches(literal, 'packages/sentinel/src/hidden.ts'), false);
+    assert.equal(scannerLoadsText(literal.unresolved), '- sentinel-scanner-cli: no computed loads in its closure');
+  } finally {
+    rmSync(fake, { recursive: true, force: true });
+  }
+  // the real closure lists the loads its steps make today, by importer and line, the Trivy checks script among them
+  const { unresolved } = scannerCliClosure();
+  const trivy = unresolved.find(({ site }) => site.startsWith('packages/sentinel/scripts/acquire-trivy-checks.mjs:'));
+  assert.deepEqual(trivy?.area, ['packages/sentinel/src/', 'packages/sentinel/scripts/']);
+  const packer = unresolved.find(({ site }) => site.startsWith('scripts/pack-sentinel.mjs:'));
+  assert.ok(packer?.area.includes('scripts/') && packer.area.includes('packages/core/src/'), 'a root script');
+  const { scannerLoads } = detectChecks({ base: undefined, head: undefined, event: 'pull_request' });
+  assert.deepEqual(scannerLoads, [], 'an unavailable range selects every check and lists nothing');
+});
+
 test('workflow image indexes and native manifests exactly match all five adapter source pins', () => {
   const engines = [
     ['pattern', 'PATTERN'],

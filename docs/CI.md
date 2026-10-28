@@ -65,23 +65,33 @@ The separate `sentinel-scanner-cli` workflow runs on pull requests and pushes to
 Its inexpensive selection job runs the selector's `scannerCli` output, the scanner closure, derived from what the
 workflow's steps execute rather than listed (`scannerCliClosure()` in `scripts/ci-changes.mjs`). Its entries are the
 files the steps name: the test files the native job runs, the scripts (the consumers, the browser check, the Trivy
-checks acquisition), the packer behind `pnpm pack:sentinel`, and the package's command, which the installed consumers
-run. From those it follows every import, export, dynamic import, `require` and `import.meta` file reference,
-workspace packages and the published `farsight-sentinel` name through their `exports`, and compiled `dist/` paths
-named as strings (the workers, launch gate and drivers), each mapped to its source: about 580 files today. A change
-reaches the workflow when it is one of those files or lies in a folder a reached test reads whole (the example
-application the full-report tests ingest, the advisory and IaC fixtures); when it is test data a reached test or script
-names; when it is another build input of a package the build step builds (its manifest or tsconfig, Sentinel's rules,
-assets and scripts); or when it is a source path that no longer exists, deleted or renamed away, which the closure of
-the tree as it is now cannot rule out. Agent review's dispatch, the review adapter and the owner UI operations are in
-the closure: the scanner tests read the review adapters through `review/dispatch`, and the installed consumer starts
-the owner service, which builds the owner UI operations. What no step runs or imports stays out: agent review's
-evaluation and owner provider, test files the workflow does not run and the fixtures only they read, another package's
-tests, the viewer, server, CLI, Echo and work. Documentation-only changes skip the acceptance job; every path that
-selects every check selects it; an unavailable range, unreadable workflow, failed selector or missing output cannot
-silently skip it. The closure is wider than the five folders the plan named (and reaches `examples/invoice-app`)
-because this workflow is the only place the native secret-privacy tests of reports, findings, evidence, decisions,
-paths, preparation and frameworks run.
+checks acquisition), the packer behind `pnpm pack:sentinel` with every export of the package it bundles, and the
+package's command, which the installed consumers run. From those it follows every import, export, dynamic import,
+`require` and `import.meta` file reference, workspace packages and the published `farsight-sentinel` name through
+their `exports`, and compiled `dist/` paths named as strings (the workers, launch gate and drivers), each mapped to
+its source: about 580 files today.
+
+A load it cannot follow fails closed. An `import()`, `require()` or `require.resolve()` of anything but one string
+literal, or a `new URL(…, import.meta.url)` of a computed path, generated code in a string included, selects the whole
+area it could point into: a package source's own `src/`; a package script's `src/` and `scripts/`; a package test's
+`src/` and `test/fixtures/` (the workers and data a test loads by path); and for a root script, `scripts/` and the
+`src/` and `scripts/` of every package the workflow builds, whose `dist/` it can load by path. The selector prints
+those loads by file and line, with the area each selects, in its output and step summary, and the scanner workflow's
+selection step prints them too. Today there are 18: the Trivy checks script and the framework controls closure in
+Sentinel, four test files that start workers by path, the packer and three consumers. So every source and script of
+the five built packages (code-parser, core, graph, parsers, sentinel), Sentinel's test fixtures and every root script
+start the workflow; making one of those loads a literal narrows its area back to what it imports.
+
+Otherwise a change reaches the workflow when it is one of the closure's files or lies in a folder a reached test reads
+whole (`examples/invoice-app`, which the full-report tests ingest, and the advisory and IaC fixtures); when it is test
+data a reached test or script names; when it is another build input of a package the build step builds (its manifest
+or tsconfig, Sentinel's rules and assets); or when it is a source path that no longer exists, deleted or renamed away,
+which the closure of the tree as it is now cannot rule out. What it leaves out is what no step runs or imports: test
+files the workflow does not run, another package's tests, the viewer, server, CLI, MCP, Echo and work packages, and the
+other examples. Documentation-only changes skip the acceptance job; every path that selects every check selects it; an
+unavailable range, unreadable workflow, failed selector or missing output cannot silently skip it. The closure is wider
+than the five folders the plan named (and reaches `examples/invoice-app`) because this workflow is the only place the
+native secret-privacy tests of reports, findings, evidence, decisions, paths, preparation and frameworks run.
 
 The selected `scanner-cli-linux-amd64` job requires a native non-root Ubuntu amd64 host, a Linux amd64 Docker daemon,
 Node 24 and the exact measured adapter pins. An explicit provisioning step verifies each index's amd64 manifest and

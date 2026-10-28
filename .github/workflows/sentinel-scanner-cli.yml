@@ -39,13 +39,14 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import { appendFileSync } from 'node:fs';
-          import { detectChecks } from './scripts/ci-changes.mjs';
-          const { checks, reason } = detectChecks({ base: process.env.BASE_SHA, head: process.env.HEAD_SHA, event: process.env.GITHUB_EVENT_NAME });
+          import { detectChecks, scannerLoadsText } from './scripts/ci-changes.mjs';
+          const { checks, reason, scannerLoads } = detectChecks({ base: process.env.BASE_SHA, head: process.env.HEAD_SHA, event: process.env.GITHUB_EVENT_NAME });
           // Every file this workflow's steps execute, followed from the tests, scripts and command they name through
-          // their imports (scannerCliClosure in scripts/ci-changes.mjs); an unavailable range selects it
+          // their imports, and the whole area around each load it cannot follow (scannerCliClosure in
+          // scripts/ci-changes.mjs, which lists those loads below); an unavailable range selects it
           const run = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || checks.scannerCli;
           appendFileSync(process.env.GITHUB_OUTPUT, `run=${run}\n`);
-          console.log(`${reason}; scanner CLI: ${run ? 'run' : 'skip'}`);
+          console.log(`${reason}; scanner CLI: ${run ? 'run' : 'skip'}\n${scannerLoadsText(scannerLoads)}`);
           JS
 
   scanner-cli-linux-amd64:
