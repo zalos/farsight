@@ -43,7 +43,6 @@ export function claudeAgentArguments(l: {
   maxTurns: number;
   maxUsd?: string;
   jsonSchema: string;
-  skills: boolean;
 }): readonly string[] {
   return Object.freeze([
     '--print',
@@ -72,9 +71,10 @@ export function claudeAgentArguments(l: {
     '{"mcpServers":{}}',
     '--settings',
     '{"disableAllHooks":true}',
-    // Promoted skills load from the scratch tree's `.claude/skills/`; without skills no setting source is read.
+    // Promoted skills load from the scratch tree's `.claude/skills/`; `--restricted` ignores every settings file, and
+    // no input may carry a name the CLI reads as its own instructions (`safeInputPath`).
     '--setting-sources',
-    l.skills ? 'project' : '',
+    'project',
     '--no-session-persistence',
     '--max-turns',
     String(l.maxTurns),
@@ -84,21 +84,14 @@ export function claudeAgentArguments(l: {
   ]);
 }
 
-export interface ClaudeAgentRequest {
-  readonly model: string;
-  readonly files: readonly Readonly<{ relativePath: string; bytes: Uint8Array }>[];
-  /** The system prompt: the stage's instructions. */
-  readonly instructions: Uint8Array;
-  readonly digests: Readonly<{ instructions: string; files: readonly string[] }>;
-  readonly task: string;
-  readonly maxTurns: number;
-  readonly maxUsd?: string;
-  readonly jsonSchema: string;
-  readonly skills?: readonly Readonly<{
-    id: string;
-    files: readonly Readonly<{ path: string; bytes: Uint8Array; digest: string }>[];
-  }>[];
-}
+/** A Copilot-shaped native request, plus the output schema `--json-schema` enforces and the CLI's own dollar cap. */
+export type ClaudeAgentRequest = CopilotAgentRequest &
+  Readonly<{
+    /** The stage output's JSON Schema, enforced by the CLI on its final answer (validated again by the runner). */
+    jsonSchema: string;
+    /** `--max-budget-usd`: the CLI's own list-price ceiling, a decimal string. */
+    maxUsd?: string;
+  }>;
 
 const MAX_EVENTS_BYTES = 8 * 1024 * 1024;
 const MAX_LINE_BYTES = 1024 * 1024;
@@ -238,7 +231,7 @@ export class ClaudeAgentDecoder {
       stream: new Uint8Array(0),
     });
   }
-  finish(): Omit<CopilotAgentResult, 'events' | 'share'> & { listPriceUsd: string | null } {
+  finish(): Omit<CopilotAgentResult, 'events' | 'share'> {
     if (this.#pending.length) this.#line(this.#pending);
     this.#pending = Buffer.alloc(0);
     const r = this.#result;
@@ -263,9 +256,6 @@ export class ClaudeAgentDecoder {
       tools: Object.freeze([...this.#tools]),
       filesRead,
       usage: Object.freeze({ inputTokens: input, outputTokens: usage.output_tokens, requests: this.#messages.size }),
-      // The CLI's own estimate at list price, not a bill; a subscription records money as unobserved.
-      listPriceUsd:
-        typeof r.total_cost_usd === 'number' && Number.isFinite(r.total_cost_usd) ? String(r.total_cost_usd) : null,
     });
   }
 }
@@ -285,22 +275,22 @@ const sealed = (bytes: Uint8Array, digest: string) => {
   return bytes;
 };
 
-export async function nativeClaudeAgentCall(
-  authority: ClaudeAgentAuthority,
-): Promise<CopilotAgentResult & { listPriceUsd: string | null }> {
+export async function nativeClaudeAgentCall(authority: ClaudeAgentAuthority): Promise<CopilotAgentResult> {
   const { runtime, request, limits, token } = beginClaudeAgentCall(authority);
-  const proxy = await openNativeClaudeProxy({
-    ...limits,
-    maxUpstreamBytes: 4 * 1024 * 1024,
-    maxDownstreamBytes: 4 * 1024 * 1024,
-    maxConnections: 8,
-  });
+  let proxy: Awaited<ReturnType<typeof openNativeClaudeProxy>> | undefined;
   let setup: Awaited<ReturnType<typeof nativeClaudeAgentSetup>> | undefined;
   let decoder: ClaudeAgentDecoder | undefined;
   let handle: NativeClaudeToken | undefined = token;
   const state = freshSandboxedState();
   const transcript = new TranscriptCapture(MAX_EVENTS_BYTES);
   try {
+    // One fixed destination, a few sequential connections (the loop's turns), each one checked and bounded.
+    proxy = await openNativeClaudeProxy({
+      ...limits,
+      maxUpstreamBytes: 4 * 1024 * 1024,
+      maxDownstreamBytes: 4 * 1024 * 1024,
+      maxConnections: 8,
+    });
     setup = await nativeClaudeAgentSetup(runtime, proxy.port, limits);
     const current = setup,
       work = current.ownedRoot + '/work',
@@ -344,7 +334,6 @@ export async function nativeClaudeAgentCall(
           maxTurns: request.maxTurns,
           ...(request.maxUsd ? { maxUsd: request.maxUsd } : {}),
           jsonSchema: request.jsonSchema,
-          skills: Boolean(request.skills?.length),
         }),
         cwd: work,
         env: current.env,
@@ -403,7 +392,7 @@ export async function nativeClaudeAgentCall(
   } finally {
     finishClaudeAgentCall(authority);
     if (handle) discardNativeClaudeToken(handle);
-    await proxy.close();
+    await proxy?.close();
     if (setup) await cleanupNativeClaudeSetup(setup);
   }
 }

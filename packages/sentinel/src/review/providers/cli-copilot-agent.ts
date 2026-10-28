@@ -377,20 +377,32 @@ export function decodeCopilotAgentUsage(
   return Object.freeze({ inputTokens: u.inputTokens, outputTokens: u.outputTokens, requests: requests.count });
 }
 
-/** A scratch-relative input path: no absolute path, no parent step, no hidden configuration directory. */
+/** Folders a CLI reads its own configuration, instructions or skills from, at any depth, in any letter case. */
+const CONFIG_FOLDERS = new Set(['.github', '.copilot', '.claude', '.agents']);
+/** Files a CLI reads as its own instructions wherever they sit in its working tree, in any letter case. */
+const INSTRUCTION_FILES = new Set([
+  'agents.md',
+  'claude.md',
+  'claude.local.md',
+  'copilot-instructions.md',
+  'gemini.md',
+]);
+/**
+ * A scratch-relative input path: no absolute path, no parent step, and nothing the CLI would read as its own
+ * configuration or instructions (a captured `CLAUDE.md` or `AGENTS.md` is an input, never a prompt).
+ */
 export function safeInputPath(path: string): string {
   const norm = posix.normalize(path);
+  const parts = norm.split('/');
   if (
     !path ||
     path.length > 1024 ||
     path.includes('\0') ||
     path.startsWith('/') ||
     norm !== path ||
-    norm.split('/').some((p) => p === '..' || p === '' || p === '.') ||
-    norm.startsWith('.github/') ||
-    norm.startsWith('.copilot/') ||
-    norm.startsWith('.claude/') ||
-    norm.startsWith('.agents/')
+    parts.some((p) => p === '..' || p === '' || p === '.') ||
+    parts.slice(0, -1).some((p) => CONFIG_FOLDERS.has(p.toLowerCase())) ||
+    INSTRUCTION_FILES.has(parts[parts.length - 1]!.toLowerCase())
   )
     return fail('sentinel.provider.invalidProfile', 'a native input path is not a plain relative path');
   return norm;

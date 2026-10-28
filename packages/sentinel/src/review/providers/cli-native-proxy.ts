@@ -1,4 +1,4 @@
-// Package-private, one-connection Claude TLS egress gate. It never terminates TLS or sees OAuth/prompt plaintext.
+// Package-private Claude TLS egress gate: one connection for a brokered turn, a bounded few for a native run. It never terminates TLS or sees OAuth/prompt plaintext.
 // It cannot forward another host/port/protocol, resolve a caller name, contact loopback inference, or retry/fallback.
 import { createServer, createConnection, isIP, type Socket } from 'node:net';
 import { lookup } from 'node:dns/promises';
