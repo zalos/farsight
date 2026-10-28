@@ -36,6 +36,7 @@ import { exchange } from './transport.js';
 import type { NativeClaudeRuntime } from './cli-native-profile.js';
 import type { NativeReviewWire } from './cli-native-wire.js';
 import { providerKind } from './registry.js';
+import type { CopilotAgentRequest, CopilotAgentResult } from './cli-copilot-agent.js';
 export type { NativeCallAuthority, CopilotCallAuthority } from './authority.js';
 export {
   beginNativeCall,
@@ -329,6 +330,137 @@ export class ModelBroker {
     return { inputTokens, tokens, costNanos };
   }
 
+  /**
+   * One native-mode stage run under an envelope: the CLI runs its own loop over the stage's inputs. The stage's token
+   * budget is reserved durably before dispatch and the reservation is marked dispatched before the process starts;
+   * the owned usage file settles it, or it stays uncertain. A run that reports more tokens than its stage allows is
+   * settled (overdrawing the envelope) and then refused, so its output is never published.
+   */
+  async runAgent(env: ModelEnvelope, current: ProviderBinding, req: AgentRunRequest): Promise<AgentRunReply> {
+    const held = envelopes.get(env);
+    if (!held) return fail('sentinel.provider.notAdmitted', 'only an envelope openEnvelope returned is accepted');
+    const { binding } = held;
+    if (!isProviderBinding(current) || current.digest !== binding.digest)
+      fail('sentinel.provider.bindingChanged', 'the provider’s binding is not the one approved');
+    if (current.policyRevision !== binding.policyRevision)
+      fail('sentinel.provider.bindingChanged', 'the policy changed since this budget was approved');
+    const cli = providerKind(binding.kind).cli;
+    if (!cli?.agent || cli.mode(binding) !== 'native')
+      return fail('sentinel.provider.invalidProfile', 'the adopted profile has no qualified native mode');
+    if (!Number.isSafeInteger(req.maxTurns) || req.maxTurns < 1 || req.maxTurns > 64)
+      fail('sentinel.provider.invalidProfile', 'a native stage allows 1 to 64 turns');
+    if (!Number.isSafeInteger(req.tokens) || req.tokens < 1 || req.tokens > binding.limits.contextTokens)
+      fail('sentinel.provider.contextExceeded', 'a native stage token budget is within the adopted context');
+    if (!Number.isSafeInteger(req.deadlineAt) || req.deadlineAt <= Date.now() || req.deadlineAt - Date.now() > 600000)
+      fail('sentinel.provider.timeout', 'a native stage needs its original bounded deadline');
+    if (
+      !Array.isArray(req.files) ||
+      req.files.length > 1000 ||
+      typeof req.task !== 'string' ||
+      !(req.instructions instanceof Uint8Array)
+    )
+      fail('sentinel.provider.invalidProfile', 'a native stage names bounded inputs, instructions and a task');
+    const bytes =
+      req.files.reduce((n, f) => n + f.bytes.byteLength, 0) + req.instructions.byteLength + Buffer.byteLength(req.task);
+    if (bytes > binding.limits.maxRequestBytes * 64)
+      fail('sentinel.provider.requestTooLarge', `${bytes} input bytes for a native stage`);
+    const ledger = this.#deps.ledger;
+    let res = ledger.reserve({
+      envelopeId: env.id,
+      operationId: req.operationId,
+      tokens: req.tokens,
+      costNanos: null,
+      epoch: this.#deps.epoch,
+      at: stamp(this.#now()),
+    });
+    if (res.state !== 'held')
+      fail('sentinel.provider.reservationState', `operation ${req.operationId} is already ${res.state}`);
+    if (
+      !held.cliRuntime ||
+      !held.receipt ||
+      !isConsumedReceipt(held.receipt) ||
+      receiptAuthority(held.receipt)?.intentDigest !== env.admission.intentDigest ||
+      res.envelopeId !== env.id
+    )
+      return fail('sentinel.provider.notAdmitted', 'a native run requires its exact admitted receipt and reservation');
+    const authority = cli.agent.issue({
+      runtime: held.cliRuntime,
+      request: Object.freeze({
+        model: binding.model,
+        files: req.files,
+        instructions: req.instructions,
+        task: req.task,
+        maxTurns: req.maxTurns,
+      }),
+      limits: Object.freeze({ deadlineAt: req.deadlineAt, ...(req.signal ? { signal: req.signal } : {}) }),
+      ledger,
+      reservationId: res.id,
+      receipt: held.receipt,
+    });
+    res = ledger.dispatch(res.id, stamp(this.#now()));
+    let result: CopilotAgentResult;
+    try {
+      result = await cli.agent.call(authority);
+    } catch (error) {
+      const e =
+        error instanceof ProviderError
+          ? error
+          : new ProviderError('sentinel.provider.malformedResponse', 'unexpected failure', 'possible');
+      const after =
+        e.spend === 'none'
+          ? ledger.releaseUnsent(res.id, stamp(this.#now()), 'no-connection')
+          : ledger.markUncertain(
+              res.id,
+              stamp(this.#now()),
+              e instanceof NativeCopilotError ? copilotFailureEvent(e) : e.code,
+            );
+      throw new ModelCallError(e, after);
+    } finally {
+      cli.agent.release(authority);
+    }
+    const settled = ledger.settle(
+      res.id,
+      { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, costNanos: null },
+      stamp(this.#now()),
+    );
+    if (result.reportedModel !== binding.model)
+      throw new ModelCallError(
+        new ProviderError(
+          'sentinel.provider.identityMismatch',
+          `${binding.model} asked, another model answered`,
+          'possible',
+        ),
+        settled,
+      );
+    if (result.usage.inputTokens + result.usage.outputTokens > req.tokens)
+      throw new ModelCallError(
+        new ProviderError(
+          'sentinel.provider.budgetExhausted',
+          'the run used more tokens than its stage allows',
+          'possible',
+        ),
+        settled,
+      );
+    return Object.freeze({
+      result,
+      identity: Object.freeze({
+        requestedModel: binding.model,
+        returnedModel: result.reportedModel,
+        probedRevision: binding.capability.revision,
+        source: providerKind(binding.kind).identitySource,
+      }),
+      usage: Object.freeze({
+        certainty: 'confirmed' as const,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        monetaryCost: null,
+        currency: null,
+        basis: 'subscription-quota' as const,
+      }),
+      reservation: settled,
+    });
+  }
+
   async generate(env: ModelEnvelope, current: ProviderBinding, call: GenerateRequest): Promise<ModelReply> {
     const held = envelopes.get(env);
     if (!held) return fail('sentinel.provider.notAdmitted', 'only an envelope openEnvelope returned is accepted');
@@ -339,6 +471,8 @@ export class ModelBroker {
     // stops the envelope until the owner approves again.
     if (current.policyRevision !== binding.policyRevision)
       fail('sentinel.provider.bindingChanged', 'the policy changed since this budget was approved');
+    if (providerKind(binding.kind).cli?.mode(binding) === 'native')
+      fail('sentinel.provider.invalidProfile', 'a native agent profile runs whole stages, not brokered turns');
     const L = binding.limits;
     if (
       !Number.isSafeInteger(call.maxOutputTokens) ||
@@ -517,6 +651,27 @@ export class ModelBroker {
       reservation: settled,
     });
   }
+}
+
+export interface AgentRunRequest {
+  /** Stable per logical run: asking again returns the same reservation and is never sent twice. */
+  readonly operationId: string;
+  readonly files: CopilotAgentRequest['files'];
+  readonly instructions: Uint8Array;
+  readonly task: string;
+  /** The stage's turn budget: model requests allowed. */
+  readonly maxTurns: number;
+  /** The stage's token budget: reserved before dispatch; a run that reports more fails after settling. */
+  readonly tokens: number;
+  /** The stage's absolute deadline. */
+  readonly deadlineAt: number;
+  readonly signal?: AbortSignal;
+}
+export interface AgentRunReply {
+  readonly result: CopilotAgentResult;
+  readonly identity: ReplyIdentity;
+  readonly usage: ModelReply['usage'];
+  readonly reservation: Reservation;
 }
 
 /** A fresh coordinator-scoped epoch id, for callers without one. */
