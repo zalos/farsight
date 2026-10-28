@@ -1,4 +1,4 @@
-// The native command gate reuses the existing package/isolation selector union and exact adapter pins.
+// The native command gate runs for the selector's scanner closure (scannerCli), with exact adapter pins.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,6 +6,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { selectChecks, detectChecks } from '../ci-changes.mjs';
 import { suiteFiles } from '../sentinel-tests.mjs';
+import { CONSUMERS } from '../test-sentinel-consumers.mjs';
+// pnpm test:sentinel:package packs once and runs every installed consumer through the parallel runner.
+const packageConsumer = (name) => {
+  const manifest = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
+  assert.equal(
+    manifest.scripts['test:sentinel:package'],
+    'pnpm pack:sentinel && node scripts/test-sentinel-consumers.mjs',
+  );
+  return CONSUMERS.includes(name);
+};
 const root = new URL('../../', import.meta.url);
 // The sentinel-service job runs Sentinel's process suite, the files packages/sentinel/test/process-suite.txt lists.
 const processSuite = suiteFiles('process');
@@ -19,10 +29,7 @@ const serviceJob = () => {
   return service;
 };
 const workflow = readFileSync(new URL('.github/workflows/sentinel-scanner-cli.yml', root), 'utf8');
-const selected = (paths) => {
-  const checks = selectChecks(paths);
-  return checks.sentinel || checks.isolation;
-};
+const selected = (paths) => selectChecks(paths).scannerCli;
 test('scanner CLI acceptance selects source, captured inputs, owner gates, packs, helpers, packaging and build dependencies', () => {
   for (const path of [
     'packages/sentinel/src/service/canonical.ts',
@@ -52,7 +59,46 @@ test('scanner CLI acceptance selects source, captured inputs, owner gates, packs
     'mixed inputs retain the gate',
   );
   const fallback = detectChecks({ base: undefined, head: undefined, event: 'pull_request' }).checks;
-  assert.equal(fallback.sentinel || fallback.isolation, true, 'unavailable ranges fail closed');
+  assert.equal(fallback.scannerCli, true, 'unavailable ranges fail closed');
+  assert.match(
+    workflow,
+    /const run = process\.env\.GITHUB_EVENT_NAME === 'workflow_dispatch' \|\| checks\.scannerCli;/,
+  );
+});
+
+test('the scanner workflow skips what it does not exercise: agent review, the owner UI, the viewer and the CLI', () => {
+  for (const path of [
+    'packages/sentinel/src/execution/coordinator.ts',
+    'packages/sentinel/src/reports/html.ts',
+    'packages/sentinel/src/findings/compare.ts',
+    'packages/sentinel/src/kernel/digest.ts',
+    'packages/sentinel/test/evidence-privacy.test.ts',
+    'packages/sentinel/test/fixtures/workers/hostile-worker.mjs',
+    'packages/core/src/counts.ts',
+    'packages/parsers/src/tsjs.ts',
+    'scripts/test-sentinel-evidence-consumer.mjs',
+  ])
+    assert.equal(selected([path]), true, path);
+  for (const path of [
+    'packages/sentinel/src/review/dispatch.ts',
+    'packages/sentinel/src/review/providers/broker.ts',
+    'packages/sentinel/src/service/review-adapter.ts',
+    'packages/sentinel/src/owner-ui/host.ts',
+    'packages/sentinel/test/review-packs.test.ts',
+    'packages/sentinel/test/cli-copilot-native.test.ts',
+    'packages/sentinel/test/owner-ui-browser.test.ts',
+    'packages/sentinel/test/fixtures/model-review/a.json',
+    'packages/core/src/strings-sentinel-review.ts',
+    'packages/core/src/sentinel-companion.ts',
+    'packages/parsers/test/tsjs.test.ts',
+    'packages/server/public/app/surfaces/sentinel.js',
+    'packages/server/src/index.ts',
+    'packages/cli/src/cli.ts',
+    'packages/echo/src/cli.ts',
+    'scripts/test-sentinel-package.mjs',
+  ])
+    assert.equal(selected([path]), false, path);
+  assert.equal(selected(['packages/sentinel/src/review/dispatch.ts', 'packages/sentinel/src/execution/x.ts']), true);
 });
 test('workflow image indexes and native manifests exactly match all five adapter source pins', () => {
   const engines = [
@@ -130,13 +176,8 @@ test('SDK run controls remain in the native service zero-skip list and installed
     assert.ok(processSuite.includes(`test/${file}.test.ts`), file);
   for (const counter of ['skipped', 'fail', 'cancelled'])
     assert.ok(service.includes(`grep -qx '# ${counter} 0' service-summary.txt`));
-  const manifest = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
-  assert.ok(
-    manifest.scripts['test:sentinel:package'].includes('&& node scripts/test-sentinel-mcp-controls-consumer.mjs'),
-  );
-  assert.ok(
-    manifest.scripts['test:sentinel:package'].endsWith('&& node scripts/test-sentinel-preparation-consumer.mjs'),
-  );
+  assert.ok(packageConsumer('test-sentinel-mcp-controls-consumer'));
+  assert.ok(packageConsumer('test-sentinel-preparation-consumer'));
   assert.ok(workflow.includes('test/preparation-assets-native.test.ts'));
   assert.equal(selected(['scripts/test-sentinel-preparation-consumer.mjs']), true);
   assert.equal(
@@ -147,8 +188,7 @@ test('SDK run controls remain in the native service zero-skip list and installed
 });
 
 test('accepted imports have a zero-skip genuine privacy gate and npm-only public owner consumer', () => {
-  const manifest = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
-  assert.ok(manifest.scripts['test:sentinel:package'].includes('node scripts/test-sentinel-evidence-consumer.mjs'));
+  assert.ok(packageConsumer('test-sentinel-evidence-consumer'));
   assert.equal(selected(['scripts/test-sentinel-evidence-consumer.mjs']), true);
   assert.ok(workflow.includes('test/owner-decision-privacy.test.ts'));
   assert.ok(workflow.includes('test/evidence-privacy.test.ts'));
@@ -157,9 +197,8 @@ test('accepted imports have a zero-skip genuine privacy gate and npm-only public
 });
 
 test('structural paths retain installed workflow, native privacy and explicit offline browser gates', () => {
-  const manifest = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
   const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
-  assert.ok(manifest.scripts['test:sentinel:package'].includes('node scripts/test-sentinel-paths-consumer.mjs'));
+  assert.ok(packageConsumer('test-sentinel-paths-consumer'));
   assert.equal(selected(['scripts/test-sentinel-paths-consumer.mjs']), true);
   assert.ok(workflow.includes('test/path-report-secrets.test.ts'));
   assert.ok(workflow.includes('node scripts/test-sentinel-paths-consumer.mjs | tee paths-consumer.log'));
@@ -169,8 +208,7 @@ test('structural paths retain installed workflow, native privacy and explicit of
 });
 
 test('owner decisions retain installed command and native privacy acceptance', () => {
-  const manifest = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
-  assert.ok(manifest.scripts['test:sentinel:package'].includes('node scripts/test-sentinel-decisions-consumer.mjs'));
+  assert.ok(packageConsumer('test-sentinel-decisions-consumer'));
   assert.equal(selected(['scripts/test-sentinel-decisions-consumer.mjs']), true);
   assert.ok(workflow.includes('test/owner-decision-privacy.test.ts'));
   assert.ok(workflow.includes('node scripts/test-sentinel-decisions-consumer.mjs | tee decisions-consumer.log'));
@@ -235,7 +273,10 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
   assert.equal(manifest.scripts['test:process'], 'node ../../scripts/sentinel-tests.mjs --suite process');
   const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
   const validate = ci.slice(ci.indexOf('    name: validate'), ci.indexOf('\n  # Required when selected'));
-  assert.match(validate, /SENTINEL_TEST_SUITE: unit\n\s+run: node scripts\/ci-changes\.mjs --run-tests/);
+  assert.match(
+    validate,
+    /SENTINEL_TEST_SUITE: unit\n(?:\s+SENTINEL_TEST_LAUNCHES: .*\n)?\s+run: node scripts\/ci-changes\.mjs --run-tests/,
+  );
   assert.match(serviceJob(), /if: \$\{\{ !cancelled\(\) && needs\.changes\.outputs\.service != 'false' \}\}/);
 
   assert.deepEqual(parseArgs([], {}), {
@@ -275,6 +316,63 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
   ]);
   assert.throws(() => nodeArgs([], { concurrency: 0 }), /Bad concurrency/);
   assert.throws(() => nodeArgs([], { concurrency: Number('x') }), /Bad concurrency/);
+});
+
+test('the launch rule: an unlisted unit launcher or an idle process file fails a passing run', async () => {
+  const { launchVerdict, unitLaunchers, runSuite } = await import('../sentinel-tests.mjs');
+  for (const file of unitLaunchers()) assert.ok(suiteFiles('unit').includes(file), `${file} is a unit file`);
+  for (const name of ['store-integration', 'store-runtime', 'review-operation', 'service-full-report-authority'])
+    assert.ok(unitLaunchers().includes(`test/${name}.test.ts`), name);
+  assert.ok(unitLaunchers().includes('test/review-packs.test.ts'), "#223's opted-in launcher is named");
+  const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
+  assert.match(ci, /SENTINEL_TEST_LAUNCHES: '1'/, 'validate enforces the rule over the unit suite');
+  assert.match(serviceJob(), /--suite process --launches --summary service-summary\.txt/, 'and the service job');
+
+  const dir = mkdtempSync(join(tmpdir(), 'farsight-sentinel-launches-'));
+  try {
+    mkdirSync(join(dir, 'test'));
+    const write = (name, text) => writeFileSync(join(dir, 'test', name), text);
+    const spawner =
+      "import { test } from 'node:test';\nimport { execFileSync } from 'node:child_process';\n" +
+      "test('starts node', () => { execFileSync(process.execPath, ['-e', '0']); });\n";
+    const quiet = "import { test } from 'node:test';\ntest('in process', () => {});\n";
+    write('launcher.test.ts', spawner);
+    write('allowed.test.ts', spawner);
+    write('listed.test.ts', spawner);
+    write('plain.test.ts', quiet);
+    write('process-suite.txt', 'test/listed.test.ts\n');
+    write('no-skip-suite.txt', 'test/plain.test.ts\n');
+    write('serial-suite.txt', '');
+    write('unit-launchers.txt', 'test/allowed.test.ts\n');
+    const counts = new Map([
+      ['test/launcher.test.ts', 1],
+      ['test/allowed.test.ts', 1],
+    ]);
+    const verdict = launchVerdict(
+      counts,
+      ['test/launcher.test.ts', 'test/allowed.test.ts', 'test/listed.test.ts'],
+      dir,
+    );
+    assert.deepEqual([verdict.unlisted, verdict.idle], [['test/launcher.test.ts'], ['test/listed.test.ts']]);
+    const errors = [];
+    const run = (suite) =>
+      runSuite(
+        { suite, concurrency: 2, launches: true },
+        { dir, out: () => {}, err: (m) => errors.push(m), stdio: 'ignore' },
+      );
+    assert.equal(run('unit'), 1, 'an unlisted launcher in the unit suite');
+    assert.match(errors.join('\n'), /the process suite is out of date/);
+    write('unit-launchers.txt', 'test/allowed.test.ts\ntest/launcher.test.ts\n');
+    assert.equal(run('unit'), 0, 'every unit launcher is named');
+    assert.equal(run('process'), 0, 'the listed file starts one');
+    write('no-skip-suite.txt', 'test/allowed.test.ts\n');
+    write('process-suite.txt', 'test/listed.test.ts\ntest/plain.test.ts\n');
+    assert.equal(run('process'), 1, 'a process file that starts none');
+    write('unit-launchers.txt', 'test/listed.test.ts\n');
+    assert.throws(() => unitLaunchers(dir), /unit-launchers\.txt lists process-suite files: test\/listed\.test\.ts/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('the launch report counts Node.js and package-manager starts per test file, not git or other tools', async () => {

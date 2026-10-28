@@ -14,6 +14,7 @@ const all = () => ({
   isolation: true,
   recovery: true,
   service: true,
+  scannerCli: true,
 });
 
 /** validate's unit tests over every package, and over none (only the skills trees changed). */
@@ -53,12 +54,53 @@ export function sentinelIsolationInputs(root = repoRoot) {
   return dirs;
 }
 
+/**
+ * The package directories the sentinel-scanner-cli workflow builds and runs over: Sentinel's workspace closure and
+ * the parsers' (its full-report tests ingest an application through `packages/parsers/dist`), read from the manifests.
+ */
+export function scannerCliInputs(root = repoRoot) {
+  const dirs = new Set(['sentinel']);
+  for (const entry of ['@farsight/sentinel', '@farsight/parsers']) {
+    const { closure, missing } = buildClosure(root, entry);
+    if (!closure.length || missing.length) throw new Error(`${entry} closure unreadable`);
+    for (const pkg of closure) dirs.add(basename(pkg.dir));
+  }
+  return dirs;
+}
+
+/**
+ * What that workflow does not exercise, though it lies inside those packages: agent review and its providers, the
+ * owner UI, their tests and fixtures, and their string catalogs. None of its tests or installed consumers imports them.
+ */
+const SCANNER_CLI_SKIPS = [
+  /^packages\/sentinel\/src\/(?:review|owner-ui)\//,
+  /^packages\/sentinel\/src\/service\/review-adapter\.ts$/,
+  /^packages\/sentinel\/test\/(?:review[-.]|providers\.|provider-helpers\.|cli-copilot|cli-native|cli-review|model-budget|agentic-only|retained-wire|owner-ui-)/,
+  /^packages\/sentinel\/test\/fixtures\/(?:model-budget|model-review|retained-wire|stage-packs)\//,
+  /^packages\/sentinel\/test\/fixtures\/review-instructions-runner\.mjs$/,
+  /^packages\/core\/src\/(?:strings-sentinel-(?:providers|review|instructions|owner-ui|viewer)|sentinel-companion)\.ts$/,
+];
+
+/** The scripts the scanner workflow runs, besides the selector and the workflow (which select every check). */
+const SCANNER_CLI_SCRIPTS =
+  /^scripts\/(?:pack-sentinel|sentinel-evidence-provenance|test-sentinel-report-browser|test-sentinel-(?:scanner|framework|mcp|evidence|decisions|paths)-consumer)\.mjs$/;
+
+/** Whether one changed path reaches the sentinel-scanner-cli workflow. */
+function reachesScannerCli(path, scanner) {
+  if (SCANNER_CLI_SKIPS.some((skip) => skip.test(path))) return false;
+  if (SCANNER_CLI_SCRIPTS.test(path) || path.startsWith('packages/sentinel/')) return true;
+  // the other packages' code, not their own tests
+  const dir = /^packages\/([^/]+)\/(?!test\/)/.exec(path)?.[1];
+  return Boolean(dir && scanner.has(dir));
+}
+
 /** The skills trees: read only by the script tests (scripts/check-skills-mirror.mjs), never by a package's tests. */
 const SKILLS = /^\.(?:claude|agents)\/skills\//;
 
 /** The checks one changed path selects, or `null` when it selects every check. */
-function pathChecks(path, inputs, isolation) {
+function pathChecks(path, inputs, isolation, scanner) {
   const checks = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false };
+  checks.scannerCli = scanner ? reachesScannerCli(path, scanner) : false;
   // These Markdown files are shipped in the Echo tarball, so still check packaging.
   if (
     [
@@ -123,11 +165,12 @@ function pathChecks(path, inputs, isolation) {
   return checks;
 }
 
-export function selectChecks(paths, { root = repoRoot, packageInputs, isolationInputs } = {}) {
-  let inputs, isolation;
+export function selectChecks(paths, { root = repoRoot, packageInputs, isolationInputs, scannerInputs } = {}) {
+  let inputs, isolation, scanner;
   try {
     inputs = packageInputs ?? sentinelPackageInputs(root);
     isolation = isolationInputs ?? sentinelIsolationInputs(root);
+    scanner = scannerInputs ?? scannerCliInputs(root);
   } catch {
     return all();
   } // unreadable manifests: everything
@@ -139,9 +182,10 @@ export function selectChecks(paths, { root = repoRoot, packageInputs, isolationI
     isolation: false,
     recovery: false,
     service: false,
+    scannerCli: false,
   };
   for (const path of paths) {
-    const selected = pathChecks(path, inputs, isolation);
+    const selected = pathChecks(path, inputs, isolation, scanner);
     if (!selected) return all();
     for (const [name, run] of Object.entries(selected)) if (run) checks[name] = true;
   }
@@ -429,7 +473,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         Object.entries(checks)
           .map(
             ([name, run]) =>
-              `- ${{ echo: 'echo-package', sentinel: 'sentinel-package', isolation: 'sentinel-isolation', recovery: 'sentinel-recovery', service: 'sentinel-service' }[name] ?? name}: ${run ? 'run' : 'skip'}`,
+              `- ${{ echo: 'echo-package', sentinel: 'sentinel-package', isolation: 'sentinel-isolation', recovery: 'sentinel-recovery', service: 'sentinel-service', scannerCli: 'sentinel-scanner-cli (its own workflow)' }[name] ?? name}: ${run ? 'run' : 'skip'}`,
           )
           .join('\n') +
         (checks.validate ? `\n${testsLine(tests)}` : '') +
