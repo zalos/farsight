@@ -4,7 +4,6 @@
 // heuristic is evidence. The first chain whose matcher matches is the one Spring runs, and within it the first
 // matching rule decides; anything this subset cannot resolve is unknown with its reason, and a route no chain
 // matches is never reported as protected.
-import { createHash } from 'node:crypto';
 import { canonicalJson } from '@farsight/graph';
 import type { AnalysisArtifact } from '@farsight/code-parser';
 import type {
@@ -17,6 +16,8 @@ import type {
   SnapshotEnvelope,
   SourceEvidence,
 } from '../../contracts/index.js';
+import { sha256Hex, sha256Id } from '../../kernel/digest.js';
+import { SentinelError } from '../../kernel/errors.js';
 import { validateEnvelope } from '../../validate.js';
 import {
   readConfiguration,
@@ -58,6 +59,10 @@ export const SPRING_PACK = Object.freeze({
 /** Positions of the controls the pack reports for a route, in Spring's evaluation order. */
 export const SPRING_ORDER = Object.freeze({ filters: 0, chain: 1, interceptors: 2, methodSecurity: 3 });
 
+/**
+ * What analyzeSpring reads: the snapshot entries, the source id, its parser evidence, a reader of captured bytes and
+ * bounds.
+ */
 export interface SpringPackInput {
   readonly snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>;
   readonly sourceId: string;
@@ -87,7 +92,7 @@ const SAFE_BOUNDARIES = new Set([
   'sentinel.capture.excludedStore',
   'sentinel.capture.excludedDependencyCache',
 ]);
-const digestOf = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJson(v)).digest('hex')}`;
+const digestOf = (v: unknown) => sha256Id(canonicalJson(v));
 const MAX_EVIDENCE = 64;
 
 // ---- version scope, read from the captured build file ----
@@ -445,9 +450,13 @@ function methodSecurity(
 
 // ---- the pack ----
 
-export class SpringPackError extends Error {
+/**
+ * The pack produced control facts that do not validate against their contract: a defect in the pack, never a
+ * property of the source. Its code is the contract's `sentinel.contract.invalid`.
+ */
+export class SpringPackError extends SentinelError<'sentinel.contract.invalid'> {
   constructor(message: string) {
-    super(message);
+    super('sentinel.contract.invalid', message);
     this.name = 'SpringPackError';
   }
 }
@@ -558,7 +567,7 @@ export async function analyzeSpring(input: SpringPackInput): Promise<ControlFact
       evidence: SourceEvidence[],
       reasonCode?: SpringReason,
     ) => {
-      const id = `spring.${createHash('sha256').update(`${surfaceId}\u0000${property}\u0000${order}`).digest('hex').slice(0, 40)}`;
+      const id = `spring.${sha256Hex(`${surfaceId}\u0000${property}\u0000${order}`).slice(0, 40)}`;
       const ev = evidence.slice(0, MAX_EVIDENCE);
       facts.push(
         verdict === 'unknown'

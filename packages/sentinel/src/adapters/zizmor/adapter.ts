@@ -1,7 +1,7 @@
 // The zizmor adapter: zizmor 1.31.1 at its official image digest, fully offline, behind an original shell shim, run
 // only through PR 07's isolated execution service. Holds the pins and the support statement; job.ts builds an
 // attempt's inputs, normalize.ts reads its outputs.
-import { createHash } from 'node:crypto';
+import { sha256Id } from '../../kernel/digest.js';
 import type { ExternalAdapterDefinition } from '../../execution/registry.js';
 import { ZIZMOR_WORKER_SOURCE } from './worker-source.js';
 
@@ -36,6 +36,7 @@ export const ZIZMOR_IMAGE_PLATFORMS = Object.freeze([
       'native Ubuntu 24.04.5 x86_64, Docker Engine 28.0.4 linux/amd64; 2026-10-22; https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627; tested merge 0d6daa8cd369835fe6ec8ec5a89b4d25cb23edc5',
   }),
 ]);
+/** The architectures the pinned engine image was measured on; any other is unqualified. */
 export const ZIZMOR_MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(
   ZIZMOR_IMAGE_PLATFORMS.filter((p) => p.state === 'measured').map((p) => p.architecture),
 );
@@ -74,9 +75,12 @@ export const ZIZMOR_ENGINE_ARGS: readonly string[] = Object.freeze([
   '--persona=regular',
   '-vv',
 ]);
+/** The most bytes the worker returns as the engine's output; more is reported truncated, never cut silently. */
 export const ZIZMOR_MAX_OUTPUT_BYTES = 8_388_608;
+/** The worker's own bound on the engine run, inside the supervisor's deadline. */
 export const ZIZMOR_ENGINE_TIMEOUT_SECONDS = 100;
 
+/** One build of the adapter: its registry definition and the exact worker bytes and digest the definition pins. */
 export interface ZizmorAdapterBuild {
   readonly definition: ExternalAdapterDefinition;
   readonly workerBytes: Buffer;
@@ -104,7 +108,7 @@ export function buildZizmorAdapter(
     ),
     'utf8',
   );
-  const workerDigest = `sha256:${createHash('sha256').update(workerBytes).digest('hex')}`;
+  const workerDigest = sha256Id(workerBytes);
   const definition = Object.freeze({
     id: options.id ?? 'ci-zizmor',
     version: ZIZMOR_ENGINE.version,
@@ -117,11 +121,14 @@ export function buildZizmorAdapter(
 }
 
 const PRODUCTION = buildZizmorAdapter();
+/** The production worker's bytes, the shell script the container runs. */
 export const ZIZMOR_WORKER_BYTES = PRODUCTION.workerBytes;
+/** The production worker's content address; the registry definition pins it. */
 export const ZIZMOR_WORKER_DIGEST = PRODUCTION.workerDigest;
 /** The trusted registry definition; not registered in the production registry until integration. */
 export const ZIZMOR_ADAPTER: ExternalAdapterDefinition = PRODUCTION.definition;
 
+/** What the adapter supports, and no more: offline, the regular persona, the measured platforms and these inputs. */
 export const ZIZMOR_SUPPORT = Object.freeze({
   adapter: ZIZMOR_ADAPTER.id,
   engine: `${ZIZMOR_ENGINE.name} ${ZIZMOR_ENGINE.version}`,

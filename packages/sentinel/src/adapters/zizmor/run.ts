@@ -11,6 +11,7 @@ import { ZIZMOR_ADAPTER, type ZizmorAdapterBuild } from './adapter.js';
 import { buildZizmorJob, type CiTarget } from './job.js';
 import { normalizeZizmorRun, notRunZizmor, type ZizmorRunResult } from './normalize.js';
 
+/** One attempt run directly through an execution service: its targets and scratch. */
 export interface ZizmorAttempt {
   attemptId: Id;
   work: WorkRef;
@@ -22,6 +23,11 @@ export interface ZizmorAttempt {
   qualifyingArchitecture?: string;
 }
 
+/**
+ * Builds the job, runs the pinned worker through `service` and normalizes the outcome; with nothing to send nothing
+ * runs. The adapter's own tests and conformance runs use it; production runs go through the coordinator and the
+ * canonical driver instead.
+ */
 export async function runZizmorAttempt(service: ExecutionService, attempt: ZizmorAttempt): Promise<ZizmorRunResult> {
   const jobDir = mkdtempSync(join(attempt.scratch, 'zizmor-job-'));
   try {

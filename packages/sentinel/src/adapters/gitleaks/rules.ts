@@ -13,6 +13,7 @@
 /** SHA-256 of the configuration file these lists were read from. */
 export const GITLEAKS_DEFAULT_CONFIG_SHA256 = 'sha256:e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf';
 
+/** The rule ids of the pinned release's default configuration: a report naming any other rule is refused. */
 export const GITLEAKS_RULE_IDS: ReadonlySet<string> = new Set([
   '1password-secret-key',
   '1password-service-account-token',
@@ -238,6 +239,7 @@ export const GITLEAKS_RULE_IDS: ReadonlySet<string> = new Set([
   'zendesk-secret-key',
 ]);
 
+/** The paths the pinned default configuration never scans, as the engine matches them; such files are not covered. */
 export const GITLEAKS_GLOBAL_ALLOWLIST_PATHS: readonly RegExp[] = Object.freeze([
   new RegExp('gitleaks\\.toml', 'u'),
   new RegExp('\\.(?:bmp|gif|jpe?g|png|svg|tiff?)$', 'iu'),

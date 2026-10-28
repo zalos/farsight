@@ -15,6 +15,8 @@
 import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, openSync, readSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { sha256Id as sha256 } from '../../kernel/digest.js';
+import { SentinelError } from '../../kernel/errors.js';
 import type { ArtifactId, CatalogKey, Id } from '../../contracts/common.js';
 import type { IncludedFileEntry, SnapshotEnvelope } from '../../contracts/snapshot.js';
 import type { CapturedInput } from '../../execution/supervisor.js';
@@ -43,6 +45,7 @@ export interface SecretsJobFile {
   readonly artifact: ArtifactId;
   readonly bytes: number;
 }
+/** A captured file the job does not send, by its entry, with the catalog reason why. */
 export interface SecretsUnsent {
   readonly ordinal: number;
   readonly entry: number;
@@ -58,6 +61,7 @@ export interface SecretsJobName {
   readonly artifact: ArtifactId;
 }
 
+/** The job a worker runs over one source of one snapshot: the files sent, what is left out and the names screened. */
 export interface SecretsJob {
   readonly schema: 'sentinel-gitleaks-job/draft-1';
   readonly snapshotId: Id;
@@ -71,6 +75,7 @@ export interface SecretsJob {
   readonly namesScreened: boolean;
 }
 
+/** A built job: the job, the digest of the file the shim reads and the sealed inputs the attempt needs. */
 export interface BuiltSecretsJob {
   readonly job: SecretsJob;
   /** Digest of the line file the shim reads; the run record must name it. */
@@ -78,23 +83,22 @@ export interface BuiltSecretsJob {
   readonly inputs: readonly CapturedInput[];
 }
 
+/** The most files one attempt sends; more is refused, never truncated. */
 export const MAX_SECRETS_FILES = 100_000;
 /** The prefix Gitleaks prints before each path: the shim scans `scan` from its work folder, the tree one level down. */
 export const SCANNER_PATH_PREFIX = 'scan/tree/';
 
-const sha256 = (b: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 // A tab is carried (the report's file field is last, so it may hold tabs); every other control character is not.
 // eslint-disable-next-line no-control-regex -- Job lines reject control characters except the permitted tab in paths.
 const CONTROL = /[\u0000-\u0008\u000a-\u001f\u007f]/;
 /** Whether one line of the job (and of the names file) can carry this path. */
 export const lineSafe = (relativePath: string) => !CONTROL.test(relativePath);
 
-export class SecretsInputError extends Error {
-  constructor(
-    readonly code: CatalogKey,
-    detail: string,
-  ) {
-    super(`${code}: ${detail}`);
+/** The secrets job refused its inputs; `code` is a catalog key and the message is `<code>: <detail>`. */
+export class SecretsInputError extends SentinelError<CatalogKey> {
+  constructor(code: CatalogKey, detail: string) {
+    super(code, `${code}: ${detail}`);
+    this.name = 'SecretsInputError';
   }
 }
 const invalid = (detail: string): never => {
@@ -136,6 +140,12 @@ export function toolAllowlisted(relativePath: string): boolean {
   return seen.some((path) => GITLEAKS_GLOBAL_ALLOWLIST_PATHS.some((re) => re.test(path)));
 }
 
+/**
+ * Builds one attempt's job over the targets of one source in one snapshot. Refuses, with a SecretsInputError
+ * `sentinel.secrets.inputInvalid`: a missing snapshot or source id, more than {@link MAX_SECRETS_FILES} targets, a
+ * target that is not an included file of that source, a duplicate entry or path, an unsafe path, a path that is also a
+ * folder, and a target whose bytes do not match its artifact id. A file the engine cannot carry is listed as unsent.
+ */
 export function buildSecretsJob(
   scope: { snapshot: SecretsSnapshot; sourceId: Id; targets: readonly SecretsTarget[] },
   dir: string,
