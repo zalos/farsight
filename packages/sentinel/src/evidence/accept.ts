@@ -48,7 +48,44 @@ function ancestorOf(value: RetainedSourceAncestor): RetainedSourceAncestor {
     sourceId: value.sourceId,
   });
 }
-/** ws is the trusted existing Workspace selected by local/OwnerService, never any input report/root JSON. */
+/**
+ * The `evidence.import` intent admission is asked about before any file is read: it names this store, workspace and
+ * source ancestor, not a candidate, so a denial costs no read.
+ */
+function preflightIntent(
+  store: SentinelStore,
+  workspaceDigest: string,
+  ancestor: RetainedSourceAncestor,
+  profile: ActionIntent['scope']['profile'],
+): ActionIntent {
+  return {
+    action: 'evidence.import',
+    input: digestOf({
+      domain: 'report-import-preflight',
+      storeId: store.storeId,
+      workspaceDigest,
+      ancestor,
+    }),
+    effects: ['local-artifacts'],
+    budget: { maxTokens: null, maxCost: null, currency: null },
+    scope: {
+      profile,
+      provider: null,
+      targets: ['report-import', ancestor.runId, `revision:${ancestor.revision}`, ancestor.sourceId],
+    },
+  };
+}
+/**
+ * The private acceptance pipeline for one report import. `ws` is the trusted existing Workspace that the local owner
+ * CLI or OwnerService selected, never anything from the report or its JSON. Policy is asked before any file is read;
+ * then the report and manifest are read within the import's bounds, normalized, bound to the retained source and, with
+ * a spent owner receipt, published once. Its statuses: `denied` (the policy refuses, or refuses the binding),
+ * `refused` (an `ImportRefusalCode` and position), `confirmationStale` (the candidate is not `expectCandidate`),
+ * `awaiting-confirmation` (no receipt yet), `accepted` (newly, or `reused` for an already accepted candidate), and,
+ * once a receipt was spent, `spentNotPublished` or `publicationUnknown` (with `acceptanceRecorded` when the acceptance
+ * is recorded but its read back failed). An unknown run, or a retained acceptance that does not authenticate, throws
+ * `sentinel.store.corruptRecord`; a retained source that cannot be proven throws the proof's own code.
+ */
 export async function acceptReportImportFiles(
   store: SentinelStore,
   ws: Workspace,
@@ -68,22 +105,7 @@ export async function acceptReportImportFiles(
     policy = currentImportPolicy(context);
   const run = store.ledger.getRun(ancestor.runId);
   if (!run) auditUnavailable();
-  const preflight: ActionIntent = {
-    action: 'evidence.import',
-    input: digestOf({
-      domain: 'report-import-preflight',
-      storeId: store.storeId,
-      workspaceDigest: c.workspaceDigest,
-      ancestor,
-    }),
-    effects: ['local-artifacts'],
-    budget: { maxTokens: null, maxCost: null, currency: null },
-    scope: {
-      profile: run.envelope.requestedScope.profile,
-      provider: null,
-      targets: ['report-import', ancestor.runId, `revision:${ancestor.revision}`, ancestor.sourceId],
-    },
-  };
+  const preflight = preflightIntent(store, c.workspaceDigest, ancestor, run.envelope.requestedScope.profile);
   const before = admit(
     admissionRequest(
       context,
