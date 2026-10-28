@@ -270,6 +270,7 @@ test(
       assert.equal(out.document.findings.length, 1);
       assert.equal(out.document.counts.reviewObservations.n, 1);
       assert.equal(out.document.reviews.length, 1);
+      assert.equal(Object.hasOwn(out.document.reviews[0], 'progress'), false, 'the older review shape remains valid');
       assert.equal(out.document.provenance.length, 3);
     }
     const plain = await generateReport((await baseInput('private')) as any);
@@ -316,13 +317,124 @@ test(
 );
 
 test(
-  'a run with an accepted secret match withholds every model statement and citation, and keeps provenance',
+  'an unfinished review says so beside its limited inspection, without making a SARIF finding',
   needsStore,
   async () => {
     const review = {
       observation: await modelObservation(),
       stage: 'review-general',
       unit: { id: 'w-review', revision: 2 },
+      progress: {
+        outcome: 'unfinished',
+        turnsUsed: 3,
+        turnCap: 3,
+        filesRead: 1,
+        filesGiven: 6,
+        source: 'brokered',
+      },
+    };
+    const out = await generateReport((await baseInput('private', { reviews: [review] })) as any);
+    assert.ok(validateEnvelope('report', out.document).ok);
+    assert.equal(out.document.reviews?.[0]?.progress?.outcome, 'unfinished');
+    assert.match(out.json, /"outcome":"unfinished"/);
+    assert.match(out.markdown, /review unfinished.*3 of 3 model exchanges used.*1 of 6 files opened for this review/);
+    assert.match(out.html, /review unfinished.*3 of 3 model exchanges used.*1 of 6 files opened for this review/);
+    assert.equal(out.sarif.runs[0]?.results.length, out.document.findings.length);
+  },
+);
+
+test('a native Copilot observation and its retained provenance render in every report format', needsStore, async () => {
+  const observation = await modelObservation('The native review found request text flowing into SQL.');
+  observation.producer.model.requestedModel = 'gpt-6-luna';
+  observation.producer.model.returnedModel = 'gpt-6-luna';
+  observation.producer.model.source = 'host-reported';
+  const agent = {
+    ...PROVENANCE[2],
+    where: 'sandboxed-cli',
+    mode: 'native',
+    runner: 'copilot-cli',
+    runnerVersion: '1.0.105',
+    executableDigest: sha('pinned Copilot executable'),
+    model: { requested: 'gpt-6-luna', reported: 'gpt-6-luna', identitySource: 'host-reported' },
+    wires: [],
+    transcript: sha('retained native transcript'),
+    tokens: { input: 1234, output: 56, certainty: 'confirmed' },
+    cost: { basis: 'unobserved', reason: 'subscription' },
+  };
+  const reviews = [{ observation, stage: 'review-general', unit: { id: 'w-review', revision: 2 } }];
+  const input = await baseInput('private', { reviews, provenance: [PROVENANCE[0], PROVENANCE[1], agent] });
+  const out = await generateReport(input as any);
+  assert.ok(validateEnvelope('report', out.document).ok);
+  assert.equal(out.document.counts.reviewObservations.n, 1);
+  assert.equal(out.document.reviews[0].evidence[0].state, 'embedded');
+  assert.deepEqual(out.document.provenance[2], agent);
+  assert.match(out.markdown, /The native review found request text/);
+  assert.match(out.html, /cost unobserved · subscription/);
+  assert.match(out.markdown.replace(/\\(.)/g, '$1'), /copilot-cli 1\.0\.105 native/);
+  for (const text of [out.markdown, out.html]) {
+    assert.ok(text.includes(agent.executableDigest));
+    assert.ok(text.includes(agent.transcript));
+  }
+  assert.equal(out.sarif.version, '2.1.0');
+  assert.equal(out.sarif.runs[0].results.length, 1, 'SARIF retains the scanner finding, not the model claim');
+  assert.deepEqual(digests(out), {
+    json: 'sha256:18e04c2a78dc809ded0aad7309c5531824b29e133604af6f0a548987f4220fe3',
+    markdown: 'sha256:230643f8b3001b841498619a9dc79d2f312c8282f7701b420ab84ee466a25e0e',
+    html: 'sha256:44d891b1544b1968a981b23cc6d961ed495916091e54d8a3395990006529dcee',
+    sarif: 'sha256:8b769e712b16a71bdbfe9dd21f78054b5b629cdf967fe06d3c20fc9a58f24ca1',
+  });
+  const withheld = withholdSecretRun(out.document, new Map());
+  assert.equal(Object.hasOwn(withheld.reviews[0], 'message'), false);
+  assert.equal(withheld.reviews[0].evidence[0].state, 'withheld');
+  assert.equal(withheld.provenance[2].mode, 'native');
+  assert.deepEqual(withheld.provenance[2].cost, { basis: 'unobserved', reason: 'subscription' });
+  const shared = await generateReport(
+    (await baseInput('shareable', { reviews, provenance: [PROVENANCE[0], PROVENANCE[1], agent] })) as any,
+  );
+  assert.equal(shared.document.reviews[0].evidence[0].state, 'withheld');
+  assert.doesNotMatch(shared.markdown, /The native review found request text/);
+});
+
+test('a brokered-only review retains its four report renderings', needsStore, async () => {
+  const review = {
+    observation: await modelObservation(),
+    stage: 'review-general',
+    unit: { id: 'w-review', revision: 2 },
+  };
+  const out = await generateReport((await baseInput('private', { reviews: [review], provenance: PROVENANCE })) as any);
+  assert.deepEqual(
+    out.document.definitions.filter((d: any) => d.key.startsWith('sentinel.report.provenance.')).map((d: any) => d.key),
+    [
+      'sentinel.report.provenance.cost.no-rates',
+      'sentinel.report.provenance.heading',
+      'sentinel.report.provenance.where.host',
+      'sentinel.report.provenance.where.in-process',
+    ],
+  );
+  assert.deepEqual(digests(out), {
+    json: 'sha256:1dc65570aef0160ccdd1f744446271f77b116d1a68dda19e7d7f81035dac28e8',
+    markdown: 'sha256:1694aa7734841157d23943c63750ee02eef93658c242dbaa093de183e911c59e',
+    html: 'sha256:b0d3389a4ce2fa4f6d1daf20e43ff7c76c71ecc08ad7fc922e6cc9875f154acf',
+    sarif: 'sha256:8b769e712b16a71bdbfe9dd21f78054b5b629cdf967fe06d3c20fc9a58f24ca1',
+  });
+});
+
+test(
+  'a run with an accepted secret match withholds every model statement and citation, but keeps progress and provenance',
+  needsStore,
+  async () => {
+    const review = {
+      observation: await modelObservation(),
+      stage: 'review-general',
+      unit: { id: 'w-review', revision: 2 },
+      progress: {
+        outcome: 'completed',
+        turnsUsed: 3,
+        turnCap: 12,
+        filesRead: 1,
+        filesGiven: 6,
+        source: 'brokered',
+      },
     };
     const out = await generateReport(
       (await baseInput('private', { reviews: [review], provenance: PROVENANCE })) as any,
@@ -332,6 +444,10 @@ test(
     assert.ok(valid.ok, JSON.stringify(valid));
     const r = doc.reviews[0];
     assert.equal(Object.hasOwn(r, 'message'), false);
+    assert.deepEqual(r.progress, out.document.reviews[0].progress, 'generated progress survives secret withholding');
+    assert.equal(r.progress.outcome, 'completed');
+    assert.match(renderMarkdown(doc), /3 of 12 model exchanges used.*1 of 6 files opened for this review/);
+    assert.match(renderHtml(doc), /3 of 12 model exchanges used.*1 of 6 files opened for this review/);
     assert.deepEqual(
       r.evidence.map((e: any) => [e.state, e.reasonCode, Object.hasOwn(e, 'location'), Object.hasOwn(e, 'excerpt')]),
       [['withheld', SECRET_RUN_WITHHELD, false, false]],
@@ -520,18 +636,22 @@ test(
     const ws = join(dir, 'workspace');
     mkdirSync(join(ws, 'src'), { recursive: true });
     writeFileSync(join(ws, 'src/query.ts'), 'export const q = (id: string) => "SELECT * FROM t WHERE id = " + id;\n');
-    // A local reviewer that reads the file once, then concludes with a claim citing what it read.
+    for (let i = 1; i <= 5; i++) writeFileSync(join(ws, `src/extra-${i}.ts`), `export const extra${i} = ${i};\n`);
+    // The reviewer spends its full turn allowance, but opens only one of its six assigned files.
+    let replies = 0;
     const endpoint = await mockEndpoint(t, (req: { body: string }, res: any) => {
       const msgs = JSON.parse(req.body).messages;
       const last = JSON.parse(msgs[msgs.length - 1].content);
-      const content = last.evidence
-        ? JSON.stringify({
-            action: 'final',
-            verdict: 'finding',
-            inspected: ['src/query.ts'],
-            claims: [{ statement: 'Request text reaches SQL.', citations: [last.evidence[0].id] }],
-          })
-        : JSON.stringify({ action: 'read', path: 'src/query.ts', startLine: 1, endLine: 1 });
+      replies++;
+      const content =
+        replies === 12
+          ? JSON.stringify({
+              action: 'final',
+              verdict: 'finding',
+              inspected: ['src/query.ts'],
+              claims: [{ statement: 'Request text reaches SQL.', citations: [last.evidence[0].id] }],
+            })
+          : JSON.stringify({ action: 'read', path: 'src/query.ts', startLine: 1, endLine: 1 });
       json(res, 200, ollamaReply({ message: { role: 'assistant', content } }));
     });
     const env = { ...process.env, HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
@@ -542,6 +662,7 @@ test(
     const s = JSON.parse(readFileSync(file, 'utf8'));
     const provider = structuredClone(trustedPolicy({ ollama: endpoint.origin }).settings.providers[0]);
     provider.models[0]!.capability.revision = null;
+    provider.models[0]!.limits.maxMessages = 64;
     s.mandatoryRules = [];
     s.hostedReviewSecretScan = 'when-selected';
     s.providers = [provider];
@@ -559,7 +680,7 @@ test(
     const id = planned.body.facts.planId;
     const ran = await cli('run', id, '--confirm', '--confirm-models');
     assert.equal(ran.body.facts.state, 'completed', JSON.stringify(ran.body));
-    assert.equal(endpoint.seen.length, 2, 'the reviewer read once and concluded');
+    assert.equal(endpoint.seen.length, 12, 'the reviewer reached its turn cap after repeatedly reading one file');
 
     const sw = workspaceOf(ws, env);
     const report = async (disclosure: 'private' | 'shareable') => {
@@ -590,6 +711,12 @@ test(
     assert.equal(r.evidence[0].state, 'embedded');
     assert.equal(r.evidence[0].location.relativePath, 'src/query.ts');
     assert.match(r.evidence[0].excerpt, /SELECT \* FROM t WHERE id = /);
+    assert.equal(r.progress.outcome, 'completed');
+    assert.deepEqual([r.progress.turns.n, r.progress.turns.of], [12, 12]);
+    assert.deepEqual([r.progress.filesRead.n, r.progress.filesRead.of], [1, 6]);
+    assert.equal(r.progress.modelInspected, undefined);
+    const { countedProblems } = await import('@farsight/core/dist/counts.js');
+    for (const c of [r.progress.turns, r.progress.filesRead]) assert.deepEqual(countedProblems(c), []);
     // Every published unit has one record: the bootstrap operations, then the review with its tokens and cost.
     const kinds = doc.provenance.map((p: any) => `${p.kind}:${p.stage}`);
     assert.deepEqual(
@@ -600,9 +727,9 @@ test(
     const agent = doc.provenance.find((p: any) => p.kind === 'agent');
     assert.equal(agent.attempt, r.attemptId);
     assert.equal(agent.model.requested, provider.models[0]!.model);
-    assert.equal(agent.turns, 2);
-    assert.equal(agent.wires.length, 2);
-    assert.equal(agent.runner, 'hosted-api');
+    assert.equal(agent.turns, 12);
+    assert.equal(agent.wires.length, 12);
+    assert.equal(agent.runner, 'ollama');
     // A local model with no fee: its confirmed usage at the provider's own (zero) rate is a list price, said so.
     assert.deepEqual(agent.cost, { basis: 'rates', amount: '0', currency: 'USD' });
     assert.equal(agent.tokens.certainty, 'confirmed');
@@ -617,7 +744,10 @@ test(
       'counted with the counts',
     );
     assert.match(priv.markdown, /Request text reaches SQL/);
+    assert.match(priv.markdown, /12 of 12 model exchanges used.*1 of 6 files opened for this review/);
     assert.match(priv.html, /How each stage ran/);
+    assert.match(priv.html, /12 of 12 model exchanges used.*1 of 6 files opened for this review/);
+    assert.equal(priv.sarif.runs[0]?.results.length, 0, 'limited review progress is not a SARIF finding');
 
     const shared = await report('shareable');
     assert.equal((shared.document as any).reviews[0].evidence[0].reasonCode, 'sentinel.report.withheld.shareable');
@@ -629,5 +759,65 @@ test(
     const again = await report('private');
     assert.equal(again.json, priv.json);
     assert.equal(again.markdown, priv.markdown);
+    assert.deepEqual(digests(again), digests(priv), 'all four brokered report formats regenerate from the same ledger');
   },
 );
+
+test('an unanswered brokered review names the configured model rather than its binding id', needsStore, async (t) => {
+  const dir = scratch(t, 'sentinel-report-unanswered-');
+  const ws = join(dir, 'workspace');
+  mkdirSync(join(ws, 'src'), { recursive: true });
+  writeFileSync(join(ws, 'src/query.ts'), 'export const query = (id: string) => id;\n');
+  const endpoint = await mockEndpoint(t, (_req, res) => json(res, 503, { error: 'unavailable' }));
+  const env = { ...process.env, HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
+  mkdirSync(env.HOME);
+  const cli = cliOver(ws, env);
+  assert.equal((await cli('init')).status, 0);
+  const settingsPath = join(ws, '.farsight/sentinel/settings.json');
+  const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+  const provider = structuredClone(trustedPolicy({ ollama: endpoint.origin }).settings.providers[0]);
+  provider.models[0]!.id = 'luna';
+  provider.models[0]!.model = 'gpt-6-luna';
+  provider.models[0]!.capability.model = 'gpt-6-luna';
+  provider.models[0]!.capability.revision = null;
+  settings.mandatoryRules = [];
+  settings.hostedReviewSecretScan = 'when-selected';
+  settings.providers = [provider];
+  settings.reviewModels = {
+    stages: [{ stage: 'general', providerId: provider.id, modelId: 'luna' }],
+    segments: [],
+  };
+  settings.grants[0].scope.effects = ['local-artifacts', 'paid-inference'];
+  settings.grants.push({ actions: ['paid.admit'], principals: ['human'], confirm: 'always' });
+  writeFileSync(settingsPath, JSON.stringify(settings));
+  assert.equal((await cli('settings', 'adopt', '--confirm')).status, 0);
+  assert.equal((await cli('rules', 'promote', 'builtin:foundation-preview', '--confirm')).status, 0);
+  const planned = await cli('plan');
+  assert.equal(planned.status, 0, JSON.stringify(planned.body));
+  const runId = planned.body.facts.planId;
+  const ran = await cli('run', runId, '--confirm', '--confirm-models');
+  assert.equal(ran.body.facts.state, 'completed', JSON.stringify(ran.body));
+
+  rmSync(join(ws, 'src'), { recursive: true, force: true });
+  const sw = workspaceOf(ws, env);
+  const store = await openStore(sw.storePath);
+  try {
+    const report = await fullReport({
+      store,
+      runId,
+      workspace: ws,
+      trustDir: sw.trustDir,
+      disclosure: 'private',
+      now: new Date('2026-10-28T09:00:00Z'),
+    });
+    const agent = report.document.provenance?.find((p) => p.kind === 'agent');
+    assert.ok(agent && agent.kind === 'agent');
+    assert.equal(agent.model.requested, 'gpt-6-luna');
+    assert.equal(agent.model.reported, null);
+    assert.match(report.markdown.replace(/\\(.)/g, '$1'), /model gpt-6-luna/);
+    assert.match(report.html, /model gpt-6-luna/);
+    assert.doesNotMatch(report.markdown, /model luna(?:\s|[·.])/);
+  } finally {
+    store.close();
+  }
+});

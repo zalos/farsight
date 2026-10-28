@@ -32,6 +32,7 @@ import {
 } from '../dist/execution/stage-inputs.js';
 import { PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../dist/adapters/preview-detector.js';
 import { COVERAGE_SCHEMA } from '../dist/execution/coverage.js';
+import { NATIVE_REVIEW_SCHEMA } from '../dist/review/native-dispatch.js';
 import { stageModel, stagesOfUnits } from '../dist/planner/index.js';
 import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { needsStore, unlock } from './snapshot-helpers.ts';
@@ -182,6 +183,7 @@ test(
       // Every producer published, none of them a `sentinel.notes/v1` document: missing, never resolved to nothing.
       assert.deepEqual([after[3]!.state, after[3]!.artifacts, after[3]!.producers.length], ['missing', [], 3]);
       assert.ok(outputSchemasOf('findings').includes(PREVIEW_FINDINGS_SCHEMA));
+      assert.ok(outputSchemasOf('observations').includes(NATIVE_REVIEW_SCHEMA));
 
       // A unit of a run planned without a recorded pipeline is bound exactly as before: no stage inputs.
       assert.equal(await stageInputsForUnit(store, admitted, previewUnits[0]!), undefined);

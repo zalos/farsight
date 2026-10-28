@@ -16,6 +16,11 @@ export const PREVIEW_LIMITATIONS = Object.freeze([
   'sentinel.report.previewOnly',
   'sentinel.report.noScannerCoverage',
 ] as const);
+const MODEL_REVIEW_LIMITATION = 'sentinel.report.previewModelReviewRan';
+/** A preview names a published model review when this run has one, without claiming scanner coverage. */
+export function previewLimitationsOf(modelReviewRan: boolean): readonly string[] {
+  return modelReviewRan ? [PREVIEW_LIMITATIONS[0], MODEL_REVIEW_LIMITATION] : PREVIEW_LIMITATIONS;
+}
 
 /**
  * The minimal preview report: a run's Counted totals at one committed ledger sequence, labelled a foundation preview,
@@ -51,7 +56,7 @@ export class ReportError extends Error {
 const word = (key: string): string | undefined => STRINGS[key]?.professional;
 
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
-const KNOWN_LIMITATIONS = new Set<string>(PREVIEW_LIMITATIONS);
+const KNOWN_LIMITATIONS = new Set<string>([...PREVIEW_LIMITATIONS, MODEL_REVIEW_LIMITATION]);
 
 /**
  * Checks a preview document before anything renders from it, stored or new: its exact fields and label, its
@@ -80,7 +85,9 @@ export function checkPreviewReport(doc: PreviewReport): PreviewReport {
     doc.limitations.some((l) => typeof l !== 'string' || !KNOWN_LIMITATIONS.has(l))
   )
     bad('limitations');
-  for (const l of PREVIEW_LIMITATIONS) if (!doc.limitations.includes(l)) bad(`missing limitation ${l}`);
+  if (!doc.limitations.includes(PREVIEW_LIMITATIONS[0])) bad(`missing limitation ${PREVIEW_LIMITATIONS[0]}`);
+  if (doc.limitations.includes(PREVIEW_LIMITATIONS[1]) === doc.limitations.includes(MODEL_REVIEW_LIMITATION))
+    bad('the preview must name exactly one review limitation');
   if (!Array.isArray(doc.counts) || doc.counts.length > 64) bad('counts');
   doc.counts.forEach((c, i) => {
     if (!isRecord(c)) bad(`count ${i} is not an object`);
