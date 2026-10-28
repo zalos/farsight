@@ -23,6 +23,7 @@ import {
   type CanonicalPathRequest,
 } from './request.js';
 
+/** A path request with the retained source proof and timing it is admitted under. */
 export interface PathRequestAdmission {
   readonly document: PathRequestEnvelope;
   readonly proof: RetainedSourceProof;
@@ -32,6 +33,9 @@ const refuse = (reason: string): never => {
   throw new ExecutionError('sentinel.execution.planInvalid', { reason });
 };
 const same = (a: unknown, b: unknown) => canonicalJsonBytes(a).equals(canonicalJsonBytes(b));
+/**
+ * The retained source ancestor a path request names: its run, revision and plan digest, with its snapshot and source.
+ */
 export const requestAncestor = (r: Readonly<PathRequestEnvelope>) => ({
   ...r.ancestor,
   snapshotId: r.snapshotId,
