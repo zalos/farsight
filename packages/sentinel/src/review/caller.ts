@@ -5,6 +5,7 @@ import type { ModelIdentity } from '../contracts/index.js';
 import type { ModelBroker, ModelEnvelope } from './providers/broker.js';
 import { isProviderBinding, type ProviderBinding, type ProviderSelection } from './providers/profile.js';
 import { fail } from './providers/errors.js';
+import { cliKind } from './providers/registry.js';
 import { canonicalDigest } from '../policy/digest.js';
 import type { NativeReviewWire } from '../contracts/instructions.js';
 import type { CallerReply, ModelCaller } from './session.js';
@@ -51,10 +52,9 @@ export function providerCaller(
         maxOutputTokens: req.maxOutputTokens,
         ...(options
           ? {
-              deadlineAt:
-                current.kind === 'copilot-cli'
-                  ? Math.min(options.deadlineAt, Date.now() + current.limits.timeoutMs)
-                  : options.deadlineAt,
+              deadlineAt: cliKind(current.kind)?.capsTurnDeadline
+                ? Math.min(options.deadlineAt, Date.now() + current.limits.timeoutMs)
+                : options.deadlineAt,
             }
           : {}),
         ...(req.expectedWireDigest ? { expectedWireDigest: req.expectedWireDigest } : {}),
