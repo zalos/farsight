@@ -286,7 +286,7 @@ export const SENTINEL_VIEWER_STRINGS: Record<string, StringEntry> = {
   'sentinel.viewer.edit.yes': same('yes', 'This stage is required: if it does not complete, required coverage is incomplete.'),
   'sentinel.viewer.edit.no': same('no', 'This stage is not required.'),
   'sentinel.viewer.edit.field.kind': same('kind', 'Who implements the stage: Sentinel itself, a scanner in a pinned container, a promoted script, or a model.'),
-  'sentinel.viewer.edit.field.operation': same('runs', 'Which of Sentinel\'s own steps of work this stage is.'),
+  'sentinel.viewer.edit.field.operation': same('runs', 'Which of Sentinel\'s own operations this stage runs: capture, parse, inventory, the walkthrough, the framework controls or the report.'),
   'sentinel.viewer.edit.field.adapter': same('scanner', 'The registered scanner this stage runs in its pinned container.'),
   'sentinel.viewer.edit.field.rules': same('rules', 'The rule families it runs, comma-separated, or one whole promoted rule pack.'),
   'sentinel.viewer.edit.field.runner': same('runs with', 'What runs the stage: for a script, this computer or a pinned container; for a model, which command line or service.'),
