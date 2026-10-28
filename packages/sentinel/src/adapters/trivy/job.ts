@@ -1,9 +1,9 @@
 // Building one Trivy attempt: which captured files are configuration inputs, whether the pinned checks bundle is
 // there, and the line-oriented job the in-container shim reads. A file the engine would read but that cannot be sent
 // (an unsupported name, too large, past the target bound, or no bundle) is recorded with its reason, never dropped.
-import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, openSync, readSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { sha256Id as sha256 } from '../../kernel/digest.js';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { CapturedInput } from '../../execution/supervisor.js';
 import { isSafeRelativePath } from '../../validate.js';
@@ -51,6 +51,7 @@ const sendable = (p: string) => SENDABLE.test(p) && p.split('/').every((s) => s 
 /** Downloaded Terraform modules are a dependency cache, not the repository's configuration. */
 const inCache = (p: string) => p.split('/').includes('.terraform');
 
+/** A captured file offered to a job: its source-relative path, its artifact id and its sealed copy. */
 export interface ConfigTarget {
   readonly relativePath: string;
   readonly artifact: ArtifactId;
@@ -62,6 +63,7 @@ export interface BundleInput {
   readonly path: string;
 }
 
+/** A file the job sends to the engine, by its index in the container, its captured identity and its kind. */
 export interface TrivyJobTarget {
   readonly index: number;
   readonly relativePath: string;
@@ -69,6 +71,10 @@ export interface TrivyJobTarget {
   readonly kind: TrivyFileKind;
   readonly type: TrivyConfigType;
 }
+/**
+ * Why a file is not sent: not configuration, a dependency cache, a variables file, a path, size or count bound, or no
+ * bundle.
+ */
 export type TrivyUnsentReason =
   | 'not-configuration'
   | 'dependency-cache'
@@ -77,6 +83,7 @@ export type TrivyUnsentReason =
   | 'too-large'
   | 'too-many'
   | 'bundle-missing';
+/** A file the job does not send, with why. */
 export interface TrivyUnsent {
   readonly relativePath: string;
   readonly artifact: ArtifactId;
@@ -84,6 +91,7 @@ export interface TrivyUnsent {
   readonly reason: TrivyUnsentReason;
 }
 
+/** The job a worker runs: the pinned bundle, the targets, what it leaves out and why, and the engine's bound. */
 export interface TrivyJob {
   readonly schema: 'sentinel-trivy-job/draft-1';
   readonly worker: string;
@@ -93,6 +101,7 @@ export interface TrivyJob {
   readonly engineTimeoutSeconds: number;
 }
 
+/** A built job: the job, the digest of the file the worker reads (null when nothing runs) and the sealed inputs. */
 export interface BuiltTrivyJob {
   readonly job: TrivyJob;
   /** Digest of the line file the worker reads; the run record must name it. Null when nothing is run. */
@@ -100,10 +109,12 @@ export interface BuiltTrivyJob {
   readonly inputs: readonly CapturedInput[];
 }
 
+/** The most files one attempt sends; the rest are listed as unsent (`too-many`), never dropped. */
 export const MAX_TRIVY_TARGETS = 2_000;
+/** The largest file one attempt sends; a larger one is listed as unsent (`too-large`). */
 export const MAX_TRIVY_FILE_BYTES = 1_048_576;
+/** The most bytes one attempt sends in all; past it, files are listed as unsent (`too-many`). */
 export const MAX_TRIVY_TOTAL_BYTES = 64 * 1_048_576;
-const sha256 = (b: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
 /** Hashes a captured file without following a link; refuses one that is not the artifact it claims to be. */
 function verifiedSize(t: ConfigTarget): number {

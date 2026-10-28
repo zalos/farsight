@@ -8,6 +8,7 @@
 // container; the coordinator maps each index back. The scan is fully offline (`--offline`): databases are the job's
 // pinned snapshot zips, linked read-only into the layout OSV-Scanner 2.7 expects. Engine stderr is never forwarded or
 // stored; only its digest, the exit code and a fixed category are reported.
+/** The worker's source text; `[MAX_OUT]` and `[ENGINE_ARGS]` are filled by buildOsvAdapter. */
 export const OSV_WORKER_SOURCE = `# Sentinel OSV worker (sentinel-osv-worker/1). Original; POSIX sh and busybox applets only.
 set -u
 P='sentinel-worker/draft-1'

@@ -1,4 +1,239 @@
 {
+  "packages/sentinel/src/analysis/paths/admission.ts": {
+    "boundaries/dependencies": {
+      "count": 3
+    }
+  },
+  "packages/sentinel/src/analysis/paths/driver.ts": {
+    "boundaries/dependencies": {
+      "count": 5
+    }
+  },
+  "packages/sentinel/src/analysis/paths/output.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/contracts/import-view.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/evidence/abandon.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/evidence/accept.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/evidence/import-operation.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/evidence/owner-cli.ts": {
+    "boundaries/dependencies": {
+      "count": 7
+    }
+  },
+  "packages/sentinel/src/evidence/owner-context.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/evidence/reader.ts": {
+    "boundaries/dependencies": {
+      "count": 4
+    }
+  },
+  "packages/sentinel/src/execution/bootstrap.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/execution/coordinator.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/execution/plans.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/execution/stage-inputs.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/findings/decision-basis.ts": {
+    "boundaries/dependencies": {
+      "count": 6
+    }
+  },
+  "packages/sentinel/src/findings/owner-cli.ts": {
+    "boundaries/dependencies": {
+      "count": 4
+    }
+  },
+  "packages/sentinel/src/findings/owner-evaluation.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/findings/owner-journal.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/findings/owner-report.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/frameworks/controls/closure.ts": {
+    "boundaries/dependencies": {
+      "count": 3
+    }
+  },
+  "packages/sentinel/src/frameworks/controls/driver.ts": {
+    "boundaries/dependencies": {
+      "count": 3
+    }
+  },
+  "packages/sentinel/src/planner/capabilities.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/planner/pipeline.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/planner/types.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/policy/admission.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/reports/accepted-secrets.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/reports/scanner.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/reports/selected-privacy.ts": {
+    "boundaries/dependencies": {
+      "count": 4
+    }
+  },
+  "packages/sentinel/src/review/caller.ts": {
+    "boundaries/dependencies": {
+      "count": 4
+    }
+  },
+  "packages/sentinel/src/review/checkpoints.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/review/dispatch.ts": {
+    "boundaries/dependencies": {
+      "count": 3
+    }
+  },
+  "packages/sentinel/src/review/operation.ts": {
+    "boundaries/dependencies": {
+      "count": 4
+    }
+  },
+  "packages/sentinel/src/review/plan.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/review/runner.ts": {
+    "boundaries/dependencies": {
+      "count": 8
+    }
+  },
+  "packages/sentinel/src/review/session.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/service/canonical.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/service/controls.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/service/local.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/service/mcp.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/service/owner-service.ts": {
+    "boundaries/dependencies": {
+      "count": 6
+    }
+  },
+  "packages/sentinel/src/service/preparation-client.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/service/preparation-controller.ts": {
+    "boundaries/dependencies": {
+      "count": 4
+    }
+  },
+  "packages/sentinel/src/service/scanner-assets.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/store/evidence-binding.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/store/ledger.ts": {
+    "boundaries/dependencies": {
+      "count": 3
+    }
+  },
+  "packages/sentinel/src/store/read-budget.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
+  "packages/sentinel/src/validate.ts": {
+    "boundaries/dependencies": {
+      "count": 2
+    }
+  },
   "scripts/sentinel-feasibility-frameworks.mjs": {
     "no-unused-vars": {
       "count": 1
