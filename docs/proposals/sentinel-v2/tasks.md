@@ -3,11 +3,45 @@
 Companion to [the plan](README.md). Every task is one PR unless marked otherwise, titled as a Conventional Commit, built
 in its own worktree, validated with the affected checks from `docs/CI.md`. Sizes: **S** under a day, **M** one to three
 days, **L** a week for one implementer. "Done when" is the acceptance the lead checks before merging; a green CI run is
-not that evidence on its own. Phases are ordered; tasks inside a phase run in parallel unless `after` says otherwise.
+not that evidence on its own. Since 2026-10-27 the lanes below are the order; the phase 1 to 5 tables stay as the task definitions and every
+id in them is mapped to a lane or to the follow-ups table.
 
-Roles stay as the ledger has them: implementers in their own worktrees, an independent reviewer per PR, the lead owns
-integration and the definition of done. Phase 0 is the exception: the lead runs it alone, because a reformat PR cannot
-coexist with open feature branches.
+Roles stay as the ledger has them: Opus implementers in their own worktrees, Sol as the independent reviewer of every PR,
+the lead owns integration and the definition of done. Phase 0 was the exception: it ran one PR at a time, because a
+reformat PR cannot coexist with open feature branches.
+
+## Evening of 2026-10-27
+
+Phase 0 is done (#199 to #210). The owner's answers tonight: Opus implements each lane, Sol reviews every PR over the
+bridge, the lead merges; the **thin vertical slice first**, not the phase-1 carve; decisions 1 to 3 below accepted as
+written (4 to 9 landed with phase 0); live `copilot -p` and `claude -p` calls allowed; **Docker only in L-VERIFY's last
+step**, so every other lane tests tool stages on the recorded fixtures with `SENTINEL_ISOLATION` unset.
+
+| lane | what it ships | starts |
+|---|---|---|
+| L-CI | phase 0b: CI under 5 min for a viewer PR and under 8 for a Sentinel PR (README §8) | now |
+| L-PIPELINE | the declared `pipeline.json`, stage contracts, the flag registry, plan by stages, rerun a stage, one `scan` verb through a facade, the host script stage, observations in the report | now; P-1 lands first |
+| L-ADAPTER | one `AgentRunner` over both CLIs; Copilot CLI native mode first, then Claude CLI; prompts, skills and models per stage; provenance on every run | now; rebases onto P-1 |
+| L-UX | the read model from Sentinel's loopback host, the SCANS · PIPELINE · STAGE stops in the shell, the Scan button, configure a stage in place, rerun it, the report; the companion retired | now on today's data; configure after P-2 and P-3 |
+| L-CLEAN-A | `kernel/`, the boundaries rule, store, snapshot, adapters, frameworks, rules, policy on the kernel; JSDoc | now; A-1 lands first |
+| L-CLEAN-B | JSDoc and density on findings, evidence, imports, analysis, reports and the report and preparation services | B-1 now (comments only); B-2 after A-1 |
+| L-VERIFY | the scan process as it is (V-1), the slice end to end (V-2), the one Docker run with memory watched (V-3) | V-1 now; V-2 after P-4, A-2, U-2; V-3 last |
+
+Start order: L-CI, L-PIPELINE (P-1), L-ADAPTER (A-1), L-UX (U-1), L-CLEAN-A (A-1), L-CLEAN-B (B-1) and L-VERIFY (V-1)
+all start now in their own worktrees from `main`. When P-1 merges, L-ADAPTER and L-UX merge `main` and import the
+contracts. When L-CLEAN-A's A-1 merges, L-CLEAN-B's B-2 starts. When P-2 and P-3 merge, L-UX's U-3 starts. When P-4, A-2
+and U-2 have merged, L-VERIFY runs V-2; V-3 is the last thing that runs.
+
+The rules every lane works under: its own worktree `../farsight-wt/<lane>/` on a branch named for the PR; one PR per task,
+titled exactly as below (lint it with `pnpm lint:commits --message '…'`), the assistant trailer on every commit; `main`
+merged into the branch before each PR and after every merge the lead announces; the change-to-check table in `docs/CI.md`
+run locally before a push; never `git stash`; servers and containers stopped by port or id; a question to the lead gets one
+letter back, never a menu. Sol reviews each PR's diff against its done-when and its owned paths and answers *may merge* or
+*not yet* with findings at file:line; a blocking finding goes back to the lane. The lead merges with `gh pr merge --squash`
+after the required checks are green, in the order lanes finish.
+
+Live model calls: L-ADAPTER's one acceptance per CLI on the invoice-app fixture, under the stage budget (Copilot: 3 turns,
+120 s, 20k tokens; Claude: 4 turns, 180 s, 60k tokens, a 0.50 USD cap); every other test replays recorded wires.
 
 ## Phase 0 — hygiene, no functional change
 
@@ -27,7 +61,181 @@ merging one PR at a time. Every style PR carried the AST-equivalence proof in CI
 | P0-8 | `style: format code-parser and mcp with Prettier` — the two packages held back for PR #121, formatted once the owner chose to reapply #121 later | S | P0-4 | 0 AST differences; ingest identical | **done** [#208](https://github.com/zalos/farsight/pull/208) `cdf7ab9e` |
 
 
-## Phase 1 — carve the kernel behind interfaces
+## Phase 0b: CI speed and affected checks (L-CI)
+
+The measurements and targets are README §8. One lane, three PRs, reviewed like any other; C-1 lands first because every
+later PR waits on validate.
+
+| id | PR | what | done when |
+|---|---|---|---|
+| C-1 | `ci: test only the packages a change reaches` | the selector emits the merge base; validate runs `pnpm -r --filter "...[<merge-base>]" test` (changed packages and their dependents); root files, the lockfile, `scripts/`, `schemas/` and `examples/` still run everything; a missing output still runs everything; the duplicate `pnpm -r typecheck` after `pnpm build` goes (C-5) | a viewer-only PR's validate runs server and e2e-adjacent packages only and finishes under 3 min; a Sentinel-only PR's validate skips echo, parsers, work; the selector test covers both and the all-paths fallback |
+| C-2 | `test(sentinel): split the process suite from the unit suite` | `packages/sentinel/test/process-suite.txt` names the 31 files `sentinel-service` runs; `scripts/sentinel-tests.mjs --suite unit\|process` runs the rest or the list with `--test-concurrency` at the core count; `test` runs both, `test:unit` and `test:process` each; `ci.yml`'s service job reads the list file; the 22 Docker-gated files keep skipping without the flag | validate's Sentinel step under 200 s; the 31 files run once per CI run; `pnpm -r test` locally still runs everything |
+| C-3 | `ci: run the Sentinel consumers in parallel and select the scanner workflow by its closure` | `scripts/test-sentinel-consumers.mjs` runs the eight consumer scripts three at a time after one pack, logs prefixed per consumer, the npm acceptance beside them (C-3); the four Sentinel browser steps and their two packs in `e2e` run only when Sentinel is selected (C-4); `sentinel-scanner-cli.yml` selects on the scanner closure (`adapters/`, `execution/`, `rules/`, `assets/`, `service/scanner-*.ts`, `service/trusted-profile.ts`, the scanner consumer script, `npm-consumer.mjs`, the workflow) through a `scannerCli` selector output (C-6); `timeout-minutes` at 1.5× the target with the budget table in `docs/CI.md` (C-7) | sentinel-package under 6 min; a viewer PR's e2e under 5 min; a review or UX PR does not start the scanner workflow; every job's timeout equals its budget row |
+
+Owns: `.github/workflows/`, `scripts/ci-changes.mjs` and `scripts/test/ci-changes.test.mjs`, `scripts/sentinel-tests.mjs`,
+`scripts/test-sentinel-consumers.mjs`, the `scripts` block of `packages/sentinel/package.json`, `packages/sentinel/test/process-suite.txt`,
+`docs/CI.md`. Must not touch: any `src/` file. Checks: the workflow changes select every check on GitHub; locally
+`pnpm test:scripts`, `actionlint`, and one run of each new script.
+
+## The lanes
+
+Each lane is one Opus implementer. A row is one PR. "Owns" is the complete list of paths the lane may edit; a one-line
+change in another lane's file (an import, a dispatch line) is requested in the PR description and made by the owner.
+
+### L-PIPELINE
+
+Owns `packages/sentinel/src/contracts/` and `schemas.generated.ts`, `planner/`, `execution/`, `cli.ts`, `cli/`,
+`capabilities.ts`, `index.ts`, `policy/features.ts` (new), new `app/`, `service/{local,canonical,launch,owner-service,controls,scanner-assets,scanner-profile,trusted-profile}.ts`,
+the planner, execution, cli, service, preparation, selected, retained, drivers, builtin, scratch, trusted and scanner test
+files, `packages/core/src/strings-sentinel-{cli,plan,service,execution,policy}.ts`, `.farsight/sentinel/*.example.json`.
+After L-CLEAN-B's B-1 lands it also takes `service/full-report.ts` and `reports/{document,markdown,html}.ts` for P-6.
+Must not touch `review/` (L-ADAPTER), `owner-ui/` and the viewer (L-UX), `store/`, `snapshot/`, `adapters/`, `frameworks/`
+(L-CLEAN-A), `findings/`, `evidence/`, `imports/` (L-CLEAN-B).
+
+| id | PR | what | after | done when |
+|---|---|---|---|---|
+| P-1 | `feat(sentinel): the pipeline and stage contracts and the flag registry` | `contracts/pipeline.ts`: `PipelineDefinition`, `StageDefinition` (four kinds), `StageInputDecl`, `StageOutputDecl`, `StageIO`, `Provenance`, `StageRun`; `StageKind` widened additively to `coded \| agentic \| external-tool \| script`; `PlanStage` and `ReviewPlanStage` become a stage id with the five built-in ids kept; `policy/features.ts` with `stage.host-scripts`, `runner.claude-cli`, `runner.copilot-cli`, `review.hosted-api` and the old booleans read as aliases; schemas regenerated | now, small | schemas regenerate with no drift; every fixture still validates; the enum pin tests list the built-in ids; every flag read goes through the registry (a lint rule) |
+| P-2 | `feat(sentinel): read, validate and adopt pipeline.json` | `.farsight/sentinel/pipeline.json` and its schema; cycle, type, flag and availability checks (runner qualified, image present, adapter promoted) with catalog codes; the digest covers referenced pack bytes; adoption like settings; `init --profile agentic` writes the example of README §3.3 and the three existing profiles write theirs, idempotent; a `pipeline.write` op (validate, write, preview, never run) for the browser | P-1 | `plan` refuses a cycle, a missing required input, an incompatible type, a disabled flag and an unknown pack, each with its code; adopting pins the digest; a clean npm-only consumer runs init with every profile |
+| P-3 | `feat(sentinel): plan declared stages and rerun one stage` | the planner builds the unit DAG from the pipeline: `builtin` stages keep today's bootstrap, a `tool` stage selects its checks from the matrix, an `agent` stage's units come from the declaration (no longer appended by `withReviewUnits`), `after` is ordering only; `{stage, output}` inputs resolve to artifact ids when the producer publishes and are sealed into the attempt binding, with the secret-withholding fold over every upstream artifact; `rerun <run> --stage <id>` expands to unit ids over the existing selection and previews downstream consequences | P-2 | the default pipeline plans to today's unit set and digests on the fixture (a golden test); a stage that needs `patterns.findings` blocks until patterns publishes and binds the exact ids; rerunning `review` with another runner reuses the rest as retained and creates one linked child |
+| P-4 | `feat(sentinel): one scan command through a service facade` | `app/service.ts` with plan, scan, rerun, report, scans, stage read, that `cli.ts`, `owner-service.ts` and L-UX's http transport call; `scan [--confirm] [--detach]` is plan, preview, run with the exact confirm line printed; `scans` lists retained runs; `status`, `report` and `plan` read through the running service instead of refusing; one composite `run.start` receipt covers the pipeline revision, every stage's effects and every provider binding in one confirmation; no user-facing string names a PR | P-3 | a first scan on the fixture is init, scan, scan --confirm, report, ids printed and never retyped; `report --full` works while the service runs; the catalog lint finds no `PR 0` string; the MCP controls consumer passes unchanged |
+| P-5 | `feat(sentinel): host script stage` | `script` kind with `runner: host` behind `stage.host-scripts`: child process, empty environment, digest-checked entry, declared inputs materialised in a scratch directory, stdout validated against the output schema, provenance (interpreter name, version and digest, argv, environment names), the report marks weaker isolation; `runner: container` through the existing backend with a pinned script-runner image (its test Docker-gated) | P-3 | the fixture's coded step runs as a host script; a tampered entry refuses at start; the provenance record is on the stage |
+| P-6 | `feat(sentinel): capabilities from the registries and observations in the report` | `capabilities` computed from the stage and provider registries, the human output fixed; the agent stage's observations and every stage's provenance in the full report (JSON, Markdown, HTML) as a cited class separate from findings | P-4, B-1 | `capabilities` prints every row; the observation from a native run appears in the report with its citation and model identity; source-removed regeneration still works |
+
+Checks per PR: the change-to-check table (`packages/sentinel/` outside `test/` selects validate, e2e, sentinel-package,
+isolation, recovery); locally `pnpm --filter '@farsight/sentinel...' build`, `test:unit`, the schema check, the catalog lint,
+and the fixtures' digests compared before and after.
+
+### L-ADAPTER
+
+Owns `packages/sentinel/src/review/` (all of it, `providers/` included), `service/review-adapter.ts`, the review, providers,
+cli-copilot, cli-native, model, instructions and agentic-only test files and their fixtures,
+`packages/core/src/strings-sentinel-{providers,review,instructions}.ts`. Must not touch `execution/`, `planner/`, `cli.ts`,
+the rest of `service/`, `owner-ui/`, the viewer.
+
+| id | PR | what | after | done when |
+|---|---|---|---|---|
+| A-1 | `refactor(sentinel): one AgentRunner over the two CLI adapters` | `review/runner.ts`: `AgentRunner { id, qualify(), run(stage, inputs, scratch) }` taking a `StageDefinition`-shaped input (local until P-1 lands); `review/providers/sandboxed-cli.ts`: one `SandboxedCliRunner` (seatbelt profile, child proxy, process, usage file, transcript capture) that both wrappers build on; the broker's 28 provider-kind branches collapse into a registry of the five kinds; `review/instructions.ts` unchanged | now | the qualified Copilot brokered profile's wire, sandbox profile and usage capture byte-identical (the retained-wire test); the review and providers suites pass; no provider-kind switch left outside the registry |
+| A-2 | `feat(sentinel): Copilot CLI native mode` | `mode: native`: the stage's declared inputs, prompt and skills materialised into a scratch tree; `copilot -p` with the flags of README §3.2; the JSONL stream and `--share` transcript retained as the inspection ledger; the output validated against the stage's output schema (a failed schema is a failed attempt, never a partial publication); `Provenance` on every run: executable digest and version, requested and reported model, prompt and skill digests, turns, tokens in and out from the usage file, cost `unobserved` for a subscription, deadline, where it ran; re-qualification of 1.0.105 (a new profile id, the isolation, zero-contact and replay controls, 1.0.103 kept) | A-1 | the fixture's review stage runs natively in one live acceptance under the stage budget; the transcript lists the files read; `report --instructions` prints the provenance; the brokered mode still passes its workflows |
+| A-3 | `feat(sentinel): custom prompts and skills per stage` | prompts and skills from a promoted stage pack by digest (`review/packs.ts`; the `stage promote` verb is one dispatch line L-PIPELINE adds); `skills` no longer `[]`; Copilot reads them from `<scratch>/.github/skills/` through `--add-dir`, Claude from `<scratch>/.claude/skills/` through `--setting-sources project`; a changed or unapproved byte refuses before dispatch; raw display under the privacy rules (#187) | A-2 | a genuine public run uses one original skill; the retained instruction record lists exact bytes and digests before dispatch; a changed prompt byte changes the pipeline digest |
+| A-4 | `feat(sentinel): Claude CLI native mode, qualified` | the same interface with `claude -p` and the flags of README §3.2 (`--json-schema` for the output, `--tools` and `--disallowedTools`, `--restricted`, the sandbox and the proxy as today, never `--bare`); the qualification controls the Copilot profile passed; a per-runner qualification record replaces `nativeClaudeReviewEnabled`, read through `policy/features.ts` | A-3, P-1 | the Claude runner passes the isolation, zero-contact and replay controls on macOS arm64 (Linux amd64 in the native CI job); the review stage reruns natively on the fixture with a retained transcript in one live acceptance |
+
+Checks per PR: the same table as L-PIPELINE; locally the review and providers tests, the retained-wire test, and for A-2
+and A-4 the one live acceptance with its budget printed.
+
+### L-UX
+
+Owns `packages/server/public/app/surfaces/sentinel.js`, new `packages/server/public/app/lib/sentinel-*.js`, the
+`/api/sentinel/companion` block of `packages/server/src/index.ts`, `packages/core/src/sentinel-companion.ts`,
+`packages/core/src/strings-sentinel-owner-ui.ts`, new `strings-sentinel-viewer.ts`, `packages/sentinel/src/owner-ui/`,
+new `packages/sentinel/src/transport/http/`, the owner-ui test files, `scripts/test-sentinel-owner-ui-consumer.mjs`,
+new `e2e/tests/sentinel-*.pw.spec.ts`, the Sentinel sections of `docs/COUNTS.md` and `docs/MAP-VIEWER.md`. Must not touch
+`cli.ts`, `service/`, `execution/`, `planner/`, `review/`. Farsight's server imports no Sentinel code (ADR 18): the read
+model is served by Sentinel's loopback host, the origin the companion uses today, and the viewer fetches it cross-origin.
+
+| id | PR | what | after | done when |
+|---|---|---|---|---|
+| U-1 | `feat(sentinel): the read model for the viewer` | `transport/http/` on the owner service's loopback origin: `GET /api/sentinel/scans`, `/scans/:id` (the pipeline with stage runs and provenance), `/scans/:id/stages/:stage` (the retained record: prompt, turns, tokens, cost, inputs, outputs, attempts; for a tool stage the command, image and raw report), `/scans/:id/report`; folded from today's runs, plans, units, attempts and review records (a stage is the unit's contract until P-3 lands, then the stage id); every number a `Counted` with its scope; read-only; the frame nonce and session code reused | now | every field of mocks 01, 02 and 06 has a source in one of these answers; `docs/COUNTS.md` lists each number; a read-only server refuses every write |
+| U-2 | `feat(viewer): the Sentinel ladder, SCANS · PIPELINE · STAGE` | `surfaces/sentinel.js` draws the chrome in the shell: the level control with the five stops (ENTRY POINTS and PATH greyed *not yet built*), LAYOUT `ladder · table`, the crumb, the dock; SCANS lists retained scans with findings, observations, stages, agentic count, cost, duration; PIPELINE draws the ladder with parallel rows and the stage dock (runner, model, prompt digest, skills, turns, tokens, cost or `unobserved`, where it ran, inputs, outputs, rerun); STAGE draws the record; the **Scan** button on the SCANS stop and on the Settings source row through the existing browser pairing and receipt flow, greyed read-only; live refresh while a run is in flight; `lib/sentinel-model.js` pure and unit-tested; both registers in `strings-sentinel-viewer.ts` | U-1 | the fixture's recorded run draws as mocks 01 and 02 with zero page errors at 1440 and 1280; the business register shows no identifier tokens; one e2e spec on a recorded fixture run, no Docker, no model |
+| U-3 | `feat(viewer): configure a stage in place and rerun it` | the PIPELINE stop in edit mode: a stage card opens an editor drawer (kind, runner, model, instructions, skills, wired inputs, outputs, budget, where it runs), `+ add a stage here`, the JSON it writes shown beneath; validate, preview, confirm through `pipeline.write` and the same receipt flow as the CLI; *rerun this stage* creates the linked child; the report downloads as HTML and Markdown | U-2, P-2, P-3 | mock 05: changing the review stage's runner from the browser produces the same `pipeline.json` as the CLI, previews reuse against rerun, confirms once; the child run appears on SCANS |
+| U-4 | `chore(sentinel): retire the owner-ui companion page` | the iframe surface and the server-rendered HTML removed; pairing and receipts stay behind `transport/http`; the owner-ui tests replaced by transport-http tests and the e2e specs | U-3 | no route serves the old page; `scripts/test-sentinel-owner-ui-consumer.mjs` becomes the surface consumer |
+
+Checks per PR: viewer and server changes select validate and e2e; Sentinel changes add the package jobs; locally
+`pnpm lint:strings`, the e2e spec, and screenshots judged by eye.
+
+### L-CLEAN-A
+
+Owns new `packages/sentinel/src/kernel/`, `store/`, `snapshot/`, `adapters/`, `frameworks/`, `rules/`, `policy/` (except
+`features.ts`), `validate.ts` (as a shim), the boundaries rule in `eslint.config.mjs`, the store, snapshot, pattern, osv,
+trivy, zizmor, secrets, gitleaks, framework, next, rules and policy test files, the matching catalogs; JSDoc on `contracts/`
+once P-1 has landed. Must not touch anything in another lane's list.
+
+| id | PR | what | after | done when |
+|---|---|---|---|---|
+| A-1 | `refactor(sentinel): kernel` | `kernel/{digest,ids,freeze,errors,seal}.ts`: one `canonicalJson` (the two in `store/objects.ts` and `store/ledger-json.ts` proven byte-identical on every fixture before one is deleted), one sha256 helper, the id and digest patterns, `deepFreeze`, a `SentinelError { code, detail }` base; `eslint-plugin-boundaries` in report-only mode with the import matrix snapshotted as a test, the 18-folder cycle listed as known debt | now, small | every retained digest on the fixtures unchanged; the matrix test passes; a new upward import fails the lint |
+| A-2 | `refactor(sentinel): adapters and frameworks on the kernel` | the 20 and 6 local sha256 helpers replaced by the kernel's; the 6 and 4 error classes extend the base; JSDoc on every export (347 and 246 exports, 173 and 109 undocumented today); the adapter id lists exported once from `adapters/drivers/canonical.ts` for `service/trusted-profile.ts` and `scanner-profile.ts` to import (one-line edits L-PIPELINE makes) | A-1 | the five worker digests identical; the pattern, osv, trivy, zizmor and framework suites pass; zero undocumented exports in the two folders |
+| A-3 | `refactor(sentinel): store, snapshot, rules and policy on the kernel` | the 3 and 4 helpers replaced; JSDoc (165, 123, 26 and 62 exports); `validate.ts` becomes a shim over `contracts/validate.ts` so the 17 importing folders keep their paths; migrations 1 to 6 byte-identical | A-1 | the migration bytes and the fixture databases identical; the store and snapshot suites pass |
+
+Checks per PR: the Sentinel table; the fixtures' plan digests, invocation records and work and attempt ids compared before
+and after; the real-ingest comparison against `main` when `snapshot/` changes.
+
+### L-CLEAN-B
+
+Owns `findings/`, `evidence/`, `imports/`, `analysis/`, `reports/` (until P-6 takes `document`, `markdown`, `html` and
+`service/full-report.ts`), `transport/ipc.ts` and `transport/index.ts`, `service/{preparation-*,path-*,full-report,inspection-report,report-key,publish-once,readonly,rule-locks,run-failure,scratch-lease,framework-adapter,mcp,package-paths,preview-driver}.ts`,
+the findings, evidence, imports, path, reports and decisions test files, the matching catalogs. Comments and density only:
+no move, no public shape change. Must not touch anything in another lane's list.
+
+| id | PR | what | after | done when |
+|---|---|---|---|---|
+| B-1 | `docs(sentinel): JSDoc on reports, findings and the report service` | comments only on `reports/`, `findings/`, `service/full-report.ts`, `inspection-report.ts`, `path-report.ts` (101 and 54 exports, 67 and 32 undocumented today) | now | zero undocumented exports in those files; the compiled output byte-identical |
+| B-2 | `refactor(sentinel): untangle evidence, imports and the preparation service` | the one-statement-per-line files in `evidence/` (37 % dense), `findings/` (28 %) and `service/preparation-*` (22 %) split into named functions with JSDoc; the 7, 2, 2 and 1 error classes extend the kernel base; the `transport/ipc.ts` import of `cli/outcome.ts` becomes a type import once P-4's `app/` exists | A-1 of L-CLEAN-A; the ipc edge after P-4 | no digest or byte change on the fixtures; the evidence, imports and preparation suites pass; `pnpm lint:report` shows fewer structure warnings in those folders than on `main` |
+| B-3 | `refactor(sentinel): analysis and the MCP service on the kernel` | `analysis/` (53 exports, 4 helpers), `service/mcp.ts`, `service/path-*.ts` on the kernel with JSDoc | B-2 | the path and MCP consumers pass; zero undocumented exports |
+
+### L-VERIFY
+
+Reads, runs and reports; edits nothing in `src/`. Writes `docs/proposals/sentinel-v2/verify-2026-10-27.md` (file:line for
+every finding, no client data, no home paths). Its checklist is README §10.
+
+| id | what | after | done when |
+|---|---|---|---|
+| V-1 | read `cli.ts`, `cli/`, `service/`, `planner/`, `execution/`, `review/`; in a scratch copy of `examples/invoice-app`, without Docker: `init --profile static`, `settings adopt --confirm`, `plan --confirm`, `run <plan> --confirm`, `status`, `report`; then the brokered Copilot review as settings configure it today (`run --confirm --confirm-models`, `report --instructions`); every refusal, retyped id, string that names a PR, place the UI's data is missing, and the peak RSS of each command (`/usr/bin/time -l`) | now | the report lists each row of README §10 as reached, refused or diverging, with file:line; the five biggest gaps confirmed or corrected |
+| V-2 | the slice end to end in the browser on the fixture: add the source, sync, Scan, the ladder live, STAGE, change the runner, rerun, the report; screenshots at 1440 and 1280; zero page errors; the catalog lint; identifier tokens in the business register; the one-fact harness (every number equal on the CLI, the report and the surface) | P-4, A-2, U-2 merged | the report says what a stranger sees and where it still lies |
+| V-3 | the one Docker run: `init --profile scanners`, the pinned Gitleaks and Semgrep images already present, `scan --confirm`, `docker stats` sampled every second, peak memory per container and on the host, its own containers stopped by id | last | the peaks in the report; no owned container left |
+
+## Mapping the phase 1 to 4 tasks onto the lanes
+
+Every task id from the phase tables below has a lane and a PR, or a row in the follow-ups table. The phase tables stay as
+the definitions; this table is the order.
+
+| task | lane · PR | note |
+|---|---|---|
+| P1-1 guardrails | L-CLEAN-A · A-1 | report-only, matrix snapshot |
+| P1-2 kernel | L-CLEAN-A · A-1, A-2, A-3 | folder by folder, other lanes' folders excluded |
+| P1-3 contracts own validation | L-CLEAN-A · A-3 | as a shim; the 17 import paths keep working |
+| P1-4 move-only reshuffle | follow-up | a repository-wide move during the slice would conflict with every lane; after U-4 |
+| P1-5 ExecutionBackend | L-PIPELINE · P-5 (host-child, in-process) | container and sandboxed-cli backends: follow-up |
+| P1-6 StageRunner, ScannerPlugin | L-PIPELINE · P-3 (the planner over declared stages) | the one `StageRunner` contract and `ScannerPlugin`: follow-up; A-2 removes the duplicate id lists on the way |
+| P1-7 ModelProvider, AgentRunner, one sandboxed CLI runner | L-ADAPTER · A-1 | |
+| P1-8 SentinelService facade and Principal | L-PIPELINE · P-4 (the facade and the op table) | the Local and Remote split and the Principal ADR: follow-up |
+| P1-9 LedgerExtension | follow-up | |
+| P1-10 flag registry, one state vocabulary | L-PIPELINE · P-1 (the registry) | the state vocabulary: follow-up |
+| P1-11 capabilities derived | L-PIPELINE · P-6 | |
+| P2-1 contracts | L-PIPELINE · P-1 | |
+| P2-2 read, validate, adopt | L-PIPELINE · P-2 | |
+| P2-3 plan declared stages | L-PIPELINE · P-3 | |
+| P2-4 typed inputs at publish | L-PIPELINE · P-3 | |
+| P2-5 stage packs and promotion | L-ADAPTER · A-3 (the pack) and L-PIPELINE · P-6 (the verb) | |
+| P2-6 composite intent, per-stage budgets | L-PIPELINE · P-4 | |
+| P2-7 host script stage | L-PIPELINE · P-5 | |
+| P2-8 reports by output type | L-PIPELINE · P-6 (observations and provenance) | the full fold by output type and SARIF: follow-up |
+| P2-9 stage rerun and compare | L-PIPELINE · P-3 (rerun) | compare by stage: follow-up |
+| P2-10 init profiles write pipeline.json | L-PIPELINE · P-2 | |
+| P2-11 one scan command | L-PIPELINE · P-4 | |
+| P3-1 read model | L-UX · U-1 | |
+| P3-2 SCANS and PIPELINE | L-UX · U-2 | |
+| P3-3 STAGE | L-UX · U-2 | |
+| P3-4 ENTRY POINTS | follow-up | after the slice, with the Map door |
+| P3-5 PATH | follow-up | needs the paths stage as a declared builtin |
+| P3-6 configure in place | L-UX · U-3 | |
+| P3-7 compare two scans | follow-up | |
+| P3-8 the chip on the gate card and Map | follow-up | with P3-5 |
+| P3-9 retire the companion | L-UX · U-4 | |
+| P4-1 AgentRunner and native mode | L-ADAPTER · A-1, A-2 | |
+| P4-2 qualify Claude CLI | L-ADAPTER · A-4 | |
+| P4-3 Copilot native mode | L-ADAPTER · A-2 | |
+| P4-4 custom prompts and skills | L-ADAPTER · A-3 | |
+| P4-5 hosted API behind the flag | follow-up | the flag exists from P-1 |
+| P4-6 cost and usage on every stage | L-ADAPTER · A-2 (recorded), L-UX · U-2 (drawn) | |
+| P4-7 per-entry fan-out | follow-up | |
+| P5-1 to P5-3 | after the slice | unchanged |
+
+Follow-ups, in the order they are worth doing once the slice is live: P3-4 and P3-5 with P3-8 (the entry points and the
+path, the door from the Map); P2-9's compare and P3-7; P2-8's full fold and SARIF; P1-4 with P1-8's Local and Remote split;
+P4-7; P4-5; P1-9; P1-6's `ScannerPlugin`; P1-10's state vocabulary; P1-5's remaining backends.
+
+## Phase 1 — carve the kernel behind interfaces (reference)
+
+> Mapped onto the lanes above on 2026-10-27; the rows stay as the task definitions.
 
 Every phase-1 PR is a no-behaviour-change refactor: plan digests, invocation records and work/attempt ids on the fixtures
 are byte-identical before and after, the real-ingest comparison against `main` is in the PR body, and the existing 227
@@ -48,7 +256,9 @@ test files pass unchanged apart from import paths that a re-export shim keeps wo
 | P1-11 | `refactor(sentinel): capabilities derived from the registries` — `capabilities.ts` computed from `StageRegistry` and `ProviderRegistry`; the human `capabilities` output no longer crashes | S | P1-8 | the capability tests pin the same words; `capabilities` prints every row |
 
 
-## Phase 2 — the declared pipeline
+## Phase 2 — the declared pipeline (reference)
+
+> Mapped onto the lanes above on 2026-10-27; the rows stay as the task definitions.
 
 | id | task | size | after | done when |
 |---|---|---|---|---|
@@ -64,7 +274,9 @@ test files pass unchanged apart from import paths that a re-export shim keeps wo
 | P2-10 | `feat(sentinel): init profiles write pipeline.json` — `static`, `scanners`, `secrets`, `agentic`; `init` is idempotent and never overwrites | S | P2-2 | a clean npm-only consumer runs init → plan → run on the fixture with the `scanners` profile |
 | P2-11 | `feat(sentinel): one scan command` — `farsight-sentinel scan [--confirm] [--detach]` = plan + preview + run, printing the exact confirm line; `scans` lists retained runs; `status`/`report` read through the running service instead of refusing; `capabilities` human output fixed; no internal PR numbers in any user-facing string | M | P2-2 | a first scan on the fixture is init → scan → scan --confirm → report, with ids printed and never retyped; the catalog lint finds no `PR 0` string |
 
-## Phase 3 — the top-down surface
+## Phase 3 — the top-down surface (reference)
+
+> Mapped onto the lanes above on 2026-10-27; the rows stay as the task definitions.
 
 | id | task | size | after | done when |
 |---|---|---|---|---|
@@ -78,7 +290,9 @@ test files pass unchanged apart from import paths that a re-export shim keeps wo
 | P3-8 | `feat(viewer): Sentinel chip on the gate card and Map property` — the one shared door from a gate or screen to its findings and path | S | P3-5 | a gate with a finding on its path shows the chip in both places; read-only and stale states honest |
 | P3-9 | `chore(sentinel): retire the owner-ui companion page` — remove the iframe surface and server-rendered HTML once P3-1…P3-6 pass; keep pairing and receipts behind the facade | M | P3-6 | no route serves the old page; the e2e suite's companion specs replaced by surface specs |
 
-## Phase 4 — runners and qualification
+## Phase 4 — runners and qualification (reference)
+
+> Mapped onto the lanes above on 2026-10-27; the rows stay as the task definitions.
 
 | id | task | size | after | done when |
 |---|---|---|---|---|
@@ -98,21 +312,24 @@ test files pass unchanged apart from import paths that a re-export shim keeps wo
 | P5-2 | Java/Spring sample and managed runtime (#176), replay bundles and pruning (#175), differential selection (plan PR 27/28) | L each | P5-1 | per their existing gates |
 | P5-3 | The outsider demo re-run on Sentinel: three outsiders asked to explain a finding's business consequence from the PATH stop alone | M | P3-5 | zero wrong answers on who may and what the finding reaches |
 
-## Decisions the owner is asked to confirm
+## Decisions
 
-1. **Host scripts are allowed** behind `hostScripts`, as a weaker isolation class named in the report. The alternative is
-   script stages only in a pinned runner container, which keeps the current invariant and needs Docker for every script.
-2. **Native agent mode is the default for custom stages; brokered stays the default for the built-in review stage.**
-   The alternative is brokered everywhere, which keeps every claim citeable but makes "custom instructions and skills"
-   a rendered-text approximation.
-3. **The owner-ui companion is retired**, its pairing and receipts kept behind the facade. The alternative is to keep it
-   as a fallback page, which means maintaining two UIs.
-4. **Phase 0 reformats the whole repository in one PR** with a blame-ignore rev, after the two open PRs (#121, #195)
-   are merged or rebased. The alternative is Sentinel first, then the rest, which spreads the conflict over weeks.
-5. **Prettier at 120 columns** (the clean packages' own width; 100 rewrites 55k lines instead of 35k).
-6. **The string catalogs stay unformatted** (one entry per line by design; formatting adds 7–10k lines).
-7. **The main-branch commit guard moves into the shared `lefthook.yml`** (AGENTS.md already forbids local commits on
-   main); the alternative is a personal `lefthook-local.yml`.
-8. **Pre-commit autofixes formatting** (`prettier --write` with `stage_fixed`, which may write a short-lived
-   `lefthook auto backup` stash entry for partially staged files, dropped by hash); the alternative is check-only.
-9. **`lint` becomes the seventh required check** after its first green run.
+Accepted by the owner on 2026-10-27, as written:
+
+1. **Host scripts are allowed** behind `hostScripts` (`stage.host-scripts` in the registry), as a weaker isolation class
+   named in the report. The alternative, script stages only in a pinned runner container, was not taken; it needs Docker
+   for every script.
+2. **Native agent mode is the default for custom stages; brokered stays the default for the built-in review stage.** The
+   alternative, brokered everywhere, keeps every claim citeable but makes custom instructions and skills a rendered-text
+   approximation.
+3. **The owner-ui companion is retired** (L-UX's U-4), its pairing and receipts kept behind the facade.
+
+Landed with phase 0 (2026-10-26 and 27), so no longer open:
+
+4. The whole repository is formatted, in one `style:` PR per area with a blame-ignore rev, after the owner chose to
+   reapply PR #121 later rather than wait for it.
+5. Prettier at 120 columns.
+6. The string catalogs stay unformatted.
+7. The main-branch commit guard is in the shared `lefthook.yml`.
+8. Pre-commit autofixes formatting.
+9. `lint` is the seventh required check.
