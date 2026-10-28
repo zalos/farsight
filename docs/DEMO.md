@@ -10,8 +10,9 @@ was shortened; a comment on a command's own line is a note (its time, its exit c
 > clean npm prefix, macOS on Apple silicon, Node 24.21.0, Copilot CLI 1.0.105, no Docker; steps 2 and 4c again on
 > `3f82c972` (the viewer's SCANS · PIPELINE · STAGE ladder, #227); steps 2 and 4a, 4b up to the model confirmation,
 > and mistakes 1, 2, 3a and 3b again on `4fd4e251` (the `scan` command, #237); steps 2 to 4c with the `review` profile
-> on #249's head `430fef90`, with one live Copilot review (see the note in 4b). This file is re-run and updated as
-> later changes land.
+> on #249's heads `430fef90` (one live Copilot review) and `052e46e3` (see the note in 4b). The serve line, the waiting
+> companion and the dock's runner, provider and unfinished words in 4c follow #246 and were not dry-run. This file is
+> re-run and updated as later changes land.
 
 | step | what you do | time |
 |---|---|---|
@@ -83,7 +84,7 @@ farsight ingest app --repo invoice-app --out graph.json
 
 cd app                             # serve from the folder Sentinel will scan: the Sentinel tab looks for its companion there
 farsight serve ../graph.json --port 4581
-#   farsight: http://localhost:4581  (graph: …/graph.json, workspace: …/farsight-demo/app)
+#   farsight: http://127.0.0.1:4581  (graph: …/graph.json, workspace: …/farsight-demo/app)
 ```
 
 Leave it running and open **http://127.0.0.1:4581** (use `127.0.0.1`, not `localhost`: the Sentinel companion in step 4
@@ -144,9 +145,9 @@ says so. There is no run id to copy: `report` reads the latest scan (`report run
 
 ### 4b. The Copilot review (the `review` profile)
 
-The `review` profile declares the review in `pipeline.json`: capture, parse, inventory, a walkthrough, one Copilot
-general review (`copilot-cli`, `gpt-6-luna`, three turns, 120 s) and the report, with no scanner, no container and no
-secrets scan first. `init` never writes over a file, so in the same folder remove the two files the static profile
+The `review` profile declares the review in `pipeline.json`: capture, parse, inventory, one Copilot general review
+of the captured source (`copilot-cli`, `gpt-6-luna`, three turns, 120 s) and the report, with no scanner, no
+container and no secrets scan first. `init` never writes over a file, so in the same folder remove the two files the static profile
 wrote; the scans already taken stay in the store.
 
 ```sh
@@ -154,14 +155,14 @@ rm .farsight/sentinel/settings.json .farsight/sentinel/pipeline.json
 farsight-sentinel init --profile review                             # 0.5 s
 #   created …/app/.farsight/sentinel/settings.json from the default settings
 #   created …/app/.farsight/sentinel/pipeline.json from the review profile
-#   profile: review — the walkthrough and a Copilot review of the source, with no scanner and no container
-#   this profile reviews without a secrets scan: its settings let the model read the source with no secret scan first
+#   profile: review — a Copilot review of the captured source, with no scanner and no container
+#   this profile reviews without a secrets scan: once you confirm the model, the captured source reaches it with no secret scan first
 #   needs: Node 24 or later; a qualified Copilot CLI, signed in, and its provider in the settings; no container runtime
 #   …
 farsight-sentinel scan                                              # exit 4
 #   first, as the owner: adopt the settings sha256:… and the pipeline sha256:…
 #   …
-#   5. review (agent) · runs sandboxed-cli · source-disclosure, network, paid-inference, local-artifacts
+#   4. review (agent) · runs sandboxed-cli · source-disclosure, network, paid-inference, local-artifacts
 #   …
 #     review: no adopted provider binds this model stage (no adopted copilot-cli provider binds the model gpt-6-luna)
 #   model for review: copilot-cli gpt-6-luna · not configured: no adopted provider binds the general review
@@ -226,12 +227,11 @@ farsight-sentinel scan                                              # 0.3 s; exi
 #   1. capture (builtin) · runs in-process · local-artifacts
 #   2. parse (builtin) · runs child · local-artifacts
 #   3. inventory (builtin) · runs child · local-artifacts
-#   4. walk (builtin) · runs child · local-artifacts
-#   5. review (agent) · runs sandboxed-cli · source-disclosure, network, paid-inference, local-artifacts
-#   6. report (builtin) · runs in-process · local-artifacts
+#   4. review (agent) · runs sandboxed-cli · source-disclosure, network, paid-inference, local-artifacts
+#   5. report (builtin) · runs in-process · local-artifacts
 #   stages: as declared in pipeline.json (sha256:…)
 #   model for review: copilot-cli gpt-6-luna through native-copilot · budget 816000 tokens
-#   to confirm as the owner: farsight-sentinel scan --confirm
+#   to confirm as the owner, the model calls above included: farsight-sentinel scan --confirm
 #   waiting for the owner to confirm: the scan waits for the owner to confirm it; nothing was captured or run
 farsight-sentinel scan --confirm                                    # about 45 s; exit 2
 #   plan run-<id> · sha256:…
@@ -261,12 +261,12 @@ turns to list the files and read one or two of them, and ends **unfinished**, wi
 observations* section is then empty. Keep the demo to what that shows: which model ran where, under what grant, at what
 cost, with what it read.
 
-> **Verified on #249's head `430fef90` with one edit.** As that head ships it, the profile's review reads the walk
-> stage's `walkthrough` output, but the walk stage plans no work on this example (it selects path checks, and the
-> profile promotes none), so `scan --confirm` ends in 3 s with *configuration or infrastructure failure: a planned
-> check failed to execute* and `status` shows the review `blocked` with *a stage input this work reads was not
-> published*. The run above changed the review's `needs` in `pipeline.json` to `["capture"]` before `scan --confirm`.
-> This note goes when #249 lands with that fixed.
+> **Not yet passing end to end.** The `init` and `scan` lines above are from #249's head `052e46e3`. There,
+> `scan --confirm` still ends in about 8 s with *configuration or infrastructure failure: a planned check failed to
+> execute* (exit 3), before any model call, and `status` shows the review `blocked`: *a stage input this work reads
+> was not published: review reads capture.source*. The `scan --confirm` and report lines above are from the earlier
+> head `430fef90`, where the review's `needs` was edited to `["capture"]` by hand. This note goes when #249 runs the
+> review as shipped.
 
 #### Before #249: the static profile with a settings-bound review
 
@@ -280,8 +280,7 @@ report line is named `review-general`. A later change refuses a review that only
 ### 4c. Sentinel in the viewer
 
 Start Sentinel's owner service in a third terminal and its companion in a fourth (same PATH, same folder), bound to
-the viewer's exact origin. Wait for the service's *serving …* line before starting the companion: a companion started
-while the service is still opening exits with *the command could not finish (sentinel.service.operationUnavailable)*.
+the viewer's exact origin. A companion started before the service has opened waits for it, up to 30 s (#246).
 
 ```sh
 # third terminal
@@ -289,10 +288,9 @@ nvm use 24 && export PATH="$HOME/farsight-demo/prefix/bin:$PATH" && cd ~/farsigh
 farsight-sentinel serve --idle-ms 600000
 #   serving …/farsight-demo/app; stops after 600000 ms with nothing to do
 
-# fourth terminal, once the line above has appeared
+# fourth terminal
 nvm use 24 && export PATH="$HOME/farsight-demo/prefix/bin:$PATH" && cd ~/farsight-demo/app
-farsight-sentinel owner-ui --workspace . --farsight-origin http://127.0.0.1:4581
-#   Launch the owner companion for this workspace, then reconnect.      (it keeps running)
+farsight-sentinel owner-ui --workspace . --farsight-origin http://127.0.0.1:4581   # it prints the view's address and keeps running
 ```
 
 Open **SENTINEL** in the viewer (or press *Reconnect* if it was already open). The tab pairs with the companion
@@ -302,15 +300,15 @@ or is no longer available*, and the fix is to stop and relaunch `owner-ui`, then
 - **SCANS** lists the scans, newest first: the review scan (`1 agentic · cost unobserved`) above the static one
   (`0 agentic · no model cost`), each with its findings, model observations and policy chip.
 - Click the review scan for **PIPELINE**: the stages that did work, top to bottom (capture, parse, inventory, *Review
-  the code*; the walk, which planned no work here, and the report draw no card), each with what it read and produced.
+  the code*; the report draws no card), each with what it read and produced.
   The crumb reads `profile static-scanners` for this scan, which is wrong. The dock on the right shows the picked
-  stage; for the review it reads
-  `RUNNER native-copilot`, `MODEL requested gpt-6-luna · reported gpt-6-luna`, `PROMPT sentinel.review.general · rev 1`,
-  `SKILLS none`, `TURNS 3 turns`, `TOKENS 12403 tokens in · 253 tokens out`, `COST cost unobserved`.
+  stage; for the review it reads `RUNNER Copilot command line · Brokered` (with `copilot-cli` outside the business
+  register), `PROVIDER native-copilot`, `MODEL requested gpt-6-luna · reported gpt-6-luna`,
+  `PROMPT sentinel.review.general · rev 1`, `SKILLS none`, `TOKENS 12403 tokens in · 253 tokens out`,
+  `COST cost unobserved`, and the review's card says *unfinished · 3 of 3 turns* (#246).
 - Press **OPEN THE STAGE** in the dock for **STAGE**: the review's instructions, then each turn (Sentinel's message and
   its tokens in, the model's request and its tokens out: *asked for the file list*, *asked to read lines
   src/server/auth.ts:1–40*), and what it left. The address is `#/sentinel/<run id>/sentinel.stage.review.general`.
-- The owner panel (the dock's second tab) is the companion page: capture, checks and retained inputs and outputs.
 - The toolbar also has **REPORT · HTML**, **REPORT · MARKDOWN** and **EDIT PIPELINE** (#245); editing a stage and
   rerunning it from here is not part of this runbook. On `3f82c972` **SCAN** was greyed while the adopted settings
   named a model review (a run that calls a model starts from the command line, step 4b); not re-checked since.
