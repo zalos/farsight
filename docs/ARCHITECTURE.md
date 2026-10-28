@@ -239,6 +239,12 @@ separately reviewed prune. Retained provenance is protected: every artifact a re
 (its influence manifest, invocation, outputs and diagnostics) is a root, so completed work is never a candidate
 while its records are kept.
 
+Migration 7 keeps a failed or canceled attempt's private record and its linked artifacts in the append-only
+`attempt_retained` table. The attempt's final diagnostics names the record, and `endAttempt` accepts its verified
+staging set in the same transaction as the end. `retainedOf` exposes only artifact metadata; a separate owner reader
+must apply disclosure and withholding before reading bytes. These artifacts remain collection roots for as long as
+the attempt row exists. Prune is explicit and owner-run; this store version schedules no automatic deletion.
+
 Qualification is bounded, and anything outside it is refused rather than assumed. The runtime's release policy lists
 exact host and SQLite pairs (`qualificationFor`); a store opens only for a listed pair, in a canonical owner-only
 folder on a file system the path checks identify as local. Measured: darwin-arm64 with SQLite 3.53.3 (Node 24.19.0)
