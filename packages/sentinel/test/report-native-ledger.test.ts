@@ -14,6 +14,7 @@ import { canonicalJson } from '@farsight/graph';
 import { openStore } from '../dist/store/index.js';
 import { fullReport } from '../dist/service/full-report.js';
 import { reportIn } from '../dist/service/local.js';
+import { canonicalResult } from '../dist/service/canonical.js';
 import { renderPreviewMarkdown } from '../dist/reports/preview.js';
 import { loadPlan } from '../dist/execution/plans.js';
 import { readPublishedNativeReview } from '../dist/review/native-dispatch.js';
@@ -149,6 +150,12 @@ test(
     try {
       const [run] = store.ledger.listRuns();
       assert.ok(run);
+      const completed = await canonicalResult(store, 'run', run.id, { executing: false, trustDir: join(dir, 'trust') });
+      assert.deepEqual(
+        [completed.outcome, completed.reasonCode, completed.facts.state],
+        ['required-coverage-incomplete', 'sentinel.service.previewNotCoverage', 'completed'],
+        'a completed native review returns its run result without a brokered login trace',
+      );
       const preview = await reportIn(
         store,
         { path: dir, storePath: join(dir, 'store'), trustDir: join(dir, 'trust') },
