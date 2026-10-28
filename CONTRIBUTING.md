@@ -74,6 +74,8 @@ pnpm e2e               # Playwright against a real `farsight serve` on a fixture
 # or: npm run e2e
 ```
 
+Sentinel’s npm source tests currently hit [#200](https://github.com/zalos/farsight/issues/200); `test:cli:package:absent` is pnpm-only.
+
 Per-PR checklist:
 
 - [ ] `pnpm format:check` and `pnpm lint` pass.
