@@ -41,6 +41,7 @@ export const COUNT_ORDER = [
   'historical',
   'controlAnswers',
   'pathQueries',
+  'reviewObservations',
 ] as const;
 
 /** Catalog keys are camel-case: `changed-evidence` → `changedEvidence`. */

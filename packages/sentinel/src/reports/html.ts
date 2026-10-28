@@ -7,6 +7,7 @@ import type { FindingPlace, ReportEnvelope, ReportEvidence } from '../contracts/
 import { structuralText } from './structural-paths.js';
 import { inspectionText } from './inspection.js';
 import { COUNT_ORDER, countText, defineOf, wordOf, labelKey } from './words.js';
+import { provenanceLine, reviewLines } from './markdown.js';
 
 /** Escapes text for HTML element and attribute content and strips nonprinting control characters. */
 export function esc(text: string): string {
@@ -123,6 +124,17 @@ ${f.evidence.map((e) => evidenceHtml(doc, e)).join('\n')}
     : doc.completeness === 'complete'
       ? '<p>Every planned check covered its scope.</p>'
       : '<p>Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.</p>';
+  const reviews = doc.reviews
+    ? `<h2 id="reviews">${esc(wordOf(doc, 'sentinel.report.review.heading', 'business'))}</h2><p>${esc(wordOf(doc, 'sentinel.report.review.proposed', 'business'))}.</p>${doc.reviews
+        .map((r) => {
+          const [head, ...rest] = reviewLines(doc, r);
+          return `<section class="card" id="${anchor('review', r.id)}"><h3><span class="sev sev-${esc(r.severity)}">${esc(head!)}</span></h3><ul>${rest.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>${r.evidence.map((e) => evidenceHtml(doc, e)).join('\n')}</section>`;
+        })
+        .join('\n')}`
+    : '';
+  const provenance = doc.provenance
+    ? `<h2 id="provenance">${esc(wordOf(doc, 'sentinel.report.provenance.heading', 'business'))}</h2><ul>${doc.provenance.map((p) => `<li>${esc(provenanceLine(doc, p))}</li>`).join('')}</ul>`
+    : '';
   const toc = doc.findings
     .map((f) => `<li><a href="#${anchor('finding', f.id)}">${esc(f.title.business)}</a></li>`)
     .join('');
@@ -148,7 +160,7 @@ ${f.evidence.map((e) => evidenceHtml(doc, e)).join('\n')}
 <div class="meta">Report <span class="code">${esc(doc.id)}</span> · run <span class="code">${esc(doc.run.id)}</span> · snapshot <span class="code">${esc(doc.run.snapshotId)}</span> · plan revision ${doc.run.planRevision} · as of ${esc(doc.evaluatedAt)} · ledger sequence ${doc.ledgerSequence}</div>
 <div class="meta">Disclosure: ${esc(doc.disclosure.profile)} · completeness: ${esc(doc.completeness)}${doc.baseline ? ` · compared with <span class="code">${esc(doc.baseline.reportId)}</span>` : ''}</div>
 </header>
-<nav><ul><li><a href="#counts">Counts</a></li><li><a href="#findings">Findings</a></li>${doc.historical ? '<li><a href="#historical">Baseline findings</a></li>' : ''}<li><a href="#gaps">Gaps</a></li><li><a href="#words">Words</a></li></ul></nav>
+<nav><ul><li><a href="#counts">Counts</a></li><li><a href="#findings">Findings</a></li>${doc.historical ? '<li><a href="#historical">Baseline findings</a></li>' : ''}${doc.reviews ? `<li><a href="#reviews">${esc(wordOf(doc, 'sentinel.report.review.heading', 'business'))}</a></li>` : ''}${doc.provenance ? `<li><a href="#provenance">${esc(wordOf(doc, 'sentinel.report.provenance.heading', 'business'))}</a></li>` : ''}<li><a href="#gaps">Gaps</a></li><li><a href="#words">Words</a></li></ul></nav>
 <main>
 <h2 id="counts">Counts</h2>
 <ul class="counts">${counts}</ul>
@@ -204,7 +216,7 @@ ${
         .join('')}`
     : ''
 }
-<h2 id="gaps">Gaps in the checks</h2>
+${reviews ? `${reviews}\n` : ''}${provenance ? `${provenance}\n` : ''}<h2 id="gaps">Gaps in the checks</h2>
 ${gaps}
 <h2 id="words">Words used in this report</h2>
 <table><tbody>${definitions}</tbody></table>
