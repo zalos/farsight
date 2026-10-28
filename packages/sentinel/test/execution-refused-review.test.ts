@@ -13,6 +13,9 @@ import { executeRun, planWorkspaceCanonical } from '../dist/service/canonical.js
 import { builtinPackDir } from '../dist/service/package-paths.js';
 import { initWorkspace } from '../dist/cli/init.js';
 import { loadPlan } from '../dist/execution/plans.js';
+import { stageInputsForUnit } from '../dist/execution/stage-inputs.js';
+import { defaultPipelineOf } from '../dist/planner/index.js';
+import { PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../dist/adapters/preview-detector.js';
 import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { needsStore, unlock } from './snapshot-helpers.ts';
 
@@ -51,7 +54,8 @@ const PROVIDER = {
   ],
 };
 
-test('a review unit refused before its attempt is held with the refusal reason', needsStore, async (t) => {
+/** A workspace with the foundation preview and the general review on a local model, adopted, and its store. */
+async function reviewed(t: any) {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-refused-review-')));
   t.after(() => {
     unlock(dir);
@@ -91,6 +95,11 @@ test('a review unit refused before its attempt is held with the refusal reason',
       /* closed */
     }
   });
+  return { path, ws, adopted, store };
+}
+
+test('a review unit refused before its attempt is held with the refusal reason', needsStore, async (t) => {
+  const { path, ws, adopted, store } = await reviewed(t);
   const work = scratchUnder(store);
   try {
     const planned = await planWorkspaceCanonical(store, {
@@ -119,3 +128,62 @@ test('a review unit refused before its attempt is held with the refusal reason',
     removeScratch(work);
   }
 });
+
+test(
+  'a declared pipeline planned through the canonical path is recorded, and its agent stage binds preview.findings',
+  needsStore,
+  async (t) => {
+    const { path, ws, adopted, store } = await reviewed(t);
+    const pipeline = defaultPipelineOf({
+      checks: [{ adapterId: 'sentinel.preview.detector', rules: [PREVIEW_RULE] }],
+      reviews: [{ kind: 'general', runner: 'hosted-api', provider: 'local-review', model: 'review' }],
+    }) as any;
+    const declared = {
+      ...pipeline,
+      id: 'reviewed-findings',
+      stages: pipeline.stages.map((s: any) =>
+        s.id === 'review-general' ? { ...s, needs: ['inventory', { stage: 'preview', output: 'findings' }] } : s,
+      ),
+    };
+    const work = scratchUnder(store);
+    try {
+      const terms = {
+        workspace: path,
+        trustDir: ws.trustDir,
+        policy: adopted.policy,
+        scratchRoot: work,
+        now: new Date(),
+      };
+      const planned = await planWorkspaceCanonical(store, { ...terms, pipeline: declared });
+      const admitted = await loadPlan(store, planned.disclosure.runId, planned.disclosure.revision);
+      assert.deepEqual(admitted.profile.pipeline, declared, 'the run records the declaration it was planned from');
+      // The same terms without a declaration are another run: the declaration is part of a run's identity.
+      const plain = await planWorkspaceCanonical(store, terms);
+      assert.notEqual(plain.disclosure.runId, planned.disclosure.runId);
+      assert.equal(
+        (await loadPlan(store, plain.disclosure.runId, plain.disclosure.revision)).profile.pipeline,
+        undefined,
+      );
+      const review = admitted.plan.units.find((u) => u.review)!;
+      const summary = await executeRun(store, planned.disclosure.runId, { scratchRoot: work });
+      assert.equal(summary.state, 'completed', JSON.stringify(summary.failures));
+      // The review unit (refused here for want of a model runtime) is bound to the preview's exact findings documents.
+      const inputs = (await stageInputsForUnit(store, admitted, { id: review.id, revision: review.revision }))!;
+      assert.equal(inputs.length, 1);
+      const findings: string[] = [];
+      for (const u of admitted.plan.units.filter((x) => !x.review))
+        for (const o of store.ledger.getPublication({ id: u.id, revision: u.revision })!.outputs)
+          if (
+            o.schema === 'application/json' &&
+            JSON.parse((await store.readArtifact(o.id as never)).toString('utf8')).schema === PREVIEW_FINDINGS_SCHEMA
+          )
+            findings.push(o.id);
+      assert.deepEqual(
+        [inputs[0]!.state, inputs[0]!.artifacts, inputs[0]!.secretFold],
+        ['resolved', findings.sort(), 'applied'],
+      );
+    } finally {
+      removeScratch(work);
+    }
+  },
+);

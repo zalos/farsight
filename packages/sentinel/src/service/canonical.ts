@@ -24,10 +24,13 @@ import type { DockerRunner } from '../execution/isolation.js';
 
 /** A scratch lease's container client wrapper (scratch-lease.ts), so the lease knows when its clients exited. */
 export type WrapRunner = (runner: DockerRunner) => DockerRunner;
-import { checkProfileRegistry } from '../execution/profile.js';
+import { checkProfileRegistry, withPipeline } from '../execution/profile.js';
+import { defaultPipelineFor } from '../execution/stage-inputs.js';
+import type { PipelineDefinition } from '../contracts/pipeline.js';
 import {
-  planAnalysis,
-  planBootstrap,
+  agentSeedsOf,
+  planPipelineAnalysis,
+  planPipelineBootstrap,
   plannerAnalysisFrom,
   plannerLockFrom,
   plannerPolicyFrom,
@@ -227,6 +230,11 @@ interface WorkspacePlanOptions {
   snapshotId?: string;
   /** Test seam: the trusted profile to plan under (the shipped one by default). */
   profile?: TrustedProfile;
+  /**
+   * The adopted pipeline declaration to plan (recorded in the run's profile); absent: the default pipeline for these
+   * terms, which plans today's units and records nothing, so such a run keeps its identity.
+   */
+  pipeline?: PipelineDefinition;
 }
 export async function planWorkspaceCanonical(
   store: SentinelStore,
@@ -315,18 +323,24 @@ async function planWorkspaceCanonicalInner(
   checkpoint();
   // The run is what it would read and do: the captured inventory (not the capture's time), the lock, the policy and
   // the profile. The same content under the same terms plans to the same run.
+  // The run plans a declared pipeline: the adopted one (recorded in its profile and part of its identity), or the
+  // default pipeline for these terms (recorded nowhere: it is today's plan, so the run keeps today's identity).
+  const lockView = plannerLockFrom(current.lock, packs, current.digest);
+  const pipeline = options.pipeline ?? defaultPipelineFor(lockView.rules, options.policy);
+  const record = options.pipeline ? withPipeline(profile.record, options.pipeline) : profile.record;
   const key = {
     inventory: snapshot.inventoryDigest,
     lock: current.digest,
     policy: options.policy.revision,
     profile: profile.digest,
     parent: options.parentId ?? null,
+    ...(options.pipeline ? { pipeline: digest(options.pipeline) } : {}),
   };
   const runId = workspaceRunIdentity(store, key);
   const latest = store.ledger.latestPlan(runId);
   const analysisFor = (boot: PlanRevision, evidence: BootstrapEvidence) => {
     const inventory = boot.units.find((u) => u.stage === 'inventory')!;
-    const deterministic = planAnalysis({
+    const terms = {
       runId,
       revision: 2,
       previous: boot,
@@ -334,13 +348,20 @@ async function planWorkspaceCanonicalInner(
       profile: profile.planner,
       snapshot: plannerSnapshotFrom(evidence.snapshot),
       analyses: evidence.analyses.map((a) => plannerAnalysisFrom(a as never)),
-      lock: plannerLockFrom(current.lock, packs, current.digest),
+      lock: lockView,
       policy: plannerPolicyFrom(options.policy),
       limits: options.policy.rules.includes(PREVIEW_RULE) ? ANALYSIS_LIMITS : { maxScopesPerWork: 32 },
-    });
-    return hasConfiguredReviews(options.policy)
-      ? reviewsFor(deterministic, evidence, options.policy, registry, packs)
-      : { plan: deterministic, artifacts: [] };
+      pipeline,
+    };
+    const deterministic = planPipelineAnalysis(terms);
+    if (!hasConfiguredReviews(options.policy)) return { plan: deterministic, artifacts: [] };
+    // The review side builds each review unit's sealed model inputs over the deterministic revision; the planner
+    // places them under the pipeline's agent stages and seals the revision once.
+    const reviewed = reviewsFor(deterministic, evidence, options.policy, registry, packs);
+    return {
+      plan: planPipelineAnalysis({ ...terms, agents: agentSeedsOf(reviewed.plan) }),
+      artifacts: reviewed.artifacts,
+    };
   };
   if (latest?.kind === 'analysis') {
     const active = store.ledger.getRun(runId);
@@ -356,8 +377,8 @@ async function planWorkspaceCanonicalInner(
           next.plan.revision !== 2 ||
           next.plan.previous !== first.plan.digest ||
           next.selection ||
-          !canonicalJsonBytes(first.profile).equals(canonicalJsonBytes(profile.record)) ||
-          !canonicalJsonBytes(next.profile).equals(canonicalJsonBytes(profile.record))
+          !canonicalJsonBytes(first.profile).equals(canonicalJsonBytes(record)) ||
+          !canonicalJsonBytes(next.profile).equals(canonicalJsonBytes(record))
         )
           throw new Error('not the immediate current-terms bootstrap successor');
         const evidence = await retainedBootstrapForReport(store, runId, next);
@@ -382,12 +403,12 @@ async function planWorkspaceCanonicalInner(
 
   const boot = latest
     ? (await loadPlan(store, runId, 1)).plan
-    : planBootstrap({ runId, sourceIds: [WORKSPACE_SOURCE], profile: profile.planner });
+    : planPipelineBootstrap({ runId, sourceIds: [WORKSPACE_SOURCE], profile: profile.planner, pipeline });
   checkpoint();
   if (!latest)
     await admitPlan(
       store,
-      { plan: boot, ruleLock: null, policy: null, profile: profile.record },
+      { plan: boot, ruleLock: null, policy: null, profile: record },
       within,
       prepared ? checkpoint : undefined,
     );
@@ -448,7 +469,7 @@ async function planWorkspaceCanonicalInner(
       plan: analysis,
       ruleLock: current.lock,
       policy: options.policy,
-      profile: profile.record,
+      profile: record,
       reviewArtifacts: reviewed.artifacts,
     },
     within,
@@ -898,7 +919,10 @@ export async function selectedRerun(
     policy: terms.policy.revision,
     profile: profile.digest,
   });
-  const plan = planAnalysis({
+  // The child plans the parent's declaration: the pipeline its profile recorded, or the default for the terms now.
+  const lockView = plannerLockFrom(current.lock, packs, current.digest);
+  const declared = closure.admitted.profile.pipeline;
+  const plan = planPipelineAnalysis({
     runId,
     revision: 1,
     previous: null,
@@ -906,9 +930,10 @@ export async function selectedRerun(
     profile: profile.planner,
     snapshot: plannerSnapshotFrom(evidence.snapshot),
     analyses: evidence.analyses.map((a) => plannerAnalysisFrom(a as never)),
-    lock: plannerLockFrom(current.lock, packs, current.digest),
+    lock: lockView,
     policy: plannerPolicyFrom(terms.policy),
     limits: terms.policy.rules.includes(PREVIEW_RULE) ? ANALYSIS_LIMITS : { maxScopesPerWork: 32 },
+    pipeline: declared ?? defaultPipelineFor(lockView.rules, terms.policy),
   });
   assertSupportedRules(plan);
   if (!terms.profile) checkPlanDatabases(plan, current.lock);
@@ -972,7 +997,13 @@ export async function selectedRerun(
     held,
     requiredHeld,
   });
-  return { preview, plan, selection, current, profile };
+  return {
+    preview,
+    plan,
+    selection,
+    current,
+    profile: declared ? { ...profile, record: withPipeline(profile.record, declared) } : profile,
+  };
 }
 
 /** A selected rerun's run envelope, derived from its admitted revision and selection alone (the same every time). */

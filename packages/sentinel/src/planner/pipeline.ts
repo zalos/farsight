@@ -555,8 +555,26 @@ export function defaultPipelineOf(options: {
   const rulesBy = new Map<Id, Set<string>>();
   for (const c of options.checks)
     for (const r of c.rules) (rulesBy.get(c.adapterId) ?? rulesBy.set(c.adapterId, new Set()).get(c.adapterId)!).add(r);
+  // Any other adapter's stage is named after it; a name that is not a stage id, or one already taken, gets one from
+  // the adapter id's digest, so the default pipeline is a valid declaration for every lock.
+  const taken = new Set<string>(['capture', 'parse', 'inventory', 'report', 'review-guided', 'review-general']);
+  const stageIdOf = (adapterId: Id): string => {
+    const named = DEFAULT_CHECK_STAGES[adapterId];
+    const plain = `check-${adapterId
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')}`;
+    const id =
+      named && !taken.has(named)
+        ? named
+        : isStageId(plain) && !taken.has(plain)
+          ? plain
+          : `check-${digestOf(adapterId).slice(7, 23)}`;
+    taken.add(id);
+    return id;
+  };
   const checks: StageDefinition[] = [...rulesBy.keys()].sort().map((adapterId) => {
-    const id = DEFAULT_CHECK_STAGES[adapterId] ?? adapterId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const id = stageIdOf(adapterId);
     const operation = BUILTIN_OPERATION_OF[adapterId];
     return operation
       ? { id, kind: 'builtin', operation, needs: ['inventory'] }

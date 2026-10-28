@@ -7,9 +7,16 @@ import type { ReportEnvelope } from '../contracts/index.js';
 import { ReportError } from './document.js';
 import { wordOf, labelKey } from './words.js';
 
+/** The SARIF export's limits: the most results it writes, and how many GitHub code scanning displays. */
 export const SARIF_LIMITS = Object.freeze({ maxResults: 25_000, displayedByGitHub: 5_000 });
 const LEVEL = { critical: 'error', high: 'error', medium: 'warning', low: 'note', info: 'note' } as const;
 
+/**
+ * Projects a report document's findings as one SARIF 2.1.0 run. The rule family is the `ruleId`, Sentinel's exact and
+ * probable issue fingerprints sit under their own `partialFingerprints` keys, withheld locations are left out and
+ * excerpts are never copied. Throws `ReportError` with `sentinel.report.tooLarge` when there are more findings than
+ * `maxResults`: the export is refused, never cut.
+ */
 export function toSarif(doc: ReportEnvelope, options: { maxResults?: number } = {}): Record<string, unknown> {
   const max = options.maxResults ?? SARIF_LIMITS.maxResults;
   if (doc.findings.length > max) {

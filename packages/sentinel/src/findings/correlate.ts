@@ -7,8 +7,13 @@ import { canonicalJson } from '@farsight/graph';
 import type { Digest } from '../contracts/index.js';
 import { SEVERITIES, type Anchor, type NormalizedObservation, type Severity } from './normalize.js';
 
+/** The version every issue fingerprint carries; fingerprints of different versions are never matched. */
 export const FINGERPRINT_VERSION = 'sentinel-issue/1';
 
+/**
+ * One issue in a run: every observation making the same claim (one rule family over one anchor set), their ids kept,
+ * the most severe of their severities, and the issue fingerprint.
+ */
 export interface Finding {
   readonly id: string;
   readonly ruleFamilyId: string;
@@ -59,6 +64,10 @@ export function fingerprintOf(
   return { version: FINGERPRINT_VERSION, exact, probable };
 }
 
+/**
+ * Groups observations into findings by exact fingerprint, sorted by finding id. A secret claim and an ordinary claim
+ * are never merged, and observations that share only a sink or a symbol stay separate findings.
+ */
 export function correlate(observations: readonly NormalizedObservation[]): Finding[] {
   const groups = new Map<string, NormalizedObservation[]>();
   const fingerprints = new Map<string, ReturnType<typeof fingerprintOf>>();
