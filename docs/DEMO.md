@@ -10,9 +10,9 @@ was shortened; a comment on a command's own line is a note (its time, its exit c
 > clean npm prefix, macOS on Apple silicon, Node 24.21.0, Copilot CLI 1.0.105, no Docker; steps 2 and 4c again on
 > `3f82c972` (the viewer's SCANS · PIPELINE · STAGE ladder, #227); steps 2 and 4a, 4b up to the model confirmation,
 > and mistakes 1, 2, 3a and 3b again on `4fd4e251` (the `scan` command, #237); steps 2 to 4c with the `review` profile
-> on #249's heads `430fef90` (one live Copilot review) and `052e46e3` (see the note in 4b). The serve line, the waiting
-> companion and the dock's runner, provider and unfinished words in 4c follow #246 and were not dry-run. This file is
-> re-run and updated as later changes land.
+> on #249's head `430fef90`, and steps 2 to 4b end to end as written on `671c6861`, with one live Copilot review. The
+> serve line, the waiting companion and the dock's runner, provider and unfinished words in 4c follow #246 and were
+> not dry-run. This file is re-run and updated as later changes land.
 
 | step | what you do | time |
 |---|---|---|
@@ -233,12 +233,13 @@ farsight-sentinel scan                                              # 0.3 s; exi
 #   model for review: copilot-cli gpt-6-luna through native-copilot · budget 816000 tokens
 #   to confirm as the owner, the model calls above included: farsight-sentinel scan --confirm
 #   waiting for the owner to confirm: the scan waits for the owner to confirm it; nothing was captured or run
-farsight-sentinel scan --confirm                                    # about 45 s; exit 2
+farsight-sentinel scan --confirm                                    # about 35 s; exit 2
 #   plan run-<id> · sha256:…
 #   run run-<id> · completed
 #   next: farsight-sentinel report
-#   required checks did not complete: coverage complete, but the finding policy is not evaluated in this build
-farsight-sentinel report --full
+#   the scan finished and its checks covered their scope; this build does not judge findings against the owner's
+#   policy, so the scan is not reported satisfied
+farsight-sentinel report --full                                     # 0.5 s
 ```
 
 `scan` takes no `--confirm-models` (*unknown option for this command: --confirm-models*, exit 3); that flag belongs to
@@ -251,7 +252,7 @@ the tokens and the cost (the numbers vary from run to run):
 
 ```text
 - review (work-review-…) · through a sandboxed command-line tool · copilot-cli brokered · model gpt-6-luna · 3 turns ·
-  12403 tokens in · 253 out (confirmed) · cost unobserved · subscription · 38888 ms
+  12392 tokens in · 431 out (confirmed) · cost unobserved · subscription · 28215 ms
 ```
 
 *Cost unobserved · subscription* is the honest word for a Copilot subscription: Sentinel records the tokens it was told
@@ -260,13 +261,6 @@ and no money. What the model read and proposed is in the private record, `farsig
 turns to list the files and read one or two of them, and ends **unfinished**, with no observations; the report's *Model
 observations* section is then empty. Keep the demo to what that shows: which model ran where, under what grant, at what
 cost, with what it read.
-
-> **Not yet passing end to end.** The `init` and `scan` lines above are from #249's head `052e46e3`. There,
-> `scan --confirm` still ends in about 8 s with *configuration or infrastructure failure: a planned check failed to
-> execute* (exit 3), before any model call, and `status` shows the review `blocked`: *a stage input this work reads
-> was not published: review reads capture.source*. The `scan --confirm` and report lines above are from the earlier
-> head `430fef90`, where the review's `needs` was edited to `["capture"]` by hand. This note goes when #249 runs the
-> review as shipped.
 
 #### Before #249: the static profile with a settings-bound review
 
