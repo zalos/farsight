@@ -9,7 +9,9 @@ import { suiteFiles } from '../sentinel-tests.mjs';
 const root = new URL('../../', import.meta.url);
 // The sentinel-service job runs Sentinel's process suite, the files packages/sentinel/test/process-suite.txt lists.
 const processSuite = suiteFiles('process');
-const unitSuite = suiteFiles('unit');
+// Files that must never skip on CI: the process suite (sentinel-service) and the unit suite's no-skip group (validate).
+const noSkipSuite = suiteFiles('no-skip');
+const neverSkips = (file) => processSuite.includes(file) || noSkipSuite.includes(file);
 const serviceJob = () => {
   const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
   const service = ci.slice(ci.indexOf('    name: sentinel-service'), ci.indexOf('\n  e2e:'));
@@ -122,7 +124,7 @@ test('SDK run controls remain in the native service zero-skip list and installed
     'preparation-publication-crash',
     'preparation-public',
   ])
-    assert.ok(processSuite.includes(`test/${file}.test.ts`) || unitSuite.includes(`test/${file}.test.ts`), file);
+    assert.ok(neverSkips(`test/${file}.test.ts`), `${file} runs where a skip fails CI`);
   // the ones that start the owner service or the CLI stay in the zero-skip native list
   for (const file of ['service-mcp-controls', 'service-planned-pause', 'preparation-service', 'preparation-public'])
     assert.ok(processSuite.includes(`test/${file}.test.ts`), file);
@@ -180,7 +182,7 @@ test('owner UI service and installed browser acceptance stay explicitly selected
   const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
   serviceJob();
   for (const name of ['session', 'host', 'descriptor', 'service', 'model-start', 'lifecycle', 'process'])
-    assert.ok(suiteFiles('all').includes(`test/owner-ui-${name}.test.ts`), name);
+    assert.ok(neverSkips(`test/owner-ui-${name}.test.ts`), name);
   for (const name of ['service', 'lifecycle']) assert.ok(processSuite.includes(`test/owner-ui-${name}.test.ts`), name);
   assert.ok(ci.includes("SENTINEL_OWNER_UI_BROWSER: '1'"));
   assert.ok(ci.includes('packages/sentinel/test/owner-ui-browser.test.ts'));
@@ -198,6 +200,24 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
   const every = suiteFiles('all');
   assert.ok(processSuite.length >= 80, `${processSuite.length} files in the process suite`);
   assert.deepEqual([...unit, ...processSuite].sort(), every, 'every test file is in exactly one suite');
+  assert.deepEqual(unit.slice(0, noSkipSuite.length), noSkipSuite, 'the unit suite runs its no-skip group first');
+  assert.ok(!noSkipSuite.some((file) => processSuite.includes(file)), 'no file is in both lists');
+  // the twelve in-process files that left sentinel-service's zero-skip list keep the guarantee in validate
+  for (const name of [
+    'owner-ui-descriptor',
+    'owner-ui-host',
+    'owner-ui-model-start',
+    'owner-ui-process',
+    'owner-ui-session',
+    'preparation-admission',
+    'preparation-journal',
+    'preparation-profile',
+    'preparation-receipt-admission',
+    'service-policy',
+    'store-read-budget',
+    'trusted-profile',
+  ])
+    assert.ok(noSkipSuite.includes(`test/${name}.test.ts`), name);
   assert.equal(new Set([...unit, ...processSuite]).size, every.length);
   assert.deepEqual(listed(), processSuite);
   // the service job requires zero skips, so no Docker-gated file belongs in its suite; they stay in the unit suite
@@ -291,6 +311,46 @@ test('the process suite list fails loudly: a missing file, a duplicate, a bad li
     assert.throws(() => listed(dir), /not a test\/<name>\.test\.ts path/);
     list('# only a comment\n');
     assert.throws(() => listed(dir), /lists no files/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the unit suite fails when a no-skip file skips, and the rest of it may skip', async () => {
+  const { noSkipSuite: listedNoSkip, runSuite, suiteGroups, tapSkips } = await import('../sentinel-tests.mjs');
+  assert.deepEqual(tapSkips('TAP version 13\n# tests 3\n# skipped 1\n# todo 0\n'), { skipped: 1, todo: 0 });
+  assert.deepEqual(tapSkips('# skipped 0\n# todo 0\n'), { skipped: 0, todo: 0 });
+  assert.equal(tapSkips('# tests 3\n'), null, 'no summary is not a pass');
+  const dir = mkdtempSync(join(tmpdir(), 'farsight-sentinel-noskip-'));
+  try {
+    mkdirSync(join(dir, 'test'));
+    const write = (name, text) => writeFileSync(join(dir, 'test', name), text);
+    write('passes.test.ts', "import { test } from 'node:test';\ntest('passes', () => {});\n");
+    write('skips.test.ts', "import { test } from 'node:test';\ntest('skips', { skip: 'by design' }, () => {});\n");
+    write('process.test.ts', "import { test } from 'node:test';\ntest('a process file', () => {});\n");
+    write('process-suite.txt', 'test/process.test.ts\n');
+    write('no-skip-suite.txt', 'test/process.test.ts\n');
+    assert.throws(() => listedNoSkip(dir), /lists process-suite files: test\/process\.test\.ts/);
+    write('no-skip-suite.txt', '# guarded\ntest/passes.test.ts\n');
+    assert.deepEqual(
+      suiteGroups('unit', dir).map(({ files, noSkips }) => [files, noSkips]),
+      [
+        [['test/passes.test.ts'], true],
+        [['test/skips.test.ts'], false],
+      ],
+    );
+    const errors = [];
+    const run = () =>
+      runSuite({ suite: 'unit', concurrency: 2 }, { dir, out: () => {}, err: (m) => errors.push(m), stdio: 'ignore' });
+    assert.equal(run(), 0, 'a skip outside the no-skip group is allowed');
+    assert.deepEqual(errors, []);
+    write('no-skip-suite.txt', 'test/passes.test.ts\ntest/skips.test.ts\n');
+    assert.equal(run(), 1, 'a skip in the no-skip group fails the suite');
+    assert.match(errors.join('\n'), /no-skip files must not skip \(no-skip-suite\.txt\): 1 skipped, 0 todo/);
+    assert.equal(
+      runSuite({ suite: 'no-skip', concurrency: 2 }, { dir, out: () => {}, err: () => {}, stdio: 'ignore' }),
+      1,
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
