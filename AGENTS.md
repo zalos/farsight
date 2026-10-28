@@ -6,9 +6,9 @@ Read in order when context is needed: [docs/VISION.md](docs/VISION.md) (why + pe
 
 ## Shared provider memory
 
-This file is the canonical project guidance for Codex/GPT and Claude Code. `CLAUDE.md` imports it; update this file instead of maintaining two copies. Read [docs/AI-HANDOFF.md](docs/AI-HANDOFF.md) at session start for the verified setup, latest validation, and handoff notes. Keep durable project facts here and dated results there. Provider-private memories are historical hints; current code and repository docs take precedence.
+This file is the canonical project guidance for Codex/GPT and Claude Code. `CLAUDE.md` imports it; update this file instead of maintaining two copies. Read [docs/AI-HANDOFF.md](docs/AI-HANDOFF.md) at session start for the work in flight: where `main` is, what is open and next. It is loaded into every session, so it stays short — rewrite its entries, never append. Dated results (checks run, measurements, review findings) go to the top of the matching [docs/history/](docs/history/README.md) file, read on demand; runtime, provider and live-tracker setup is in [docs/AI-SETUP.md](docs/AI-SETUP.md). Keep durable project facts here. Provider-private memories are historical hints; current code and repository docs take precedence.
 
-Use Node 24+ (`.nvmrc`) with pnpm 9.0.0 or npm 10 (`npm install`, `npm run build`); pnpm remains the contributor and CI path. The sole committed lockfile is pnpm’s; npm uses `npm install`, not `npm ci`. Build before tests, which import `dist/`. Put a Node 24 on PATH (`nvm use`) before building. Before changing work, inspect `git status`; preserve another provider's uncommitted edits. Record branch, changes, checks, and unresolved issues in the handoff before switching providers. Shared instructions do not imply shared permissions, authentication, or live MCP connections.
+Use Node 24+ (`.nvmrc`) with pnpm 9.0.0 or npm 10 (`npm install`, `npm run build`); pnpm remains the contributor and CI path. The sole committed lockfile is pnpm’s; npm uses `npm install`, not `npm ci`. Build before tests, which import `dist/`. Put a Node 24 on PATH (`nvm use`) before building. Before changing work, inspect `git status`; preserve another provider's uncommitted edits. Before switching providers, rewrite the handoff's entries with the branch, changes, checks and unresolved issues. Shared instructions do not imply shared permissions, authentication, or live MCP connections.
 
 **Work in a worktree, never in the primary checkout** (learned 2026-10-17, PR #115). The primary checkout is the dogfood server's workspace: `pnpm build` there rewrites the `dist/` the 4478 server restarts into (`farsight status` and the HUD chip then say RESTART into a feature build), `pnpm e2e` there stamps `e2e/test-results/results.json`, which the dogfood graph reads as its own e2e run, and a branch left checked out there is what the next session's `git status` starts from. Every implementation, Codex or Claude, concurrent or not, happens in its own worktree (`git worktree add ../farsight-wt/<name> -b <branch>`; Codex's live under `~/.codex/worktrees/`); the primary checkout stays on `main` with a `main` build. If you did build or test in the primary checkout, say so in the handoff, check `main` out again and rebuild before handing off.
 
@@ -163,7 +163,9 @@ moved out; open a map when you need it, not to orient.
 | [docs/SECURITY.md](docs/SECURITY.md) | touching the server's routes, secrets, tracker writes or recorded fixtures — the threat model, the request guard, the CI secret scan |
 | [docs/CI.md](docs/CI.md) | changing the GitHub Actions workflow, reading a red check, or running exactly what CI runs |
 | [docs/COUNTS.md](docs/COUNTS.md) | before printing, changing or defending a number — every count the product prints, its source field, what it counts, the scope it counts over, and the `Counted` shape a surface wires |
-| [docs/AI-HANDOFF.md](docs/AI-HANDOFF.md) | at session start — the verified current state and the ranked next work |
+| [docs/AI-HANDOFF.md](docs/AI-HANDOFF.md) | at session start — the work in flight and the ranked next work |
+| [docs/history/](docs/history/README.md) | why something is the way it is — every pass's dated checks, measurements, review findings and left-open lists, one file per area |
+| [docs/AI-SETUP.md](docs/AI-SETUP.md) | setting up a runtime, a provider's MCP access or a live tracker test |
 | [docs/proposals/](docs/proposals/) | how a design was argued before it was built |
 | [docs/review-swarm.md](docs/review-swarm.md) | how to run the eight review personas and the three outsiders (their reports stay out of the repo) |
 | [docs/VISION.md](docs/VISION.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/ROADMAP.md](docs/ROADMAP.md) | why the product exists, its ADRs, what is done and next |
@@ -205,10 +207,7 @@ Blue-black ground `#0A0D14`, panels `#111623`, condensed-uppercase HUD labels (F
 
 ## Current position
 
-The clarity phase is built and merged; six passes have followed it, the last the lanes round's wave 1 (2026-10-10:
-one surface with five stops, the storyline as swimlanes, lifecycle views, scope on every test number, gates for a
-business reader, affected on a PR, the state of play), with its waves 2–3 in flight. **`docs/AI-HANDOFF.md` carries
-the verified current state and the ranked next work — read it, not this paragraph.**
+**`docs/AI-HANDOFF.md` carries the current state and the ranked next work; `docs/history/` how it got there.**
 
 The bar the product is judged against, unchanged: *"a person who opens Farsight on a real application understands
 the app before they understand the tool."* As of the 2026-09-24 visual swarm a reader new to the reference app
