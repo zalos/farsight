@@ -4,7 +4,14 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { computedLoadSites, scannerCliClosure, scannerLoadsText, selectChecks, detectChecks } from '../ci-changes.mjs';
+import {
+  computedLoadSites,
+  loadSites,
+  scannerCliClosure,
+  scannerLoadsText,
+  selectChecks,
+  detectChecks,
+} from '../ci-changes.mjs';
 import { suiteFiles } from '../sentinel-tests.mjs';
 import { CONSUMERS } from '../test-sentinel-consumers.mjs';
 // pnpm test:sentinel:package packs once and runs every installed consumer through the parallel runner.
@@ -180,6 +187,16 @@ test('the load detector reads a computed load across lines, generated code inclu
       [1, 'third'],
     ],
   );
+  // a literal load, quoted or a template with no substitution, is handed to the walk, never dropped
+  for (const text of [
+    "await import('./x.js');",
+    'await import(`./x.js`);',
+    'require(`./x.js`);',
+    'require.resolve("./x.js");',
+    'new URL(`./x.js`, import.meta.url);',
+    "new URL(\n  './x.js',\n  import.meta.url\n);",
+  ])
+    assert.deepEqual(loadSites(text), [{ line: 1, literal: './x.js' }], text);
   // a brace that does not close is still a load, with no expression to resolve
   assert.deepEqual(sites('await import(join(a, b'), [[1, null]]);
   // not loads: literals the walk follows (one line or several), a URL with another base, prose, comments
@@ -203,45 +220,81 @@ test('a computed load whose target is one literal is followed, not given an area
     writeFileSync(join(fake, path), text);
   };
   const manifest = (name) => JSON.stringify({ name, version: '0.0.0', main: './dist/index.js' });
+  const closureOf = (...lines) => {
+    write('scripts/consumer.mjs', lines.join('\n') + '\n');
+    return scannerCliClosure(fake);
+  };
+  const reaches = (closure, path) =>
+    selectChecks([path], { root: fake, packageInputs: new Set(), isolationInputs: new Set(), scannerInputs: closure })
+      .scannerCli;
+  const sources = ['index', 'url-target', 'driver', 'tick-import', 'tick-require', 'tick-url', 'unreached'];
   try {
     write('.github/workflows/sentinel-scanner-cli.yml', 'run: node scripts/consumer.mjs\n');
     write('packages/sentinel/package.json', manifest('@farsight/sentinel'));
     write('packages/parsers/package.json', manifest('@farsight/parsers'));
-    for (const name of ['index', 'url-target', 'driver', 'unreached'])
-      write(`packages/sentinel/src/${name}.ts`, 'export {};\n');
-    write(
-      'scripts/consumer.mjs',
-      [
-        // a URL against the module, wrapped
-        "await import(pathToFileURL(fileURLToPath(new URL('../packages/sentinel/dist/url-target.js', import.meta.url))).href);",
-        "await import(new URL('../packages/sentinel/dist/index.js', import.meta.url).href);",
-        // a resolved specifier (a third party: nothing in the repository)
-        "await import(pathToFileURL(require.resolve('some-sdk/client.js')).href);",
-        // a file of the installed tarball by its dist/ path, in generated code
-        'const code = `await import(${JSON.stringify("file://" + join(installed, "dist/driver.mjs"))});`;',
-        // a module this script writes from a literal
-        "writeFileSync(join(c.dir, 'public.mjs'), \"export * from 'farsight-sentinel';\\n\");",
-        "await import(pathToFileURL(join(c.dir, 'public.mjs')).href);",
-      ].join('\n'),
+    for (const name of sources) write(`packages/sentinel/src/${name}.ts`, 'export {};\n');
+    const closure = closureOf(
+      // a URL against the module, wrapped
+      "await import(pathToFileURL(fileURLToPath(new URL('../packages/sentinel/dist/url-target.js', import.meta.url))).href);",
+      "await import(new URL('../packages/sentinel/dist/index.js', import.meta.url).href);",
+      // templates with no substitution are literals like quoted strings, in each of the three forms
+      'await import(`../packages/sentinel/dist/tick-import.js`);',
+      'require(`../packages/sentinel/dist/tick-require.js`);',
+      'new URL(`../packages/sentinel/dist/tick-url.js`, import.meta.url);',
+      // a resolved specifier (a third party: nothing in the repository)
+      "await import(pathToFileURL(require.resolve('some-sdk/client.js')).href);",
+      // a file of the installed tarball by its dist/ path, under a base the file binds once to that package's root
+      "const installed = join(realpathSync.native(c.dir), 'node_modules/farsight-sentinel');",
+      'const code = `await import(${JSON.stringify("file://" + join(installed, "dist/driver.mjs"))});`;',
+      // a module this script writes from a literal
+      "writeFileSync(join(c.dir, 'public.mjs'), \"export * from 'farsight-sentinel';\\n\");",
+      "await import(pathToFileURL(join(c.dir, 'public.mjs')).href);",
     );
-    const closure = scannerCliClosure(fake);
     assert.deepEqual(closure.unresolved, [], 'every load names its target');
-    for (const file of ['url-target', 'index', 'driver'])
-      assert.ok(closure.files.has(`packages/sentinel/src/${file}.ts`), file);
-    assert.ok(!closure.files.has('packages/sentinel/src/unreached.ts'));
-    const reaches = (path) =>
-      selectChecks([path], { root: fake, packageInputs: new Set(), isolationInputs: new Set(), scannerInputs: closure })
-        .scannerCli;
-    assert.equal(reaches('packages/sentinel/src/unreached.ts'), false, 'no area: an unreached source stays out');
+    for (const name of sources.slice(0, -1)) {
+      assert.ok(closure.files.has(`packages/sentinel/src/${name}.ts`), name);
+      assert.equal(reaches(closure, `packages/sentinel/src/${name}.ts`), true, `an edit to ${name} selects`);
+    }
+    assert.equal(
+      reaches(closure, 'packages/sentinel/src/unreached.ts'),
+      false,
+      'no area: an unreached source stays out',
+    );
+
+    // a dist/ tail counts only under a known base: an unbound base, one bound twice, or one bound to another
+    // folder leaves the load computed, so it is listed and its area (a root script's) selects the source
+    for (const binding of [
+      [],
+      ["let installed = join(c.dir, 'node_modules/farsight-sentinel');", "installed = join(other, 'x');"],
+      ["const installed = join(c.dir, 'node_modules/left-pad');"],
+      ['const installed = somewhere();'],
+    ]) {
+      const unknown = closureOf(...binding, "await import(pathToFileURL(join(installed, 'dist/driver.mjs')).href);");
+      assert.deepEqual(
+        unknown.unresolved.map(({ site }) => site),
+        [`scripts/consumer.mjs:${binding.length + 1}`],
+        binding.join(' ') || 'unbound',
+      );
+      assert.equal(reaches(unknown, 'packages/sentinel/src/driver.ts'), true, 'its area selects the source');
+    }
+    // the workspace folder is a known root too
+    const folder = closureOf(
+      "const dir = join(root, 'packages', 'sentinel');",
+      "await import(pathToFileURL(join(dir, 'dist/driver.mjs')).href);",
+    );
+    assert.deepEqual(folder.unresolved, []);
+    assert.ok(folder.files.has('packages/sentinel/src/driver.ts'));
 
     // the same script writing a different module than it loads, or loading a dist/ file no package has, gets an area
-    write(
-      'scripts/consumer.mjs',
-      "writeFileSync(join(c.dir, 'other.mjs'), '');\nawait import(pathToFileURL(join(c.dir, 'public.mjs')).href);\nawait import(pathToFileURL(join(installed, 'dist/chunks/x.mjs')).href);\n",
+    const missed = closureOf(
+      "const installed = join(c.dir, 'node_modules/farsight-sentinel');",
+      "writeFileSync(join(c.dir, 'other.mjs'), '');",
+      "await import(pathToFileURL(join(c.dir, 'public.mjs')).href);",
+      "await import(pathToFileURL(join(installed, 'dist/chunks/x.mjs')).href);",
     );
     assert.deepEqual(
-      scannerCliClosure(fake).unresolved.map(({ site }) => site),
-      ['scripts/consumer.mjs:2', 'scripts/consumer.mjs:3'],
+      missed.unresolved.map(({ site }) => site),
+      ['scripts/consumer.mjs:3', 'scripts/consumer.mjs:4'],
     );
   } finally {
     rmSync(fake, { recursive: true, force: true });

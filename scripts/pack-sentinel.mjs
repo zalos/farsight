@@ -400,7 +400,12 @@ try {
     .filter((f) => /^package-assets.*\.mjs$/.test(f))
     .sort()) {
     const load = ASSET_HOOKS.get(hook);
-    if (!load) fail(`packages/sentinel/scripts/${hook} is an asset hook scripts/pack-sentinel.mjs does not name.`);
+    if (!load) {
+      rmSync(stage, { recursive: true, force: true }); // fail() exits, so the catch below would not clean the stage
+      fail(`packages/sentinel/scripts/${hook} is an asset hook scripts/pack-sentinel.mjs does not name.`, [
+        'Name it in ASSET_HOOKS; prior artifacts in build/ are unchanged.',
+      ]);
+    }
     const staged = await (await load()).stageAssets(dir, out);
     for (const f of staged.files) if (!files.includes(f)) files.push(f);
     Object.assign(exportsMap, staged.exports);

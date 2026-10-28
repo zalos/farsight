@@ -146,12 +146,13 @@ function unwrapLoad(expression) {
 }
 
 /**
- * Every load in a file whose target the import walk cannot read as one literal specifier, comment lines aside, with
- * its line and its path expression unwrapped (null when its brackets do not close): a dynamic import, require or
- * require.resolve of anything but one literal, a new URL(…, import.meta.url) of a computed path, and a static import
- * generated in a template. Their brackets are followed across lines, so a load split over several is one load.
+ * Every load in a file, comment lines aside, with its line: a dynamic import, a require or require.resolve, a new
+ * URL(…, import.meta.url), and an import generated in a template. Their brackets are followed across lines, so a load
+ * split over several is one load. One whose path is a single literal ('…', "…" or a template with no substitution)
+ * carries it as `literal`, and the walk follows it; any other carries its path expression unwrapped (null when its
+ * brackets do not close). So no load is neither followed nor reported.
  */
-export function computedLoadSites(text) {
+export function loadSites(text) {
   const sites = [];
   for (const match of text.matchAll(LOAD_START)) {
     const lineStart = text.lastIndexOf('\n', match.index) + 1;
@@ -165,13 +166,20 @@ export function computedLoadSites(text) {
     }
     const args = generated ? [`\${${inner}}`] : topLevelArgs(inner);
     const first = args[0] ?? '';
-    if (/^new\s+URL/.test(match[0])) {
-      // a URL against the module is a load; one with another base, or a literal, is not one this walk misses
-      if (args[1] !== 'import.meta.url' || ONE_LITERAL.test(first)) continue;
-    } else if (!first || ONE_LITERAL.test(first)) continue; // `import()` in prose, or a literal the walk follows
-    sites.push({ line, expression: unwrapLoad(first) });
+    // a URL with another base is not a module load; `import()` with nothing in it is prose
+    if (/^new\s+URL/.test(match[0]) ? args[1] !== 'import.meta.url' : !first) continue;
+    const literal = ONE_LITERAL.exec(first);
+    if (literal) sites.push({ line, literal: literal[1] ?? literal[2] ?? literal[3] });
+    else sites.push({ line, expression: unwrapLoad(first) });
   }
   return sites;
+}
+
+/** The loads in a file whose path is not one literal: what `loadSites` cannot hand the walk as a specifier. */
+export function computedLoadSites(text) {
+  return loadSites(text)
+    .filter((site) => site.literal === undefined)
+    .map(({ line, expression }) => ({ line, expression }));
 }
 
 /**
@@ -269,11 +277,36 @@ export function scannerCliClosure(root = repoRoot) {
     for (const pkg of closure) built.add(basename(pkg.dir));
   }
   // A computed load whose target is still one literal, once its wrappers are off: a URL against the module, a
-  // resolved specifier, a file of the installed tarball or a built package by its dist/ path (every built package
-  // with that source counts, whatever the base), or a module the same file writes from a literal (its text is
-  // followed with the file's). Anything else is null: its area is selected.
-  const QUOTED = String.raw`('[^'\n]*'|"[^"\n]*")`;
+  // resolved specifier, a dist/ path joined to a known package root (below), or a module the same file writes from
+  // a literal (its text is followed with the file's). Anything else is null: its area is selected.
+  const QUOTED = String.raw`('[^'\n]*'|"[^"\n]*"|\x60[^\x60$\n]*\x60)`;
   const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // The workspace package a base names, when the file binds it once, to a literal path ending in a package root:
+  // an installed tarball (`join(…, 'node_modules/farsight-sentinel')`) or a workspace folder (`join(root, 'packages',
+  // 'sentinel')`, `join(root, 'packages/sentinel')`). A base bound more than once, or to anything else, is unknown.
+  const packageOf = (text, base) => {
+    if (!/^[\w$]+$/.test(base)) return null;
+    const assigned = new RegExp(
+      String.raw`(?<![\w$.])${escape(base)}\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|\?\?|&&|\|\|)?=(?![=>])\s*([^;\n]*)`,
+      'g',
+    );
+    const bindings = [...text.matchAll(assigned)];
+    if (bindings.length !== 1) return null;
+    const value = bindings[0][1].replace(/[,;]\s*$/, '').trim();
+    const tail = new RegExp(String.raw`^join\(.*?,\s*${QUOTED}(?:\s*,\s*${QUOTED})?\s*\)$`).exec(value);
+    if (!tail) return null;
+    const path = [tail[1], tail[2]]
+      .filter(Boolean)
+      .map((part) => part.slice(1, -1))
+      .join('/');
+    const installed = /^node_modules\/((?:@[\w.-]+\/)?[\w.-]+)$/.exec(path)?.[1];
+    if (installed) {
+      const name = PUBLISHED.get(installed) ?? installed;
+      return packages.has(name) ? dirOf.get(name) : null;
+    }
+    const folder = /^packages\/([\w.-]+)$/.exec(path)?.[1];
+    return folder && built.has(folder) ? `packages/${folder}` : null;
+  };
   const resolveLoad = (source, text, expression) => {
     const url = new RegExp(String.raw`^new\s+URL\(\s*${QUOTED}\s*,\s*import\.meta\.url\s*\)$`).exec(expression);
     const specifier = new RegExp(String.raw`^require\.resolve\(\s*${QUOTED}\s*\)$`).exec(expression);
@@ -283,9 +316,10 @@ export function scannerCliClosure(root = repoRoot) {
     const [, base, literal] = joined;
     const path = literal.slice(1, -1);
     if (path.startsWith('dist/')) {
-      const stem = path.slice('dist/'.length).replace(/\.(?:m?js|d\.ts)$/, '');
-      const found = [...built].map((dir) => sourceOf(root, `packages/${dir}/dist/${stem}.js`)).filter(Boolean);
-      return found.length ? found : null;
+      const pkg = packageOf(text, base); // a dist/ tail counts only under a base known to be a package root
+      const target =
+        pkg && sourceOf(root, `${pkg}/dist/${path.slice('dist/'.length).replace(/\.(?:m?js|d\.ts)$/, '')}.js`);
+      return target ? [target] : null;
     }
     const writes = String.raw`writeFileSync\(\s*join\(\s*${escape(base)}\s*,\s*${escape(literal)}\s*\)\s*,\s*${QUOTED}\s*[,)]`;
     return new RegExp(writes).test(text) ? [] : null;
@@ -308,7 +342,11 @@ export function scannerCliClosure(root = repoRoot) {
     if (!CODE.test(source)) continue;
     const text = readFileSync(join(root, source), 'utf8');
     if (/^(?:scripts|packages\/[^/]+\/(?:test|scripts))\//.test(source)) mentions += `\n${text}`;
-    for (const { line, expression } of computedLoadSites(text)) {
+    for (const { line, literal, expression } of loadSites(text)) {
+      if (literal !== undefined) {
+        queue.push(resolveFrom(source, literal));
+        continue;
+      }
       const targets = expression === null ? null : resolveLoad(source, text, expression);
       if (targets) {
         queue.push(...targets);
