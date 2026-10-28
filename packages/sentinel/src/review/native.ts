@@ -41,6 +41,8 @@ interface NativeOutputSchema {
   readonly id: string;
   /** The schema in words, for the task text. */
   readonly describe: string;
+  /** The same shape as JSON Schema, for a CLI that validates its own output (Claude's `--json-schema`). */
+  readonly jsonSchema: Readonly<Record<string, unknown>>;
   validate(value: unknown, inputs: ReadonlySet<string>, read: ReadonlySet<string>): unknown;
 }
 
@@ -57,6 +59,29 @@ const OBSERVATIONS_V1: NativeOutputSchema = Object.freeze({
     '"claim":"<what the code shows, in one or two sentences>"}],"inspected":["<every input path you read>"]}\n',
     'At most 32 observations. An empty observations list is a valid answer when the code shows nothing.',
   ].join(''),
+  jsonSchema: Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    required: ['observations', 'inspected'],
+    properties: {
+      observations: {
+        type: 'array',
+        maxItems: 32,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['path', 'line', 'kind', 'claim'],
+          properties: {
+            path: { type: 'string' },
+            line: { type: ['integer', 'null'], minimum: 1 },
+            kind: { enum: ['risk', 'note'] },
+            claim: { type: 'string', minLength: 1, maxLength: 2000 },
+          },
+        },
+      },
+      inspected: { type: 'array', maxItems: 1000, items: { type: 'string' } },
+    },
+  }),
   validate(value: unknown, inputs: ReadonlySet<string>, read: ReadonlySet<string>): NativeReviewOutput {
     if (!plain(value) || Object.keys(value).sort().join() !== 'inspected,observations')
       return invalid('the answer is one object with observations and inspected');
@@ -97,16 +122,30 @@ export function nativeOutputSchema(id: string): NativeOutputSchema {
 }
 
 /** The one prompt-mode user message: the inputs, the instructions file and the exact answer shape. */
+/** Where a CLI reads its instructions and skills from, for the task text. */
+export interface NativeTaskLayout {
+  readonly instructions: string;
+  readonly skillsDir: string;
+}
+export const COPILOT_TASK_LAYOUT: NativeTaskLayout = Object.freeze({
+  instructions: 'Follow .github/copilot-instructions.md.',
+  skillsDir: '.github/skills',
+});
+export const CLAUDE_TASK_LAYOUT: NativeTaskLayout = Object.freeze({
+  instructions: 'Follow your system instructions.',
+  skillsDir: '.claude/sentinel-stage/skills',
+});
 export function nativeTask(
   stageId: string,
   paths: readonly string[],
   schema: NativeOutputSchema,
   skills: readonly string[] = [],
+  layout: NativeTaskLayout = COPILOT_TASK_LAYOUT,
 ): string {
   return [
-    `Sentinel stage ${stageId}. Follow .github/copilot-instructions.md.`,
+    `Sentinel stage ${stageId}. ${layout.instructions}`,
     ...(skills.length
-      ? [`Read and apply these skills first: ${skills.map((id) => `.github/skills/${id}/SKILL.md`).join(', ')}.`]
+      ? [`Read and apply these skills first: ${skills.map((id) => `${layout.skillsDir}/${id}/SKILL.md`).join(', ')}.`]
       : []),
     `The files under review, relative to the working directory: ${paths.join(', ')}.`,
     `When you are done, reply with exactly one JSON object and nothing else, matching ${schema.id}:`,
