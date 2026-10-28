@@ -198,6 +198,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'review/providers/sandboxed-cli.js': ['node:child_process', 'node:fs', 'node:fs/promises'],
   // Copilot native mode: the scratch tree is written under the runner's owned root; no process of its own.
   'review/providers/cli-copilot-agent.js': ['node:crypto', 'node:fs/promises', 'node:path'],
+  // Claude native mode: the same scratch tree and shared runner; the token crosses descriptor 3 only.
+  'review/providers/cli-native-agent.js': ['node:crypto', 'node:fs/promises', 'node:path'],
   // Stage packs: owner-promoted prompt and skill bytes, copied into the trust folder and re-checked by digest.
   'review/packs.js': ['node:crypto', 'node:fs', 'node:path'],
   'review/runner.js': ['node:crypto'],

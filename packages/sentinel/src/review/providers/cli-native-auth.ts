@@ -150,3 +150,32 @@ export function discardNativeClaudeToken(token: NativeClaudeToken): void {
   tokens.delete(token);
   held?.bytes.fill(0);
 }
+
+/**
+ * A one-send handle over the owner's long-lived token (from `claude setup-token`, stored by the owner under an
+ * adopted `keychain:farsight/…` reference and read in-process by the broker). Its expiry is not observed here: the
+ * vendor checks it; the handle is valid for the admitted call's deadline only. Printable ASCII, bounded, nothing else.
+ */
+export function nativeClaudeTokenFromSecret(
+  value: string,
+  deadlineAt: number,
+  signal?: AbortSignal,
+): NativeClaudeToken {
+  deadline(deadlineAt, signal);
+  if (
+    typeof value !== 'string' ||
+    !value.length ||
+    Buffer.byteLength(value) > MAX_TOKEN_BYTES ||
+    /[^\x21-\x7e]/.test(value)
+  )
+    throw new NativeCredentialError({
+      schema: 'sentinel-native-auth-refusal/1',
+      phase: 'validate',
+      reason: 'unsupported',
+      osStatus: null,
+    });
+  const expiresAt = deadlineAt + 60_000;
+  const handle = Object.freeze(new Token(expiresAt));
+  tokens.set(handle, { bytes: Buffer.from(value, 'utf8'), expiresAt });
+  return handle;
+}

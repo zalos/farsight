@@ -1,4 +1,5 @@
 // Fixed native login reader. No caller-chosen query, writes, refresh, login or interactive authentication.
+// One argument form besides the read: --probe answers reachability with a fixed literal and never the item.
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 #import <LocalAuthentication/LocalAuthentication.h>
@@ -47,7 +48,10 @@ int main(int argc, const char *argv[]) {
       if (getrlimit(RLIMIT_CORE, &observed) != 0 || observed.rlim_cur != 0 || observed.rlim_max != 0) return 70;
       return output([@"{\"protocol\":\"claude-keychain-token/1\",\"noUi\":true,\"coreDisabled\":true}\n" dataUsingEncoding:NSUTF8StringEncoding]);
     }
-    if (argc != 1) return 64;
+    // --probe: the same no-UI lookup and validation, answering only whether the login is reachable from this
+    // session. The item never leaves this process: nothing but the fixed probe literal is written.
+    bool probe = argc == 2 && strcmp(argv[1], "--probe") == 0;
+    if (argc != 1 && !probe) return 64;
     struct passwd *account = getpwuid(getuid());
     if (!account || !account->pw_name || strlen(account->pw_name) == 0 || strlen(account->pw_name) > 128) return refuse(69,"lookup","unavailable",0,false);
     NSString *name = [NSString stringWithUTF8String:account->pw_name];
@@ -92,6 +96,8 @@ int main(int argc, const char *argv[]) {
       if (![scope isKindOfClass:[NSString class]] || ![known containsObject:scope] || [seen containsObject:scope]) return refuse(65,"validate","unsupported",0,false);
       [seen addObject:scope];
     }
+    if (probe)
+      return output([@"{\"schema\":\"sentinel-native-auth-probe/1\",\"reachable\":true}\n" dataUsingEncoding:NSUTF8StringEncoding]);
     // Whole native JSON (which may contain refresh material) remains only in this short-lived helper.
     // The parent receives only access token + expiry + scopes. No erasure claim is made for framework buffers.
     NSData *result = [NSJSONSerialization dataWithJSONObject:@{@"claudeAiOauth":@{@"accessToken":token,@"expiresAt":expiry,@"scopes":scopes}} options:0 error:nil];
