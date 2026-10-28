@@ -27,18 +27,39 @@ import { COVERAGE_SCHEMA } from './coverage.js';
 import { ExecutionError } from './errors.js';
 import type { AdmittedPlan } from './plans.js';
 
-/** The publication schemas each typed output is, so a consumer is bound to exactly that kind of artifact. */
-export const OUTPUT_SCHEMAS: Readonly<Record<StageOutputType | 'walkthrough', readonly string[]>> = Object.freeze({
-  source: [CAPTURE_RECORD_SCHEMA],
-  parse: [PARSER_RESULT_SCHEMA, PARSER_INDEX_SCHEMA],
-  inventory: [INVENTORY_RECORD_SCHEMA],
-  findings: ['sentinel-driver-finding/draft-1', PREVIEW_FINDINGS_SCHEMA, 'sentinel-paths/draft-1'],
-  coverage: [COVERAGE_SCHEMA],
-  observations: ['sentinel-observation/draft-1'],
-  'walkthrough-md': [PATHS_OUTPUT_SCHEMA],
-  walkthrough: [PATHS_OUTPUT_SCHEMA],
-  report: [],
-});
+/**
+ * The publication schemas each typed output is, so a consumer is bound to exactly that kind of artifact. Built on
+ * first use: the schema constants live in modules that import this one back.
+ */
+let outputSchemas: Readonly<Record<string, readonly string[]>> | undefined;
+export function outputSchemasOf(output: StageOutputType | 'walkthrough' | string): readonly string[] {
+  outputSchemas ??= Object.freeze({
+    source: [CAPTURE_RECORD_SCHEMA],
+    parse: [PARSER_RESULT_SCHEMA, PARSER_INDEX_SCHEMA],
+    inventory: [INVENTORY_RECORD_SCHEMA],
+    findings: ['sentinel-driver-finding/draft-1', PREVIEW_FINDINGS_SCHEMA, 'sentinel-paths/draft-1'],
+    coverage: [COVERAGE_SCHEMA],
+    observations: ['sentinel-observation/draft-1'],
+    'walkthrough-md': [PATHS_OUTPUT_SCHEMA],
+    walkthrough: [PATHS_OUTPUT_SCHEMA],
+    report: [],
+  });
+  return Object.hasOwn(outputSchemas, output) ? outputSchemas[output]! : [];
+}
+
+/** A worker's raw output is recorded under its media type; a JSON document names its own schema inside. */
+const RAW_JSON = 'application/json';
+const MAX_DOCUMENT_BYTES = 4_194_304;
+async function documentSchemaOf(store: SentinelStore, id: string): Promise<string> {
+  try {
+    const bytes = await store.readArtifact(id as ArtifactId);
+    if (bytes.byteLength > MAX_DOCUMENT_BYTES) return '';
+    const value = JSON.parse(new TextDecoder('utf8', { fatal: true }).decode(bytes)) as { schema?: unknown };
+    return typeof value?.schema === 'string' ? value.schema : '';
+  } catch {
+    return '';
+  }
+}
 
 /** The provider kinds whose runner the contract names; the others are recorded as the hosted-API runner. */
 const RUNNER_OF: Readonly<Record<string, AgentRunnerId>> = Object.freeze({
@@ -104,7 +125,7 @@ export async function resolveStageInputs(
     const named = model.stages
       .get(input.stage)!
       .produces?.find((p) => typeof p !== 'string' && p.name === input.output) as { schema: string } | undefined;
-    const schemas = new Set(named ? [named.schema] : (OUTPUT_SCHEMAS[input.output as StageOutputType] ?? []));
+    const schemas = new Set(named ? [named.schema] : outputSchemasOf(input.output));
     const producers: WorkRef[] =
       role.role === 'bootstrap'
         ? admitted.plan.reused.filter(
@@ -118,7 +139,9 @@ export async function resolveStageInputs(
     for (const p of producers) {
       const publication = store.ledger.getPublication(p);
       if (publication) {
-        for (const o of publication.outputs) if (schemas.has(o.schema)) artifacts.add(o.id as ArtifactId);
+        for (const o of publication.outputs)
+          if (schemas.has(o.schema) || (o.schema === RAW_JSON && schemas.has(await documentSchemaOf(store, o.id))))
+            artifacts.add(o.id as ArtifactId);
         continue;
       }
       const row = store.ledger.getWork(p);

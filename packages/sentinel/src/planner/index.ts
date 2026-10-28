@@ -72,6 +72,8 @@ export {
   stagesOfUnits,
   selectStages,
   defaultPipelineOf,
+  planShapeOf,
+  PLAN_SHAPE_KEYS,
 } from './pipeline.js';
 export type {
   StageModel,

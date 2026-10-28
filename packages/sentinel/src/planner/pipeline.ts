@@ -98,7 +98,14 @@ const fail = (
 /** What one declared stage plans. */
 export type StageRole =
   | { readonly role: 'bootstrap'; readonly operation: BootstrapOperation }
-  | { readonly role: 'check'; readonly adapterId: Id; readonly rules: ReadonlySet<string> | null }
+  | {
+      readonly role: 'check';
+      readonly adapterId: Id;
+      /** The rule families it selects; null: every rule of its adapter. */
+      readonly rules: ReadonlySet<string> | null;
+      /** A rule pack selector not yet resolved to rule families (adoption resolves it); planning refuses it. */
+      readonly pack?: string;
+    }
   | { readonly role: 'agent'; readonly review: 'guided' | 'general' | null }
   | { readonly role: 'script' }
   | { readonly role: 'none' };
@@ -125,16 +132,19 @@ export interface StageModel {
 
 const outputName = (o: StageOutputDecl): unknown => (typeof o === 'string' ? o : o?.name);
 
-function rulesOf(id: string, rules: unknown): ReadonlySet<string> {
+function rulesOf(id: string, rules: unknown): { rules: ReadonlySet<string> | null; pack?: string } {
   // A pack selector (`pack:builtin:pattern`) names rule families by their pack; adopting the pipeline resolves it
-  // against the promoted lock. Planning reads only the resolved family list.
-  if (typeof rules === 'string')
-    return fail('sentinel.plan.stageUnavailable', `${id}: rule pack ${rules} is not resolved to rule families`);
+  // against the promoted lock. Planning reads only the resolved family list (declaredAnalysis refuses a selector).
+  if (typeof rules === 'string') {
+    if (!/^pack:[a-z][a-z0-9-]{0,63}:[a-z][a-z0-9-]{0,63}$/.test(rules))
+      return fail('sentinel.plan.pipelineInvalid', `tool stage ${id} names a rule pack that is not a selector`);
+    return { rules: null, pack: rules };
+  }
   if (!Array.isArray(rules) || rules.length === 0 || rules.length > 1024)
     return fail('sentinel.plan.pipelineInvalid', `tool stage ${id} names no rule families`);
   if (rules.some((r) => typeof r !== 'string' || !ID.test(r)))
     return fail('sentinel.plan.pipelineInvalid', `tool stage ${id} names a rule family that is not an id`);
-  return new Set(rules as string[]);
+  return { rules: new Set(rules as string[]) };
 }
 
 function roleOf(s: StageDefinition): StageRole {
@@ -151,7 +161,7 @@ function roleOf(s: StageDefinition): StageRole {
     case 'tool': {
       if (typeof s.adapter !== 'string' || !(ID.test(s.adapter) || Object.hasOwn(TOOL_ADAPTERS, s.adapter)))
         return fail('sentinel.plan.pipelineInvalid', `tool stage ${s.id} names no adapter`);
-      return { role: 'check', adapterId: TOOL_ADAPTERS[s.adapter] ?? s.adapter, rules: rulesOf(s.id, s.rules) };
+      return { role: 'check', adapterId: TOOL_ADAPTERS[s.adapter] ?? s.adapter, ...rulesOf(s.id, s.rules) };
     }
     case 'agent': {
       const fanOut = s.fanOut ?? 'per-run';
@@ -338,6 +348,11 @@ export interface DeclaredAnalysis {
  */
 export function declaredAnalysis(model: StageModel): DeclaredAnalysis {
   for (const [id, role] of model.roles) {
+    if (role.role === 'check' && role.pack !== undefined)
+      throw new PlanError(
+        'sentinel.plan.stageUnavailable',
+        `${id}: rule pack ${role.pack} is not resolved to rule families`,
+      );
     if (role.role === 'script')
       throw new PlanError('sentinel.plan.stageUnavailable', `${id}: a script stage runs only as a host script stage`);
     if (role.role === 'agent' && role.review === null)
@@ -356,7 +371,8 @@ export function declaredAnalysis(model: StageModel): DeclaredAnalysis {
   return Object.freeze({
     stageOfRule(rule: Pick<PlannerRule, 'familyId' | 'adapterId'>) {
       const matching = checkStages.filter(
-        ([, r]) => r.adapterId === rule.adapterId && (r.rules === null || r.rules.has(rule.familyId)),
+        ([, r]) =>
+          r.pack === undefined && r.adapterId === rule.adapterId && (r.rules === null || r.rules.has(rule.familyId)),
       );
       if (matching.length > 1)
         throw new PlanError(
@@ -416,6 +432,7 @@ export function stagesOfUnits(model: StageModel, plan: Pick<PlanRevision, 'units
       const owners = [...model.roles].filter(
         ([, r]) =>
           r.role === 'check' &&
+          r.pack === undefined &&
           r.adapterId === u.adapterId &&
           [...families].every((f) => f !== undefined && (r.rules === null || r.rules.has(f))),
       );
@@ -565,3 +582,27 @@ export function crossStageDependencies(
     for (const u of unitsByStage.get(up) ?? []) refs.set(`${u.id}@${u.revision}`, { id: u.id, revision: u.revision });
   return [...refs.values()];
 }
+
+/** What a revision runs, in the planner's words. */
+export type PlanShape = 'checks-and-review' | 'checks' | 'review-only' | 'bootstrap' | 'nothing';
+
+/**
+ * What a revision runs: deterministic checks, model review, both, the bootstrap, or nothing. A revision that holds
+ * only review units checks nothing deterministically and names no scanner (an agentic-only plan); one with neither
+ * plans nothing. The words are the catalog's `sentinel.plan.shape.*`.
+ */
+export function planShapeOf(plan: Pick<PlanRevision, 'kind' | 'units'>): PlanShape {
+  if (plan.kind === 'bootstrap') return 'bootstrap';
+  const checks = plan.units.some((u) => !u.review);
+  const reviews = plan.units.some((u) => u.review);
+  return checks && reviews ? 'checks-and-review' : checks ? 'checks' : reviews ? 'review-only' : 'nothing';
+}
+
+/** The catalog key of a plan shape's words. */
+export const PLAN_SHAPE_KEYS: Readonly<Record<PlanShape, string>> = Object.freeze({
+  'checks-and-review': 'sentinel.plan.shape.checksAndReview',
+  checks: 'sentinel.plan.shape.checks',
+  'review-only': 'sentinel.plan.shape.reviewOnly',
+  bootstrap: 'sentinel.plan.shape.bootstrap',
+  nothing: 'sentinel.plan.shape.nothing',
+});
