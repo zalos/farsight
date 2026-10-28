@@ -39,7 +39,7 @@ import { PREVIEW_DETECTOR_ID, runPreviewWorker } from './adapters/preview-detect
 import { adoptScannerAsset, acquireScannerDatabase } from './service/scanner-assets.js';
 import { CAPABILITIES } from './capabilities.js';
 import { parseArgs, plannedIn, COMMANDS, type ParsedCommand } from './cli/args.js';
-import { initWorkspace, InitError } from './cli/init.js';
+import { initWorkspace, InitError, PROFILE_PACKS } from './cli/init.js';
 import { result, type CommandResult } from './cli/outcome.js';
 import { ENVELOPES, ENVELOPE_KINDS, MAX_ENVELOPE_BYTES, type EnvelopeKind } from './contracts/index.js';
 import { parseEnvelope } from './validate.js';
@@ -240,11 +240,14 @@ function init(p: ParsedCommand): number {
     errOut(word(e.code, { detail: e.detail }));
     return finish(result('init', 'refused', { reasonCode: e.code, facts: { workspace } }));
   }
+  const file = (f: typeof done.settings) => ({ outcome: f.outcome, path: f.path, digest: f.digest, holds: f.holds });
   const facts = {
     path: done.path,
     digest: done.digest,
     profile: done.profile,
     recognised: done.recognised,
+    settings: file(done.settings),
+    pipeline: file(done.pipeline),
     downloads: 0,
     scansStarted: 0,
   };
@@ -252,13 +255,40 @@ function init(p: ParsedCommand): number {
     errOut(word('sentinel.init.unrecognised'));
     return finish(result('init', 'refused', { reasonCode: 'sentinel.init.unrecognised', facts }));
   }
+  if (!done.pipeline.recognised) {
+    errOut(word('sentinel.init.pipelineUnrecognised'));
+    return finish(result('init', 'refused', { reasonCode: 'sentinel.init.pipelineUnrecognised', facts }));
+  }
   if (!jsonOut) {
-    out(word(done.outcome === 'prepared' ? 'sentinel.init.created' : 'sentinel.init.kept', { path: done.path }));
+    // A kept file is used as it is: say which profile it holds when that is not the one asked for.
+    const holds = (f: typeof done.settings) => {
+      if (f.outcome === 'prepared' || f.holds === done.profile) return;
+      out(
+        f.holds === null
+          ? word('sentinel.init.edited')
+          : word('sentinel.init.holdsOther', { holds: f.holds, profile: done.profile }),
+      );
+    };
+    out(
+      word(done.settings.outcome === 'prepared' ? 'sentinel.init.created' : 'sentinel.init.kept', { path: done.path }),
+    );
+    holds(done.settings);
+    out(
+      done.pipeline.outcome === 'prepared'
+        ? word('sentinel.init.pipelineCreated', { path: done.pipeline.path, profile: done.profile })
+        : word('sentinel.init.kept', { path: done.pipeline.path }),
+    );
+    holds(done.pipeline);
     out(word('sentinel.init.profile', { profile: done.profile }));
     out(word('sentinel.init.prerequisites'));
     out(word('sentinel.init.credentials'));
     out(word('sentinel.init.noEffects'));
-    out(word('sentinel.init.next'));
+    const packs = PROFILE_PACKS[done.profile as keyof typeof PROFILE_PACKS] ?? [];
+    out(
+      word('sentinel.init.next', {
+        packs: packs.map((p) => `rules promote builtin:${p} --confirm`).join('; '),
+      }),
+    );
   }
   return finish(result('init', done.outcome, { facts }));
 }

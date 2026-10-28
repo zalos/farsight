@@ -99,6 +99,8 @@ export const ENVELOPES = {
   instructions: { schema: 'sentinel-review-instructions/draft-1', type: 'ReviewInstructionsEnvelope' },
   reviewrequest: { schema: 'sentinel-review-request/draft-1', type: 'ReviewRequestEnvelope' },
   review: { schema: 'sentinel-review-record/draft-1', type: 'ReviewRecordEnvelope' },
+  pipeline: { schema: 'sentinel-pipeline/draft-1', type: 'PipelineDefinition' },
+  pipelineadoption: { schema: 'sentinel-pipeline-adoption/draft-1', type: 'PipelineAdoptionEnvelope' },
 } as const;
 
 export type EnvelopeKind = keyof typeof ENVELOPES;

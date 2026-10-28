@@ -10,6 +10,7 @@ export const COMMANDS = {
   validate: null,
   init: null,
   settings: null,
+  pipeline: null,
   plan: null,
   paths: null,
   run: null,
@@ -60,6 +61,11 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   validate: { flags: COMMON, positional: ['kind', 'file'], min: 2 },
   init: { flags: { ...COMMON, '--workspace': 'value', '--profile': 'value' }, positional: [], min: 0 },
   settings: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action'], min: 1 },
+  pipeline: {
+    flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--file': 'value' },
+    positional: ['action'],
+    min: 1,
+  },
   plan: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: [], min: 0 },
   paths: {
     flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--request': 'value' },
@@ -232,6 +238,13 @@ export function parseArgs(argv: readonly string[]): ParseResult {
   spec.positional.forEach((p, i) => {
     if (positional[i] !== undefined) args[p] = positional[i]!;
   });
+  if (command === 'pipeline') {
+    const allowed: Record<string, string[]> = { show: [], validate: ['--file'], adopt: ['--confirm'] };
+    if (!Object.hasOwn(allowed, args.action!)) return fail('sentinel.args.unexpectedArgument', String(args.action));
+    for (const flag of Object.keys(flags))
+      if (!['--json', '--workspace', ...allowed[args.action!]!].includes(flag))
+        return fail('sentinel.args.unknownFlag', flag);
+  }
   if (command === 'decision') {
     const common = ['--json', '--workspace'];
     const allowed: Record<string, string[]> = {

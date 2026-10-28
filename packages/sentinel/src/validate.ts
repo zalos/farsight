@@ -58,6 +58,8 @@ import type {
   ReviewRecordEnvelope,
   ReviewInstructionsEnvelope,
   ReviewRequestEnvelope,
+  PipelineDefinition,
+  PipelineAdoptionEnvelope,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
 import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf, reviewUnitIdOf } from './planner/identity.js';
@@ -110,6 +112,9 @@ export interface EnvelopeTypes {
   review: ReviewRecordEnvelope;
   instructions: ReviewInstructionsEnvelope;
   reviewrequest: ReviewRequestEnvelope;
+  // The declared pipeline (contracts/pipeline.ts). Its cross-stage checks are app/pipeline.ts's checkPipeline.
+  pipeline: PipelineDefinition;
+  pipelineadoption: PipelineAdoptionEnvelope;
 }
 
 /** Stable error codes; message text is safe context, never raw input. */
@@ -1434,6 +1439,10 @@ const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
 
   instructions,
   reviewrequest,
+  pipeline: () => [],
+  pipelineadoption: (v, out) => {
+    if (!v.workspacePath.startsWith('/')) out.add(err('/workspacePath', 'the workspace path is absolute'));
+  },
 };
 
 /**
