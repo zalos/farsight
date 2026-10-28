@@ -59,6 +59,8 @@ test('pnpm keeps its exact recursive and filtered commands; npm propagates the f
     runRoot('pack:cli', { root, env, run });
     assert.deepEqual(calls.pop(), [process.execPath, [env.npm_execpath, 'run', 'pack:cli']]);
     const npm = { npm_execpath: '/manager/npm-cli.js', npm_config_user_agent: 'npm/10.9.4' };
+    runRoot('pack:sentinel', { root, env: npm, run });
+    assert.deepEqual(calls.pop(), [process.execPath, [npm.npm_execpath, 'run', 'pack:sentinel']]);
     assert.equal(
       runWorkspace('build', undefined, {
         root,

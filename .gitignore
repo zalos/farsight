@@ -43,4 +43,4 @@ e2e/perf/results.json
 e2e/perf/test-results/
 
 # npm is a supported local build path; pnpm-lock.yaml remains the only committed lockfile.
-package-lock.json
+/package-lock.json
