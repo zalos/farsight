@@ -1,0 +1,378 @@
+{
+  "scanners": {
+    "bootstrap": {
+      "kind": "bootstrap",
+      "digest": "sha256:ea3d66b90ff708acfe0adfc96d1a5f156ce2ef9f2129e88e31cc4ffc7dc180fb",
+      "units": [
+        {
+          "id": "work-capture-83f4cdcc56242b20b0cd9529",
+          "stage": "capture",
+          "adapterId": "sentinel-capture",
+          "inputFingerprint": "sha256:28e5ea3c3043ddfe0644bb1e7809e1f0263cb7757ed927d3f5303efb25544158",
+          "inputSetDigest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "checks": 0
+        },
+        {
+          "id": "work-parse-c7a8b3edca08586379ab6f3e",
+          "stage": "parse",
+          "adapterId": "sentinel-parse",
+          "inputFingerprint": "sha256:ad4b659f433fb892b1a6aa7eaad925c9b0afbbf735dc1a5df7b752b95cbb10df",
+          "inputSetDigest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "checks": 0
+        },
+        {
+          "id": "work-inventory-26ea2dfb42485ab959daf716",
+          "stage": "inventory",
+          "adapterId": "sentinel-inventory",
+          "inputFingerprint": "sha256:0eb4074fc77eed840dab2c31b94bcd213e6aa9ad83f92d9a1bac8fe5c0bb77c5",
+          "inputSetDigest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "checks": 0
+        }
+      ],
+      "checks": {
+        "planned": 0,
+        "unsupported": 0,
+        "applicability-unknown": 0,
+        "scope-unavailable": 0,
+        "scope-unknown": 0
+      }
+    },
+    "analysis": {
+      "kind": "analysis",
+      "digest": "sha256:47b0d8b4af74540246ef936d1c69462062e9e401c3b0763b0dec3319512a1962",
+      "units": [
+        {
+          "id": "work-check-1feb80fae2555cbfa7befbfd",
+          "stage": "check",
+          "adapterId": "advisories-osv",
+          "inputFingerprint": "sha256:e081c96a3b7bd45f476eb6e8ddfe6c60010c0c87405f25eabde6c5a4c4fe853d",
+          "inputSetDigest": "sha256:92b365fe9a10b2e567d7a0bae21ffe2f6b7d661db298dda5574cbfd66fa8187b",
+          "checks": 1
+        },
+        {
+          "id": "work-check-5094c54ebeee9551df31bc8f",
+          "stage": "check",
+          "adapterId": "secrets-gitleaks",
+          "inputFingerprint": "sha256:07152bd73409527a194149b7d6bdf2427891f8c78a286a60a75fa222df0d8e2d",
+          "inputSetDigest": "sha256:4cf1bf94ab18cc8f45dc1bb167330bba1de56ed3b99c1768553187377091aaa3",
+          "checks": 1
+        },
+        {
+          "id": "work-check-71f6710faacaf3c2e7a0bec8",
+          "stage": "check",
+          "adapterId": "pattern-semgrep",
+          "inputFingerprint": "sha256:4415698b7c8992de38912a48e35fee8740e67feaac5cd2d760926976674a57b3",
+          "inputSetDigest": "sha256:cf64d5b8eb92d2095afeb1d4b6a237ecbf7d27affa3659192042264ae2edfb2a",
+          "checks": 60
+        },
+        {
+          "id": "work-check-d026ec462d13c7452f7bd95b",
+          "stage": "check",
+          "adapterId": "iac-trivy",
+          "inputFingerprint": "sha256:ea4a2cd41eed4621802f55d22fd72a0e274af7ff4c9455054924ae2eeb39cfc6",
+          "inputSetDigest": "sha256:5c302835c2beb03bfaf2fd5ec3f9883872b3e24fa4aaa3c5060c5554a2719a75",
+          "checks": 1
+        }
+      ],
+      "checks": {
+        "planned": 63,
+        "unsupported": 0,
+        "applicability-unknown": 0,
+        "scope-unavailable": 1,
+        "scope-unknown": 0
+      }
+    }
+  },
+  "static": {
+    "bootstrap": {
+      "kind": "bootstrap",
+      "digest": "sha256:ea3d66b90ff708acfe0adfc96d1a5f156ce2ef9f2129e88e31cc4ffc7dc180fb",
+      "units": [
+        {
+          "id": "work-capture-83f4cdcc56242b20b0cd9529",
+          "stage": "capture",
+          "adapterId": "sentinel-capture",
+          "inputFingerprint": "sha256:28e5ea3c3043ddfe0644bb1e7809e1f0263cb7757ed927d3f5303efb25544158",
+          "inputSetDigest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "checks": 0
+        },
+        {
+          "id": "work-parse-c7a8b3edca08586379ab6f3e",
+          "stage": "parse",
+          "adapterId": "sentinel-parse",
+          "inputFingerprint": "sha256:ad4b659f433fb892b1a6aa7eaad925c9b0afbbf735dc1a5df7b752b95cbb10df",
+          "inputSetDigest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "checks": 0
+        },
+        {
+          "id": "work-inventory-26ea2dfb42485ab959daf716",
+          "stage": "inventory",
+          "adapterId": "sentinel-inventory",
+          "inputFingerprint": "sha256:0eb4074fc77eed840dab2c31b94bcd213e6aa9ad83f92d9a1bac8fe5c0bb77c5",
+          "inputSetDigest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "checks": 0
+        }
+      ],
+      "checks": {
+        "planned": 0,
+        "unsupported": 0,
+        "applicability-unknown": 0,
+        "scope-unavailable": 0,
+        "scope-unknown": 0
+      }
+    },
+    "analysis": {
+      "kind": "analysis",
+      "digest": "sha256:9874ae5eb19a491977f65b5b0c91b09752a2d9f322978234f6b4c1107fd80514",
+      "units": [
+        {
+          "id": "work-check-039e67fe66f6a36aed983f68",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:cec8741406005b3aea0f3e7072fa3499abd43209619396b34265d46a007912f3",
+          "inputSetDigest": "sha256:31005a9e0ee5d72be4fa43c3cd7c12aa3c15974e8881205bb2da550a6e65eb73",
+          "checks": 1
+        },
+        {
+          "id": "work-check-041cbc4bfe44797ea3a2622c",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:4bc72e6cf9b952cef362d5e431eedb52dd7e3eb000b4b1afcb2a1ac6e0807eb8",
+          "inputSetDigest": "sha256:1faec0bb8c1e63748c81959bf9686187e3e76b491fe42e8aa1bb99d10aa2b361",
+          "checks": 1
+        },
+        {
+          "id": "work-check-08a0b5b89e4618888be8962c",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:7b47e9eaf9a6c5e7c2719f0b8a22b9ab93e2437a059290e0e1be92565e654e90",
+          "inputSetDigest": "sha256:e57b82f9035b867002da94fff83d070a955691487d7afcb0363bd37a2fe9c272",
+          "checks": 1
+        },
+        {
+          "id": "work-check-0b92e0b58865c10cc241f71e",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:4a8e5feb2e246884f217c26362eb35193a9b37723b9a0e0d89f68327105949e6",
+          "inputSetDigest": "sha256:20545e4d9f72b27a648ca382d91fa1f01319a8e893455c80de6b33914c1165d5",
+          "checks": 1
+        },
+        {
+          "id": "work-check-19abe40e4b6201eef5db5e09",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:cce38c7913ddb2bd01442e229d8d644b15dd60435baaba71829d91b964f0dffe",
+          "inputSetDigest": "sha256:4cf451473305384730e4c140d5fef17929f8086de6a511d5481cf9ea6c8a3fac",
+          "checks": 1
+        },
+        {
+          "id": "work-check-1bbc8c15d8ae6246f4c204ef",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:67f3ec0354cf5f45094be0bfd7f5a6eb0131b1f1c7f32af5a682f925ff42b270",
+          "inputSetDigest": "sha256:d1892744137b4854b0750553bf858d4776e55ed548da7a2838178b049bd192ec",
+          "checks": 1
+        },
+        {
+          "id": "work-check-1d781ab811a3ab07b0669b05",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:881459a763c6d918ca26f986a32f20edf3ea8f14270c98d3b7a6cba9c6e2a77b",
+          "inputSetDigest": "sha256:b2da760102baef390225f52a717425406e6c350b0f0eeb029fb9631f15a86505",
+          "checks": 1
+        },
+        {
+          "id": "work-check-271cafb2ba72ae33f8c0ac2f",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:614036d4a75e0ec9e0b6eff9c740dc3f397d7f3060eca6758cdb8ffd629781da",
+          "inputSetDigest": "sha256:7488576f7a91c610275275b885dcab0a3bda430ee379ade1b3c515f94558f165",
+          "checks": 1
+        },
+        {
+          "id": "work-check-288f82ee257f188a07dac2dd",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:43b8d0a0fbe1e23ebac294e44585367003270df0113a09994eac22e2dfa269c6",
+          "inputSetDigest": "sha256:c50bb5376f0ce7d0c20d4c7666e6b59528aa2f56528eea1578b9e11f09f0dc3a",
+          "checks": 1
+        },
+        {
+          "id": "work-check-2a7ff9f26d32034832477d17",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:07e1243ed20698520fbcc5b132f43d2ada54bb532ef2835a0837b3140881e5c5",
+          "inputSetDigest": "sha256:9f38ea1eac2ab59a4494e315d00eb0450b2203caccec7f468fa73fb5ed909b32",
+          "checks": 1
+        },
+        {
+          "id": "work-check-2aa57234f23b19944aea1109",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:1ef58f412f2ed27cc2b5cccbe6d2cbdb4d62d3a1d8aad0027f59617cc681ef91",
+          "inputSetDigest": "sha256:d4768ab59437c9836a1ab6ff8c772dd56cdebf0da2fe0d0488213693fc74f5e5",
+          "checks": 1
+        },
+        {
+          "id": "work-check-2e0e77cb1532a6faae3474cc",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:0897fa28de5d0a9ef47d9ef1dbc10444358e97d987b926980ca0d0853361aa98",
+          "inputSetDigest": "sha256:63193c8a9174c39a02ea47542f2f1b2f149dd8dd585138e6e4dc030fbb53823e",
+          "checks": 1
+        },
+        {
+          "id": "work-check-3b062a6307aad6018458c244",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:3b6dbe62987e2296b504023193a890683d533759c76d8181c389b6e5d22592a2",
+          "inputSetDigest": "sha256:eabc4c92928485d6b2a7bc1b0faf040a858f7fae3601a3b6ee2e87fffcdbd5f9",
+          "checks": 1
+        },
+        {
+          "id": "work-check-3ef7b3a2dac36a8c0d16bf42",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:4d9b72e5502e8a365842c1f10a4a24cc54fe02512d55e50e2fceb81f153fc83c",
+          "inputSetDigest": "sha256:e3e0bf34005266a5dfeac1187a56cfca10cd89db8ac0b5781ea8ffad4bb2ff28",
+          "checks": 1
+        },
+        {
+          "id": "work-check-44f01e7e38dd6ac79beabd34",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:394a72d3164ab34a00cb30bb134149df5c696646aa2655f85148db0a9c320763",
+          "inputSetDigest": "sha256:923f382f5a6ae3acec455e026aa10e08081a8421745056be55adf283ac5e5480",
+          "checks": 1
+        },
+        {
+          "id": "work-check-49a22685c4bcd1a1638d246b",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:77893f05173da7214dae30065ee8f7edc276c04fe5e7f203333f8a52d1b69dca",
+          "inputSetDigest": "sha256:0acb504a1e9805dbf49cebac3dae554dad2f8dd495b587898198d511ab75b6cb",
+          "checks": 1
+        },
+        {
+          "id": "work-check-4ae23bf5c306b814fca54fea",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:7ce6da102a31eb6ae3a5b08e00d364202a1b1b4e561ecfe6ebb7f4f33e873e0c",
+          "inputSetDigest": "sha256:f53a12b363393132a95d53b3d67258040305cf58c08fe7be4666f10d39b8b081",
+          "checks": 1
+        },
+        {
+          "id": "work-check-5d889cb193cde0b090c0c28a",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:dc47012c0894455a89fc3b63a845b177887d55f210dad75766d34bef13aae1f8",
+          "inputSetDigest": "sha256:0a271c2824f737546b66de2d811a48646de0a20c6661ebb0d35c881bebca0410",
+          "checks": 1
+        },
+        {
+          "id": "work-check-5eddeef7de6e6ed9a0967967",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:bd5ded2499c948710f3e5ed2882c675597b59df16652f0f0ee4ff8a9f7ff847c",
+          "inputSetDigest": "sha256:f2a246abbcad9e21f8e38ca8d195f22b1545b79a973a680e268ffc5c78cb4a15",
+          "checks": 1
+        },
+        {
+          "id": "work-check-6148ceebe192da22f79d3825",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:006726238b3a98f5768a611f25302b39bc39dbefb66ddd71a9010a5766d58efb",
+          "inputSetDigest": "sha256:f56d678a11949c900dfae1bebfe4303039ed1f255ed676cfbe15d44c9b985a16",
+          "checks": 1
+        },
+        {
+          "id": "work-check-6810140729cf3c3e9a0df3b9",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:7b983edd402b6a5ba1c7292e7396c3c42d55dc616926d51bd91da0f367f5151f",
+          "inputSetDigest": "sha256:bc5025f5f2f0f609f7ed9e964e67e096cc583466f7b3db8c5b963d82e3942a35",
+          "checks": 1
+        },
+        {
+          "id": "work-check-6d1af29fafcfb1a12eb080e5",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:314154ebe6045e7037cd35deef67966003f3f744713f0d4cf88a04b0aa05136e",
+          "inputSetDigest": "sha256:11c048772a23b4e637d38d03d3823d3a7a96109e8aa6b2dce70b6a3aabea6444",
+          "checks": 1
+        },
+        {
+          "id": "work-check-8b70aaf677f3884954c5b7bf",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:7670d75d42a977c880f8523954163934c2ba8142b454db656c6ec975c03ddc20",
+          "inputSetDigest": "sha256:ef2805981b17acde4e5edc7b611e1389c5c0f504d1e44cc67753fb97a1fdf4db",
+          "checks": 1
+        },
+        {
+          "id": "work-check-8e207e551d952b7c7eebc307",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:e8f4f7bce03ccf5e2dc398c138a99558f7c9ca0773c1a883d74e70175010ac71",
+          "inputSetDigest": "sha256:af9decc75076bfb9db49085887a699b76b9811dbd8fede1ed9ab86f3f6cbf9c1",
+          "checks": 1
+        },
+        {
+          "id": "work-check-97daaf06661bd21dbc6fbb92",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:e2f5da9257fd9e17b031bd2c5066592f7c5fe6284bac65a7d4cec5852579b403",
+          "inputSetDigest": "sha256:f3579d42aabb8156b918456f11621da8d401c0b02ddf124dcb730a78b12628a8",
+          "checks": 1
+        },
+        {
+          "id": "work-check-a96ee839989517c148756d4b",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:d3bd0f1cec8953e7a14db63319bdd92645afc2fe1ba4405f744c98327a715980",
+          "inputSetDigest": "sha256:ad0271da3ba20bfec52335df10d95b47da3562ddbccde62963fbdec01011e156",
+          "checks": 1
+        },
+        {
+          "id": "work-check-ab1fbd7770e72a6caa7598cb",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:8b31db0af5453d0ff682c5b888f2e76218232b2427a446ff0320d350ca153423",
+          "inputSetDigest": "sha256:94b13a9c733a793baba62dc7226730e3f30106920375a6ae5458d9ae1aee6e27",
+          "checks": 1
+        },
+        {
+          "id": "work-check-b479d84a2307c543076cd80b",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:014c54c2b13b157ba93157811220a0d27925ac550bd3c8d4e50f9d795be58e73",
+          "inputSetDigest": "sha256:8e3d73150644d535ba001e1fa2ab3c9facf5b6adf527c4c5b6f17ebe8a128ed2",
+          "checks": 1
+        },
+        {
+          "id": "work-check-bacc689243f917b959f7fc32",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:44c19f8a94df4cff051a7b07a9b97049ee669ae8e8d41ae5fcddc79fb5451254",
+          "inputSetDigest": "sha256:caa7c2f90d5dd22b1a1cee4589fffb646d9fd3c2c262a2734fdff03e4dd03307",
+          "checks": 1
+        },
+        {
+          "id": "work-check-c6dc9f2f447b32e6b443ab43",
+          "stage": "check",
+          "adapterId": "sentinel.preview.detector",
+          "inputFingerprint": "sha256:aee02f7908636fb59215380d6b92733af49f8c9bdefed25e98cbc8029004692b",
+          "inputSetDigest": "sha256:28b0ef68cef86de5f2bcf521cb92ced8a03a1c7e0415a2d2800ff0032f0076c8",
+          "checks": 1
+        }
+      ],
+      "checks": {
+        "planned": 30,
+        "unsupported": 0,
+        "applicability-unknown": 0,
+        "scope-unavailable": 0,
+        "scope-unknown": 0
+      }
+    }
+  }
+}

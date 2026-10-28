@@ -28,6 +28,7 @@ export const PLAN_REASON_CODES = Object.freeze([
   'sentinel.plan.coverageConflict',
   'sentinel.plan.coverageTooCoarse',
   'sentinel.plan.ruleNotLocked',
+  'sentinel.plan.stageNotDeclared',
 ] as const);
 export type PlanReasonCode = (typeof PLAN_REASON_CODES)[number];
 
@@ -39,6 +40,12 @@ export const PLAN_ERROR_CODES = Object.freeze([
   'sentinel.plan.tooManyChecks',
   'sentinel.plan.tooMuchWork',
   'sentinel.plan.pinMismatch',
+  'sentinel.plan.pipelineInvalid',
+  'sentinel.plan.stageUnknown',
+  'sentinel.plan.stageCycle',
+  'sentinel.plan.stageAmbiguous',
+  'sentinel.plan.stageUnavailable',
+  'sentinel.plan.agentStageMissing',
 ] as const);
 export type PlanErrorCode = (typeof PLAN_ERROR_CODES)[number];
 
