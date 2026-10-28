@@ -5,7 +5,7 @@
 //
 // The receipt is a `settings.adopt` receipt for the pipeline's digest and a target naming the pipeline: the same owner
 // action and the same three verdicts as the settings, and an intent the settings' own adoption can never match.
-import { realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
   ActionIntent,
@@ -164,20 +164,12 @@ export function loadPipeline(options: {
   }
   if (!read) return { trust: 'missing' };
   const dir = trustFolder(options.trustDir, ws, options.readOnly === true);
-  let recordBytes: Buffer | undefined;
-  try {
-    recordBytes = readPrivateFile(
-      join(realpathSync.native(dir), adoptionFile(ws)),
-      64 * 1024,
-      'sentinel.policy.trustDirUnsafe',
-      {
+  // A read-only caller never creates the trust folder: without one, nothing was adopted here.
+  const recordBytes = existsSync(dir)
+    ? readPrivateFile(join(realpathSync.native(dir), adoptionFile(ws)), 64 * 1024, 'sentinel.policy.trustDirUnsafe', {
         repairTemporaryAliases: options.readOnly !== true,
-      },
-    );
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') recordBytes = undefined;
-    else throw e;
-  }
+      })
+    : undefined;
   if (!recordBytes) return { trust: 'not-adopted', read };
   let record: unknown;
   try {

@@ -254,6 +254,44 @@ test('init writes the private settings once and never again; it downloads and st
   assert.deepEqual(readFileSync(join(ws2, '.farsight/sentinel/settings.json')), before);
 });
 
+test('init, as an owner reads it: both files, which profile a kept file holds, and the next commands without a PR', (t) => {
+  const ws = scratch(t);
+  const env = { ...process.env, XDG_STATE_HOME: scratch(t, 'sentinel-state-') };
+  const run = (args: string[]) =>
+    spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', cwd: ws, env, timeout: 20_000 });
+  const first = run(['init', '--profile', 'agentic']);
+  assert.equal(first.status, 0, first.stderr);
+  assert.match(first.stdout, /created .*settings\.json/);
+  assert.match(first.stdout, /created .*pipeline\.json from the agentic profile/);
+  assert.match(first.stdout, /settings adopt --confirm/);
+  assert.match(first.stdout, /rules promote builtin:secrets --confirm; rules promote builtin:pattern --confirm/);
+  assert.doesNotMatch(first.stdout, /\bPR \d/);
+  const other = run(['init', '--profile', 'scanners', '--json']);
+  assert.equal(other.status, 0, other.stderr);
+  const facts = JSON.parse(other.stdout).facts;
+  assert.deepEqual(
+    [facts.settings.outcome, facts.settings.holds, facts.pipeline.outcome, facts.pipeline.holds],
+    ['kept', 'agentic', 'kept', 'agentic'],
+  );
+  const human = run(['init', '--profile', 'scanners']);
+  assert.match(human.stdout, /it holds the agentic profile, not scanners/);
+  // The pipeline commands read and check what init wrote; nothing runs.
+  const shown = run(['pipeline', 'show', '--json']);
+  assert.equal(shown.status, 0, shown.stderr);
+  const view = JSON.parse(shown.stdout).facts;
+  assert.deepEqual([view.trust, view.id, view.stages], ['not-adopted', 'default', 9]);
+  assert.ok(view.problems.some((p: { code: string }) => p.code === 'sentinel.pipeline.unknownPack'));
+  assert.equal(run(['pipeline', 'validate']).status, 0, 'its own meaning is sound');
+  const adopt = run(['pipeline', 'adopt']);
+  assert.equal(adopt.status, 3, 'a pipeline naming packs that are not promoted is not adopted');
+  assert.match(adopt.stderr, /names a pack that is not there/);
+  const waiting = run(['settings', 'adopt']);
+  assert.equal(waiting.status, 4);
+  assert.match(waiting.stdout, /to confirm as the owner: farsight-sentinel settings adopt --confirm/);
+  assert.equal(parseArgs(['pipeline', 'adopt', '--file', 'x']).ok, false, 'adopt reads the workspace file only');
+  assert.equal(parseArgs(['pipeline', 'remove']).ok, false);
+});
+
 test('init refuses an unsafe path or an unknown profile and leaves a foreign file as it is', (t) => {
   const ws = scratch(t);
   assert.throws(

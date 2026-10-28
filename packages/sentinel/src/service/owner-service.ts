@@ -52,6 +52,7 @@ import {
   runStateIn,
   statusIn,
   checkWorkspaceLayout,
+  writeWorkspacePipeline,
   type Workspace,
 } from './local.js';
 import { assertSupportedRules, canonicalResult, currentPlan, rerunEnvelopeOf } from './canonical.js';
@@ -101,6 +102,7 @@ interface ActiveRun {
 }
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const MAX_WAIT_MS = 25_000;
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const codeOf = (e: unknown) => {
@@ -307,6 +309,19 @@ export class OwnerService {
       }
       case 'report':
         return reportIn(this.#store, this.#ws, { runId: fields(body, ['runId']).runId as string, now: this.#now() });
+      case 'pipeline.write': {
+        // Validate, write and preview the workspace's pipeline file; never adopt, never run. Any service client may
+        // ask: the file grants nothing until the owner adopts it, and a concurrent edit is refused, not overwritten.
+        if (this.#stopping) throw new ServiceError('sentinel.service.requestInvalid');
+        if (
+          !isRecord(body) ||
+          Object.keys(body).some((k) => k !== 'pipeline' && k !== 'expectDigest') ||
+          !isRecord(body.pipeline) ||
+          !(body.expectDigest === null || (typeof body.expectDigest === 'string' && DIGEST.test(body.expectDigest)))
+        )
+          throw new ServiceError('sentinel.service.requestInvalid');
+        return writeWorkspacePipeline(this.#ws, body.pipeline, body.expectDigest as string | null);
+      }
       default:
         throw new ServiceError('sentinel.service.unknownOperation');
     }

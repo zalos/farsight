@@ -14,7 +14,7 @@ import { publicRegistry } from './scanner-profile.js';
 // service (owner-service.ts) reuses the store-level reads below; it holds the store while it runs.
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { ActionEffect, ActionIntent, AdmissionEnvelope } from '../contracts/index.js';
 import {
   adoptSettings,
@@ -30,7 +30,16 @@ import {
 } from '../policy/index.js';
 import { issueReceipt } from '../policy/owner-receipts.js';
 import { assertTrustOutside } from '../policy/adoption.js';
-import { checkPipeline, PipelineError, type PipelineEnvironment, type PipelineProblem } from '../app/pipeline.js';
+import {
+  checkPipeline,
+  MAX_PIPELINE_BYTES,
+  parsePipeline,
+  PipelineError,
+  PIPELINE_PATH,
+  type PipelineEnvironment,
+  type PipelineProblem,
+} from '../app/pipeline.js';
+import { readCheckoutFile, writePrivateFileAtomic } from '../policy/user-state.js';
 import { adoptPipeline, loadPipeline, NO_PACKS, pipelineAdoptionIntent } from '../app/pipeline-adoption.js';
 import { builtinRulePack, shippedCheckAdapters } from './trusted-profile.js';
 import {
@@ -414,6 +423,50 @@ export function showWorkspacePipeline(ws: Workspace): CommandResult {
       digest,
       problems: checkPipeline(pipeline, pipelineEnvironment(ws, adoptedOrNull(ws))),
     },
+  });
+}
+
+/**
+ * `pipeline.write` (the browser's editor): validate a pipeline, write it as the workspace's pipeline file, and preview
+ * what adopting it would pin. It never adopts and never runs: the file grants nothing until the owner adopts it.
+ * `expectDigest` is the file digest the caller last read (null: there was no file), so a concurrent edit is refused
+ * rather than overwritten. A pipeline with a refused problem is not written.
+ */
+export function writeWorkspacePipeline(ws: Workspace, pipeline: unknown, expectDigest: string | null): CommandResult {
+  const bytes = Buffer.from(`${JSON.stringify(pipeline, null, 2)}\n`, 'utf8');
+  let problems: readonly PipelineProblem[];
+  try {
+    problems = checkPipeline(parsePipeline(bytes), pipelineEnvironment(ws, adoptedOrNull(ws)));
+  } catch (e) {
+    if (!(e instanceof PipelineError)) throw e;
+    return result('pipeline.write', 'configuration-failure', { reasonCode: e.code, facts: { detail: e.detail } });
+  }
+  const refused = problems.find((p) => p.class === 'refused');
+  if (refused)
+    return result('pipeline.write', 'configuration-failure', {
+      reasonCode: refused.code,
+      facts: { problems, written: false },
+    });
+  const path = join(ws.path, PIPELINE_PATH);
+  let current: Buffer | undefined;
+  try {
+    current = readCheckoutFile(path, MAX_PIPELINE_BYTES, 'sentinel.policy.settingsUnreadable', { nonblocking: true });
+    if ((current === undefined ? null : sha(current)) !== expectDigest)
+      return result('pipeline.write', 'configuration-failure', {
+        reasonCode: 'sentinel.pipeline.changed',
+        facts: { problems, written: false },
+      });
+    writePrivateFileAtomic(dirname(path), basename(path), bytes, 'sentinel.policy.settingsUnreadable');
+  } catch (e) {
+    if (!(e instanceof PolicyError)) throw e;
+    return result('pipeline.write', 'configuration-failure', {
+      reasonCode: 'sentinel.pipeline.unreadable',
+      facts: { detail: e.message, written: false },
+    });
+  }
+  const read = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: NO_PACKS });
+  return result('pipeline.write', 'prepared', {
+    facts: { written: true, fileDigest: sha(bytes), digest: read.read?.digest ?? null, trust: read.trust, problems },
   });
 }
 

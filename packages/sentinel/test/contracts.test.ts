@@ -966,7 +966,7 @@ test('the example pipeline and stage runs validate, and each bound refuses one p
   const ajv = pipelineAjv();
   const pipeline = ajv.compile(pipelineSchemaOf('PipelineDefinition'));
   const stageRun = ajv.compile(pipelineSchemaOf('StageRun'));
-  const example = pipelineFixture('example');
+  const example = load('pipeline-example');
   assert.ok(pipeline(example), JSON.stringify(pipeline.errors));
   assert.deepEqual([...new Set(example.stages.map((s: any) => s.kind))].sort(), [...PIPELINE_STAGE_KINDS].sort());
   const runs = pipelineFixture('stage-runs');

@@ -10,6 +10,8 @@ import { REPORT_FORMATS, type ReportFormat } from './service/full-report.js';
 import {
   privateReviewTrace,
   adoptWorkspaceSettings,
+  adoptWorkspacePipeline,
+  showWorkspacePipeline,
   confirmForService,
   currentRules,
   followWorkspaceRun,
@@ -40,6 +42,7 @@ import { adoptScannerAsset, acquireScannerDatabase } from './service/scanner-ass
 import { CAPABILITIES } from './capabilities.js';
 import { parseArgs, plannedIn, COMMANDS, type ParsedCommand } from './cli/args.js';
 import { initWorkspace, InitError, PROFILE_PACKS } from './cli/init.js';
+import { checkPipeline, parsePipeline, PipelineError, PIPELINE_PATH, type PipelineProblem } from './app/pipeline.js';
 import { result, type CommandResult } from './cli/outcome.js';
 import { ENVELOPES, ENVELOPE_KINDS, MAX_ENVELOPE_BYTES, type EnvelopeKind } from './contracts/index.js';
 import { parseEnvelope } from './validate.js';
@@ -75,6 +78,7 @@ function help(): string {
     `      ${word('sentinel.cli.kinds', { kinds: ENVELOPE_KINDS.join(', ') })}`,
     `  ${word('sentinel.cli.usageInit')}`,
     `  ${word('sentinel.cli.usageSettings')}`,
+    `  ${word('sentinel.cli.usagePipeline')}`,
     `  ${word('sentinel.cli.usagePlan')}`,
     `  ${word('sentinel.cli.usagePaths')}`,
     `  ${word('sentinel.cli.usageRun')}`,
@@ -303,15 +307,86 @@ function workspaceFor(p: ParsedCommand) {
 }
 
 /** Prints a service result: JSON whole, or its outcome words, reason and the facts a reader needs. */
-function serviceOut(r: CommandResult, lines: string[] = []): number {
+function serviceOut(r: CommandResult, lines: string[] = [], values: Record<string, string | number> = {}): number {
   if (!jsonOut) {
     for (const l of lines) out(l);
     const head = word(`sentinel.outcome.${r.outcome.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())}`);
     (r.exitCode === 0 ? out : errOut)(
-      r.reasonCode && r.reasonCode !== 'sentinel.outcome.unavailable' ? `${head}: ${word(r.reasonCode)}` : head,
+      r.reasonCode && r.reasonCode !== 'sentinel.outcome.unavailable' ? `${head}: ${word(r.reasonCode, values)}` : head,
     );
   }
   return finish(r);
+}
+
+/** A declared pipeline's problems, one line each, in the catalog's words with their safe detail. */
+function problemLines(problems: unknown): string[] {
+  return Array.isArray(problems)
+    ? (problems as PipelineProblem[]).map((p) => `  ${p.stage ?? 'pipeline'}: ${word(p.code, { detail: p.detail })}`)
+    : [];
+}
+
+/** The detail of the problem a refusal names, for its reason line. */
+function refusedDetail(r: CommandResult): Record<string, string> {
+  const view = (r.facts.pipeline ?? r.facts) as { problems?: PipelineProblem[]; detail?: string };
+  const first = view.problems?.find((x) => x.code === r.reasonCode);
+  return { detail: first?.detail ?? view.detail ?? '' };
+}
+
+/** `pipeline show | validate | adopt`: read, check or adopt the declared pipeline. None of them runs anything. */
+function pipelineCommand(p: ParsedCommand, ws: Workspace, confirm: boolean, now: Date): number {
+  if (p.args.action === 'validate') {
+    const file = typeof p.flags['--file'] === 'string' ? resolve(p.flags['--file']) : resolve(ws.path, PIPELINE_PATH);
+    let bytes: Buffer;
+    try {
+      if (!statSync(file).isFile()) throw new Error('not a file');
+      bytes = readFileSync(file);
+    } catch {
+      errOut(word('sentinel.pipeline.unreadable', { detail: file }));
+      return finish(result('pipeline.validate', 'refused', { reasonCode: 'sentinel.pipeline.unreadable' }));
+    }
+    let problems: readonly PipelineProblem[];
+    try {
+      problems = checkPipeline(parsePipeline(bytes));
+    } catch (e) {
+      if (!(e instanceof PipelineError)) throw e;
+      errOut(word(e.code, { detail: e.detail }));
+      return finish(result('pipeline.validate', 'refused', { reasonCode: e.code, facts: { detail: e.detail } }));
+    }
+    const refused = problems.find((x) => x.class === 'refused');
+    const r = refused
+      ? result('pipeline.validate', 'refused', { reasonCode: refused.code, facts: { problems } })
+      : result('pipeline.validate', 'answered', { facts: { problems } });
+    if (!jsonOut && !refused) out(word('sentinel.cli.pipelineSound'));
+    return serviceOut(r, problemLines(problems), refusedDetail(r));
+  }
+  if (p.args.action === 'adopt') {
+    const r = adoptWorkspacePipeline(ws, { confirm, now });
+    const lines = [
+      ...(r.facts.digest ? [`pipeline ${String(r.facts.digest)}`] : []),
+      ...problemLines(r.facts.problems),
+    ];
+    if (r.outcome === 'awaiting-confirmation')
+      lines.push(word('sentinel.cli.confirmWith', { command: 'pipeline adopt --confirm' }));
+    return serviceOut(r, lines, refusedDetail(r));
+  }
+  const r = showWorkspacePipeline(ws);
+  const f = r.facts as Record<string, unknown>;
+  const lines =
+    f.id === undefined
+      ? []
+      : [
+          word('sentinel.cli.pipelineShown', {
+            id: String(f.id),
+            revision: String(f.revision),
+            stages: String(f.stages),
+            digest: String(f.digest),
+            trust: String(f.trust),
+          }),
+          ...problemLines(f.problems),
+        ];
+  if (f.id !== undefined && Array.isArray(f.problems) && f.problems.length === 0)
+    lines.push(word('sentinel.cli.pipelineSound'));
+  return serviceOut(r, lines, refusedDetail(r));
 }
 
 const SERVICE_START_MS = 15_000;
@@ -565,7 +640,17 @@ async function owner(p: ParsedCommand): Promise<number> {
         return finish(result('settings', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
       }
       const r = adoptWorkspaceSettings(ws, { confirm, now });
-      return serviceOut(r, [`settings ${String(r.facts.settingsDigest)}`]);
+      const pipeline = r.facts.pipeline as { digest?: string; reasonCode?: string; detail?: string } | undefined;
+      const lines = [`settings ${String(r.facts.settingsDigest)}`];
+      if (pipeline?.digest) lines.push(`pipeline ${pipeline.digest}`);
+      if (pipeline?.reasonCode) lines.push(`pipeline: ${word(pipeline.reasonCode, { detail: pipeline.detail ?? '' })}`);
+      if (r.outcome === 'awaiting-confirmation')
+        lines.push(word('sentinel.cli.confirmWith', { command: 'settings adopt --confirm' }));
+      return serviceOut(r, lines);
+    }
+    if (p.command === 'pipeline') {
+      if (live) live.close();
+      return pipelineCommand(p, ws, confirm, now);
     }
     if (p.command === 'rules') {
       // The owner's rule lock lives in the owner's private state, not the store: it works with or without a service.
@@ -619,6 +704,8 @@ async function owner(p: ParsedCommand): Promise<number> {
     }
     if (p.command === 'plan') {
       const r = await planWorkspace(ws, { confirm, now });
+      const pipeline = r.facts.pipeline as { problems?: unknown } | undefined;
+      if (!r.disclosure) return serviceOut(r, problemLines(pipeline?.problems), refusedDetail(r));
       return serviceOut(
         r,
         r.disclosure
@@ -667,7 +754,17 @@ async function owner(p: ParsedCommand): Promise<number> {
   } catch (e) {
     const code = (e as { code?: string }).code;
     if (e instanceof PolicyError || (typeof code === 'string' && code.startsWith('sentinel.'))) {
-      errOut(`${code}: ${(e as Error).message}`);
+      // The reason in words when the catalog has them (a raw code repeated is no help); the safe message otherwise.
+      const message = (e as Error).message;
+      let said: string;
+      try {
+        const plain = word(code!);
+        const detailed = word(code!, { detail: message });
+        said = detailed !== plain ? detailed : message && message !== code ? `${plain} (${message})` : plain;
+      } catch {
+        said = `${code}: ${message}`;
+      }
+      errOut(said);
       return finish(result(p.command, 'configuration-failure', { reasonCode: code }));
     }
     throw e;
@@ -905,6 +1002,7 @@ async function dispatch(p: ParsedCommand): Promise<number> {
     case 'init':
       return init(p);
     case 'settings':
+    case 'pipeline':
     case 'plan':
     case 'paths':
     case 'run':
