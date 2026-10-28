@@ -278,7 +278,7 @@ test('the 1.0.103 record is kept beside the 1.0.105 re-qualification and its nat
   assert.deepEqual(COPILOT_PROFILES.map(copilotProfileMode), ['brokered', 'brokered', 'native']);
   assert.equal(copilotProfileById('copilot-1.0.103-darwin-arm64-seatbelt-v5'), undefined);
   assert.deepEqual([...COPILOT_RUNNER.modes], ['brokered', 'native']);
-  assert.deepEqual([...CLAUDE_RUNNER.modes], ['brokered']);
+  assert.deepEqual([...CLAUDE_RUNNER.modes], ['brokered', 'native']);
   assert.equal(agentRunner('copilot-cli'), COPILOT_RUNNER);
   assert.throws(
     () => agentRunner('unregistered-runner'),
