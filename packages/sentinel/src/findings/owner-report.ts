@@ -22,6 +22,7 @@ import {
 } from './decision-basis.js';
 import { decisionProjection } from './owner-evaluation.js';
 import type { Finding } from './correlate.js';
+/** The most approved owner decisions one report evaluates; past it the section is `partial`, with reason `limit`. */
 export const OWNER_REPORT_LIMITS = Object.freeze({ evaluations: 50 });
 const hardBoundary = (store: SentinelStore) => {
   boundOwner(store).assertHeld();
@@ -87,6 +88,14 @@ function projected(
     definitions: definitions.sort((a, b) => a.key.localeCompare(b.key)),
   };
 }
+/**
+ * Adds the owner decision section to a completed run's report document. Each approved decision is matched to its
+ * finding (the same id, or the one finding at its site), derived again and evaluated; one with no validity is left out,
+ * and its rationale is dropped in the shareable profile. The section is `complete`, `partial` or `unavailable`
+ * (`sentinel.decision.section.*`): a decision-domain failure only marks it partial or unavailable, while owner, budget
+ * and cancellation failures, and a `sentinel.report.*` refusal deriving a current finding, still throw. A run that is
+ * not completed, or a workspace with no decision history, returns the document unchanged.
+ */
 export async function withOwnerDecisions(
   document: ReportEnvelope,
   store: SentinelStore,

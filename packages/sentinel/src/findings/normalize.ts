@@ -6,12 +6,18 @@
 import { createHash } from 'node:crypto';
 import type { ArtifactId, Digest, ObservationEnvelope, WithheldLocationEvidence } from '../contracts/index.js';
 
+/** Sentinel's severity scale. */
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+/** The severity scale, most severe first. */
 export const SEVERITIES: readonly Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
 
 /** Where an anchor sits in the claim: the first location is the source, the last the sink, the rest steps. */
 export type AnchorRole = 'source' | 'step' | 'sink' | 'single';
 
+/**
+ * One evidence location of an observation as issue identity needs it: its role, its file or withheld key, the symbol it
+ * sits in and a digest of the cited text, never a line number.
+ */
 export interface Anchor {
   readonly role: AnchorRole;
   readonly sourceId: string;
@@ -34,6 +40,10 @@ export interface Anchor {
   readonly evidenceIndex: number;
 }
 
+/**
+ * An observation with what identity and reporting derive from it: the rule family, the mapped severity beside the
+ * original, the anchors and whether it concerns a secret. The original envelope is kept unchanged.
+ */
 export interface NormalizedObservation {
   readonly observationId: string;
   readonly snapshotId: string;
@@ -70,6 +80,7 @@ const SEVERITY_ALIASES: Record<string, Severity> = {
 
 const sha = (b: string | Uint8Array): Digest => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
+/** True when the observation's rule family or one of its limitation keys is in `sentinel.secrets.*`. */
 export const isSecretObservation = (o: ObservationEnvelope): boolean =>
   (o.rule?.familyId ?? '').startsWith('sentinel.secrets.') ||
   o.limitationKeys.some((k) => k.startsWith('sentinel.secrets.'));
@@ -79,12 +90,17 @@ function producerOf(o: ObservationEnvelope): string {
   return p.kind === 'imported' ? `imported:${p.provenanceArtifact}` : `${p.kind}:${p.adapterId}`;
 }
 
-/** Reads every cited span once per content and normalizes the observation. */
+/** Options for `normalizeObservation`. */
 export interface NormalizeOptions {
   /** An opaque key for a withheld citation's file (never its path); the capture entry when absent. */
   readonly withheldKey?: (evidence: WithheldLocationEvidence) => string;
 }
 
+/**
+ * Normalizes one observation, reading each cited content at most once through `cache`. A withheld location is never
+ * read or turned into a path; an unrecognized severity maps to `info` with `severityUnmapped`, never upward; the
+ * observation is a secret when its rule or limitations say so or any citation is withheld.
+ */
 export async function normalizeObservation(
   o: ObservationEnvelope,
   readContent: (id: ArtifactId) => Promise<Uint8Array>,

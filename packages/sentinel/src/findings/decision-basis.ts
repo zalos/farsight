@@ -22,6 +22,11 @@ import { readAcceptedReportImport } from '../evidence/reader.js';
 import { evidenceLedgerFor } from '../store/evidence-binding.js';
 import { fail, validId } from './decision-data.js';
 
+/**
+ * The retained description of one accepted finding: the exact source ancestor, the finding's fingerprint and site, the
+ * accepted publications and checks that produced it, its citations and its artifact closure. A decision stores it as
+ * its basis; it is never authority by itself (`revalidateFindingRecord` derives it again).
+ */
 export interface AcceptedFindingRecord {
   readonly schema: 'sentinel-accepted-finding-basis/2';
   readonly storeId: string;
@@ -56,6 +61,10 @@ export interface AcceptedFindingRecord {
   readonly closure: readonly string[];
 }
 declare const brand: unique symbol;
+/**
+ * The opaque capability that a finding was derived from accepted evidence for this owner. Only
+ * `acceptedFindingBasisFor` mints one; a copy or its JSON has no authority.
+ */
 export interface AcceptedFindingBasis {
   readonly [brand]: true;
 }
@@ -95,6 +104,10 @@ interface ReadSession {
   privacyPins: Map<string, PrivacyPin>;
 }
 const readSessions = new WeakMap<object, ReadSession>();
+/**
+ * Opens one report's read session over this store and workspace: assessments, plans, proofs and supports read through
+ * it are reused until `finishFindingReadSession` closes it.
+ */
 export function findingReadSessionFor(store: SentinelStore, ws: Workspace, timing: ProofTiming): FindingReadSession {
   const token = Object.freeze({}) as FindingReadSession,
     context = importOwnerContext(store, ws, timing);
@@ -139,6 +152,11 @@ function memo<K, V>(map: Map<K, Promise<V>> | undefined, key: K, read: () => Pro
   }
   return result;
 }
+/**
+ * Closes a read session after verifying again everything it reused: every support read, every accepted finding basis
+ * and every privacy pin. A closed or unknown session is `sentinel.decision.unauthorized`; a privacy ancestor that
+ * changed is `sentinel.decision.staleState`. The session is closed even when a check throws.
+ */
 export async function finishFindingReadSession(token: FindingReadSession): Promise<void> {
   const s = readSessions.get(token);
   if (!s || s.closed) return fail('sentinel.decision.unauthorized', 'closed report read session');
@@ -157,6 +175,11 @@ export async function finishFindingReadSession(token: FindingReadSession): Promi
   }
 }
 
+/**
+ * The state behind an accepted finding basis, after reading its retained source proof again, so a lost owner, a passed
+ * deadline or changed retained bytes refuse here too. A value this module did not mint is
+ * `sentinel.decision.unauthorized`.
+ */
 export function acceptedFindingOf(value: AcceptedFindingBasis): Readonly<State> {
   const s = bases.get(value);
   if (!s) return fail('sentinel.decision.unauthorized', 'no accepted finding authority');
@@ -319,8 +342,10 @@ export async function revalidateFindingRecord(
     return fail('sentinel.decision.staleState', 'accepted finding identity changed');
   return fresh;
 }
+/** The digest of an accepted finding's record, after its authority is checked again. */
 export const acceptedFindingDigest = (basis: AcceptedFindingBasis) => digestOf(acceptedFindingOf(basis).record);
 
+/** One piece of evidence an owner decision names: a finding artifact or an accepted import root, by id. */
 export interface OwnerDecisionSupport {
   readonly id: string;
   readonly kind: 'finding-artifact' | 'accepted-import';

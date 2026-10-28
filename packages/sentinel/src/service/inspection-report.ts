@@ -29,6 +29,12 @@ import {
   type LibraryOutcome,
 } from '../frameworks/controls/facts.js';
 
+/**
+ * Derives again the control inspection of one accepted framework-controls unit, from its genuine publication, owned
+ * attempt and invocation, sealed job, raw output and admitted source extent; nothing a caller supplies counts. Raw
+ * source text is left out. Any binding that does not hold refuses through `refuse` (the full report raises
+ * `sentinel.report.evidenceUnbound`).
+ */
 export async function acceptedInspection(
   store: SentinelStore,
   admitted: AdmittedPlan,

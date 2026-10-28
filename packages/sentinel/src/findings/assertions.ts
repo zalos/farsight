@@ -6,6 +6,7 @@ import { snapshot } from '../policy/immutable.js';
 import { compareTimestamps } from '../validate.js';
 import { fail, fields, list, timestamp, unique, validDigest, validId, validNode } from './decision-data.js';
 
+/** The control properties a deployment assertion may claim. */
 export const ASSERTION_PROPERTIES = [
   'authentication',
   'authorization',
@@ -20,8 +21,15 @@ export const ASSERTION_PROPERTIES = [
   'cookie-http-only',
   'cookie-same-site',
 ] as const;
+/** One of `ASSERTION_PROPERTIES`. */
 export type AssertionProperty = (typeof ASSERTION_PROPERTIES)[number];
+/** The direction of traffic an assertion covers at its surfaces. */
 export type AssertionDirection = 'inbound' | 'outbound';
+/**
+ * A claim about a deployed control on some surfaces, bound to the environment, deployment and control digests it was
+ * made against. It is a claim even when `trust` says `runtime-observed`: only the bounded importer's provenance can
+ * verify it.
+ */
 export interface DeploymentAssertion {
   readonly id: string;
   readonly trust: AssertionTrust;
@@ -35,6 +43,12 @@ export interface DeploymentAssertion {
   readonly lastVerifiedAt: string | null;
   readonly expiresAt: string | null;
 }
+/**
+ * Copies and checks at most 64 assertions: the assertion fields as `fields` checks them, known trust, property and
+ * direction, at least one surface and unique surfaces and evidence, digest-shaped bindings, an expiry after the last
+ * verification, and for `runtime-observed` a verification time, an expiry and evidence. Anything else, or a repeated
+ * assertion id, is `sentinel.decision.invalidInput`. Returns a frozen copy.
+ */
 export function checkedAssertions(given: unknown): readonly DeploymentAssertion[] {
   const all = snapshot(given);
   list(all, 64, (a): a is DeploymentAssertion => {
