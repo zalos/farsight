@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // The npm-only consumer's foundation-preview path (PR 09), canonical end to end: install the packed Sentinel tarball into a clean npm
-// prefix and, with only Node and npm, initialize a synthetic workspace twice (keeping its settings), adopt them,
+// prefix and, with only Node and npm, initialize a synthetic workspace twice (keeping its settings), initialize one
+// workspace per profile (static, scanners, secrets, agentic) twice with its declared pipeline, adopt the settings,
 // plan, run and read the report through the installed `farsight-sentinel` alone: no pnpm, no Farsight checkout. Then
 // a second plan is handed to the owner's background service (`run --detach --confirm`, started on demand), joined
 // by a duplicate start, waited for and reported through the service, which is then stopped. With the workspace's
@@ -51,7 +52,11 @@ try {
   // The files the package starts by path (the launch gate) are installed where its manifest says, with those bytes.
   const installed = join(consumer.dir, 'node_modules', 'farsight-sentinel');
   const assets = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8')).sentinel?.assets ?? {};
-  assert.deepEqual(Object.keys(assets), ['execution/launch-gate', 'frameworks/controls/worker']);
+  assert.deepEqual(Object.keys(assets), [
+    'execution/launch-gate',
+    'frameworks/controls/worker',
+    'analysis/paths/worker',
+  ]);
   for (const [name, { path, sha256 }] of Object.entries(assets)) {
     assert.equal(
       createHash('sha256')
@@ -75,6 +80,30 @@ try {
   const settings = readFileSync(join(ws, '.farsight', 'sentinel', 'settings.json'));
   assert.equal((await sentinel('init')).body.outcome, 'kept', 'a second init keeps the configuration');
   assert.deepEqual(readFileSync(join(ws, '.farsight', 'sentinel', 'settings.json')), settings);
+  // Every profile initializes from the installed package alone, twice: its settings and its declared pipeline.
+  for (const profile of ['static', 'scanners', 'secrets', 'agentic']) {
+    const at = join(scratch, `init-${profile}`);
+    mkdirSync(at, { recursive: true });
+    const call = async (...args) => {
+      try {
+        const r = await consumer.exec(bin, [...args, '--json'], { cwd: at, env });
+        return { status: 0, body: JSON.parse(r.stdout) };
+      } catch (error) {
+        if (typeof error.code !== 'number') throw error;
+        return { status: error.code, body: JSON.parse(error.stdout) };
+      }
+    };
+    const first = await call('init', '--profile', profile);
+    assert.deepEqual(
+      [first.status, first.body.outcome, first.body.facts.settings.holds, first.body.facts.pipeline.holds],
+      [0, 'prepared', profile, profile],
+      `${profile}: ${JSON.stringify(first.body)}`,
+    );
+    const pipeline = readFileSync(join(at, '.farsight', 'sentinel', 'pipeline.json'));
+    assert.equal((await call('init', '--profile', profile)).body.outcome, 'kept', `${profile}: kept`);
+    assert.deepEqual(readFileSync(join(at, '.farsight', 'sentinel', 'pipeline.json')), pipeline);
+    assert.equal((await call('pipeline', 'validate')).status, 0, `${profile}: the pipeline it wrote is sound`);
+  }
   assert.equal((await sentinel('settings', 'adopt')).status, 4, 'adoption waits for the owner');
   assert.equal((await sentinel('settings', 'adopt', '--confirm')).status, 0);
   // The rule pack the package ships, promoted by the owner from the installed tarball alone.

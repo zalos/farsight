@@ -1,0 +1,17 @@
+# Test files that run one at a time (--test-concurrency=1), before the rest of their group, in whichever suite they
+# belong to; they keep that group's skip rule. Each has cases that race the wall clock or a SIGKILL checkpoint, so they
+# fail when other files load the machine, which core-count concurrency made systematic on CI. A deterministic
+# checkpoint fix is queued (lane L-CLEAN-B); files leave this list as it lands.
+#
+#   preparation-admission          the ORIGINAL clock crossing (no-skip group; failed at :79 on CI)
+#   preparation-publication-crash  SIGKILL at each publication checkpoint after a readiness retry (process suite)
+#   preparation-public             owner deaths at saved-preparation checkpoints, deadlines (process suite)
+#   preparation-seams              an actual wall-clock expiry inside capture (process suite)
+#   service-detached               the detached service's SIGKILL and resume after a readiness retry (process suite)
+#
+# One path per line, relative to packages/sentinel; a listed file that does not exist fails every suite.
+test/preparation-admission.test.ts
+test/preparation-publication-crash.test.ts
+test/preparation-public.test.ts
+test/preparation-seams.test.ts
+test/service-detached.test.ts

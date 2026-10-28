@@ -1,0 +1,18 @@
+# Unit-suite files allowed to start a Node.js process or a package manager. Their launching cases skip on CI by
+# design, so the zero-skip sentinel-service job cannot hold them; validate runs them with the rest of the unit suite.
+# `scripts/sentinel-tests.mjs --launches` (SENTINEL_TEST_LAUNCHES=1 in validate) fails when any other unit file starts
+# one, or a process-suite file starts none. A file here cannot also be in process-suite.txt.
+#
+#   store-integration, store-runtime   host and user checks that skip on Linux CI
+#   review-operation                   a FARSIGHT_LIVE opt-in
+#   service-full-report-authority      SENTINEL_ISOLATION
+#   build-identity                     a SENTINEL_BASELINE_PACKAGE opt-in
+#   review-packs                       an explicitly opted-in case
+#
+# One path per line, relative to packages/sentinel; a listed file that does not exist fails every suite.
+test/build-identity.test.ts
+test/review-operation.test.ts
+test/review-packs.test.ts
+test/service-full-report-authority.test.ts
+test/store-integration.test.ts
+test/store-runtime.test.ts

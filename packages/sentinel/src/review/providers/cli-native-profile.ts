@@ -25,6 +25,32 @@ export const CLAUDE_NATIVE_PROFILE = Object.freeze({
   executableDigest: 'sha256:fcfd837103965c64de34a6b9b94370d77a347ea71819715a27d5f0ef01775ea4',
   destination: 'api.anthropic.com:443',
 });
+/**
+ * The native agent mode on Claude Code 2.1.282: `claude -p` runs its own loop over a scratch tree holding only the
+ * stage's inputs and promoted skills (one session plugin under `.claude/sentinel-stage/`), with `Read` and `Glob`
+ * the only tools (`Grep` runs the bundled ripgrep, which the deny-default profile refuses) beside the output tool
+ * `--json-schema` adds, `--restricted` confining file tools to the working directories, no hooks, no MCP, never
+ * `--bare`. The login is the owner's long-lived token, read in-process from the
+ * adopted `keychain:farsight/…` reference and handed to the CLI on an anonymous descriptor; the config, home and
+ * temporary folders are private and the only writable ones.
+ */
+export const CLAUDE_AGENT_PROFILE = Object.freeze({
+  ...CLAUDE_NATIVE_PROFILE,
+  id: 'claude-code-2.1.282-darwin-arm64-native-v1',
+  mode: 'native' as const,
+  tools: 'Read,Glob',
+  skills: 'scratch-session-plugin-skills/1',
+  env: 'owned-config-home-tmp-and-cli-tmp/1',
+  reads: 'base-and-system-icu/1',
+  auth: 'owner-keychain-token-fd3/1',
+  output: 'stream-json-and-result/1',
+  writes: 'owned-config-home-tmp/1',
+});
+export type ClaudeProfile = typeof CLAUDE_NATIVE_PROFILE | typeof CLAUDE_AGENT_PROFILE;
+export const CLAUDE_PROFILES: readonly ClaudeProfile[] = Object.freeze([CLAUDE_NATIVE_PROFILE, CLAUDE_AGENT_PROFILE]);
+export const claudeProfileById = (id: string): ClaudeProfile | undefined => CLAUDE_PROFILES.find((p) => p.id === id);
+export const claudeProfileMode = (p: ClaudeProfile): 'brokered' | 'native' =>
+  'mode' in p && p.mode === 'native' ? 'native' : 'brokered';
 export interface NativeClaudeRuntime {
   readonly profileId: string;
   readonly executableDigest: string;
@@ -33,7 +59,15 @@ export interface NativeClaudeRuntime {
 }
 const runtimes = new WeakMap<
   object,
-  { executable: string; dev: number; ino: number; size: number; mtimeMs: number; helper: NativeHelper }
+  {
+    profile: ClaudeProfile;
+    executable: string;
+    dev: number;
+    ino: number;
+    size: number;
+    mtimeMs: number;
+    helper: NativeHelper;
+  }
 >();
 export interface NativeTiming {
   readonly deadlineAt: number;
@@ -48,6 +82,7 @@ function boundary(t: NativeTiming) {
 export async function qualifyNativeClaude(
   executablePath: string,
   timing: NativeTiming = { deadlineAt: Date.now() + 5000 },
+  profile: ClaudeProfile = CLAUDE_NATIVE_PROFILE,
 ): Promise<NativeClaudeRuntime> {
   boundary(timing);
   const localDeadline = Math.min(timing.deadlineAt, Date.now() + 5000);
@@ -82,13 +117,16 @@ export async function qualifyNativeClaude(
     )
       return fail('sentinel.provider.capabilityUntested', 'native CLI identity changed');
     const helper = await qualifyNativeHelper(timing);
-    const identity = {
-      profileId: CLAUDE_NATIVE_PROFILE.id,
-      executableDigest: CLAUDE_NATIVE_PROFILE.executableDigest,
-      helperDigest: helper.digest,
-      wire: 'sentinel-claude-chat/v1',
-      auth: helper.protocol,
-    };
+    const identity =
+      profile === CLAUDE_NATIVE_PROFILE
+        ? {
+            profileId: CLAUDE_NATIVE_PROFILE.id,
+            executableDigest: CLAUDE_NATIVE_PROFILE.executableDigest,
+            helperDigest: helper.digest,
+            wire: 'sentinel-claude-chat/v1',
+            auth: helper.protocol,
+          }
+        : { ...profile, profileId: profile.id, helperDigest: helper.digest };
     const runtime = Object.freeze({
       profileId: identity.profileId,
       executableDigest: identity.executableDigest,
@@ -96,6 +134,7 @@ export async function qualifyNativeClaude(
       profileDigest: canonicalDigest(identity),
     });
     runtimes.set(runtime, {
+      profile,
       executable,
       dev: after.dev,
       ino: after.ino,
@@ -189,7 +228,10 @@ export function nativeRuntimeHelper(runtime: NativeClaudeRuntime): NativeHelper 
 }
 
 /** First installed fixed basename only; no command execution, alternate candidates or model/credential probe. */
-export async function qualifyInstalledNativeClaude(timing: NativeTiming): Promise<NativeClaudeRuntime> {
+export async function qualifyInstalledNativeClaude(
+  timing: NativeTiming,
+  profile: ClaudeProfile = CLAUDE_NATIVE_PROFILE,
+): Promise<NativeClaudeRuntime> {
   boundary(timing);
   const path = process.env.PATH ?? '';
   const dirs = path.split(':');
@@ -204,7 +246,87 @@ export async function qualifyInstalledNativeClaude(timing: NativeTiming): Promis
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
       return fail('sentinel.provider.capabilityUntested', 'first native CLI candidate unavailable');
     }
-    return qualifyNativeClaude(candidate, timing);
+    return qualifyNativeClaude(candidate, timing, profile);
   }
   return fail('sentinel.provider.capabilityUntested', 'fixed native CLI is not installed');
+}
+
+/** The installation a genuine qualification matched and its exact executable path: private provenance. */
+export function claudeRuntimeInstallation(runtime: object): Readonly<{ source: string; executable: string }> {
+  const held = runtimes.get(runtime);
+  if (!held) return fail('sentinel.provider.notTrusted', 'native runtime is not qualified');
+  return Object.freeze({ source: 'path', executable: held.executable });
+}
+export const claudeRuntimeProfile = (runtime: object): ClaudeProfile | undefined => runtimes.get(runtime)?.profile;
+
+/**
+ * The native-v1 seatbelt profile: the brokered one's reads (system, the executable, the owned root holding the
+ * scratch tree) and the system ICU data, writes only to the owned config, home and temporary folders, egress only to
+ * the owned proxy. No HOME, no keychain: the login arrives on the anonymous descriptor.
+ */
+export function claudeAgentSeatbeltPolicy(l: { executable: string; ownedRoot: string; proxyPort: number }): string {
+  return seatbelt([
+    ...seatbeltHead(l.executable),
+    SEATBELT_PROCESS_INFO,
+    seatbeltBaseReads(l.executable, l.ownedRoot),
+    // The system ICU data: without it the 2.1.282 runtime traps on its first Intl use (help, print mode).
+    '(allow file-read* (subpath "/usr/share/icu"))',
+    `${SEATBELT_DIRECTORY_METADATA}(allow file-write* (subpath ${JSON.stringify(l.ownedRoot + '/config')}) (subpath ${JSON.stringify(l.ownedRoot + '/home')}) (subpath ${JSON.stringify(l.ownedRoot + '/tmp')}) (literal "/dev/null"))`,
+    `${SEATBELT_TASK_PORT}(allow user-preference-read)`,
+    `(allow mach-lookup ${SEATBELT_SYSTEM_SERVICES})`,
+    SEATBELT_DEVICE_IOCTL,
+    seatbeltProxyOnly(l.proxyPort),
+  ]);
+}
+/** Constructed, never merged: private home, config and temporary folders; the token only on descriptor 3. */
+export function claudeAgentEnvironment(l: { ownedRoot: string; proxyPort: number }): Readonly<Record<string, string>> {
+  return Object.freeze({
+    PATH: '/usr/bin:/bin',
+    HOME: `${l.ownedRoot}/home`,
+    CLAUDE_CONFIG_DIR: `${l.ownedRoot}/config`,
+    TMPDIR: `${l.ownedRoot}/tmp`,
+    // Its own temporary folder (settings, sockets) is `/tmp/claude-<uid>` unless this names another.
+    CLAUDE_CODE_TMPDIR: `${l.ownedRoot}/tmp`,
+    TERM: 'dumb',
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    DISABLE_TELEMETRY: '1',
+    DISABLE_ERROR_REPORTING: '1',
+    DISABLE_AUTOUPDATER: '1',
+    CLAUDE_CODE_MAX_RETRIES: '0',
+    CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR: '3',
+    HTTPS_PROXY: `http://127.0.0.1:${l.proxyPort}`,
+    HTTP_PROXY: `http://127.0.0.1:${l.proxyPort}`,
+    NO_PROXY: '',
+  });
+}
+/** Native setup: re-qualifies the exact bytes, then the owned config, home, tmp and work folders, policy and env. */
+export async function nativeClaudeAgentSetup(runtime: NativeClaudeRuntime, proxyPort: number, timing: NativeTiming) {
+  boundary(timing);
+  const held = runtimes.get(runtime);
+  if (
+    !held ||
+    held.profile !== CLAUDE_AGENT_PROFILE ||
+    !Number.isSafeInteger(proxyPort) ||
+    proxyPort < 1 ||
+    proxyPort > 65535
+  )
+    return fail('sentinel.provider.notTrusted', 'native agent setup requires its qualified native runtime');
+  await qualifyNativeClaude(held.executable, timing, CLAUDE_AGENT_PROFILE);
+  boundary(timing);
+  const ownedRoot = await realpath(await mkdtemp('/private/tmp/sentinel-claude-agent-'));
+  try {
+    for (const d of ['config', 'home', 'tmp', 'work']) await mkdir(`${ownedRoot}/${d}`, { mode: 0o700 });
+    boundary(timing);
+    const setup = Object.freeze({
+      executable: held.executable,
+      policy: claudeAgentSeatbeltPolicy({ executable: held.executable, ownedRoot, proxyPort }),
+      env: claudeAgentEnvironment({ ownedRoot, proxyPort }),
+      ownedRoot,
+    });
+    setups.set(setup, ownedRoot);
+    return setup;
+  } catch (error) {
+    await rm(ownedRoot, { recursive: true, force: true });
+    throw error;
+  }
 }

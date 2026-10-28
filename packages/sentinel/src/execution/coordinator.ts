@@ -72,15 +72,15 @@ import {
 } from './plan.js';
 import { loadPlan } from './plans.js';
 import { stageInputsForUnit } from './stage-inputs.js';
-import type { StageInputBinding } from '../contracts/pipeline.js';
+import { checkEntry, interpreterOf, runHostScript, SCRIPT_CONTRACT } from './script-runner.js';
+import { featureEnabled } from '../policy/features.js';
+import type { ScriptStageDefinition } from '../contracts/pipeline.js';
 
 /**
  * The review dispatch, handed the attempt's sealed stage inputs as its last argument (undefined for a unit whose
  * stage reads no other stage's output). The binding is the one the invocation record accepted with the attempt.
  */
-const runReviewWithInputs: (
-  ...args: [...Parameters<typeof runAdmittedReview>, stageInputs: readonly StageInputBinding[] | undefined]
-) => ReturnType<typeof runAdmittedReview> = runAdmittedReview;
+const runReviewWithInputs: typeof runAdmittedReview = runAdmittedReview;
 import { publishPrepared, runOperation } from './bootstrap.js';
 import { COVERAGE_SCHEMA, coverageRecords, scopeIndex, type ScopeIndex } from './coverage.js';
 import { evaluateRequiredCoverage, type RequiredCoverage } from '../planner/coverage.js';
@@ -128,6 +128,11 @@ export interface CoordinatorOptions {
   packs?: ReadonlyArray<{ pack: ValidatedPack; files: ReadonlyMap<string, Uint8Array> }>;
   /** Package-internal test seam for the container runtime (see ContainerBackend.connect). */
   review?: ReviewRuntime;
+  /**
+   * The entry bytes of the run's host script stages, by digest, as the owner's promoted stage packs hold them. Each is
+   * checked against the digest the run's profile pins before its attempt starts; a missing or changed entry refuses.
+   */
+  scripts?: ReadonlyMap<string, Uint8Array>;
   backendOptions?: { wrapRunner?: (runner: DockerRunner) => DockerRunner };
 }
 
@@ -178,6 +183,7 @@ const CPU_SLACK_MS = 100;
 export class Coordinator {
   readonly #store: SentinelStore;
   readonly #review: ReviewRuntime | undefined;
+  readonly #scripts: ReadonlyMap<string, Uint8Array> | undefined;
   readonly #plan: ValidatedPlan;
   readonly #service: ExecutionService;
   readonly #intents: IntentFiles;
@@ -224,6 +230,7 @@ export class Coordinator {
   ) {
     this.#store = o.store;
     this.#review = o.review;
+    this.#scripts = o.scripts;
     this.#plan = plan;
     this.#service = service;
     this.#intents = intents;
@@ -1167,7 +1174,8 @@ export class Coordinator {
    */
   #holdRefusedModelUnit(ref: WorkRef, code: string): void {
     try {
-      if (!this.#plan.unitOf(ref).unit.review || !CATALOG.test(code)) return;
+      const unit = this.#plan.unitOf(ref).unit;
+      if (!(unit.review || unit.contract === SCRIPT_CONTRACT) || !CATALOG.test(code)) return;
       const row = this.#store.ledger.getWork(ref);
       if (row && ['pending', 'ready'].includes(row.state))
         this.#store.ledger.setWorkState(ref, 'blocked', { reasonCode: code.slice(0, 128) });
@@ -1185,6 +1193,38 @@ export class Coordinator {
    * and writes no process output, so its pid and process-output grants always hold; retained artifact sizes are the
    * store's and the parser's own bounds. Returns the attempt id.
    */
+  /**
+   * A host script unit's declared stage, entry digest and entry bytes, before anything is recorded: the run's
+   * recorded pipeline names the stage, the adopted settings must turn host scripts on, and the entry supplied must be
+   * the bytes the profile pins. Any of these failing refuses the unit before its attempt (and holds it with why).
+   */
+  #scriptOf(unit: Readonly<import('../contracts/plan.js').PlanWork>): {
+    stage: ScriptStageDefinition;
+    digest: string;
+    entry: Uint8Array;
+    schema: { id: string; digest: string; bytes: Uint8Array };
+  } {
+    const profile = this.#plan.admitted.profile;
+    const stage = profile.pipeline?.stages.find((s) => s.id === unit.stage && s.kind === 'script') as
+      ScriptStageDefinition | undefined;
+    const pinned = profile.scripts?.find((s) => s.stage === unit.stage);
+    if (!stage || !pinned)
+      throw new ExecutionError('sentinel.execution.planInvalid', {
+        reason: `script unit ${unit.id} has no declared stage and entry in its run's profile`,
+      });
+    if (stage.runner === 'host' && !featureEnabled(this.#plan.admitted.policy?.settings ?? null, 'stage.host-scripts'))
+      throw new ExecutionError('sentinel.execution.featureOff', { feature: 'stage.host-scripts' });
+    if (stage.runner !== 'host')
+      throw new ExecutionError('sentinel.execution.isolationUnavailable', {
+        reason: 'a script-runner container is not available in this build',
+      });
+    const entry = checkEntry(this.#scripts?.get(pinned.digest), pinned.digest);
+    const schema = checkEntry(this.#scripts?.get(pinned.schema.digest), pinned.schema.digest, 'output schema');
+    // The interpreter must be measurable (path, digest, version) before anything is recorded.
+    interpreterOf(stage.interpreter);
+    return { stage, digest: pinned.digest, entry, schema: { ...pinned.schema, bytes: schema } };
+  }
+
   async #operation(work: Readonly<WorkEnvelope>, ordinal: number, id: Id): Promise<Id> {
     const ref: WorkRef = { id: work.id, revision: work.revision };
     const executable = this.#plan.unitOf(ref);
@@ -1195,9 +1235,10 @@ export class Coordinator {
     const review = executable.unit.review
       ? await prepareAdmittedReview(this.#store, this.#plan, ref, this.#review)
       : undefined;
+    const script = adapter.operation === 'script' ? this.#scriptOf(executable.unit) : undefined;
     // A declared stage that reads other stages' outputs is bound to their exact published artifacts, folded for
     // secrets first; the binding is sealed in the invocation record accepted with the attempt's start.
-    const stageInputs = review ? await stageInputsForUnit(this.#store, this.#plan.admitted, ref) : undefined;
+    const stageInputs = review || script ? await stageInputsForUnit(this.#store, this.#plan.admitted, ref) : undefined;
     const record = {
       format: 'sentinel-operation-invocation/draft-1',
       store: this.#store.storeId,
@@ -1217,12 +1258,37 @@ export class Coordinator {
       ...(adapter.operation === 'parse' ? { parse: profile.parse } : {}),
       ...(review ? { review: review.review } : {}),
       ...(stageInputs ? { stageInputs } : {}),
+      ...(script
+        ? {
+            script: {
+              stage: script.stage.id,
+              runner: script.stage.runner,
+              entry: script.stage.entry,
+              entryDigest: script.digest,
+              outputSchema: { id: script.schema.id, digest: script.schema.digest },
+              interpreter: script.stage.interpreter,
+              args: [...(script.stage.args ?? [])],
+              environmentNames: [],
+            },
+          }
+        : {}),
     };
     const invocation = this.#store.objects.identifyCanonicalJson(record).id as ArtifactId;
     const records = await this.#stageRecords(`invocation.${id}`, [
       { value: record, schema: 'sentinel-operation-invocation/draft-1', privacy: 'source-derived' },
       ...(review
         ? [{ value: review.admission, schema: 'sentinel-admission/draft-1', privacy: 'source-derived' as const }]
+        : []),
+      // The exact entry the attempt runs is retained with its start, so the run keeps what ran without its pack.
+      ...(script
+        ? [
+            { bytes: script.entry, schema: 'sentinel-script-entry/draft-1', privacy: 'source' as const },
+            {
+              bytes: script.schema.bytes,
+              schema: 'sentinel-script-output-schema/draft-1',
+              privacy: 'metadata' as const,
+            },
+          ]
         : []),
     ]);
     try {
@@ -1272,16 +1338,33 @@ export class Coordinator {
     try {
       prepared = review
         ? await runReviewWithInputs(this.#store, this.#plan, ref, id, review, signal, deadlineAt, stageInputs)
-        : await runOperation(adapter.operation as import('./registry.js').BootstrapOperation, {
-            store: this.#store,
-            run: this.#plan.run,
-            plan: this.#plan.admitted.plan,
-            unit: executable.unit,
-            profile,
-            attemptId: id,
-            scratchRoot: this.#scratchRoot,
-            signal,
-          });
+        : script
+          ? await runHostScript({
+              store: this.#store,
+              stage: script.stage,
+              unit: ref,
+              attemptId: id,
+              invocation,
+              entry: script.entry,
+              entryDigest: script.digest,
+              outputSchema: script.schema.bytes,
+              outputSchemaDigest: script.schema.digest,
+              inputs: stageInputs ?? [],
+              scratchRoot: this.#scratchRoot,
+              signal,
+              deadlineMs,
+              maxOutputBytes: grant.maxOutputBytes,
+            })
+          : await runOperation(adapter.operation as import('./registry.js').BootstrapOperation, {
+              store: this.#store,
+              run: this.#plan.run,
+              plan: this.#plan.admitted.plan,
+              unit: executable.unit,
+              profile,
+              attemptId: id,
+              scratchRoot: this.#scratchRoot,
+              signal,
+            });
     } catch (error) {
       failure = error;
     } finally {

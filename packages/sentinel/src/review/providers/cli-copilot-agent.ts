@@ -3,7 +3,8 @@
 // projection and owned-file reads as the brokered turn (`cli-copilot-call.ts`); the difference is what the model may
 // do inside it and what is retained: the JSONL event stream and the `--share` Markdown transcript, both bounded.
 // The broker alone admits, reserves and settles; this module supplies confinement and decoding.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { dirname, join, posix } from 'node:path';
 import {
   nativeCopilotSetup,
@@ -29,10 +30,24 @@ export interface CopilotAgentRequest {
   readonly files: readonly Readonly<{ relativePath: string; bytes: Uint8Array }>[];
   /** Written to `.github/copilot-instructions.md` in the scratch tree. */
   readonly instructions: Uint8Array;
+  /**
+   * The digests each written file must hash to, sealed before dispatch and never derived from the buffers above:
+   * the instructions file's (from its pack's manifest, or of the bundled text) and each input's.
+   */
+  readonly digests: Readonly<{ instructions: string; files: readonly string[] }>;
   /** Piped on stdin as the one prompt-mode user message. */
   readonly task: string;
   /** Model requests (turns) allowed; one more stops the process and fails the run. */
   readonly maxTurns: number;
+  /**
+   * Promoted skills, in order: written to `.github/skills/<id>/` in the scratch tree, which `--add-dir` loads as the
+   * session's only trusted skills. Their bytes were checked against the pack lock before this request was made.
+   */
+  readonly skills?: readonly Readonly<{
+    id: string;
+    /** Each file with the digest its promoted pack's manifest pins (checked against the pack lock). */
+    files: readonly Readonly<{ path: string; bytes: Uint8Array; digest: string }>[];
+  }>[];
 }
 
 /** A tool the model ran, with the scratch-relative path it named when it named one. */
@@ -49,6 +64,8 @@ export interface CopilotAgentResult {
   /** Scratch-relative paths the read tools named, in first-read order, deduplicated. */
   readonly filesRead: readonly string[];
   readonly usage: Readonly<{ inputTokens: number; outputTokens: number; requests: number }>;
+  /** Other models the CLI reports usage for (a small background model), never the answering one. */
+  readonly secondaryModels?: readonly string[];
   /** The JSONL event stream as the CLI printed it (bounded). */
   readonly events: Uint8Array;
   /** The `--share` Markdown transcript (bounded). */
@@ -75,6 +92,8 @@ export function copilotAgentArguments(l: {
   sharePath: string;
   workDir: string;
   model: string;
+  /** The stage has promoted skills under `<workDir>/.github/skills/`: load that tree's skills as trusted. */
+  skills?: boolean;
 }): readonly string[] {
   return Object.freeze([
     '--no-auto-update',
@@ -91,6 +110,7 @@ export function copilotAgentArguments(l: {
     '-C',
     l.workDir,
     '--trust-folder',
+    ...(l.skills ? ['--add-dir', l.workDir] : []),
     '--available-tools',
     ...COPILOT_READ_TOOLS,
     '--excluded-tools',
@@ -115,6 +135,7 @@ export function copilotAgentArguments(l: {
   ]);
 }
 
+const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const MAX_EVENTS_BYTES = 8 * 1024 * 1024;
 const MAX_LINE_BYTES = 1024 * 1024;
 const MAX_EVENTS = 50000;
@@ -358,25 +379,57 @@ export function decodeCopilotAgentUsage(
   return Object.freeze({ inputTokens: u.inputTokens, outputTokens: u.outputTokens, requests: requests.count });
 }
 
-/** A scratch-relative input path: no absolute path, no parent step, no hidden configuration directory. */
+/** Folders a CLI reads its own configuration, instructions or skills from, at any depth, in any letter case. */
+const CONFIG_FOLDERS = new Set(['.github', '.copilot', '.claude', '.agents']);
+/** Files a CLI reads as its own instructions wherever they sit in its working tree, in any letter case. */
+const INSTRUCTION_FILES = new Set([
+  'agents.md',
+  'claude.md',
+  'claude.local.md',
+  'copilot-instructions.md',
+  'gemini.md',
+]);
+/**
+ * A scratch-relative input path: no absolute path, no parent step, and nothing the CLI would read as its own
+ * configuration or instructions (a captured `CLAUDE.md` or `AGENTS.md` is an input, never a prompt).
+ */
 export function safeInputPath(path: string): string {
   const norm = posix.normalize(path);
+  const parts = norm.split('/');
   if (
     !path ||
     path.length > 1024 ||
     path.includes('\0') ||
     path.startsWith('/') ||
     norm !== path ||
-    norm.split('/').some((p) => p === '..' || p === '' || p === '.') ||
-    norm.startsWith('.github/') ||
-    norm.startsWith('.copilot/') ||
-    norm.startsWith('.claude/') ||
-    norm.startsWith('.agents/')
+    parts.some((p) => p === '..' || p === '' || p === '.') ||
+    parts.slice(0, -1).some((p) => CONFIG_FOLDERS.has(p.toLowerCase())) ||
+    INSTRUCTION_FILES.has(parts[parts.length - 1]!.toLowerCase())
   )
     return fail('sentinel.provider.invalidProfile', 'a native input path is not a plain relative path');
   return norm;
 }
 
+/** Each written file is still one regular, single-link file holding exactly its bytes; otherwise scratchChanged. */
+export async function verifyMaterialised(expected: readonly Readonly<{ path: string; digest: string }>[]) {
+  for (const e of expected) {
+    let now: Buffer | undefined;
+    try {
+      const st = await lstat(e.path);
+      now = st.isFile() && !st.isSymbolicLink() && st.nlink === 1 ? await readFile(e.path) : undefined;
+    } catch {
+      now = undefined;
+    }
+    if (!now || 'sha256:' + sha256(now) !== e.digest)
+      throw new ProviderError('sentinel.provider.scratchChanged', 'a materialised file changed before launch');
+  }
+}
+/** A buffer about to be written must already hash to its sealed digest; a changed buffer is never written. */
+const sealed = (bytes: Uint8Array, digest: string) => {
+  if ('sha256:' + sha256(bytes) !== digest)
+    throw new ProviderError('sentinel.provider.scratchChanged', 'a buffer differs from its sealed digest');
+  return bytes;
+};
 const SIGNALS = new Set(['SIGKILL', 'SIGTERM', 'SIGABRT', 'SIGSEGV']);
 const AGENT_WORDS = Object.freeze({
   canceled: 'Copilot native run canceled',
@@ -405,19 +458,45 @@ export async function nativeCopilotAgentCall(authority: CopilotAgentAuthority): 
       work = current.ownedRoot + '/work',
       usagePath = current.ownedRoot + '/state/usage.json',
       sharePath = current.ownedRoot + '/state/transcript.md',
-      files = copilotPrivateState(selector);
+      files = copilotPrivateState(selector, { stageSkills: Boolean(request.skills?.length) });
     await writeFile(current.ownedRoot + '/state/config.json', files.config, { flag: 'wx', mode: 0o600 });
     await writeFile(current.ownedRoot + '/state/settings.json', files.settings, { flag: 'wx', mode: 0o600 });
     // The scratch tree: only the declared inputs and the instructions, read-only to the sandboxed process.
     await mkdir(join(work, '.github'), { recursive: true, mode: 0o700 });
-    await writeFile(join(work, '.github/copilot-instructions.md'), request.instructions, { flag: 'wx', mode: 0o400 });
-    for (const f of request.files) {
+    if (request.digests.files.length !== request.files.length)
+      fail('sentinel.provider.invalidProfile', 'every native input has its sealed digest');
+    await writeFile(
+      join(work, '.github/copilot-instructions.md'),
+      sealed(request.instructions, request.digests.instructions),
+      { flag: 'wx', mode: 0o400 },
+    );
+    for (const [i, f] of request.files.entries()) {
       const rel = safeInputPath(f.relativePath);
       await mkdir(dirname(join(work, rel)), { recursive: true, mode: 0o700 });
-      await writeFile(join(work, rel), f.bytes, { flag: 'wx', mode: 0o400 });
+      await writeFile(join(work, rel), sealed(f.bytes, request.digests.files[i]!), { flag: 'wx', mode: 0o400 });
+    }
+    for (const skill of request.skills ?? []) {
+      if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(skill.id))
+        fail('sentinel.provider.invalidProfile', 'a skill id is a plain pack id');
+      for (const f of skill.files) {
+        const rel = safeInputPath(f.path);
+        const target = join(work, '.github/skills', skill.id, rel);
+        await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+        await writeFile(target, sealed(f.bytes, f.digest), { flag: 'wx', mode: 0o400 });
+      }
     }
     copilotBoundary(limits);
     await verifyNativeCopilotSetup(current, limits);
+    // Immediately before the process starts: every materialised file is re-read and must hash to the bytes the
+    // request carries (the instructions, each skill file, each input). A changed byte refuses before any launch.
+    await verifyMaterialised([
+      { path: join(work, '.github/copilot-instructions.md'), digest: request.digests.instructions },
+      ...(request.skills ?? []).flatMap((k) =>
+        k.files.map((f) => ({ path: join(work, '.github/skills', k.id, f.path), digest: f.digest })),
+      ),
+      ...request.files.map((f, i) => ({ path: join(work, f.relativePath), digest: request.digests.files[i]! })),
+    ]);
+    copilotBoundary(limits);
     decoder = new CopilotAgentDecoder(work, request.maxTurns);
     const stream = decoder;
     const shareNotice = Buffer.from(`Session exported to: ${sharePath}\n`);
@@ -428,7 +507,13 @@ export async function nativeCopilotAgentCall(authority: CopilotAgentAuthority): 
           label: 'sentinel-copilot-agent',
           policy: current.policy,
           executable: current.executable,
-          args: copilotAgentArguments({ usagePath, sharePath, workDir: work, model: request.model }),
+          args: copilotAgentArguments({
+            usagePath,
+            sharePath,
+            workDir: work,
+            model: request.model,
+            skills: Boolean(request.skills?.length),
+          }),
           cwd: work,
           env: current.env,
           timing: limits,

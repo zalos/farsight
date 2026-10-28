@@ -1,7 +1,8 @@
-// `farsight-sentinel init`: create the workspace's private settings file from scrubbed defaults, once. It never
-// overwrites a file that exists (a second run leaves its bytes untouched and says so), stores no credential value
-// (settings hold keychain references only, and the defaults hold none), downloads nothing, starts no scan, and
-// trusts nothing: the file only grants once its owner adopts these exact bytes (PR 06's adoption flow).
+// `farsight-sentinel init`: create the workspace's private settings file and its declared pipeline from a profile,
+// once each. It never overwrites a file that exists (a second run leaves its bytes untouched and says which profile
+// they hold), stores no credential value (settings hold keychain references only, and the defaults hold none),
+// downloads nothing, starts no scan, and trusts nothing: the files grant only once their owner adopts these exact
+// bytes (`settings adopt --confirm` adopts both).
 import { createHash } from 'node:crypto';
 import {
   closeSync,
@@ -25,6 +26,8 @@ import {
   GITLEAKS_SUPPORTED_RULES,
 } from '../adapters/drivers/index.js';
 import { PREVIEW_RULE } from '../adapters/preview-detector.js';
+import { PIPELINE_PATH, parsePipeline } from '../app/pipeline.js';
+import { profilePipeline } from '../app/pipeline-profiles.js';
 
 /** The settings file's place in a workspace, and its scrubbed defaults: PR 06's own, so init writes what policy reads. */
 export { SETTINGS_PATH, DEFAULT_SETTINGS };
@@ -50,7 +53,9 @@ export function initialSettings(profile: string) {
           ].map((r) => r.familyId)
         : profile === 'secrets'
           ? GITLEAKS_SUPPORTED_RULES.map((r) => r.familyId)
-          : [PREVIEW_RULE],
+          : profile === 'agentic'
+            ? [...GITLEAKS_SUPPORTED_RULES, ...PATTERN_SUPPORTED_RULES].map((r) => r.familyId)
+            : [PREVIEW_RULE],
     grants: [
       {
         actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'],
@@ -62,11 +67,26 @@ export function initialSettings(profile: string) {
   };
 }
 
-/** The one scan profile this build can describe; scanner coverage arrives with later packages. */
-export const PROFILES = ['static', 'scanners', 'secrets'] as const;
+/**
+ * The scan profiles init describes: the foundation preview, the five pinned scanners, the secret scan alone, and the
+ * plan's agentic example (the secret and pattern scanners, the walkthrough, a brokered Copilot review and a native
+ * Claude triage).
+ */
+export const PROFILES = ['static', 'scanners', 'secrets', 'agentic'] as const;
+
+/** The rule packs a profile's owner promotes before planning: the packs this package ships, by name. */
+export const PROFILE_PACKS: Readonly<Record<(typeof PROFILES)[number], readonly string[]>> = Object.freeze({
+  static: ['foundation-preview'],
+  scanners: ['pattern', 'advisories', 'infrastructure', 'ci', 'secrets'],
+  secrets: ['secrets'],
+  agentic: ['secrets', 'pattern'],
+});
 
 export type InitErrorCode =
-  'sentinel.init.workspaceUnsafe' | 'sentinel.init.settingsUnsafe' | 'sentinel.init.profileUnknown';
+  | 'sentinel.init.workspaceUnsafe'
+  | 'sentinel.init.settingsUnsafe'
+  | 'sentinel.init.pipelineUnsafe'
+  | 'sentinel.init.profileUnknown';
 
 export class InitError extends Error {
   constructor(
@@ -78,19 +98,40 @@ export class InitError extends Error {
   }
 }
 
-export interface InitResult {
+/** One file init writes once: what it did and what the file is now. */
+export interface InitFile {
   /** `prepared`: the file was written now; `kept`: it already existed and was not touched. */
   readonly outcome: 'prepared' | 'kept';
   readonly path: string;
-  /** SHA-256 of the file's bytes as they are now: what an owner adopts. */
+  /** SHA-256 of the file's bytes as they are now. */
   readonly digest: string;
-  readonly profile: string;
-  /** Whether the kept file parses as JSON with the settings schema; it is reported, never repaired. */
+  /** Whether the file parses as what it should be (settings, a pipeline); it is reported, never repaired. */
   readonly recognised: boolean;
+  /** The profile whose defaults these exact bytes are; null for a file that was edited or came from elsewhere. */
+  readonly holds: string | null;
+}
+
+export interface InitResult {
+  /** `prepared` when either file was written now; `kept` when both were already there. */
+  readonly outcome: 'prepared' | 'kept';
+  /** The settings file (kept at the top level, as before the pipeline existed). */
+  readonly path: string;
+  readonly digest: string;
+  /** The profile asked for. */
+  readonly profile: string;
+  readonly recognised: boolean;
+  readonly settings: InitFile;
+  readonly pipeline: InitFile;
 }
 
 const UID = typeof process.getuid === 'function' ? process.getuid() : undefined;
 const sha = (b: Buffer) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
+const settingsBytes = (profile: string) =>
+  Buffer.from(`${JSON.stringify(initialSettings(profile), null, 2)}\n`, 'utf8');
+const pipelineBytes = (profile: string) =>
+  Buffer.from(`${JSON.stringify(profilePipeline(profile), null, 2)}\n`, 'utf8');
+/** The profile whose bytes these are exactly, or null. */
+const holds = (bytes: Buffer, of: (profile: string) => Buffer) => PROFILES.find((p) => of(p).equals(bytes)) ?? null;
 
 function ensurePrivateDir(path: string): void {
   try {
@@ -106,7 +147,7 @@ function ensurePrivateDir(path: string): void {
     throw new InitError('sentinel.init.workspaceUnsafe', `${path} belongs to another user`);
 }
 
-/** Creates the settings file if it does not exist; otherwise reports it unchanged. Never writes over a file. */
+/** Creates the settings and pipeline files that do not exist; reports the others unchanged. Never writes over a file. */
 export function initWorkspace(options: { workspace: string; profile?: string }): InitResult {
   try {
     return initOnce(options);
@@ -116,6 +157,106 @@ export function initWorkspace(options: { workspace: string; profile?: string }):
     throw new InitError('sentinel.init.workspaceUnsafe', `${(e as NodeJS.ErrnoException).code ?? 'error'}`);
   }
 }
+
+/**
+ * Writes `bytes` to `path` unless a file is there. An existing file is read through one descriptor, opened without
+ * following a link: what is checked is what is read. Unreadable, oversized or not a regular file: refused with a
+ * reason, and never written over.
+ */
+function writeOnce(
+  path: string,
+  bytes: Buffer,
+  options: {
+    code: 'sentinel.init.settingsUnsafe' | 'sentinel.init.pipelineUnsafe';
+    noun: string;
+    maxBytes: number;
+    recognise: (bytes: Buffer) => boolean;
+    holds: (bytes: Buffer) => string | null;
+  },
+): InitFile {
+  const { code, noun } = options;
+  const kept = (): InitFile => {
+    let fd: number;
+    try {
+      fd = openSync(path, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0));
+    } catch (e) {
+      const errno = (e as NodeJS.ErrnoException).code;
+      throw new InitError(
+        code,
+        errno === 'ELOOP' ? `the ${noun} path is a link` : `the ${noun} file cannot be read (${errno ?? 'error'})`,
+      );
+    }
+    let found: Buffer;
+    try {
+      const st = fstatSync(fd);
+      if (!st.isFile()) throw new InitError(code, `the ${noun} path is not a regular file`);
+      if (st.size > options.maxBytes) throw new InitError(code, `the ${noun} file is larger than it may be`);
+      found = Buffer.alloc(st.size);
+      let off = 0;
+      while (off < st.size) {
+        const n = readSync(fd, found, off, st.size - off, off);
+        if (n === 0) break;
+        off += n;
+      }
+      found = found.subarray(0, off);
+    } catch (e) {
+      if (e instanceof InitError) throw e;
+      throw new InitError(code, `the ${noun} file cannot be read (${(e as NodeJS.ErrnoException).code ?? 'error'})`);
+    } finally {
+      closeSync(fd);
+    }
+    return Object.freeze({
+      outcome: 'kept' as const,
+      path,
+      digest: sha(found),
+      recognised: options.recognise(found),
+      holds: options.holds(found),
+    });
+  };
+  try {
+    lstatSync(path);
+    return kept();
+  } catch (e) {
+    if (e instanceof InitError) throw e;
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT')
+      throw new InitError(
+        code,
+        `the ${noun} path cannot be inspected (${(e as NodeJS.ErrnoException).code ?? 'error'})`,
+      );
+  }
+  if (!options.recognise(bytes)) throw new InitError(code, `the ${noun} defaults do not validate`);
+  let fd: number;
+  try {
+    // O_EXCL: if another init created the file meanwhile, it is kept, not replaced.
+    fd = openSync(path, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | (FS.O_NOFOLLOW ?? 0), 0o600);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return kept();
+    throw new InitError(code, `cannot create the ${noun} file`);
+  }
+  try {
+    let off = 0;
+    while (off < bytes.length) off += writeSync(fd, bytes, off, bytes.length - off, off);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  return Object.freeze({
+    outcome: 'prepared' as const,
+    path,
+    digest: sha(bytes),
+    recognised: true,
+    holds: options.holds(bytes),
+  });
+}
+
+const parses = (parse: (bytes: Buffer) => unknown) => (bytes: Buffer) => {
+  try {
+    parse(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 function initOnce(options: { workspace: string; profile?: string }): InitResult {
   const profile = options.profile ?? 'static';
@@ -144,81 +285,37 @@ function initOnce(options: { workspace: string; profile?: string }): InitResult 
   if (fst.isSymbolicLink() || !fst.isDirectory())
     throw new InitError('sentinel.init.workspaceUnsafe', '.farsight is not a real folder');
   ensurePrivateDir(sentinelDir);
-  const path = join(sentinelDir, fileName);
-
-  // An existing file is read through one descriptor, opened without following a link: what is checked is what is
-  // read. Unreadable, oversized or not a regular file: refused with a reason, and never written over.
-  const kept = (): InitResult => {
-    let fd: number;
-    try {
-      fd = openSync(path, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0));
-    } catch (e) {
-      const code = (e as NodeJS.ErrnoException).code;
-      throw new InitError(
-        'sentinel.init.settingsUnsafe',
-        code === 'ELOOP' ? 'the settings path is a link' : `the settings file cannot be read (${code ?? 'error'})`,
-      );
-    }
-    let bytes: Buffer;
-    try {
-      const st = fstatSync(fd);
-      if (!st.isFile()) throw new InitError('sentinel.init.settingsUnsafe', 'the settings path is not a regular file');
-      if (st.size > MAX_SETTINGS_BYTES)
-        throw new InitError('sentinel.init.settingsUnsafe', 'the settings file is larger than settings may be');
-      bytes = Buffer.alloc(st.size);
-      let off = 0;
-      while (off < st.size) {
-        const n = readSync(fd, bytes, off, st.size - off, off);
-        if (n === 0) break;
-        off += n;
-      }
-      bytes = bytes.subarray(0, off);
-    } catch (e) {
-      if (e instanceof InitError) throw e;
-      throw new InitError(
-        'sentinel.init.settingsUnsafe',
-        `the settings file cannot be read (${(e as NodeJS.ErrnoException).code ?? 'error'})`,
-      );
-    } finally {
-      closeSync(fd);
-    }
-    // Recognised when policy itself would read it: PR 06's parser (schema, bounds, no credential values).
-    let recognised: boolean;
-    try {
-      parseSettings(bytes);
-      recognised = true;
-    } catch {
-      recognised = false;
-    }
-    return Object.freeze({ outcome: 'kept', path, digest: sha(bytes), profile, recognised });
-  };
-  try {
-    lstatSync(path);
-    return kept();
-  } catch (e) {
-    if (e instanceof InitError) throw e;
-    if ((e as NodeJS.ErrnoException).code !== 'ENOENT')
-      throw new InitError(
-        'sentinel.init.settingsUnsafe',
-        `the settings path cannot be inspected (${(e as NodeJS.ErrnoException).code ?? 'error'})`,
-      );
-  }
-  const bytes = Buffer.from(`${JSON.stringify(initialSettings(profile), null, 2)}\n`, 'utf8');
-  parseSettings(bytes); // what init writes is what policy reads
-  let fd: number;
-  try {
-    // O_EXCL: if another init created the file meanwhile, it is kept, not replaced.
-    fd = openSync(path, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | (FS.O_NOFOLLOW ?? 0), 0o600);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return kept();
-    throw new InitError('sentinel.init.settingsUnsafe', 'cannot create the settings file');
-  }
-  try {
-    let off = 0;
-    while (off < bytes.length) off += writeSync(fd, bytes, off, bytes.length - off, off);
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
-  }
-  return Object.freeze({ outcome: 'prepared', path, digest: sha(bytes), profile, recognised: true });
+  // Recognised when what reads it would read it: the policy's settings parser, the pipeline parser.
+  const settings = writeOnce(join(sentinelDir, fileName), settingsBytes(profile), {
+    code: 'sentinel.init.settingsUnsafe',
+    noun: 'settings',
+    maxBytes: MAX_SETTINGS_BYTES,
+    recognise: parses(parseSettings),
+    holds: (b) => holds(b, settingsBytes),
+  });
+  // A foreign settings file is reported before anything else is written beside it.
+  const pipeline = settings.recognised
+    ? writeOnce(join(workspace, PIPELINE_PATH), pipelineBytes(profile), {
+        code: 'sentinel.init.pipelineUnsafe',
+        noun: 'pipeline',
+        maxBytes: MAX_SETTINGS_BYTES,
+        recognise: parses(parsePipeline),
+        holds: (b) => holds(b, pipelineBytes),
+      })
+    : Object.freeze({
+        outcome: 'kept' as const,
+        path: join(workspace, PIPELINE_PATH),
+        digest: '',
+        recognised: false,
+        holds: null,
+      });
+  return Object.freeze({
+    outcome: settings.outcome === 'prepared' || pipeline.outcome === 'prepared' ? 'prepared' : 'kept',
+    path: settings.path,
+    digest: settings.digest,
+    profile,
+    recognised: settings.recognised,
+    settings,
+    pipeline,
+  });
 }

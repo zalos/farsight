@@ -14,7 +14,7 @@ import { publicRegistry } from './scanner-profile.js';
 // service (owner-service.ts) reuses the store-level reads below; it holds the store while it runs.
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { ActionEffect, ActionIntent, AdmissionEnvelope } from '../contracts/index.js';
 import {
   adoptSettings,
@@ -30,6 +30,21 @@ import {
 } from '../policy/index.js';
 import { issueReceipt } from '../policy/owner-receipts.js';
 import { assertTrustOutside } from '../policy/adoption.js';
+import {
+  checkPipeline,
+  MAX_PIPELINE_BYTES,
+  parsePipeline,
+  PipelineError,
+  PIPELINE_PATH,
+  previewPipeline,
+  type PipelineEnvironment,
+  type PipelineProblem,
+} from '../app/pipeline.js';
+import type { PipelineDefinition } from '../contracts/index.js';
+import { readCheckoutFile, writePrivateFileAtomic } from '../policy/user-state.js';
+import { adoptPipeline, loadPipeline, pipelineAdoptionIntent, promotedPacks } from '../app/pipeline-adoption.js';
+import { builtinRulePack, shippedCheckAdapters } from './trusted-profile.js';
+import { FEATURE_FLAGS } from '../policy/features.js';
 import {
   checkPreviewReport,
   PREVIEW_LIMITATIONS,
@@ -266,11 +281,23 @@ export function runWriteBinding(
 
 // ---- settings adoption (an owner action) ----
 
+/**
+ * Adopts the workspace's settings and, when the workspace has a pipeline file, the pipeline too: one confirmed owner
+ * action, two receipts (each for exactly its own bytes). A pipeline that cannot be adopted (it does not parse, or names
+ * a pack that is not there) leaves the settings adopted and says why; `plan` refuses it until it is fixed.
+ */
 export function adoptWorkspaceSettings(ws: Workspace, options: { confirm: boolean; now: Date }): CommandResult {
   const { intent, settingsDigest } = adoptionIntent(ws.path);
+  const pipeline = pipelineIntentOf(ws);
+  const pipelineFacts =
+    pipeline === undefined
+      ? {}
+      : 'error' in pipeline
+        ? { pipeline: { adopted: false, reasonCode: pipeline.error.code, detail: pipeline.error.detail } }
+        : { pipeline: { digest: pipeline.digest } };
   if (!options.confirm) {
     return result('settings.adopt', 'awaiting-confirmation', {
-      facts: { settingsDigest, intentDigest: sha(canonicalJsonBytes(intent)) },
+      facts: { settingsDigest, intentDigest: sha(canonicalJsonBytes(intent)), ...pipelineFacts },
     });
   }
   assertMayConfirm(OWNER);
@@ -285,9 +312,294 @@ export function adoptWorkspaceSettings(ws: Workspace, options: { confirm: boolea
   );
   const spent = book.consume(receipt.id, { intent, stateDigest: settingsDigest, policyRevision }, options.now);
   const adoption = adoptSettings({ workspace: ws.path, trustDir: ws.trustDir, receipt: spent, now: options.now });
+  const adopted = pipeline !== undefined && !('error' in pipeline) ? adoptPipelineNow(ws, options.now) : undefined;
+  // What the adopted pipeline still waits on under the settings just adopted: each feature that is off, by name.
+  const problems = adopted ? pipelineProblems(ws, adoptedOrNull(ws)) : [];
   return result('settings.adopt', 'prepared', {
-    facts: { settingsDigest: adoption.settingsDigest, adoptedAt: adoption.adoptedAt },
+    facts: {
+      settingsDigest: adoption.settingsDigest,
+      adoptedAt: adoption.adoptedAt,
+      ...(adopted
+        ? {
+            pipeline: {
+              digest: adopted.digest,
+              adoptedAt: adopted.adoptedAt,
+              problems,
+              waitingOn: waitingFeatures(problems),
+            },
+          }
+        : pipelineFacts),
+    },
   });
+}
+
+/** The features a pipeline's stages need that the adopted settings leave off, by registry name, once each. */
+export function waitingFeatures(problems: readonly PipelineProblem[]): string[] {
+  return [
+    ...new Set(
+      problems.flatMap((p) =>
+        p.code === 'sentinel.pipeline.flagDisabled'
+          ? FEATURE_FLAGS.filter((f) => p.detail.includes(f.name)).map((f) => f.name)
+          : [],
+      ),
+    ),
+  ];
+}
+
+// ---- the declared pipeline (`.farsight/sentinel/pipeline.json`) ----
+
+/** The pipeline's adoption intent and digest, its refusal, or undefined when the workspace has no pipeline file. */
+function pipelineIntentOf(
+  ws: Workspace,
+): { intent: ActionIntent; digest: string } | { error: PipelineError } | undefined {
+  try {
+    const { intent, read } = pipelineAdoptionIntent(ws.path, packsOf(ws));
+    return { intent, digest: read.digest };
+  } catch (e) {
+    if (e instanceof PipelineError) {
+      if (e.code === 'sentinel.pipeline.unreadable' && e.detail.endsWith('does not exist')) return undefined;
+      return { error: e };
+    }
+    throw e;
+  }
+}
+
+/** Issues and spends the owner's receipt for the pipeline as it is now, and records the adoption. */
+function adoptPipelineNow(ws: Workspace, now: Date) {
+  const { intent, read } = pipelineAdoptionIntent(ws.path, packsOf(ws));
+  const book = receiptBook(ws);
+  const policyRevision = effectivePolicy(loadPolicyInputs({ workspace: ws.path, trustDir: trustFolder(ws) })).revision;
+  const binding = { intent, stateDigest: read.digest, policyRevision };
+  const receipt = issueReceipt(book, OWNER, binding, { now, ttlMs: RECEIPT_TTL_MS });
+  const spent = book.consume(receipt.id, binding, now);
+  return adoptPipeline({ workspace: ws.path, trustDir: ws.trustDir, receipt: spent, now, resolve: packsOf(ws) });
+}
+
+/** `pipeline adopt`: the owner adopts the workspace's pipeline bytes, and the packs they name, as they are now. */
+export function adoptWorkspacePipeline(ws: Workspace, options: { confirm: boolean; now: Date }): CommandResult {
+  const pending = pipelineIntentOf(ws);
+  if (pending === undefined)
+    return result('pipeline.adopt', 'configuration-failure', { reasonCode: 'sentinel.pipeline.unreadable' });
+  if ('error' in pending)
+    return result('pipeline.adopt', 'configuration-failure', {
+      reasonCode: pending.error.code,
+      facts: { detail: pending.error.detail },
+    });
+  const problems = pipelineProblems(ws, adoptedOrNull(ws));
+  if (!options.confirm)
+    return result('pipeline.adopt', 'awaiting-confirmation', {
+      facts: { digest: pending.digest, intentDigest: sha(canonicalJsonBytes(pending.intent)), problems },
+    });
+  assertMayConfirm(OWNER);
+  const adopted = adoptPipelineNow(ws, options.now);
+  return result('pipeline.adopt', 'prepared', {
+    facts: { digest: adopted.digest, adoptedAt: adopted.adoptedAt, problems, waitingOn: waitingFeatures(problems) },
+  });
+}
+
+/** The owner's promoted stage and skill packs, which a pipeline's digest covers. */
+const packsOf = (ws: Workspace) => promotedPacks(trustFolder(ws));
+
+/** The adopted policy, or null (the defaults) when the settings are not adopted. */
+function adoptedOrNull(ws: Workspace): EffectivePolicy | null {
+  const adopted = adoptedPolicy(ws);
+  return 'policy' in adopted ? adopted.policy : null;
+}
+
+/**
+ * What this workspace holds for checking a pipeline: the adopted features and providers, the rules promoted into the
+ * owner's lock and the adapters they run under, the tools the owner adopted, and the adapters and rule packs this
+ * build ships. No stage or skill pack is promoted in this build, so every pack reference is unknown.
+ */
+export function pipelineEnvironment(ws: Workspace, policy: EffectivePolicy | null): PipelineEnvironment {
+  const book = new RuleLockBook(trustFolder(ws));
+  const current = book.current();
+  const locked = new Map<string, string>();
+  for (const p of current ? book.packsOf(current.lock) : [])
+    for (const r of p.manifest.rules) locked.set(r.familyId, r.implementation.adapterId);
+  const tools = new Set(current?.lock.tools.map((t) => t.adapterId) ?? []);
+  const shipped = shippedCheckAdapters();
+  return Object.freeze({
+    settings: policy?.settings ?? null,
+    pack: packsOf(ws),
+    rulePack: builtinRulePack,
+    adapters: new Map([...shipped].map(([id, a]) => [id, a.families])),
+    locked,
+    installed: new Set([...shipped].filter(([id, a]) => !a.container || tools.has(id)).map(([id]) => id)),
+  });
+}
+
+/** Every problem with the workspace's pipeline here, or [] when there is no readable pipeline file. */
+function pipelineProblems(ws: Workspace, policy: EffectivePolicy | null): readonly PipelineProblem[] {
+  const loaded = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
+  return loaded.read ? checkPipeline(loaded.read.pipeline, pipelineEnvironment(ws, policy)) : [];
+}
+
+/** `pipeline show`: the workspace's pipeline, how far it is trusted, and every problem with it here. */
+export function showWorkspacePipeline(ws: Workspace): CommandResult {
+  const loaded = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
+  if (loaded.trust === 'missing') return result('pipeline.show', 'answered', { facts: { trust: 'missing' } });
+  if (!loaded.read)
+    return result('pipeline.show', 'configuration-failure', {
+      reasonCode: loaded.error!.code,
+      facts: { trust: loaded.trust, detail: loaded.error!.detail },
+    });
+  const { pipeline, digest } = loaded.read;
+  return result('pipeline.show', 'answered', {
+    facts: {
+      trust: loaded.trust,
+      id: pipeline.id,
+      revision: pipeline.revision,
+      stages: pipeline.stages.length,
+      digest,
+      problems: checkPipeline(pipeline, pipelineEnvironment(ws, adoptedOrNull(ws))),
+    },
+  });
+}
+
+/** What a pipeline write is confirmed against: these exact bytes, replacing exactly the file the writer read. */
+export function pipelineWriteBinding(
+  ws: Workspace,
+  bytes: Uint8Array,
+  expectDigest: string | null,
+): { intent: ActionIntent; stateDigest: string } {
+  const workspace = workspaceIdentity(ws.path).digest;
+  // `settings.adopt` is an owner action: no grant can give it to an agent, so only an owner's receipt writes.
+  const intent: ActionIntent = {
+    action: 'settings.adopt',
+    input: sha(bytes),
+    effects: [],
+    budget: { maxTokens: null, maxCost: null, currency: null },
+    scope: { profile: null, provider: null, targets: [`sentinel.workspace:${workspace}`, 'sentinel.pipeline.write'] },
+  };
+  return { intent, stateDigest: expectDigest ?? sha(Buffer.from('sentinel.pipeline.absent')) };
+}
+
+/** The bytes a pipeline object is written as: two-space JSON and a final newline, the form init writes. */
+export const pipelineBytesOf = (pipeline: unknown): Buffer =>
+  Buffer.from(`${JSON.stringify(pipeline, null, 2)}\n`, 'utf8');
+
+/**
+ * `pipeline.write` (the browser's editor): validate a pipeline, preview what running it would do (each stage's order,
+ * where it would run, its effects, and which stages a change reruns against the adopted pipeline), and, only when the
+ * owner's authority for exactly these bytes is shown, write it as the workspace's pipeline file. It never adopts and
+ * never runs: the file grants nothing until the owner adopts it. `expectDigest` is the file digest the caller last
+ * read (null: there was no file), so a concurrent edit is refused rather than overwritten. A pipeline with a refused
+ * problem is not written. `authorize` decides the write (the service: an owner receipt, or admission, which an agent
+ * never passes for this owner action).
+ */
+export function writeWorkspacePipeline(
+  ws: Workspace,
+  pipeline: unknown,
+  expectDigest: string | null,
+  authorize: (binding: {
+    intent: ActionIntent;
+    stateDigest: string;
+  }) => { refusal: CommandResult } | { facts: Record<string, unknown> },
+): CommandResult {
+  const bytes = pipelineBytesOf(pipeline);
+  let problems: readonly PipelineProblem[];
+  let next: PipelineDefinition;
+  try {
+    next = parsePipeline(bytes);
+    problems = checkPipeline(next, pipelineEnvironment(ws, adoptedOrNull(ws)));
+  } catch (e) {
+    if (!(e instanceof PipelineError)) throw e;
+    return result('pipeline.write', 'configuration-failure', { reasonCode: e.code, facts: { detail: e.detail } });
+  }
+  const current = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
+  const preview = previewPipeline(next, current.trust === 'adopted' ? current.read!.pipeline : null);
+  const refused = problems.find((p) => p.class === 'refused');
+  if (refused)
+    return result('pipeline.write', 'configuration-failure', {
+      reasonCode: refused.code,
+      facts: { problems, preview, written: false },
+    });
+  const binding = pipelineWriteBinding(ws, bytes, expectDigest);
+  const decided = authorize(binding);
+  if ('refusal' in decided)
+    return result('pipeline.write', decided.refusal.outcome, {
+      verdicts: decided.refusal.verdicts,
+      ...(decided.refusal.reasonCode ? { reasonCode: decided.refusal.reasonCode } : {}),
+      facts: { ...decided.refusal.facts, problems, preview, written: false },
+    });
+  const path = join(ws.path, PIPELINE_PATH);
+  try {
+    const found = readCheckoutFile(path, MAX_PIPELINE_BYTES, 'sentinel.policy.settingsUnreadable', {
+      nonblocking: true,
+    });
+    if ((found === undefined ? null : sha(found)) !== expectDigest)
+      return result('pipeline.write', 'configuration-failure', {
+        reasonCode: 'sentinel.pipeline.changed',
+        facts: { problems, preview, written: false },
+      });
+    writePrivateFileAtomic(dirname(path), basename(path), bytes, 'sentinel.policy.settingsUnreadable');
+  } catch (e) {
+    if (!(e instanceof PolicyError)) throw e;
+    return result('pipeline.write', 'configuration-failure', {
+      reasonCode: 'sentinel.pipeline.unreadable',
+      facts: { detail: e.message, written: false },
+    });
+  }
+  const read = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
+  return result('pipeline.write', 'prepared', {
+    facts: {
+      ...decided.facts,
+      written: true,
+      fileDigest: sha(bytes),
+      digest: read.read?.digest ?? null,
+      trust: read.trust,
+      problems,
+      preview,
+    },
+  });
+}
+
+/**
+ * The owner's receipt for one pipeline write, issued on the owner's own command line for exactly these bytes over
+ * exactly the file the writer read: what a service client presents to `pipeline.write`.
+ */
+export function confirmPipelineWrite(ws: Workspace, pipeline: unknown, expectDigest: string | null, now: Date): string {
+  assertMayConfirm(OWNER);
+  const binding = pipelineWriteBinding(ws, pipelineBytesOf(pipeline), expectDigest);
+  const policyRevision = effectivePolicy(loadPolicyInputs({ workspace: ws.path, trustDir: trustFolder(ws) })).revision;
+  return issueReceipt(receiptBook(ws), OWNER, { ...binding, policyRevision }, { now, ttlMs: RECEIPT_TTL_MS }).id;
+}
+
+/**
+ * The pipeline gate before planning. No pipeline file: planning goes on as without one. Otherwise the pipeline must
+ * parse, have no refused problem here, and be adopted as it is now; its unavailable stages are reported, not refused.
+ */
+export function pipelineGate(
+  ws: Workspace,
+  policy: EffectivePolicy,
+  command = 'plan',
+): { refusal: CommandResult } | { facts: Record<string, unknown> } {
+  const loaded = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
+  if (loaded.trust === 'missing') return { facts: {} };
+  if (!loaded.read)
+    return {
+      refusal: result(command, 'configuration-failure', {
+        reasonCode: loaded.error!.code,
+        facts: { pipeline: { trust: loaded.trust, detail: loaded.error!.detail } },
+      }),
+    };
+  const { pipeline, digest } = loaded.read;
+  const problems = checkPipeline(pipeline, pipelineEnvironment(ws, policy));
+  const view = { id: pipeline.id, revision: pipeline.revision, digest, trust: loaded.trust, problems };
+  const refused = problems.find((p) => p.class === 'refused');
+  if (refused)
+    return {
+      refusal: result(command, 'configuration-failure', { reasonCode: refused.code, facts: { pipeline: view } }),
+    };
+  if (loaded.trust !== 'adopted')
+    return {
+      refusal: result(command, 'configuration-failure', {
+        reasonCode: loaded.trust === 'changed' ? 'sentinel.pipeline.changed' : 'sentinel.pipeline.notAdopted',
+        facts: { pipeline: view },
+      }),
+    };
+  return { facts: { pipeline: view } };
 }
 
 // ---- plan ----
@@ -343,6 +655,9 @@ export async function planWorkspace(
   const adopted = adoptedPolicy(ws);
   if ('refusal' in adopted) return adopted.refusal;
   const { policy } = adopted;
+  // A declared pipeline is checked before anything is admitted or captured.
+  const gate = pipelineGate(ws, policy);
+  if ('refusal' in gate) return gate.refusal;
   const decided = decide(
     ws,
     policy,
@@ -379,7 +694,10 @@ export async function planWorkspace(
         throw e;
       }
       return {
-        ...result('plan', planned.outcome, { verdicts: printed(decided.record), facts: { ...planned.disclosure } }),
+        ...result('plan', planned.outcome, {
+          verdicts: printed(decided.record),
+          facts: { ...planned.disclosure, ...gate.facts },
+        }),
         disclosure: planned.disclosure,
       };
     }),
@@ -929,7 +1247,11 @@ export async function reportIn(
     });
   const snapshotId = recorded.envelope.snapshotId;
   const opened = await openSnapshot(store, snapshotId);
-  const unknown = opened.snapshot.entries.filter((e) => e.kind === 'directory-boundary').length;
+  // The full report's semantics (service/full-report.ts): a folder excluded by policy is out of scope, not unknown.
+  // Only the folders capture refused or could not read are counted.
+  const unknown = opened.snapshot.entries.filter(
+    (e) => e.kind === 'directory-boundary' && e.disposition !== 'excluded',
+  ).length;
   const recheck = { cli: `farsight-sentinel report ${options.runId} --json` };
   const doc: PreviewReport = {
     schema: PREVIEW_REPORT_SCHEMA,

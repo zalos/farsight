@@ -26,7 +26,8 @@ import { openScratchLease, releaseScratchLease, type ScratchLease } from './scra
 import { Coordinator } from '../execution/coordinator.js';
 import type { AdapterRegistry } from '../execution/registry.js';
 import type { RunEnvelope } from '../contracts/run.js';
-import { admit, PolicyError } from '../policy/index.js';
+import type { ActionIntent } from '../contracts/policy.js';
+import { admit, effectivePolicy, loadPolicyInputs, PolicyError } from '../policy/index.js';
 import { readPrivateFile, writePrivateFileAtomic } from '../policy/user-state.js';
 import { openStore, type SentinelStore } from '../store/index.js';
 import type { RequestedBy } from '../cli/actor.js';
@@ -52,6 +53,7 @@ import {
   runStateIn,
   statusIn,
   checkWorkspaceLayout,
+  writeWorkspacePipeline,
   type Workspace,
 } from './local.js';
 import { assertSupportedRules, canonicalResult, currentPlan, rerunEnvelopeOf } from './canonical.js';
@@ -101,6 +103,7 @@ interface ActiveRun {
 }
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const MAX_WAIT_MS = 25_000;
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const codeOf = (e: unknown) => {
@@ -307,9 +310,75 @@ export class OwnerService {
       }
       case 'report':
         return reportIn(this.#store, this.#ws, { runId: fields(body, ['runId']).runId as string, now: this.#now() });
+      case 'pipeline.write': {
+        // Validate, preview and, with the owner's receipt for exactly these bytes, write the workspace's pipeline file;
+        // never adopt, never run. Writing is the owner action `settings.adopt`: without a receipt, admission decides,
+        // and no grant gives an owner action to an agent, so a service client alone is refused.
+        if (this.#stopping) throw new ServiceError('sentinel.service.requestInvalid');
+        if (
+          !isRecord(body) ||
+          Object.keys(body).some((k) => k !== 'pipeline' && k !== 'expectDigest' && k !== 'receiptId') ||
+          !isRecord(body.pipeline) ||
+          !(body.expectDigest === null || (typeof body.expectDigest === 'string' && DIGEST.test(body.expectDigest))) ||
+          !(body.receiptId === undefined || (typeof body.receiptId === 'string' && ID.test(body.receiptId)))
+        )
+          throw new ServiceError('sentinel.service.requestInvalid');
+        const receiptId = body.receiptId as string | undefined;
+        return writeWorkspacePipeline(this.#ws, body.pipeline, body.expectDigest as string | null, (binding) =>
+          this.#authorizeOwnerWrite('pipeline.write', binding, receiptId, by),
+        );
+      }
       default:
         throw new ServiceError('sentinel.service.unknownOperation');
     }
+  }
+
+  /**
+   * Decides one owner-action write that is not on a run (a pipeline file): the owner's receipt for exactly this
+   * binding under the current policy, spent once; otherwise admission with the connection's own requester, which no
+   * grant passes for an owner action. Being connected grants nothing.
+   */
+  #authorizeOwnerWrite(
+    command: string,
+    binding: { intent: ActionIntent; stateDigest: string },
+    receiptId: string | undefined,
+    by: RequestedBy,
+  ): { refusal: CommandResult } | { facts: Record<string, unknown> } {
+    const adopted = adoptedPolicy(this.#ws);
+    const policy =
+      'policy' in adopted
+        ? adopted.policy
+        : effectivePolicy(loadPolicyInputs({ workspace: this.#ws.path, trustDir: this.#ws.trustDir }));
+    const now = this.#now();
+    if (receiptId !== undefined) {
+      try {
+        const spent = receiptBook(this.#ws).consume(receiptId, { ...binding, policyRevision: policy.revision }, now);
+        return { facts: { receipt: spent.digest } };
+      } catch (e) {
+        if (!(e instanceof PolicyError)) throw e;
+        return { refusal: result(command, 'configuration-failure', { reasonCode: e.code }) };
+      }
+    }
+    const decision = admit({
+      ...binding,
+      requestedBy: by,
+      policy,
+      now,
+      capability: () => ({ available: true, detail: 'writes one file in this workspace; runs nothing' }),
+      credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
+    }).record;
+    if (decision.outcome === 'admitted') return { facts: {} };
+    return {
+      refusal: result(
+        command,
+        decision.outcome === 'awaiting-confirmation' ? 'awaiting-confirmation' : 'configuration-failure',
+        {
+          verdicts: printed(decision),
+          reasonCode: decision.verdicts.policy.reasonCode,
+          facts: { intentDigest: decision.intentDigest },
+        },
+      ),
+    };
   }
 
   /**

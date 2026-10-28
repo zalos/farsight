@@ -57,7 +57,10 @@ export function cleanCopilotExit(
   return code === 0 && signal === null && spawned === true && stderrBytes === 0;
 }
 /** The owner-created fixed private state: only the validated selected-account pair is projected; nothing else. */
-export function copilotPrivateState(selector: Readonly<NativeCopilotSelector>): Readonly<{
+export function copilotPrivateState(
+  selector: Readonly<NativeCopilotSelector>,
+  options: Readonly<{ stageSkills?: boolean }> = {},
+): Readonly<{
   config: string;
   settings: string;
 }> {
@@ -70,7 +73,9 @@ export function copilotPrivateState(selector: Readonly<NativeCopilotSelector>): 
       continueOnAutoMode: false,
       storeTokenPlaintext: false,
       extensions: { mode: 'disabled' },
-      skills: { disabled: ['*'] },
+      // A native stage with promoted skills loads only those, from its scratch tree; every other skill stays off and
+      // the vendor's bundled skills stay unreadable under the seatbelt.
+      skills: { disabled: options.stageSkills ? [] : ['*'] },
     }),
   });
 }

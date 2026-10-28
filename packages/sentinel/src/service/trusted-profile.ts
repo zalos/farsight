@@ -12,6 +12,7 @@ import { canonicalJsonBytes } from '../store/objects.js';
 import { PATHS_SUPPORTED_RULES } from '../analysis/paths/definitions.js';
 import { CONTROLS_SUPPORTED_RULES } from '../frameworks/controls/driver.js';
 import { productionDrivers } from '../adapters/drivers/index.js';
+import { SCANNER_ADAPTER_IDS } from '../adapters/drivers/canonical.js';
 import { PREVIEW_DETECTOR_ID } from '../adapters/preview-detector.js';
 import { builtinPackDir, ownExecutable } from './package-paths.js';
 import { readPackDirectory, validatePack } from '../rules/index.js';
@@ -156,14 +157,53 @@ export function supportedRules(): readonly SupportedRule[] {
   return supportedCache;
 }
 
+let shippedCache: ReadonlyMap<string, { families: ReadonlySet<string>; container: boolean }> | undefined;
+/**
+ * Every check adapter this build ships, with the rule families it implements and whether it runs in a pinned
+ * container (and so needs an owner-adopted tool): what a declared pipeline's tool stage is checked against.
+ */
+export function shippedCheckAdapters(): ReadonlyMap<string, { families: ReadonlySet<string>; container: boolean }> {
+  if (shippedCache) return shippedCache;
+  const container = new Set(
+    [...productionDrivers({ maxAdvisoryAgeMs: 7 * 86400000 }).values()].map((e) => e.definition.id),
+  );
+  const families = new Map<string, Set<string>>();
+  for (const r of supportedRules()) {
+    if (!families.has(r.adapterId)) families.set(r.adapterId, new Set());
+    families.get(r.adapterId)!.add(r.familyId);
+  }
+  shippedCache = new Map(
+    [...families].map(([id, f]) => [id, Object.freeze({ families: f, container: container.has(id) })]),
+  );
+  return shippedCache;
+}
+
+const rulePackCache = new Map<string, readonly string[] | undefined>();
+/**
+ * The rule families of a whole rule pack a pipeline selects (`pack:builtin:<name>`), read from the pack this package
+ * ships; undefined for any other origin or an unknown name. Selecting a pack does not promote it.
+ */
+export function builtinRulePack(selector: string): readonly string[] | undefined {
+  const m = /^pack:builtin:([a-z][a-z0-9-]{0,63})$/.exec(selector);
+  if (!m) return undefined;
+  if (!rulePackCache.has(m[1]!)) {
+    const dir = builtinPackDir(m[1]!);
+    rulePackCache.set(
+      m[1]!,
+      dir === undefined
+        ? undefined
+        : Object.freeze(
+            validatePack(readPackDirectory(realpathSync.native(dir))).manifest.rules.map((r) => r.familyId),
+          ),
+    );
+  }
+  return rulePackCache.get(m[1]!);
+}
+
 /** The check adapters this build ships (whose rules are bound by supportedRules). */
 export const SHIPPED_CHECK_ADAPTERS: ReadonlySet<string> = new Set([
   PREVIEW_DETECTOR_ID,
-  'pattern-semgrep',
-  'advisories-osv',
-  'iac-trivy',
-  'ci-zizmor',
-  'secrets-gitleaks',
+  ...SCANNER_ADAPTER_IDS,
   'framework-controls',
   'bounded-paths',
 ]);

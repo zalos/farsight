@@ -10,6 +10,7 @@
 // input and provenance use the pipeline contract's agent field names.
 import type { Digest } from '../contracts/index.js';
 import type { AgentMode } from '../contracts/pipeline.js';
+import { createHash } from 'node:crypto';
 import { canonicalDigest } from '../policy/digest.js';
 import { fail } from './providers/errors.js';
 import { providerKind } from './providers/registry.js';
@@ -22,12 +23,28 @@ import {
   qualifyInstalledNativeCopilot,
   type CopilotCredentialPath,
 } from './providers/cli-copilot-profile.js';
-import { CLAUDE_NATIVE_PROFILE, qualifyInstalledNativeClaude } from './providers/cli-native-profile.js';
+import {
+  CLAUDE_AGENT_PROFILE,
+  claudeProfileById,
+  claudeRuntimeInstallation,
+  nativeRuntimeHelper,
+  qualifyInstalledNativeClaude,
+} from './providers/cli-native-profile.js';
+import { probeNativeLogin, type NativeLoginProbe } from './providers/cli-native-helper.js';
 import { safeInputPath, type CopilotAgentPartial, type CopilotAgentResult } from './providers/cli-copilot-agent.js';
 import type { ModelBroker, ModelEnvelope } from './providers/broker.js';
 import type { ProviderBinding } from './providers/profile.js';
 import { reviewFail } from './errors.js';
-import { NATIVE_REVIEW_INSTRUCTIONS, nativeOutputSchema, nativeTask, parseFinalAnswer } from './native.js';
+import {
+  CLAUDE_TASK_LAYOUT,
+  COPILOT_TASK_LAYOUT,
+  NATIVE_REVIEW_INSTRUCTIONS,
+  nativeOutputSchema,
+  nativeTask,
+  parseFinalAnswer,
+  type NativeTaskLayout,
+} from './native.js';
+import { resolveStageInstructions, stagePackDigests, type ResolvedStageInstructions } from './packs.js';
 
 /** The runners an agent stage can name (the pipeline contract's ids). */
 export type AgentRunnerId = 'copilot-cli' | 'claude-cli' | 'hosted-api';
@@ -97,7 +114,15 @@ export interface AgentQualification {
   /** The exact resolved executable path: private to the owner's qualification record, never in a public artifact. */
   readonly executablePath?: string;
   /** The credential path as probed once here: whether this process (a CLI or a service child) can reach the login. */
-  readonly credentialPath?: CopilotCredentialPath;
+  readonly credentialPath?: CopilotCredentialPath | ClaudeCredentialPath;
+}
+
+/** Claude's two login paths, as classes: never an item, a token or a path. */
+export interface ClaudeCredentialPath {
+  /** The vendor login the brokered profile's fixed helper reads: `reachable`, or the helper's refusal class. */
+  readonly vendorLogin: 'reachable' | Extract<NativeLoginProbe, { reachable: false }>['reason'];
+  /** The native profile's credential: the owner's token under an adopted reference, read by the broker at admission. */
+  readonly native: 'adopted-reference';
 }
 
 /** A brokered run's result is the review session's own record, observations and private artifacts. */
@@ -118,6 +143,18 @@ export interface NativeRunResult {
   readonly tools: readonly Readonly<{ tool: string; path: string | null }>[];
   readonly instructions: Uint8Array;
   readonly task: string;
+  /** Every pack reference the stage used and the pack digest it resolved to, as the pipeline digest covers them. */
+  readonly packs: readonly Readonly<{ ref: string; digest: string }>[];
+  /** The exact instruction record sealed before the broker call (owner-private). */
+  readonly instructionRecord: NativeInstructionRecord;
+  /** Other models the CLI reported usage for (a background model), apart from the answering one (owner-private). */
+  readonly secondaryModels: readonly string[];
+  /** The promoted skills, in order, with each file's digest: the exact bytes that were materialised. */
+  readonly skills: readonly Readonly<{
+    ref: string;
+    digest: string;
+    files: readonly Readonly<{ path: string; digest: string }>[];
+  }>[];
   readonly provenance: AgentRunProvenance;
 }
 export type AgentRunResult = BrokeredRunResult | NativeRunResult;
@@ -135,8 +172,16 @@ export interface NativeRunContext {
   readonly binding: ProviderBinding;
   readonly operationId: string;
   readonly signal?: AbortSignal;
-  /** Promoted instruction bytes for this stage; absent means the bundled native review instructions. */
-  readonly instructions?: Uint8Array;
+  /**
+   * The workspace trust folder that holds promoted stage packs. Required when the stage names instructions or
+   * skills; every referenced byte is re-checked against the pack lock here, before anything is admitted or sent.
+   */
+  readonly trustDir?: string;
+  /**
+   * Seals the exact instruction record before anything is admitted or sent: the caller retains it owner-privately,
+   * behind the accepted-secret withholding fold. A failure here dispatches nothing.
+   */
+  readonly retain?: (record: NativeInstructionRecord) => Promise<void>;
 }
 export interface AgentRunContext {
   readonly brokered?: BrokeredRunContext;
@@ -158,13 +203,62 @@ export interface AgentRunner {
 
 const timingOf = (t?: { deadlineAt: number; signal?: AbortSignal }) => t ?? { deadlineAt: Date.now() + 5000 };
 
-/** Copilot native mode: the stage's budget, inputs and output schema in; a validated output and provenance out. */
-async function runCopilotNative(
+/** What differs between the two CLIs' native modes; the run itself is one function over these. */
+interface NativeFlavor {
+  readonly runner: 'copilot-cli' | 'claude-cli';
+  /** The task's wording and where the scratch tree holds instructions and skills. */
+  readonly layout: NativeTaskLayout;
+  /** The adopted pin's profile, or undefined when the binding names none this runner knows. */
+  pinned(binding: ProviderBinding): Readonly<{ id: string; version: string; executableDigest: string }> | undefined;
+  readonly fallbackProfileId: string;
+  /** Refuses with `credentialUnavailable`, before any reservation or launch, when the login cannot be reached. */
+  probe(timing: { deadlineAt: number; signal?: AbortSignal }): Promise<void>;
+  /** The CLI enforces the output schema and a dollar ceiling itself (`--json-schema`, `--max-budget-usd`). */
+  readonly enforces: boolean;
+}
+
+const COPILOT_FLAVOR: NativeFlavor = Object.freeze({
+  runner: 'copilot-cli' as const,
+  layout: COPILOT_TASK_LAYOUT,
+  pinned: (b: ProviderBinding) => (b.copilotProfile ? copilotProfileById(b.copilotProfile.id) : undefined),
+  fallbackProfileId: COPILOT_AGENT_PROFILE.id,
+  // The vendor's login must be reachable from this process (a foreground CLI or a service child in the owner's
+  // login session); a locked or absent login refuses here, before any reservation or launch.
+  async probe(timing: { deadlineAt: number; signal?: AbortSignal }) {
+    const credential = await probeCopilotCredentialPath(timing);
+    if (credential.selector !== 'selected' || credential.keychain !== 'reachable')
+      fail(
+        'sentinel.provider.credentialUnavailable',
+        `the Copilot login is not reachable from this process (selector ${credential.selector}, keychain ${credential.keychain})`,
+      );
+  },
+  enforces: false,
+});
+
+const CLAUDE_FLAVOR: NativeFlavor = Object.freeze({
+  runner: 'claude-cli' as const,
+  layout: CLAUDE_TASK_LAYOUT,
+  pinned: (b: ProviderBinding) => (b.nativeProfile ? claudeProfileById(b.nativeProfile.id) : undefined),
+  fallbackProfileId: CLAUDE_AGENT_PROFILE.id,
+  // The owner's token was read by the broker from the adopted reference when the envelope was admitted; an
+  // unreadable reference denied admission there. Nothing is read again here.
+  probe: () => Promise.resolve(),
+  enforces: true,
+});
+
+/** A native run: the stage's budget, inputs and output schema in; a validated output and provenance out. */
+async function runNative(
+  flavor: NativeFlavor,
   stage: AgentStageInput,
   inputs: readonly AgentInputFile[],
   context: NativeRunContext,
 ): Promise<NativeRunResult> {
-  if (stage.runner !== 'copilot-cli') fail('sentinel.provider.invalidProfile', 'the stage names another runner');
+  if (stage.runner !== flavor.runner) fail('sentinel.provider.invalidProfile', 'the stage names another runner');
+  if (
+    stage.budget?.usd !== undefined &&
+    (!flavor.enforces || !/^(0|[1-9][0-9]{0,5})(\.[0-9]{1,2})?$/.test(stage.budget.usd))
+  )
+    return reviewFail('sentinel.review.nativeBudget');
   const turns = stage.budget?.turns,
     tokens = stage.budget?.tokens,
     seconds = stage.budget?.seconds;
@@ -181,26 +275,44 @@ async function runCopilotNative(
   const named = (stage.produces ?? []).filter((p): p is { name: string; schema: string } => typeof p === 'object');
   if (named.length !== 1) return reviewFail('sentinel.review.outputSchema', 'a native stage declares one named output');
   const schema = nativeOutputSchema(named[0]!.schema);
-  if (stage.instructions !== undefined && context.instructions === undefined)
-    fail('sentinel.provider.invalidProfile', 'promoted stage instructions are read from their stage pack');
-  if (stage.skills?.length) fail('sentinel.provider.invalidProfile', 'skills are read from their promoted packs');
+  // Every supplied pack field is validated before dispatch: a native stage naming a `prompt` is refused, never run
+  // with the bundled instructions instead.
+  const packed = stage.instructions !== undefined || stage.prompt !== undefined || Boolean(stage.skills?.length);
+  if (packed && context.trustDir === undefined)
+    fail('sentinel.provider.invalidProfile', 'promoted instructions and skills are read from the trust folder');
+  // Changed or unapproved pack bytes refuse here, before the credential probe, any reservation or any launch.
+  const resolved: ResolvedStageInstructions = packed
+    ? resolveStageInstructions(context.trustDir!, { ...stage, mode: 'native' })
+    : Object.freeze({ text: null, skills: Object.freeze([]) });
+  // A stage with packs runs only after its exact instruction record is sealed by the caller.
+  if (packed && !context.retain) return reviewFail('sentinel.review.instructionsUnsealed');
   const paths = inputs.map((f) => safeInputPath(f.relativePath));
   if (new Set(paths).size !== paths.length || !paths.length)
     fail('sentinel.provider.invalidProfile', 'a native stage reads distinct inputs');
-  const instructions = context.instructions ?? new TextEncoder().encode(NATIVE_REVIEW_INSTRUCTIONS.text + '\n');
-  const task = nativeTask(stage.id, paths, schema);
-  const pinned = context.binding.copilotProfile ? copilotProfileById(context.binding.copilotProfile.id) : undefined;
-  // The vendor's login must be reachable from this process (a foreground CLI or a service child in the owner's login
-  // session); a locked or absent login refuses here, before any reservation or launch.
-  const credential = await probeCopilotCredentialPath({
-    deadlineAt: Date.now() + 5000,
-    ...(context.signal ? { signal: context.signal } : {}),
-  });
-  if (credential.selector !== 'selected' || credential.keychain !== 'reachable')
-    fail(
-      'sentinel.provider.credentialUnavailable',
-      `the Copilot login is not reachable from this process (selector ${credential.selector}, keychain ${credential.keychain})`,
-    );
+  const instructions = resolved.text?.bytes ?? new TextEncoder().encode(NATIVE_REVIEW_INSTRUCTIONS.text + '\n');
+  // The sealed digests are taken now, from the pack lock (skills, a promoted instructions file) or from the bytes as
+  // first received (inputs, the bundled instructions); the request carries its own copies, so nothing a caller does
+  // to the record can change what is written, and the scratch tree is verified against these strings.
+  const skills = resolved.skills.map((k) =>
+    Object.freeze({
+      id: k.id,
+      files: k.files.map((f) => Object.freeze({ path: f.path, bytes: Uint8Array.from(f.bytes), digest: f.digest })),
+    }),
+  );
+  const inputDigests = Object.freeze(inputs.map((f) => 'sha256:' + createHash('sha256').update(f.bytes).digest('hex')));
+  const instructionsDigest =
+    resolved.text?.digest ?? 'sha256:' + createHash('sha256').update(instructions).digest('hex');
+  const sendInputs = inputs.map((f) => ({ relativePath: f.relativePath, bytes: Uint8Array.from(f.bytes) }));
+  const sendInstructions = Uint8Array.from(instructions);
+  const task = nativeTask(
+    stage.id,
+    paths,
+    schema,
+    resolved.skills.map((k) => k.id),
+    flavor.layout,
+  );
+  const pinned = flavor.pinned(context.binding);
+  await flavor.probe({ deadlineAt: Date.now() + 5000, ...(context.signal ? { signal: context.signal } : {}) });
   const started = Date.now(),
     grantedMs = seconds! * 1000;
   type Installation = Readonly<{ source: string; executable: string }> | null;
@@ -211,9 +323,9 @@ async function runCopilotNative(
   ): AgentRunProvenance =>
     Object.freeze({
       mode: 'native' as const,
-      runner: 'copilot-cli' as const,
+      runner: flavor.runner,
       runnerVersion: pinned?.version ?? null,
-      profileId: pinned?.id ?? COPILOT_AGENT_PROFILE.id,
+      profileId: pinned?.id ?? flavor.fallbackProfileId,
       executableDigest: (pinned?.executableDigest ?? null) as Digest | null,
       installation: installation
         ? Object.freeze({ source: installation.source, executablePath: installation.executable })
@@ -224,7 +336,7 @@ async function runCopilotNative(
         identitySource: 'host-reported' as const,
       }),
       promptDigest: canonicalDigest({ instructions: Buffer.from(instructions).toString('base64'), task }) as Digest,
-      skillDigests: Object.freeze([]),
+      skillDigests: Object.freeze(resolved.skills.map((k) => k.digest as Digest)),
       turns: seen.turns,
       tokens: seen.usage
         ? Object.freeze({
@@ -274,21 +386,58 @@ async function runCopilotNative(
         instructions,
         task,
         provenance: provenanceOf(seen, installation),
+        instructionRecord: record,
       }),
       error,
     );
   };
+  const sha = (b: Uint8Array) => ('sha256:' + createHash('sha256').update(b).digest('hex')) as Digest;
+  const record: NativeInstructionRecord = Object.freeze({
+    schema: 'sentinel-native-instructions/draft-1' as const,
+    disclosure: 'private-only' as const,
+    withholding: 'accepted-secret-fold-before-read' as const,
+    stage: stage.id,
+    instructions: Object.freeze({
+      ref: resolved.text?.ref ?? null,
+      digest: instructionsDigest as Digest,
+      bytes: Uint8Array.from(instructions),
+    }),
+    inputs: Object.freeze(
+      inputs.map((f, i) => Object.freeze({ relativePath: f.relativePath, digest: inputDigests[i] as Digest })),
+    ),
+    task: Object.freeze({ digest: sha(Buffer.from(task)), text: task }),
+    skills: Object.freeze(
+      resolved.skills.map((k) =>
+        Object.freeze({
+          ref: k.ref,
+          digest: k.digest,
+          files: Object.freeze(
+            k.files.map((f) =>
+              Object.freeze({ path: f.path, digest: f.digest as Digest, bytes: Uint8Array.from(f.bytes) }),
+            ),
+          ),
+        }),
+      ),
+    ),
+    packs: stagePackDigests(resolved),
+  });
+  // Sealed before the broker call: the record exists (and the caller retained it) before any byte is sent.
+  if (context.retain) await context.retain(record);
   let reply: Awaited<ReturnType<ModelBroker['runAgent']>>;
   try {
     reply = await context.broker.runAgent(context.envelope, context.binding, {
       operationId: context.operationId,
-      files: inputs.map((f) => ({ relativePath: f.relativePath, bytes: f.bytes })),
-      instructions,
+      files: sendInputs,
+      instructions: sendInstructions,
+      digests: Object.freeze({ instructions: instructionsDigest, files: inputDigests }),
       task,
+      ...(skills.length ? { skills } : {}),
       maxTurns: turns!,
       tokens: tokens!,
       deadlineAt: started + grantedMs,
       ...(context.signal ? { signal: context.signal } : {}),
+      ...(flavor.enforces ? { jsonSchema: JSON.stringify(schema.jsonSchema) } : {}),
+      ...(flavor.enforces && stage.budget?.usd !== undefined ? { maxUsd: stage.budget.usd } : {}),
     });
   } catch (e) {
     const refused = e as {
@@ -335,6 +484,18 @@ async function runCopilotNative(
     tools: reply.result.tools,
     instructions,
     task,
+    packs: stagePackDigests(resolved),
+    instructionRecord: record,
+    secondaryModels: Object.freeze([...(reply.result.secondaryModels ?? [])]),
+    skills: Object.freeze(
+      resolved.skills.map((k) =>
+        Object.freeze({
+          ref: k.ref,
+          digest: k.digest,
+          files: Object.freeze(k.files.map((f) => Object.freeze({ path: f.path, digest: f.digest }))),
+        }),
+      ),
+    ),
     provenance,
   });
 }
@@ -347,6 +508,28 @@ export function publicProvenance(p: AgentRunProvenance): AgentRunProvenance {
       ? Object.freeze({ source: p.installation.source, executablePath: '<redacted>' })
       : null,
   });
+}
+
+/**
+ * The exact instructions a native stage sends, sealed before the broker call: the instructions file, the task, every
+ * promoted skill file with its digest, and the pack references they resolved from. Owner-private; the accepted-secret
+ * withholding fold runs over it before any read.
+ */
+export interface NativeInstructionRecord {
+  readonly schema: 'sentinel-native-instructions/draft-1';
+  readonly disclosure: 'private-only';
+  readonly withholding: 'accepted-secret-fold-before-read';
+  readonly stage: string;
+  readonly instructions: Readonly<{ ref: string | null; digest: Digest; bytes: Uint8Array }>;
+  /** Each input's digest as first received; the scratch tree is verified against these, never against buffers. */
+  readonly inputs: readonly Readonly<{ relativePath: string; digest: Digest }>[];
+  readonly task: Readonly<{ digest: Digest; text: string }>;
+  readonly skills: readonly Readonly<{
+    ref: string;
+    digest: string;
+    files: readonly Readonly<{ path: string; digest: Digest; bytes: Uint8Array }>[];
+  }>[];
+  readonly packs: readonly Readonly<{ ref: string; digest: string }>[];
 }
 
 /** What a refused native run retains privately: its transcript and provenance, never a stage output. */
@@ -365,6 +548,7 @@ export interface NativeFailedAttempt {
   readonly instructions: Uint8Array;
   readonly task: string;
   readonly provenance: AgentRunProvenance;
+  readonly instructionRecord: NativeInstructionRecord;
 }
 /** A native run that completed and was refused afterwards. Its `code` is the refusal's catalog key. */
 export class NativeRunFailure extends Error {
@@ -419,25 +603,35 @@ export const COPILOT_RUNNER: AgentRunner = Object.freeze({
     });
   },
   run: (stage: AgentStageInput, inputs: readonly AgentInputFile[], context: AgentRunContext) =>
-    delegate(COPILOT_RUNNER, stage, inputs, context, runCopilotNative),
+    delegate(COPILOT_RUNNER, stage, inputs, context, (st, i, c) => runNative(COPILOT_FLAVOR, st, i, c)),
 });
 
 export const CLAUDE_RUNNER: AgentRunner = Object.freeze({
   id: 'claude-cli' as const,
-  modes: Object.freeze(['brokered'] as const),
+  modes: Object.freeze(['brokered', 'native'] as const),
   async qualify(timing?: { deadlineAt: number; signal?: AbortSignal }): Promise<AgentQualification> {
-    const runtime = await qualifyInstalledNativeClaude(timingOf(timing));
+    const runtime = await qualifyInstalledNativeClaude(timingOf(timing), CLAUDE_AGENT_PROFILE);
+    const installation = claudeRuntimeInstallation(runtime);
+    // The class of each login path, read once: the vendor login through the fixed helper (what the brokered profile
+    // uses), and the native profile's adopted token reference, which only the broker reads, at admission.
+    const vendor = await probeNativeLogin(nativeRuntimeHelper(runtime), timingOf(timing));
     return Object.freeze({
       runner: 'claude-cli' as const,
       profileId: runtime.profileId,
-      version: CLAUDE_NATIVE_PROFILE.version,
+      version: CLAUDE_AGENT_PROFILE.version,
       executableDigest: runtime.executableDigest as Digest,
       profileDigest: runtime.profileDigest as Digest,
       modes: CLAUDE_RUNNER.modes,
+      installation: installation.source,
+      executablePath: installation.executable,
+      credentialPath: Object.freeze({
+        vendorLogin: vendor.reachable ? ('reachable' as const) : vendor.reason,
+        native: 'adopted-reference' as const,
+      }),
     });
   },
   run: (stage: AgentStageInput, inputs: readonly AgentInputFile[], context: AgentRunContext) =>
-    delegate(CLAUDE_RUNNER, stage, inputs, context),
+    delegate(CLAUDE_RUNNER, stage, inputs, context, (st, i, c) => runNative(CLAUDE_FLAVOR, st, i, c)),
 });
 
 /**
