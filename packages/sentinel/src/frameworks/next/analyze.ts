@@ -13,7 +13,6 @@
 // Inputs are the snapshot envelope, the parser's analysis of the same snapshot and source (PR 05), and a reader of
 // captured bytes by content id (the store). Every read is hash-checked against its content id. No application code
 // runs; Farsight's broad middleware guard edges are never consulted.
-import { createHash } from 'node:crypto';
 import type {
   ArtifactId,
   ControlFactsEnvelope,
@@ -25,9 +24,9 @@ import type {
   SourceEvidence,
   Digest,
 } from '../../contracts/index.js';
+import { digestOf, sha256Id as sha } from '../../kernel/digest.js';
 import { plannerAnalysisFrom } from '../../planner/adapters.js';
 import type { SourceAnalysis } from '../../snapshot/parser.js';
-import { digestOf } from '../../store/ledger-json.js';
 import { validateEnvelope } from '../../validate.js';
 import { readMiddleware, readNextConfig, type ByteRange, type MiddlewareRead, type NextConfigRead } from './config.js';
 import { decideCaseStable, parseMatcherSource, routeLanguage, type SegmentLanguage } from './pattern.js';
@@ -35,6 +34,7 @@ import { NEXT_ANALYSIS_SCHEMA, NEXT_PACK_DIGEST, NEXT_SUPPORT } from './support.
 import { PACKAGES, resolveVersions, type CapturedFile, type PackageName, type ResolvedVersion } from './version.js';
 import { NextPackError } from './errors.js';
 
+/** The control properties the pack emits facts for by default: every property the contract names. */
 export const CONTROL_PROPERTIES: readonly ControlProperty[] = Object.freeze([
   'authentication',
   'authorization',
@@ -71,11 +71,13 @@ export const NEXT_REASON_CODES = Object.freeze([
   'sentinel.next.frontier.noRouter',
   'sentinel.next.frontier.directoryUnlisted',
 ] as const);
+/** One of {@link NEXT_REASON_CODES}. */
 export type NextReasonCode = (typeof NEXT_REASON_CODES)[number];
 
 /** How the middleware relates to the requests that reach one surface. */
 export type Applicability = 'matched' | 'excluded' | 'partial' | 'no-middleware' | 'unknown';
 
+/** How the middleware relates to one surface, with an example request path it reaches and one it does not. */
 export interface SurfaceApplicability {
   readonly surfaceId: string;
   readonly kind: string;
@@ -92,6 +94,7 @@ export interface SurfaceApplicability {
   readonly influenceDigest: Digest;
 }
 
+/** One Next project in the source: its folders, its resolved versions, whether it is supported, and its middleware. */
 export interface NextProject {
   /** The folder holding the project's package.json ('' for the source root). */
   readonly projectDir: string;
@@ -116,6 +119,7 @@ export interface NextProject {
   readonly registrationDigest: Digest;
 }
 
+/** The pack's result for one source: every project, the source-wide frontiers and one envelope per routed project. */
 export interface NextPackResult {
   readonly schema: typeof NEXT_ANALYSIS_SCHEMA;
   readonly snapshotId: string;
@@ -129,6 +133,7 @@ export interface NextPackResult {
   readonly envelopes: readonly ControlFactsEnvelope[];
 }
 
+/** What analyzeNext reads: the snapshot, the parser's analysis of its source and a hash-checked reader of bytes. */
 export interface NextPackInput {
   readonly snapshot: SnapshotEnvelope;
   /** The parser's analysis of this snapshot's source (snapshot/parser `parseSnapshot`). */
@@ -148,7 +153,6 @@ const NEXT_CONFIG_EXTS = ['js', 'mjs', 'cjs', 'ts'];
 const SURFACE_FILE = /^(page|route)\.(tsx|ts|jsx|js)$/;
 const PARSER_SURFACE_FILE = /^(page\.(tsx|ts|jsx|js)|route\.(ts|js))$/;
 
-const sha = (b: Uint8Array | string) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 const under = (path: string, dir: string) => (dir === '' ? true : path === dir || path.startsWith(dir + '/'));
 const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);

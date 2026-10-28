@@ -11,6 +11,7 @@
 // silently falls back to the checks embedded in its binary when that cache is missing, so the worker reports the
 // engine's own "loaded from disk" evidence and the coordinator refuses a run without it. The engine log never leaves
 // the container: only fixed words, digits and paths from the job's own list are extracted from it.
+/** The worker's source text; `[MAX_OUT]`, `[ENGINE_ARGS]` and `[BUNDLE_LAYER]` are filled by buildTrivyAdapter. */
 export const TRIVY_WORKER_SOURCE = `# Sentinel Trivy worker (sentinel-trivy-worker/1). Original; POSIX sh and busybox applets only.
 set -u
 P='sentinel-worker/draft-1'

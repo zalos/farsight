@@ -12,7 +12,8 @@
 //   non-zero match time for that rule on that file; a zero (the rule's file prefilter skipped it) is `not-run`, a
 //   reported timeout for that rule is `partial`, a missing timing block leaves every rule `not-established`; files
 //   requested but neither scanned nor skipped are `omitted`, even on exit zero.
-import { createHash } from 'node:crypto';
+import { sha256Id as sha256 } from '../../kernel/digest.js';
+import { deepFreeze } from '../../kernel/freeze.js';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { WorkerOutcome } from '../../execution/supervisor.js';
 import { MEASURED_ARCHITECTURES, PATTERN_ENGINE, PATTERN_IMAGE_PLATFORMS } from './adapter.js';
@@ -25,6 +26,7 @@ import {
   type PatternRule,
 } from './job.js';
 
+/** Why a file and rule's coverage is what it is: each is a catalog key. */
 export const PATTERN_COVERAGE_REASONS = [
   'sentinel.pattern.coverage.complete',
   'sentinel.pattern.coverage.partialParse',
@@ -45,8 +47,10 @@ export const PATTERN_COVERAGE_REASONS = [
   'sentinel.pattern.coverage.platformUnmeasured',
   'sentinel.pattern.coverage.inputMismatch',
 ] as const;
+/** One of {@link PATTERN_COVERAGE_REASONS}. */
 export type PatternCoverageReason = (typeof PATTERN_COVERAGE_REASONS)[number];
 
+/** Why a result the engine reported was refused rather than kept: each is a catalog key. */
 export const PATTERN_REFUSAL_REASONS = [
   'sentinel.pattern.refused.unknownRule',
   'sentinel.pattern.refused.unknownTarget',
@@ -56,6 +60,7 @@ export const PATTERN_REFUSAL_REASONS = [
   'sentinel.pattern.refused.malformed',
   'sentinel.pattern.refused.inputMismatch',
 ] as const;
+/** One of {@link PATTERN_REFUSAL_REASONS}. */
 export type PatternRefusalReason = (typeof PATTERN_REFUSAL_REASONS)[number];
 
 /** The fixed categories a failed engine run is reported as; its messages are never kept. */
@@ -68,8 +73,13 @@ export const PATTERN_ENGINE_FAILURES = [
   'sentinel.pattern.engine.killed',
   'sentinel.pattern.engine.unknown',
 ] as const;
+/** One of {@link PATTERN_ENGINE_FAILURES}. */
 export type PatternEngineFailure = (typeof PATTERN_ENGINE_FAILURES)[number];
 
+/**
+ * One file and rule's coverage word: complete only when the engine's own timings show the rule ran over the whole
+ * parsed file.
+ */
 export type CoverageStatus =
   | 'complete'
   | 'partial'
@@ -91,12 +101,14 @@ export interface PatternCoverage {
   readonly reasonCode: PatternCoverageReason;
 }
 
+/** A byte range in a captured file and the digest of the bytes it quotes; the bytes themselves are never kept. */
 export interface ByteSpanRef {
   readonly startByte: number;
   readonly endByte: number;
   readonly quoteDigest: string;
 }
 
+/** What a finding shows: a location, or a same-file sink with its source when the engine reported one. */
 export type PatternEvidence =
   | { readonly kind: 'structural-locator' }
   | {
@@ -106,6 +118,7 @@ export type PatternEvidence =
       readonly trace: 'same-file' | 'not-reported';
     };
 
+/** One kept finding: the rule, the captured file and span, and its evidence. */
 export interface PatternFinding {
   /** Sentinel's identity: digest of adapter, rule, revision, target and span. Never the engine's fingerprint. */
   readonly id: string;
@@ -117,12 +130,14 @@ export interface PatternFinding {
   readonly evidence: PatternEvidence;
 }
 
+/** One refused result, with why and, when known, the rule and file it named. */
 export interface PatternRefusal {
   readonly reasonCode: PatternRefusalReason;
   readonly familyId: string | null;
   readonly relativePath: string | null;
 }
 
+/** A normalized run: the engine and platform, findings, per-file-per-rule coverage and what was refused. */
 export interface PatternRunResult {
   readonly adapter: string;
   readonly engine: string;
@@ -141,6 +156,7 @@ export interface PatternRunResult {
   readonly refused: readonly PatternRefusal[];
 }
 
+/** What normalizing one run needs: the job, its rules, the verified outcome and outputs, and the sealed targets. */
 export interface NormalizeInput {
   job: PatternJob;
   jobDigest: ArtifactId;
@@ -163,7 +179,6 @@ export interface NormalizeInput {
 const TREE = '/tmp/sentinel-pattern/tree/';
 const MAX_ENGINE_JSON = 3_145_728;
 const MAX_RUN_RECORD = 65_536;
-const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 const canonical = (v: unknown): string =>
   JSON.stringify(v, (_k, x) =>
     x && typeof x === 'object' && !Array.isArray(x)
@@ -171,14 +186,6 @@ const canonical = (v: unknown): string =>
       : x,
   );
 const int = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
-
-function deepFreeze<T>(v: T): T {
-  if (v && typeof v === 'object' && !Object.isFrozen(v)) {
-    Object.freeze(v);
-    for (const x of Object.values(v)) deepFreeze(x);
-  }
-  return v;
-}
 
 function parseJson(bytes: Uint8Array, limit: number, what: string): any {
   if (bytes.byteLength > limit) patternFail('sentinel.pattern.outputInvalid', `${what} exceeds ${limit} bytes`);
@@ -230,6 +237,12 @@ function traceLoc(node: unknown): { path: string; start: unknown; end: unknown }
   return loc && typeof loc.path === 'string' ? loc : null;
 }
 
+/**
+ * Reads one finished attempt into findings and per-file-per-rule coverage. Refuses, with a PatternError: rules that are
+ * not the job's (`ruleInvalid`); output past its bound or not UTF-8 JSON, a missing run record, a record for another
+ * job, an engine output that is not the named one, from another engine version or edition, or without results
+ * (`outputInvalid`). A result naming an unknown rule or file, a bad span or another file is listed as refused.
+ */
 export function normalizePatternRun(input: NormalizeInput): PatternRunResult {
   const { job, outcome } = input;
   const rules = new Map(input.rules.map((r) => [r.familyId, r]));

@@ -5,6 +5,7 @@
 // optional or repeated parameter, regular expression, array of paths, trailing slash or empty segment is outside the
 // subset and unknown, never approximated.
 
+/** Whether a request path matches a registration path: yes, no, or not decidable within the supported subset. */
 export type MatchResult = 'match' | 'no-match' | 'unknown';
 
 type Segment = { readonly kind: 'literal'; readonly text: string } | { readonly kind: 'param'; readonly name: string };

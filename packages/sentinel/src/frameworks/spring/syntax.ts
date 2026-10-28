@@ -98,9 +98,11 @@ export async function parseJava(path: string, content: string, raw: Buffer): Pro
 
 // ---- small syntax helpers ----
 
+/** A node's named children, in order; empty for no node. */
 export const named = (n: JavaNode | null | undefined): JavaNode[] =>
   n ? n.namedChildren.filter((c): c is JavaNode => c !== null) : [];
 
+/** Visits `n` and every named node under it, outermost first. */
 export function walk(n: JavaNode, visit: (n: JavaNode) => void): void {
   visit(n);
   for (const c of named(n)) walk(c, visit);
@@ -115,6 +117,7 @@ export function literalString(n: JavaNode | null | undefined): string | undefine
   return parts[0]!.text;
 }
 
+/** One annotation: its name as written, its node, its positional value and its named pairs. */
 export interface Annotation {
   readonly name: string;
   readonly node: JavaNode;
@@ -166,6 +169,7 @@ export function stringValues(n: JavaNode | undefined): string[] | undefined {
   return undefined;
 }
 
+/** The keyword modifiers of a declaration (`public`, `static`, …), annotations left out. */
 export function modifierWords(decl: JavaNode): Set<string> {
   const mods = named(decl).find((c) => c.type === 'modifiers');
   // Keyword modifiers are anonymous children; read them from the text outside annotations.
@@ -188,5 +192,7 @@ export function fluentChain(n: JavaNode): { root: JavaNode | null; calls: JavaNo
   return { root: cur, calls };
 }
 
+/** The method name of a call node; empty when it has none. */
 export const callName = (call: JavaNode): string => call.childForFieldName('name')?.text ?? '';
+/** The argument nodes of a call, in order. */
 export const callArgs = (call: JavaNode): JavaNode[] => named(call.childForFieldName('arguments'));

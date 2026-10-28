@@ -2,6 +2,7 @@
 // public parser uses (0.138.0). It records what the source declares, with exact UTF-8 byte spans; it decides nothing.
 // Only literal, statically resolvable forms are understood; every other form is returned as a frontier with its span.
 // Nothing here executes, imports or evaluates target code.
+import { SentinelError } from '../../kernel/errors.js';
 type ParseSync = (path: string, text: string, options: object) => { program: unknown; errors?: unknown[] };
 let parseSync: ParseSync | null = null;
 
@@ -10,11 +11,13 @@ export async function loadParser(): Promise<void> {
   if (!parseSync) parseSync = ((await import('oxc-parser')) as { parseSync: ParseSync }).parseSync;
 }
 
+/** A syntax node as the pinned parser emits it, with UTF-16 offsets. */
 export type AstNode = { type: string; start: number; end: number; [k: string]: any };
 
 const isNode = (v: unknown): v is AstNode =>
   typeof v === 'object' && v !== null && typeof (v as AstNode).type === 'string';
 
+/** Visits every node under `node`, outermost first; a visitor returning false skips that node's children. */
 export function walk(node: unknown, visit: (n: AstNode) => boolean | void): void {
   if (Array.isArray(node)) {
     for (const c of node) walk(c, visit);
@@ -42,9 +45,13 @@ export interface ParsedFile {
   span(node: { start: number; end: number }): Span | null;
 }
 
-export class SyntaxFailure extends Error {
-  constructor(readonly reason: 'invalidUtf8' | 'parseError') {
-    super(reason);
+/** A captured file the pack cannot read: bytes that are not UTF-8, or a syntax error. The message is the reason. */
+export class SyntaxFailure extends SentinelError<'sentinel.nest.invalidUtf8' | 'sentinel.nest.parseFailed'> {
+  readonly reason: 'invalidUtf8' | 'parseError';
+  constructor(reason: 'invalidUtf8' | 'parseError') {
+    super(reason === 'invalidUtf8' ? 'sentinel.nest.invalidUtf8' : 'sentinel.nest.parseFailed', reason);
+    this.name = 'SyntaxFailure';
+    this.reason = reason;
   }
 }
 
@@ -128,6 +135,7 @@ export function decoratorCall(d: AstNode): { callee: AstNode; args: AstNode[] } 
   return { callee: e, args: [] };
 }
 
+/** The classes a file declares at its top level, exported or not. */
 export function classesOf(file: ParsedFile): AstNode[] {
   const out: AstNode[] = [];
   for (const s of file.program.body ?? []) {
@@ -150,6 +158,7 @@ const SCOPE_TYPES = new Set([
   'ClassExpression',
   'SwitchStatement',
 ]);
+/** True for a function declaration, a function expression or an arrow function. */
 export const isFunction = (n: AstNode | undefined) => !!n && FUNCTION_TYPES.has(n.type);
 
 /** Like `walk`, with the chain of ancestors (outermost first) of each node. */

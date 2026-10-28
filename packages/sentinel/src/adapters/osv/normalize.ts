@@ -10,15 +10,16 @@
 //   advisory snapshot too, so a new snapshot is a new assessment; advisory text is untrusted and not kept;
 // - coverage is per file: complete, partial (versions unknown or transitives not resolved), database-absent,
 //   database-stale (older than the owner's bound), empty, error, not applicable.
-import { createHash } from 'node:crypto';
+import { sha256Id as sha256 } from '../../kernel/digest.js';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { WorkerOutcome } from '../../execution/supervisor.js';
 import { canonicalDigest } from '../../policy/digest.js';
-import { deepFreeze } from '../../policy/immutable.js';
+import { deepFreeze } from '../../kernel/freeze.js';
 import { OSV_ENGINE, OSV_IMAGE_PLATFORMS, OSV_MAX_OUTPUT_BYTES, OSV_MEASURED_ARCHITECTURES } from './adapter.js';
 import { osvFail } from './errors.js';
 import { KIND_ECOSYSTEMS, type DependencyFileKind, type Ecosystem, type OsvJob, type OsvJobTarget } from './job.js';
 
+/** How sure a component's version is, from a resolved lockfile down to unknown. */
 export const OSV_CERTAINTIES = [
   'resolved-lockfile',
   'declared-sbom',
@@ -28,6 +29,7 @@ export const OSV_CERTAINTIES = [
   'unknown-managed',
   'unknown',
 ] as const;
+/** One of {@link OSV_CERTAINTIES}. */
 export type VersionCertainty = (typeof OSV_CERTAINTIES)[number];
 const ASSESSABLE: ReadonlySet<VersionCertainty> = new Set([
   'resolved-lockfile',
@@ -35,8 +37,10 @@ const ASSESSABLE: ReadonlySet<VersionCertainty> = new Set([
   'declared-exact',
   'declared-property',
 ]);
+/** How far a file's dependencies were followed: as the lockfile locked them, as the SBOM listed them, or not. */
 export type TransitiveLimit = 'as-locked' | 'as-listed-by-sbom' | 'not-resolved';
 
+/** Why a file's coverage is what it is: each is a catalog key. */
 export const OSV_COVERAGE_REASONS = [
   'sentinel.osv.coverage.complete',
   'sentinel.osv.coverage.versionsUnknown',
@@ -58,7 +62,9 @@ export const OSV_COVERAGE_REASONS = [
   'sentinel.osv.coverage.componentsRefused',
   'sentinel.osv.coverage.databaseAgeUnknown',
 ] as const;
+/** One of {@link OSV_COVERAGE_REASONS}. */
 export type OsvCoverageReason = (typeof OSV_COVERAGE_REASONS)[number];
+/** Why a part of the engine's output was refused rather than read: each is a catalog key. */
 export const OSV_REFUSAL_REASONS = [
   'sentinel.osv.refused.unknownSource',
   'sentinel.osv.refused.versionUnverified',
@@ -66,15 +72,19 @@ export const OSV_REFUSAL_REASONS = [
   'sentinel.osv.refused.malformed',
   'sentinel.osv.refused.inputMismatch',
 ] as const;
+/** One of {@link OSV_REFUSAL_REASONS}. */
 export type OsvRefusalReason = (typeof OSV_REFUSAL_REASONS)[number];
+/** The fixed categories a failed engine run is reported under; the engine's own text never leaves the container. */
 export const OSV_ENGINE_FAILURES = [
   'sentinel.osv.engine.engineError',
   'sentinel.osv.engine.noPackages',
   'sentinel.osv.engine.killed',
   'sentinel.osv.engine.unknown',
 ] as const;
+/** One of {@link OSV_ENGINE_FAILURES}. */
 export type OsvEngineFailure = (typeof OSV_ENGINE_FAILURES)[number];
 
+/** One file's coverage word: complete only when no limitation applies (every component assessed, nothing skipped). */
 export type OsvCoverageStatus =
   | 'complete'
   | 'partial'
@@ -85,6 +95,7 @@ export type OsvCoverageStatus =
   | 'error'
   | 'not-applicable';
 
+/** One component the engine listed: its version, how sure that version is, and whether it was assessed. */
 export interface OsvComponent {
   readonly ecosystem: Ecosystem;
   readonly name: string;
@@ -103,6 +114,7 @@ export interface OsvComponent {
   readonly kind: DependencyFileKind;
 }
 
+/** One assessed component that matches known advisories in the snapshot it was assessed against. */
 export interface OsvFinding {
   /** The assessment: component, advisory group and the advisory snapshot it was matched against. */
   readonly id: string;
@@ -121,6 +133,7 @@ export interface OsvFinding {
   readonly database: { readonly sha256: string; readonly sourceLastModified: string | null };
 }
 
+/** One file's coverage: its status and every limitation, with how many components it held and assessed. */
 export interface OsvCoverage {
   readonly relativePath: string;
   readonly artifact: ArtifactId;
@@ -133,6 +146,7 @@ export interface OsvCoverage {
   readonly unassessed: number;
 }
 
+/** One snapshot the run used, with its age and freshness; an unknown age is never assumed fresh. */
 export interface OsvDatabaseUse {
   readonly ecosystem: Ecosystem;
   readonly sha256: string;
@@ -142,6 +156,7 @@ export interface OsvDatabaseUse {
   readonly freshness: 'fresh' | 'stale' | 'unknown';
 }
 
+/** A normalized run: the engine and platform, the snapshots, findings, per-file coverage and what was refused. */
 export interface OsvRunResult {
   readonly adapter: string;
   readonly engine: string;
@@ -157,6 +172,7 @@ export interface OsvRunResult {
   readonly refused: readonly { readonly reasonCode: OsvRefusalReason; readonly relativePath: string | null }[];
 }
 
+/** What normalizing one run needs: the job, the verified outcome and outputs, the sealed targets and the bound. */
 export interface OsvNormalizeInput {
   job: OsvJob;
   jobDigest: ArtifactId;
@@ -174,7 +190,6 @@ const ADVISORY_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
 /** A strict UTC RFC 3339 timestamp; anything else (extra text, offsets, words) is not read as a time. */
 const RFC3339_Z = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$/;
 const STAMP = RFC3339_Z;
-const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
 /**
  * The version text each dependency of a `pom.xml` declares, by `group:artifact`: null when it declares none (managed
@@ -218,6 +233,12 @@ function certaintyOf(
 const transitiveOf = (kind: DependencyFileKind): TransitiveLimit =>
   kind === 'maven-pom' ? 'not-resolved' : kind === 'cyclonedx-sbom' ? 'as-listed-by-sbom' : 'as-locked';
 
+/**
+ * Reads one finished attempt into findings and per-file coverage, from the run record and the engine output the
+ * record names. Refuses, with an OsvError `sentinel.osv.outputInvalid`, output past its bound, output that is not
+ * UTF-8 JSON, a missing run record, a record for another job and an engine output that is not the named one. Parts
+ * of the output it cannot trust are listed as refused; a file is complete only when every component was assessed.
+ */
 export function normalizeOsvRun(input: OsvNormalizeInput): OsvRunResult {
   const { job, outcome } = input;
   const databases: OsvDatabaseUse[] = job.databases.map((d) => {
@@ -544,6 +565,7 @@ export function normalizeOsvRun(input: OsvNormalizeInput): OsvRunResult {
   });
 }
 
+/** How one advisory group moved between two runs, and why; `unknown` wherever the two sides are not comparable. */
 export interface AdvisoryChange {
   readonly key: string;
   /**
