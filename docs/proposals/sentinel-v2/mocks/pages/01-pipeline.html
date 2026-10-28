@@ -1,0 +1,68 @@
+<!-- {"title":"Sentinel · Pipeline","level":"Pipeline","layout":["ladder","lanes","table"],"crumb":"<b>invoice-app</b> <span class=sep>›</span> scan <b>#42</b> <span class=sep>·</span> 2026-10-23 14:02 <span class=sep>·</span> source <span class=mono>1ff7a25e</span> <span class=sep>·</span> pipeline <span class=mono>rev 7</span> <span class=sep>·</span> 7 stages · 5 done · 1 running · 1 waiting","verdicts":"<span class=chip>coverage · 8 of 9 required</span><span class='chip warn'>12 findings · this scan</span><span class='chip k-agent'>3 model observations</span><span class='chip err'>policy · hold</span>"} -->
+<style>
+.ladder{display:grid;grid-template-columns:minmax(0,1fr);gap:0;max-width:1000px}
+.stg{display:grid;grid-template-columns:28px 1fr;gap:0 14px;position:relative}
+.stg .rail{position:relative}
+.stg .rail::before{content:'';position:absolute;left:13px;top:0;bottom:0;width:2px;background:var(--line)}
+.stg .rail .n{position:absolute;left:3px;top:11px;width:22px;height:22px;border-radius:50%;background:var(--panel);border:2px solid var(--line);font:11px var(--hud);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.stg.done .rail .n{border-color:var(--ok);color:var(--ok)}
+.stg.run .rail .n{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 0 4px var(--accent-dim)}
+.stg.wait .rail .n{border-style:dashed}
+.stg.skip .rail .n{border-color:var(--warn);color:var(--warn)}
+.sc{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:6px;padding:7px 12px;margin:4px 0;display:grid;grid-template-columns:1fr auto;gap:3px 14px;align-items:center}
+.sc.s{border-left-color:var(--k-script)} .sc.t{border-left-color:var(--k-tool);border-left-style:double;border-left-width:4px} .sc.a{border-left-color:var(--k-agent)}
+.sc.sel{outline:1px solid var(--cyan);box-shadow:0 0 0 3px var(--accent-dim)}
+.sc .nm{grid-column:1;grid-row:1;font:600 13px var(--body);display:flex;gap:8px;align-items:center;min-width:0}
+.sc .prov{grid-column:1;grid-row:2;font:11.5px var(--mono);color:var(--muted);overflow-wrap:anywhere}
+.sc .st{grid-column:2;grid-row:1/3;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.sc .io{grid-column:1/3;grid-row:3;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:3px}
+.sc .io .label{margin-right:2px}
+.par{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.par .sc{margin:4px 0;grid-template-columns:minmax(0,1fr)}
+.par .sc .nm,.par .sc .prov,.par .sc .st,.par .sc .io{grid-column:1;grid-row:auto}
+.par .sc .st{grid-row:auto;flex-direction:row;justify-content:flex-start;flex-wrap:wrap}
+.add{margin:2px 0 2px 42px;font:11px var(--hud);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);border:1px dashed var(--line);border-radius:4px;padding:3px 10px;display:inline-block}
+.cost{font:11px var(--mono);color:var(--dim)}
+</style>
+<div class="stage">
+ <div class="ladder">
+  <div class="stg done"><div class="rail"><span class="n">1</span></div><div class="sc s"><div class="nm">Capture the source <span class="chip k-script">script · host</span></div><div class="prov">sentinel capture @ 0.4.0 · node 24.21 · 1,735 files · 38.2 MB · digest 2c154ed1702d</div><div class="st"><span class="chip ok"><i class="dot"></i>done · 4.1 s</span><span class="cost">retained</span></div><div class="io"><span class="label">out</span><span class="chip plain">snapshot 2c154ed1</span></div></div></div>
+  <div class="stg done"><div class="rail"><span class="n">2</span></div><div class="sc s"><div class="nm">Parse and inventory <span class="chip k-script">script · host</span></div><div class="prov">@farsight/code-parser 0.3.1 · oxc 0.138 · 11,399 nodes · 24,466 edges · 18 entry points</div><div class="st"><span class="chip ok"><i class="dot"></i>done · 21 s</span><span class="cost">retained</span></div><div class="io"><span class="label">in</span><span class="chip plain">snapshot</span><span class="label">out</span><span class="chip plain">graph</span><span class="chip plain">inventory</span><span class="chip plain">entry points (18)</span></div></div></div>
+  <div class="stg done"><div class="rail"><span class="n">3</span></div><div class="par">
+    <div class="sc t"><div class="nm">Secrets <span class="chip k-tool">tool · container</span></div><div class="prov">gitleaks 8.30.1<br>ghcr.io/…@sha256:3f2a9c · linux/arm64</div><div class="st"><span class="chip ok"><i class="dot"></i>done · 9 s</span><span class="chip plain">0 findings</span></div></div>
+    <div class="sc t"><div class="nm">Dependencies <span class="chip k-tool">tool · container</span></div><div class="prov">osv-scanner 2.7.0 · advisories 2026-10-21<br>ghcr.io/…@sha256:b71e04</div><div class="st"><span class="chip ok"><i class="dot"></i>done · 14 s</span><span class="chip plain warn">2 findings</span></div></div>
+    <div class="sc t"><div class="nm">Patterns <span class="chip k-tool">tool · container</span></div><div class="prov">semgrep 1.181.0 · sentinel-rules 0.4.0 (41 rules)<br>ghcr.io/…@sha256:9ad6f1</div><div class="st"><span class="chip ok"><i class="dot"></i>done · 48 s</span><span class="chip plain warn">9 findings</span></div></div>
+    <div class="sc t"><div class="nm">CI &amp; infra <span class="chip k-tool">tool · container</span></div><div class="prov">trivy 0.68 · zizmor 1.14<br>ghcr.io/…@sha256:17c0e2</div><div class="st"><span class="chip ok"><i class="dot"></i>done · 11 s</span><span class="chip plain warn">1 finding</span></div></div>
+  </div></div>
+  <div class="stg done"><div class="rail"><span class="n">4</span></div><div class="sc s"><div class="nm">Walk each entry point end to end <span class="chip k-script">script · host</span></div><div class="prov">sentinel walkthrough @ 0.4.0 · 18 entries · 18 documents · 3 boundaries could not be followed</div><div class="st"><span class="chip ok"><i class="dot"></i>done · 6 s</span></div><div class="io"><span class="label">in</span><span class="chip plain">graph</span><span class="chip plain">entry points</span><span class="label">out</span><span class="chip plain">walkthroughs (18 md)</span></div></div></div>
+  <div class="stg done"><div class="rail"><span class="n">5</span></div><div class="sc a sel"><div class="nm">Review each entry point <span class="chip k-agent">agent · copilot cli</span></div><div class="prov">copilot 1.0.103 · gpt-6-luna · prompt review-entry/3 (9f1c…) · skills owasp-top10/2, express-auth/1 · 3 turns · 10,442 in / 326 out · $0.0048</div><div class="st"><span class="chip ok"><i class="dot"></i>done · 2 m 10 s</span><span class="cost">18 calls · $0.09 total</span></div><div class="io"><span class="label">in</span><span class="chip plain">walkthroughs</span><span class="chip plain">findings (12)</span><span class="label">out</span><span class="chip plain k-agent">observations (3)</span></div></div></div>
+  <div class="stg run"><div class="rail"><span class="n">6</span></div><div class="sc a"><div class="nm">Triage findings against the journeys <span class="chip k-agent">agent · claude cli</span> <span class="chip cyan">custom stage</span></div><div class="prov">claude 2.1.40 · claude-sonnet-5-5 · instructions triage.md (a04b…) · skill farsight-journeys/1 · budget 60k tokens · $0.50 · 180 s</div><div class="st"><span class="chip cyan"><i class="dot"></i>running · turn 2 of 4</span><span class="cost">7,900 in / 410 out so far</span></div><div class="io"><span class="label">in</span><span class="chip plain">findings (12)</span><span class="chip plain">observations (3)</span><span class="chip plain">journeys (21)</span><span class="label">out</span><span class="chip plain">triage · sentinel.triage/v1</span></div></div></div>
+  <span class="add">+ add a stage here</span>
+  <div class="stg wait"><div class="rail"><span class="n">7</span></div><div class="sc s"><div class="nm">Report <span class="chip k-script">script · host</span></div><div class="prov">sentinel report @ 0.4.0 · html · markdown · json · sarif</div><div class="st"><span class="chip"><i class="dot"></i>waiting on 6</span></div><div class="io"><span class="label">in</span><span class="chip plain">findings</span><span class="chip plain">observations</span><span class="chip plain">triage</span><span class="chip plain">walkthroughs</span></div></div></div>
+ </div>
+ <div class="foot"><span class="lg"><i class="sw s"></i>script on the host</span><span class="lg"><i class="sw t"></i>tool in a pinned container</span><span class="lg"><i class="sw a"></i>agent cli on the host</span><span style="margin-left:auto">every stage keeps its inputs, outputs and provenance · a changed stage reruns only what depends on it</span></div>
+</div>
+<aside class="dock">
+ <div class="tabs"><span class="on">Stage</span><span>Inputs</span><span>Outputs</span><span>Attempts</span></div>
+ <div class="pane">
+  <h2>Review each entry point</h2>
+  <div class="row"><span class="chip k-agent">agent · copilot cli</span><span class="chip ok">done · 2 m 10 s</span><span class="chip">stage 5 of 7</span></div>
+  <dl class="kv">
+   <dt>runner</dt><dd>GitHub Copilot CLI <span class="mono dim">1.0.103 · macOS arm64</span></dd>
+   <dt>model</dt><dd>requested <span class="mono">gpt-6-luna</span> · reported <span class="mono">gpt-6-luna</span></dd>
+   <dt>prompt</dt><dd>review-entry <span class="mono dim">rev 3 · 9f1c2e…</span> <a class="door">read it</a></dd>
+   <dt>skills</dt><dd>owasp-top10 <span class="mono dim">/2</span> · express-auth <span class="mono dim">/1</span></dd>
+   <dt>turns</dt><dd>3 per entry · 120 s deadline · 18 entries reviewed</dd>
+   <dt>tokens</dt><dd class="num">187,956 in · 5,868 out · 18 calls</dd>
+   <dt>cost</dt><dd class="num">$0.09 <span class="dim">· list price, not billed</span></dd>
+   <dt>ran where</dt><dd>host process · no container · network through the child proxy only</dd>
+   <dt>feature flags</dt><dd>hosted api review <span class="chip">off</span></dd>
+  </dl>
+  <h3>what it read</h3>
+  <div class="row"><span class="chip plain">walkthroughs (18 md · 412 KB)</span><span class="chip plain">findings (12)</span></div>
+  <h3>what it produced</h3>
+  <div class="row"><span class="chip plain k-agent">observations (3) · cited</span><span class="chip plain">messages (54) · retained</span></div>
+  <div class="note">An observation is a model claim with a citation into the walkthrough. It never changes a scanner finding or the coverage word.</div>
+  <div class="row" style="margin-top:auto"><span class="btn primary">rerun this stage</span><span class="btn">change runner</span></div>
+ </div>
+</aside>
