@@ -121,6 +121,7 @@
   "cycle": [
     "adapters",
     "analysis",
+    "app",
     "cli",
     "evidence",
     "execution",

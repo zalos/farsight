@@ -1,0 +1,640 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/PipelineDefinition",
+  "definitions": {
+    "PipelineDefinition": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-pipeline/draft-1"
+        },
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "stages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageDefinition"
+          },
+          "description": "In declaration order; the dependency order comes from `needs` and `after`.",
+          "minItems": 1,
+          "maxItems": 64
+        },
+        "flags": {
+          "$ref": "#/definitions/PipelineFlags"
+        }
+      },
+      "required": [
+        "schema",
+        "id",
+        "revision",
+        "stages"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-pipeline/draft-1 — `.farsight/sentinel/pipeline.json`. Adopted by digest like the settings: its place in a checkout does not make it trusted, and a changed byte (its own or a referenced pack's) is a new revision."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Ordinal": {
+      "type": "integer",
+      "description": "A positive integer ordinal or revision.",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "StageDefinition": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "builtin",
+            "tool",
+            "script",
+            "agent"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "builtin"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/BuiltinStageDefinition"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "tool"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/ToolStageDefinition"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "script"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/ScriptStageDefinition"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "agent"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/AgentStageDefinition"
+          }
+        }
+      ],
+      "description": "One declared stage."
+    },
+    "BuiltinStageDefinition": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/StageId"
+        },
+        "needs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageInputDecl"
+          },
+          "description": "Typed inputs. A missing required input, a cycle or an incompatible type refuses the pipeline before anything runs.",
+          "maxItems": 32
+        },
+        "produces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageOutputDecl"
+          },
+          "maxItems": 16
+        },
+        "after": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageId"
+          },
+          "description": "Ordering only: these stages finish first, and nothing of theirs is read.",
+          "maxItems": 32
+        },
+        "fanOut": {
+          "$ref": "#/definitions/StageFanOut",
+          "description": "Absent: one unit per run."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "A required stage that does not complete leaves required coverage incomplete. Only `builtin` and `tool` make coverage."
+        },
+        "budget": {
+          "$ref": "#/definitions/StageBudget"
+        },
+        "kind": {
+          "type": "string",
+          "const": "builtin"
+        },
+        "operation": {
+          "$ref": "#/definitions/BuiltinOperation"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "operation"
+      ],
+      "additionalProperties": false,
+      "description": "A stage implemented by Sentinel's own code, in-process or as a bounded child."
+    },
+    "StageId": {
+      "type": "string",
+      "description": "A stage id: a built-in plan stage (`capture`, `review-guided`) or one a pipeline declares (`secrets`, `triage`). Lower-case words joined by single hyphens, so it never collides with a context input, which carries a dot.",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "StageInputDecl": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/StageId"
+        },
+        {
+          "$ref": "#/definitions/ContextInputId"
+        },
+        {
+          "$ref": "#/definitions/StageOutputRef"
+        }
+      ],
+      "description": "A typed input: every output of a stage (by its id), one named output of a stage, or graph context."
+    },
+    "ContextInputId": {
+      "type": "string",
+      "description": "Context the application graph supplies (`farsight.journeys`): pinned Farsight data, never live disk.",
+      "pattern": "^farsight\\.[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "StageOutputRef": {
+      "type": "object",
+      "properties": {
+        "stage": {
+          "$ref": "#/definitions/StageId"
+        },
+        "output": {
+          "$ref": "#/definitions/StageOutputName"
+        }
+      },
+      "required": [
+        "stage",
+        "output"
+      ],
+      "additionalProperties": false,
+      "description": "One named output of an upstream stage. It resolves to exact artifact ids when the producer publishes."
+    },
+    "StageOutputName": {
+      "type": "string",
+      "description": "The name one stage's output is wired by (`findings`, `walkthrough`, `triage`).",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "StageOutputDecl": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/StageOutputType"
+        },
+        {
+          "$ref": "#/definitions/NamedStageOutput"
+        }
+      ],
+      "description": "A typed output a stage declares: one Sentinel knows, or a named custom one."
+    },
+    "StageOutputType": {
+      "type": "string",
+      "enum": [
+        "source",
+        "parse",
+        "inventory",
+        "findings",
+        "coverage",
+        "observations",
+        "walkthrough-md",
+        "report"
+      ],
+      "description": "The typed outputs Sentinel itself knows how to read. A custom output names a schema instead."
+    },
+    "NamedStageOutput": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/StageOutputName"
+        },
+        "schema": {
+          "$ref": "#/definitions/OutputSchemaId"
+        }
+      },
+      "required": [
+        "name",
+        "schema"
+      ],
+      "additionalProperties": false,
+      "description": "A custom typed output: its name for wiring and the schema its bytes must validate against."
+    },
+    "OutputSchemaId": {
+      "type": "string",
+      "description": "A custom output's schema id, `<area>.<name>/v<n>` (`sentinel.triage/v1`). Sentinel validates the stage's output against it after the stage exits; a failed validation is a failed attempt, never a partial publication.",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+/v[1-9][0-9]{0,5}$",
+      "maxLength": 128
+    },
+    "StageFanOut": {
+      "type": "string",
+      "enum": [
+        "per-run",
+        "per-source",
+        "per-entry",
+        "per-check"
+      ],
+      "description": "How many units a stage becomes: one per run, per captured source, per entry point or per planned check."
+    },
+    "StageBudget": {
+      "type": "object",
+      "properties": {
+        "turns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "tokens": {
+          "type": "integer",
+          "description": "Tokens in and out together, per unit.",
+          "minimum": 1,
+          "maximum": 10000000
+        },
+        "usd": {
+          "$ref": "#/definitions/DecimalAmount",
+          "description": "A monetary ceiling in US dollars, written as a decimal string so it is never a binary float."
+        },
+        "seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        }
+      },
+      "additionalProperties": false,
+      "description": "Bounds on one stage. Each is a ceiling the policy may lower; none is a grant."
+    },
+    "DecimalAmount": {
+      "type": "string",
+      "description": "A non-negative decimal amount written as a string, so money is never a binary float.",
+      "pattern": "^(0|[1-9][0-9]{0,15})(\\.[0-9]{1,9})?$"
+    },
+    "BuiltinOperation": {
+      "type": "string",
+      "enum": [
+        "capture",
+        "parse",
+        "inventory",
+        "walkthrough",
+        "framework-controls",
+        "report"
+      ],
+      "description": "What a `builtin` stage runs: Sentinel's own capture, parse and inventory, the bounded call paths under each entry point (`walkthrough`, today's `analysis/paths`), the framework control facts, and the report."
+    },
+    "ToolStageDefinition": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/StageId"
+        },
+        "needs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageInputDecl"
+          },
+          "description": "Typed inputs. A missing required input, a cycle or an incompatible type refuses the pipeline before anything runs.",
+          "maxItems": 32
+        },
+        "produces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageOutputDecl"
+          },
+          "maxItems": 16
+        },
+        "after": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageId"
+          },
+          "description": "Ordering only: these stages finish first, and nothing of theirs is read.",
+          "maxItems": 32
+        },
+        "fanOut": {
+          "$ref": "#/definitions/StageFanOut",
+          "description": "Absent: one unit per run."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "A required stage that does not complete leaves required coverage incomplete. Only `builtin` and `tool` make coverage."
+        },
+        "budget": {
+          "$ref": "#/definitions/StageBudget"
+        },
+        "kind": {
+          "type": "string",
+          "const": "tool"
+        },
+        "adapter": {
+          "$ref": "#/definitions/Id",
+          "description": "A registered scanner adapter (`gitleaks`, `semgrep`); availability is checked against the registry."
+        },
+        "rules": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RuleFamilyList"
+            },
+            {
+              "$ref": "#/definitions/RulePackSelector"
+            }
+          ],
+          "description": "The rule families it runs, or one whole promoted pack. Only locked rules are planned."
+        }
+      },
+      "required": [
+        "adapter",
+        "id",
+        "kind",
+        "rules"
+      ],
+      "additionalProperties": false,
+      "description": "A scanner adapter in a pinned Linux container, never pulled during a scan, with no host fallback."
+    },
+    "RuleFamilyList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/RuleFamilyId"
+      },
+      "description": "Rule families a tool stage runs, by id.",
+      "minItems": 1,
+      "maxItems": 1024
+    },
+    "RuleFamilyId": {
+      "type": "string",
+      "description": "A stable rule family: `sentinel.<area>.<name>` for original rules, `<vendor>.<area>.<name>` otherwise.",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*){2,7}$",
+      "maxLength": 128
+    },
+    "RulePackSelector": {
+      "type": "string",
+      "description": "A whole promoted rule pack a tool stage selects, `pack:<origin>:<name>` (`pack:builtin:pattern`).",
+      "pattern": "^pack:[a-z][a-z0-9-]{0,63}:[a-z][a-z0-9-]{0,63}$",
+      "maxLength": 160
+    },
+    "ScriptStageDefinition": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/StageId"
+        },
+        "needs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageInputDecl"
+          },
+          "description": "Typed inputs. A missing required input, a cycle or an incompatible type refuses the pipeline before anything runs.",
+          "maxItems": 32
+        },
+        "produces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageOutputDecl"
+          },
+          "maxItems": 16
+        },
+        "after": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageId"
+          },
+          "description": "Ordering only: these stages finish first, and nothing of theirs is read.",
+          "maxItems": 32
+        },
+        "fanOut": {
+          "$ref": "#/definitions/StageFanOut",
+          "description": "Absent: one unit per run."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "A required stage that does not complete leaves required coverage incomplete. Only `builtin` and `tool` make coverage."
+        },
+        "budget": {
+          "$ref": "#/definitions/StageBudget"
+        },
+        "kind": {
+          "type": "string",
+          "const": "script"
+        },
+        "runner": {
+          "type": "string",
+          "enum": [
+            "host",
+            "container"
+          ],
+          "description": "`host` is the weaker isolation class and is named so in the report."
+        },
+        "interpreter": {
+          "type": "string",
+          "enum": [
+            "node",
+            "sh"
+          ]
+        },
+        "entry": {
+          "$ref": "#/definitions/PackRef"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScriptArgument"
+          },
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "entry",
+        "id",
+        "interpreter",
+        "kind",
+        "runner"
+      ],
+      "additionalProperties": false,
+      "description": "An entry file from a promoted stage pack, run on the host (behind `stage.host-scripts`) or in a pinned container."
+    },
+    "PackRef": {
+      "type": "string",
+      "description": "A file inside a promoted stage pack, `stages/<id>@<revision>#<file>`, or a whole skill pack, `skills/<id>@<revision>`. The pipeline's digest covers the referenced bytes, so a changed prompt is a new pipeline.",
+      "pattern": "^(stages|skills)/[a-z0-9][a-z0-9-]{0,63}@[1-9][0-9]{0,8}(#[A-Za-z0-9][A-Za-z0-9._-]{0,127}(/[A-Za-z0-9][A-Za-z0-9._-]{0,127}){0,7})?$",
+      "maxLength": 512
+    },
+    "ScriptArgument": {
+      "type": "string",
+      "description": "One argument passed to a script, as written. Never a credential: settings and pipelines hold none.",
+      "maxLength": 1024
+    },
+    "AgentStageDefinition": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/StageId"
+        },
+        "needs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageInputDecl"
+          },
+          "description": "Typed inputs. A missing required input, a cycle or an incompatible type refuses the pipeline before anything runs.",
+          "maxItems": 32
+        },
+        "produces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageOutputDecl"
+          },
+          "maxItems": 16
+        },
+        "after": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StageId"
+          },
+          "description": "Ordering only: these stages finish first, and nothing of theirs is read.",
+          "maxItems": 32
+        },
+        "fanOut": {
+          "$ref": "#/definitions/StageFanOut",
+          "description": "Absent: one unit per run."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "A required stage that does not complete leaves required coverage incomplete. Only `builtin` and `tool` make coverage."
+        },
+        "budget": {
+          "$ref": "#/definitions/StageBudget"
+        },
+        "kind": {
+          "type": "string",
+          "const": "agent"
+        },
+        "mode": {
+          "$ref": "#/definitions/AgentMode"
+        },
+        "runner": {
+          "$ref": "#/definitions/AgentRunnerId"
+        },
+        "provider": {
+          "$ref": "#/definitions/Id",
+          "description": "The adopted settings provider entry to bind; absent when the runner has exactly one adopted provider."
+        },
+        "model": {
+          "$ref": "#/definitions/ModelName"
+        },
+        "prompt": {
+          "$ref": "#/definitions/PackRef",
+          "description": "The prompt a brokered stage sends."
+        },
+        "instructions": {
+          "$ref": "#/definitions/PackRef",
+          "description": "The instructions a native stage's CLI reads."
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PackRef"
+          },
+          "description": "Skill packs, in order: the order is part of the instruction bytes.",
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "mode",
+        "model",
+        "runner"
+      ],
+      "additionalProperties": false,
+      "description": "A model stage. It proposes cited claims; it can never make coverage."
+    },
+    "AgentMode": {
+      "type": "string",
+      "enum": [
+        "brokered",
+        "native"
+      ],
+      "description": "`brokered`: Sentinel runs the loop and the evidence broker serves cited slices. `native`: the CLI runs its own loop over a scratch tree holding only the stage's declared inputs, and its full transcript is retained."
+    },
+    "AgentRunnerId": {
+      "type": "string",
+      "enum": [
+        "claude-cli",
+        "copilot-cli",
+        "hosted-api",
+        "ollama"
+      ],
+      "description": "The agent runners a stage may name: the two CLIs, a hosted model API (off unless `review.hosted-api` is on), and a local model server (an adopted `ollama` provider that keeps the source on this machine)."
+    },
+    "ModelName": {
+      "type": "string",
+      "description": "A model name as the provider spells it.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$"
+    },
+    "PipelineFlags": {
+      "type": "object",
+      "properties": {
+        "stage.host-scripts": {
+          "type": "boolean"
+        },
+        "runner.claude-cli": {
+          "type": "boolean"
+        },
+        "runner.copilot-cli": {
+          "type": "boolean"
+        },
+        "review.hosted-api": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "description": "The features a pipeline needs, by registry name. `true` asks for the feature: a stage that needs a feature the adopted settings leave off is refused at plan, with the feature named. A request never turns anything on."
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-pipeline.draft-1.schema.json",
+  "title": "sentinel-pipeline/draft-1"
+}
