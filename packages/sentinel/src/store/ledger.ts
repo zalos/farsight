@@ -47,6 +47,7 @@ import {
   type ObjectVerifier,
   type ObjectReceipt,
   type RetainedAttempt,
+  type WorkRefusal,
   type OpenLedgerOptions,
   type PublicationReceipt,
   type PublishInput,
@@ -81,6 +82,16 @@ const MAX_ERROR_DETAIL_BYTES = 4096;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const MAX_STAGED = 4096;
 const MAX_PAYLOAD_BYTES = 16384;
+const CREDENTIAL_FIELD = /credential|password|secret|token|api.?key|authorization|bearer/i;
+const CREDENTIAL_TEXT = /bearer\s+\S+|\bsk-[A-Za-z0-9]{12,}\b|\bgh[pousr]_[A-Za-z0-9]{12,}\b/i;
+
+const isSafeRefusalDetail = (value: unknown): boolean => {
+  if (typeof value === 'string') return !CREDENTIAL_TEXT.test(value);
+  if (Array.isArray(value)) return value.every(isSafeRefusalDetail);
+  if (value && typeof value === 'object')
+    return Object.entries(value).every(([key, part]) => !CREDENTIAL_FIELD.test(key) && isSafeRefusalDetail(part));
+  return value === null || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value));
+};
 
 const RUN_MOVES: Readonly<Record<RunState, readonly RunState[]>> = {
   planned: ['running', 'canceling', 'canceled'],
@@ -1530,7 +1541,7 @@ export class Ledger {
   setWorkState(
     ref: WorkRef,
     to: WorkTransition,
-    opts: { reasonCode?: string; idempotency?: IdempotencyRef } = {},
+    opts: { reasonCode?: string; refusalDetail?: Readonly<Record<string, unknown>>; idempotency?: IdempotencyRef } = {},
   ): { work: WorkRef; state: WorkTransition; sequence: number } {
     checkRef(ref);
     if (!['ready', 'blocked', 'disabled-by-policy'].includes(to))
@@ -1539,7 +1550,24 @@ export class Ledger {
     if (held !== (opts.reasonCode !== undefined)) throw invalid('a reason is given exactly when holding work');
     if (held && (!CATALOG_KEY.test(String(opts.reasonCode)) || String(opts.reasonCode).length > 128))
       throw invalid('the reason is a catalog key');
-    return this.#mutate('setWorkState', { ref, to, reason: opts.reasonCode ?? null }, opts.idempotency, () => {
+    if (opts.refusalDetail !== undefined && (to !== 'blocked' || this.migration.to < 7))
+      throw invalid('private refusal detail needs a blocked work revision and migration 7');
+    if (
+      opts.refusalDetail !== undefined &&
+      (!opts.refusalDetail || Array.isArray(opts.refusalDetail) || !isSafeRefusalDetail(opts.refusalDetail))
+    )
+      throw invalid('private refusal detail must be bounded safe structured context');
+    let detail: string | null = null;
+    if (opts.refusalDetail !== undefined) {
+      try {
+        detail = canonicalJson(opts.refusalDetail);
+      } catch {
+        throw invalid('private refusal detail must be JSON');
+      }
+      if (Buffer.byteLength(detail) > MAX_ERROR_DETAIL_BYTES)
+        throw invalid('private refusal detail must be bounded safe structured context');
+    }
+    return this.#mutate('setWorkState', { ref, to, reason: opts.reasonCode ?? null, detail }, opts.idempotency, () => {
       const row = this.#get(
         `SELECT w.state, w.run_id, r.state AS run_state FROM work_units w JOIN runs r ON r.id = w.run_id
         WHERE w.id = ? AND w.revision = ?`,
@@ -1560,16 +1588,54 @@ export class Ledger {
         ref.id,
         ref.revision,
       );
+      const sequence = this.#event('work-state', String(row.run_id), ref, {
+        from,
+        to,
+        ...(held ? { reason: opts.reasonCode } : {}),
+      });
+      if (detail !== null) {
+        this.#run(
+          'INSERT INTO work_refusals (work_id,work_revision,code,detail,privacy,sequence) VALUES (?,?,?,?,?,?)',
+          ref.id,
+          ref.revision,
+          opts.reasonCode!,
+          detail,
+          'source',
+          sequence,
+        );
+      }
       return {
         work: { id: ref.id, revision: ref.revision },
         state: to,
-        sequence: this.#event('work-state', String(row.run_id), ref, {
-          from,
-          to,
-          ...(held ? { reason: opts.reasonCode } : {}),
-        }),
+        sequence,
       };
     });
+  }
+
+  /** The current held work refusal, if its latest state transition recorded private detail. */
+  refusalOf(ref: WorkRef): WorkRefusal | undefined {
+    checkRef(ref);
+    if (this.migration.to < 7) return undefined;
+    const row = this.#read(() =>
+      this.#get(
+        `SELECT f.code, f.detail, f.privacy, f.sequence FROM work_refusals f
+         JOIN work_units w ON w.id = f.work_id AND w.revision = f.work_revision
+         WHERE f.work_id = ? AND f.work_revision = ? AND w.state = 'blocked' AND w.state_reason = f.code
+           AND f.sequence = (SELECT max(e.sequence) FROM events e WHERE e.kind = 'work-state'
+             AND e.work_id = f.work_id AND e.work_revision = f.work_revision)`,
+        ref.id,
+        ref.revision,
+      ),
+    );
+    return row
+      ? {
+          work: { id: ref.id, revision: ref.revision },
+          code: String(row.code),
+          detail: JSON.parse(String(row.detail)) as Record<string, unknown>,
+          privacy: 'source',
+          sequence: Number(row.sequence),
+        }
+      : undefined;
   }
 
   /**

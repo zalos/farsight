@@ -525,6 +525,24 @@ CREATE TRIGGER attempt_retained_ended BEFORE INSERT ON attempt_retained
   BEGIN SELECT RAISE(ABORT, 'sentinel.store.wrongState: attempt_retained'); END;
 ${APPEND_ONLY('attempt_retained', 'UPDATE')}
 ${APPEND_ONLY('attempt_retained', 'DELETE')}
+-- A refusal before any attempt belongs to its held work revision. Its bounded, private detail remains readable
+-- after the coordinator exits, while state_reason keeps the catalog code used by ordinary work reads.
+CREATE TABLE work_refusals (
+  work_id TEXT NOT NULL,
+  work_revision INTEGER NOT NULL,
+  code TEXT NOT NULL CHECK (length(code) BETWEEN 1 AND 128),
+  detail TEXT NOT NULL CHECK (json_valid(detail) AND length(CAST(detail AS BLOB)) <= 4096),
+  privacy TEXT NOT NULL CHECK (privacy = 'source'),
+  sequence INTEGER PRIMARY KEY REFERENCES events(sequence),
+  FOREIGN KEY (work_id, work_revision) REFERENCES work_units(id, revision)
+) STRICT;
+CREATE INDEX work_refusals_by_work ON work_refusals(work_id, work_revision, sequence DESC);
+CREATE TRIGGER work_refusals_held BEFORE INSERT ON work_refusals
+  WHEN (SELECT state FROM work_units WHERE id = NEW.work_id AND revision = NEW.work_revision) <> 'blocked'
+    OR (SELECT state_reason FROM work_units WHERE id = NEW.work_id AND revision = NEW.work_revision) <> NEW.code
+  BEGIN SELECT RAISE(ABORT, 'sentinel.store.wrongState: work_refusals'); END;
+${APPEND_ONLY('work_refusals', 'UPDATE')}
+${APPEND_ONLY('work_refusals', 'DELETE')}
 `;
 
 /** The shipped migrations, in order. Never edit a released step: add the next number. */

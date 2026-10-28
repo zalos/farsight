@@ -124,6 +124,48 @@ test('a failed attempt keeps its private record and links after the source is go
   }
 });
 
+test('a pre-attempt refusal keeps its catalog code and source-private detail after a store restart', async (t) => {
+  const dir = realpathSync.native(scratch(t));
+  let store = await openStore(join(dir, 'store'));
+  t.after(() => store.close());
+  store.ledger.createRun(runEnvelope(store.epoch) as never);
+  store.ledger.createWork(workEnvelope(store.epoch, { state: 'pending' }) as never);
+  const code = 'sentinel.provider.credentialUnavailable';
+  const detail = { reason: 'native login is missing', provider: 'native' };
+  assert.throws(
+    () =>
+      store.ledger.setWorkState(WORK, 'blocked', {
+        reasonCode: code,
+        refusalDetail: { credentialValue: 'synthetic credential' },
+      }),
+    (e: any) => e?.code === 'sentinel.store.invalidInput',
+  );
+  assert.equal(store.ledger.getWork(WORK)?.state, 'pending');
+  const held = store.ledger.setWorkState(WORK, 'blocked', { reasonCode: code, refusalDetail: detail });
+  assert.equal(store.ledger.countAttempts(WORK), 0, 'no attempt was fabricated');
+  store.close();
+  store = await openStore(join(dir, 'store'));
+  assert.equal(store.ledger.getWork(WORK)?.reason, code);
+  assert.deepEqual(store.ledger.refusalOf(WORK), {
+    work: WORK,
+    code,
+    detail,
+    privacy: 'source',
+    sequence: held.sequence,
+  });
+  assert.throws(
+    () =>
+      store.ledger.setWorkState(WORK, 'ready', {
+        refusalDetail: { reason: 'must remain blocked' },
+      }),
+    (e: any) => e?.code === 'sentinel.store.invalidInput',
+  );
+  store.ledger.setWorkState(WORK, 'ready');
+  assert.equal(store.ledger.refusalOf(WORK), undefined, 'an old refusal is not the current reason');
+  store.ledger.setWorkState(WORK, 'blocked', { reasonCode: code });
+  assert.equal(store.ledger.refusalOf(WORK), undefined, 'an unannotated new hold does not reuse the old detail');
+});
+
 test('retention rolls back with the attempt end and refuses mismatched staging', async (t) => {
   const dir = scratch(t);
   const objects = new FakeObjects();
