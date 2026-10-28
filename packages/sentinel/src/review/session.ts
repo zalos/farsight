@@ -112,6 +112,8 @@ export interface SessionSpec {
   readonly producerRuleId: string;
   readonly rule?: { readonly familyId: string; readonly revisionDigest: Digest };
   readonly tools: readonly ToolRequest['action'][];
+  /** The promoted pack references the prompt and skills came from, with the digest each resolved to. */
+  readonly packs?: readonly Readonly<{ ref: string; digest: string }>[];
 }
 
 export type OperationRecord = ReviewOperation;
@@ -201,6 +203,7 @@ export function specDigest(spec: SessionSpec): Digest {
           ...(spec.requestedSelection ? { requestedSelection: spec.requestedSelection } : {}),
         }
       : {}),
+    ...(spec.packs?.length ? { packs: spec.packs.map((p) => ({ ref: p.ref, digest: p.digest })) } : {}),
   }) as Digest;
 }
 

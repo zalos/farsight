@@ -75,15 +75,12 @@ import { stageInputsForUnit } from './stage-inputs.js';
 import { checkEntry, interpreterOf, runHostScript, SCRIPT_CONTRACT } from './script-runner.js';
 import { featureEnabled } from '../policy/features.js';
 import type { ScriptStageDefinition } from '../contracts/pipeline.js';
-import type { StageInputBinding } from '../contracts/pipeline.js';
 
 /**
  * The review dispatch, handed the attempt's sealed stage inputs as its last argument (undefined for a unit whose
  * stage reads no other stage's output). The binding is the one the invocation record accepted with the attempt.
  */
-const runReviewWithInputs: (
-  ...args: [...Parameters<typeof runAdmittedReview>, stageInputs: readonly StageInputBinding[] | undefined]
-) => ReturnType<typeof runAdmittedReview> = runAdmittedReview;
+const runReviewWithInputs: typeof runAdmittedReview = runAdmittedReview;
 import { publishPrepared, runOperation } from './bootstrap.js';
 import { COVERAGE_SCHEMA, coverageRecords, scopeIndex, type ScopeIndex } from './coverage.js';
 import { evaluateRequiredCoverage, type RequiredCoverage } from '../planner/coverage.js';
