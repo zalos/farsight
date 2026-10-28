@@ -3,32 +3,48 @@ import type { StringEntry } from './strings.js';
 // The words of Sentinel's read model for the viewer (Sentinel v2 §4, lane L-UX): the SCANS · PIPELINE · STAGE stops
 // and the answers Sentinel's loopback host serves them (its transport/http read model). Spread into STRINGS
 // in strings.ts. Every count is a Counted with one of the sentinel.viewer.scope.* scopes (docs/COUNTS.md § Sentinel
-// read model). The business register says scan, stage, task, checked by and cost (*step* stays the storyline's word); it never prints a hash or an id.
+// read model). The business register says scan, stage, check, review, checked by and cost (*step* is the storyline's and *task* a
+// work item's); it never prints a hash or an id.
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
 const one = (text: string, pluralKey: string): StringEntry => ({ hud: text, professional: text, singularOf: pluralKey });
 
 export const SENTINEL_VIEWER_STRINGS: Record<string, StringEntry> = {
   // ── what a number counts over ─────────────────────────────────────────────────────────────────────────────────
-  'sentinel.viewer.scope.scans': same('of the scans listed', 'What the number beside it counts over: the scans this workspace keeps, newest first, as many as the list shows.'),
+  'sentinel.viewer.scope.scans': same('of the scans kept', 'What the number beside it counts over: every scan this workspace\'s store keeps, numbered in the order the store made them.'),
   'sentinel.viewer.scope.scan': same('in this scan', 'What the number beside it counts over: one scan, every stage its plan admitted and the work it recorded, as of this read.'),
-  'sentinel.viewer.scope.stage': same('in this stage', 'What the number beside it counts over: one stage of one scan, every task it planned and every try of each task.'),
-  'sentinel.viewer.scope.task': same('in this task', 'What the number beside it counts over: one task of one stage, every try it made.'),
+  'sentinel.viewer.scope.stage': same('in this stage', 'What the number beside it counts over: one stage of one scan, every check or review it planned and every try of each.'),
+  'sentinel.viewer.scope.check': same('in this check', 'What the number beside it counts over: one check of one stage, every try it made.'),
+  'sentinel.viewer.scope.review': same('in this review', 'What the number beside it counts over: one review of one stage, every try and every exchange with the model.'),
   'sentinel.viewer.scope.turn': same('in this exchange', 'What the number beside it counts over: one request to the model and its reply.'),
+  'sentinel.viewer.scope.output': same('in this output', 'What the number beside it counts over: one output a check or review left in the store, as the store keeps it.'),
+  'sentinel.viewer.scope.attempt': same('in this try', 'What the number beside it counts over: one try of a check, as the record kept of what it ran names it.'),
 
   // ── counts ────────────────────────────────────────────────────────────────────────────────────────────────────
   'sentinel.viewer.count.scans': same('{n} scans', 'Scans this workspace keeps, each one capture of the source and the stages that ran over it.'),
   'sentinel.viewer.count.scansOne': one('1 scan', 'sentinel.viewer.count.scans'),
+  'sentinel.viewer.count.scansShown': same('{n} of {m} scans shown', 'The scans on this page of the list, newest first, out of every scan the store keeps. Older ones are on the next page.'),
+  'sentinel.viewer.count.sources': same('{n} sources', 'The folders or repositories the scan captured, each copied into the store as it was.'),
+  'sentinel.viewer.count.sourcesOne': one('1 source', 'sentinel.viewer.count.sources'),
+  'sentinel.viewer.count.files': same('{n} files', 'Captured files a check or review covered, or that one request named, each file once.'),
+  'sentinel.viewer.count.filesOne': one('1 file', 'sentinel.viewer.count.files'),
+  'sentinel.viewer.count.bytes': same('{n} bytes', 'A size in bytes, as the store or the record that kept it measured it.'),
+  'sentinel.viewer.count.bytesOne': one('1 byte', 'sentinel.viewer.count.bytes'),
+  'sentinel.viewer.count.processes': same('{n} processes', 'How many processes the try was allowed to run at once, as its record names the limit.'),
+  'sentinel.viewer.count.processesOne': one('1 process', 'sentinel.viewer.count.processes'),
+  'sentinel.viewer.count.claims': same('{n} claims', 'Statements the model made in its answer, each one it had to back with a citation.'),
+  'sentinel.viewer.count.claimsOne': one('1 claim', 'sentinel.viewer.count.claims'),
+  'sentinel.viewer.measure.cpus': same('{n} CPUs', 'The share of this computer\'s processors the try was allowed, as its record names the limit.'),
   'sentinel.viewer.count.stages': same('{n} stages', 'Stages of a scan: capture, parse, list, each tool that checks the code and each review by a model.'),
   'sentinel.viewer.count.stagesOne': one('1 stage', 'sentinel.viewer.count.stages'),
   'sentinel.viewer.count.agentic': same('{n} agentic', 'Stages a model ran. Their observations are claims with citations and never change what the tools found or the coverage.'),
   'sentinel.viewer.count.checkedByModel': same('{n} checked by a model', 'Stages a model ran. What a model says is a claim it must cite, never a finding on its own.'),
-  'sentinel.viewer.count.units': same('{n} work units', 'Planned units of work: each runs one stage over one part of the source and keeps its own inputs, tries and outputs.'),
-  'sentinel.viewer.count.unitsOne': one('1 work unit', 'sentinel.viewer.count.units'),
-  'sentinel.viewer.count.tasks': same('{n} tasks', 'The pieces a stage was split into, each over one part of the source.'),
-  'sentinel.viewer.count.tasksOne': one('1 task', 'sentinel.viewer.count.tasks'),
+  'sentinel.viewer.count.checks': same('{n} checks', 'The checks a tool or Sentinel\'s own code ran in this stage, each over its part of the source with its own inputs, tries and outputs. One check may cover several planned checks of the report.'),
+  'sentinel.viewer.count.checksOne': one('1 check', 'sentinel.viewer.count.checks'),
+  'sentinel.viewer.count.reviews': same('{n} reviews', 'The reviews a model made in this stage, each over its part of the source with its own exchanges, tries and observations.'),
+  'sentinel.viewer.count.reviewsOne': one('1 review', 'sentinel.viewer.count.reviews'),
   'sentinel.viewer.count.attempts': same('{n} attempts', 'Recorded tries of the work units. A retry after an interruption is a second attempt; only one attempt per unit is accepted.'),
   'sentinel.viewer.count.attemptsOne': one('1 attempt', 'sentinel.viewer.count.attempts'),
-  'sentinel.viewer.count.tries': same('{n} tries', 'How many times the tasks ran. A task that was interrupted and run again counts twice.'),
+  'sentinel.viewer.count.tries': same('{n} tries', 'How many times the checks or reviews ran. One that was interrupted and run again counts twice.'),
   'sentinel.viewer.count.triesOne': one('1 try', 'sentinel.viewer.count.tries'),
   'sentinel.viewer.count.inputs': same('{n} captured files read', 'Captured files the work units were given to read, each file once per unit that read it.'),
   'sentinel.viewer.count.inputsOne': one('1 captured file read', 'sentinel.viewer.count.inputs'),
@@ -92,12 +108,12 @@ export const SENTINEL_VIEWER_STRINGS: Record<string, StringEntry> = {
   'sentinel.viewer.status.notRun': same('not run', 'Planned, but the scan ended before it started.'),
   'sentinel.viewer.scanState.planned': same('planned', 'Admitted and waiting to start.'),
   'sentinel.viewer.scanState.running': same('running', 'Running, as the record says.'),
-  'sentinel.viewer.scanState.pausing': same('pausing', 'Asked to pause; the running task finishes first.'),
+  'sentinel.viewer.scanState.pausing': same('pausing', 'Asked to pause; what is running finishes first.'),
   'sentinel.viewer.scanState.paused': same('paused', 'Paused by its owner; it can be resumed.'),
-  'sentinel.viewer.scanState.canceling': same('canceling', 'Asked to stop; the running task is being stopped.'),
+  'sentinel.viewer.scanState.canceling': same('canceling', 'Asked to stop; what is running is being stopped.'),
   'sentinel.viewer.scanState.canceled': same('canceled', 'Stopped by its owner before it finished.'),
   'sentinel.viewer.scanState.completed': same('finished', 'Ran to its end. Read the coverage and the findings: finishing is not the same as passing.'),
-  'sentinel.viewer.selection.held': same('not selected for this rerun', 'A rerun runs only the stages it selected and what depends on them. This task was not run again; nothing the earlier scan found is copied into this one.'),
+  'sentinel.viewer.selection.held': same('not selected for this rerun', 'A rerun runs only the stages it selected and what depends on them. This check or review was not run again; nothing the earlier scan found is copied into this one.'),
   'sentinel.viewer.scanState.awaiting': same('waiting for its first run', 'A rerun admitted and not started yet.'),
 
   // ── the policy word on a scan ───────────────────────────────────────────────────────────────────────────────
@@ -126,13 +142,14 @@ export const SENTINEL_VIEWER_STRINGS: Record<string, StringEntry> = {
   'sentinel.viewer.io.other': same('other output', 'Output this view has no name for. It is kept in the store with its digest.'),
 
   // ── a model's turn, and the reply it gave ──────────────────────────────────────────────────────────────────
-  'sentinel.viewer.turn.task': same('the task', 'What Sentinel asked the model to do and the files in its scope.'),
+  'sentinel.viewer.turn.task': same('the assignment', 'What Sentinel asked the model to do and the files in its scope.'),
   'sentinel.viewer.turn.toolResult': same('what Sentinel served', 'The answer to the model\'s last request: lines of a file, a rule, or a list.'),
   'sentinel.viewer.turn.list': same('asked for the file list', 'The model asked which files are in its scope.'),
   'sentinel.viewer.turn.read': same('asked to read lines', 'The model asked for lines of one file in its scope.'),
-  'sentinel.viewer.turn.rule': same('asked for a rule', 'The model asked for the definition of one rule in its task.'),
+  'sentinel.viewer.turn.rule': same('asked for a rule', 'The model asked for the definition of one rule in its assignment.'),
   'sentinel.viewer.turn.paths': same('asked for call paths', 'The model asked which calls the graph records from one node.'),
   'sentinel.viewer.turn.final': same('answered', 'The model gave its verdict and its cited claims.'),
+  'sentinel.viewer.turn.failed': same('the call failed', 'The request reached no answer that was recorded; it may still have been charged, and the session ended there.'),
   'sentinel.viewer.turn.unreadable': same('a reply Sentinel could not read', 'The reply was not one of the shapes the model was allowed to send, so it was refused and kept.'),
 
   // ── money ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -149,11 +166,23 @@ export const SENTINEL_VIEWER_STRINGS: Record<string, StringEntry> = {
   'sentinel.viewer.absent.notCounted': same('not counted yet', 'Counting this scan took longer than this read allows. Open the scan, or read the list again.'),
   'sentinel.viewer.absent.withheld': same('withheld', 'A secret was found in this scan, so file names, model text and prompts are not shown anywhere for it.'),
   'sentinel.viewer.absent.noReview': same('no review in this scan', 'No stage of this scan asked a model.'),
+  'sentinel.viewer.absent.foldsDisagree': same('not shown: the two reports count it differently', 'The preview report and the full report count the folders that were never listed differently today, so this view shows neither number until the two agree.'),
   'sentinel.viewer.absent.reviewUnreadable': same('the review record could not be read', 'The retained review could not be verified, so nothing from it is shown.'),
+
+  // ── a retained output, and what a try ran ───────────────────────────────────────────────────────────────────
+  'sentinel.viewer.raw.source': same('the source itself, not shown here', 'This output is the captured or parsed source itself. It stays in the store; this view never streams the source.'),
+  'sentinel.viewer.raw.binary': same('not text', 'This output is not text, so only its size and type are shown.'),
+  'sentinel.viewer.raw.tooLarge': same('too large to show here', 'This output is larger than this view reads, so only its size and type are shown. The store keeps all of it.'),
+  'sentinel.viewer.raw.unreadable': same('could not be read', 'The store could not return this output as it was recorded, so nothing from it is shown.'),
+  'sentinel.viewer.invocation.none': same('ran in Sentinel\'s own process', 'Sentinel\'s own code did this work inside the owner service, so there is no separate command to record.'),
+  'sentinel.viewer.invocation.unverified': same('the record of what ran does not match its try', 'The kept record of the command does not name this try, its work and its pinned tool exactly, so nothing from it is shown.'),
+  'sentinel.viewer.invocation.notRecorded': same('what ran was not recorded', 'This try kept no record of the command it ran.'),
+  'sentinel.viewer.invocation.notRead': same('open a check to see what ran', 'The record of what a try ran is read when one check is opened.'),
 
   // ── the read model's own refusals ───────────────────────────────────────────────────────────────────────────
   'sentinel.viewer.readOnly': same('The scan view only reads.', 'This address answers reads of retained scans and refuses every write. Starting or changing a scan is confirmed in the owner panel.'),
-  'sentinel.viewer.scanUnknown': same('There is no such scan.', 'No retained scan has that number in this workspace\'s list.'),
+  'sentinel.viewer.scanUnknown': same('There is no such scan.', 'No scan this workspace\'s store keeps has that address.'),
+  'sentinel.viewer.unitUnknown': same('There is no such check or review in this stage.', 'The stage has fewer checks or reviews than that number.'),
   'sentinel.viewer.stageUnknown': same('There is no such stage in this scan.', 'The scan\'s plan has no stage by that name.'),
   'sentinel.viewer.notPaired': same('The scan view needs the owner panel\'s pairing.', 'Reads of retained scans use the read pass the paired owner panel gives this page. Reconnect to pair again.'),
 };

@@ -86,6 +86,7 @@ const unit = (key: string, stage: string, over: Partial<UnitRecord> = {}): UnitR
   checks: 0,
   scopes: [],
   inputs: 0,
+  inputPaths: [],
   review: null,
   work: { state: 'published', reason: null, kind: 'coded', deadlineMs: 120000, reusedFrom: null },
   attempts: [attempt()],
@@ -295,7 +296,7 @@ test('the fold draws parallel stages on one level, counts that sum and provenanc
 test('the stage answer reads turns by the closed grammar and never the evidence the model was served', () => {
   const answer = stageAnswer('example-app', synthetic(), 'sentinel.stage.review.general')!;
   assert.equal(answer.prompt!.text, 'You are reviewing.');
-  const [first, second] = answer.steps[0]!.review!.turns;
+  const [first, second] = answer.units[0]!.review!.turns;
   assert.deepEqual(first!.sent, { key: 'sentinel.viewer.turn.task', files: 2 });
   assert.deepEqual(first!.reply, { key: 'sentinel.viewer.turn.read', path: 'src/a.ts', lines: [1, 2] });
   assert.deepEqual(second!.sent, {
@@ -307,11 +308,11 @@ test('the stage answer reads turns by the closed grammar and never the evidence 
   });
   assert.deepEqual(second!.reply, { key: 'sentinel.viewer.turn.final', verdict: 'finding', claims: 1 });
   assert.doesNotMatch(JSON.stringify(answer), /SECRET-LOOKING/);
-  assert.equal(answer.steps[0]!.review!.observations[0]!.message, 'withTx opens no transaction.');
+  assert.equal(answer.units[0]!.review!.observations[0]!.message, 'withTx opens no transaction.');
   assert.equal(stageAnswer('example-app', synthetic(), 'sentinel.stage.absent'), null);
   const check = stageAnswer('example-app', synthetic(), 'sentinel.stage.check.secrets-gitleaks')!;
-  assert.equal(check.steps[0]!.label, 'src/a.ts');
-  assert.equal(check.steps[0]!.review, null);
+  assert.equal(check.units[0]!.label, 'src/a.ts');
+  assert.equal(check.units[0]!.review, null);
   assertCountsSound(answer);
 });
 
@@ -323,10 +324,10 @@ test('a secret match withholds every file name, prompt and model text, and keeps
   assert.equal(pipeline.review, 'withheld');
   assert.equal(pipeline.scan.counts.modelObservations, null);
   assert.equal(pipeline.scan.absent.modelObservations, 'sentinel.viewer.absent.withheld');
-  assert.equal(stage.steps[0]!.label, null);
-  assert.equal(stage.steps[0]!.files, 1);
+  assert.equal(stage.units[0]!.label, null);
+  assert.equal(stage.units[0]!.files, 1);
   assert.equal(review.prompt, null);
-  assert.equal(review.steps[0]!.review, null);
+  assert.equal(review.units[0]!.review, null);
   for (const text of ['src/a.ts', 'src/b.ts', 'withTx', 'You are reviewing'])
     assert.equal(JSON.stringify([pipeline, stage, review]).includes(text), false, text);
   assert.equal(
@@ -400,6 +401,20 @@ test('states, costs and absences are said, never shown as zero', () => {
   assert.equal(stageName('check', 'unknown-adapter'), 'sentinel.viewer.stage.otherCheck');
   assert.equal(stageName('something', null), 'sentinel.viewer.stage.other');
   assert.equal(replyOf('not json', false)!.key, 'sentinel.viewer.turn.unreadable');
+  const failing = synthetic();
+  const trace = failing.review.units[0]!;
+  const failed = stageAnswer(
+    'example-app',
+    {
+      ...failing,
+      review: {
+        status: 'available',
+        units: [{ ...trace, turns: [{ ...trace.turns[0]!, outcome: 'failed', reply: null }] }],
+      },
+    },
+    'sentinel.stage.review.general',
+  )!;
+  assert.deepEqual(failed.units[0]!.review!.turns[0]!.reply, { key: 'sentinel.viewer.turn.failed' });
   const list = scansAnswer('example-app', [scanRow(synthetic())], false);
   assert.equal(list.counts.scans.n, 1);
   assert.equal(list.readOnly, true);
@@ -487,9 +502,9 @@ test(
     assert.deepEqual(scan.scan.counts.seenByNoStage, doc.counts.seenByNoStage);
     assert.deepEqual(scan.scan.counts.unknownScopeBoundaries, doc.counts.unknownScopeBoundaries);
     const stage = await f.call('owner-ui.stage', { number: 1, stage: scan.stages[3].id });
-    assert.equal(stage.steps.length, 1);
-    assert.equal(stage.steps[0].label, 'src/one.ts');
-    assert.equal(stage.steps[0].attempts[0].accepted, true);
+    assert.equal(stage.units.length, 1);
+    assert.equal(stage.units[0].label, 'src/one.ts');
+    assert.equal(stage.units[0].attempts[0].accepted, true);
     const report = await f.call('owner-ui.scan-report', { number: 1, format: 'md' });
     assert.match(report.formatDigest, /^sha256:[0-9a-f]{64}$/);
     assert.deepEqual(Object.keys(report).sort(), ['deliveryId', 'format', 'formatBytes', 'formatDigest']);
@@ -543,7 +558,7 @@ test(
     const general = agents.find((s: any) => s.name === 'sentinel.viewer.stage.reviewGeneral');
     const stage = await f.call('owner-ui.stage', { number: 1, stage: general.id });
     assert.match(stage.prompt.text, /You are reviewing/);
-    const review = stage.steps[0].review;
+    const review = stage.units[0].review;
     assert.equal(review.verdict, 'finding');
     assert.deepEqual(
       review.turns.map((x: any) => [x.sent?.key, x.reply?.key]),

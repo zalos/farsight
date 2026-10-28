@@ -1061,16 +1061,16 @@ first; with more retained runs the answer says `more` and the numbers count with
 | captured files seen by no check | `sentinel.count.seenByNoStage` | `sentinel.scope.inventory` | **Copied** from the same report's `counts.seenByNoStage`; its `of` is every captured file. The read model counts no captured files of its own |
 | folders never listed | `sentinel.count.unknownBoundaries` | `sentinel.scope.inventory` | **Copied** from the same report's `counts.unknownScopeBoundaries` (the full report's number, not the preview report's) |
 | required checks covered | `sentinel.viewer.count.requiredCovered` (*n of m*) | `sentinel.viewer.scope.scan` | `canonicalResult` facts `requiredComplete` of `requiredChecks`, the numbers `run` and `status` print; absent for a preview (`sentinel.service.previewNotCoverage`) or an unfinished scan |
-| model observations | `sentinel.viewer.count.modelObservations` (`.modelNotes`) | scan · stage · task | Observations in the accepted review records (`readPublishedInstructions`), each once; 0 when no stage is agentic; withheld under a secret match. The report does not project them yet (#194); when P-6 does, this copies the report's |
-| work units (tasks) of a stage | `sentinel.viewer.count.units` (`.tasks`) | `sentinel.viewer.scope.stage` | The stage's work units, partitioned by status like the stages |
-| attempts | `sentinel.viewer.count.attempts` (`.tries`) | stage · task | Ledger attempts of the stage's units (`ledger.listAttempts`); reused work carries none here (its tries are the earlier scan's) |
-| captured files read | `sentinel.viewer.count.inputs` | stage · task | The plan units' pinned inputs, each file once per unit that reads it |
+| model observations | `sentinel.viewer.count.modelObservations` (`.modelNotes`) | scan · stage · check or review | Observations in the accepted review records (`readPublishedInstructions`), each once; 0 when no stage is agentic; withheld under a secret match. The report does not project them yet (#194); when P-6 does, this copies the report's |
+| checks or reviews of a stage | `sentinel.viewer.count.checks` (a tool or built-in stage) · `sentinel.viewer.count.reviews` (an agent stage) | `sentinel.viewer.scope.stage` | The stage's work units, partitioned by status like the stages. A *check* here is one run of the tool over its part of the source and may cover several of the report's planned checks |
+| attempts | `sentinel.viewer.count.attempts` (`.tries`) | stage · check or review | Ledger attempts of the stage's units (`ledger.listAttempts`); reused work carries none here (its tries are the earlier scan's) |
+| captured files read | `sentinel.viewer.count.inputs` | stage · check or review | The plan units' pinned inputs, each file once per unit that reads it |
 | findings of a stage | `sentinel.count.findings` (`sentinel.count.issues`) | `sentinel.viewer.scope.stage` | A partition of the report's findings by the adapter the plan pins for each finding's rule (`pins.rules`); the stages' parts sum to the scan's findings |
-| tokens in · out | `sentinel.viewer.count.tokensIn` · `.tokensOut` (no business words) | stage · task · `sentinel.viewer.scope.turn` | Attempt usage the provider reported, summed (stage, task); one review operation's usage (turn). Absent, never 0, when no try reported it |
-| turns | `sentinel.viewer.count.turns` (`.exchanges`) | stage · task | Operations in the accepted review records |
-| citations | `sentinel.viewer.count.citations` | `sentinel.viewer.scope.task` | Evidence locations one model observation cites |
+| tokens in · out | `sentinel.viewer.count.tokensIn` · `.tokensOut` (no business words) | stage · check or review · `sentinel.viewer.scope.turn` | Attempt usage the provider reported, summed (stage, check or review); one review operation's usage (turn). Absent, never 0, when no try reported it |
+| turns | `sentinel.viewer.count.turns` (`.exchanges`) | stage · check or review | Operations in the accepted review records |
+| citations | `sentinel.viewer.count.citations` | `sentinel.viewer.scope.check` · `.review` | Evidence locations one model observation cites |
 
 Two measures carry their scope and source the same way: a **duration** (`ms`; scan: created to completed; stage and
-task: first try's start to last try's end, absent while running) and a **cost** (`basis`: `none` when no model ran,
+check or review: first try's start to last try's end, absent while running) and a **cost** (`basis`: `none` when no model ran,
 `recorded` when every model try was priced at the owner's rates — the amounts added exactly as decimals —, `unobserved`
 when any was not (a subscription CLI), `mixed` across currencies; never `0` for an unobserved price).
