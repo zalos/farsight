@@ -12,7 +12,7 @@ import { publicRegistry } from '../dist/service/scanner-profile.js';
 import { executablePlan } from '../dist/execution/plan.js';
 import { runAdmittedReview, prepareAdmittedReview, requireHostedSecretCoverage } from '../dist/review/dispatch.js';
 import { BudgetLedger } from '../dist/review/providers/budget.js';
-import { readReviewSpec, withReviewUnits, verifyReviewInputs } from '../dist/review/plan.js';
+import { readReviewSpec, reviewSeedsOfSpecs, reviewUnitOf, verifyReviewInputs } from '../dist/review/plan.js';
 import { adoptedPolicy, workspaceOf } from '../dist/service/local.js';
 import { reviewIdentityIn } from '../dist/service/review-adapter.js';
 import { OwnerService } from '../dist/service/owner-service.js';
@@ -132,17 +132,10 @@ test(
     const livePolicy = adoptedPolicy(workspaceOf(ws, env));
     assert.ok('policy' in livePolicy);
     if (!('policy' in livePolicy)) throw Error('missing genuine policy');
+    // Admission re-derives the admitted plan's review inputs from its own stored specs with the planning seed builder.
     const specs = await Promise.all(units.map((u) => readReviewSpec(store, u))),
-      skeleton = {
-        ...admitted.plan,
-        units: admitted.plan.units.filter((u) => !u.review),
-        pins: {
-          ...admitted.plan.pins,
-          adapters: admitted.plan.pins.adapters.filter((a) => !units.some((u) => u.adapterId === a.adapterId)),
-        },
-      },
       terms = new Map(units.map((u) => [u.review!.selection.bindingDigest, u.review!.terms])),
-      rebuilt = withReviewUnits(skeleton, specs, terms);
+      rebuilt = { plan: admitted.plan, ...reviewSeedsOfSpecs(admitted.plan, specs, terms) };
     await verifyReviewInputs(store, rebuilt.plan, livePolicy.policy, rebuilt.artifacts);
     await assert.rejects(
       requireHostedSecretCoverage(store, id, admitted, units[0]!.sourceId!),
@@ -188,8 +181,9 @@ test(
       i ? a : { ...a, bytes: Buffer.from('changed exact original bytes') },
     );
     await assert.rejects(verifyReviewInputs(store, rebuilt.plan, livePolicy.policy, altered));
-    const wrongScope = withReviewUnits(
-      skeleton,
+    // A review unit placed, as the planner would, from a spec that names a file the capture does not hold: refused.
+    const wrongSeeds = reviewSeedsOfSpecs(
+      admitted.plan,
       specs.map((s, i) =>
         i
           ? s
@@ -200,7 +194,21 @@ test(
       ),
       terms,
     );
+    let k = 0;
+    const wrongScope = {
+      plan: {
+        ...admitted.plan,
+        units: admitted.plan.units.map((u) => (u.review ? reviewUnitOf(admitted.plan, wrongSeeds.seeds[k++]!) : u)),
+      },
+      artifacts: wrongSeeds.artifacts,
+    };
     await assert.rejects(verifyReviewInputs(store, wrongScope.plan, livePolicy.policy, wrongScope.artifacts));
+    // A planned review unit that is not where the planner places its seed (another dependency set): refused.
+    const misplaced = {
+      ...admitted.plan,
+      units: admitted.plan.units.map((u) => (u.review ? { ...u, dependencies: [] } : u)),
+    };
+    await assert.rejects(verifyReviewInputs(store, misplaced, livePolicy.policy, rebuilt.artifacts));
     await assert.rejects(
       verifyReviewInputs(store, rebuilt.plan, livePolicy.policy, [
         ...rebuilt.artifacts,
