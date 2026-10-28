@@ -2,6 +2,8 @@
 // through the command line and the running service, and the composite start a plan with model stages needs. The
 // model is a local fixture endpoint; nothing contacts a hosted provider or a real keychain.
 import { test } from 'node:test';
+import { PATHS_SUPPORTED_RULES } from '../dist/analysis/paths/definitions.js';
+import { builtinPackDir } from '../dist/service/package-paths.js';
 import { sentinelExecutionWord } from '@farsight/core/dist/strings-sentinel-execution.js';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -35,6 +37,8 @@ import { bindProvider } from '../dist/review/providers/profile.js';
 import {
   OWNER,
   adoptedPolicy,
+  adoptWorkspaceSettings,
+  promoteRulePack,
   confirmForService,
   runPlan,
   envelopeBinding,
@@ -361,6 +365,60 @@ test('the scan preview refuses a pipeline it cannot adopt or plan, and lists eve
   assert.equal(off.outcome, 'configuration-failure', JSON.stringify(off.facts));
   assert.equal(off.reasonCode, 'sentinel.pipeline.flagDisabled');
   assert.equal(off.facts.ownerOnly, undefined, 'nothing to confirm');
+});
+
+test('the scan preview plans with the rules the repository requests, as planning does', (t) => {
+  const dir = scratchDir(t, 'sentinel-preview-requested-');
+  const ws = join(dir, 'ws');
+  mkdirSync(ws);
+  const env = { HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
+  initWorkspace({ workspace: ws });
+  // A walkthrough the repository's own rule selects, and a review that reads it.
+  const file = join(ws, '.farsight', 'sentinel', 'pipeline.json');
+  const pipeline = JSON.parse(readFileSync(file, 'utf8'));
+  pipeline.stages.splice(
+    -1,
+    0,
+    { id: 'walk', kind: 'builtin', operation: 'walkthrough', needs: ['parse'] },
+    {
+      id: 'review',
+      kind: 'agent',
+      mode: 'brokered',
+      runner: 'ollama',
+      model: 'review-model:1',
+      needs: [{ stage: 'walk', output: 'walkthrough' }],
+    },
+  );
+  writeFileSync(file, JSON.stringify(pipeline));
+  const wsOf = workspaceOf(ws, env);
+  const by = agentPrincipal(AGENT as never);
+  const now = new Date();
+  assert.equal(adoptWorkspaceSettings(wsOf, { confirm: true, now }).outcome, 'prepared');
+  assert.equal(
+    promoteRulePack(wsOf, { packDir: realpathSync.native(builtinPackDir('bounded-paths')!), confirm: true, now })
+      .outcome,
+    'prepared',
+  );
+  const unproduced = () =>
+    ((scanPreviewOf(wsOf, by, now).facts.pipeline as any)?.problems ?? []).filter(
+      (p: { code: string }) => p.code === 'sentinel.pipeline.inputUnproduced',
+    );
+  // The owner's settings select no path rule: the walkthrough plans nothing, and the review is refused.
+  assert.equal(unproduced().length, 1);
+  // The repository requests the path rule: planning selects it, the walkthrough plans work, and so does the preview.
+  writeFileSync(
+    join(ws, 'sentinel.config.json'),
+    JSON.stringify({
+      schema: 'sentinel-repoconfig/draft-1',
+      requestedRules: [PATHS_SUPPORTED_RULES[0]!.familyId],
+      disabledRules: [],
+      thresholds: {},
+      suppressions: [],
+      providers: [],
+    }),
+  );
+  assert.ok(adoptedPolicy(wsOf).policy!.rules.includes(PATHS_SUPPORTED_RULES[0]!.familyId), 'planning selects it');
+  assert.deepEqual(unproduced(), []);
 });
 
 test('the composite start binds the plan digest, its stages and each model binding with its budget', (t) => {
@@ -985,5 +1043,70 @@ test(
     assert.equal(paid.length, 1, "the composite's one model envelope receipt");
     assert.equal(existsSync(markers.docker), false, 'no container was asked for');
     assert.equal(existsSync(markers.copilot), false, 'the unqualified Copilot never ran');
+  },
+);
+
+test(
+  'the review profile’s review reads the capture on a fresh run: the input resolves and the model is called',
+  needsStore,
+  async (t) => {
+    const dir = scratchDir(t, 'sentinel-review-capture-');
+    const ws = join(dir, 'ws');
+    mkdirSync(join(ws, 'src'), { recursive: true });
+    writeFileSync(join(ws, 'src', 'original.ts'), 'export const original = (x: string) => x;\n');
+    const ep = await mockEndpoint(t, (q, r) => {
+      const last = JSON.parse(JSON.parse(q.body).messages.at(-1).content),
+        reply = last.evidence
+          ? { action: 'final', verdict: 'no-finding', claims: [], inspected: ['src/original.ts'] }
+          : { action: 'read', path: 'src/original.ts', startLine: 1, endLine: 1 };
+      json(r, 200, ollamaReply({ message: { role: 'assistant', content: JSON.stringify(reply) } }));
+    });
+    const env = { PATH: process.env.PATH ?? '', HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
+    mkdirSync(env.HOME);
+    t.after(() => stopService(env));
+    const run = owner(ws, env);
+    assert.equal(run('init', '--profile', 'review').status, 0);
+    // The profile's own review stage, reading capture.source as init wrote it, bound to a local fixture model.
+    const pipelineFile = join(ws, '.farsight', 'sentinel', 'pipeline.json');
+    const pipeline = JSON.parse(readFileSync(pipelineFile, 'utf8'));
+    const review = pipeline.stages.find((s: { id: string }) => s.id === 'review');
+    assert.deepEqual(review.needs, [{ stage: 'capture', output: 'source' }]);
+    Object.assign(review, { runner: 'ollama', model: 'review-model:1' });
+    writeFileSync(pipelineFile, JSON.stringify(pipeline, null, 2));
+    const path = join(ws, '.farsight', 'sentinel', 'settings.json'),
+      settings = JSON.parse(readFileSync(path, 'utf8')),
+      fixture = trustedPolicy({ ollama: ep.origin }).settings;
+    settings.providers = [structuredClone(fixture.providers[0])];
+    settings.providers[0].models[0].capability.revision = null;
+    settings.reviewModels = {
+      stages: [{ stage: 'general', providerId: 'local-review', modelId: 'review' }],
+      segments: [],
+    };
+    settings.grants.push({ actions: ['paid.admit'], principals: ['human'], confirm: 'always' });
+    writeFileSync(path, JSON.stringify(settings));
+    const preview = JSON.parse(run('scan', '--json').stdout);
+    assert.equal(preview.outcome, 'awaiting-confirmation', JSON.stringify(preview.facts.pipeline));
+    assert.deepEqual(preview.facts.pipeline.problems, [], 'the plan check passes it');
+    // The pipeline is edited (no longer the profile's own bytes), so its pack is promoted by hand.
+    assert.equal(run('settings', 'adopt', '--confirm').status, 0);
+    assert.equal(run('rules', 'promote', 'builtin:foundation-preview', '--confirm').status, 0);
+    // Asynchronously: the fixture model answers in this process.
+    const scanned = await ownerAsync(ws, env)('scan', '--confirm', '--json');
+    const body = JSON.parse(scanned.stdout);
+    assert.ok(body.facts.runId, scanned.stdout + scanned.stderr);
+    const status = JSON.parse(run('status', '--json').stdout);
+    assert.deepEqual(status.facts.held ?? [], [], 'nothing held: the capture input resolved');
+    assert.equal(status.facts.state, 'completed', JSON.stringify(status.facts));
+    assert.ok(ep.seen.length > 0, 'the model was called');
+    const store = await openStore(join(ws, '.farsight', 'sentinel', 'store'));
+    try {
+      const current = await currentPlan(store, body.facts.runId);
+      const admitted = await loadPlan(store, body.facts.runId, current!.revision);
+      // A fresh run's analysis revision reuses only the inventory; the capture is found behind it.
+      const unit = admitted.plan.units.find((u: any) => u.review)!;
+      assert.ok(store.ledger.getPublication({ id: unit.id, revision: unit.revision }), 'the review published');
+    } finally {
+      store.close();
+    }
   },
 );

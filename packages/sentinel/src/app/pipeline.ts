@@ -29,8 +29,7 @@ import { featureEnabled } from '../policy/features.js';
 import { canonicalDigest } from '../policy/digest.js';
 import { sentinelPlanWord } from '@farsight/core/dist/strings-sentinel-plan.js';
 import { PlanError } from '../planner/errors.js';
-import { requireBootstrap, stageModel } from '../planner/pipeline.js';
-import { PATHS_ADAPTER_ID } from '../analysis/paths/request.js';
+import { BUILTIN_CHECK_OPERATIONS, requireBootstrap, stageModel, TOOL_ADAPTERS } from '../planner/pipeline.js';
 
 /** The pipeline file's place in a workspace, beside the settings. */
 export const PIPELINE_PATH = '.farsight/sentinel/pipeline.json';
@@ -408,10 +407,10 @@ export function checkPipeline(pipeline: PipelineDefinition, env: PipelineEnviron
 }
 
 /**
- * Every stage output an agent or script stage reads is one some planned work can publish: a check stage, or a walkthrough, plans work
- * only for a rule family the policy selects and the lock holds under its adapter. One that plans none under these
- * settings never publishes, and a stage reading it would wait for nothing, so the reader is refused here, before
- * anything runs. Checked only when the environment knows both the selection and the lock.
+ * Every stage output an agent or script stage reads is one some planned work can publish. A report plans no unit, so
+ * it never does. A check stage (a tool, a walkthrough, the framework controls) plans work only for a rule family the
+ * policy selects and the lock holds under its adapter; that is decided only when the environment knows both. A
+ * stage reading what nothing publishes would wait for nothing, so it is refused here, before anything runs.
  */
 function inputsProduced(
   pipeline: PipelineDefinition,
@@ -420,11 +419,19 @@ function inputsProduced(
   refuse: Refuse,
 ): void {
   const { locked, rules: selected } = env;
-  if (!locked || !selected) return;
-  const plansWork = (p: StageDefinition): boolean => {
+  // Whether the producer can publish what a reader resolves: never, for a report (it plans no unit); for a check
+  // stage (a tool, a walkthrough or the framework controls) only when the lock holds a rule the policy selects under
+  // its adapter, which is decided only when the environment knows both (undefined: not decided here).
+  const publishes = (p: StageDefinition): boolean | undefined => {
+    if (p.kind === 'builtin' && p.operation === 'report') return false;
     const adapter =
-      p.kind === 'tool' ? p.adapter : p.kind === 'builtin' && p.operation === 'walkthrough' ? PATHS_ADAPTER_ID : null;
-    if (adapter === null) return true;
+      p.kind === 'tool'
+        ? (TOOL_ADAPTERS[p.adapter] ?? p.adapter)
+        : p.kind === 'builtin'
+          ? BUILTIN_CHECK_OPERATIONS[p.operation]
+          : undefined;
+    if (adapter === undefined) return true;
+    if (!locked || !selected) return undefined;
     const families =
       p.kind === 'tool' ? (typeof p.rules === 'string' ? (env.rulePack?.(p.rules) ?? []) : p.rules) : null;
     return [...locked].some(
@@ -438,12 +445,14 @@ function inputsProduced(
       (s.needs ?? []).flatMap((n) => (typeof n === 'string' ? (n.startsWith('farsight.') ? [] : [n]) : [n.stage])),
     )) {
       const producer = byId.get(producerId);
-      if (producer && producer.id !== s.id && !plansWork(producer))
-        refuse(
-          'sentinel.pipeline.inputUnproduced',
-          s.id,
-          `stage ${s.id} reads ${producerId}, which plans no work under these settings: no rule it runs is both selected and promoted`,
-        );
+      if (!producer || producer.id === s.id || publishes(producer) !== false) continue;
+      refuse(
+        'sentinel.pipeline.inputUnproduced',
+        s.id,
+        producer.kind === 'builtin' && producer.operation === 'report'
+          ? `stage ${s.id} reads ${producerId}, a report, which publishes nothing a stage can read`
+          : `stage ${s.id} reads ${producerId}, which plans no work under these settings: no rule it runs is both selected and promoted`,
+      );
     }
 }
 

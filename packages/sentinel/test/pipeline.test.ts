@@ -601,6 +601,32 @@ test('a stage reading what no planned work can publish is refused before anythin
   assert.equal(unproduced({ locked: new Map(), rules: new Set([family]) }).length, 1);
   // Without the selection (validate of a file alone) nothing is decided on.
   assert.deepEqual(unproduced({ locked: new Map() }), []);
+  // The framework controls plan work the same way: only under a selected, locked rule.
+  const controls = pipelineOf([
+    ...BOOT,
+    { id: 'controls', kind: 'builtin', operation: 'framework-controls', needs: ['parse'] },
+    { ...reader, needs: [{ stage: 'controls', output: 'findings' }] },
+  ]);
+  assert.deepEqual(
+    checkPipeline(controls, { locked: new Map(), rules: new Set() })
+      .filter((x) => x.code === 'sentinel.pipeline.inputUnproduced')
+      .map((x) => x.stage),
+    ['review'],
+  );
+  // A report plans no unit, so a stage reading it is refused whatever the settings, the lock or none at all.
+  const readsReport = pipelineOf([
+    ...BOOT,
+    { id: 'report', kind: 'builtin', operation: 'report', needs: ['inventory'] },
+    { ...reader, needs: [{ stage: 'report', output: 'report' }] },
+  ]);
+  for (const env of [{}, { locked: new Map(), rules: new Set<string>() }]) {
+    const refusedReport = checkPipeline(readsReport, env).filter((x) => x.code === 'sentinel.pipeline.inputUnproduced');
+    assert.deepEqual(
+      refusedReport.map((x) => [x.class, x.stage]),
+      [['refused', 'review']],
+    );
+    assert.match(refusedReport[0]!.detail, /reads report, a report, which publishes nothing/);
+  }
   // The shipped profiles read only what they plan, under the settings init writes and the packs it promotes.
   for (const profile of PROFILES) {
     const settings = initialSettings(profile);

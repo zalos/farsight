@@ -25,7 +25,8 @@ import type { ScannerReport } from '../reports/scanner.js';
 import { loadPipeline, promotedPacks, type WorkspacePipeline } from './pipeline-adoption.js';
 import { profilePipeline, PROFILES, PROFILE_PACKS } from './pipeline-profiles.js';
 import { builtinPackDir } from '../service/package-paths.js';
-import { loadPolicyInputs, parseSettings, SETTINGS_PATH } from '../policy/index.js';
+import { effectivePolicy, loadPolicyInputs, parseSettings, SETTINGS_PATH } from '../policy/index.js';
+import { canonicalDigest } from '../policy/digest.js';
 import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { readCheckoutFile } from '../policy/user-state.js';
@@ -275,7 +276,10 @@ export function scanPreviewOf(ws: Workspace, by: Principal, now: Date = new Date
   const path = loaded.read ? pipelinePathOf(loaded.read) : null;
   // Every problem with the pipeline under these settings, as plan will see it once the setup is done: the rule packs
   // the setup promotes count as promoted. A refused one means plan stops, so the scan is refused here.
-  const problems = pipeline ? previewProblems(ws, pipeline, settings, setup) : [];
+  // The rules planning would select under these settings: the adopted policy's (the owner's mandatory rules and what
+  // the repository requests), or, for settings the setup adopts first, the same merge over the file as it reads now.
+  const rules = new Set('policy' in adopted ? adopted.policy.rules : effectiveRulesOf(ws, settings));
+  const problems = pipeline ? previewProblems(ws, pipeline, settings, rules, setup) : [];
   const refused = problems.find((x) => x.class === 'refused');
   const stages = pipeline
     ? previewPipeline(pipeline, pipeline).stages.map((s) => ({
@@ -419,20 +423,35 @@ function runnerServing(p: Readonly<SettingsEnvelope>['providers'][number] | unde
   return p.kind === 'ollama' && p.disclosure === 'local-only' ? 'ollama' : 'hosted-api';
 }
 
+/**
+ * The rule families the effective policy would select for these settings once adopted: the owner's mandatory rules
+ * and the repository's requested ones, less what it disables (policy/settings.ts effectivePolicy, the one merge). A
+ * repository file that does not read leaves the owner's rules alone.
+ */
+function effectiveRulesOf(ws: Workspace, settings: Readonly<SettingsEnvelope>): readonly string[] {
+  try {
+    const inputs = loadPolicyInputs({ workspace: ws.path, trustDir: ws.trustDir });
+    return effectivePolicy({
+      trust: 'adopted',
+      settings: settings as SettingsEnvelope,
+      settingsDigest: canonicalDigest(settings),
+      repoConfig: inputs.repoConfig,
+      repoConfigDigest: inputs.repoConfigDigest,
+    }).rules;
+  } catch {
+    return settings.mandatoryRules;
+  }
+}
+
 /** The pipeline's problems under these settings once the setup is done: the packs it promotes count as locked. */
 function previewProblems(
   ws: Workspace,
   pipeline: PipelineDefinition,
   settings: Readonly<SettingsEnvelope>,
+  rules: ReadonlySet<string>,
   setup: readonly SetupStep[],
 ): readonly PipelineProblem[] {
   const env = pipelineEnvironment(ws, null);
-  // The rules these settings select (the adopted policy's when it is the one shown, which adds the repository's).
-  const adopted = adoptedPolicy(ws);
-  const rules = new Set([
-    ...settings.mandatoryRules,
-    ...('policy' in adopted && adopted.policy.settings === settings ? adopted.policy.rules : []),
-  ]);
   const locked = new Map(env.locked ?? []);
   for (const step of setup) {
     if (step.kind !== 'promote') continue;
