@@ -41,6 +41,7 @@ export interface StoreLayout {
   readonly scratch: string;
 }
 
+/** The names of a store's files and folders. */
 export const STORE_FILE_NAMES = Object.freeze({
   owner: 'owner.sqlite',
   descriptor: 'owner.json',
@@ -53,6 +54,7 @@ export const STORE_FILE_NAMES = Object.freeze({
 // process opened on owner.sqlite (a copy, a hash, a backup, a second connection) silently drops the owner lock.
 // Nothing but owner.ts may open that file; backups copy the ledger, never the lock.
 
+/** The paths of a store's files and folders under its root. */
 export function storeLayout(root: string): StoreLayout {
   return Object.freeze({
     root,
@@ -67,6 +69,7 @@ export function storeLayout(root: string): StoreLayout {
 /** `dev:ino` from bigint stats, so large inode numbers keep full precision. */
 export type FileIdentity = string;
 
+/** The file system a store lives on, as measured, and how it was measured. */
 export interface FilesystemIdentity {
   readonly platform: NodeJS.Platform;
   /** The measured file system name, e.g. `apfs`, `ext4`. */
@@ -75,6 +78,7 @@ export interface FilesystemIdentity {
   readonly evidence: string;
 }
 
+/** A store folder that passed its checks: its path, identity and file system, and whether this call created it. */
 export interface CheckedStoreRoot {
   readonly path: string;
   readonly identity: FileIdentity;
@@ -83,6 +87,7 @@ export interface CheckedStoreRoot {
   readonly created: boolean;
 }
 
+/** A file's identity as `dev:ino`, from bigint stats so large inode numbers keep full precision. */
 export const identityOf = (s: BigIntStats): FileIdentity => `${s.dev}:${s.ino}`;
 
 const uid = (): number => {

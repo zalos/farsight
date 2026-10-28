@@ -94,6 +94,7 @@ export interface ObjectIdentityRef {
   readonly rawSize: number;
 }
 
+/** How openStore acquires the store: SQLite's busy budget and the build label recorded with migrations. */
 export interface OpenStoreOptions {
   /** SQLite's busy budget for a contended owner lock, in ms (0–10000, default 250). Not a lease. */
   readonly waitMs?: number;
@@ -135,6 +136,7 @@ export type StoreLedger = Pick<
   | 'listOpenStages'
 >;
 
+/** The store's object operations: identify, put, read and check bytes, all bound to the held store. */
 export interface StoreObjects {
   /** The artifact id and size of bytes, computed without writing. */
   identify(bytes: Uint8Array): ObjectIdentityRef;
@@ -154,11 +156,13 @@ export interface StoreObjects {
   check(ref: StoredObject): Promise<ObjectCheck>;
 }
 
+/** What a put must match: the identity registered as staging, so different bytes are refused before any write. */
 export interface PutObjectOptions {
   /** The identity registered as staging; different bytes are refused before anything is written. */
   readonly expect?: ObjectIdentityRef;
 }
 
+/** The runtime a store was opened under: SQLite, Node, platform and the behaviour checks that passed. */
 export interface StoreRuntimeFacts {
   readonly sqlite: string;
   readonly node: string;
@@ -167,6 +171,7 @@ export interface StoreRuntimeFacts {
   readonly checks: readonly string[];
 }
 
+/** An open store: its folder, id and epoch, the ledger, the objects, and the checks that it is still held. */
 export interface SentinelStore {
   /** The canonical store folder. */
   readonly storePath: string;

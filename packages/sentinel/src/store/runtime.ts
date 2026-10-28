@@ -22,6 +22,7 @@ export interface QualifiedRuntime {
   readonly evidence: string;
 }
 
+/** Which host and SQLite pairs are qualified, and the behaviour every one must show at open. */
 export interface SqliteReleasePolicy {
   /**
    * Every qualified host and SQLite pair: POSIX advisory locks through SQLite's default unix VFS, the lock
@@ -71,6 +72,7 @@ export function qualificationFor(
   return policy.qualified.find((q) => q.host === host && q.sqlite === sqlite);
 }
 
+/** The SQLite runtime the store opens connections through, with the versions and checks that qualified it. */
 export interface SqliteRuntime {
   /** The lazily imported module; store code opens connections through this, never by importing it again. */
   readonly sqlite: SqliteModule;

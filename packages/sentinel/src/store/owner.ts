@@ -61,6 +61,7 @@ export interface StoreOwner {
   close(): void;
 }
 
+/** How an owner lock is acquired: SQLite's busy budget for a contended lock. */
 export interface AcquireOptions {
   /**
    * SQLite's busy budget for a contended lock, in ms (0–10000, default 250). Not a lease. SQLite's busy handler
@@ -101,6 +102,11 @@ type Db = InstanceType<SqliteRuntime['sqlite']['DatabaseSync']>;
 // Stores held by this process, by the lock file's inode identity and by canonical path.
 const heldInProcess = new Set<string>();
 
+/**
+ * Takes the store's owner lock for this process with a fresh epoch. Refuses, with a StoreError, an unqualified
+ * runtime, an unsafe path or lock file, a store this process or another already holds, and a folder or lock file
+ * whose identity changed while it was acquired; a `waitMs` outside 0 to 10000 is a RangeError.
+ */
 export async function acquireStoreOwner(storePath: string, options: AcquireOptions = {}): Promise<StoreOwner> {
   const waitMs = options.waitMs ?? DEFAULT_WAIT_MS;
   if (!Number.isInteger(waitMs) || waitMs < 0 || waitMs > 10_000)

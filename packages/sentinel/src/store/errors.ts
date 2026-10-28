@@ -2,7 +2,12 @@
 // (packages/core/src/strings-sentinel-store.ts); `detail` is safe structured context (paths, versions, OS error
 // codes), never a file's contents or a credential.
 import { sentinelStoreWord } from '@farsight/core/dist/strings-sentinel-store.js';
+import { SentinelError } from '../kernel/errors.js';
 
+/**
+ * Why the owner lock, the runtime gate or a path check refused: each is a catalog key in core
+ * strings-sentinel-store.ts.
+ */
 export type StoreErrorCode =
   | 'sentinel.store.runtimeUnavailable'
   | 'sentinel.store.runtimeUnqualified'
@@ -53,11 +58,14 @@ export const STORE_ERROR_CODES: readonly StoreErrorCode[] = Object.freeze([
   'sentinel.store.scratchUnsafe',
 ] as const);
 
+/** The safe structured context a StoreError carries: paths, versions, counts and OS error codes. */
 export type StoreErrorDetail = Record<string, string | number | boolean | null | readonly string[]>;
 
-export class StoreError extends Error {
-  readonly code: StoreErrorCode;
-  readonly detail: Readonly<StoreErrorDetail>;
+/**
+ * A refusal by the store's owner lock, runtime gate or path checks; the message is the catalog's sentence for `code`.
+ */
+export class StoreError extends SentinelError<StoreErrorCode> {
+  declare readonly detail: Readonly<StoreErrorDetail>;
 
   constructor(code: StoreErrorCode, detail: StoreErrorDetail = {}, options?: { cause?: unknown }) {
     const values: Record<string, string | number> = {};
@@ -65,13 +73,12 @@ export class StoreError extends Error {
       if (typeof v === 'string' || typeof v === 'number') values[k] = v;
       else if (Array.isArray(v)) values[k] = v.join(', ');
     }
-    super(sentinelStoreWord(code, values), options);
+    super(code, sentinelStoreWord(code, values), { detail, cause: options?.cause });
     this.name = 'StoreError';
-    this.code = code;
-    this.detail = Object.freeze({ ...detail });
   }
 }
 
+/** True when `error` is a StoreError, and, when `code` is given, carries exactly that code. */
 export function isStoreError(error: unknown, code?: StoreErrorCode): error is StoreError {
   return error instanceof StoreError && (code === undefined || error.code === code);
 }

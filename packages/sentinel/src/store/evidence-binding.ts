@@ -5,6 +5,7 @@ import type { AbandonPermit } from '../evidence/abandon.js';
 import { LedgerError } from './store-types.js';
 import { boundOwner } from './owner-binding.js';
 
+/** An accepted evidence import as the ledger records it: its candidate, operation, root, binding and predecessor. */
 export interface EvidenceAcceptance {
   readonly candidateDigest: string;
   readonly operationId: string;
@@ -19,6 +20,7 @@ export interface EvidenceAcceptance {
   readonly links: readonly { parent: string; child: string }[];
   readonly floors: readonly { id: string; privacy: string }[];
 }
+/** An open evidence operation as abandonment reads it: its identity, state, epoch and staged artifacts. */
 export interface AbandonTarget {
   readonly identity: EvidenceIdentity;
   readonly state: string;
@@ -30,6 +32,7 @@ export interface AbandonTarget {
     artifacts: readonly { id: string; schema: string; privacy: string; links: readonly string[] }[];
   }[];
 }
+/** One evidence operation in a page of a binding's history. */
 export interface EvidencePageRow {
   readonly operationId: string;
   readonly candidateDigest: string;
@@ -37,6 +40,7 @@ export interface EvidencePageRow {
   readonly root: string | null;
   readonly previous: string | null;
 }
+/** The ledger's evidence-import operations, reached only through the open owner's binding (evidenceLedgerFor). */
 export interface EvidenceOperations {
   page(binding: string, after: string | null, limit: number): readonly EvidencePageRow[];
   head(bindingDigest: string): string | null;
@@ -69,6 +73,7 @@ export function bindEvidenceLedger(owner: LedgerOwner, operations: EvidenceOpera
     throw new LedgerError('sentinel.store.conflict', 'an open owner already has an evidence ledger');
   bindings.set(owner, { operations, storeId: owner.storeId, epoch: owner.epoch, closed });
 }
+/** Removes this owner's evidence binding when it is still these operations; anything else is left as it is. */
 export function unbindEvidenceLedger(owner: LedgerOwner, operations: EvidenceOperations): void {
   if (bindings.get(owner)?.operations === operations) bindings.delete(owner);
 }

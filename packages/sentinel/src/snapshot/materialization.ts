@@ -8,10 +8,12 @@ import { SnapshotError } from './errors.js';
 import type { Inventory } from './inventory.js';
 import { digestOf, isRecordablePath } from './policy.js';
 
+/** The schema of a snapshot's materialization sidecar. */
 export const MATERIALIZATION_SCHEMA = 'sentinel-capture-materialization/draft-1';
 /** A link target longer than this is not recorded (the link itself still is, in the envelope). */
 const MAX_TARGET = 4096;
 
+/** One file as restore writes it: its path, content, executable bit and where its bytes came from. */
 export interface MaterializedFile {
   readonly path: string;
   readonly content: ArtifactId;
@@ -20,6 +22,7 @@ export interface MaterializedFile {
   readonly lfs?: { readonly oid: string; readonly size: number };
 }
 
+/** One source as restore rebuilds it: every folder, file, link and gitlink. */
 export interface MaterializedSource {
   readonly sourceId: string;
   /** Every listed folder below the root, sorted; restored even when empty. */
@@ -29,6 +32,9 @@ export interface MaterializedSource {
   readonly gitlinks: readonly { readonly path: string; readonly commit: string }[];
 }
 
+/**
+ * What restore needs beyond the envelope: per source, the folders, files, links and gitlinks, bound to the inventory.
+ */
 export interface Materialization {
   readonly schema: typeof MATERIALIZATION_SCHEMA;
   readonly snapshotId: string;

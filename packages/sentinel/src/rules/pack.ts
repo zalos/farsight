@@ -17,7 +17,7 @@ import type { LockedPack, LockedRule, PackFile, RuleDefinition, RulePackManifest
 import { isSafeRelativePath, validateEnvelope } from '../validate.js';
 import { canonicalDigest, sha256Digest } from '../policy/digest.js';
 import { policyFail } from '../policy/errors.js';
-import { deepFreeze } from '../policy/immutable.js';
+import { deepFreeze } from '../kernel/freeze.js';
 
 /** The manifest's name at a pack's root. */
 export const PACK_MANIFEST = 'sentinel-pack.json';
@@ -36,6 +36,7 @@ export interface PackLimits {
   readonly totalBytes: number;
 }
 
+/** The bounds a pack is read within: files, entries, depth, path length, one file's bytes and all bytes together. */
 export const PACK_LIMITS: PackLimits = Object.freeze({
   files: 4096,
   entries: 8192,
@@ -44,8 +45,11 @@ export const PACK_LIMITS: PackLimits = Object.freeze({
   fileBytes: 1024 * 1024,
   totalBytes: 32 * 1024 * 1024,
 });
+/** The most files a pack may hold ({@link PACK_LIMITS}). */
 export const MAX_PACK_FILES = PACK_LIMITS.files;
+/** The largest file a pack may hold ({@link PACK_LIMITS}). */
 export const MAX_PACK_FILE_BYTES = PACK_LIMITS.fileBytes;
+/** The most bytes a pack may hold in all ({@link PACK_LIMITS}). */
 export const MAX_PACK_BYTES = PACK_LIMITS.totalBytes;
 
 function limitsOf(given: Partial<PackLimits> = {}): PackLimits {
@@ -92,6 +96,16 @@ function verifyChain(chain: Chain): void {
  * folder swapped for a link or another folder mid-read refuses the pack (`packChanged`) instead of reading outside
  * it. Listing is one entry at a time against the entry budget, so an enormous or deeply nested folder stops at the
  * limit rather than being enumerated. These checks detect a swap between observations; they are not an OS sandbox.
+ *
+ * Throws a PolicyError:
+ * - `sentinel.rules.packUnsafe`: the root is not an absolute, normalised, canonical folder path; or an entry has an
+ *   unsafe name, is a symbolic link or is neither a folder nor a regular file;
+ * - `sentinel.rules.packUnreadable`: the root cannot be resolved, a folder cannot be listed or a file cannot be opened;
+ * - `sentinel.rules.packTooLarge`: a limit in `limits` is not a positive integer, or the pack passes its depth, entry,
+ *   path-length, file-count, file-size or total-size limit;
+ * - `sentinel.rules.packChanged`: a folder or file changed identity, size or kind between two observations.
+ *
+ * A root removed between its resolution and its first check throws the operating system's error.
  */
 export function readPackDirectory(root: string, limits: Partial<PackLimits> = {}): Map<string, Buffer> {
   return readPackDirectoryWith(root, limits, {});
@@ -102,6 +116,11 @@ export interface PackReadHooks {
   readonly beforeRead?: (rel: string) => void;
 }
 
+/**
+ * {@link readPackDirectory} with test hooks between each entry's check and its read. It refuses exactly what that
+ * function refuses (`sentinel.rules.packUnsafe`, `packUnreadable`, `packTooLarge` and `packChanged`, as listed there),
+ * and whatever a hook throws passes through.
+ */
 export function readPackDirectoryWith(
   root: string,
   limits: Partial<PackLimits>,

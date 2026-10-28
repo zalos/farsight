@@ -12,6 +12,10 @@ interface Fence {
   failure?: unknown;
 }
 const active = new AsyncLocalStorage<readonly Fence[]>();
+/**
+ * Runs every admission fence the current async scope holds for this owner, after rechecking the owner is held. Throws
+ * the first fence's failure, or the refusal a fence raises, so a write inside an expired admission never commits.
+ */
 export function admissionFenceCheckpoint(owner: LedgerOwner): void {
   const fences = (active.getStore() ?? []).filter((f) => f.owner === owner);
   if (!fences.length) return;

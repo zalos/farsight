@@ -451,7 +451,7 @@ try {
         '-e',
         `
    import assert from 'node:assert/strict';import{readdirSync}from'node:fs';
-   const{frameworkControlsAdapter}=await import(${JSON.stringify('file://' + driverPath)});
+   const{frameworkControlsAdapter}=await import(${JSON.stringify('file://' + join(installed, 'dist/frameworks/controls/driver.mjs'))});
    assert.throws(()=>frameworkControlsAdapter({entryDir:${JSON.stringify(refusalDir)}}),e=>e.code==='sentinel.execution.adapterInvalid');
    assert.deepEqual(readdirSync(${JSON.stringify(refusalDir)}),[]);
  `,
@@ -491,7 +491,7 @@ try {
         '-e',
         `
   import assert from 'node:assert/strict';let refused=false;
-  try{const{frameworkControlsAdapter}=await import(${JSON.stringify('file://' + driverPath)});frameworkControlsAdapter({entryDir:${JSON.stringify(refusalDir)}})}catch{refused=true}
+  try{const{frameworkControlsAdapter}=await import(${JSON.stringify('file://' + join(installed, 'dist/frameworks/controls/driver.mjs'))});frameworkControlsAdapter({entryDir:${JSON.stringify(refusalDir)}})}catch{refused=true}
   assert.ok(refused,'the changed installed build cannot register');
  `,
       ],
@@ -507,7 +507,7 @@ try {
         '-e',
         `
   import assert from 'node:assert/strict';import{readdirSync}from'node:fs';
-  const{frameworkControlsAdapter}=await import(${JSON.stringify('file://' + driverPath)});
+  const{frameworkControlsAdapter}=await import(${JSON.stringify('file://' + join(installed, 'dist/frameworks/controls/driver.mjs'))});
   assert.throws(()=>frameworkControlsAdapter({entryDir:${JSON.stringify(refusalDir)}}),{message:'the shipped dist tree contains a dependency shadow'});
   assert.deepEqual(readdirSync(${JSON.stringify(refusalDir)}),[]);
  `,
@@ -542,7 +542,7 @@ try {
       [
         '--input-type=module',
         '-e',
-        `const{frameworkControlsAdapter}=await import(${JSON.stringify('file://' + driverPath)});console.log(frameworkControlsAdapter({entryDir:${JSON.stringify(exportEntries)}}).definition.module)`,
+        `const{frameworkControlsAdapter}=await import(${JSON.stringify('file://' + join(installed, 'dist/frameworks/controls/driver.mjs'))});console.log(frameworkControlsAdapter({entryDir:${JSON.stringify(exportEntries)}}).definition.module)`,
       ],
       { cwd: ws, env },
     );
@@ -565,7 +565,7 @@ try {
       '-e',
       `
   import assert from 'node:assert/strict';import{readFileSync,writeFileSync,mkdirSync,rmSync,readdirSync}from'node:fs';import{join,dirname}from'node:path';
-  const{frameworkControlsAdapter}=await import(${JSON.stringify('file://' + driverPath)});
+  const{frameworkControlsAdapter}=await import(${JSON.stringify('file://' + join(installed, 'dist/frameworks/controls/driver.mjs'))});
   const own=${JSON.stringify(manifestPath)},outer=${JSON.stringify(join(c.dir, 'package.json'))},outerDist=${JSON.stringify(join(c.dir, 'dist'))};
   const ownBytes=readFileSync(own),outerBytes=readFileSync(outer);
   try{

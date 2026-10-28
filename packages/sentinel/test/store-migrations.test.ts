@@ -1,10 +1,11 @@
 import { test } from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { chmodSync, existsSync, linkSync, statSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { openLedger } from '../dist/store/ledger.js';
-import { LEDGER_APPLICATION_ID, LEDGER_MIGRATIONS } from '../dist/store/migrations.js';
+import { LEDGER_APPLICATION_ID, LEDGER_MIGRATIONS, migrationChecksum } from '../dist/store/migrations.js';
 import { ARTIFACT_CODECS, ARTIFACT_PRIVACY, LEDGER_EVENT_KINDS, LedgerError } from '../dist/store/store-types.js';
 import { ATTEMPT_STATES, RUN_OUTCOMES, RUN_STATES, USAGE_CERTAINTIES, WORK_STATES } from '../dist/index.js';
 import { FakeOwner, runEnvelope, scratch } from './store-helpers.ts';
@@ -243,4 +244,58 @@ test('no ledger path may name the owner lock file, by spelling, case or inode', 
   const after = statSync(lockPath, { bigint: true });
   assert.equal(after.size, 0n);
   assert.equal(after.mtimeNs, before.mtimeNs, 'the owner file was never written');
+});
+
+// The six shipped migrations, byte for byte (docs/proposals/sentinel-v2 K-3): an applied migration is recorded by its
+// checksum, so a changed one would refuse every ledger it already upgraded. A new schema change is a seventh.
+test('migrations 1 to 6 keep their exact bytes and checksums', () => {
+  const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
+  assert.deepEqual(
+    LEDGER_MIGRATIONS.map((m: { version: number; name: string; sql: string }) => [
+      m.version,
+      m.name,
+      sha(m.sql),
+      migrationChecksum(m),
+    ]),
+    [
+      [
+        1,
+        'foundation',
+        '6808d86dfefa6c61b82ea81e3d8f7f837d2f84f8b4035d9f919af6235ad0ec29',
+        'sha256:8f187e3afcfa684e1acaf9166c4c680593841ecd7ffaa42a03e8aec5a49aba6a',
+      ],
+      [
+        2,
+        'snapshot-admission',
+        'f12ef651a7daf3af6795c1ca51afdf70b65ff4577d17309d11b60f80ffc0839e',
+        'sha256:b0c6808fd6bc8d23f7220e43a7827e7f85663223ffc425d5e953cd391d37c085',
+      ],
+      [
+        3,
+        'durable-execution',
+        '4c8a01d57022d01b7481766a1cff617912f8af46566e60cf0ddd59c8ad52319f',
+        'sha256:f615fb3c6b4a7d70b15c3202992e57c10c669dfaddd90a8ed0e7d8d2ff94c805',
+      ],
+      [
+        4,
+        'plan-admission',
+        'e1eb25fb601d8dd3e388e4963bd91148e4295d76aaf5b971cd0a3bdea336faeb',
+        'sha256:077cf68d7b62526dcacd0bbbc41263da088f3ee77d5032929f9708930cd05ed8',
+      ],
+      [
+        5,
+        'plan-selection',
+        '70892cd51dc30f368eb0508b02d1a236891d5e25685c819567aab226c86b2ae4',
+        'sha256:89bf60c8c17bb1bd8ae8233ef90c49409e7a6bf71e25c6e5fad3cccecfd8027c',
+      ],
+      [
+        6,
+        'evidence-operations',
+        'f81722f684b0297b0107e4129b3379f6ede92ea285692ca8ae5761f1378f10df',
+        'sha256:17fbb8bcfbe6463909ae22cc76ce061f201150aa262f668b6bc61cfda4763935',
+      ],
+    ],
+  );
+  for (const m of LEDGER_MIGRATIONS)
+    assert.equal(migrationChecksum(m), `sha256:${sha(`${m.version}\n${m.name}\n${m.sql}`)}`, 'the checksum formula');
 });

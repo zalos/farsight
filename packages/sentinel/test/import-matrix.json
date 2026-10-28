@@ -115,8 +115,7 @@
     "store/ledger.ts → evidence/import-operation.ts",
     "store/ledger.ts → evidence/test-hooks.ts",
     "store/read-budget.ts → execution/errors.ts",
-    "validate.ts → planner/identity.ts",
-    "validate.ts → store/ledger-json.ts"
+    "validate.ts → planner/identity.ts"
   ],
   "cycle": [
     "adapters",

@@ -26,21 +26,26 @@ import {
 } from 'node:fs';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 import { constants as zconstants, inflateSync } from 'node:zlib';
+import { SentinelError } from '../kernel/errors.js';
 
+/** The kind of a Git object. */
 export type GitObjectType = 'commit' | 'tree' | 'blob' | 'tag';
+/** The object format of a repository. */
 export type GitHashAlgorithm = 'sha1' | 'sha256';
 
-export class GitReadError extends Error {
+/** Why the Git reader refused; capture maps each to a catalog reason. */
+export type GitReadErrorCode = 'unsupported' | 'corrupt' | 'notRepository' | 'unresolved' | 'limit';
+
+/** A Git object or repository the reader refused. */
+export class GitReadError extends SentinelError<GitReadErrorCode> {
   /** `limit`: the object may be intact, but reading it would exceed a bound this reader keeps (never `corrupt`). */
-  constructor(
-    readonly code: 'unsupported' | 'corrupt' | 'notRepository' | 'unresolved' | 'limit',
-    message: string,
-  ) {
-    super(message);
+  constructor(code: GitReadErrorCode, message: string) {
+    super(code, message);
     this.name = 'GitReadError';
   }
 }
 
+/** One Git object, inflated: its type and its bytes. */
 export interface GitObject {
   readonly type: GitObjectType;
   readonly data: Buffer;
@@ -80,6 +85,7 @@ export interface GitReadLimits {
   readonly maxDeltaChainBytes: number;
 }
 
+/** The bounds a Git reader keeps by default: packs, index and pack objects, the index cache and delta chains. */
 export const DEFAULT_GIT_READ_LIMITS: GitReadLimits = Object.freeze({
   maxPacks: 1024,
   maxIndexBytes: 64 * 1024 * 1024,
@@ -111,6 +117,7 @@ export interface GitReadBudgetLimits {
   readonly maxPackObjects: number;
 }
 
+/** The memory one capture's Git readers may retain together by default. */
 export const DEFAULT_GIT_READ_BUDGET: GitReadBudgetLimits = Object.freeze({
   maxRetainedBytes: 128 * 1024 * 1024,
   maxPackObjects: 3_000_000,
@@ -382,6 +389,7 @@ function configValue(text: string, section: string, key: string): string | undef
   return found;
 }
 
+/** How to open a repository: its Git and common folders when they are not the defaults, its limits and budget. */
 export interface GitOpenOptions {
   /** The canonical Git directory, required when it lies outside the source root (a linked worktree). */
   readonly gitDir?: string;
@@ -399,6 +407,10 @@ export interface GitOpenOptions {
   readonly budget?: GitReadBudget;
 }
 
+/**
+ * A read-only Git object reader over loose objects and packs, within its limits. It never runs Git, never follows a
+ * file outside the repository's own folders and refuses, with a GitReadError, what it cannot read exactly.
+ */
 export class GitRepository {
   readonly gitDir: string;
   readonly commonDir: string;
