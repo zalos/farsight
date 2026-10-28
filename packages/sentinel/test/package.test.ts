@@ -156,6 +156,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/recovery.js': ['node:fs', 'node:path'],
   'execution/scratch.js': ['node:fs', 'node:path'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
+  // The host script runner starts its child only inside an attempt (runHostScript), never at import.
+  'execution/script-runner.js': ['node:child_process', 'node:crypto', 'node:fs', 'node:path'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
   // The Nest pack (PR 16) reads captured bytes with the parser's own pinned oxc-parser, loaded on first analysis only.
   'frameworks/nest/analyze.js': ['node:crypto'],
