@@ -25,7 +25,7 @@ export class OwnerUiReceiptBook extends ReceiptReader<OwnerUiReceiptEnvelope> {
     // A model envelope opens later in the run the owner started, after the confirming request has returned: it is
     // spent against the exact session and view that issued it (the book was made under that live proof, checked in
     // the constructor), and nothing else. Every other receipt needs the proof still live.
-    if ((receipt.action as string) !== 'paid.admit') assertOwnerUiProof(this.proof, receipt.action);
+    if (receipt.action !== 'paid.admit') assertOwnerUiProof(this.proof, receipt.action);
     if (canonicalDigest(receipt.issuer) !== canonicalDigest(this.proof.issuer))
       policyFail('sentinel.receipt.mismatch', 'the browser owner session or view changed');
   }

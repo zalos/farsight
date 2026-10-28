@@ -177,14 +177,18 @@ const envelopes = new WeakMap<
 >();
 const stamp = (d: Date) => d.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z');
 
+/** The one envelope each spent receipt opened. A receipt is spent once, so it opens one envelope and serves only it. */
+const opened = new WeakMap<object, string>();
+
 /**
  * The one rule for a spent receipt, at every site that needs one (opening a paid or disclosing envelope, a native run,
  * a brokered CLI-runner call): a book's `consume` returned it — the owner CLI's book or the paired browser's owner-UI
- * book — and what it authorizes is exactly this envelope's admitted intent. `receiptAuthority` answers only for an
- * object `consume` returned and recorded, so an unspent receipt, a copied one or one spent for another intent fails.
+ * book — what it authorizes is exactly this envelope's admitted intent, and this is the envelope it opened.
+ * `receiptAuthority` answers only for an object `consume` returned and recorded, so an unspent receipt or a copy of a
+ * spent one fails; one spent for another intent fails; one already holding another envelope fails.
  */
-function spentForIntent(receipt: unknown, intentDigest: string): receipt is SpentReceipt {
-  return receiptAuthority(receipt)?.intentDigest === intentDigest;
+function spentForIntent(receipt: unknown, intentDigest: string, envelopeId: string): receipt is SpentReceipt {
+  return receiptAuthority(receipt)?.intentDigest === intentDigest && opened.get(receipt as object) === envelopeId;
 }
 const ROLES = new Set(['system', 'user', 'assistant']);
 
@@ -285,12 +289,14 @@ export class ModelBroker {
         this.#now(),
       );
     }
-    if ((hosted || priced) && !spentForIntent(spent, result.record.intentDigest)) {
-      fail('sentinel.provider.receiptRequired', hosted ? 'hosted disclosure' : 'priced inference');
-    }
     const receiptDigest = spent?.digest ?? null;
     const admissionDigest = canonicalDigest(result.record);
     const id = `menv-${admissionDigest.slice(7, 39)}`;
+    // The receipt is bound to the first envelope it opens; a second envelope never takes it over.
+    if (spent && !opened.has(spent)) opened.set(spent, id);
+    if ((hosted || priced) && !spentForIntent(spent, result.record.intentDigest, id)) {
+      fail('sentinel.provider.receiptRequired', hosted ? 'hosted disclosure' : 'priced inference');
+    }
     this.#deps.ledger.createEnvelope({
       id,
       runId: req.runId,
@@ -415,7 +421,11 @@ export class ModelBroker {
     });
     if (res.state !== 'held')
       fail('sentinel.provider.reservationState', `operation ${req.operationId} is already ${res.state}`);
-    if (!held.cliRuntime || !spentForIntent(held.receipt, env.admission.intentDigest) || res.envelopeId !== env.id)
+    if (
+      !held.cliRuntime ||
+      !spentForIntent(held.receipt, env.admission.intentDigest, env.id) ||
+      res.envelopeId !== env.id
+    )
       return fail('sentinel.provider.notAdmitted', 'a native run requires its exact admitted receipt and reservation');
     const authority = cli.agent.issue({
       runtime: held.cliRuntime,
@@ -567,7 +577,11 @@ export class ModelBroker {
     const cli = providerKind(binding.kind).cli;
     let authority: object | undefined;
     if (wire && cli) {
-      if (!held.cliRuntime || !spentForIntent(held.receipt, env.admission.intentDigest) || res.envelopeId !== env.id)
+      if (
+        !held.cliRuntime ||
+        !spentForIntent(held.receipt, env.admission.intentDigest, env.id) ||
+        res.envelopeId !== env.id
+      )
         return fail(
           'sentinel.provider.notAdmitted',
           'native call requires its exact admitted receipt and held reservation',
