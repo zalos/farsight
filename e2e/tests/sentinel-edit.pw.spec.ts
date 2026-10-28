@@ -296,7 +296,8 @@ async function standIn(page: Page, baseURL: string | undefined, opts: { readOnly
         const parentOrigin = ${JSON.stringify(origin)}, hostInstance = ${JSON.stringify(instance)};
         const R = ${JSON.stringify(RECORDED)};
         const frameNonce = 'frame-' + '1'.repeat(32), documentId = 'document-' + '2'.repeat(32), id = '3'.repeat(64);
-        let draft = null;
+        let draft = null,
+          got = null;
         const tell = (v, digest = draft) => parent.postMessage({ type: 'sentinel-owner-pipeline-result', frameNonce, documentId, hostInstance,
           state: v.state, draftDigest: digest, reasonCode: v.reasonCode ?? null, detail: v.detail ?? null, problems: v.problems ?? [], preview: v.preview ?? null,
           written: v.written ?? null }, parentOrigin);
@@ -309,12 +310,14 @@ async function standIn(page: Page, baseURL: string | undefined, opts: { readOnly
             // the page edited after its check: the confirmation goes; a race button keeps the earlier one, as an owner
             // who pressed confirm before the withdraw arrived would
             window.__sentinelWithdrawn();
-            const kept = draft;
+            const kept = draft,
+              keptPipeline = got;
             document.getElementById('said').textContent = 'withdrawn';
             const late = document.createElement('button');
             late.textContent = 'Write the earlier check';
             late.onclick = () => {
               late.remove();
+              window.__sentinelGot(keptPipeline, true);
               tell({ state: 'written', problems: R.checked.problems, preview: R.checked.preview, written: R.written }, kept);
             };
             document.getElementById('confirm').replaceChildren(late);
@@ -323,6 +326,7 @@ async function standIn(page: Page, baseURL: string | undefined, opts: { readOnly
           if (e.data.type !== 'sentinel-owner-pipeline' || e.data.frameNonce !== frameNonce) return;
           const p = e.data.pipeline;
           draft = e.data.draftDigest;
+          got = p;
           window.__sentinelGot(p, false, { draftDigest: e.data.draftDigest, expectDigest: e.data.expectDigest });
           document.getElementById('said').textContent = 'checking';
           // the recorded refusals: an empty agent stage, and (a stand-in rule) a capture stage made one per source
@@ -576,11 +580,20 @@ test.describe('the PIPELINE edit mode', () => {
     await page.locator('.snt-tabs [data-tab="stage"]').click();
     await expect(seconds).toHaveValue('180');
     await expect(page.locator('.snt-json')).toContainText('"seconds": 180');
-    // checking the newer draft again replaces the file the earlier write left, not the one first read
+    // Discard after a check withdraws it too: nothing the frame offers can write a draft the page dropped
     await page.locator('.snt-tools [data-act="echeck"]').click();
     await expect.poll(() => state.checks.length).toBe(2);
-    expect(state.checks[1].expectDigest).toBe(RECORDED.written.fileDigest);
-    expect(state.checks[1].draftDigest).not.toBe(state.checks[0].draftDigest);
+    await page.locator('.snt-tools [data-act="ediscard"]').click();
+    await expect.poll(() => state.withdrawn).toBe(2);
+    await expect(page.locator('.snt-crumb')).not.toContainText(/edited, not written/i);
+    await page.locator('.snt-tabs [data-tab="stage"]').click();
+    await seconds.fill('180');
+    await seconds.press('Tab');
+    // checking the newer draft again replaces the file the earlier write left, not the one first read
+    await page.locator('.snt-tools [data-act="echeck"]').click();
+    await expect.poll(() => state.checks.length).toBe(3);
+    expect(state.checks[2].expectDigest).toBe(RECORDED.written.fileDigest);
+    expect(state.checks[2].draftDigest).not.toBe(state.checks[0].draftDigest);
   });
 
   for (const width of [1440, 1280])

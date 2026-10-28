@@ -420,6 +420,41 @@ test(
         })
         .waitFor({ timeout: 15000 });
       assert.equal(await confirmWrite.count(), 0);
+      // A check still out with the service when the page edits: its answer is dropped, no confirmation appears.
+      let release!: () => void;
+      const held = new Promise<void>((r) => (release = r));
+      await page.route('**/pipeline-preview', async (route) => {
+        await held;
+        await route.continue();
+      });
+      await page.locator('.snt-tabs [data-tab="stage"]').click();
+      await seconds.fill('120');
+      await seconds.press('Tab');
+      const answered = page.waitForResponse((r) => r.url().endsWith('/pipeline-preview'));
+      await page.locator('.snt-tools [data-act="echeck"]').click();
+      await page.locator('.snt-tabs [data-tab="stage"]').click();
+      await seconds.fill('122');
+      await seconds.press('Tab');
+      release();
+      await answered;
+      await page.unroute('**/pipeline-preview');
+      await page.locator('.snt-tabs [data-tab="owner"]').click();
+      await frame
+        .getByText('The page changed the pipeline after it was checked: nothing was written. Check it again.', {
+          exact: true,
+        })
+        .waitFor({ timeout: 15000 });
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(await confirmWrite.count(), 0, 'a withdrawn check offers no confirmation');
+      assert.equal(await page.locator('.snt-verdicts').getByText('checked · confirm in the owner panel').count(), 0);
+      // Discard after a check withdraws it as well.
+      await page.locator('.snt-tools [data-act="echeck"]').click();
+      await confirmWrite.waitFor({ timeout: 15000 });
+      await page.locator('.snt-tools [data-act="ediscard"]').click();
+      for (let i = 0; i < 100 && (await confirmWrite.count()); i++) await new Promise((r) => setTimeout(r, 50));
+      assert.equal(await confirmWrite.count(), 0, 'a discarded draft offers no confirmation');
+      assert.deepEqual(JSON.parse(readFileSync(pipelinePath, 'utf8')), before);
+      await page.locator('.snt-erow[data-estage="report"]').click();
       await page.locator('.snt-tabs [data-tab="stage"]').click();
       await seconds.fill('120');
       await seconds.press('Tab');

@@ -208,13 +208,20 @@ function browserMain(layout: typeof processLayout) {
         return;
       void run(async () => {
         notice(text('pipelineChecking'));
-        pipelineDraft = null;
+        withdrawPipeline(false);
+        // the check in flight: a withdrawal or a newer check while it is out drops its answer
+        pendingDraft = draftDigest;
         try {
           // The page names the draft by the digest of the bytes it would write; the panel confirms exactly those.
           if ((await textDigest(JSON.stringify(pipeline, null, 2) + '\n')) !== draftDigest)
             throw Object.assign(Error('changed'), { code: 'sentinel.ownerUi.changed' });
-          showPipeline(await call('/pipeline-preview', { pipeline, expectDigest }), draftDigest);
+          const answer = await call('/pipeline-preview', { pipeline, expectDigest });
+          if (pendingDraft !== draftDigest) return;
+          pendingDraft = null;
+          showPipeline(answer, draftDigest);
         } catch (error: any) {
+          if (pendingDraft !== draftDigest) return;
+          pendingDraft = null;
           tellPipeline({ state: 'failed', reasonCode: error?.code ?? 'sentinel.ownerUi.failed', draftDigest });
           throw error;
         }
@@ -704,13 +711,19 @@ function browserMain(layout: typeof processLayout) {
     return 'sha256:' + Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
   }
   /** The draft a pipeline confirmation here is for; the page's later edit withdraws it. */
-  let pipelineDraft: string | null = null;
-  function withdrawPipeline() {
-    if (!pipelineDraft) return;
-    pipelineDraft = null;
-    confirmation = null;
-    document.getElementById('preview')?.replaceChildren();
-    notice(text('pipelineWithdrawn'));
+  let pipelineDraft: string | null = null,
+    /** The draft whose check is still out with the service; its answer is dropped once this no longer names it. */
+    pendingDraft: string | null = null;
+  /** The page withdrew its check (an edit, a discard): a pending check is dropped and an offered confirmation goes. */
+  function withdrawPipeline(say = true) {
+    const had = pipelineDraft !== null || pendingDraft !== null;
+    pendingDraft = null;
+    if (pipelineDraft !== null) {
+      pipelineDraft = null;
+      confirmation = null;
+      document.getElementById('preview')?.replaceChildren();
+    }
+    if (had && say) notice(text('pipelineWithdrawn'));
   }
   /** What the parent page may know of a pipeline check or write: the service's own answer, in its own words. */
   function tellPipeline(answer: {

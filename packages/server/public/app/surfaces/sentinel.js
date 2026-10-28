@@ -1239,16 +1239,24 @@ async function draftDigest(pipeline) {
 }
 
 /**
- * An edit: the page's copy changes, and the last check no longer speaks for it. A confirmation the frame still offers
- * for the earlier copy is withdrawn, so what the owner confirms is always what the page shows.
+ * The page's last check no longer speaks for what it shows (an edit, a discard): the frame drops the check if it is
+ * still out with the service, and the confirmation if it offers one.
  */
-function edited(next) {
-  if (!SN.draft) SN.draftBase = SN.config?.fileDigest ?? null;
+function withdrawCheck() {
   if ((SN.checking || SN.check?.state === 'checked') && SN.frame?.contentWindow && SN.child)
     SN.frame.contentWindow.postMessage(
       { type: 'sentinel-owner-pipeline-withdraw', frameNonce: SN.child.frameNonce, documentId: SN.child.documentId },
       SN.origin,
     );
+}
+
+/**
+ * An edit: the page's copy changes, and the last check no longer speaks for it. A confirmation the frame still offers
+ * for the earlier copy is withdrawn, so what the owner confirms is always what the page shows.
+ */
+function edited(next) {
+  if (!SN.draft) SN.draftBase = SN.config?.fileDigest ?? null;
+  withdrawCheck();
   SN.draft = next;
   SN.check = null;
   SN.checking = false;
@@ -1717,7 +1725,8 @@ async function checkPipeline() {
 async function pipelineResult(v) {
   if (typeof v.draftDigest !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(v.draftDigest)) return;
   const current = SN.draft ? await draftDigest(SN.draft) : null;
-  if (current !== v.draftDigest) {
+  // (a write after the draft was discarded is simply the file's new state)
+  if (current !== v.draftDigest && !(v.state === 'written' && !SN.draft)) {
     if (v.state !== 'written') return;
     SN.checking = false;
     SN.draftBase = typeof v.written?.fileDigest === 'string' ? v.written.fileDigest : SN.draftBase;
@@ -1815,6 +1824,8 @@ function onClick(e) {
     if (a === 'report') void download(act.dataset.format);
     if (a === 'echeck') void checkPipeline();
     if (a === 'ediscard') {
+      withdrawCheck();
+      SN.checking = false;
       SN.draft = null;
       SN.draftBase = undefined;
       SN.check = null;
