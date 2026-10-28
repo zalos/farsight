@@ -76,9 +76,10 @@ A load it cannot follow fails closed. The detector follows each load's brackets 
 (`import x from ${…}`); prose and comment lines are not loads. A load whose path is one literal, quoted or a template
 with no substitution, is followed like an import, so no load is neither followed nor listed. A load whose target is
 still one literal once its wrappers (`JSON.stringify`, `pathToFileURL`, `.href`, a `'file://' +`) are off is followed
-too: a URL against the module, a resolved specifier, a `dist/` path joined to a base the same file binds once to a
-package root (an installed `node_modules/farsight-sentinel` or a `packages/<dir>` folder), or a module the same file
-writes from a literal. Any other selects the whole area it could point into: a package source's own `src/`; a package
+too: a URL against the module, a resolved specifier, a `dist/` path joined to a base proven to be a package root
+(the file's code, comments and string text aside, declares it once as a `const` of an installed
+`node_modules/farsight-sentinel` or a `packages/<dir>` folder, nothing else binds or shadows the name, and the load
+lies after that declaration inside its block), or a module the same file writes from a literal. Any other selects the whole area it could point into: a package source's own `src/`; a package
 script's `src/` and `scripts/`; a package test's `src/` and `test/fixtures/` (the workers and data a test loads by
 path); and for a root script, `scripts/` and the `src/` and `scripts/` of every package the workflow builds, whose
 `dist/` it can load by path. The selector prints those loads by file and line, with the area each selects, in its

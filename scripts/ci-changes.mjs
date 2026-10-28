@@ -100,6 +100,78 @@ function balanced(text, open) {
   return null;
 }
 
+/**
+ * A file's code with its comments and the text of its strings blanked to spaces, offsets kept: what declares and
+ * references names. A template literal's text is blanked and its `${…}` substitutions kept, since they are code; a
+ * regular expression literal is blanked where the previous token allows one.
+ */
+export function codeView(text) {
+  const out = text.split('');
+  const blank = (from, to) => {
+    for (let i = from; i < to; i++) if (out[i] !== '\n') out[i] = ' ';
+  };
+  // the index just past a template literal starting at `start` (its opening backtick), blanking its text
+  const template = (start) => {
+    let i = start + 1;
+    for (let from = i; i < text.length; i++) {
+      if (text[i] === '\\') i++;
+      else if (text[i] === '`') {
+        blank(from, i);
+        return i + 1;
+      } else if (text[i] === '$' && text[i + 1] === '{') {
+        blank(from, i);
+        i = code(i + 2, '}');
+        from = i + 1;
+      }
+    }
+    return i;
+  };
+  // scans code from `start` to the bracket `close` that ends it (or the end), returning that bracket's index
+  const code = (start, close) => {
+    let depth = 0;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '/' && text[i + 1] === '/') {
+        const end = text.indexOf('\n', i);
+        blank(i, end < 0 ? text.length : end);
+        i = end < 0 ? text.length : end - 1;
+      } else if (ch === '/' && text[i + 1] === '*') {
+        const end = text.indexOf('*/', i + 2);
+        blank(i, end < 0 ? text.length : end + 2);
+        i = end < 0 ? text.length : end + 1;
+      } else if (ch === "'" || ch === '"') {
+        let j = i + 1;
+        while (j < text.length && text[j] !== ch && text[j] !== '\n') j += text[j] === '\\' ? 2 : 1;
+        blank(i + 1, j);
+        i = j;
+      } else if (ch === '`') i = template(i) - 1;
+      else if (
+        ch === '/' &&
+        /(?:^|[(,=:[!&|?{};+\-*%<>~^]|\breturn|\btypeof|\bcase|\bdo|\belse|\bin|\bof)\s*$/.test(
+          text.slice(Math.max(0, i - 12), i),
+        )
+      ) {
+        let j = i + 1;
+        for (let inClass = false; j < text.length && text[j] !== '\n'; j++) {
+          if (text[j] === '\\') j++;
+          else if (text[j] === '[') inClass = true;
+          else if (text[j] === ']') inClass = false;
+          else if (text[j] === '/' && !inClass) break;
+        }
+        blank(i + 1, j);
+        i = j;
+      } else if ('({['.includes(ch)) depth++;
+      else if (')}]'.includes(ch)) {
+        if (depth === 0 && ch === close) return i;
+        depth--;
+      }
+    }
+    return text.length;
+  };
+  code(0, null);
+  return out.join('');
+}
+
 /** An argument list split at its top-level commas. */
 function topLevelArgs(list) {
   const args = [];
@@ -161,7 +233,7 @@ export function loadSites(text) {
     const generated = match[0].endsWith('{') && match[0].includes('$');
     const inner = balanced(text, match.index + match[0].length);
     if (inner === null) {
-      sites.push({ line, expression: null });
+      sites.push({ line, index: match.index, expression: null });
       continue;
     }
     const args = generated ? [`\${${inner}}`] : topLevelArgs(inner);
@@ -169,8 +241,8 @@ export function loadSites(text) {
     // a URL with another base is not a module load; `import()` with nothing in it is prose
     if (/^new\s+URL/.test(match[0]) ? args[1] !== 'import.meta.url' : !first) continue;
     const literal = ONE_LITERAL.exec(first);
-    if (literal) sites.push({ line, literal: literal[1] ?? literal[2] ?? literal[3] });
-    else sites.push({ line, expression: unwrapLoad(first) });
+    if (literal) sites.push({ line, index: match.index, literal: literal[1] ?? literal[2] ?? literal[3] });
+    else sites.push({ line, index: match.index, expression: unwrapLoad(first) });
   }
   return sites;
 }
@@ -281,18 +353,59 @@ export function scannerCliClosure(root = repoRoot) {
   // a literal (its text is followed with the file's). Anything else is null: its area is selected.
   const QUOTED = String.raw`('[^'\n]*'|"[^"\n]*"|\x60[^\x60$\n]*\x60)`;
   const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // The workspace package a base names, when the file binds it once, to a literal path ending in a package root:
-  // an installed tarball (`join(…, 'node_modules/farsight-sentinel')`) or a workspace folder (`join(root, 'packages',
-  // 'sentinel')`, `join(root, 'packages/sentinel')`). A base bound more than once, or to anything else, is unknown.
-  const packageOf = (text, base) => {
+  // The workspace package a base names at a load: proven only when the file's code (comments and string text aside,
+  // codeView) declares the name exactly once, as `const <base> = join(…, <a package root>)`, with no other binding
+  // of it anywhere (another declaration, a destructuring, a parameter, a catch, an assignment), and the load lies
+  // after that declaration inside the block that holds it. A package root is an installed tarball
+  // (`'node_modules/farsight-sentinel'`) or a workspace folder (`'packages', 'sentinel'`, `'packages/sentinel'`).
+  // Anything short of that is unknown, and the load keeps its area.
+  const packageOf = (text, code, base, index) => {
     if (!/^[\w$]+$/.test(base)) return null;
-    const assigned = new RegExp(
-      String.raw`(?<![\w$.])${escape(base)}\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|\?\?|&&|\|\|)?=(?![=>])\s*([^;\n]*)`,
-      'g',
+    const name = String.raw`(?<![\w$.])${escape(base)}(?![\w$])`;
+    const declared = [...code.matchAll(new RegExp(String.raw`\bconst\s+${escape(base)}\s*=(?![=>])\s*([^;\n]*)`, 'g'))];
+    if (declared.length !== 1) return null;
+    const others = [
+      String.raw`\b(?:let|var)\s+${escape(base)}(?![\w$])`,
+      String.raw`\b(?:const|let|var)\s*[{[][^=;]*?${name}`,
+      String.raw`\b(?:function\s*\*?|class)\s+${escape(base)}(?![\w$])`,
+      String.raw`\bimport\b[^;]*?${name}[^;]*?\bfrom\b`,
+      String.raw`${name}\s*=>`,
+    ];
+    if (others.some((pattern) => new RegExp(pattern).test(code))) return null;
+    const assignments = code.match(
+      new RegExp(String.raw`${name}\s*(?:[-+*/%&|^]|\*\*|<<|>>>?|\?\?|&&|\|\|)?=(?![=>])`, 'g'),
     );
-    const bindings = [...text.matchAll(assigned)];
-    if (bindings.length !== 1) return null;
-    const value = bindings[0][1].replace(/[,;]\s*$/, '').trim();
+    if (assignments?.length !== 1) return null; // the declaration's own
+    // a parameter list or a catch clause naming it shadows the declaration somewhere
+    for (const open of code.matchAll(/\(/g)) {
+      const inner = balanced(code, open.index + 1);
+      if (inner === null || !new RegExp(name).test(inner)) continue;
+      const before = code.slice(Math.max(0, open.index - 40), open.index);
+      const after = code.slice(open.index + inner.length + 2, open.index + inner.length + 40);
+      const method =
+        /\{/.test(after.trimStart()[0] ?? '') &&
+        /(?<![\w$.])(?!(?:if|for|while|switch|with|return|typeof|await|in|of|new|void|delete|else)\b)[\w$]+\s*$/.test(
+          before,
+        );
+      if (/^\s*=>/.test(after) || /\bfunction\s*\*?\s*[\w$]*\s*$/.test(before) || /\bcatch\s*$/.test(before) || method)
+        return null;
+    }
+    // the load lies after the declaration, inside the block that holds it
+    const at = declared[0].index;
+    if (index <= at) return null;
+    const stack = [];
+    for (let i = 0; i < at; i++)
+      if (code[i] === '{') stack.push(i);
+      else if (code[i] === '}') stack.pop();
+    const open = stack.at(-1);
+    if (open !== undefined) {
+      const body = balanced(code, open + 1);
+      if (body === null || index > open + body.length) return null;
+    }
+    // the value as written (the code view blanks its literals): the declaration's own text, from the same offset
+    const written = new RegExp(String.raw`const\s+${escape(base)}\s*=\s*([^;\n]*)`, 'y');
+    written.lastIndex = at;
+    const value = (written.exec(text)?.[1] ?? '').replace(/[,;]\s*$/, '').trim();
     const tail = new RegExp(String.raw`^join\(.*?,\s*${QUOTED}(?:\s*,\s*${QUOTED})?\s*\)$`).exec(value);
     if (!tail) return null;
     const path = [tail[1], tail[2]]
@@ -301,13 +414,13 @@ export function scannerCliClosure(root = repoRoot) {
       .join('/');
     const installed = /^node_modules\/((?:@[\w.-]+\/)?[\w.-]+)$/.exec(path)?.[1];
     if (installed) {
-      const name = PUBLISHED.get(installed) ?? installed;
-      return packages.has(name) ? dirOf.get(name) : null;
+      const pkg = PUBLISHED.get(installed) ?? installed;
+      return packages.has(pkg) ? dirOf.get(pkg) : null;
     }
     const folder = /^packages\/([\w.-]+)$/.exec(path)?.[1];
     return folder && built.has(folder) ? `packages/${folder}` : null;
   };
-  const resolveLoad = (source, text, expression) => {
+  const resolveLoad = (source, text, code, expression, index) => {
     const url = new RegExp(String.raw`^new\s+URL\(\s*${QUOTED}\s*,\s*import\.meta\.url\s*\)$`).exec(expression);
     const specifier = new RegExp(String.raw`^require\.resolve\(\s*${QUOTED}\s*\)$`).exec(expression);
     if (url || specifier) return [resolveFrom(source, (url ?? specifier)[1].slice(1, -1))];
@@ -316,7 +429,7 @@ export function scannerCliClosure(root = repoRoot) {
     const [, base, literal] = joined;
     const path = literal.slice(1, -1);
     if (path.startsWith('dist/')) {
-      const pkg = packageOf(text, base); // a dist/ tail counts only under a base known to be a package root
+      const pkg = packageOf(text, code, base, index); // a dist/ tail counts only under a base proven to be a package root
       const target =
         pkg && sourceOf(root, `${pkg}/dist/${path.slice('dist/'.length).replace(/\.(?:m?js|d\.ts)$/, '')}.js`);
       return target ? [target] : null;
@@ -342,12 +455,13 @@ export function scannerCliClosure(root = repoRoot) {
     if (!CODE.test(source)) continue;
     const text = readFileSync(join(root, source), 'utf8');
     if (/^(?:scripts|packages\/[^/]+\/(?:test|scripts))\//.test(source)) mentions += `\n${text}`;
-    for (const { line, literal, expression } of loadSites(text)) {
+    const code = codeView(text);
+    for (const { line, index, literal, expression } of loadSites(text)) {
       if (literal !== undefined) {
         queue.push(resolveFrom(source, literal));
         continue;
       }
-      const targets = expression === null ? null : resolveLoad(source, text, expression);
+      const targets = expression === null ? null : resolveLoad(source, text, code, expression, index);
       if (targets) {
         queue.push(...targets);
         continue;

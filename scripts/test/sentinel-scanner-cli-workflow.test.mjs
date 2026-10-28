@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  codeView,
   computedLoadSites,
   loadSites,
   scannerCliClosure,
@@ -196,7 +197,11 @@ test('the load detector reads a computed load across lines, generated code inclu
     'new URL(`./x.js`, import.meta.url);',
     "new URL(\n  './x.js',\n  import.meta.url\n);",
   ])
-    assert.deepEqual(loadSites(text), [{ line: 1, literal: './x.js' }], text);
+    assert.deepEqual(
+      loadSites(text).map(({ line, literal }) => ({ line, literal })),
+      [{ line: 1, literal: './x.js' }],
+      text,
+    );
   // a brace that does not close is still a load, with no expression to resolve
   assert.deepEqual(sites('await import(join(a, b'), [[1, null]]);
   // not loads: literals the walk follows (one line or several), a URL with another base, prose, comments
@@ -211,6 +216,21 @@ test('the load detector reads a computed load across lines, generated code inclu
     ' * await import(name)',
   ])
     assert.deepEqual(sites(text), [], text);
+});
+
+test("the code view blanks comments and strings' text, keeps template substitutions and every offset", () => {
+  const text = [
+    "const a = 'x // not a comment'; // const installed = 1",
+    '/* const installed = 2 */ const b = "a { brace";',
+    'const c = `text ${join(installed, "dist/x.mjs")} more`;',
+    'const r = /[\'"{]/g; const d = a / 2;',
+  ].join('\n');
+  const code = codeView(text);
+  assert.equal(code.length, text.length);
+  assert.deepEqual(
+    code.split('\n').map((line) => line.replace(/\s+/g, ' ').trim()),
+    ["const a = ' ';", 'const b = " ";', 'const c = ` ${join(installed, " ")} `;', 'const r = / /g; const d = a / 2;'],
+  );
 });
 
 test('a computed load whose target is one literal is followed, not given an area', () => {
@@ -228,11 +248,15 @@ test('a computed load whose target is one literal is followed, not given an area
     selectChecks([path], { root: fake, packageInputs: new Set(), isolationInputs: new Set(), scannerInputs: closure })
       .scannerCli;
   const sources = ['index', 'url-target', 'driver', 'tick-import', 'tick-require', 'tick-url', 'unreached'];
+  const LOAD = "await import(pathToFileURL(join(installed, 'dist/hidden.mjs')).href);";
+  const BOUND = "const installed = join(realpathSync.native(c.dir), 'node_modules/farsight-sentinel');";
   try {
     write('.github/workflows/sentinel-scanner-cli.yml', 'run: node scripts/consumer.mjs\n');
     write('packages/sentinel/package.json', manifest('@farsight/sentinel'));
     write('packages/parsers/package.json', manifest('@farsight/parsers'));
     for (const name of sources) write(`packages/sentinel/src/${name}.ts`, 'export {};\n');
+    // Sol's repro: hidden.ts in both packages, so a base wrongly taken for Sentinel's skips the parsers' one
+    for (const pkg of ['sentinel', 'parsers']) write(`packages/${pkg}/src/hidden.ts`, 'export {};\n');
     const closure = closureOf(
       // a URL against the module, wrapped
       "await import(pathToFileURL(fileURLToPath(new URL('../packages/sentinel/dist/url-target.js', import.meta.url))).href);",
@@ -261,21 +285,43 @@ test('a computed load whose target is one literal is followed, not given an area
       'no area: an unreached source stays out',
     );
 
-    // a dist/ tail counts only under a known base: an unbound base, one bound twice, or one bound to another
-    // folder leaves the load computed, so it is listed and its area (a root script's) selects the source
-    for (const binding of [
-      [],
-      ["let installed = join(c.dir, 'node_modules/farsight-sentinel');", "installed = join(other, 'x');"],
-      ["const installed = join(c.dir, 'node_modules/left-pad');"],
-      ['const installed = somewhere();'],
+    // a dist/ tail counts only under a base proven to be a package root at the load: an unbound base, one bound
+    // twice, to another package or to a call, one bound only in a comment, one a parameter or catch clause shadows,
+    // and a load before the declaration or outside its block leave the load computed. It is listed, and its area (a
+    // root script's) selects the parsers' hidden.ts.
+    for (const lines of [
+      [LOAD],
+      ["let installed = join(c.dir, 'node_modules/farsight-sentinel');", "installed = join(other, 'x');", LOAD],
+      ["const installed = join(c.dir, 'node_modules/left-pad');", LOAD],
+      ['const installed = somewhere();', LOAD],
+      [`// ${BOUND}`, LOAD],
+      [`/* ${BOUND} */`, LOAD],
+      [BOUND, 'function load(installed) {', `  ${LOAD}`, '}'],
+      [BOUND, 'const load = (installed) => {', `  ${LOAD}`, '};'],
+      [BOUND, "const load = installed => import(join(installed, 'dist/hidden.mjs'));"],
+      [BOUND, 'try {} catch (installed) {', `  ${LOAD}`, '}'],
+      [LOAD, BOUND],
+      ['{', `  ${BOUND}`, '}', LOAD],
     ]) {
-      const unknown = closureOf(...binding, "await import(pathToFileURL(join(installed, 'dist/driver.mjs')).href);");
+      const unknown = closureOf(...lines);
+      const at = lines.findIndex((line) => line.includes("'dist/hidden.mjs'")) + 1;
       assert.deepEqual(
         unknown.unresolved.map(({ site }) => site),
-        [`scripts/consumer.mjs:${binding.length + 1}`],
-        binding.join(' ') || 'unbound',
+        [`scripts/consumer.mjs:${at}`],
+        lines.join(' | '),
       );
-      assert.equal(reaches(unknown, 'packages/sentinel/src/driver.ts'), true, 'its area selects the source');
+      assert.equal(reaches(unknown, 'packages/parsers/src/hidden.ts'), true, `selects: ${lines.join(' | ')}`);
+    }
+    // proven: one declaration, no shadowing, the load after it in its block (here inside a nested function)
+    for (const lines of [
+      [BOUND, LOAD],
+      [BOUND, 'async function load(dir) {', `  ${LOAD}`, '}'],
+      ['{', `  ${BOUND}`, `  ${LOAD}`, '}'],
+    ]) {
+      const proven = closureOf(...lines);
+      assert.deepEqual(proven.unresolved, [], lines.join(' | '));
+      assert.equal(reaches(proven, 'packages/sentinel/src/hidden.ts'), true);
+      assert.equal(reaches(proven, 'packages/parsers/src/hidden.ts'), false, `proven: ${lines.join(' | ')}`);
     }
     // the workspace folder is a known root too
     const folder = closureOf(
