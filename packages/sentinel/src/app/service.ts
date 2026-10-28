@@ -43,6 +43,7 @@ import {
   pipelineBytesOf,
   promoteRulePack,
   confirmPlanForService,
+  heldWordsOf,
   pipelinePathOf,
   pipelineEnvironment,
   followWorkspaceRun,
@@ -132,6 +133,7 @@ export async function stageIn(store: SentinelStore, runId: string, stageId: stri
     });
   const ids = new Set(expanded.units);
   const units = admitted.plan.units.filter((u) => ids.has(u.id));
+  const words = heldWordsOf(admitted);
   return result('stage', 'answered', {
     facts: {
       runId,
@@ -140,6 +142,7 @@ export async function stageIn(store: SentinelStore, runId: string, stageId: stri
       downstream: (expanded.stages?.downstream ?? []).map((d) => d.stage),
       units: units.map((u) => {
         const work = store.ledger.getWork({ id: u.id, revision: u.revision });
+        const named = words(u.id);
         const published = store.ledger.getPublication({ id: u.id, revision: u.revision }) !== null;
         return Object.freeze({
           id: u.id,
@@ -154,6 +157,7 @@ export async function stageIn(store: SentinelStore, runId: string, stageId: stri
                 detail: u.review
                   ? `${u.review.selection.providerId} ${u.review.selection.modelId}`
                   : String(u.adapterId ?? u.stage),
+                ...named,
               }
             : {}),
         });
@@ -423,6 +427,12 @@ function previewProblems(
   setup: readonly SetupStep[],
 ): readonly PipelineProblem[] {
   const env = pipelineEnvironment(ws, null);
+  // The rules these settings select (the adopted policy's when it is the one shown, which adds the repository's).
+  const adopted = adoptedPolicy(ws);
+  const rules = new Set([
+    ...settings.mandatoryRules,
+    ...('policy' in adopted && adopted.policy.settings === settings ? adopted.policy.rules : []),
+  ]);
   const locked = new Map(env.locked ?? []);
   for (const step of setup) {
     if (step.kind !== 'promote') continue;
@@ -431,7 +441,7 @@ function previewProblems(
     for (const r of validatePack(readPackDirectory(realpathSync.native(dir))).manifest.rules)
       locked.set(r.familyId, r.implementation.adapterId);
   }
-  return checkPipeline(pipeline, { ...env, settings, locked });
+  return checkPipeline(pipeline, { ...env, settings, locked, rules });
 }
 
 /** The composite a start confirms, read from the run's current revision (no receipt is issued). */

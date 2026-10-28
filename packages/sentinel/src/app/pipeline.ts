@@ -30,6 +30,7 @@ import { canonicalDigest } from '../policy/digest.js';
 import { sentinelPlanWord } from '@farsight/core/dist/strings-sentinel-plan.js';
 import { PlanError } from '../planner/errors.js';
 import { requireBootstrap, stageModel } from '../planner/pipeline.js';
+import { PATHS_ADAPTER_ID } from '../analysis/paths/request.js';
 
 /** The pipeline file's place in a workspace, beside the settings. */
 export const PIPELINE_PATH = '.farsight/sentinel/pipeline.json';
@@ -59,6 +60,7 @@ export const PIPELINE_ERROR_CODES = [
   'sentinel.pipeline.notAdopted',
   'sentinel.pipeline.changed',
   'sentinel.pipeline.adoptionUnauthorized',
+  'sentinel.pipeline.inputUnproduced',
 ] as const;
 export type PipelineErrorCode = (typeof PIPELINE_ERROR_CODES)[number];
 
@@ -258,6 +260,8 @@ export interface PipelineEnvironment {
   readonly locked?: ReadonlyMap<RuleFamilyId, string>;
   /** The adapters whose pinned tool and offline assets the owner adopted. */
   readonly installed?: ReadonlySet<string>;
+  /** The rule families the policy selects: with `locked`, which check and walkthrough stages plan any work. */
+  readonly rules?: ReadonlySet<RuleFamilyId>;
 }
 
 const RUNNER_FEATURE: Readonly<Record<string, FeatureFlagName>> = {
@@ -395,11 +399,52 @@ export function checkPipeline(pipeline: PipelineDefinition, env: PipelineEnviron
     edges,
   );
   if (cycle) refuse('sentinel.pipeline.cycle', cycle[0]!, `the stages wait on each other: ${cycle.join(' → ')}`);
+  inputsProduced(pipeline, byId, env, refuse);
   // What the planner itself refuses, read from the planner (one source of truth, never a copy of its rules): a pipeline
   // the checks above pass but the planner cannot plan, such as one with no parse or inventory stage, or two stages that
   // both capture. Only when nothing above refused it, so one problem is never reported twice in two words.
   if (!problems.some((p) => p.class === 'refused')) plannerProblem(pipeline, refuse);
   return Object.freeze(problems);
+}
+
+/**
+ * Every stage output an agent or script stage reads is one some planned work can publish: a check stage, or a walkthrough, plans work
+ * only for a rule family the policy selects and the lock holds under its adapter. One that plans none under these
+ * settings never publishes, and a stage reading it would wait for nothing, so the reader is refused here, before
+ * anything runs. Checked only when the environment knows both the selection and the lock.
+ */
+function inputsProduced(
+  pipeline: PipelineDefinition,
+  byId: ReadonlyMap<StageId, StageDefinition>,
+  env: PipelineEnvironment,
+  refuse: Refuse,
+): void {
+  const { locked, rules: selected } = env;
+  if (!locked || !selected) return;
+  const plansWork = (p: StageDefinition): boolean => {
+    const adapter =
+      p.kind === 'tool' ? p.adapter : p.kind === 'builtin' && p.operation === 'walkthrough' ? PATHS_ADAPTER_ID : null;
+    if (adapter === null) return true;
+    const families =
+      p.kind === 'tool' ? (typeof p.rules === 'string' ? (env.rulePack?.(p.rules) ?? []) : p.rules) : null;
+    return [...locked].some(
+      ([f, a]) => a === adapter && selected.has(f) && (families === null || families.includes(f)),
+    );
+  };
+  // Only a stage that reads another stage's output waits for it: an agent or a script stage (a report gathers what
+  // was published, and a check stage reads the bootstrap).
+  for (const s of pipeline.stages.filter((x) => x.kind === 'agent' || x.kind === 'script'))
+    for (const producerId of new Set(
+      (s.needs ?? []).flatMap((n) => (typeof n === 'string' ? (n.startsWith('farsight.') ? [] : [n]) : [n.stage])),
+    )) {
+      const producer = byId.get(producerId);
+      if (producer && producer.id !== s.id && !plansWork(producer))
+        refuse(
+          'sentinel.pipeline.inputUnproduced',
+          s.id,
+          `stage ${s.id} reads ${producerId}, which plans no work under these settings: no rule it runs is both selected and promoted`,
+        );
+    }
 }
 
 /** The planner's own refusal of a declaration, as a problem: its stage model first, then its bootstrap rule. */

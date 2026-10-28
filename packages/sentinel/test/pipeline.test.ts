@@ -36,7 +36,11 @@ import {
 import { promoteStagePack } from '../dist/review/packs.js';
 import { profilePipeline } from '../dist/app/pipeline-profiles.js';
 import { requireBootstrap, stageModel } from '../dist/planner/pipeline.js';
-import { initWorkspace, PROFILES } from '../dist/cli/init.js';
+import { initialSettings, initWorkspace, PROFILE_PACKS, PROFILES } from '../dist/cli/init.js';
+import { PATHS_SUPPORTED_RULES } from '../dist/analysis/paths/definitions.js';
+import { builtinPackDir } from '../dist/service/package-paths.js';
+import { builtinRulePack } from '../dist/service/trusted-profile.js';
+import { readPackDirectory, validatePack } from '../dist/rules/index.js';
 import { DEFAULT_SETTINGS, ReceiptBook, validateEnvelope } from '../dist/index.js';
 import type { PipelineDefinition, SettingsEnvelope, StageDefinition } from '../dist/index.js';
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
@@ -569,6 +573,53 @@ test('what the workspace has not made available is reported, not refused', () =>
   );
 });
 
+test('a stage reading what no planned work can publish is refused before anything runs', () => {
+  const walk: StageDefinition = { id: 'walk', kind: 'builtin', operation: 'walkthrough', needs: ['parse'] };
+  const reader: StageDefinition = {
+    id: 'review',
+    kind: 'agent',
+    mode: 'brokered',
+    runner: 'ollama',
+    model: 'qwen3:4b',
+    needs: [{ stage: 'walk', output: 'walkthrough' }],
+  };
+  const pipeline = pipelineOf([...BOOT, walk, reader]);
+  const unproduced = (env: PipelineEnvironment) =>
+    checkPipeline(pipeline, env).filter((x) => x.code === 'sentinel.pipeline.inputUnproduced');
+  // No path rule selected and locked: the walkthrough plans nothing, so the review would wait for nothing.
+  const none = unproduced({ locked: new Map(), rules: new Set() });
+  assert.deepEqual(
+    none.map((x) => [x.class, x.stage]),
+    [['refused', 'review']],
+  );
+  assert.match(none[0]!.detail, /reads walk, which plans no work/);
+  // Selected and locked under the walkthrough's adapter: it plans work, and the review may read it.
+  const family = PATHS_SUPPORTED_RULES[0]!.familyId;
+  assert.deepEqual(unproduced({ locked: new Map([[family, 'bounded-paths']]), rules: new Set([family]) }), []);
+  // Locked but not selected, or selected but not locked: still nothing planned.
+  assert.equal(unproduced({ locked: new Map([[family, 'bounded-paths']]), rules: new Set() }).length, 1);
+  assert.equal(unproduced({ locked: new Map(), rules: new Set([family]) }).length, 1);
+  // Without the selection (validate of a file alone) nothing is decided on.
+  assert.deepEqual(unproduced({ locked: new Map() }), []);
+  // The shipped profiles read only what they plan, under the settings init writes and the packs it promotes.
+  for (const profile of PROFILES) {
+    const settings = initialSettings(profile);
+    const locked = new Map<string, string>();
+    for (const name of PROFILE_PACKS[profile])
+      for (const r of validatePack(readPackDirectory(realpathSync.native(builtinPackDir(name)!))).manifest.rules)
+        locked.set(r.familyId, r.implementation.adapterId);
+    assert.deepEqual(
+      checkPipeline(profilePipeline(profile), {
+        locked,
+        rules: new Set(settings.mandatoryRules),
+        rulePack: builtinRulePack,
+      }).filter((x) => x.code === 'sentinel.pipeline.inputUnproduced'),
+      [],
+      profile,
+    );
+  }
+});
+
 test('the profiles init writes are sound pipelines; the agentic one names what this build does not have yet', () => {
   for (const profile of PROFILES) {
     const pipeline = profilePipeline(profile);
@@ -588,7 +639,6 @@ test('the profiles init writes are sound pipelines; the agentic one names what t
       'inventory:builtin',
       'secrets:tool',
       'patterns:tool',
-      'walk:builtin',
       'review:agent',
       'report:builtin',
     ],
@@ -1042,7 +1092,6 @@ test('a change previews what it reruns: the stage, everything downstream of it, 
     inventory: 'unchanged',
     secrets: 'unchanged',
     patterns: 'unchanged',
-    walk: 'unchanged',
     review: 'changed',
     triage: 'downstream',
     report: 'downstream',

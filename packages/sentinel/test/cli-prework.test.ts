@@ -303,7 +303,7 @@ test('init, as an owner reads it: both files, which profile a kept file holds, a
   const shown = run(['pipeline', 'show', '--json']);
   assert.equal(shown.status, 0, shown.stderr);
   const view = JSON.parse(shown.stdout).facts;
-  assert.deepEqual([view.trust, view.id, view.stages], ['not-adopted', 'default', 8]);
+  assert.deepEqual([view.trust, view.id, view.stages], ['not-adopted', 'default', 7]);
   assert.ok(!view.problems.some((p: { class: string }) => p.class === 'refused'), 'the shipped profile plans');
   assert.equal(run(['pipeline', 'validate']).status, 0, 'its own meaning is sound');
   assert.equal(run(['pipeline', 'adopt']).status, 4, 'adoption waits for the owner');

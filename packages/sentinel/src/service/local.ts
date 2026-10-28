@@ -81,6 +81,7 @@ import {
 import { RuleLockBook } from './rule-locks.js';
 import { loadPlan } from '../execution/plans.js';
 import { expandStageTokens, unitsToRun } from '../execution/selection.js';
+import { runStages } from '../execution/stage-inputs.js';
 import type { StageSelection } from '../planner/pipeline.js';
 import { PlanError } from '../planner/errors.js';
 import { ServiceError } from './owner-service.js';
@@ -463,6 +464,8 @@ export function pipelineEnvironment(ws: Workspace, policy: EffectivePolicy | nul
     adapters: new Map([...shipped].map(([id, a]) => [id, a.families])),
     locked,
     installed: new Set([...shipped].filter(([id, a]) => !a.container || tools.has(id)).map(([id]) => id)),
+    // What the adopted policy selects; before adoption nothing is decided on, so no stage is held to plan work.
+    ...(policy ? { rules: new Set(policy.rules) } : {}),
   });
 }
 
@@ -1644,6 +1647,7 @@ export async function heldUnitsIn(
   if (!plan) return { held: [] };
   const admitted = await loadPlan(store, runId, plan.revision);
   const held: HeldUnit[] = [];
+  const words = heldWordsOf(admitted);
   for (const u of admitted.plan.units) {
     const work = store.ledger.getWork({ id: u.id, revision: u.revision });
     if (work && (work.state === 'blocked' || work.state === 'disabled-by-policy') && work.reason)
@@ -1658,6 +1662,7 @@ export async function heldUnitsIn(
           detail: u.review
             ? `${u.review.selection.providerId} ${u.review.selection.modelId}`
             : String(u.adapterId ?? u.stage),
+          ...words(u.id),
         }),
       );
   }
@@ -1683,6 +1688,34 @@ export interface HeldUnit {
   readonly reasonCode: string;
   /** What the reason is about, for its words: the provider and model a review asked for, or a check's adapter. */
   readonly detail: string;
+  /** The declared stage the unit belongs to and the outputs it reads (a stage-input reason's words), when known. */
+  readonly declaredStage?: string;
+  readonly inputs?: string;
+}
+
+/**
+ * For each unit, the declared stage it belongs to and the stage outputs that stage reads, in words (`patterns.findings`),
+ * from the run's recorded or implied pipeline: what a held stage-input reason names. Empty when the plan has no stage
+ * model this build can read.
+ */
+export function heldWordsOf(
+  admitted: Awaited<ReturnType<typeof loadPlan>>,
+): (unit: string) => { declaredStage?: string; inputs?: string } {
+  let stages: ReturnType<typeof runStages>;
+  try {
+    stages = runStages(admitted);
+  } catch {
+    return () => ({});
+  }
+  return (unit) => {
+    const stage = stages.owner.get(unit);
+    if (!stage) return {};
+    const inputs = stages.model.inputs.get(stage) ?? [];
+    return {
+      declaredStage: stage,
+      ...(inputs.length ? { inputs: inputs.map((i) => `${i.stage}.${i.output}`).join(', ') } : {}),
+    };
+  };
 }
 
 /** The pipeline a run was planned from, as its admitted profile records it. */

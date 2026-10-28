@@ -384,8 +384,14 @@ function serviceOut(r: CommandResult, lines: string[] = [], values: Record<strin
       r.reasonCode === 'sentinel.service.needsOwnerConfirm' && r.facts.requiredFlag === '--confirm-models'
         ? 'sentinel.cli.needsModelConfirm'
         : r.reasonCode;
+    // A finished scan whose checks covered their scope but whose findings this build does not judge is one sentence of
+    // its own: the outcome's words (required checks did not complete) would contradict it.
     (r.exitCode === 0 ? out : errOut)(
-      reason && reason !== 'sentinel.outcome.unavailable' ? `${head}: ${word(reason, values)}` : head,
+      reason === 'sentinel.service.policyNotEvaluated'
+        ? word(reason, values)
+        : reason && reason !== 'sentinel.outcome.unavailable'
+          ? `${head}: ${word(reason, values)}`
+          : head,
     );
   }
   return finish(r);
@@ -597,13 +603,20 @@ function stagesLine(path: unknown): string[] {
 }
 
 /** The units a run holds, each with why. */
+/** A held reason's words: its detail, and for a stage input the declared stage and the outputs it reads. */
+const heldValues = (h: Record<string, unknown>): Record<string, string> => ({
+  detail: String(h.detail ?? h.stage ?? ''),
+  stage: String(h.declaredStage ?? h.stage ?? ''),
+  inputs: String(h.inputs ?? ''),
+});
+
 function heldLines(held: unknown): string[] {
   if (!Array.isArray(held)) return [];
   return held.map((h: Record<string, unknown>) =>
     word('sentinel.cli.held', {
       unit: String(h.unit),
       stage: String(h.stage),
-      reason: word(String(h.reasonCode), { detail: String(h.detail ?? h.stage) }),
+      reason: word(String(h.reasonCode), heldValues(h)),
     }),
   );
 }
@@ -722,9 +735,13 @@ async function scanCommand(
         ...modelLines(f.models),
         ...(r.outcome === 'awaiting-confirmation'
           ? [
-              word('sentinel.cli.confirmWith', {
-                command: `scan --confirm${p.flags['--detach'] === true ? ' --detach' : ''}`,
-              }),
+              // scan --confirm is the one confirmation: it covers every model call listed above too.
+              word(
+                Array.isArray(f.models) && f.models.length
+                  ? 'sentinel.cli.confirmScanModels'
+                  : 'sentinel.cli.confirmWith',
+                { command: `scan --confirm${p.flags['--detach'] === true ? ' --detach' : ''}` },
+              ),
             ]
           : []),
       ],
@@ -1001,7 +1018,7 @@ async function owner(p: ParsedCommand): Promise<number> {
               adapter: String(u.adapterId),
               state: String(u.state),
               attempts: Number(u.attempts),
-            }) + (u.reasonCode ? ` · ${word(String(u.reasonCode), { detail: String(u.detail ?? '') })}` : ''),
+            }) + (u.reasonCode ? ` · ${word(String(u.reasonCode), heldValues(u))}` : ''),
         ),
         refusedDetail(r),
       );

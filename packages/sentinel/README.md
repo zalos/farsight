@@ -227,7 +227,8 @@ npm install -g <pinned farsight-sentinel tarball URL>   # a GitHub Release asset
 cd /path/to/your/workspace
 farsight-sentinel init [--profile <name>]  # .farsight/sentinel/settings.json and pipeline.json (0600); again: kept
 farsight-sentinel scan                     # what it would adopt, promote and run, every model and budget; exit 4
-farsight-sentinel scan --confirm           # one confirmation: adopt, promote, plan and run (--detach: in the service)
+farsight-sentinel scan --confirm           # one confirmation: adopt, promote, plan and run, the model calls the preview
+                                           #   lists included (scan has no --confirm-models); --detach: in the service
 farsight-sentinel report                   # the newest scan's report; scans lists them, status and wait read the newest
 # or step by step:
 farsight-sentinel settings adopt --confirm # you, the owner, adopt these exact bytes (without --confirm: shown, exit 4)
@@ -254,8 +255,8 @@ contacts a model provider. `init` prints what the profile plans and what this ma
 | `static` (default) | the foundation preview check | Node 24 |
 | `scanners` | the five pinned scanners | a container runtime and their adopted images |
 | `secrets` | the current-tree secret scan | a container runtime and the adopted Gitleaks image |
-| `agentic` | secrets, patterns, the walkthrough, a Copilot general review of their findings | containers for the two scanners; a qualified Copilot CLI and its provider |
-| `review` | the walkthrough and a Copilot general review | a qualified Copilot CLI and its provider; no container |
+| `agentic` | secrets, patterns, a Copilot general review of the pattern findings | containers for the two scanners; a qualified Copilot CLI and its provider |
+| `review` | a Copilot general review of the captured source | a qualified Copilot CLI and its provider; no container |
 
 The `review` profile reviews **without a secrets scan**: its settings carry `hostedReviewSecretScan: "when-selected"`,
 so once you confirm the model a hosted review is admitted without a current secret scan. Secrets an accepted earlier
@@ -1205,7 +1206,7 @@ private trace content/output at 8 MiB with a shared 20-second read deadline, and
 ### Agentic-only review without external scanners
 
 Capture, parsing, retained inputs and general model review do not need Docker or a local model. `init --profile
-review` writes this setup (the walkthrough and a Copilot general review, no scanner); for an existing workspace,
+review` writes this setup (a Copilot general review of the captured source, no scanner); for an existing workspace,
 keep the configured Copilot provider and its exact model pins, and explicitly select:
 
 ```json

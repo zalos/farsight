@@ -2,6 +2,7 @@
 // through the command line and the running service, and the composite start a plan with model stages needs. The
 // model is a local fixture endpoint; nothing contacts a hosted provider or a real keychain.
 import { test } from 'node:test';
+import { sentinelExecutionWord } from '@farsight/core/dist/strings-sentinel-execution.js';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import {
@@ -890,7 +891,7 @@ test(
     };
     const init = run('init', '--profile', 'review');
     assert.equal(init.status, 0, init.stderr);
-    assert.match(init.stdout, /profile: review — the walkthrough and a Copilot review/);
+    assert.match(init.stdout, /profile: review — a Copilot review of the captured source/);
     assert.match(init.stdout, /this profile reviews without a secrets scan/);
     assert.match(init.stdout, /no container runtime/);
     const path = join(ws, '.farsight', 'sentinel', 'settings.json');
@@ -909,7 +910,7 @@ test(
     assert.equal(preview.facts.pipeline.path.kind, 'declared');
     assert.deepEqual(
       preview.facts.stages.map((s: { id: string; kind: string }) => `${s.id}:${s.kind}`),
-      ['capture:builtin', 'parse:builtin', 'inventory:builtin', 'walk:builtin', 'review:agent', 'report:builtin'],
+      ['capture:builtin', 'parse:builtin', 'inventory:builtin', 'review:agent', 'report:builtin'],
     );
     assert.ok(!preview.facts.stages.some((s: { where: string }) => s.where === 'container'), 'no container stage');
     assert.deepEqual(preview.facts.models, [
@@ -941,6 +942,18 @@ test(
     assert.deepEqual(
       status.facts.held.map((h: Record<string, string>) => [h.stage, h.reasonCode, h.detail]),
       [['review-general', 'sentinel.provider.capabilityUntested', 'native-copilot luna']],
+    );
+    // A held unit names its declared stage and the outputs it reads (what a stage-input reason's words need).
+    assert.deepEqual(
+      status.facts.held.map((h: Record<string, string>) => [h.declaredStage, h.inputs]),
+      [['review', 'capture.source']],
+    );
+    assert.equal(
+      sentinelExecutionWord('sentinel.execution.stageInputMissing', {
+        stage: status.facts.held[0].declaredStage,
+        inputs: status.facts.held[0].inputs,
+      }),
+      'a stage input this work reads was not published: review reads capture.source',
     );
     const store = await openStore(join(ws, '.farsight', 'sentinel', 'store'));
     try {

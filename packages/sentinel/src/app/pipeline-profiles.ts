@@ -1,7 +1,7 @@
 // The pipeline each init profile writes. `static`, `scanners` and `secrets` declare exactly the stages those
 // profiles plan today (capture, a parse per source, the inventory, the checks their rules select, the report), so
 // declared planning reproduces today's units; `agentic` is the plan's example (README §3.3) as this build can plan
-// it, and `review` is its model half alone: the walkthrough and a Copilot review, with no scanner and no container.
+// it, and `review` is its model half alone: a Copilot review of the capture, with no scanner and no container.
 import type { PipelineDefinition, StageDefinition } from '../contracts/index.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import {
@@ -36,8 +36,8 @@ const pipeline = (stages: StageDefinition[], flags?: PipelineDefinition['flags']
 
 /**
  * The scan profiles init describes: the foundation preview, the five pinned scanners, the secret scan alone, the
- * plan's agentic example (the secret and pattern scanners, the walkthrough and a brokered Copilot review), and that
- * review alone over the walkthrough, which needs no container and runs no secret scan first.
+ * plan's agentic example (the secret and pattern scanners and a brokered Copilot review), and that review alone over
+ * the capture, which needs no container and runs no secret scan first.
  */
 export const PROFILES = ['static', 'scanners', 'secrets', 'agentic', 'review'] as const;
 export type Profile = (typeof PROFILES)[number];
@@ -65,13 +65,6 @@ const copilotReview = (needs: { stage: string; output: string }[], after?: strin
   fanOut: 'per-run',
   budget: { turns: 3, tokens: 20000, seconds: 120 },
 });
-const walk: StageDefinition = {
-  id: 'walk',
-  kind: 'builtin',
-  operation: 'walkthrough',
-  needs: ['parse'],
-  fanOut: 'per-entry',
-};
 
 /** The pipeline `init --profile <profile>` writes. */
 export function profilePipeline(profile: string): PipelineDefinition {
@@ -89,8 +82,8 @@ export function profilePipeline(profile: string): PipelineDefinition {
     case 'secrets':
       return pipeline([tool('secrets', 'secrets-gitleaks', families(GITLEAKS_SUPPORTED_RULES)), report(['secrets'])]);
     case 'agentic':
-      // The plan's example, as this build can plan it: the secret and pattern scanners, the walkthrough, a brokered
-      // Copilot general review over their outputs, and the report. No stage or skill pack is named (none ships yet),
+      // The plan's example, as this build can plan it: the secret and pattern scanners, a brokered Copilot general
+      // review of the pattern findings, and the report. No stage or skill pack is named (none ships yet),
       // and the native Claude triage waits until the runner is turned on (a later profile adds it).
       return pipeline(
         [
@@ -102,21 +95,17 @@ export function profilePipeline(profile: string): PipelineDefinition {
             rules: 'pack:builtin:pattern',
             needs: ['capture', 'parse'],
           },
-          walk,
-          copilotReview(
-            [
-              { stage: 'walk', output: 'walkthrough' },
-              { stage: 'patterns', output: 'findings' },
-            ],
-            ['secrets'],
-          ),
-          report(['secrets', 'patterns', 'review', 'walk']),
+          // No walkthrough stage: it would plan nothing (no path rule is in this lock), and never publish its input.
+          copilotReview([{ stage: 'patterns', output: 'findings' }], ['secrets']),
+          report(['secrets', 'patterns', 'review']),
         ],
         { 'review.hosted-api': false },
       );
     case 'review':
-      // The review alone: no scanner, so no container. Its settings choose to review without a secret scan first.
-      return pipeline([walk, copilotReview([{ stage: 'walk', output: 'walkthrough' }]), report(['review', 'walk'])], {
+      // The review alone: no scanner, so no container. Its settings choose to review without a secret scan first. It
+      // reads the capture: a walkthrough stage would plan nothing here (the lock holds no path rule), so it would
+      // never publish the input a review waiting on it needs.
+      return pipeline([copilotReview([{ stage: 'capture', output: 'source' }]), report(['review'])], {
         'review.hosted-api': false,
       });
     default:
