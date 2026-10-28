@@ -19,8 +19,16 @@ import {
 } from '../ci-changes.mjs';
 import { buildClosure } from '../pack-preflight.mjs';
 
-const none = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false, recovery: false };
-const full = { validate: true, e2e: true, echo: true, sentinel: true, isolation: true, recovery: true };
+const none = {
+  validate: false,
+  e2e: false,
+  echo: false,
+  sentinel: false,
+  isolation: false,
+  recovery: false,
+  service: false,
+};
+const full = { validate: true, e2e: true, echo: true, sentinel: true, isolation: true, recovery: true, service: true };
 const every = { scope: 'all', packages: [], also: [] };
 const some = (packages, also = []) => ({ scope: 'packages', packages, also });
 const repoRoot = new URL('../../', import.meta.url).pathname;
@@ -46,27 +54,27 @@ test('e2e and unit test changes select their own check; mixed edits take the uni
   assert.deepEqual(selectChecks(['e2e/tests/chrome.pw.spec.ts', 'scripts/e2e.mjs']), { ...none, e2e: true });
   assert.deepEqual(
     selectChecks(['scripts/synth-graph.mjs']),
-    { ...none, e2e: true, validate: true },
+    { ...none, e2e: true, validate: true, service: true },
     "the perf suite's synthetic workspace is also imported by the server's unit tests",
   );
+  // a script change tests every package, Sentinel's process suite with them
   assert.deepEqual(selectChecks(['packages/core/test/coverage.test.ts', 'scripts/test/release.test.mjs']), {
     ...none,
     validate: true,
+    service: true,
   });
   assert.deepEqual(selectChecks(['docs/CI.md', 'scripts/release.mjs', 'e2e/fixture/serve.mjs']), {
     ...none,
     validate: true,
     e2e: true,
+    service: true,
   });
 });
 
 test('runtime, fixtures and shared build inputs retain their affected checks', () => {
-  for (const path of [
-    'packages/app/src/index.ts',
-    'examples/nx-workspace/package.json',
-    'schemas/farsight-affected-v1.schema.json',
-  ]) {
-    assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true }, path);
+  assert.deepEqual(selectChecks(['packages/app/src/index.ts']), { ...none, validate: true, e2e: true });
+  for (const path of ['examples/nx-workspace/package.json', 'schemas/farsight-affected-v1.schema.json']) {
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true, service: true }, path);
   }
   for (const path of [
     'packages/server/public/app/main.js',
@@ -80,7 +88,10 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
     'packages/work-azdo/src/index.ts',
     'examples/invoice-app/docs/flow.md',
   ]) {
-    assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true, sentinel: true }, path);
+    // validate tests Sentinel (so sentinel-service runs) for the parsers, whose dist its report tests ingest through,
+    // and for examples/ (every package)
+    const service = /^(?:packages\/parsers|examples)\//.test(path);
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true, sentinel: true, service }, path);
   }
   for (const path of [
     'packages/graph/src/graph.ts',
@@ -99,7 +110,7 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
   }
   assert.deepEqual(
     selectChecks(['packages/code-parser/src/tsjs.ts']),
-    { ...none, validate: true, e2e: true, sentinel: true, isolation: true, recovery: true },
+    { ...none, validate: true, e2e: true, sentinel: true, isolation: true, recovery: true, service: true },
     'the public parser now belongs to Sentinel’s own build closure',
   );
   assert.deepEqual(selectChecks(['scripts/pack-echo.mjs']), { ...none, echo: true });
@@ -115,18 +126,23 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
 });
 
 test('the release scripts select their own checks: the acceptance runs in sentinel-package, the rest are script tests', () => {
-  assert.deepEqual(selectChecks(['scripts/npm-acceptance.mjs']), { ...none, validate: true, sentinel: true });
+  assert.deepEqual(selectChecks(['scripts/npm-acceptance.mjs']), {
+    ...none,
+    validate: true,
+    sentinel: true,
+    service: true,
+  });
   for (const path of [
     'scripts/release-manifest.mjs',
     'scripts/verify-release.mjs',
     'scripts/release.mjs',
     'scripts/changelog.mjs',
   ]) {
-    assert.deepEqual(selectChecks([path]), { ...none, validate: true }, path);
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true, service: true }, path);
   }
   assert.deepEqual(
     selectChecks(['scripts/test/helpers/acceptance-standins.mjs']),
-    { ...none, validate: true },
+    { ...none, validate: true, service: true },
     'a test helper is a script test',
   );
   for (const path of [
@@ -204,7 +220,7 @@ test('Sentinel code and tests select offline report delivery in the browser job;
   ]) {
     assert.deepEqual(
       selectChecks([path]),
-      { ...none, validate: true, e2e: true, sentinel: true, isolation: true, recovery: true },
+      { ...none, validate: true, e2e: true, sentinel: true, isolation: true, recovery: true, service: true },
       path,
     );
   }
@@ -214,7 +230,7 @@ test('Sentinel code and tests select offline report delivery in the browser job;
       'packages/sentinel/test/contracts.test.ts',
       'packages/sentinel/test/fixtures/feasibility/a.ts',
     ]),
-    { ...none, validate: true, e2e: true, isolation: true, recovery: true },
+    { ...none, validate: true, e2e: true, isolation: true, recovery: true, service: true },
   );
   assert.deepEqual(selectChecks(['packages/sentinel/README.md', 'scripts/test-sentinel-package.mjs']), {
     ...none,
@@ -222,7 +238,7 @@ test('Sentinel code and tests select offline report delivery in the browser job;
   });
   assert.deepEqual(
     selectChecks(['scripts/pack-sentinel.mjs']),
-    { ...none, validate: true, sentinel: true },
+    { ...none, validate: true, sentinel: true, service: true },
     "Sentinel's review-package unit test packs the tarball too",
   );
   assert.deepEqual(selectChecks(['packages/core/src/counts.ts']), full, 'core feeds Echo and Sentinel');
@@ -318,7 +334,8 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
     });
     assert.equal(
       readFileSync(output, 'utf8'),
-      'validate=false\ne2e=false\necho=false\nsentinel=false\nisolation=false\nrecovery=false\ntestScope=all\ntestPackages=\n',
+      'validate=false\ne2e=false\necho=false\nsentinel=false\nisolation=false\nrecovery=false\nservice=false\n' +
+        'testScope=all\ntestPackages=\n',
     );
     assert.match(readFileSync(summary, 'utf8'), /e2e: skip/);
     assert.match(readFileSync(summary, 'utf8'), /sentinel-package: skip/);
@@ -507,12 +524,13 @@ test('the outputs carry only strict values; a package name that could add a reco
   const checks = { ...none, validate: true };
   assert.equal(
     selectorOutput(checks, { scope: 'packages', packages: ['@farsight/cli', '@farsight/server'], also: [] }),
-    'validate=true\ne2e=false\necho=false\nsentinel=false\nisolation=false\nrecovery=false\n' +
+    'validate=true\ne2e=false\necho=false\nsentinel=false\nisolation=false\nrecovery=false\nservice=false\n' +
       'testScope=packages\ntestPackages=@farsight/cli @farsight/server\n',
   );
   assert.match(selectorOutput(checks, { scope: 'none', packages: [], also: [] }), /\ntestScope=none\ntestPackages=\n$/);
   const everything =
-    'validate=true\ne2e=true\necho=true\nsentinel=true\nisolation=true\nrecovery=true\ntestScope=all\ntestPackages=\n';
+    'validate=true\ne2e=true\necho=true\nsentinel=true\nisolation=true\nrecovery=true\nservice=true\n' +
+    'testScope=all\ntestPackages=\n';
   for (const tests of [
     { scope: 'packages', packages: ['@farsight/x\nvalidate=false\ne2e=false'], also: [] },
     { scope: 'packages', packages: ['@farsight/cli', '@farsight/x testScope=none'], also: [] },
@@ -648,4 +666,35 @@ test('a file renamed out of a package still tests it: the pnpm arguments validat
     rmSync(dir, { recursive: true, force: true });
     rmSync(stub, { recursive: true, force: true });
   }
+});
+
+test("sentinel-service runs exactly when validate tests Sentinel, since it runs Sentinel's process suite", () => {
+  for (const paths of [
+    ['packages/sentinel/src/execution/supervisor.ts'],
+    ['packages/sentinel/test/cli-prework.test.ts'],
+    ['packages/sentinel/test/process-suite.txt'],
+    ['packages/sentinel/package.json'],
+    ['packages/core/src/counts.ts'],
+    ['packages/code-parser/src/tsjs.ts'],
+    ['packages/parsers/src/tsjs.ts'],
+    ['scripts/sentinel-tests.mjs'],
+    ['scripts/test/release.test.mjs'],
+    ['pnpm-lock.yaml'],
+    ['packages/server/public/app/shell.js'],
+    ['packages/cli/src/cli.ts'],
+    ['packages/echo/src/cli.ts'],
+    ['packages/work/src/gate.ts'],
+    ['.claude/skills/git-pr-flow/SKILL.md'],
+    ['packages/sentinel/README.md'],
+    ['e2e/tests/chrome.pw.spec.ts'],
+    ['docs/CI.md'],
+  ]) {
+    const checks = selectChecks(paths);
+    const tests = selectTests(paths);
+    const testsSentinel = checks.validate && (tests.scope === 'all' || tests.packages.includes('@farsight/sentinel'));
+    assert.equal(checks.service, testsSentinel, paths.join(', '));
+  }
+  assert.equal(selectChecks(['packages/server/public/app/shell.js']).service, false, 'a viewer change');
+  assert.equal(selectChecks(['packages/sentinel/test/cli-prework.test.ts']).service, true, 'a process test itself');
+  assert.equal(selectChecks(['packages/sentinel/README.md']).service, false, 'packaging alone');
 });
