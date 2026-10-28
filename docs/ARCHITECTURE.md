@@ -2175,8 +2175,10 @@ envelope receipt (`book.check`, nothing spent) before it spends the start receip
 envelope (`sentinel.receipt.mismatch`) and a plan or binding that differs from the one confirmed; it hands each
 receipt to the run only for its own envelope and never issues an owner receipt itself. A start that reaches the service
 without the composite (an agent or MCP, or one carrying no envelope receipts) still refuses with `foregroundRequired`
-and opens no envelope; the command line asks for `--confirm-models` before it issues anything. A rerun with changed
-bindings needs its own confirmation, since no receipt outlives its plan. *Why:* the
+and opens no envelope; the command line asks for `--confirm-models` before it issues anything. A foreground start
+(`run --confirm --confirm-models`, `scan --confirm`) takes the same composite: its envelope is decided before the start
+(a denial refuses before anything starts) and its receipt is issued with the start, never as a stage dispatches. A
+rerun with changed bindings needs its own confirmation, since no receipt outlives its plan. *Why:* the
 owner reads the whole composite in the preview (every stage, where it runs and what it does, every model with its
 budget) before confirming it, so one confirmation over exactly those bindings is the same consent the foreground pair
 gave, and the run no longer depends on the confirming terminal staying open. The owner-panel clause above (the

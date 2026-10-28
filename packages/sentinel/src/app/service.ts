@@ -220,7 +220,15 @@ function runOwnerSetup(ws: Workspace, now: Date): CommandResult | undefined {
  * model the settings bind with its runner and budget. Nothing is captured, adopted or issued.
  */
 export function scanPreviewOf(ws: Workspace, by: Principal, now: Date = new Date()): CommandResult {
-  const setup = ownerSetupOf(ws, now);
+  let setup: readonly SetupStep[];
+  try {
+    setup = ownerSetupOf(ws, now);
+  } catch (e) {
+    // Settings or a pipeline the setup could not adopt as they read now: refused with the reason adoption gives.
+    const code = (e as { code?: unknown }).code;
+    if (typeof code !== 'string' || !code.startsWith('sentinel.')) throw e;
+    return result('scan', 'configuration-failure', { reasonCode: code });
+  }
   const adopted = adoptedPolicy(ws);
   // The settings the scan runs under: the adopted ones, or (before the setup adopts them) the file as it reads now,
   // shown only, never decided on. A file that does not read is refused as adoption would refuse it.
@@ -249,15 +257,21 @@ export function scanPreviewOf(ws: Workspace, by: Principal, now: Date = new Date
         effects: [...s.effects],
       }))
     : null;
-  // Every model the settings configure for review, with its runner (the provider's kind), the model as the provider
-  // spells it and the provider's budget: what confirming the scan confirms.
-  const models = (settings.reviewModels?.stages ?? []).map((s) => {
-    const provider = settings.providers.find((p) => p.id === s.providerId);
-    const model = provider?.models?.find((m) => m.id === s.modelId);
+  // Every binding the plan can use for review, exactly as review/plan.ts resolves one (a segment's own selection, else
+  // its stage's): each stage-wide selection and each segment selection, with its runner (the provider's kind), the
+  // model as the provider spells it and the provider's budget. What confirming the scan confirms.
+  const configured = settings.reviewModels;
+  const models = [
+    ...(configured?.stages ?? []).map((x) => ({ ...x, segmentId: null as string | null })),
+    ...(configured?.segments ?? []).map((x) => ({ ...x, segmentId: x.segmentId as string | null })),
+  ].map((x) => {
+    const provider = settings.providers.find((p) => p.id === x.providerId);
+    const model = provider?.models?.find((m) => m.id === x.modelId);
     return {
-      stage: s.stage,
-      providerId: s.providerId,
-      modelId: s.modelId,
+      stage: x.stage,
+      segmentId: x.segmentId,
+      providerId: x.providerId,
+      modelId: x.modelId,
       runner: provider?.kind ?? null,
       model: model?.model ?? null,
       budget: provider?.budget ?? null,
@@ -370,7 +384,8 @@ export class LocalSentinelService implements SentinelService {
     return withStore(this.ws, async (store) => {
       const runId = runIdOr(store, 'start', o.runId);
       if (typeof runId !== 'string') return runId;
-      return startPreviewOf(this.ws, await currentPlan(store, runId), runId, o.now);
+      // Bound to this store, as the service shows it: the same composite whichever side answers.
+      return startPreviewOf(this.ws, await currentPlan(store, runId), runId, o.now, store.storeId);
     });
   }
 

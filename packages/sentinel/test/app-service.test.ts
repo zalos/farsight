@@ -19,8 +19,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { needsStore, unlock } from './snapshot-helpers.ts';
 import { json, mockEndpoint, ollamaReply, trustedPolicy } from './provider-helpers.ts';
-import { agentPrincipal, isOwner, mintOwnerPrincipal, principalOf } from '../dist/app/principal.js';
-import { HeldSentinelService, LocalSentinelService } from '../dist/app/service.js';
+import { agentPrincipal, claimOwnerMint, isOwner, principalOf } from '../dist/app/principal.js';
+import {
+  HeldSentinelService,
+  LocalSentinelService,
+  RemoteSentinelService,
+  scanPreviewOf,
+} from '../dist/app/service.js';
+import { initWorkspace } from '../dist/cli/init.js';
 import { ActorError } from '../dist/cli/actor.js';
 import { ReceiptBook } from '../dist/policy/index.js';
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
@@ -29,6 +35,7 @@ import {
   OWNER,
   adoptedPolicy,
   confirmForService,
+  runPlan,
   envelopeBinding,
   receiptBook,
   runWriteBinding,
@@ -86,6 +93,80 @@ function owner(ws: string, env: Record<string, string>) {
   };
 }
 
+/**
+ * Local (in this process, the store opened per call), Held (inside an owner service over the store it holds) and
+ * Remote (the owner's side, through the service's own operations) answer every shared read and preview alike.
+ */
+async function facadeParity(ws: string, env: Record<string, string>, runId: string) {
+  const wsOf = workspaceOf(ws, env);
+  const now = new Date('2026-10-28T12:00:00.000Z');
+  // One at a time: the local side opens the store for each call.
+  const reads = async (facade: any, by: any) => {
+    const out: any[] = [];
+    for (const call of [
+      () => facade.status(by, {}),
+      () => facade.status(by, { runId, after: 0, limit: 5 }),
+      () => facade.report(by, { now }),
+      () => facade.report(by, { runId, now }),
+      () => facade.scans(by, {}),
+      () => facade.stage(by, { stageId: 'preview' }),
+      () => facade.stage(by, { runId, stageId: 'nope' }),
+      () => facade.startPreview(by, { runId, now }),
+    ])
+      out.push(await call());
+    return out;
+  };
+  const owner = claimOwnerMintOnce();
+  const local = await reads(new LocalSentinelService(wsOf), owner);
+  const store = await openStore(wsOf.storePath);
+  const service = new OwnerService(store, wsOf, { now: () => now });
+  try {
+    const agent = agentPrincipal(AGENT as never);
+    const held = await reads(
+      new HeldSentinelService(store, wsOf, { executing: () => false, registry: () => ({}) as never }),
+      agent,
+    );
+    // The remote side's connection, answered by the service's own operations for a connection on the CLI channel.
+    const connect = async () => ({
+      storeId: store.storeId,
+      request: (op: string, body: Record<string, unknown>) =>
+        service.handle(op, body, { principal: 'agent', channel: 'cli' } as never),
+      close() {},
+    });
+    const remote = await reads(new RemoteSentinelService(wsOf, connect), owner);
+    const labels = [
+      'status',
+      'status page',
+      'report',
+      'report by id',
+      'scans',
+      'stage',
+      'unknown stage',
+      'start preview',
+    ];
+    for (let i = 0; i < labels.length; i++) {
+      assert.deepEqual(held[i], local[i], `held = local: ${labels[i]}`);
+      assert.deepEqual(remote[i], local[i], `remote = local: ${labels[i]}`);
+    }
+    assert.equal(local[0].facts.runId, runId);
+    assert.equal(local[7].facts.planId, runId);
+  } finally {
+    await service.stop();
+    store.close();
+  }
+}
+
+/** The one owner this test process mints (the mint is claimed once per process). */
+let testOwner: unknown;
+let testMint: (() => unknown) | undefined;
+function claimOwnerMintOnce(): any {
+  if (!testOwner) {
+    testMint ??= claimOwnerMint();
+    testOwner = testMint();
+  }
+  return testOwner;
+}
+
 /** The same executable, without blocking this process (a fixture endpoint here must keep answering). */
 function ownerAsync(ws: string, env: Record<string, string>) {
   return (...args: string[]) =>
@@ -101,7 +182,27 @@ function ownerAsync(ws: string, env: Record<string, string>) {
 }
 
 test('only an owner the command line minted is the owner; a copy, a parsed body or a forged object is refused', async (t) => {
-  const me = mintOwnerPrincipal();
+  // The mint is handed out once per process: here (no CLI is loaded in this test's process) this claim is the one.
+  const me = claimOwnerMintOnce();
+  // A second importer cannot make an owner: the mint is already claimed.
+  assert.throws(
+    () => claimOwnerMint(),
+    (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.ownerMintClaimed',
+  );
+  // The command line claims it as it loads: any module that asks after it, in the same process, is refused.
+  const afterCli = spawnSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `await import(${JSON.stringify(CLI)});
+       const { claimOwnerMint } = await import(${JSON.stringify(fileURLToPath(new URL('../dist/app/principal.js', import.meta.url)))});
+       try { claimOwnerMint(); console.log('minted'); } catch (e) { console.log(e.code); }`,
+    ],
+    { encoding: 'utf8', env: { PATH: process.env.PATH ?? '', HOME: tmpdir() } },
+  );
+  assert.match(afterCli.stdout, /sentinel\.actor\.ownerMintClaimed$/m, afterCli.stdout + afterCli.stderr);
+  assert.doesNotMatch(afterCli.stdout, /minted/);
   assert.equal(isOwner(me), true);
   assert.equal(principalOf(me), me);
   for (const forged of [
@@ -155,6 +256,39 @@ test('only an owner the command line minted is the owner; a copy, a parsed body 
       );
   }
   assert.equal(existsSync(join(dir, 'ws')), false, 'nothing was created for a refused caller');
+});
+
+test('the scan preview names every binding the plan can use, a segment-only selection included', (t) => {
+  const dir = scratchDir(t, 'sentinel-preview-models-');
+  const ws = join(dir, 'ws');
+  mkdirSync(ws);
+  const env = { HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
+  initWorkspace({ workspace: ws });
+  const path = join(ws, '.farsight', 'sentinel', 'settings.json');
+  const settings = JSON.parse(readFileSync(path, 'utf8'));
+  settings.providers = [structuredClone(trustedPolicy().settings.providers[0])];
+  settings.providers[0].models[0].capability.revision = null;
+  // No stage-wide selection: only one segment of the guided review has a model.
+  settings.reviewModels = {
+    stages: [],
+    segments: [{ stage: 'guided', segmentId: 'guided-chk-1', providerId: 'local-review', modelId: 'review' }],
+  };
+  writeFileSync(path, JSON.stringify(settings));
+  const preview = scanPreviewOf(workspaceOf(ws, env), agentPrincipal(AGENT as never), new Date());
+  assert.equal(preview.outcome, 'awaiting-confirmation', JSON.stringify(preview));
+  assert.deepEqual(preview.facts.models, [
+    {
+      stage: 'guided',
+      segmentId: 'guided-chk-1',
+      providerId: 'local-review',
+      modelId: 'review',
+      runner: 'ollama',
+      model: 'review-model:1',
+      budget: { maxTokens: 100000, maxCost: '0', currency: 'USD' },
+    },
+  ]);
+  // An agent sees what would run and is told only the owner confirms it.
+  assert.equal(preview.facts.ownerOnly, true);
 });
 
 test('the composite start binds the plan digest, its stages and each model binding with its budget', (t) => {
@@ -231,7 +365,7 @@ test('the composite start binds the plan digest, its stages and each model bindi
 test(
   'a first scan is init, scan, scan --confirm, report: ids printed and never retyped, and reads go through the running service',
   needsStore,
-  (t) => {
+  async (t) => {
     const dir = scratchDir(t, 'sentinel-scan-');
     const ws = join(dir, 'ws');
     mkdirSync(join(ws, 'src'), { recursive: true });
@@ -270,7 +404,16 @@ test(
     );
     const status = run('status');
     assert.match(status.stdout, new RegExp(`run ${runId} · completed`));
-    assert.match(status.stdout, /stages: the defaults for the adopted settings/);
+    // The run records which path its plan took: the static profile's own pipeline plans as its defaults.
+    assert.match(status.stdout, /stages: the static profile's defaults \(settings-configured reviews included\)/);
+    assert.deepEqual(JSON.parse(run('status', '--json').stdout).facts.pipeline, {
+      path: 'default-of',
+      profile: 'static',
+    });
+
+    // The three sides of the facade give the same answers on the same retained run: in this process, inside the
+    // service over the store it holds, and through the service's operations (the remote side's connection).
+    await facadeParity(ws, env, runId);
     const stage = JSON.parse(run('stage', 'show', 'preview', '--json').stdout);
     assert.equal(stage.outcome, 'answered');
     assert.ok(stage.facts.units.length >= 1);
@@ -495,7 +638,7 @@ test(
         ledger.close();
       }
       const status: any = await service.handle('run.status', { runId: planId }, AGENT);
-      assert.deepEqual(status.facts.pipeline, { path: 'default' });
+      assert.deepEqual(status.facts.pipeline, { path: 'default-of', profile: 'static' });
     } finally {
       await service.stop();
       store.close();
@@ -513,5 +656,41 @@ test(
     const status = JSON.parse(run('status', '--json').stdout).facts;
     assert.equal(status.state, 'completed');
     stopService(env);
+
+    // In the foreground the same composite: the model envelope is decided and its receipt issued with the start,
+    // never as a stage dispatches, and the run's review runtime hands that receipt to its own envelope only.
+    const listing = () => new Set(readdirSync(book.directory).filter((n) => n.endsWith('.json')));
+    writeFileSync(join(ws, 'src', 'original.ts'), 'export const original = (x: string) => x.trim();\n');
+    const foreground = JSON.parse(run('plan', '--json').stdout).facts.planId as string;
+    const before = listing();
+    const calls = ep.seen.length;
+    const ran = await runPlan(wsOf, { planId: foreground, confirm: true, confirmModels: true, now: new Date() });
+    assert.equal(ran.facts.state, 'completed', JSON.stringify(ran));
+    assert.ok(ep.seen.length > calls, 'the foreground run called the model');
+    const issued = [...listing()].filter((n) => !before.has(n));
+    const actions = issued.map((n) => JSON.parse(readFileSync(join(book.directory, n), 'utf8')).action).sort();
+    // The one envelope receipt (and the start's own when its grant asks for confirmation), nothing issued later.
+    assert.equal(actions.filter((a) => a === 'paid.admit').length, 1, JSON.stringify(actions));
+    assert.ok(
+      actions.every((a) => a === 'paid.admit' || a === 'run.start'),
+      JSON.stringify(actions),
+    );
+    for (const n of issued) assert.ok(existsSync(join(book.directory, n.replace(/\.json$/, '.spent'))), n);
+
+    // A start whose model envelope the adopted grants refuse is refused before anything starts or is spent.
+    settings.grants = settings.grants.filter((g: { actions: string[] }) => !g.actions.includes('paid.admit'));
+    writeFileSync(path, JSON.stringify(settings));
+    assert.equal(run('settings', 'adopt', '--confirm').status, 0);
+    writeFileSync(join(ws, 'src', 'original.ts'), 'export const original = (x: string) => x.toUpperCase();\n');
+    const denied = JSON.parse(run('plan', '--json').stdout).facts.planId as string;
+    const events = JSON.parse(run('status', denied, '--json').stdout).facts.cursor;
+    const beforeDenied = listing();
+    const callsBeforeDenied = ep.seen.length;
+    const refused = await runPlan(wsOf, { planId: denied, confirm: true, confirmModels: true, now: new Date() });
+    assert.equal(refused.outcome, 'configuration-failure', JSON.stringify(refused));
+    assert.match(String(refused.reasonCode), /^sentinel\.admission\./);
+    assert.equal(ep.seen.length, callsBeforeDenied, 'no model was called');
+    assert.equal(JSON.parse(run('status', denied, '--json').stdout).facts.cursor, events, 'nothing started');
+    assert.deepEqual(listing(), beforeDenied, 'no receipt issued');
   },
 );

@@ -28,7 +28,7 @@ import {
 } from './service/local.js';
 import { connectService, readServiceDescriptor, serveWorkspace } from './service/owner-service.js';
 import { LocalSentinelService, RemoteSentinelService, type SentinelService } from './app/service.js';
-import { mintOwnerPrincipal, type OwnerPrincipal } from './app/principal.js';
+import { claimOwnerMint, type OwnerPrincipal } from './app/principal.js';
 import { canonicalResult, type CurrentPlan } from './service/canonical.js';
 import { launchService } from './service/launch.js';
 import { builtinPackDir } from './service/package-paths.js';
@@ -458,9 +458,13 @@ function pipelineCommand(p: ParsedCommand, ws: Workspace, confirm: boolean, now:
   return serviceOut(r, lines, refusedDetail(r));
 }
 
-/** The owner of this command, minted once by the command line's own entry (never in `serve`, `mcp` or `owner-ui`). */
+/**
+ * The owner mint, claimed by this entry as it loads (once per process; no other module can claim it), and the owner
+ * of this command, minted only on the owner's own command path (never in `serve`, `mcp` or `owner-ui`).
+ */
+const mintOwner = claimOwnerMint();
 let ownerOfCommand: OwnerPrincipal | undefined;
-const me = (): OwnerPrincipal => (ownerOfCommand ??= mintOwnerPrincipal());
+const me = (): OwnerPrincipal => (ownerOfCommand ??= mintOwner());
 
 /** Each model a start would call, in words: provider, model, runner and budget. */
 function modelLines(models: unknown): string[] {
@@ -470,7 +474,7 @@ function modelLines(models: unknown): string[] {
     ...new Set(
       models.map((m: Record<string, unknown>) =>
         word('sentinel.cli.scanModel', {
-          stage: String(m.stage ?? 'review'),
+          stage: m.segmentId ? `${String(m.stage ?? 'review')} ${String(m.segmentId)}` : String(m.stage ?? 'review'),
           runner: String(m.runner ?? m.providerId),
           model: String(m.model ?? m.modelId),
           provider: String(m.providerId),
@@ -499,6 +503,7 @@ function stagesLine(path: unknown): string[] {
   if (!p) return [];
   if (p.kind === 'default-of') return [word('sentinel.cli.stagesDefault', { profile: String(p.profile) })];
   if (p.kind === 'declared') return [word('sentinel.cli.stagesDeclared', { digest: String(p.digest) })];
+  if (p.path === 'default-of') return [word('sentinel.cli.stagesDefault', { profile: String(p.profile) })];
   if (p.path === 'default') return [word('sentinel.cli.stagesDefaultRun')];
   if (p.path === 'declared')
     return [

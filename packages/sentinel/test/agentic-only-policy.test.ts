@@ -15,6 +15,7 @@ import { loadPlan } from '../dist/execution/plans.js';
 import { workspaceOf, receiptBook } from '../dist/service/local.js';
 import { fullReport, assessRun } from '../dist/service/full-report.js';
 import { readPublishedInstructions } from '../dist/review/instructions.js';
+import { BudgetLedger } from '../dist/review/providers/budget.js';
 const CLI = new URL('../dist/cli.js', import.meta.url).pathname;
 // Denial-only test preload: observes the genuine backend boundary before any client/config/engine inspection.
 // It grants no authority and supplies no simulated successful container or publication.
@@ -177,8 +178,18 @@ for (const mode of ['default', 'required', 'agentic-only', 'selected-unavailable
       const u = p.plan.units.find((u) => u.review)!;
       assert.equal(u.review!.selection.providerId, 'native-copilot');
       assert.equal(u.review!.selection.modelId, 'luna');
-      assert.equal(store.ledger.listAttempts(u).length, 0);
-      assert.equal(store.ledger.getPublication(u), null);
+      assert.equal(store.ledger.listAttempts(u).length, 0, 'no attempt');
+      assert.equal(store.ledger.getPublication(u), null, 'no publication');
+      // No envelope opened: the budget ledger holds none for this run (it may not exist at all).
+      const budget = join(store.storePath, 'review-budget.sqlite');
+      if (existsSync(budget)) {
+        const ledger = await BudgetLedger.open(budget);
+        try {
+          assert.equal(ledger.listEnvelopes({ runId: id, limit: 10 }).length, 0, 'no envelope opened');
+        } finally {
+          ledger.close();
+        }
+      }
     } finally {
       store.close();
     }
@@ -189,17 +200,13 @@ for (const mode of ['default', 'required', 'agentic-only', 'selected-unavailable
             .map((n) => JSON.parse(readFileSync(join(book.directory, n), 'utf8')))
             .filter((r) => r.action === 'paid.admit')
         : [];
-    assert.equal(
-      paid.length,
-      mode === 'agentic-only' ? 1 : 0,
-      'only explicit agentic-only reaches model admission; absent/required or selected-but-unavailable scanner refuses before a model receipt',
-    );
-    for (const r of paid)
-      assert.equal(
-        existsSync(join(book.directory, r.id + '.spent')),
-        false,
-        'fake runtime never admits a model envelope',
-      );
+    // Refused before model admission (ADR 48, the composite start): every mode's confirmed start issued exactly its
+    // one paid.admit receipt, and nothing spent it. An absent/required or selected-but-unavailable scanner refuses at
+    // the hosted secret gate, and agentic-only's fake runtime never admits the envelope; no envelope, attempt or
+    // publication (above), and no native auth (the marker, above).
+    assert.equal(paid.length, 1, "exactly the composite's one model envelope receipt");
+    for (const r of paid) assert.equal(existsSync(join(book.directory, r.id + '.spent')), false, 'never spent');
+    assert.equal(existsSync(nativeMarker), false, 'no auth: the vendor CLI never ran');
   });
 
 test(
