@@ -39,10 +39,20 @@ import {
 } from '../lib/sentinel-model.js';
 
 /**
- * Whether a browser may start a scan, as the last read of the SCANS answer said it (the Settings door reads it; the
- * SCANS stop re-reads it before any press). Unknown until a read has answered: then every door is greyed with why.
+ * Whether a browser may start a scan, as the last read of the SCANS answer said it, bound to the companion and the
+ * host session it was read under and to when: `{ action, origin, instance, at }`. The Settings door goes live only
+ * after it has checked again that this same companion is still there and this same session still runs (the SCANS
+ * stop re-reads the answer before any press). A companion lost or a session changed forgets it.
  */
 let lastScanAction = null;
+const SCAN_ACTION_TTL_MS = 10 * 60 * 1000;
+function rememberScanAction(action) {
+  if (action && SN.origin)
+    lastScanAction = { action, origin: SN.origin, instance: S.VERSION?.session?.instance ?? null, at: Date.now() };
+}
+function forgetScanAction() {
+  lastScanAction = null;
+}
 
 const SN = {
   el: null,
@@ -218,7 +228,7 @@ async function load() {
   try {
     const at = place.scan ? 'scans/' + encodeURIComponent(place.scan) : '';
     if (place.stop === 'scans') SN.scans = await read(place.before ? 'scans/before/' + place.before : 'scans');
-    if (place.stop === 'scans' && SN.scans?.scanAction) lastScanAction = SN.scans.scanAction;
+    if (place.stop === 'scans' && SN.scans?.scanAction) rememberScanAction(SN.scans.scanAction);
     else if (place.stop === 'pipeline') SN.scan = await read(at);
     else {
       const stageAt = at + '/stages/' + encodeURIComponent(place.stage);
@@ -230,7 +240,7 @@ async function load() {
       SN.unit = stage.units.length ? await read(stageAt + '/units/' + k) : null;
     }
     if (place.stop !== 'scans' && !SN.scans) SN.scans = await read('scans').catch(() => null);
-    if (SN.scans?.scanAction) lastScanAction = SN.scans.scanAction;
+    if (SN.scans?.scanAction) rememberScanAction(SN.scans.scanAction);
     SN.error = null;
   } catch (e) {
     SN.error = (e && e.code) || 'sentinel.ownerUi.failed';
@@ -302,8 +312,10 @@ registerTip('sentinel-measure', (_el, a) => {
 
 /** The tip attributes of a measure the read model supplied with its `scope` and `source`. */
 function measureAttrs(m, words, define) {
-  // the field it was read from is a developer's fact: the business lens names the sync only
-  const source = { api: API, sync: null, ...(biz() || !m.source ? {} : { note: m.source }) };
+  // where it came from: the field it was read from is a developer's fact; the business lens names the record in words
+  const source = biz()
+    ? { api: '', sync: null, note: 'sentinel.viewer.source.store' }
+    : { api: API, sync: null, note: m.source || 'sentinel.viewer.source.store' };
   return tipAttrs({ id: 'sentinel-measure', args: { words, define, scope: m.scope, source }, noFocus: true });
 }
 
@@ -770,11 +782,7 @@ function stageDockHtml(stage) {
             ? word('sentinel.viewer.dock.noSkills')
             : code
               ? esc(p.skills.map((s) => s.name + '/' + s.revision).join(', '))
-              : esc(
-                  fill(p.skills.length === 1 ? 'sentinel.viewer.dock.skillsNOne' : 'sentinel.viewer.dock.skillsN', {
-                    n: p.skills.length,
-                  }),
-                ),
+              : word('sentinel.viewer.dock.skillsGiven'),
         )
       : '') +
     kv('sentinel.viewer.field.turns', stage.counts.turns ? cnt(stage.counts.turns) : '') +
@@ -1205,10 +1213,18 @@ function scan(button) {
  * same way the Scan button does — greyed with its reason when it cannot, never a dead click.
  */
 export function sentinelScanDoorHtml() {
-  const door = doorState({ readOnly: !!readOnlyWhy(), action: lastScanAction });
+  if (readOnlyWhy()) return doorHtml({ on: false, why: 'sys.readonly.control' });
+  if (!lastScanAction) return doorHtml({ on: false, why: 'sentinel.viewer.scan.unknown' });
+  // the answer is the last read's: greyed until this same companion and session are confirmed still there
+  setTimeout(() => void verifyDoors(), 0);
+  return doorHtml({ on: false, why: 'sentinel.viewer.scan.checking' }, true);
+}
+
+function doorHtml(door, pending = false) {
   if (!door.on)
     return (
       '<span class="map-tb snt-door" style="margin-right:6px;opacity:.45" aria-disabled="true"' +
+      (pending ? ' data-door="pending"' : '') +
       tipAttrs({ key: door.why, noFocus: true }) +
       '>' +
       word('sentinel.viewer.tool.scan') +
@@ -1223,6 +1239,33 @@ export function sentinelScanDoorHtml() {
     word('sentinel.viewer.tool.scan') +
     '</a>'
   );
+}
+
+/** Checks the remembered answer against the companion and the session now, then settles every pending door. */
+async function verifyDoors() {
+  const cached = lastScanAction;
+  if (!cached) return;
+  let why = null;
+  try {
+    const [companion, version] = await Promise.all([
+      fetch('/api/sentinel/companion', { cache: 'no-store' }).then((r) => r.json()),
+      fetch('/api/version', { cache: 'no-store' }).then((r) => r.json()),
+    ]);
+    if (
+      !companion?.available ||
+      companion.ownerOrigin !== cached.origin ||
+      document.body.dataset.sentinelOwnerOrigin !== cached.origin
+    )
+      why = 'sentinel.ownerUi.launch';
+    else if ((version?.session?.instance ?? null) !== cached.instance || Date.now() - cached.at > SCAN_ACTION_TTL_MS)
+      why = 'sentinel.viewer.scan.unknown';
+  } catch {
+    why = 'sentinel.ownerUi.hostUnavailable';
+  }
+  if (lastScanAction !== cached) return; // a newer read answered meanwhile; its own doors settle themselves
+  if (why) forgetScanAction();
+  const door = why ? { on: false, why } : doorState({ readOnly: !!readOnlyWhy(), action: cached.action });
+  for (const el of document.querySelectorAll('.snt-door[data-door="pending"]')) el.outerHTML = doorHtml(door);
 }
 
 // ── the surface ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1252,6 +1295,7 @@ export async function mountSentinel(_route, el) {
     if (SN.el !== el) return;
     if (!value.available || typeof value.ownerOrigin !== 'string') {
       SN.companion = false;
+      forgetScanAction();
       draw();
       return;
     }
@@ -1279,6 +1323,7 @@ export async function mountSentinel(_route, el) {
   } catch {
     if (SN.el !== el) return;
     SN.companion = false;
+    forgetScanAction();
     SN.error = 'sentinel.ownerUi.hostUnavailable';
     draw();
   }

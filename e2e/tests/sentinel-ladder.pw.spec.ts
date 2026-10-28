@@ -372,6 +372,47 @@ test.describe('the Sentinel ladder', () => {
     await expect(refused).toHaveAttribute('data-tip', 'sentinel.review.foregroundRequired');
   });
 
+  test('the Settings door forgets the answer when the companion is gone or the session changed', async ({
+    page,
+    baseURL,
+  }) => {
+    await standIn(page, baseURL, { scanAction: { available: true, reasonCode: null } });
+    await gotoReady(page, '#/sentinel');
+    await expect(page.locator('.snt-scan-row')).toHaveCount(1); // the list said a browser may start a scan
+    // the companion went away after that read: the door must not stay live
+    await page.route('**/api/sentinel/companion', (route) =>
+      route.fulfill({ json: { available: false }, headers: { 'cache-control': 'no-store' } }),
+    );
+    await page.evaluate(() => (location.hash = '#/settings'));
+    const gone = page.locator('#srcrows .snt-door').first();
+    await expect(gone).toHaveAttribute('data-tip', 'sentinel.ownerUi.launch');
+    await expect(gone).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.locator('#srcrows a.snt-door')).toHaveCount(0);
+    // and the answer is forgotten, not merely hidden: back with the companion, the door has nothing to follow
+    await page.unroute('**/api/sentinel/companion');
+    await page.evaluate(() => (location.hash = '#/portfolio'));
+    await page.evaluate(() => (location.hash = '#/settings'));
+    await expect(page.locator('#srcrows .snt-door').first()).toHaveAttribute(
+      'data-tip',
+      'sentinel.viewer.scan.unknown',
+    );
+  });
+
+  test('the Settings door forgets the answer when the host session changed', async ({ page, baseURL }) => {
+    await standIn(page, baseURL, { scanAction: { available: true, reasonCode: null } });
+    await gotoReady(page, '#/sentinel');
+    await expect(page.locator('.snt-scan-row')).toHaveCount(1);
+    await page.route('**/api/version', async (route) => {
+      const response = await route.fetch();
+      const v = await response.json();
+      await route.fulfill({ response, json: { ...v, session: { ...v.session, instance: 'host-' + 'f'.repeat(32) } } });
+    });
+    await page.evaluate(() => (location.hash = '#/settings'));
+    const door = page.locator('#srcrows .snt-door').first();
+    await expect(door).toHaveAttribute('data-tip', 'sentinel.viewer.scan.unknown');
+    await expect(page.locator('#srcrows a.snt-door')).toHaveCount(0);
+  });
+
   test('the Settings source row carries the Scan door to the SCANS stop', async ({ page, baseURL }) => {
     await standIn(page, baseURL, { scanAction: { available: true, reasonCode: null } });
     await gotoReady(page, '#/sentinel');
