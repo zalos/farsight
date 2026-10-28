@@ -113,6 +113,13 @@ try {
   page.on('response', (r) => {
     if (r.status() >= 400) requests.push({ status: r.status(), url: r.url() });
   });
+  // The read pass the paired frame hands its parent (transport/http/): captured here, as the viewer will use it.
+  await page.addInitScript(() => {
+    globalThis.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'sentinel-owner-read')
+        globalThis.__sentinelRead = { pass: e.data.pass, origin: e.origin };
+    });
+  });
   await page.goto(origin + '/#/sentinel');
   const frame = page.frameLocator('iframe[title="Sentinel"]');
   await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).waitFor({ timeout: 15000 });
@@ -150,6 +157,28 @@ try {
   await frame.locator('#process-graph .process-card[open] table tbody tr').first().waitFor();
   await frame.getByRole('button', { name: 'Read shareable report', exact: true }).click();
   await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 30000 });
+  // The read model, read cross-origin from the Farsight page with that pass: the installed companion's own answers.
+  const model = await page.evaluate(async () => {
+    const read = globalThis.__sentinelRead;
+    if (!read) return null;
+    const get = async (path) => {
+      const r = await fetch(read.origin + path, { headers: { authorization: 'Bearer ' + read.pass } });
+      return {
+        status: r.status,
+        body: r.headers.get('content-type')?.startsWith('application/json') ? await r.json() : await r.text(),
+      };
+    };
+    const scans = await get('/api/sentinel/scans');
+    const number = scans.body.scans?.find((s) => s.state === 'completed')?.number;
+    const scan = await get('/api/sentinel/scans/' + number);
+    return { scans, scan };
+  });
+  assert.ok(model, 'the paired frame handed its parent a read pass');
+  assert.equal(model.scans.status, 200);
+  assert.equal(model.scan.status, 200);
+  assert.ok(model.scan.body.stages.length >= 4);
+  assert.ok(model.scan.body.stages.every((s) => s.status === 'done'));
+  assert.equal(JSON.stringify(model).includes('run-'), false, 'no run id leaves the read model');
   if (evidence) {
     mkdirSync(evidence, { recursive: true });
     writeFileSync(join(evidence, 'report.md'), report);
@@ -171,6 +200,7 @@ try {
     processDag: true,
     expandedWorkIo: true,
     reconnect: true,
+    readModel: true,
     errors,
     requests,
   };

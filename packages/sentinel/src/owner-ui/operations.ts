@@ -15,6 +15,7 @@ import type { ReceiptBinding } from '../policy/receipts.js';
 import { admitOwnerUi } from '../policy/admission.js';
 import { canonicalDigest } from '../policy/digest.js';
 import { OwnerUiProcess } from './process.js';
+import { OwnerUiScans } from './scans.js';
 import { OwnerUiAuthority, activeOwnerUiProof, assertOwnerUiProof, type OwnerUiAction } from './authority.js';
 import { OwnerUiReceiptBook, issueOwnerUiReceipt } from './receipts.js';
 import { OwnerUiError } from './session.js';
@@ -57,6 +58,7 @@ interface Preview {
 }
 export class OwnerUiOperations {
   readonly #process: OwnerUiProcess;
+  readonly #scans: OwnerUiScans;
   readonly #store: SentinelStore;
   readonly #ws: Workspace;
   readonly #authority: OwnerUiAuthority;
@@ -66,6 +68,7 @@ export class OwnerUiOperations {
   constructor(store: SentinelStore, ws: Workspace, handle: Handle, confirmation: Confirmation) {
     this.#store = store;
     this.#process = new OwnerUiProcess(store);
+    this.#scans = new OwnerUiScans(store, ws);
     this.#ws = ws;
     this.#authority = new OwnerUiAuthority(store, ws);
     this.#handle = handle;
@@ -162,7 +165,15 @@ export class OwnerUiOperations {
                       ? ['runId']
                       : op === 'owner-ui.review-capabilities'
                         ? []
-                        : null;
+                        : op === 'owner-ui.scans'
+                          ? []
+                          : op === 'owner-ui.scan'
+                            ? ['number']
+                            : op === 'owner-ui.stage'
+                              ? ['number', 'stage']
+                              : op === 'owner-ui.scan-report'
+                                ? ['number', 'format']
+                                : null;
     if (!base) throw new OwnerUiError();
     const f = bodyFields(body, ['proof', 'revision', ...base], op === 'owner-ui.preview' ? ['parentId'] : []);
     if (typeof f.proof !== 'string' || !/^([a-f0-9]{64})$/.test(f.proof) || !Number.isSafeInteger(f.revision))
@@ -175,6 +186,34 @@ export class OwnerUiOperations {
           : op === 'owner-ui.select'
             ? this.#process.resolve(proof, f.key)
             : this.#process.details(proof, runId(f.runId), context.signal);
+      });
+    // The viewer's read model (transport/http/): read-only, under the same paired proof and view revision as every
+    // other read here, and never an action; a report is rendered through the existing retained report delivery.
+    if (op === 'owner-ui.scans' || op === 'owner-ui.scan' || op === 'owner-ui.stage')
+      return this.#authority.with<unknown>(f.proof, f.revision, null, () => {
+        const proof = activeOwnerUiProof()!;
+        return op === 'owner-ui.scans'
+          ? this.#scans.scans(proof, context.signal)
+          : op === 'owner-ui.scan'
+            ? this.#scans.scan(proof, f.number, context.signal)
+            : this.#scans.stage(proof, f.number, f.stage, context.signal);
+      });
+    if (op === 'owner-ui.scan-report')
+      return this.#authority.with<unknown>(f.proof, f.revision, null, async () => {
+        const named = this.#scans.reportRun(activeOwnerUiProof()!, f.number, f.format);
+        const delivery = (await this.#handle('report.open', named, by, context)) as {
+          deliveryId: string;
+          format: string;
+          formatDigest: string;
+          formatBytes: number;
+        };
+        // The delivery's manifest names the run; the companion needs only the handle to read its bytes.
+        return {
+          deliveryId: delivery.deliveryId,
+          format: delivery.format,
+          formatDigest: delivery.formatDigest,
+          formatBytes: delivery.formatBytes,
+        };
       });
     if (op === 'owner-ui.review-capabilities')
       return this.#authority.with(f.proof, f.revision, null, () => ({
@@ -323,6 +362,7 @@ export class OwnerUiOperations {
   }
   close() {
     this.#process.close();
+    this.#scans.close();
     this.#authority.close();
     this.#previews.clear();
   }
