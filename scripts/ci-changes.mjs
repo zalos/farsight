@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Coarse CI boundaries, not a per-test dependency graph. Unknown inputs run everything.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { appendFileSync, readFileSync, readdirSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { appendFileSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildClosure, workspacePackages } from './pack-preflight.mjs';
 
@@ -14,6 +14,7 @@ const all = () => ({
   isolation: true,
   recovery: true,
   service: true,
+  scannerCli: true,
 });
 
 /** validate's unit tests over every package, and over none (only the skills trees changed). */
@@ -53,12 +54,201 @@ export function sentinelIsolationInputs(root = repoRoot) {
   return dirs;
 }
 
+const SCANNER_WORKFLOW = '.github/workflows/sentinel-scanner-cli.yml';
+const CODE = /\.(?:[cm]?[jt]s|tsx)$/;
+// import and export specifiers, dynamic imports, requires and import.meta-relative file references
+const SPECIFIERS = [
+  /\bfrom\s*['"]([^'"\n]+)['"]/g,
+  /\bimport\s*\(\s*['"]([^'"\n]+)['"]\s*\)/g,
+  /\bimport\s+['"]([^'"\n]+)['"]/g,
+  /\brequire(?:\.resolve)?\(\s*['"]([^'"\n]+)['"]\s*\)/g,
+  /\bnew URL\(\s*['"]([^'"\n]+)['"]\s*,\s*import\.meta\.url/g,
+];
+// a compiled file named by its path under a package's dist/, as workers, gates and drivers are ('execution/launch-gate')
+const DIST_PATH = /['"`](?:dist\/)?([a-z][\w-]*(?:\/[\w.-]+)+)['"`]/g;
+// the published name the consumers import the installed tarball by
+const PUBLISHED = new Map([['farsight-sentinel', '@farsight/sentinel']]);
+const LITERAL = String.raw`(?:'[^'\n]*'|"[^"\n]*"|\x60[^\x60$\n]*\x60)`;
+// a load whose target is computed, which the walk cannot follow: an import(), require() or require.resolve() of
+// anything but one literal, and a new URL(…, import.meta.url) of anything but one; code generated in a string counts
+const COMPUTED = [
+  new RegExp(String.raw`\bimport\s*\(\s*(?!\)|${LITERAL}\s*[,)])`, 'g'),
+  new RegExp(String.raw`\brequire(?:\.resolve)?\s*\(\s*(?!\)|${LITERAL}\s*[,)])`, 'g'),
+  new RegExp(String.raw`\bnew URL\(\s*(?!${LITERAL}\s*,)[^;\n]*?,\s*import\.meta\.url`, 'g'),
+];
+
+/**
+ * Where a computed load in one file may point, selected whole because the walk cannot tell which file it is: a
+ * package source's own `src/`; a package script's `src/` and `scripts/`; a package test's `src/` and
+ * `test/fixtures/` (the workers and data a test loads by path); a root script's neighbours in `scripts/` and the
+ * `src/` and `scripts/` of every package the workflow builds, whose `dist/` it can load by path.
+ */
+function computedArea(file, built) {
+  const inPackage = /^packages\/([^/]+)\/([^/]+)\//.exec(file);
+  if (!inPackage)
+    return ['scripts/', ...[...built].flatMap((dir) => [`packages/${dir}/src/`, `packages/${dir}/scripts/`])];
+  const [, dir, top] = inPackage;
+  const second = { scripts: 'scripts/', test: 'test/fixtures/' }[top];
+  return [`packages/${dir}/src/`, ...(second ? [`packages/${dir}/${second}`] : [])];
+}
+
+/** The lines of a file with a computed load, comment lines aside: `[line number, text]`. */
+function computedLoads(text) {
+  const sites = [];
+  text.split('\n').forEach((line, index) => {
+    if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) return;
+    if (COMPUTED.some((pattern) => line.match(pattern))) sites.push(index + 1);
+  });
+  return sites;
+}
+
+/** A compiled file's source: `packages/<p>/dist/x.js` is `packages/<p>/src/x.ts` (or .tsx, .js, .mjs). */
+function sourceOf(root, path) {
+  const dist = /^(packages\/[^/]+)\/dist\/(.+?)\.(?:js|mjs|d\.ts)$/.exec(path);
+  const candidates = dist
+    ? ['ts', 'tsx', 'js', 'mjs'].map((ext) => `${dist[1]}/src/${dist[2]}.${ext}`)
+    : [path, ...(path.endsWith('.js') ? [path.replace(/\.js$/, '.ts')] : [])];
+  return candidates.find((candidate) => existsSync(join(root, candidate))) ?? null;
+}
+
+/** The file a package subpath (`.` or `./x`) names, by its manifest's `exports` (patterns included), else its `main`. */
+function exportTarget(manifest, sub) {
+  const { exports } = manifest;
+  if (exports === undefined) return sub === '.' ? (manifest.main ?? 'index.js') : sub;
+  const map =
+    typeof exports === 'string' || !Object.keys(exports).some((k) => k.startsWith('.')) ? { '.': exports } : exports;
+  const pick = (entry) => (typeof entry === 'string' ? entry : (entry?.import ?? entry?.default ?? null));
+  if (map[sub] !== undefined) return pick(map[sub]);
+  for (const [key, entry] of Object.entries(map)) {
+    const star = key.indexOf('*');
+    const [head, tail] = [key.slice(0, star), key.slice(star + 1)];
+    if (star >= 0 && sub.startsWith(head) && sub.endsWith(tail) && sub.length >= head.length + tail.length)
+      return pick(entry)?.replace('*', sub.slice(head.length, sub.length - tail.length)) ?? null;
+  }
+  return null;
+}
+
+/** The files the sentinel-scanner-cli workflow's steps name: tests, scripts, the packer, the package's command. */
+function scannerCliEntries(workflow, sentinel) {
+  const entries = new Set();
+  for (const [file] of workflow.matchAll(/\btest\/[\w.-]+\.test\.ts\b/g)) entries.add(`packages/sentinel/${file}`);
+  for (const [, file] of workflow.matchAll(/(?<![\w/.-])((?:packages\/sentinel\/)?scripts\/[\w.-]+\.mjs)\b/g))
+    entries.add(file);
+  // the packer bundles every export of the package, so each export's file is built into what the consumers run
+  if (/\bpnpm pack:sentinel\b/.test(workflow)) {
+    entries.add('scripts/pack-sentinel.mjs');
+    for (const key of Object.keys(sentinel.exports ?? {})) {
+      const file = !key.includes('*') && exportTarget(sentinel, key);
+      if (file) entries.add(join('packages/sentinel', file).split(sep).join('/'));
+    }
+  }
+  for (const bin of Object.values(sentinel.bin ?? {})) entries.add(join('packages/sentinel', bin).split(sep).join('/'));
+  return entries;
+}
+
+/**
+ * Every file the sentinel-scanner-cli workflow executes, from the files its steps name: the test files it runs, the
+ * scripts it runs (`pnpm pack:sentinel` is the packer), and, because its consumers install the tarball and run it, the
+ * package's command. Followed through every import, export, dynamic import, require and import.meta file reference,
+ * workspace packages (and the published name) through their `exports`, and through compiled `dist/` paths named as
+ * strings (workers, gates, drivers), each mapped to its source. A load it cannot follow (an import, require or
+ * import.meta URL whose path is computed) is recorded with its file and line, and the area it may point into is
+ * selected whole (`computedArea`). Returns the root, the files (repository paths), the folders read whole (the
+ * example application the full-report tests ingest), the packages its build step builds (both closures, read from
+ * the manifests), the text of the test and script files reached, which names the fixtures they read, and the
+ * computed loads with the areas they select. Unreadable inputs throw, and the caller then selects every check.
+ */
+export function scannerCliClosure(root = repoRoot) {
+  const workflow = readFileSync(join(root, SCANNER_WORKFLOW), 'utf8');
+  const packages = workspacePackages(root);
+  const dirOf = new Map([...packages].map(([name, { dir }]) => [name, `packages/${basename(dir)}`]));
+  const sentinel = packages.get('@farsight/sentinel')?.manifest;
+  if (!sentinel) throw new Error('@farsight/sentinel has no manifest');
+  const resolveFrom = (from, spec) => {
+    let target = null;
+    if (spec.startsWith('.')) target = relative(root, resolve(root, dirname(from), spec));
+    else {
+      const [, bare, rest] = /^((?:@[\w.-]+\/)?[\w.-]+)(?:\/(.*))?$/.exec(spec) ?? [];
+      const name = PUBLISHED.get(bare) ?? bare;
+      const file = packages.has(name) ? exportTarget(packages.get(name).manifest, rest ? `./${rest}` : '.') : null;
+      if (file) target = join(dirOf.get(name), file);
+    }
+    return target && !target.startsWith('..') ? sourceOf(root, target.split(sep).join('/')) : null;
+  };
+  const built = new Set();
+  for (const entry of ['@farsight/sentinel', '@farsight/parsers']) {
+    const { closure, missing } = buildClosure(root, entry);
+    if (!closure.length || missing.length) throw new Error(`${entry} closure unreadable`);
+    for (const pkg of closure) built.add(basename(pkg.dir));
+  }
+  const files = new Set(),
+    dirs = new Set(),
+    unresolved = [],
+    areas = new Set();
+  let mentions = '';
+  for (const queue = [...scannerCliEntries(workflow, sentinel)]; queue.length;) {
+    const next = queue.pop();
+    const source = next && sourceOf(root, next);
+    if (!source || files.has(source)) continue;
+    if (statSync(join(root, source)).isDirectory()) {
+      // a folder a test reads whole (the example application it ingests, a fixture tree), not a base path to resolve from
+      if (!/^(?:|packages\/[^/]+(?:\/(?:src|test|dist))?)$/.test(source)) dirs.add(source);
+      continue;
+    }
+    files.add(source);
+    if (!CODE.test(source)) continue;
+    const text = readFileSync(join(root, source), 'utf8');
+    if (/^(?:scripts|packages\/[^/]+\/(?:test|scripts))\//.test(source)) mentions += `\n${text}`;
+    for (const line of computedLoads(text)) {
+      const area = computedArea(source, built);
+      unresolved.push({ site: `${source}:${line}`, area });
+      for (const prefix of area) areas.add(prefix);
+    }
+    for (const pattern of SPECIFIERS)
+      for (const [, spec] of text.matchAll(pattern)) queue.push(resolveFrom(source, spec));
+    // a package's own dist/ paths; a script's are the installed Sentinel tarball's
+    const own = /^(packages\/[^/]+)\//.exec(source)?.[1] ?? 'packages/sentinel';
+    for (const [, stem] of text.matchAll(DIST_PATH))
+      queue.push(`${own}/dist/${stem.replace(/\.(?:m?js|d\.ts)$/, '')}.js`);
+  }
+  if (!files.size) throw new Error('The scanner workflow names no files');
+  unresolved.sort((a, b) => a.site.localeCompare(b.site, 'en'));
+  return { root, files, dirs, packages: built, mentions, unresolved, areas };
+}
+
+/**
+ * Whether one changed path reaches the sentinel-scanner-cli workflow, by that closure: a file it executes, or one in
+ * a folder it reads whole; one in the area of a computed load; a fixture or other test data a reached test or script
+ * names; a built package's other build inputs (its manifest, its tsconfig, Sentinel's rules, assets and scripts),
+ * outside `src/` and `test/`; and a source path that no longer exists (deleted, or renamed away), which the closure
+ * of the tree as it is now cannot rule out.
+ */
+function reachesScannerCli(path, scanner) {
+  if (scanner.files.has(path) || [...scanner.dirs].some((dir) => path.startsWith(`${dir}/`))) return true;
+  if ([...scanner.areas].some((prefix) => path.startsWith(prefix))) return true; // a computed load may name it
+  const inPackage = /^packages\/([^/]+)\/([^/]+)(?:\/(.*))?$/.exec(path);
+  if (!inPackage) return false;
+  const [, pkg, top, rest = ''] = inPackage;
+  if (!scanner.packages.has(pkg)) return false;
+  if (top === 'src') return !existsSync(join(scanner.root, path)); // a source it executes is in `files` already
+  if (top !== 'test') return true; // build inputs
+  if (pkg !== 'sentinel') return false; // another package's own tests
+  const parts = rest.split('/');
+  if (parts[0] !== 'fixtures' && CODE.test(path)) return false; // a test file or helper no step runs or imports
+  // test data, fixtures included: reached when a reached test or script names its folder or file
+  const name = (parts[0] === 'fixtures' ? parts[1] : parts[0])?.replace(/\.[^.]+$/, '');
+  if (!name) return false;
+  const quoted = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:fixtures/|['"/])${quoted}\\b`).test(scanner.mentions);
+}
+
 /** The skills trees: read only by the script tests (scripts/check-skills-mirror.mjs), never by a package's tests. */
 const SKILLS = /^\.(?:claude|agents)\/skills\//;
 
 /** The checks one changed path selects, or `null` when it selects every check. */
-function pathChecks(path, inputs, isolation) {
+function pathChecks(path, inputs, isolation, scanner) {
   const checks = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false };
+  checks.scannerCli = scanner ? reachesScannerCli(path, scanner) : false;
   // These Markdown files are shipped in the Echo tarball, so still check packaging.
   if (
     [
@@ -123,11 +313,12 @@ function pathChecks(path, inputs, isolation) {
   return checks;
 }
 
-export function selectChecks(paths, { root = repoRoot, packageInputs, isolationInputs } = {}) {
-  let inputs, isolation;
+export function selectChecks(paths, { root = repoRoot, packageInputs, isolationInputs, scannerInputs } = {}) {
+  let inputs, isolation, scanner;
   try {
     inputs = packageInputs ?? sentinelPackageInputs(root);
     isolation = isolationInputs ?? sentinelIsolationInputs(root);
+    scanner = scannerInputs ?? scannerCliClosure(root);
   } catch {
     return all();
   } // unreadable manifests: everything
@@ -139,9 +330,10 @@ export function selectChecks(paths, { root = repoRoot, packageInputs, isolationI
     isolation: false,
     recovery: false,
     service: false,
+    scannerCli: false,
   };
   for (const path of paths) {
-    const selected = pathChecks(path, inputs, isolation);
+    const selected = pathChecks(path, inputs, isolation, scanner);
     if (!selected) return all();
     for (const [name, run] of Object.entries(selected)) if (run) checks[name] = true;
   }
@@ -352,19 +544,41 @@ export function detectChecks({ root = repoRoot, ...range } = {}) {
   try {
     const paths = changedPaths(range);
     workspaceGraph(root); // an unreadable workspace, or a package name unsafe to emit, selects every check
+    const scanner = scannerCliClosure(root);
     const checks = selectChecks(paths, {
       root,
       packageInputs: sentinelPackageInputs(root),
       isolationInputs: sentinelIsolationInputs(root),
+      scannerInputs: scanner,
     });
     return {
       checks,
       tests: checks.validate ? selectTests(paths, { root }) : EVERY,
       reason: `${paths.length} changed paths`,
+      scannerLoads: scanner.unresolved,
     };
   } catch {
-    return { checks: all(), tests: EVERY, reason: 'Change range or workspace unavailable; running every check' };
+    return {
+      checks: all(),
+      tests: EVERY,
+      reason: 'Change range or workspace unavailable; running every check',
+      scannerLoads: [],
+    };
   }
+}
+
+/**
+ * The computed loads the scanner closure met, grouped by the area each selects in its place, for the selector's
+ * printed output and step summary (never `GITHUB_OUTPUT`, whose values stay strict).
+ */
+export function scannerLoadsText(loads) {
+  if (!loads.length) return '- sentinel-scanner-cli: no computed loads in its closure';
+  const byArea = new Map();
+  for (const { site, area } of loads) byArea.set(area.join(', '), [...(byArea.get(area.join(', ')) ?? []), site]);
+  return [
+    `- sentinel-scanner-cli: ${loads.length} computed loads in its closure, each selecting its whole area:`,
+    ...[...byArea].map(([area, sites]) => `  - ${sites.join(', ')} select ${area}`),
+  ].join('\n');
 }
 
 function testsLine({ scope, packages, also }) {
@@ -414,13 +628,13 @@ function runTests() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv[2] === '--run-tests') process.exit(runTests());
-  const { checks, tests, reason } = detectChecks({
+  const { checks, tests, reason, scannerLoads } = detectChecks({
     base: process.env.BASE_SHA,
     head: process.env.HEAD_SHA,
     event: process.env.GITHUB_EVENT_NAME,
   });
   const output = selectorOutput(checks, tests);
-  console.log(`${reason}\n${output}`);
+  console.log(`${reason}\n${output}${scannerLoadsText(scannerLoads)}`);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, output);
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(
@@ -429,10 +643,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         Object.entries(checks)
           .map(
             ([name, run]) =>
-              `- ${{ echo: 'echo-package', sentinel: 'sentinel-package', isolation: 'sentinel-isolation', recovery: 'sentinel-recovery', service: 'sentinel-service' }[name] ?? name}: ${run ? 'run' : 'skip'}`,
+              `- ${{ echo: 'echo-package', sentinel: 'sentinel-package', isolation: 'sentinel-isolation', recovery: 'sentinel-recovery', service: 'sentinel-service', scannerCli: 'sentinel-scanner-cli (its own workflow)' }[name] ?? name}: ${run ? 'run' : 'skip'}`,
           )
           .join('\n') +
         (checks.validate ? `\n${testsLine(tests)}` : '') +
+        `\n${scannerLoadsText(scannerLoads)}` +
         '\n\nSecret scanning and PR commit conventions run independently.\n',
     );
   }

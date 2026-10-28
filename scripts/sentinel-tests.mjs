@@ -18,9 +18,9 @@
 // The suite defaults to SENTINEL_TEST_SUITE, else `all`; concurrency to the machine's available parallelism. Files
 // run from packages/sentinel. A listed file that does not exist, a duplicate, or a line that is not
 // `test/<name>.test.ts` fails before anything runs, so a renamed file cannot drop out of the process suite unseen.
-// `--launches` records every child process each test file's process starts (from the test or the code under test)
-// and, after the run, names the unit files that started a Node.js process or a package manager and the process files
-// that started none: how the list is kept honest.
+// `--launches` (or SENTINEL_TEST_LAUNCHES=1) records every child process each test file's process starts, from the
+// test or the code under test, and after a passing run fails when a unit file started a Node.js process or a package
+// manager without being named in test/unit-launchers.txt, or a process-suite file started none: the list is enforced.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism, tmpdir } from 'node:os';
@@ -75,6 +75,18 @@ export function noSkipSuite(dir = sentinelDir()) {
  */
 export function serialSuite(dir = sentinelDir()) {
   return readList(dir, 'serial-suite.txt', { allowEmpty: true });
+}
+
+/**
+ * The unit-suite files allowed to start a Node.js process or a package manager: their launching cases skip on CI by
+ * design (an opt-in, a container, a host check), so the zero-skip service job cannot hold them. From
+ * `test/unit-launchers.txt`; a file there cannot also be in the process suite.
+ */
+export function unitLaunchers(dir = sentinelDir()) {
+  const files = readList(dir, 'unit-launchers.txt', { allowEmpty: true });
+  const both = files.filter((file) => processSuite(dir).includes(file));
+  if (both.length) throw new Error(`unit-launchers.txt lists process-suite files: ${both.join(' ')}`);
+  return files;
 }
 
 /** Every test file of a suite, as `test/<name>.test.ts`, in name order. */
@@ -209,7 +221,7 @@ export function parseArgs(argv, env = process.env) {
     suite: env.SENTINEL_TEST_SUITE || 'all',
     concurrency: undefined,
     list: false,
-    launches: false,
+    launches: Boolean(env.SENTINEL_TEST_LAUNCHES),
     summary: undefined,
     extra: [],
   };
@@ -229,15 +241,37 @@ export function parseArgs(argv, env = process.env) {
 }
 
 /** Prints which files started a Node.js process or a package manager, against the process list. */
-function reportLaunches(log, files, dir, out) {
-  const counts = launchCounts(existsSync(log) ? readFileSync(log, 'utf8') : '');
+/**
+ * The launch rule over a `--launches` run: a unit-suite file may start a Node.js process or a package manager only
+ * when `test/unit-launchers.txt` names it (its launching cases skip on CI, so the zero-skip service job cannot hold
+ * it), and a process-suite file must start one. Returns the report lines and the violations.
+ */
+export function launchVerdict(counts, files, dir = sentinelDir()) {
   const listed = new Set(processSuite(dir));
-  const unlisted = files.filter((file) => !listed.has(file) && counts.has(file));
+  const allowed = new Set(unitLaunchers(dir));
+  const unlisted = files.filter((file) => !listed.has(file) && !allowed.has(file) && counts.has(file));
   const idle = files.filter((file) => listed.has(file) && !counts.has(file));
-  out(`\nNode.js or package-manager starts, by file (${counts.size} of ${files.length} files started one):`);
-  for (const file of files.filter((f) => counts.has(f))) out(`  ${String(counts.get(file)).padStart(4)}  ${file}`);
-  out(`Unit files that started one (list them unless a case skips on CI): ${unlisted.join(' ') || 'none'}`);
-  out(`Process files that started none (move them to the unit suite): ${idle.join(' ') || 'none'}`);
+  const lines = [`Node.js or package-manager starts, by file (${counts.size} of ${files.length} files started one):`];
+  for (const file of files.filter((f) => counts.has(f)))
+    lines.push(
+      `  ${String(counts.get(file)).padStart(4)}  ${file}${allowed.has(file) ? '  (unit-launchers.txt)' : ''}`,
+    );
+  lines.push(
+    `Unit files that started one, not in unit-launchers.txt (list them in process-suite.txt): ${unlisted.join(' ') || 'none'}`,
+  );
+  lines.push(`Process files that started none (move them to the unit suite): ${idle.join(' ') || 'none'}`);
+  return { lines, unlisted, idle };
+}
+
+/** Prints the launch report and, after a passing run, refuses one that breaks the launch rule. Returns the status. */
+function enforceLaunches(log, files, dir, status, { out, err }) {
+  const verdict = launchVerdict(launchCounts(existsSync(log) ? readFileSync(log, 'utf8') : ''), files, dir);
+  out(`\n${verdict.lines.join('\n')}`);
+  // enforced only over a run that passed: a failing file can stop before it starts anything
+  if (status !== 0 || (!verdict.unlisted.length && !verdict.idle.length)) return status;
+  const prefix = process.env.GITHUB_ACTIONS ? '::error::' : 'sentinel-tests: ';
+  err(`${prefix}the process suite is out of date: see the launch report above (scripts/sentinel-tests.mjs)`);
+  return 1;
 }
 
 /** The refusal for a no-skip group whose TAP summary shows a skip (or has no summary), else null. */
@@ -299,7 +333,7 @@ export function runSuite(
       }
     }
     if (options.summary) writeFileSync(options.summary, summaryText(summaries));
-    if (options.launches) reportLaunches(env.SENTINEL_LAUNCH_LOG, files, dir, out);
+    if (options.launches) status = enforceLaunches(env.SENTINEL_LAUNCH_LOG, files, dir, status, { out, err });
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
