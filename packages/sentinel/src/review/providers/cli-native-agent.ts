@@ -112,6 +112,8 @@ const MAX_ANSWER = 262144;
 const obj = (v: unknown): Record<string, any> | undefined =>
   v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, any>) : undefined;
 const count = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
+/** A message or tool-use id as the CLI prints them (`msg_…`, `toolu_…`, a UUID). */
+const ID = /^[A-Za-z0-9_-]{1,200}$/;
 
 /** A Claude native run's failure: a closed reason, plus the partial ledger once the process had started. */
 export class ClaudeAgentError extends ProviderError {
@@ -144,7 +146,13 @@ export class ClaudeAgentDecoder {
   #events = 0;
   readonly #messages = new Set<string>();
   readonly #tools: { tool: string; path: string | null }[] = [];
+  /** Read calls awaiting their result, by tool-use id; a path counts as read only once its result succeeded. */
+  readonly #pendingReads = new Map<string, string>();
+  readonly #issued = new Set<string>();
+  readonly #read: string[] = [];
+  /** The model `init` names, and the model each answering message names. */
   #model: string | undefined;
+  readonly #answering = new Set<string>();
   #result: Record<string, any> | undefined;
   constructor(
     readonly workDir: string,
@@ -188,18 +196,40 @@ export class ClaudeAgentDecoder {
     }
     if (e.type === 'assistant') {
       const message = obj(e.message);
-      if (typeof message?.id === 'string' && !this.#messages.has(message.id)) {
+      // Every model request is one message with its own id; one without a well-formed id cannot be counted.
+      if (!message || typeof message.id !== 'string' || !ID.test(message.id)) return this.#bad('stream');
+      if (typeof message.model !== 'string' || !message.model || message.model.length > 200)
+        return this.#bad('identity', 'sentinel.provider.identityMalformed');
+      this.#answering.add(message.model);
+      if (!this.#messages.has(message.id)) {
         this.#messages.add(message.id);
         if (this.#messages.size > this.maxTurns) this.#bad('turns', 'sentinel.provider.budgetExhausted');
       }
-      for (const block of Array.isArray(message?.content) ? message!.content : []) {
+      for (const block of Array.isArray(message.content) ? message.content : []) {
         if (obj(block)?.type !== 'tool_use') continue;
+        if (typeof block.id !== 'string' || !ID.test(block.id) || this.#issued.has(block.id))
+          return this.#bad('stream');
+        this.#issued.add(block.id);
         if (block.name === CLAUDE_OUTPUT_TOOL) {
           if (!obj(block.input)) this.#bad('disallowed-tool');
           this.#tools.push(Object.freeze({ tool: CLAUDE_OUTPUT_TOOL, path: null }));
           continue;
         }
-        this.#tools.push(Object.freeze({ tool: block.name, path: this.#toolPath(block.name, obj(block.input)) }));
+        const path = this.#toolPath(block.name, obj(block.input));
+        this.#tools.push(Object.freeze({ tool: block.name, path }));
+        if (block.name === 'Read' && path !== null) this.#pendingReads.set(block.id, path);
+      }
+      return;
+    }
+    if (e.type === 'user') {
+      // A tool's result: only a Read that succeeded makes its file read. A result for an id never issued is refused.
+      const content = obj(e.message)?.content;
+      for (const block of Array.isArray(content) ? content : []) {
+        if (obj(block)?.type !== 'tool_result') continue;
+        if (typeof block.tool_use_id !== 'string' || !this.#issued.has(block.tool_use_id)) return this.#bad('stream');
+        const path = this.#pendingReads.get(block.tool_use_id);
+        this.#pendingReads.delete(block.tool_use_id);
+        if (path !== undefined && block.is_error !== true && !this.#read.includes(path)) this.#read.push(path);
       }
       return;
     }
@@ -244,13 +274,10 @@ export class ClaudeAgentDecoder {
     return this.#inside(input.file_path) ?? this.#bad('disallowed-tool');
   }
   partial(): CopilotAgentPartial {
-    const filesRead: string[] = [];
-    for (const t of this.#tools)
-      if (t.path !== null && t.path !== '.' && !filesRead.includes(t.path)) filesRead.push(t.path);
     return Object.freeze({
       turns: this.#messages.size,
       tools: Object.freeze([...this.#tools]),
-      filesRead: Object.freeze(filesRead),
+      filesRead: Object.freeze(this.#read.filter((p) => p !== '.')),
       events: this.#events,
       stream: new Uint8Array(0),
     });
@@ -264,8 +291,20 @@ export class ClaudeAgentDecoder {
       models = obj(r.modelUsage);
     const fields = ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'output_tokens'];
     if (!usage || fields.some((k) => !count(usage[k]))) return this.#bad('usage');
-    if (!this.#model || !models || !Object.hasOwn(models, this.#model))
+    // The CLI's own turn count, against the same limit as the messages counted here.
+    if (!count(r.num_turns)) return this.#bad('result');
+    if (r.num_turns > this.maxTurns) return this.#bad('turns', 'sentinel.provider.budgetExhausted');
+    // The identity is the model that answered: one model on every answering message, the one `init` named (or its
+    // own dated snapshot), with its usage reported. Any other model in the usage is secondary and recorded apart.
+    const answering = [...this.#answering];
+    if (!this.#model || answering.length !== 1) return this.#bad('identity', 'sentinel.provider.identityMismatch');
+    const reported = answering[0]!;
+    if (
+      reported !== this.#model &&
+      !(reported.startsWith(this.#model + '-') && /^\d{8}$/.test(reported.slice(this.#model.length + 1)))
+    )
       return this.#bad('identity', 'sentinel.provider.identityMismatch');
+    if (!models || !Object.hasOwn(models, reported)) return this.#bad('identity', 'sentinel.provider.identityMismatch');
     // The schema-checked answer only: a run that ended without one (text alone) did not answer in its schema.
     if (obj(r.structured_output) === undefined) return this.#bad('result');
     const answer = JSON.stringify(r.structured_output);
@@ -287,8 +326,13 @@ export class ClaudeAgentDecoder {
     const filesRead = this.partial().filesRead;
     return Object.freeze({
       finalAnswer: answer,
-      reportedModel: this.#model,
-      turns: count(r.num_turns) ? r.num_turns : this.#messages.size,
+      reportedModel: reported,
+      secondaryModels: Object.freeze(
+        Object.keys(models)
+          .filter((m) => m !== reported)
+          .sort(),
+      ),
+      turns: Math.max(r.num_turns, this.#messages.size),
       tools: Object.freeze([...this.#tools]),
       filesRead,
       usage: Object.freeze({ inputTokens: input, outputTokens: output, requests: this.#messages.size }),

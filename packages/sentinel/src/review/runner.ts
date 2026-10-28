@@ -147,6 +147,8 @@ export interface NativeRunResult {
   readonly packs: readonly Readonly<{ ref: string; digest: string }>[];
   /** The exact instruction record sealed before the broker call (owner-private). */
   readonly instructionRecord: NativeInstructionRecord;
+  /** Other models the CLI reported usage for (a background model), apart from the answering one (owner-private). */
+  readonly secondaryModels: readonly string[];
   /** The promoted skills, in order, with each file's digest: the exact bytes that were materialised. */
   readonly skills: readonly Readonly<{
     ref: string;
@@ -484,6 +486,7 @@ async function runNative(
     task,
     packs: stagePackDigests(resolved),
     instructionRecord: record,
+    secondaryModels: Object.freeze([...(reply.result.secondaryModels ?? [])]),
     skills: Object.freeze(
       resolved.skills.map((k) =>
         Object.freeze({
