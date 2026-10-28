@@ -72,7 +72,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/cgroup-memory.js': ['node:fs'],
 
   // The declared pipeline (app/): the credential-shape check, and the pipeline file read beside the settings.
-  'app/pipeline.js': ['@farsight/core/dist/credential-shapes.js'],
+  'app/pipeline.js': ['@farsight/core/dist/credential-shapes.js', '@farsight/core/dist/strings-sentinel-plan.js'],
   'app/pipeline-adoption.js': ['node:fs', 'node:path'],
   'service/preparation-key-lock.js': ['node:path'],
   'service/preparation-client.js': ['node:crypto', 'node:path'],

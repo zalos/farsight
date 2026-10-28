@@ -27,6 +27,9 @@ import type {
 import { validateEnvelope } from '../validate.js';
 import { featureEnabled } from '../policy/features.js';
 import { canonicalDigest } from '../policy/digest.js';
+import { sentinelPlanWord } from '@farsight/core/dist/strings-sentinel-plan.js';
+import { PlanError } from '../planner/errors.js';
+import { requireBootstrap, stageModel } from '../planner/pipeline.js';
 
 /** The pipeline file's place in a workspace, beside the settings. */
 export const PIPELINE_PATH = '.farsight/sentinel/pipeline.json';
@@ -39,6 +42,8 @@ export const PIPELINE_ERROR_CODES = [
   'sentinel.pipeline.invalid',
   'sentinel.pipeline.credentialValue',
   'sentinel.pipeline.duplicateStage',
+  'sentinel.pipeline.bootstrapMissing',
+  'sentinel.pipeline.notPlannable',
   'sentinel.pipeline.unknownStage',
   'sentinel.pipeline.cycle',
   'sentinel.pipeline.missingInput',
@@ -390,7 +395,41 @@ export function checkPipeline(pipeline: PipelineDefinition, env: PipelineEnviron
     edges,
   );
   if (cycle) refuse('sentinel.pipeline.cycle', cycle[0]!, `the stages wait on each other: ${cycle.join(' → ')}`);
+  // What the planner itself refuses, read from the planner (one source of truth, never a copy of its rules): a pipeline
+  // the checks above pass but the planner cannot plan, such as one with no parse or inventory stage, or two stages that
+  // both capture. Only when nothing above refused it, so one problem is never reported twice in two words.
+  if (!problems.some((p) => p.class === 'refused')) plannerProblem(pipeline, refuse);
   return Object.freeze(problems);
+}
+
+/** The planner's own refusal of a declaration, as a problem: its stage model first, then its bootstrap rule. */
+function plannerProblem(pipeline: PipelineDefinition, refuse: Refuse): void {
+  let model: ReturnType<typeof stageModel>;
+  try {
+    model = stageModel(pipeline);
+  } catch (e) {
+    if (!(e instanceof PlanError)) throw e;
+    const code =
+      e.code === 'sentinel.plan.stageCycle'
+        ? 'sentinel.pipeline.cycle'
+        : e.code === 'sentinel.plan.stageUnknown'
+          ? 'sentinel.pipeline.unknownStage'
+          : 'sentinel.pipeline.notPlannable';
+    // The planner's own words for what it found, without its sentence's opening (this problem's code has its own).
+    const opening = sentinelPlanWord(e.code, { detail: '' });
+    refuse(code, null, e.message.startsWith(opening) ? e.message.slice(opening.length) : e.message);
+    return;
+  }
+  try {
+    requireBootstrap(model);
+  } catch (e) {
+    if (!(e instanceof PlanError)) throw e;
+    // Which of the three the planner found missing, read from its model.
+    const missing = (Object.keys(model.bootstrap) as (keyof typeof model.bootstrap)[]).filter(
+      (op) => !model.bootstrap[op],
+    );
+    refuse('sentinel.pipeline.bootstrapMissing', null, missing.join(', '));
+  }
 }
 
 type Refuse = (code: PipelineErrorCode, stage: StageId | null, detail: string) => void;

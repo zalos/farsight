@@ -35,6 +35,7 @@ import {
 } from '../dist/app/pipeline-adoption.js';
 import { promoteStagePack } from '../dist/review/packs.js';
 import { profilePipeline } from '../dist/app/pipeline-profiles.js';
+import { requireBootstrap, stageModel } from '../dist/planner/pipeline.js';
 import { initWorkspace, PROFILES } from '../dist/cli/init.js';
 import { DEFAULT_SETTINGS, ReceiptBook, validateEnvelope } from '../dist/index.js';
 import type { PipelineDefinition, SettingsEnvelope, StageDefinition } from '../dist/index.js';
@@ -78,6 +79,7 @@ const pipelineOf = (stages: StageDefinition[], extra: Partial<PipelineDefinition
 const BOOT: StageDefinition[] = [
   { id: 'capture', kind: 'builtin', operation: 'capture' },
   { id: 'parse', kind: 'builtin', operation: 'parse', needs: ['capture'] },
+  { id: 'inventory', kind: 'builtin', operation: 'inventory', needs: ['parse'] },
 ];
 const settingsWith = (extra: Partial<SettingsEnvelope>): SettingsEnvelope => ({ ...DEFAULT_SETTINGS, ...extra });
 
@@ -414,6 +416,49 @@ test('the pipeline-wide and per-stage checks refuse each mistake with its code',
     assert.ok(refused(problems).includes(code), `${name}: wanted ${code}, got ${JSON.stringify(problems)}`);
     for (const p of problems) assert.ok(STRINGS[p.code], `${name}: ${p.code} is cataloged`);
   }
+});
+
+test("a pipeline the planner cannot plan is refused by the check too, in the planner's words", () => {
+  // The planner's own judgement (stage model, then bootstrap rule): every case here throws there.
+  const plannerRefuses = (p: PipelineDefinition) => {
+    try {
+      requireBootstrap(stageModel(p));
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  const cases: Array<[string, PipelineDefinition, string, string]> = [
+    [
+      'capture only',
+      pipelineOf([{ id: 'capture', kind: 'builtin', operation: 'capture' }]),
+      'sentinel.pipeline.bootstrapMissing',
+      'parse, inventory',
+    ],
+    ['no inventory stage', pipelineOf([BOOT[0]!, BOOT[1]!]), 'sentinel.pipeline.bootstrapMissing', 'inventory'],
+    [
+      'two stages that both capture',
+      pipelineOf([...BOOT, { id: 'capture-again', kind: 'builtin', operation: 'capture' }]),
+      'sentinel.pipeline.notPlannable',
+      'two stages run the capture operation',
+    ],
+  ];
+  for (const [name, pipeline, code, detail] of cases) {
+    assert.ok(validateEnvelope('pipeline', pipeline).ok, `${name}: schema-valid`);
+    assert.ok(plannerRefuses(pipeline), `${name}: the planner refuses it`);
+    const problems = checkPipeline(pipeline, {});
+    assert.deepEqual(
+      problems.map((p) => [p.class, p.code, p.stage, p.detail]),
+      [['refused', code, null, detail]],
+      name,
+    );
+    assert.ok(STRINGS[code], `${name}: ${code} is cataloged`);
+  }
+  // The other way round: the sound bootstrap passes both.
+  assert.equal(plannerRefuses(pipelineOf(BOOT)), false);
+  assert.deepEqual(checkPipeline(pipelineOf(BOOT), {}), []);
+  // Every profile init writes is plannable, by the same reading.
+  for (const profile of PROFILES) assert.equal(plannerRefuses(profilePipeline(profile)), false, profile);
 });
 
 test('what the workspace has not made available is reported, not refused', () => {
@@ -799,6 +844,17 @@ test('plan refuses a cycle, a missing input, a wrong type, a disabled feature an
       },
       'sentinel.pipeline.unknownPack',
       false,
+    ],
+    // What the planner refuses, the plan refuses before anything is captured (planner/pipeline.ts decides).
+    [
+      'a capture-only pipeline',
+      { ...base, stages: base.stages.filter((s) => s.id === 'capture') },
+      'sentinel.pipeline.bootstrapMissing',
+    ],
+    [
+      'two capture stages',
+      { ...base, stages: [...base.stages, { id: 'capture-again', kind: 'builtin', operation: 'capture' }] },
+      'sentinel.pipeline.notPlannable',
     ],
   ];
   for (const [name, pipeline, code, adoptable] of cases) {
