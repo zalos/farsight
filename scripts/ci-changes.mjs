@@ -816,6 +816,7 @@ export function detectChecks({ root = repoRoot, ...range } = {}) {
     });
     return {
       checks,
+      npmBuild: selectNpmBuild(paths),
       tests: checks.validate ? selectTests(paths, { root }) : EVERY,
       reason: `${paths.length} changed paths`,
       scannerLoads: scanner.unresolved,
@@ -823,11 +824,23 @@ export function detectChecks({ root = repoRoot, ...range } = {}) {
   } catch {
     return {
       checks: all(),
+      npmBuild: true,
       tests: EVERY,
       reason: 'Change range or workspace unavailable; running every check',
       scannerLoads: [],
     };
   }
+}
+
+/** The optional npm build proof is independent of the existing runtime/test selection. */
+export function selectNpmBuild(paths) {
+  return paths.some(
+    (path) =>
+      /(?:^|\/)package\.json$/.test(path) ||
+      /(?:^|\/)(?:pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json)$/.test(path) ||
+      path.startsWith('scripts/') ||
+      ['.github/workflows/ci.yml', '.npmrc', '.nvmrc', 'pnpm-workspace.yaml'].includes(path),
+  );
 }
 
 /**
@@ -891,12 +904,12 @@ function runTests() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv[2] === '--run-tests') process.exit(runTests());
-  const { checks, tests, reason, scannerLoads } = detectChecks({
+  const { checks, tests, reason, scannerLoads, npmBuild } = detectChecks({
     base: process.env.BASE_SHA,
     head: process.env.HEAD_SHA,
     event: process.env.GITHUB_EVENT_NAME,
   });
-  const output = selectorOutput(checks, tests);
+  const output = selectorOutput(checks, tests) + `npmBuild=${npmBuild}\n`;
   console.log(`${reason}\n${output}${scannerLoadsText(scannerLoads)}`);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, output);
   if (process.env.GITHUB_STEP_SUMMARY) {
@@ -909,6 +922,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
               `- ${{ echo: 'echo-package', sentinel: 'sentinel-package', isolation: 'sentinel-isolation', recovery: 'sentinel-recovery', service: 'sentinel-service', scannerCli: 'sentinel-scanner-cli (its own workflow)' }[name] ?? name}: ${run ? 'run' : 'skip'}`,
           )
           .join('\n') +
+        `\n- npm-build: ${npmBuild ? 'run' : 'skip'}` +
         (checks.validate ? `\n${testsLine(tests)}` : '') +
         `\n${scannerLoadsText(scannerLoads)}` +
         '\n\nSecret scanning and PR commit conventions run independently.\n',

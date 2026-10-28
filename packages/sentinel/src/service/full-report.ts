@@ -26,8 +26,9 @@ import type {
   WorkRef,
 } from '../contracts/index.js';
 import type { BuiltinOperation, ExecutionSite, Provenance, StageCost } from '../contracts/pipeline.js';
-import { runStages } from '../execution/stage-inputs.js';
+import { runStages, runnerOfProvider } from '../execution/stage-inputs.js';
 import { SCRIPT_PROVENANCE_SCHEMA, SCRIPT_RUNNER_ID } from '../execution/script-runner.js';
+import { NATIVE_REVIEW_SCHEMA } from '../review/native-dispatch.js';
 import { validateEnvelope } from '../validate.js';
 import type { SentinelStore } from '../store/index.js';
 import { loadPlan } from '../execution/plans.js';
@@ -35,6 +36,7 @@ import { retainedBootstrapForReport, type RetainedAncestorRevision } from '../ex
 import type { ParserIndex, ParserResult } from '../snapshot/parser.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import { secretObservation } from '../reports/accepted-secrets.js';
+import type { ReviewProgressInput } from '../reports/document.js';
 import { selectedSecretPrivacy } from '../reports/selected-privacy.js';
 import { resolveWithheldLocation } from '../snapshot/locations.js';
 import type { WithheldLocationEvidence } from '../contracts/index.js';
@@ -684,6 +686,8 @@ const TRUSTED = new RegExp(
       PLACE + String.raw`\.personas\.\*\.(?:declared|evidenceArtifact)`,
       // A model observation's generated identity; its statement, its excerpts and the reported model are screened.
       String.raw`reviews\.\*\.(?:id|stage|attemptId|promptDigest|ruleFamilyId|severity|limitationKeys\.\*|unit\.(?:id|revision)|model\.(?:requestedModel|source))`,
+      String.raw`reviews\.\*\.progress\.outcome`,
+      String.raw`reviews\.\*\.progress\.(?:turns|filesRead|modelInspected)\.` + COUNT,
       String.raw`reviews\.\*\.evidence\.\*\.(?:id|state|reasonCode|content)`,
       String.raw`reviewFailures\.\*\.(?:stage|reasonCode|unit\.(?:id|revision))`,
       // Provenance is the ledger's own record of what ran; a host path, an argument and a reported model are screened.
@@ -1342,6 +1346,7 @@ export interface RunStages {
     readonly observation: ObservationEnvelope;
     readonly stage: string;
     readonly unit: WorkRef;
+    readonly progress: ReviewProgressInput;
   }[];
   readonly reviewFailures?: readonly { readonly stage: string; readonly unit: WorkRef; readonly reasonCode: string }[];
   readonly provenance: readonly Provenance[];
@@ -1350,9 +1355,10 @@ export interface RunStages {
 /**
  * The model observations and the provenance of a completed run, from its retained ledger alone.
  *
- * A model observation is read only through its accepted review publication (readPublishedInstructions: the exact
- * admitted unit, attempt, invocation, admission, instructions, requests and record, every citation re-derived from
- * the unit's assigned captured bytes); anything that does not read back refuses the report. The document fold then
+ * A model observation is read only through its accepted review publication: readPublishedInstructions authenticates
+ * brokered requests, and readPublishedNativeReview authenticates the native transcript and provenance. Both bind the
+ * admitted unit, attempt, instructions and every citation to assigned captured bytes. An unreadable publication
+ * refuses the report. The document fold then
  * embeds its citations under the report's disclosure profile and the accepted-secret fold, like a finding's.
  *
  * Provenance: one record per published unit, the bootstrap work the analysis depends on first (in start order), then
@@ -1380,14 +1386,65 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
   const reviewUnits = plan.units.filter((u) => u.review);
   if (reviewUnits.length > MAX_REVIEW_UNITS) unbound('more model review units than one report reads');
   const traces = new Map<string, import('../review/instructions.js').RetainedInstructionTrace>();
+  const nativeTraces = new Map<string, import('../review/native-dispatch.js').NativeReviewTrace>();
+  const progress = new Map<string, ReviewProgressInput>();
   const published = reviewUnits.filter((u) => store.ledger.getPublication(u));
   if (published.length) {
     const { readPublishedInstructions } = await import('../review/instructions.js');
+    const { readPublishedNativeReview } = await import('../review/native-dispatch.js');
+    const { readReviewSpec } = await import('../review/plan.js');
     const deadlineAt = Date.now() + 20_000;
     const signal = AbortSignal.timeout(20_000);
     for (const u of published) {
       try {
-        traces.set(u.id, await readPublishedInstructions(store, u, { deadlineAt, signal }));
+        const native = store.ledger.getPublication(u)!.outputs.some((o) => o.schema === NATIVE_REVIEW_SCHEMA);
+        const assigned = new Set(u.inputs.map((i) => i.relativePath));
+        if (assigned.size !== u.inputs.length) unbound('a model review has repeated assigned files');
+        if (native) {
+          const trace = await readPublishedNativeReview(store, u, { deadlineAt, signal });
+          nativeTraces.set(u.id, trace);
+          const answer = trace.record.output.value;
+          const inspectedPaths: unknown[] =
+            isRecord(answer) && Array.isArray(answer.inspected)
+              ? answer.inspected
+              : unbound('a native review has no inspected-file list');
+          if (!inspectedPaths.every((p) => typeof p === 'string'))
+            unbound('a native review has no inspected-file list');
+          const read = new Set(trace.record.filesRead.filter((p) => assigned.has(p)));
+          const inspected = new Set((inspectedPaths as string[]).filter((p) => assigned.has(p)));
+          if (!Number.isSafeInteger(trace.provenance.turns) || trace.provenance.turns < 0)
+            unbound('a native review progress record exceeds its assigned reads');
+          progress.set(u.id, {
+            outcome: 'not-recorded',
+            turnsUsed: trace.provenance.turns,
+            turnCap: null,
+            filesRead: read.size,
+            filesGiven: assigned.size,
+            modelInspected: inspected.size,
+            source: 'native',
+          });
+        } else {
+          const trace = await readPublishedInstructions(store, u, { deadlineAt, signal });
+          traces.set(u.id, trace);
+          const spec = await readReviewSpec(store, u);
+          const read = new Set(trace.record.inspected.map((i) => i.relativePath));
+          const unread = new Set(trace.record.notInspected);
+          if (
+            read.size + unread.size !== assigned.size ||
+            [...read].some((p) => unread.has(p)) ||
+            [...read, ...unread].some((p) => !assigned.has(p)) ||
+            trace.record.totals.steps > spec.budget.maxSteps
+          )
+            unbound('a brokered review progress record differs from its admitted scope');
+          progress.set(u.id, {
+            outcome: trace.record.outcome,
+            turnsUsed: trace.record.totals.steps,
+            turnCap: spec.budget.maxSteps,
+            filesRead: read.size,
+            filesGiven: assigned.size,
+            source: 'brokered',
+          });
+        }
       } catch {
         return unbound('an accepted model review does not read back exactly');
       }
@@ -1395,16 +1452,22 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
   }
   const reviews = reviewUnits.length
     ? published.flatMap((u) =>
-        traces.get(u.id)!.observations.map((o) => {
+        (nativeTraces.get(u.id) ?? traces.get(u.id))!.observations.map((o) => {
           if (o.snapshotId !== a.snapshot.id || o.producer.kind !== 'model-review')
             unbound('a model observation is not a review of this capture');
-          return { observation: o, stage: stageOf(u), unit: { id: u.id, revision: u.revision } };
+          return {
+            observation: o,
+            stage: stageOf(u),
+            unit: { id: u.id, revision: u.revision },
+            progress: progress.get(u.id) ?? unbound('a published model review has no progress record'),
+          };
         }),
       )
     : undefined;
-  const reviewFailures = published.flatMap((u) =>
-    traces.get(u.id)!.record.outcome === 'unfinished' &&
-    traces.get(u.id)!.record.frontiers.some((f) => f.reasonCode === 'sentinel.review.frontier.copilotLogin')
+  const reviewFailures = published.flatMap((u) => {
+    const trace = traces.get(u.id);
+    return trace?.record.outcome === 'unfinished' &&
+      trace.record.frontiers.some((f) => f.reasonCode === 'sentinel.review.frontier.copilotLogin')
       ? [
           {
             stage: stageOf(u),
@@ -1412,8 +1475,8 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
             reasonCode: 'sentinel.review.frontier.copilotLogin',
           },
         ]
-      : [],
-  );
+      : [];
+  });
 
   // Every published unit: the bootstrap work first, then the analysis.
   const key = (r: WorkRef) => `${r.id}#${r.revision}`;
@@ -1485,16 +1548,26 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
       invocation: env.invocation ?? null,
     };
     if (unit?.review) {
+      const native = nativeTraces.get(unit.id);
+      if (native) {
+        provenance.push(native.provenance);
+        continue;
+      }
       const trace = traces.get(unit.id);
       if (!trace) return unbound('a published model review was not read back');
       const record = trace.record;
+      const bindingModel = admitted.policy?.settings.providers
+        .find((p) => p.id === unit.review!.selection.providerId)
+        ?.models?.find((m) => m.id === unit.review!.selection.modelId)?.model;
       const encoding = trace.requests.find((r) => r.wire)?.wire?.encoding;
       const runner =
         encoding === 'sentinel-claude-chat/v1'
           ? ('claude-cli' as const)
           : encoding === 'sentinel-copilot-chat/v1'
             ? ('copilot-cli' as const)
-            : ('hosted-api' as const);
+            : runnerOfProvider(
+                admitted.policy?.settings.providers.find((p) => p.id === unit.review!.selection.providerId),
+              );
       const usage = env.usage;
       const confirmed = record.totals.usage === 'confirmed' && usage.certainty === 'confirmed';
       const cost: StageCost =
@@ -1502,18 +1575,24 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
           ? { basis: 'rates', amount: usage.monetaryCost, currency: usage.currency }
           : {
               basis: 'unobserved',
-              reason: runner !== 'hosted-api' ? 'subscription' : !confirmed ? 'usage-unknown' : 'no-rates',
+              reason:
+                runner === 'claude-cli' || runner === 'copilot-cli'
+                  ? 'subscription'
+                  : !confirmed
+                    ? 'usage-unknown'
+                    : 'no-rates',
             };
       provenance.push({
         ...base,
-        where: runner === 'hosted-api' ? where : 'sandboxed-cli',
+        where: runner === 'claude-cli' || runner === 'copilot-cli' ? 'sandboxed-cli' : where,
         kind: 'agent',
         mode: 'brokered',
         runner,
         runnerVersion: null,
         executableDigest: null,
         model: {
-          requested: record.model?.requestedModel ?? unit.review.selection.modelId,
+          requested:
+            record.model?.requestedModel ?? bindingModel ?? unbound('a published model review has no bound model'),
           reported: record.model?.returnedModel ?? null,
           identitySource: record.model?.source ?? 'unknown',
         },

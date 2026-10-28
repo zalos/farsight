@@ -1874,6 +1874,39 @@
             "$ref": "#/definitions/CatalogKey"
           },
           "maxItems": 64
+        },
+        "progress": {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "completed",
+                "unfinished",
+                "not-recorded"
+              ],
+              "description": "Native publications record an answer but no completed/unfinished review verdict."
+            },
+            "turns": {
+              "$ref": "#/definitions/ReportCount",
+              "description": "Turns used; `of` is present only when the admitted turn cap was recorded."
+            },
+            "filesRead": {
+              "$ref": "#/definitions/ReportCount",
+              "description": "Files actually read out of the files assigned to this review."
+            },
+            "modelInspected": {
+              "$ref": "#/definitions/ReportCount",
+              "description": "Native answer's self-reported inspected files, apart from authenticated reads."
+            }
+          },
+          "required": [
+            "outcome",
+            "turns",
+            "filesRead"
+          ],
+          "additionalProperties": false,
+          "description": "Retained review progress. Optional so reports made before this disclosure remain valid."
         }
       },
       "required": [

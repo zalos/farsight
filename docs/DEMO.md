@@ -14,9 +14,13 @@ was shortened; a comment on a command's own line is a note (its time, its exit c
 > serve line, the waiting companion and the dock's runner, provider and unfinished words in 4c again on main
 > `59213a6c` (#246). This file is re-run and updated as later changes land.
 
+> The npm-only checkout build, both tarballs, invoice ingest and step 4a were also verified on 2026-10-28 with
+> Node 24.21.0 and npm 10.9.4, with pnpm absent from PATH. That check used the static profile without Docker or a
+> model call; the Copilot qualification above is separate.
+
 | step | what you do | time |
 |---|---|---|
-| 1 | prerequisites: Node 24, pnpm, Git LFS, Copilot CLI 1.0.105 logged in | 5 to 10 min, once |
+| 1 | prerequisites: Node 24, pnpm 9 or npm 10, Git LFS, Copilot CLI 1.0.105 logged in | 5 to 10 min, once |
 | 2 | clone, build, pack, install both packages into one folder | about 70 s with a warm pnpm store; a few minutes on a new machine |
 | 3 | ingest the example, open the viewer | under 1 min |
 | 4 | Sentinel: initialise, adopt, a first scan, then the Copilot review | 2 to 3 min (the review itself about 40 s) |
@@ -31,8 +35,9 @@ build or platform rather than fall back. No Docker is needed for this demo.
 # Node 24 (any Node 24 on PATH works; nvm shown)
 nvm install 24 && nvm use 24
 node --version                     # v24.x
-corepack enable && corepack prepare pnpm@9.0.0 --activate
+# For the pnpm path only: corepack enable && corepack prepare pnpm@9.0.0 --activate
 pnpm --version                     # 9.0.0
+# or: npm --version                # 10.x (npm install -g npm@10 if needed)
 git lfs install                    # the example's images are LFS files; without it they show as missing
 
 # GitHub Copilot CLI, the exact version Sentinel pins (1.0.103 is also accepted; nothing newer is)
@@ -51,13 +56,18 @@ already existed, not on a clean home folder. `gh` is not needed: the repository 
 
 ## 2. Build the two packages and install them into one folder
 
+Choose pnpm 9 or npm 10: every `# or:` line is the npm alternative to the pnpm command above it. Run one of each pair. pnpm remains the contributor/CI path; npm uses `npm install`, not `npm ci`, because only `pnpm-lock.yaml` is committed and npm’s generated lockfile is ignored. Start with a fresh clone when changing managers.
+
 ```sh
 git clone https://github.com/zalos/farsight.git
 cd farsight
 pnpm install --frozen-lockfile     # 3 s with a warm store, a few minutes on a new machine
+# or: npm install
 pnpm build                         # about 17 s
+# or: npm run build
 node scripts/pack.mjs              # packaged: build/farsight-cli-0.3.0.tgz  (built …, commit <sha>)
 pnpm pack:sentinel                 # packaged: build/sentinel/farsight-sentinel-0.0.0-draft.1.tgz  (built …, commit <sha>)
+# or: npm run pack:sentinel
 
 mkdir -p ~/farsight-demo
 npm install -g --prefix ~/farsight-demo/prefix \

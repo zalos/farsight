@@ -304,6 +304,17 @@ export interface ReportReviewObservation {
   evidence: ReportEvidence[];
   /** @maxItems 64 */
   limitationKeys: CatalogKey[];
+  /** Retained review progress. Optional so reports made before this disclosure remain valid. */
+  progress?: {
+    /** Native publications record an answer but no completed/unfinished review verdict. */
+    outcome: 'completed' | 'unfinished' | 'not-recorded';
+    /** Turns used; `of` is present only when the admitted turn cap was recorded. */
+    turns: ReportCount;
+    /** Files actually read out of the files assigned to this review. */
+    filesRead: ReportCount;
+    /** Native answer's self-reported inspected files, apart from authenticated reads. */
+    modelInspected?: ReportCount;
+  };
 }
 
 /** sentinel-report/draft-1 — one deterministic projection at a pinned ledger sequence and evaluation time. */

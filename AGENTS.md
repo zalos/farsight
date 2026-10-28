@@ -8,7 +8,7 @@ Read in order when context is needed: [docs/VISION.md](docs/VISION.md) (why + pe
 
 This file is the canonical project guidance for Codex/GPT and Claude Code. `CLAUDE.md` imports it; update this file instead of maintaining two copies. Read [docs/AI-HANDOFF.md](docs/AI-HANDOFF.md) at session start for the verified setup, latest validation, and handoff notes. Keep durable project facts here and dated results there. Provider-private memories are historical hints; current code and repository docs take precedence.
 
-Use Node 24+ (`.nvmrc`) and pnpm 9.0.0. Build before tests, which import `dist/`. Put a Node 24 on PATH (`nvm use`) before building. Before changing work, inspect `git status`; preserve another provider's uncommitted edits. Record branch, changes, checks, and unresolved issues in the handoff before switching providers. Shared instructions do not imply shared permissions, authentication, or live MCP connections.
+Use Node 24+ (`.nvmrc`) with pnpm 9.0.0 or npm 10 (`npm install`, `npm run build`); pnpm remains the contributor and CI path. The sole committed lockfile is pnpm’s; npm uses `npm install`, not `npm ci`. Build before tests, which import `dist/`. Put a Node 24 on PATH (`nvm use`) before building. Before changing work, inspect `git status`; preserve another provider's uncommitted edits. Record branch, changes, checks, and unresolved issues in the handoff before switching providers. Shared instructions do not imply shared permissions, authentication, or live MCP connections.
 
 **Work in a worktree, never in the primary checkout** (learned 2026-10-17, PR #115). The primary checkout is the dogfood server's workspace: `pnpm build` there rewrites the `dist/` the 4478 server restarts into (`farsight status` and the HUD chip then say RESTART into a feature build), `pnpm e2e` there stamps `e2e/test-results/results.json`, which the dogfood graph reads as its own e2e run, and a branch left checked out there is what the next session's `git status` starts from. Every implementation, Codex or Claude, concurrent or not, happens in its own worktree (`git worktree add ../farsight-wt/<name> -b <branch>`; Codex's live under `~/.codex/worktrees/`); the primary checkout stays on `main` with a `main` build. If you did build or test in the primary checkout, say so in the handoff, check `main` out again and rebuild before handing off.
 
@@ -68,7 +68,7 @@ Every change is a branch (`feat/…`, `fix/…`, `docs/…`, `chore/…`) and a 
 ## Commands
 
 ```sh
-pnpm install && pnpm build          # build all packages (tsc, topological)
+pnpm install --frozen-lockfile --ignore-scripts && pnpm build # linked worktree: build all packages
 pnpm -r typecheck                   # typecheck everything
 pnpm -r test                        # node --test suites (build first — tests import dist/)
 pnpm lint:strings                   # viewer string/symbol grammar gate
@@ -116,11 +116,13 @@ The Claude preview/dev server is defined in `.claude/launch.json` (name: `farsig
   cannot rewrite everybody's hooks. Never pop a `lefthook auto backup` stash entry; the stash stack is shared too.
   `pnpm install` explicitly installs the two managed hooks; pre-commit formats and re-stages eligible JS/TS files.
   An install from a worktree embeds that worktree's absolute lefthook binary path in the shared hooks, which breaks
-  when the worktree is removed. After this PR merges, run `pnpm install` once in the primary checkout so the hooks
+  when the worktree is removed. After a worktree PR merges, run `pnpm install` once in the primary checkout so the hooks
   point at a lasting path. A branch without `lefthook.yml` silently skips the commit-msg lint and main-branch guard;
   it relies on CI's `commits` check until it rebases. Never commit on main from a worktree whose branch predates lefthook.
+- **Linked worktree installs:** never run bare `pnpm install` there; use `pnpm install --frozen-lockfile --ignore-scripts`, then run `pnpm install` in the primary checkout after the PR merges to restore the lasting hook path.
+- **PR base branch:** check `gh pr view <n> --json baseRefName` says `main` before every merge; squash-merging a stacked PR into its parent does not land it on `main`.
 - **Changed pnpm hoisting:** after pulling this change into an existing worktree, run
-  `pnpm install --config.confirm-modules-purge=false` once. With changed `.npmrc` hoist settings, pnpm 9 asks to purge
+  `pnpm install --config.confirm-modules-purge=false --ignore-scripts` once. With changed `.npmrc` hoist settings, pnpm 9 asks to purge
   `node_modules`; a non-TTY shell can silently exit 0 without installing. CI's fresh install is unaffected.
 - **The CI lint check:** `pnpm format:check` and `pnpm lint` run when runtime checks are selected; `style` PRs also
   prove AST equivalence against their merge base. The lead adds `lint` to required checks after its first green run.

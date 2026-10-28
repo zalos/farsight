@@ -87,6 +87,17 @@ export interface PlannedCheck {
   readonly files: readonly string[];
 }
 
+/** Retained review facts before the document gives each number its catalog words, scope and source. */
+export interface ReviewProgressInput {
+  readonly outcome: 'completed' | 'unfinished' | 'not-recorded';
+  readonly turnsUsed: number;
+  readonly turnCap: number | null;
+  readonly filesRead: number;
+  readonly filesGiven: number;
+  readonly modelInspected?: number;
+  readonly source: 'brokered' | 'native';
+}
+
 /**
  * Everything `buildReport` folds into one document. Besides it, the fold reads only the catalog's words, so the same
  * input and catalog give the same document.
@@ -127,6 +138,7 @@ export interface ReportInput {
     readonly observation: ObservationEnvelope;
     readonly stage: string;
     readonly unit: WorkRef;
+    readonly progress?: ReviewProgressInput;
   }[];
   readonly reviewFailures?: readonly { readonly stage: string; readonly unit: WorkRef; readonly reasonCode: string }[];
   /** One provenance record per published attempt. Absent: the document has no provenance section. */
@@ -360,6 +372,67 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
         });
     }
     for (const k of o.limitationKeys) used.add(k);
+    let progress: NonNullable<ReportReviewObservation['progress']> | undefined;
+    if (r.progress) {
+      const p = r.progress;
+      if (
+        !Number.isSafeInteger(p.turnsUsed) ||
+        p.turnsUsed < 0 ||
+        (p.turnCap !== null && (!Number.isSafeInteger(p.turnCap) || p.turnCap < p.turnsUsed)) ||
+        !Number.isSafeInteger(p.filesRead) ||
+        p.filesRead < 0 ||
+        !Number.isSafeInteger(p.filesGiven) ||
+        p.filesGiven < p.filesRead ||
+        (p.modelInspected !== undefined &&
+          (!Number.isSafeInteger(p.modelInspected) || p.modelInspected < 0 || p.modelInspected > p.filesGiven)) ||
+        (p.source === 'native' &&
+          (p.turnCap !== null || p.modelInspected === undefined || p.outcome !== 'not-recorded')) ||
+        (p.source === 'brokered' &&
+          (p.turnCap === null || p.modelInspected !== undefined || p.outcome === 'not-recorded'))
+      )
+        throw new ReportError('sentinel.report.invalidInput', 'model review progress is outside its retained bounds');
+      const recheck = { cli: `farsight-sentinel report ${input.run.id} --full --format json` };
+      const counted = (n: number, unit: string, source: string, of?: number): ReportCount => ({
+        n,
+        ...(of === undefined ? {} : { of }),
+        unit,
+        scope: 'sentinel.viewer.scope.review',
+        source,
+        recheck,
+      });
+      progress = {
+        outcome: p.outcome,
+        turns: counted(
+          p.turnsUsed,
+          p.turnCap === null ? 'sentinel.count.reviewTurnsCapUnknown' : 'sentinel.count.reviewTurns',
+          p.source === 'native' ? 'sentinel native agent provenance.turns' : 'sentinel review record totals.steps',
+          p.turnCap ?? undefined,
+        ),
+        filesRead: counted(
+          p.filesRead,
+          'sentinel.count.reviewFilesRead',
+          p.source === 'native' ? 'sentinel native review filesRead' : 'sentinel review record inspected',
+          p.filesGiven,
+        ),
+        ...(p.modelInspected === undefined
+          ? {}
+          : {
+              modelInspected: counted(
+                p.modelInspected,
+                'sentinel.count.reviewModelInspected',
+                'sentinel native review output.inspected',
+                p.filesGiven,
+              ),
+            }),
+      };
+      used.add('sentinel.report.review.progress');
+      used.add(`sentinel.report.review.progress.${p.outcome}`);
+      for (const count of [progress.turns, progress.filesRead, progress.modelInspected]) {
+        if (!count) continue;
+        used.add(count.unit);
+        used.add(count.scope);
+      }
+    }
     reviews!.push({
       id: o.id,
       stage: r.stage,
@@ -372,6 +445,7 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
       ...(profile.embedSource ? { message: o.message } : {}),
       evidence,
       limitationKeys: [...o.limitationKeys],
+      ...(progress ? { progress } : {}),
     });
   }
   if (reviews) for (const key of ['heading', 'proposed', 'model', 'unrated']) used.add(`sentinel.report.review.${key}`);
@@ -392,8 +466,13 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
     used.add('sentinel.report.provenance.heading');
     for (const p of provenance) {
       used.add(`sentinel.report.provenance.where.${p.where}`);
-      if (p.kind === 'agent')
+      if (p.kind === 'agent') {
         used.add(`sentinel.report.provenance.cost.${p.cost.basis === 'rates' ? 'rates' : p.cost.reason}`);
+        if (p.mode === 'native') {
+          if (p.executableDigest) used.add('sentinel.report.provenance.executableDigest');
+          if (p.transcript) used.add('sentinel.report.provenance.transcript');
+        }
+      }
     }
   }
 

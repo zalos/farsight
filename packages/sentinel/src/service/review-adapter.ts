@@ -17,13 +17,18 @@ import { REVIEW_ADAPTERS, type ReviewRuntime } from '../review/dispatch.js';
 export { REVIEW_ADAPTERS } from '../review/dispatch.js';
 import { ExecutionError } from '../execution/errors.js';
 import { COPILOT_LOGIN_FRONTIER } from '../review/errors.js';
+import { NATIVE_REVIEW_SCHEMA } from '../review/native-dispatch.js';
 export const hasConfiguredReviews = (p: EffectivePolicy) =>
   Boolean(
     p.settings.reviewModels && (p.settings.reviewModels.stages.length || p.settings.reviewModels.segments.length),
   );
 /** Only an authenticated published review can explain a completed run's Copilot login refusal. */
 export async function reviewLoginFailureIn(store: SentinelStore, units: readonly PlanWork[]): Promise<boolean> {
-  const published = units.filter((unit) => unit.review && store.ledger.getPublication(unit));
+  const published = units.filter((unit) => {
+    if (!unit.review) return false;
+    const publication = store.ledger.getPublication(unit);
+    return publication && !publication.outputs.some((output) => output.schema === NATIVE_REVIEW_SCHEMA);
+  });
   if (!published.length) return false;
   if (published.length > 32) throw new ExecutionError('sentinel.execution.planInvalid', {});
   const { readPublishedInstructions } = await import('../review/instructions.js');

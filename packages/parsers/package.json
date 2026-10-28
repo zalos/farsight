@@ -10,10 +10,10 @@
     "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts"
   },
   "dependencies": {
-    "@farsight/core": "workspace:*",
+    "@farsight/core": "*",
     "oxc-parser": "^0.138.0",
     "yaml": "2.9.0",
-    "@farsight/graph": "workspace:*",
-    "@farsight/code-parser": "workspace:*"
+    "@farsight/graph": "*",
+    "@farsight/code-parser": "*"
   }
 }

@@ -58,7 +58,7 @@ import { builtinRulePack, shippedCheckAdapters } from './trusted-profile.js';
 import { FEATURE_FLAGS } from '../policy/features.js';
 import {
   checkPreviewReport,
-  PREVIEW_LIMITATIONS,
+  previewLimitationsOf,
   PREVIEW_REPORT_SCHEMA,
   type PreviewReport,
 } from '../reports/preview.js';
@@ -1798,7 +1798,13 @@ export async function reportIn(
         recheck,
       },
     ],
-    limitations: [...PREVIEW_LIMITATIONS],
+    limitations: [
+      ...previewLimitationsOf(
+        (await loadPlan(store, options.runId, recorded.planRevision)).plan.units.some(
+          (unit) => !!unit.review && !!store.ledger.getPublication(unit),
+        ),
+      ),
+    ],
   };
   return checkPreviewReport(doc);
 }

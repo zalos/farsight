@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pnpm's pack rewrites workspace:^ into an ordinary published dependency range.
+// The libraries already declare ordinary published dependency ranges, so either manager can pack them.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -12,5 +12,5 @@ execFileSync(process.execPath, [join(root, 'scripts/graph-schema.mjs'), '--check
 for (const name of ['graph', 'code-parser']) {
   const pkg = JSON.parse(readFileSync(join(root, 'packages', name, 'package.json'), 'utf8'));
   if (pkg.private) throw new Error(`${pkg.name} is private`);
-  execFileSync('pnpm', ['pack', '--pack-destination', out], { cwd: join(root, 'packages', name), stdio: 'inherit' });
+  execFileSync('npm', ['pack', '--pack-destination', out], { cwd: join(root, 'packages', name), stdio: 'inherit' });
 }
