@@ -96,6 +96,16 @@ function verifyChain(chain: Chain): void {
  * folder swapped for a link or another folder mid-read refuses the pack (`packChanged`) instead of reading outside
  * it. Listing is one entry at a time against the entry budget, so an enormous or deeply nested folder stops at the
  * limit rather than being enumerated. These checks detect a swap between observations; they are not an OS sandbox.
+ *
+ * Throws a PolicyError:
+ * - `sentinel.rules.packUnsafe`: the root is not an absolute, normalised, canonical folder path; or an entry has an
+ *   unsafe name, is a symbolic link or is neither a folder nor a regular file;
+ * - `sentinel.rules.packUnreadable`: the root cannot be resolved, a folder cannot be listed or a file cannot be opened;
+ * - `sentinel.rules.packTooLarge`: a limit in `limits` is not a positive integer, or the pack passes its depth, entry,
+ *   path-length, file-count, file-size or total-size limit;
+ * - `sentinel.rules.packChanged`: a folder or file changed identity, size or kind between two observations.
+ *
+ * A root removed between its resolution and its first check throws the operating system's error.
  */
 export function readPackDirectory(root: string, limits: Partial<PackLimits> = {}): Map<string, Buffer> {
   return readPackDirectoryWith(root, limits, {});
@@ -107,7 +117,9 @@ export interface PackReadHooks {
 }
 
 /**
- * {@link readPackDirectory} with test hooks between each entry's check and its read; refuses exactly what it refuses.
+ * {@link readPackDirectory} with test hooks between each entry's check and its read. It refuses exactly what that
+ * function refuses (`sentinel.rules.packUnsafe`, `packUnreadable`, `packTooLarge` and `packChanged`, as listed there),
+ * and whatever a hook throws passes through.
  */
 export function readPackDirectoryWith(
   root: string,

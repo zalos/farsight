@@ -148,8 +148,19 @@ function grantMiss(g: SentinelGrant, intent: ActionIntent): string | null {
 
 /**
  * Decides one action: the policy verdict first, then, only when it allows, the capability and credential checks.
- * Admitted only when all three allow; otherwise the record says `denied` or `awaiting-confirmation` with every
- * verdict and its reason. Throws (PolicyError `settingsInvalid`) only for a policy effectivePolicy did not produce.
+ * The record says `admitted` when all three allow and, if the action needs confirmation, the given receipt is spent;
+ * `awaiting-confirmation` when all three allow and it needs a receipt none was given for; `denied` otherwise. It
+ * carries every verdict and its reason.
+ *
+ * Throws a PolicyError:
+ * - `sentinel.policy.settingsInvalid`: the policy is not one effectivePolicy produced;
+ * - while spending a receipt, `sentinel.receipt.unknown` (no valid receipt with this id in the book),
+ *   `sentinel.receipt.expired`, `sentinel.receipt.mismatch` (another action or intent, another state or policy
+ *   revision, or issued in the future), `sentinel.receipt.alreadyUsed` or `sentinel.receipt.storeUnsafe` (the receipt
+ *   folder is not private).
+ *
+ * An intent that is not canonical JSON throws the object store's `sentinel.object.notCanonical`, and whatever
+ * `capability` or `credential` throws passes through unchanged.
  */
 export function admit(req: AdmissionRequest): AdmissionResult {
   return decideAdmission(req, false);
