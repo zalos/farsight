@@ -164,3 +164,50 @@ test('a historical or read-only view of the page cannot check or write the pipel
   // reading stays open
   assert.equal((await ui('owner-ui.pipeline', {}, 2)).schema, 'sentinel-viewer-pipeline/draft-1');
 });
+
+test(
+  "a panel settings.adopt receipt for the written bytes adopts nothing: adoption stays the CLI owner's",
+  needsStore,
+  async (t) => {
+    const { f, ui } = await paired(t);
+    const { OwnerUiAuthority, activeOwnerUiProof } = await import('../dist/owner-ui/authority.js');
+    const { OwnerUiReceiptBook, issueOwnerUiReceipt } = await import('../dist/owner-ui/receipts.js');
+    const { pipelineWriteBinding, pipelineBytesOf, adoptedPolicy } = await import('../dist/service/local.js');
+    const { adoptPipeline } = await import('../dist/app/pipeline-adoption.js');
+    const { adoptSettings } = await import('../dist/policy/adoption.js');
+    const read = await ui('owner-ui.pipeline');
+    const owner = new OwnerUiAuthority(f.store, f.ws);
+    const { proof } = owner.pair({
+      farsightOrigin: 'http://127.0.0.1:4500',
+      hostInstance: 'host-' + 'b'.repeat(32),
+      processNonce: 'c'.repeat(64),
+    });
+    owner.context(proof, {
+      frameNonce: 'frame-' + 'd'.repeat(32),
+      documentId: 'document-' + 'e'.repeat(32),
+      revision: 1,
+      hostInstance: 'host-' + 'b'.repeat(32),
+      mode: 'live',
+      sync: null,
+    });
+    const adopted = adoptedPolicy(f.ws);
+    if (!('policy' in adopted)) assert.fail('settings not adopted');
+    // Exactly the receipt the panel issues for a write: settings.adopt, bound to the bytes the file holds.
+    const binding = {
+      ...pipelineWriteBinding(f.ws, pipelineBytesOf(read.pipeline), read.fileDigest),
+      policyRevision: adopted.policy.revision,
+    };
+    const spent = await owner.with(proof, 1, 'settings.adopt', () => {
+      const book = new OwnerUiReceiptBook(join(f.ws.trustDir, 'receipts'), activeOwnerUiProof()!);
+      return book.consume(issueOwnerUiReceipt(book, binding, new Date()).id, binding, new Date());
+    });
+    assert.throws(
+      () => adoptPipeline({ workspace: f.ws.path, trustDir: f.ws.trustDir, receipt: spent as any, now: new Date() }),
+      (e: any) => e?.code === 'sentinel.pipeline.adoptionUnauthorized',
+    );
+    assert.throws(
+      () => adoptSettings({ workspace: f.ws.path, trustDir: f.ws.trustDir, receipt: spent as any, now: new Date() }),
+      (e: any) => e?.code === 'sentinel.policy.adoptionUnauthorized',
+    );
+  },
+);

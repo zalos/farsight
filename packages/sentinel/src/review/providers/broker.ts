@@ -294,13 +294,22 @@ export class ModelBroker {
         this.#now(),
       );
     }
-    const receiptDigest = spent?.digest ?? null;
+    // Only the digest a book's consume recorded is the receipt's; any other object a book hands back records none.
+    const receiptDigest = receiptAuthority(spent)?.digest ?? null;
     const admissionDigest = canonicalDigest(result.record);
     const id = `menv-${admissionDigest.slice(7, 39)}`;
     // The receipt is bound to the first envelope it opens; a second envelope never takes it over.
     if (spent && !opened.has(spent)) opened.set(spent, id);
     if ((hosted || priced) && !spentForIntent(spent, result.record.intentDigest, id)) {
       fail('sentinel.provider.receiptRequired', hosted ? 'hosted disclosure' : 'priced inference');
+    }
+    // Who confirmed it is who the admission names (admitOwnerUi's provenance, kept when the broker spends the
+    // receipt): a panel receipt admits only the panel's human requester, and a CLI receipt never the panel's channel.
+    if (spent && receiptAuthority(spent)) {
+      const panel = spent.receipt.schema === 'sentinel-owneruireceipt/draft-1';
+      const by = req.requestedBy;
+      if (panel ? !(by.principal === 'human' && by.channel === 'owner-ui') : by.channel === 'owner-ui')
+        fail('sentinel.provider.notAdmitted', 'the receipt was confirmed through another channel than the one named');
     }
     this.#deps.ledger.createEnvelope({
       id,

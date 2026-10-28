@@ -513,3 +513,55 @@ test(
     assert.throws(() => otherBook.consume(ids[0]!, mine, new Date()), code('sentinel.receipt.mismatch'));
   },
 );
+
+test(
+  "who confirmed a receipt is who the envelope's admission names; only a spent receipt's digest is recorded",
+  needsStore,
+  async (t) => {
+    const p = await panel(t),
+      pol = policy(),
+      binding = bindProvider(pol, 'native-claude', 'haiku'),
+      mine = bindingFor(pol, binding, 'run-1');
+    // A panel receipt handed in under the CLI's requester: the admission would credit the CLI with a browser's
+    // confirmation, so the envelope is refused.
+    const { book, ids } = await confirm(p, [mine, mine]);
+    const asCli = {
+      ...requestFor(pol, binding),
+      requestedBy: { principal: 'human' as const, channel: 'owner-cli' as const },
+    };
+    await assert.rejects(
+      p.broker.openEnvelope({ ...asCli, receipt: { book, id: ids[0]! } }),
+      code('sentinel.provider.notAdmitted'),
+    );
+    // A CLI receipt handed in under the panel's requester: refused the same way.
+    const cliBook = new ReceiptBook(join(p.f.dir, 'cli-receipts'));
+    const cliId = issueReceipt(cliBook, { channel: 'owner-cli', principal: 'owner' }, mine, {
+      now: new Date(),
+      ttlMs: 600_000,
+    }).id;
+    await assert.rejects(
+      p.broker.openEnvelope({ ...requestFor(pol, binding), receipt: { book: cliBook, id: cliId } }),
+      code('sentinel.provider.notAdmitted'),
+    );
+    // The genuine pairing records the receipt's own spent digest.
+    const env = await p.broker.openEnvelope({ ...requestFor(pol, binding), receipt: { book, id: ids[1]! } });
+    const row = p.ledger.listEnvelopes({ limit: 50 }).find((e: any) => e.id === env.id)!;
+    assert.match(row.receiptDigest!, /^sha256:[a-f0-9]{64}$/);
+    assert.equal(row.receiptDigest, env.receiptDigest);
+    // On a loopback envelope that opens with no receipt check of its own, an object a book hands back that no consume
+    // returned records no digest at all.
+    fake.loose = true;
+    t.after(() => {
+      fake.loose = false;
+    });
+    const local = policy(true),
+      localBinding = bindProvider(local, 'native-claude', 'haiku'),
+      record = { receipt: { schema: 'sentinel-owneruireceipt/draft-1' }, digest: 'sha256:' + 'e'.repeat(64) };
+    const forged = await p.broker.openEnvelope({
+      ...requestFor(local, localBinding),
+      receipt: { book: handing(record), id: 'receipt-x' },
+    });
+    assert.equal(forged.receiptDigest, null);
+    assert.equal(p.ledger.listEnvelopes({ limit: 50 }).find((e: any) => e.id === forged.id)!.receiptDigest, null);
+  },
+);
