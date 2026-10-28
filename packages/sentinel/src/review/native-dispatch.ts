@@ -17,9 +17,7 @@ import { validateEnvelope } from '../validate.js';
 import { reviewFail } from './errors.js';
 import type { InstructionArtifact } from './instructions.js';
 import type { NativeReviewOutput } from './native.js';
-import type { ModelEnvelope } from './providers/broker.js';
-import type { ProviderBinding } from './providers/profile.js';
-import type { AgentRunner, NativeInstructionRecord, NativeRunResult } from './runner.js';
+import type { AgentRunner, NativeInstructionRecord, NativeRunContext, NativeRunResult } from './runner.js';
 import type { SessionSpec } from './session.js';
 import type { ReviewRuntime } from './dispatch.js';
 
@@ -67,9 +65,9 @@ export interface NativeReviewRun {
   readonly attemptId: string;
   readonly spec: SessionSpec;
   readonly runtime: ReviewRuntime;
-  readonly envelope: ModelEnvelope;
+  readonly envelope: NativeRunContext['envelope'];
   /** The current genuine binding, re-checked against the admitted selection on every read. */
-  readonly binding: () => ProviderBinding;
+  readonly binding: () => NativeRunContext['binding'];
   readonly runner: AgentRunner;
   readonly signal: AbortSignal;
   readonly deadlineAt: number;
@@ -132,6 +130,8 @@ export async function runNativeReview(r: NativeReviewRun): Promise<PreparedOutpu
         operationId,
         signal: r.signal,
         ...(r.runtime.trustDir !== undefined ? { trustDir: r.runtime.trustDir } : {}),
+        // The packs the admitted spec sealed: the runner's own resolution must give exactly these, before any call.
+        packs: spec.packs ?? [],
         // Sealed before anything is sent; the publication retains these exact bytes.
         retain: async (record) => void (sealed = record),
       },
@@ -187,18 +187,22 @@ function publishNative(
   const output = ran.output.value as NativeReviewOutput;
   const byPath = new Map(spec.scope.files.map((f) => [f.relativePath, f]));
   const observations: ObservationEnvelope[] = (output.observations ?? []).map((o, i) => {
+    // Only a captured file has a location to cite; a claim on an upstream input has none and never publishes.
     const f = byPath.get(o.path);
-    const evidence: ObservationEvidence[] = [];
-    if (f) {
-      const bytes = bytesOf.get(o.path)!;
-      evidence.push({
+    if (!f)
+      return reviewFail(
+        'sentinel.review.outputSchema',
+        'an observation cites an input that is not a captured file, so it has no evidence to publish',
+      );
+    const evidence: ObservationEvidence[] = [
+      {
         snapshotId: spec.scope.snapshotId,
         sourceId: spec.scope.sourceId,
         relativePath: f.relativePath,
         content: f.content as ArtifactId,
-        span: lineSpan(bytes, o.line),
-      });
-    }
+        span: lineSpan(bytesOf.get(o.path)!, o.line),
+      },
+    ];
     const obs: ObservationEnvelope = {
       schema: 'sentinel-observation/draft-1',
       id: `obs-${canonicalDigest({ session: spec.sessionId, attempt: r.attemptId, i, o }).slice(7, 39)}`,
@@ -312,4 +316,180 @@ function publishNative(
       ? { certainty: 'confirmed', inputTokens: usage!.usedInputTokens ?? 0, outputTokens: usage!.usedOutputTokens ?? 0 }
       : { certainty: 'unknown' },
   };
+}
+
+/** The native review record a unit published (`NATIVE_REVIEW_SCHEMA`). */
+export interface NativeReviewRecord {
+  readonly schema: typeof NATIVE_REVIEW_SCHEMA;
+  readonly runId: string;
+  readonly attemptId: string;
+  readonly work: WorkRef;
+  readonly sessionId: string;
+  readonly specDigest: Digest;
+  readonly snapshotId: string;
+  readonly sourceId: string;
+  readonly segmentId: string;
+  readonly selection: unknown;
+  readonly stage: string;
+  readonly output: Readonly<{ name: string; schema: string; value: unknown }>;
+  readonly filesRead: readonly string[];
+  readonly tools: readonly Readonly<{ tool: string; path: string | null }>[];
+  readonly secondaryModels: readonly string[];
+  readonly transcript: ArtifactId;
+  readonly share: ArtifactId | null;
+  readonly instructions: ArtifactId;
+  readonly packs: readonly Readonly<{ ref: string; digest: string }>[];
+  readonly observations: readonly string[];
+  readonly provenance: ArtifactId;
+}
+/** An accepted native review publication, read back: owner-private, never a shareable view. */
+export interface NativeReviewTrace {
+  readonly disclosure: 'private-only';
+  readonly authority: 'accepted-coordinator-native-review';
+  readonly record: NativeReviewRecord;
+  readonly provenance: AgentProvenance;
+  /** The instruction record the run was sent, as retained (`NATIVE_INSTRUCTIONS_SCHEMA`). */
+  readonly instructions: Readonly<Record<string, unknown>>;
+  /** The CLI's JSONL stream. */
+  readonly transcript: Uint8Array;
+  readonly observations: readonly ObservationEnvelope[];
+}
+
+/**
+ * Owner-only replay of one accepted native review publication: the same checks as `readPublishedInstructions`
+ * (the exact admitted unit, its succeeded attempt, the fixed coordinator operation and invocation, the owner's
+ * admission), then exactly one native record bound to the admitted spec, exactly one agent provenance record it names
+ * by digest, the retained transcript and instruction record, and every observation the record lists, each citation
+ * inside the unit's assigned captured bytes. Anything else refuses.
+ */
+export async function readPublishedNativeReview(
+  store: SentinelStore,
+  work: WorkRef,
+  options?: Readonly<{ signal?: AbortSignal; deadlineAt?: number }>,
+): Promise<NativeReviewTrace> {
+  const { acceptedReviewPublication } = await import('./instructions.js');
+  const { row, pub, attempt, admitted, unit, outputs, read, json, fence } = await acceptedReviewPublication(
+    store,
+    work,
+    options,
+  );
+  const integrity = (detail: string): never => reviewFail('sentinel.review.integrity', detail);
+  const one = (schema: string) => {
+    const found = pub.outputs.filter((o) => o.schema === schema);
+    return found.length === 1 ? (found[0]!.id as ArtifactId) : integrity(`one exact ${schema} is required`);
+  };
+  const record = (await json(one(NATIVE_REVIEW_SCHEMA))) as NativeReviewRecord;
+  const spec = await (await import('./plan.js')).readReviewSpec(store, unit);
+  fence();
+  if (
+    !spec.native ||
+    record.schema !== NATIVE_REVIEW_SCHEMA ||
+    record.attemptId !== attempt.id ||
+    record.runId !== row.runId ||
+    canonicalDigest(record.work) !== canonicalDigest({ id: work.id, revision: work.revision }) ||
+    record.specDigest !== row.envelope.inputFingerprint ||
+    record.specDigest !== unit.review.specDigest ||
+    record.sessionId !== spec.sessionId ||
+    record.snapshotId !== admitted.plan.pins.snapshotId ||
+    record.sourceId !== unit.sourceId ||
+    record.segmentId !== unit.review.segmentId ||
+    canonicalDigest(record.selection) !== canonicalDigest(unit.review.selection) ||
+    record.stage !== spec.native.stage ||
+    canonicalDigest(record.packs ?? []) !== canonicalDigest(spec.packs ?? [])
+  )
+    return integrity('native review record changes its admitted inputs');
+  // The provenance the record names, by digest, and bound to the same unit, attempt, stage and transcript.
+  const provenance = (await json(one(AGENT_PROVENANCE_SCHEMA))) as AgentProvenance;
+  if (
+    canonicalDigest(provenance) !== record.provenance ||
+    provenance.kind !== 'agent' ||
+    provenance.mode !== 'native' ||
+    provenance.runner !== spec.native.runner ||
+    provenance.stage !== record.stage ||
+    canonicalDigest(provenance.unit) !== canonicalDigest(record.work) ||
+    provenance.attempt !== attempt.id ||
+    provenance.transcript !== record.transcript ||
+    provenance.wires.length !== 0
+  )
+    return integrity('native provenance differs from its record');
+  // The retained bytes: the stream and the instruction record, each one of this publication's outputs.
+  if (outputs.get(record.transcript)?.schema !== TRANSCRIPT_SCHEMA)
+    return integrity('the native transcript is not retained');
+  const transcript = await read(record.transcript);
+  if (sha(transcript) !== record.transcript) return integrity('the native transcript differs');
+  if (record.share !== null && outputs.get(record.share)?.schema !== SHARE_SCHEMA)
+    return integrity('the native session export is not retained');
+  if (outputs.get(record.instructions)?.schema !== NATIVE_INSTRUCTIONS_SCHEMA)
+    return integrity('the native instruction record is not retained');
+  const instructions = (await json(record.instructions)) as Record<string, any>;
+  const scoped = spec.scope.files.map((f) => [f.relativePath, f.content]);
+  const sent = Array.isArray(instructions.inputs)
+    ? instructions.inputs.filter((i: any) => !String(i?.relativePath).startsWith('upstream/'))
+    : [];
+  if (
+    canonicalDigest(instructions) !== record.instructions ||
+    instructions.schema !== NATIVE_INSTRUCTIONS_SCHEMA ||
+    instructions.stage !== record.stage ||
+    canonicalDigest(sent.map((i: any) => [i.relativePath, i.digest])) !== canonicalDigest(scoped) ||
+    typeof instructions.task?.text !== 'string' ||
+    sha(Buffer.from(instructions.task.text)) !== instructions.task.digest
+  )
+    return integrity('the native instruction record differs from the admitted scope');
+  // Every observation the record lists, from this publication, produced by this unit's attempt, cited in scope.
+  const ids = pub.outputs.filter((o) => o.schema === 'sentinel-observation/draft-1');
+  if (ids.length !== record.observations.length || ids.length > 32)
+    return integrity('accepted native observation set differs');
+  const observations: ObservationEnvelope[] = [];
+  for (const o of ids) {
+    const obs = (await json(o.id as ArtifactId)) as ObservationEnvelope;
+    if (
+      !validateEnvelope('observation', obs).ok ||
+      !record.observations.includes(obs.id) ||
+      obs.snapshotId !== record.snapshotId ||
+      obs.producer.kind !== 'model-review' ||
+      obs.producer.adapterId !== unit.adapterId ||
+      obs.producer.adapterDigest !== unit.implementationDigest ||
+      obs.producer.attemptId !== attempt.id ||
+      obs.producer.model.requestedModel !== provenance.model.requested ||
+      obs.producer.model.returnedModel !== provenance.model.reported ||
+      obs.producerRuleId !== spec.producerRuleId ||
+      obs.evidence.length === 0
+    )
+      return integrity('accepted native observation differs from this review');
+    for (const ev of obs.evidence) {
+      const file = spec.scope.files.find((f) => 'relativePath' in ev && f.relativePath === ev.relativePath);
+      if (
+        !('relativePath' in ev) ||
+        !file ||
+        ev.content !== file.content ||
+        ev.snapshotId !== record.snapshotId ||
+        ev.sourceId !== record.sourceId ||
+        !Number.isSafeInteger(ev.span.startByte) ||
+        !Number.isSafeInteger(ev.span.endByte) ||
+        ev.span.startByte < 0 ||
+        ev.span.endByte < ev.span.startByte ||
+        ev.span.endByte > file.bytes
+      )
+        return integrity('native model evidence is outside its assigned captured scope');
+    }
+    observations.push(obs);
+  }
+  if (new Set(observations.map((o) => o.id)).size !== record.observations.length)
+    return integrity('accepted native observation set differs');
+  fence();
+  if (
+    canonicalDigest(store.ledger.getWork(work)) !== canonicalDigest(row) ||
+    canonicalDigest(store.ledger.getAttempt(attempt.id)) !== canonicalDigest(attempt) ||
+    canonicalDigest(store.ledger.getPublication(work)) !== canonicalDigest(pub)
+  )
+    return integrity('retained publication changed');
+  return Object.freeze({
+    disclosure: 'private-only' as const,
+    authority: 'accepted-coordinator-native-review' as const,
+    record,
+    provenance,
+    instructions,
+    transcript: Uint8Array.from(transcript),
+    observations: Object.freeze(observations),
+  });
 }

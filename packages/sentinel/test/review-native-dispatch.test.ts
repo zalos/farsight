@@ -31,8 +31,18 @@ import {
   NATIVE_INSTRUCTIONS_SCHEMA,
   NATIVE_REVIEW_SCHEMA,
   lineSpan,
+  readPublishedNativeReview,
+  runNativeReview,
 } from '../dist/review/native-dispatch.js';
-import { COPILOT_AGENT_PROFILE, qualifyInstalledNativeCopilot } from '../dist/review/providers/cli-copilot-profile.js';
+import { admitsMode, prepareAdmittedReview } from '../dist/review/dispatch.js';
+import { bindProvider } from '../dist/review/providers/index.js';
+import { executablePlan } from '../dist/execution/plan.js';
+import { readPublishedInstructions } from '../dist/review/instructions.js';
+import {
+  COPILOT_1_0_105_PROFILE,
+  COPILOT_AGENT_PROFILE,
+  qualifyInstalledNativeCopilot,
+} from '../dist/review/providers/cli-copilot-profile.js';
 import { CLAUDE_AGENT_PROFILE } from '../dist/review/providers/cli-native-profile.js';
 import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { needsStore, unlock } from './snapshot-helpers.ts';
@@ -397,6 +407,21 @@ test(
       // The attempt's usage is the settled reservation.
       const attempt = w.store.ledger.getAttempt(pub.attemptId)!;
       assert.deepEqual(attempt.envelope.usage, { certainty: 'confirmed', inputTokens: 1234, outputTokens: 56 });
+      // Read back through the authenticating reader: the same record, provenance, stream and observations.
+      const trace = await readPublishedNativeReview(w.store, ref);
+      assert.equal(trace.authority, 'accepted-coordinator-native-review');
+      assert.deepEqual(trace.record, record);
+      assert.deepEqual(trace.provenance, provenance);
+      assert.deepEqual(trace.observations, observations);
+      assert.equal(Buffer.from(trace.transcript).toString('utf8'), transcript);
+      assert.equal(trace.instructions.schema, NATIVE_INSTRUCTIONS_SCHEMA);
+      // Neither reader accepts the other's publication, and a deterministic unit is no review at all.
+      await assert.rejects(readPublishedInstructions(w.store, ref), code('sentinel.review.integrity'));
+      const other = admitted.units.find((u: any) => !u.review && w.store.ledger.getPublication(u))!;
+      await assert.rejects(
+        readPublishedNativeReview(w.store, { id: other.id, revision: other.revision }),
+        code('sentinel.review.integrity'),
+      );
     } finally {
       removeScratch(work);
     }
@@ -450,6 +475,273 @@ test(
         () => seedsWith({ ...triage, prompt: 'stages/review@1#instructions.md' }),
         code('sentinel.review.invalidInput'),
       );
+    } finally {
+      removeScratch(work);
+    }
+  },
+);
+
+const sha = (b: Uint8Array) => 'sha256:' + createHash('sha256').update(b).digest('hex');
+/** A runner stand-in that seals a record and answers one claim on the input `cite` picks; no process, no model. */
+const stubRunner = (cite: (inputs: readonly { relativePath: string }[]) => string) => ({
+  id: 'copilot-cli' as const,
+  modes: Object.freeze(['brokered', 'native'] as const),
+  qualify: () => Promise.reject(Error('not used')),
+  async run(stage: any, inputs: readonly { relativePath: string; bytes: Uint8Array }[], context: any) {
+    const record = {
+      schema: 'sentinel-native-instructions/draft-1',
+      disclosure: 'private-only',
+      withholding: 'accepted-secret-fold-before-read',
+      stage: stage.id,
+      instructions: { ref: null, digest: D('original instructions'), bytes: new Uint8Array([1]) },
+      inputs: inputs.map((i) => ({ relativePath: i.relativePath, digest: sha(i.bytes) })),
+      task: { digest: sha(Buffer.from('t')), text: 't' },
+      skills: [],
+      packs: [],
+    };
+    await context.native.retain(record);
+    const path = cite(inputs);
+    return {
+      mode: 'native',
+      output: {
+        name: 'observations',
+        schema: 'sentinel.review-observations/v1',
+        value: { observations: [{ path, line: null, kind: 'note', claim: 'An original claim.' }], inspected: [path] },
+      },
+      transcript: Buffer.from('{}\n'),
+      share: new Uint8Array(0),
+      filesRead: [path],
+      tools: [],
+      instructions: new Uint8Array([1]),
+      task: 't',
+      packs: [],
+      instructionRecord: record,
+      skills: [],
+      secondaryModels: [],
+      provenance: {
+        mode: 'native',
+        runner: 'copilot-cli',
+        runnerVersion: '1.0.105',
+        profileId: COPILOT_AGENT_PROFILE.id,
+        executableDigest: null,
+        installation: null,
+        model: { requested: 'gpt-6-luna', reported: 'gpt-6-luna', identitySource: 'host-reported' },
+        promptDigest: D('original prompt'),
+        skillDigests: [],
+        turns: 1,
+        tokens: { input: 1, output: 1, certainty: 'confirmed' },
+        cost: { basis: 'unobserved', reason: 'subscription' },
+        deadline: { grantedMs: 1000, usedMs: 1 },
+        where: 'sandboxed-cli',
+      },
+    };
+  },
+});
+
+test(
+  'a claim on an upstream input has no captured location to cite, so it is refused and nothing publishes',
+  needsStore,
+  async (t) => {
+    const w = await workspace(t, copilotProvider(D('synthetic-copilot-profile')));
+    const work = scratchUnder(w.store);
+    try {
+      const planned = await plan(w, work);
+      const { plan: admitted } = await loadPlan(w.store, planned.disclosure.runId, planned.disclosure.revision);
+      const unit = admitted.units.find((u: any) => u.review)!;
+      const spec = await readReviewSpec(w.store, unit);
+      const run = (cite: (inputs: readonly { relativePath: string }[]) => string) =>
+        runNativeReview({
+          store: w.store,
+          unit,
+          attemptId: 'attempt-original',
+          spec,
+          runtime: { broker: {}, ledger: { reservationOf: () => null } } as any,
+          envelope: { id: 'menv-original' } as any,
+          binding: () => ({ model: 'gpt-6-luna' }) as any,
+          runner: stubRunner(cite) as any,
+          signal: new AbortController().signal,
+          deadlineAt: Date.now() + 60000,
+          // One bound upstream artifact (here a captured file's bytes, standing in for a published output).
+          stageInputs: [
+            {
+              decl: { stage: 'preview', output: 'findings' },
+              state: 'resolved',
+              artifacts: [spec.scope.files[0]!.content],
+              producers: [],
+              secretFold: 'applied',
+            },
+          ] as any,
+        });
+      await assert.rejects(
+        run((inputs) => inputs.find((i) => i.relativePath.startsWith('upstream/'))!.relativePath),
+        code('sentinel.review.outputSchema'),
+      );
+      // The same claim on a captured file publishes, with one authenticated citation.
+      const published = await run(() => 'src/auth.ts');
+      const observations = published.records.filter((r: any) => r.schema === 'sentinel-observation/draft-1');
+      assert.equal(observations.length, 1);
+      assert.equal((observations[0]!.value as any).evidence.length, 1);
+      assert.deepEqual((observations[0]!.value as any).evidence[0].span, { startByte: 0, endByte: AUTH.length });
+    } finally {
+      removeScratch(work);
+    }
+  },
+);
+
+test(
+  'the run resolves exactly the packs its admitted spec sealed: a trust folder that resolves other bytes is refused',
+  needsStore,
+  async (t) => {
+    const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-native-packs-')));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const [sealedDir, changedDir] = [join(dir, 'sealed'), join(dir, 'changed')];
+    mkdirSync(sealedDir, { mode: 0o700 });
+    mkdirSync(changedDir, { mode: 0o700 });
+    const sealed = promoteStagePack(sealedDir, SKILL, { confirm: true });
+    // The same reference, other bytes: a copy of the skill with one line changed and its manifest re-pinned.
+    const copy = join(dir, 'invoice-approvals');
+    mkdirSync(copy);
+    const text = readFileSync(join(SKILL, 'SKILL.md'), 'utf8') + '\nOne more original line.\n';
+    writeFileSync(join(copy, 'SKILL.md'), text);
+    const manifest = JSON.parse(readFileSync(join(SKILL, 'sentinel-stage-pack.json'), 'utf8'));
+    manifest.files = [{ path: 'SKILL.md', digest: sha(Buffer.from(text)) }];
+    writeFileSync(join(copy, 'sentinel-stage-pack.json'), JSON.stringify(manifest));
+    const changed = promoteStagePack(changedDir, copy, { confirm: true });
+    assert.notEqual(changed.digest, sealed.digest);
+    let calls = 0;
+    const { COPILOT_RUNNER } = await import('../dist/review/runner.js');
+    await assert.rejects(
+      COPILOT_RUNNER.run(
+        {
+          id: 'triage',
+          kind: 'agent',
+          mode: 'native',
+          runner: 'copilot-cli',
+          model: 'gpt-6-luna',
+          skills: ['skills/invoice-approvals@1'],
+          produces: [{ name: 'observations', schema: 'sentinel.review-observations/v1' }],
+          budget: { turns: 2, tokens: 1000, seconds: 30 },
+        },
+        [{ relativePath: 'src/auth.ts', bytes: Buffer.from(AUTH) }],
+        {
+          native: {
+            broker: { runAgent: () => (calls++, Promise.reject(Error('never'))) } as any,
+            envelope: {} as any,
+            binding: { model: 'gpt-6-luna' } as any,
+            operationId: 'op-original',
+            trustDir: changedDir,
+            retain: async () => {},
+            packs: [{ ref: 'skills/invoice-approvals@1', digest: sealed.digest }],
+          },
+        },
+      ),
+      code('sentinel.review.packChanged'),
+    );
+    assert.equal(calls, 0, 'refused before the credential probe, any reservation or any launch');
+  },
+);
+
+test(
+  "the sealed mode and runner are the pin's before any envelope opens: a re-adopted brokered pin is refused",
+  needsStore,
+  async (t) => {
+    const native = copilotProvider(D('synthetic-copilot-profile'));
+    const w = await workspace(t, native);
+    const work = scratchUnder(w.store);
+    try {
+      const planned = await plan(w, work);
+      const runId = planned.disclosure.runId;
+      const admitted = await loadPlan(w.store, runId, planned.disclosure.revision);
+      const unit = admitted.plan.units.find((u: any) => u.review)!;
+      const spec = await readReviewSpec(w.store, unit);
+      // The pure check, every way round.
+      const bind = (provider: any) => {
+        const settings = JSON.parse(readFileSync(join(w.path, '.farsight/sentinel/settings.json'), 'utf8'));
+        writeFileSync(
+          join(w.path, '.farsight/sentinel/settings.json'),
+          JSON.stringify({ ...settings, providers: [provider] }),
+        );
+        assert.equal(adoptWorkspaceSettings(w.ws, { confirm: true, now: new Date() }).outcome, 'prepared');
+        const policy = (adoptedPolicy(w.ws) as any).policy;
+        return { policy, binding: bindProvider(policy, provider.id, provider.models[0].id) };
+      };
+      const nativeBinding = bind(native).binding;
+      assert.equal(admitsMode(spec, nativeBinding), true);
+      assert.equal(admitsMode({ ...spec, native: { ...spec.native!, runner: 'claude-cli' } }, nativeBinding), false);
+      assert.equal(admitsMode({ ...spec, native: undefined }, nativeBinding), false);
+      const brokered = {
+        ...native,
+        copilotProfile: {
+          id: COPILOT_1_0_105_PROFILE.id,
+          executableDigest: COPILOT_1_0_105_PROFILE.executableDigest,
+          runtimeDigest: COPILOT_1_0_105_PROFILE.runtimeDigest,
+          profileDigest: D('synthetic-brokered-profile'),
+        },
+      };
+      const { policy } = bind(brokered);
+      assert.equal(admitsMode(spec, bindProvider(policy, brokered.id, 'luna')), false);
+      // Through admission: the brokered pin refuses the native unit, and no envelope ever opens.
+      let opened = 0;
+      const lease = scratchUnder(w.store);
+      try {
+        const bound = await executablePlan(
+          w.store,
+          admitted,
+          w.store.ledger.getRun(runId)!.envelope,
+          planned.disclosure.revision,
+          publicRegistry(w.ws.trustDir),
+          lease,
+        );
+        await assert.rejects(
+          prepareAdmittedReview(
+            w.store,
+            bound,
+            { id: unit.id, revision: unit.revision },
+            {
+              trustDir: w.ws.trustDir,
+              ledger: { loadCheckpoint: () => null } as any,
+              broker: { openEnvelope: () => (opened++, Promise.reject(Error('never'))) } as any,
+              currentPolicy: () => policy,
+              requestedBy: { principal: 'human', channel: 'owner-cli' },
+            },
+          ),
+          code('sentinel.execution.planInvalid'),
+        );
+      } finally {
+        removeScratch(lease);
+      }
+      assert.equal(opened, 0, 'refused before the envelope opens');
+      // The control: with the native pin adopted again, the same admission reaches the envelope.
+      const again = bind(native).policy;
+      const lease2 = scratchUnder(w.store);
+      try {
+        const bound = await executablePlan(
+          w.store,
+          admitted,
+          w.store.ledger.getRun(runId)!.envelope,
+          planned.disclosure.revision,
+          publicRegistry(w.ws.trustDir),
+          lease2,
+        );
+        await assert.rejects(
+          prepareAdmittedReview(
+            w.store,
+            bound,
+            { id: unit.id, revision: unit.revision },
+            {
+              trustDir: w.ws.trustDir,
+              ledger: { loadCheckpoint: () => null } as any,
+              broker: { openEnvelope: () => (opened++, Promise.reject(Error('never'))) } as any,
+              currentPolicy: () => again,
+              requestedBy: { principal: 'human', channel: 'owner-cli' },
+            },
+          ),
+          /never/,
+        );
+      } finally {
+        removeScratch(lease2);
+      }
+      assert.equal(opened, 1, 'the native pin reaches the envelope');
     } finally {
       removeScratch(work);
     }
