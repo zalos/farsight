@@ -4,7 +4,7 @@
 
 #208 `cdf7ab9e`: formatted code-parser and mcp (37 JS/TS files); AST-identical, with identical real-ingest node and edge sets.
 #209 `49951fc7`: cleared Sentinel's suppressions — 129 fixed, 17 reasoned disables.
-#210 `<sha>`: cleared non-Sentinel suppressions — 142 fixed, 24 reasoned disables; fill the squash SHA after merge.
+#210 `00683efa`: cleared non-Sentinel suppressions — 142 fixed, 24 reasoned disables.
 Seven suppressions remain in five sha256-pinned feasibility files; their measured bytes stay unchanged to preserve retained evidence.
 `eslint-suppressions.json` now holds only those seven; #210's ingest delta is two unused viewer helpers, two call edges and 17 inferred coverage edges from an unused `preview` import (both builds agree on the same source).
 Every eligible JS/TS area is formatted; permanent exclusions are listed in `.prettierignore`.
