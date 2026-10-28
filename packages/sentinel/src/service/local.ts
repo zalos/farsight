@@ -69,7 +69,8 @@ import {
 } from '../rules/index.js';
 import { RuleLockBook } from './rule-locks.js';
 import { loadPlan } from '../execution/plans.js';
-import { unitsToRun } from '../execution/selection.js';
+import { expandStageTokens, unitsToRun } from '../execution/selection.js';
+import type { StageSelection } from '../planner/pipeline.js';
 import { ServiceError } from './owner-service.js';
 import { runFailureFacts } from './run-failure.js';
 import type { AdapterRegistry } from '../execution/registry.js';
@@ -731,10 +732,24 @@ export async function followWorkspaceRun(
     const parent = store.ledger.getRun(options.runId);
     const recorded = parent ? await loadPlan(store, options.runId, parent.planRevision) : null;
     if (recorded?.pathRequest) return followPathTaskIn(store, ws, recorded, policy, options);
-    const decided = decide(ws, policy, intent, policy.revision, options.confirm, options.now);
-    if (!decided.admitted) return decided.result;
-    const verdicts = printed(decided.record);
     let stages = [...(options.stages ?? [])];
+    // `rerun --stage` names declared stages or units: a stage expands to its units in the parent's admitted revision,
+    // with the stages downstream of it previewed; a unit id stays as it is.
+    let stagePreview: StageSelection | null = null;
+    if (options.mode === 'rerun' && stages.length && recorded) {
+      const expanded = expandStageTokens(recorded, stages);
+      if (expanded.unknown.length || !expanded.units.length)
+        return result('rerun', 'configuration-failure', {
+          reasonCode: 'sentinel.service.stageUnknown',
+          facts: { runId: options.runId, unknown: expanded.unknown, empty: expanded.empty },
+        });
+      stages = expanded.units;
+      stagePreview = expanded.stages;
+    }
+    const stageFacts = stagePreview ? { stages: stagePreview } : {};
+    const decided = decide(ws, policy, intent, policy.revision, options.confirm, options.now);
+    if (!decided.admitted) return { ...decided.result, facts: { ...decided.result.facts, ...stageFacts } };
+    const verdicts = printed(decided.record);
     if (options.mode === 'retry') {
       // The units that did not publish: what a retry runs again. A selected rerun's held units were never chosen, so
       // a retry of it runs again only what it selected, never widening to them.
@@ -772,7 +787,7 @@ export async function followWorkspaceRun(
         });
       return result(options.mode, followed.outcome, {
         verdicts,
-        facts: { ...followed.disclosure, parentId: options.runId, preview: followed.preview },
+        facts: { ...followed.disclosure, parentId: options.runId, preview: followed.preview, ...stageFacts },
       });
     });
   });

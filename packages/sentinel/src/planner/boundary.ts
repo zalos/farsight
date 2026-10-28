@@ -19,14 +19,15 @@ import { validateEnvelope } from '../validate.js';
 import { PlanError } from './errors.js';
 import { verifyPlanRevision } from './planner.js';
 import { deepFreeze } from './identity.js';
-import type { PlanRevision, PlanStage, PlannedWork } from './types.js';
+import type { PlanRevision, PlannedWork } from './types.js';
+import type { BuiltinPlanStage } from '../contracts/plan.js';
 
 const invalid = (detail: string) => new PlanError('sentinel.plan.invalidInput', detail);
 const mismatch = (detail: string) => new PlanError('sentinel.plan.pinMismatch', detail);
 
 /** What the trusted profile grants each stage. Each must be within the work contract's ceilings, or it is refused. */
 export interface ExecutionProfile {
-  readonly resources: Readonly<Record<PlanStage, ResourcePolicy>>;
+  readonly resources: Readonly<Record<BuiltinPlanStage, ResourcePolicy>>;
 }
 
 export interface WorkConversion {
@@ -173,8 +174,10 @@ export function workEnvelopesFor(given: PlanRevision, conversion: WorkConversion
   const tools = new Set(plan.pins.tools.map((t) => t.adapterId));
   return plan.units.map((u) => {
     const { manifest, id: manifestId } = manifestIn(plan, index, u);
-    const resources =
-      conversion.execution.resources[u.stage === 'review-guided' || u.stage === 'review-general' ? 'check' : u.stage];
+    // Units carry built-in stage ids (a declared stage is derived from them, planner/pipeline.ts); review runs as check.
+    const resources = (conversion.execution.resources as Readonly<Record<string, ResourcePolicy | undefined>>)[
+      u.stage === 'review-guided' || u.stage === 'review-general' ? 'check' : u.stage
+    ];
     if (!resources) throw invalid(`the profile grants no resources to the ${u.stage} stage`);
     const kind: StageKind = u.review
       ? 'agentic'
