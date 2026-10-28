@@ -367,6 +367,8 @@ export interface ReportEnvelope {
    * @maxItems 1024
    */
   reviews?: ReportReviewObservation[];
+  /** Authenticated unfinished model stages whose fixed failure reason a report can state without native text. @maxItems 32 */
+  reviewFailures?: { stage: ShortText; unit: WorkRef; reasonCode: CatalogKey }[];
   /**
    * What ran for each published unit: implementation, version, where, what it read and wrote, how long, and for a
    * model stage its tokens and cost.

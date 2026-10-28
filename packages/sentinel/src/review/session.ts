@@ -36,7 +36,7 @@ import {
   type ToolRequest,
   type ToolResult,
 } from './evidence.js';
-import { reviewFail, type ReviewFrontierCode } from './errors.js';
+import { COPILOT_LOGIN_FRONTIER, reviewFail, type ReviewFrontierCode } from './errors.js';
 import type { ReviewRequestEnvelope, ReviewProviderSelection, NativeReviewWire } from '../contracts/instructions.js';
 import type { NamedStageOutput } from '../contracts/pipeline.js';
 import {
@@ -84,6 +84,8 @@ export interface ModelCaller {
 export interface CallerFailure {
   readonly code?: string;
   readonly spend?: 'none' | 'possible';
+  /** Closed native diagnostic only; never native stderr, an account or a credential. */
+  readonly nativeCopilot?: Readonly<{ reason: string }>;
 }
 
 // ---- specification and records ----
@@ -528,6 +530,10 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
       });
     } catch (error) {
       const e = (error ?? {}) as CallerFailure;
+      const copilotLogin =
+        e.spend === 'none' &&
+        (e.nativeCopilot?.reason === 'native-selector-unavailable' ||
+          e.nativeCopilot?.reason === 'native-auth-unavailable');
       // An operation the ledger already holds (a crash between its call and its checkpoint) is never re-sent: its
       // spend is uncertain until the owner reconciles it. A fenced epoch hands the session to the next coordinator.
       const code: ReviewFrontierCode =
@@ -537,9 +543,11 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
             ? 'sentinel.review.frontier.canceled'
             : e.code === 'sentinel.provider.epochFenced'
               ? 'sentinel.review.frontier.fenced'
-              : e.code === 'sentinel.provider.reservationState' || e.spend === 'possible'
-                ? 'sentinel.review.frontier.uncertainUsage'
-                : 'sentinel.review.frontier.modelError';
+              : copilotLogin
+                ? COPILOT_LOGIN_FRONTIER
+                : e.code === 'sentinel.provider.reservationState' || e.spend === 'possible'
+                  ? 'sentinel.review.frontier.uncertainUsage'
+                  : 'sentinel.review.frontier.modelError';
       if (code === 'sentinel.review.frontier.fenced') throw error;
       await save({
         ...cp,

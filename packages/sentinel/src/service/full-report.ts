@@ -685,6 +685,7 @@ const TRUSTED = new RegExp(
       // A model observation's generated identity; its statement, its excerpts and the reported model are screened.
       String.raw`reviews\.\*\.(?:id|stage|attemptId|promptDigest|ruleFamilyId|severity|limitationKeys\.\*|unit\.(?:id|revision)|model\.(?:requestedModel|source))`,
       String.raw`reviews\.\*\.evidence\.\*\.(?:id|state|reasonCode|content)`,
+      String.raw`reviewFailures\.\*\.(?:stage|reasonCode|unit\.(?:id|revision))`,
       // Provenance is the ledger's own record of what ran; a host path, an argument and a reported model are screened.
       String.raw`provenance\.\*\.(?:kind|stage|attempt|where|startedAt|endedAt|invocation|read\.\*|wrote\.\*|unit\.id)`,
       String.raw`provenance\.\*\.(?:operation|moduleDigest|sentinelVersion|adapterId|adapterVersion|workerDigest|image\.(?:reference|id))`,
@@ -1258,6 +1259,7 @@ async function reportDocument(req: FullReportRequest): Promise<ReportDocument> {
       readContent,
       withheldFiles: current.withheldFiles,
       ...(stages.reviews ? { reviews: stages.reviews } : {}),
+      ...(stages.reviewFailures ? { reviewFailures: stages.reviewFailures } : {}),
       provenance: stages.provenance,
       ...(contexts ? { contexts } : {}),
       rules: ruleWords(req.trustDir, current.ruleLock),
@@ -1341,6 +1343,7 @@ export interface RunStages {
     readonly stage: string;
     readonly unit: WorkRef;
   }[];
+  readonly reviewFailures?: readonly { readonly stage: string; readonly unit: WorkRef; readonly reasonCode: string }[];
   readonly provenance: readonly Provenance[];
 }
 
@@ -1399,6 +1402,18 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
         }),
       )
     : undefined;
+  const reviewFailures = published.flatMap((u) =>
+    traces.get(u.id)!.record.outcome === 'unfinished' &&
+    traces.get(u.id)!.record.frontiers.some((f) => f.reasonCode === 'sentinel.review.frontier.copilotLogin')
+      ? [
+          {
+            stage: stageOf(u),
+            unit: { id: u.id, revision: u.revision },
+            reasonCode: 'sentinel.review.frontier.copilotLogin',
+          },
+        ]
+      : [],
+  );
 
   // Every published unit: the bootstrap work first, then the analysis.
   const key = (r: WorkRef) => `${r.id}#${r.revision}`;
@@ -1575,7 +1590,7 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
         .map((d) => ({ databaseId: d.databaseId, snapshotDigest: d.snapshotDigest })),
     });
   }
-  return { ...(reviews ? { reviews } : {}), provenance };
+  return { ...(reviews ? { reviews } : {}), ...(reviewFailures.length ? { reviewFailures } : {}), provenance };
 }
 
 const assessmentIdentity = (a: RunAssessment): ReportAssessmentIdentity =>

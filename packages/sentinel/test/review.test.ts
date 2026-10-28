@@ -521,6 +521,25 @@ test('every bound stops the session with its own frontier, keeping what was done
   assert.deepEqual(await stopOf({}, fail({ code: 'sentinel.provider.unreachable', spend: 'none' })), [
     'sentinel.review.frontier.modelError',
   ]);
+  for (const reason of ['native-selector-unavailable', 'native-auth-unavailable'])
+    assert.deepEqual(
+      await stopOf(
+        {},
+        fail({ code: 'sentinel.provider.credentialUnavailable', spend: 'none', nativeCopilot: { reason } }),
+      ),
+      ['sentinel.review.frontier.copilotLogin'],
+    );
+  assert.deepEqual(
+    await stopOf(
+      {},
+      fail({
+        code: 'sentinel.provider.credentialUnavailable',
+        spend: 'possible',
+        nativeCopilot: { reason: 'native-auth-unavailable' },
+      }),
+    ),
+    ['sentinel.review.frontier.uncertainUsage'],
+  );
   assert.deepEqual(await stopOf({}, fail({ code: 'sentinel.provider.budgetExhausted', spend: 'none' })), [
     'sentinel.review.frontier.budget',
   ]);

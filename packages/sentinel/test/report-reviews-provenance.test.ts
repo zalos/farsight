@@ -143,6 +143,33 @@ test(
   },
 );
 
+test(
+  'an unfinished Copilot review explains its login refusal in every report rendering without native text',
+  needsStore,
+  async () => {
+    const failure = {
+      stage: 'review-general',
+      unit: { id: 'review-unit-1', revision: 1 },
+      reasonCode: 'sentinel.review.frontier.copilotLogin',
+    };
+    for (const disclosure of ['private', 'shareable'] as const) {
+      const out = await generateReport((await baseInput(disclosure, { reviewFailures: [failure] })) as any);
+      assert.equal(validateEnvelope('report', out.document).ok, true);
+      assert.deepEqual(out.document.reviewFailures, [failure]);
+      assert.ok(out.document.definitions?.some((d: any) => d.key === failure.reasonCode));
+      assert.match(out.markdown, /Copilot needs a login/);
+      assert.match(out.html, /Copilot needs a login/);
+      assert.match(out.markdown, /A model review is unfinished/);
+      assert.match(out.html, /A model review is unfinished/);
+      assert.deepEqual((out.sarif as any).runs[0].properties.reviewFailures, [failure]);
+      for (const rendered of [out.json, out.markdown, out.html, JSON.stringify(out.sarif)]) {
+        assert.doesNotMatch(rendered, /original-private-token|original-account/);
+        assert.match(rendered, /Copilot|copilotLogin/);
+      }
+    }
+  },
+);
+
 /** A model observation over the captured invoice service: a cited claim, as an accepted review publishes one. */
 async function modelObservation(message = 'The total is built from request text before it reaches SQL.') {
   const e = entryOf('src/server/invoiceService.ts');

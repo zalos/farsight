@@ -11,7 +11,7 @@
 // A run's result is read back from the ledger: its recorded outcome and the coverage its units published. A run
 // that rests on the foundation-preview rule is required coverage incomplete whatever it records, and this build
 // never prints a satisfied result (findings are not judged against the policy until the full report exists).
-import { hasConfiguredReviews, REVIEW_ADAPTERS } from './review-adapter.js';
+import { hasConfiguredReviews, reviewLoginFailureIn, REVIEW_ADAPTERS } from './review-adapter.js';
 import { reviewSeedsFor } from '../review/plan.js';
 import { createHash } from 'node:crypto';
 import type { ActionEffect } from '../contracts/policy.js';
@@ -699,6 +699,7 @@ export async function canonicalResult(
   const state = recorded.state;
   const admitted = await loadPlan(store, runId, plan.revision);
   const preview = isPreview(admitted.plan);
+  const copilotLoginFailure = state === 'completed' && (await reviewLoginFailureIn(store, admitted.plan.units));
   const findings = state === 'completed' ? await previewFindingsOf(store, runId) : undefined;
   const scanner =
     state === 'completed' ? await scannerReportOf(store, runId, new Date(), { trustDir: options.trustDir }) : undefined;
@@ -722,6 +723,12 @@ export async function canonicalResult(
     label: preview ? 'foundation-preview' : 'deterministic',
   };
   if (state === 'completed') {
+    if (copilotLoginFailure)
+      return result(command, 'configuration-failure', {
+        ...base,
+        facts,
+        reasonCode: 'sentinel.review.frontier.copilotLogin',
+      });
     if (recorded.outcome === 'execution-failure')
       return result(command, 'configuration-failure', {
         ...base,

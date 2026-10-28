@@ -99,6 +99,7 @@ export function toSarif(doc: ReportEnvelope, options: { maxResults?: number } = 
           coverageGaps: doc.gaps.length,
           ...(doc.inspections ? { inspections: doc.inspections, controlAnswers: doc.counts.controlAnswers } : {}),
           ...(doc.structuralPaths ? { structuralPaths: doc.structuralPaths, pathQueries: doc.counts.pathQueries } : {}),
+          ...(doc.reviewFailures ? { reviewFailures: doc.reviewFailures } : {}),
           limits: SARIF_LIMITS,
         },
       },

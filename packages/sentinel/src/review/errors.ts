@@ -23,12 +23,14 @@ export const REPLY_REJECTION_CODES = Object.freeze([
 ] as const);
 
 /** Why part of a review's scope was left unfinished or unreviewed. */
+export const COPILOT_LOGIN_FRONTIER = 'sentinel.review.frontier.copilotLogin' as const;
 export const REVIEW_FRONTIER_CODES = Object.freeze([
   'sentinel.review.frontier.budget',
   'sentinel.review.frontier.steps',
   'sentinel.review.frontier.deadline',
   'sentinel.review.frontier.invalidReplies',
   'sentinel.review.frontier.modelError',
+  COPILOT_LOGIN_FRONTIER,
   'sentinel.review.frontier.uncertainUsage',
   'sentinel.review.frontier.notCaptured',
   'sentinel.review.frontier.tooLarge',
