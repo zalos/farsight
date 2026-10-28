@@ -3,7 +3,7 @@
 // import starts work; plan admission stores the profile and the coordinator checks the executing registry again.
 import { createHash } from 'node:crypto';
 import type { Digest } from '../contracts/common.js';
-import type { PlanStage } from '../contracts/plan.js';
+import type { BuiltinPlanStage, PlanStage } from '../contracts/plan.js';
 import type { ResourcePolicy } from '../contracts/work.js';
 import { createCapabilityTable, type CapabilityFact, type PlannerProfile } from '../planner/index.js';
 import { createAdapterRegistry, type AdapterRegistry } from '../execution/registry.js';
@@ -51,7 +51,7 @@ const LIMITS: ResourcePolicy = Object.freeze({
   maxPids: 128,
   maxOutputBytes: 4_194_304,
 });
-export const RESOURCES: Readonly<Record<PlanStage, ResourcePolicy>> = Object.freeze({
+export const RESOURCES: Readonly<Record<BuiltinPlanStage, ResourcePolicy>> = Object.freeze({
   capture: LIMITS,
   parse: LIMITS,
   inventory: LIMITS,

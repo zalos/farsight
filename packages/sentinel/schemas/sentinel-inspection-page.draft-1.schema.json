@@ -94,14 +94,7 @@
           "$ref": "#/definitions/ViewHandle"
         },
         "stage": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/PlanStage"
-            },
-            {
-              "$ref": "#/definitions/ReviewPlanStage"
-            }
-          ]
+          "$ref": "#/definitions/PlanStage"
         },
         "revision": {
           "$ref": "#/definitions/Ordinal"
@@ -217,6 +210,20 @@
       "pattern": "^h[0-9a-f]{32}$"
     },
     "PlanStage": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/BuiltinPlanStage"
+        },
+        {
+          "$ref": "#/definitions/ReviewPlanStage"
+        },
+        {
+          "$ref": "#/definitions/StageId"
+        }
+      ],
+      "description": "What a work unit does: a built-in stage id (the bootstrap stages, `check`, the two review stages) or the id of a stage a pipeline declares. The built-in ids are kept as they were, so every retained plan's units still validate."
+    },
+    "BuiltinPlanStage": {
       "type": "string",
       "enum": [
         "capture",
@@ -224,14 +231,21 @@
         "inventory",
         "check"
       ],
-      "description": "What a work unit does: the bootstrap stages, or running checks."
+      "description": "The built-in ids a unit carried before declared pipelines: the bootstrap stages, or running checks."
     },
     "ReviewPlanStage": {
       "type": "string",
       "enum": [
         "review-guided",
         "review-general"
-      ]
+      ],
+      "description": "The two built-in review stage ids."
+    },
+    "StageId": {
+      "type": "string",
+      "description": "A stage id: a built-in plan stage (`capture`, `review-guided`) or one a pipeline declares (`secrets`, `triage`). Lower-case words joined by single hyphens, so it never collides with a context input, which carries a dot.",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
     },
     "Ordinal": {
       "type": "integer",
