@@ -29,7 +29,7 @@ import { canonicalDigest } from '../policy/digest.js';
 import { readPackDirectory } from '../rules/pack.js';
 import { reviewFail } from './errors.js';
 import type { SessionSpec } from './session.js';
-import type { AgentStageDefinition } from '../contracts/pipeline.js';
+import type { AgentRunnerId, AgentStageDefinition } from '../contracts/pipeline.js';
 import { prepareInstructions, type PreparedInstructions, type SkillSelection } from './instructions.js';
 import type { PromptArtifact } from './prompts.js';
 
@@ -388,4 +388,62 @@ export function reviewInstructionsFor(
     return { prompt: s.prompt, instructions: prepareInstructions({ prompt: s.prompt, skills: [] }) };
   const prepared = brokeredInstructions(stagePacks!.trustDir, stage, s.prompt);
   return { prompt: prepared.prompt, instructions: prepared.instructions, packs: prepared.packs };
+}
+
+/** What a native review needs when its stage leaves something out: the runner, and its turn, time and token budget. */
+export interface NativeReviewDefaults {
+  readonly runner: AgentRunnerId;
+  readonly turns: number;
+  readonly seconds: number;
+  readonly tokens: number;
+}
+const OBSERVATIONS = Object.freeze({ name: 'observations', schema: 'sentinel.review-observations/v1' });
+/**
+ * A native review's stage, sealed into its spec. The adopted pin runs its own loop, so the review is native: from the
+ * agent stage that runs it when the pipeline names one (its mode and runner must be the pin's; its instructions and
+ * skills resolved and checked against the pack lock here, its output and budget kept), otherwise the runner's defaults
+ * over the bundled native instructions with the observations output. A brokered stage never runs on such a pin.
+ */
+export function nativeReviewFor(
+  s: SessionSpec,
+  stagePacks: ReviewStagePacks | undefined,
+  defaults: NativeReviewDefaults,
+): Pick<SessionSpec, 'native' | 'packs'> {
+  const stage = stagePacks && stageForKind(stagePacks, s.kind);
+  if (stage && stage.mode !== 'native')
+    return reviewFail('sentinel.review.invalidInput', `the ${s.kind} review's adopted pin runs its own loop`);
+  if (stage && stage.runner !== defaults.runner)
+    return reviewFail('sentinel.review.invalidInput', `the ${s.kind} review's stage names another runner`);
+  if (stage?.prompt !== undefined)
+    return reviewFail('sentinel.review.invalidInput', 'a native stage names instructions, never a prompt');
+  const named = (stage?.produces ?? []).filter(
+    (p): p is { name: string; schema: string } => typeof p === 'object' && p !== null,
+  );
+  if (stage?.produces && named.length !== 1)
+    return reviewFail('sentinel.review.invalidInput', 'a native review stage declares one named output');
+  const packed = Boolean(stage && (stage.instructions !== undefined || stage.skills?.length));
+  const resolved = packed
+    ? resolveStageInstructions(stagePacks!.trustDir, {
+        mode: 'native',
+        ...(stage!.instructions !== undefined ? { instructions: stage!.instructions } : {}),
+        ...(stage!.skills ? { skills: stage!.skills } : {}),
+      })
+    : undefined;
+  const b = stage?.budget;
+  return {
+    native: Object.freeze({
+      stage: stage?.id ?? `review-${s.kind}`,
+      runner: defaults.runner,
+      ...(stage?.instructions !== undefined ? { instructions: stage.instructions } : {}),
+      ...(stage?.skills?.length ? { skills: Object.freeze([...stage.skills]) } : {}),
+      produces: Object.freeze([named[0] ? { name: named[0].name, schema: named[0].schema } : OBSERVATIONS]),
+      budget: Object.freeze({
+        turns: b?.turns ?? defaults.turns,
+        tokens: b?.tokens ?? defaults.tokens,
+        seconds: b?.seconds ?? defaults.seconds,
+        ...(b?.usd !== undefined ? { usd: b.usd } : {}),
+      }),
+    }),
+    ...(resolved && stagePackDigests(resolved).length ? { packs: stagePackDigests(resolved) } : {}),
+  };
 }

@@ -211,6 +211,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'review/providers/cli-native-agent.js': ['node:crypto', 'node:fs/promises', 'node:path'],
   // Stage packs: owner-promoted prompt and skill bytes, copied into the trust folder and re-checked by digest.
   'review/packs.js': ['node:crypto', 'node:fs', 'node:path'],
+  // Native review dispatch: the published run's records and artifacts are content-addressed; no process of its own.
+  'review/native-dispatch.js': ['node:crypto'],
   'review/runner.js': ['node:crypto'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   // The Spring pack: tree-sitter's Java grammar, loaded on first analysis only; graph is pure JSON helpers.

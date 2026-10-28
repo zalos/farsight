@@ -22,7 +22,8 @@ import { guidedSpec } from './guided.js';
 import { generalSpec } from './general.js';
 import { partitionInventory } from './evidence.js';
 import { cliKind } from './providers/registry.js';
-import { reviewInstructionsFor, type ReviewStagePacks } from './packs.js';
+import { nativeReviewFor, reviewInstructionsFor, type ReviewStagePacks } from './packs.js';
+import { runnerForKind } from './runner.js';
 const digest = (v: unknown) => canonicalDigest(v) as ArtifactId;
 const bad = (): never => reviewFail('sentinel.review.integrity', 'the admitted review inputs differ');
 export const MAX_REVIEW_UNITS = 32;
@@ -215,20 +216,29 @@ export function reviewSeedsFor(
     if (!enabled(s.kind, segmentId)) return;
     if (specs.length >= MAX_REVIEW_UNITS) reviewFail('sentinel.review.planLimit', 'more than 32 requested, maximum 32');
     const resolved = resolveReviewModel(policy, s.kind, segmentId),
-      adapter = registry.get(s.adapterId);
-    terms.set(resolved.selection.bindingDigest, {
-      disclosure: resolved.binding.disclosure,
-      budget: policy.settings.providers.find((p) => p.id === resolved.selection.providerId)!.budget,
-    });
+      adapter = registry.get(s.adapterId),
+      cli = cliKind(resolved.binding.kind),
+      providerBudget = policy.settings.providers.find((p) => p.id === resolved.selection.providerId)!.budget;
+    terms.set(resolved.selection.bindingDigest, { disclosure: resolved.binding.disclosure, budget: providerBudget });
+    // A pin that runs its own loop runs native reviews only: the review's spec seals its native stage.
+    const native = cli?.mode(resolved.binding) === 'native';
     specs.push({
       ...s,
       budget: {
         ...s.budget,
-        ...cliKind(resolved.binding.kind)?.sessionBudget,
+        ...cli?.sessionBudget,
         maxOutputTokens: Math.min(s.budget.maxOutputTokens, resolved.binding.limits.maxOutputTokens),
       },
       adapterDigest: adapter.digest,
-      ...reviewInstructionsFor(s, stagePacks),
+      ...reviewInstructionsFor(s, native ? undefined : stagePacks),
+      ...(native
+        ? nativeReviewFor(s, stagePacks, {
+            runner: runnerForKind(resolved.binding.kind).id,
+            turns: cli!.sessionBudget?.maxSteps ?? 4,
+            seconds: Math.ceil((cli!.sessionBudget?.deadlineMs ?? 180000) / 1000),
+            tokens: Math.min(providerBudget.maxTokens ?? Infinity, resolved.binding.limits.contextTokens),
+          })
+        : {}),
       segmentId,
       requestedSelection: resolved.selection,
     });
