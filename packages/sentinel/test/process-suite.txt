@@ -33,6 +33,7 @@ test/execution-container-faults.test.ts
 test/execution-coordinator.test.ts
 test/execution-driver-boundaries.test.ts
 test/execution-framing-budget.test.ts
+test/execution-host-script.test.ts
 test/execution-launch-gate.test.ts
 test/execution-memory-start.test.ts
 test/execution-plans.test.ts
