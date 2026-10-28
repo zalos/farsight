@@ -177,8 +177,11 @@ export interface ScriptStageDefinition extends StageDefinitionBase {
   args?: ScriptArgument[];
 }
 
-/** The agent runners a stage may name. A hosted API is off unless `review.hosted-api` is on. */
-export type AgentRunnerId = 'claude-cli' | 'copilot-cli' | 'hosted-api';
+/**
+ * The agent runners a stage may name: the two CLIs, a hosted model API (off unless `review.hosted-api` is on), and a
+ * local model server (an adopted `ollama` provider that keeps the source on this machine).
+ */
+export type AgentRunnerId = 'claude-cli' | 'copilot-cli' | 'hosted-api' | 'ollama';
 
 /**
  * `brokered`: Sentinel runs the loop and the evidence broker serves cited slices. `native`: the CLI runs its own loop
@@ -241,6 +244,36 @@ export interface PipelineDefinition {
    */
   stages: StageDefinition[];
   flags?: PipelineFlags;
+}
+
+/** One stage or skill pack a pipeline names, by the digest of its referenced bytes at adoption. */
+export interface PipelinePackPin {
+  ref: PackRef;
+  digest: Digest;
+}
+
+/**
+ * sentinel-pipeline-adoption/draft-1 — the owner's adoption of one pipeline for one workspace, kept in the owner's
+ * trust folder outside every checkout. `digest` covers the pipeline file's bytes and every pinned pack's bytes; a
+ * changed byte in either is no longer adopted.
+ */
+export interface PipelineAdoptionEnvelope {
+  schema: 'sentinel-pipeline-adoption/draft-1';
+  workspaceIdentity: Digest;
+  /**
+   * The canonical workspace path, recorded for the owner to read; the identity is what is compared.
+   * @maxLength 4096
+   */
+  workspacePath: string;
+  pipelineId: Id;
+  revision: Ordinal;
+  fileDigest: Digest;
+  /** @maxItems 256 */
+  packs: PipelinePackPin[];
+  digest: Digest;
+  /** The spent owner receipt that confirmed it. */
+  receipt: Digest;
+  adoptedAt: Timestamp;
 }
 
 // ---- one stage run: what it read, what it wrote, and the provenance of every attempt ----

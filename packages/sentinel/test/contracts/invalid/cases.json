@@ -2296,5 +2296,61 @@
       }
     ],
     "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a pipeline stage of an unknown kind",
+    "base": "pipeline-example",
+    "ops": [
+      {
+        "set": "/stages/0/kind",
+        "value": "plugin"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a pipeline with the example's unreviewed version",
+    "base": "pipeline-example",
+    "ops": [
+      {
+        "set": "/schema",
+        "value": "sentinel-pipeline/1"
+      }
+    ],
+    "expect": "sentinel.contract.wrongKind",
+    "path": "/schema"
+  },
+  {
+    "name": "a pipeline budget in binary floating point",
+    "base": "pipeline-example",
+    "ops": [
+      {
+        "set": "/stages/6/budget/usd",
+        "value": 0.5
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a pipeline adoption at a relative workspace path",
+    "base": "pipelineadoption",
+    "ops": [
+      {
+        "set": "/workspacePath",
+        "value": "workspace/app"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/workspacePath"
+  },
+  {
+    "name": "a pipeline adoption pin without its digest",
+    "base": "pipelineadoption",
+    "ops": [
+      {
+        "delete": "/packs/0/digest"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
   }
 ]
