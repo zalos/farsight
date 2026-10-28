@@ -4,8 +4,6 @@
 // never copies a run, unit, attempt or artifact id into an answer. A scan is addressed by its number in the newest
 // window of the ledger's runs. When a scan's accepted evidence holds a secret match (the review gate's own test),
 // no review trace is read at all and the fold withholds every file name and model text.
-import { basename } from 'node:path';
-import { STRINGS } from '@farsight/core/dist/strings.js';
 import type { SentinelStore } from '../store/index.js';
 import { boundOwner } from '../store/owner-binding.js';
 import { withStoreReadBudget } from '../store/read-budget.js';
@@ -18,7 +16,9 @@ import { canonicalResult } from '../service/canonical.js';
 import { fullReportFormat } from '../service/full-report.js';
 import { publicRegistry } from '../service/scanner-profile.js';
 import { reviewSecretsKnown } from '../review/dispatch.js';
-import { reviewIdentityIn } from '../service/review-adapter.js';
+import { reviewIdentityIn, hasConfiguredReviews } from '../service/review-adapter.js';
+import { loadPolicyInputsReadOnly } from '../policy/adoption.js';
+import { effectivePolicy } from '../policy/settings.js';
 import { readPublishedInstructions } from '../review/instructions.js';
 import {
   READ_MODEL_LIMITS,
@@ -29,6 +29,7 @@ import {
   type AdapterRecord,
   type AttemptRecord,
   type ReviewRecord,
+  type ScanAction,
   type ScanRecord,
   type UnitRecord,
   type WorkerPlace,
@@ -47,8 +48,12 @@ const ANSWER_BYTES = 900 * 1024;
 /** How long a list may spend counting findings before the rest say *not counted yet*. */
 const LIST_COUNT_MS = 5000;
 const FINAL = new Set(['completed', 'canceled']);
+/**
+ * A recorded reason passed on only when it has the shape of a catalog code; the viewer prints it through the catalog
+ * and says *not recorded* for a code the catalog lacks. (No catalog import here: the package's reviewed imports.)
+ */
 const safeCode = (v: unknown): string | null =>
-  typeof v === 'string' && v.startsWith('sentinel.') && Object.hasOwn(STRINGS, v) ? v : null;
+  typeof v === 'string' && /^sentinel\.[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)+$/.test(v) && v.length <= 128 ? v : null;
 const ref = (u: { id: string; revision: number }) => `${u.id}#${u.revision}`;
 const PLACE: Readonly<Record<string, WorkerPlace>> = {
   'coordinator-operation': 'in-process',
@@ -85,8 +90,9 @@ export class OwnerUiScans {
       throw new OwnerUiError();
   }
 
+  /** The workspace folder's own name, as the owner sees it in the file system. */
   get #workspace(): string {
-    return basename(this.#ws.path);
+    return this.#ws.path.split(/[\\/]/).filter(Boolean).at(-1) ?? '';
   }
 
   #listed(): Listed {
@@ -116,7 +122,23 @@ export class OwnerUiScans {
       rows.push(scanRow(await this.#record(run.id, listed, { full: performance.now() < until, signal })));
       this.#held(proof);
     }
-    return fit(scansAnswer(this.#workspace, rows, listed.more));
+    return fit(scansAnswer(this.#workspace, rows, listed.more, this.#scanAction()));
+  }
+
+  /**
+   * Whether the owner panel can start a scan from a browser, said before anyone presses Scan: the same refusals its
+   * preview and start answer (no adopted settings; a configured model stage needs the owner command line, ADR 48).
+   */
+  #scanAction(): ScanAction {
+    try {
+      const inputs = loadPolicyInputsReadOnly({ workspace: this.#ws.path, trustDir: this.#ws.trustDir });
+      if (inputs.trust !== 'adopted') return { available: false, reasonCode: 'sentinel.preparation.unavailable' };
+      if (hasConfiguredReviews(effectivePolicy(inputs)))
+        return { available: false, reasonCode: 'sentinel.review.foregroundRequired' };
+      return { available: true, reasonCode: null };
+    } catch {
+      return { available: false, reasonCode: 'sentinel.preparation.unavailable' };
+    }
   }
 
   /** The PIPELINE stop: one scan's stages with their provenance. */

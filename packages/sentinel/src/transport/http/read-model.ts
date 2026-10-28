@@ -307,9 +307,17 @@ export interface ScanRow {
   readonly withheld: boolean;
 }
 
+/** Whether this browser can start a scan, and why not: the owner panel's own refusals, said before a press. */
+export interface ScanAction {
+  readonly available: boolean;
+  /** A catalog code when it is not available (no adopted settings; a model stage needs the owner command line). */
+  readonly reasonCode: string | null;
+}
+
 export interface ScansAnswer {
   readonly schema: typeof READ_MODEL_SCHEMAS.scans;
   readonly workspace: string;
+  readonly scanAction: ScanAction;
   readonly scans: readonly ScanRow[];
   readonly counts: { readonly scans: Counted };
   /** Older scans exist beyond the listed ones. */
@@ -927,11 +935,17 @@ export function scanRow(scan: ScanRecord): ScanRow {
 }
 
 /** The SCANS stop: the workspace's retained scans, newest first. */
-export function scansAnswer(workspace: string, rows: readonly ScanRow[], more: boolean): ScansAnswer {
+export function scansAnswer(
+  workspace: string,
+  rows: readonly ScanRow[],
+  more: boolean,
+  scanAction: ScanAction = { available: false, reasonCode: 'sentinel.preparation.unavailable' },
+): ScansAnswer {
   const listed = rows.slice(0, READ_MODEL_LIMITS.scans);
   return {
     schema: READ_MODEL_SCHEMAS.scans,
     workspace,
+    scanAction,
     scans: listed,
     counts: {
       scans: count(listed.length, 'sentinel.viewer.count.scans', SCOPE.scans, 'ledger runs, newest first', {

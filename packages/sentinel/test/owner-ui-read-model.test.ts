@@ -455,6 +455,11 @@ test(
     assert.equal(list.scans[0].state, 'completed');
     assert.equal(list.scans[0].policy.reasonCode, 'sentinel.service.previewNotCoverage');
     assert.equal(list.scans[0].cost.basis, 'none');
+    assert.deepEqual(
+      list.scanAction,
+      { available: true, reasonCode: null },
+      'a deterministic scan starts from a browser',
+    );
     const scan = await f.call('owner-ui.scan', { number: 1 });
     assert.deepEqual(
       scan.stages.map((s: any) => [s.name, s.kind, s.status, s.provenance.where]),
@@ -510,6 +515,11 @@ test(
   { ...needsStore, timeout: 180000 },
   async (t) => {
     const f = await completedReviewScan(t);
+    assert.deepEqual(
+      (await f.call('owner-ui.scans')).scanAction,
+      { available: false, reasonCode: 'sentinel.review.foregroundRequired' },
+      'a configured model stage is refused from a browser, said before a press',
+    );
     const scan = await f.call('owner-ui.scan', { number: 1 });
     const agents = scan.stages.filter((s: any) => s.kind === 'agent');
     assert.equal(agents.length, 2);

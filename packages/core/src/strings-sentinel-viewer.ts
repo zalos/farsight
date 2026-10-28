@@ -1,7 +1,7 @@
 import type { StringEntry } from './strings.js';
 
 // The words of Sentinel's read model for the viewer (Sentinel v2 §4, lane L-UX): the SCANS · PIPELINE · STAGE stops
-// and the answers Sentinel's loopback host serves them (packages/sentinel/src/transport/http/). Spread into STRINGS
+// and the answers Sentinel's loopback host serves them (its transport/http read model). Spread into STRINGS
 // in strings.ts. Every count is a Counted with one of the sentinel.viewer.scope.* scopes (docs/COUNTS.md § Sentinel
 // read model). The business register says scan, stage, task, checked by and cost (*step* stays the storyline's word); it never prints a hash or an id.
 const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
