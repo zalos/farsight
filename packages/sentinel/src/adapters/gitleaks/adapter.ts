@@ -1,7 +1,7 @@
 // The Gitleaks adapter (PR 11): Gitleaks 8.30.1 at its official image digest, behind the original shell shim, run only
 // through PR 07's isolated execution service. Holds the pins, the fixed configuration and report template, and the
 // support statement; job.ts builds an attempt's inputs, normalize.ts reads its outputs, run.ts joins them.
-import { createHash } from 'node:crypto';
+import { sha256Id as sha } from '../../kernel/digest.js';
 import type { ExternalAdapterDefinition } from '../../execution/registry.js';
 import { GITLEAKS_DEFAULT_CONFIG_SHA256 } from './rules.js';
 import { GITLEAKS_WORKER_SOURCE } from './worker-source.js';
@@ -36,6 +36,7 @@ export const GITLEAKS_IMAGE_PLATFORMS = Object.freeze([
       'native Ubuntu 24.04.5 x64, Node 24.22.0; CI 39801723971 isolation/conformance 93 passed, zero skipped, 2026-10-22',
   }),
 ]);
+/** The architectures the pinned engine image was measured on; any other is unqualified. */
 export const GITLEAKS_MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(
   GITLEAKS_IMAGE_PLATFORMS.filter((p) => p.state === 'measured').map((p) => p.architecture),
 );
@@ -51,6 +52,7 @@ export const GITLEAKS_MAX_REPORT_BYTES = 3_145_728;
 /** The worker's own bound on the engine run, inside the supervisor's deadline. */
 export const GITLEAKS_ENGINE_TIMEOUT_SECONDS = 100;
 
+/** One build of the adapter: its registry definition, the exact worker bytes and digest, and the digests it audits. */
 export interface GitleaksAdapterBuild {
   readonly definition: ExternalAdapterDefinition;
   readonly workerBytes: Buffer;
@@ -59,8 +61,6 @@ export interface GitleaksAdapterBuild {
   readonly configDigest: string;
   readonly templateDigest: string;
 }
-
-const sha = (b: string | Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
 /**
  * Builds the adapter around the shim. A test variant (other id, extra engine arguments, template, report bound) gets
@@ -104,11 +104,15 @@ export function buildGitleaksAdapter(
 }
 
 const PRODUCTION = buildGitleaksAdapter();
+/** The production worker's bytes, the shell script the container runs. */
 export const GITLEAKS_WORKER_BYTES = PRODUCTION.workerBytes;
+/** The production worker's content address; the registry definition pins it. */
 export const GITLEAKS_WORKER_DIGEST = PRODUCTION.workerDigest;
+/** The digest of the pinned configuration the worker writes; a run record must name it. */
 export const GITLEAKS_CONFIG_DIGEST = PRODUCTION.configDigest;
 /** The trusted registry definition; not registered in the production registry until integration. */
 export const GITLEAKS_ADAPTER: ExternalAdapterDefinition = PRODUCTION.definition;
+/** The production build, the one the canonical driver and the default job use. */
 export const GITLEAKS_PRODUCTION_BUILD: GitleaksAdapterBuild = PRODUCTION;
 
 /** What the adapter supports, and no more. */

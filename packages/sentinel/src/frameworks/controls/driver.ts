@@ -21,7 +21,7 @@ import {
 } from '../../execution/check-drivers.js';
 import { surfacesFromIndex } from '../../planner/planner.js';
 import { canonicalJsonBytes } from '../../store/objects.js';
-import { deepFreeze } from '../../policy/immutable.js';
+import { deepFreeze } from '../../kernel/freeze.js';
 import { validateEnvelope } from '../../validate.js';
 import { DriverError, sha256 } from '../../adapters/drivers/common.js';
 import { writeBuiltinClosureEntry } from './closure.js';
@@ -129,6 +129,7 @@ function outputOf(ctx: DriverContext, verified: VerifiedAttempt, jobId: string):
   return doc.libraries;
 }
 
+/** The registered inspection adapter: its definition, its driver and the digest of its worker closure. */
 export interface FrameworkControlsAdapter {
   readonly definition: BuiltInAdapterDefinition;
   readonly driver: CheckDriver;

@@ -16,12 +16,12 @@
 // What this guarantees: a changed build or installation after registration is refused, and any change to the
 // closure is a different adapter identity. It is not a defence against a process that can write the installation
 // between that check and the import, which could equally rewrite Node itself.
-import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from 'node:fs';
 import { createRequire, isBuiltin } from 'node:module';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { builtinWorkerFiles } from '../../execution/assets.js';
+import { sha256Hex as sha } from '../../kernel/digest.js';
 import { builtinWorker, type BuiltinWorkerId } from '../../execution/builtin-workers.js';
 import { publishOnce, readPublished } from '../../service/publish-once.js';
 
@@ -46,13 +46,15 @@ export type ClosureEntry = readonly [
   value: string,
 ];
 
+/**
+ * A worker's byte closure: every file, link, folder and resolution its entry rechecks, and the digest over them all.
+ */
 export interface WorkerClosure {
   readonly entries: readonly ClosureEntry[];
   /** Relative labels still carry absolute resolution and target-path values. This digest is bound to the installation, not invariant under relocation. */
   readonly digest: string;
 }
 
-const sha = (b: Uint8Array | string) => createHash('sha256').update(b).digest('hex');
 const packageName = (spec: string) =>
   spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]!;
 
@@ -414,9 +416,14 @@ export function writeBuiltinClosureEntry(
 
 // Internal fixture helpers, imported only by tests, absent from the controls index and package exports. They never
 // take the installed whole-dist branch and cannot be selected by registration or any production caller.
+/** Test helper: the closure of `entry` (and `extra` roots) as the generated entry would list it. */
 export function workerClosure(entry: string, extra: readonly string[] = []): WorkerClosure {
   return collectClosure(entry, extra);
 }
+/**
+ * Test helper: publishes a generated closure entry for `worker` into `dir`, as registration does for the shipped
+ * worker.
+ */
 export function writeClosureEntry(dir: string, worker: string, extra: readonly string[] = []) {
   return publishEntry(dir, 'framework-controls', collectClosure(worker, extra), worker, 'runFrameworkControlsWorker');
 }
