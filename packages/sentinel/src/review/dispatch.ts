@@ -163,7 +163,7 @@ export async function runAdmittedReview(
   // The admitted turn loop runs through the stage's agent runner; brokered mode is exactly the session below.
   const binding = prepared.resolved.binding,
     runner = runnerForKind(binding.kind);
-  const { session: result } = await runner.run(
+  const ran = await runner.run(
     {
       id: unit.stage,
       kind: 'agent',
@@ -185,6 +185,8 @@ export async function runAdmittedReview(
       },
     },
   );
+  if (ran.mode !== 'brokered') return bad();
+  const result = ran.session;
   store.assertHeld();
   current();
   const artifacts = result.privateArtifacts ?? [],

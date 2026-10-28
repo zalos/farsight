@@ -49,6 +49,8 @@ export const REVIEW_ERROR_CODES = Object.freeze([
   'sentinel.review.planLimit',
   'sentinel.review.secretCoverageRequired',
   'sentinel.review.foregroundRequired',
+  'sentinel.review.outputSchema',
+  'sentinel.review.nativeBudget',
 ] as const);
 
 /** E5/E8 gate states and reasons. */
