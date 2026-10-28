@@ -781,9 +781,14 @@ interface ReviewTerms {
 
 /**
  * The runner a brokered review ran through, by the wire its requests carried: the full report's own rule
- * (`service/full-report.ts`), so the two never name different runners for one review.
+ * (`service/full-report.ts`) — a command line's wire names it, a request without one went through the HTTP runner.
+ * A review that stopped before its first request (`review/session.ts`, the step and deadline checks) recorded none,
+ * and its runner is not recorded: null, never a guess.
  */
-function brokeredRunner(trace: Awaited<ReturnType<typeof readPublishedInstructions>>): ReviewRecord['runner'] {
+export function brokeredRunner(
+  trace: Pick<Awaited<ReturnType<typeof readPublishedInstructions>>, 'requests'>,
+): ReviewRecord['runner'] {
+  if (!trace.requests.length) return null;
   const encoding = trace.requests.find((r) => r.wire)?.wire?.encoding;
   return encoding === 'sentinel-claude-chat/v1'
     ? 'claude-cli'

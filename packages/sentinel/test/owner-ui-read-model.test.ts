@@ -923,3 +923,27 @@ test('a review names its runner apart from its provider, the files the model rea
   assert.equal(older.counts.turns!.of, undefined);
   assert.equal(older.review!.outcome, 'completed');
 });
+
+test('a brokered runner is what the record establishes: a wire names its command line, none is not recorded', async () => {
+  const { brokeredRunner } = await import('../dist/owner-ui/scans.js');
+  // a review that stopped before its first request recorded no request: its runner is unknown, never hosted-api
+  assert.equal(brokeredRunner({ requests: [] } as any), null);
+  assert.equal(
+    brokeredRunner({ requests: [{ wire: { encoding: 'sentinel-copilot-chat/v1' } }] } as any),
+    'copilot-cli',
+  );
+  assert.equal(brokeredRunner({ requests: [{ wire: { encoding: 'sentinel-claude-chat/v1' } }] } as any), 'claude-cli');
+  // a request with no command-line wire went through the HTTP runner (the full report's rule)
+  assert.equal(brokeredRunner({ requests: [{}] } as any), 'hosted-api');
+  // and the fold carries the unknown through: no runner, the row's absence word, not a guess
+  const base = synthetic();
+  const stopped = synthetic({
+    review: {
+      status: 'available',
+      units: [{ ...base.review.units[0]!, runner: null, outcome: 'unfinished', verdict: null, turns: [] }],
+    },
+  });
+  const review = scanAnswer('example-app', stopped).stages.find((s) => s.kind === 'agent')!;
+  assert.equal(review.provenance.runner, null);
+  assert.equal(review.review!.outcome, 'unfinished');
+});

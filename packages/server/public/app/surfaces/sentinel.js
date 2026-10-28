@@ -859,8 +859,8 @@ function stageDockHtml(stage) {
       ' · ' +
       word(choiceKey('mode', p.runner.mode)) +
       (code ? ' <span class="mono">' + esc(p.runner.id) + '</span>' : '')
-    : p.provider
-      ? ''
+    : p.provider || stage.kind === 'agent'
+      ? word('sentinel.viewer.absent.notRecorded') // no admitted native spec and no request wire names it
       : code && impl.adapter
         ? esc(impl.adapter + (impl.version ? ' ' + impl.version : ''))
         : '';
@@ -1193,7 +1193,7 @@ function stageStopHtml() {
         '</span><span class="snt-ent-c">' +
         (st.counts.modelObservations?.n
           ? chip('k-agent', cnt(st.counts.modelObservations, { words: String(st.counts.modelObservations.n) }))
-          : outcomeChip(st.status, st.review)) +
+          : outcomeChip(st.status, st.review, st.counts.turns)) +
         '</span></button>',
     )
     .join('');

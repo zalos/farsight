@@ -385,6 +385,7 @@ test.describe('the Sentinel ladder', () => {
     // STAGE: the review in the list and its head say unfinished, with its turns and the files the model read
     await gotoReady(page, AT + '/' + encodeURIComponent(general) + '?lens=hybrid');
     await expect(page.locator('.snt-ent').first()).toContainText(/unfinished/);
+    await expect(page.locator('.snt-ent').first()).toContainText(/2 of 2 turns/);
     const head = page.locator('.snt-turns > .snt-row').first();
     await expect(head).toContainText(/unfinished/);
     await expect(head).toContainText(/2 of 2 turns/);
@@ -402,6 +403,10 @@ test.describe('the Sentinel ladder', () => {
     await expect(card.locator('.snt-stc')).toContainText(/done/);
     await expect(card.locator('.snt-stc')).not.toContainText(/unfinished/);
     const dock = page.locator('.snt-dock [data-pane="stage"]');
+    // answers recorded before the runner was read name none: the row says so, and claims no runner
+    await expect(dock.locator('dt', { hasText: /^runner$/i }).locator('xpath=following-sibling::dd[1]')).toHaveText(
+      'not recorded',
+    );
     await expect(dock.locator('dt', { hasText: /^model read$/i })).toHaveCount(0);
     await expect(dock.locator('dt', { hasText: /^files given$/i })).toHaveCount(1);
   });
