@@ -1,8 +1,15 @@
 # Sentinel v2 — the plan
 
-> Status: proposal, 2026-10-23. Supersedes the direction of [the implementation plan](../farsight-sentinel/implementation-plan.md) and the
+> Status: proposal, 2026-10-23; reworked 2026-10-27 after phase 0 landed. Supersedes the direction of
+> [the implementation plan](../farsight-sentinel/implementation-plan.md) and the
 > [closeout](../../../SENTINEL-STATUS-2026-10-23.md) where they disagree; it does not touch the shipped release gates.
-> Companion files: [tasks.md](tasks.md) (the work breakdown), [mocks/](mocks/) (the UX mocks, rendered as PNGs).
+> Companion files: [tasks.md](tasks.md) (the lanes and the work breakdown), [tooling.md](tooling.md) (phase 0's configs),
+> [mocks/](mocks/) (the UX mocks, rendered as PNGs).
+>
+> **2026-10-27.** Phase 0 is done (PRs #199 to #210). The owner chose a thin vertical slice over the eleven-task
+> phase-1 carve, accepted the three open decisions as written, and added a CI phase before everything else. The
+> slice runs as parallel lanes with explicit file ownership (§9); the phase 1 to 4 tables in tasks.md stay as the
+> task definitions the lanes draw from.
 
 ## 0. The verdict in one page
 
@@ -31,11 +38,12 @@ Three things went wrong on top of it, and they are what the owner noticed.
    units bolted onto a sealed plan, and service glue that re-derives the same registry in several places. There is no
    formatter, no linter and no hook, so none of this is caught.
 
-The plan, in order: **format and lint the repo with no functional change (phase 0)**, then **carve the kernel behind
-interfaces** (phase 1), then **declare the pipeline** (phase 2), then **build the top-down UI on the real data** (phase 3),
-then **qualify the two agent CLIs and the host script runner** (phase 4), and only then revisit the deferred release.
-Phases 1–3 each ship behind the existing flags and leave the qualified Copilot path intact until its replacement passes
-the same checks.
+The plan, in order: **format and lint the repo with no functional change (phase 0, done)**, then **make CI fast enough to
+run on every lane PR (phase 0b, §8)**, then **the thin slice in parallel lanes (§9)**: add a repository from the GUI, press
+Scan, watch a declared pipeline run with a Copilot CLI agent stage, open the stage's record, change its runner, prompt or
+skills, rerun it, read the report. The kernel is carved only where a lane's files need the seam; the rest of the phase 1 to 4
+tasks map onto the lanes or a follow-ups table (tasks.md). Every lane ships behind the existing flags and leaves the
+qualified Copilot path intact until its replacement passes the same checks.
 
 ## 1. What we keep, what we change, what we stop
 
@@ -72,10 +80,16 @@ A **pipeline** is a declared, digest-pinned list of **stages**. Four kinds:
 
 | kind | runs where | implementation | provenance recorded |
 |---|---|---|---|
-| `builtin` | in-process or a bounded child from Sentinel's own code | `capture`, `parse`, `inventory`, `walkthrough`, `report`, `framework-controls`, `paths` | module digest, Sentinel version |
+| `builtin` | in-process or a bounded child from Sentinel's own code | `capture`, `parse`, `inventory`, `paths` (the bounded call paths of `analysis/paths/` and `service/path-report.ts`, what this plan calls the walkthrough; there is no module named `walkthrough` today), `report`, `framework-controls` | module digest, Sentinel version |
 | `tool` | a pinned Linux container, never pulled during a scan, no host fallback | an adapter (`gitleaks`, `osv-scanner`, `semgrep`, `trivy`, `zizmor`) plus the rules it selects | adapter id and version, image reference and id, worker digest, rules and database snapshots |
 | `script` | **host** (owner-promoted) or a pinned script-runner container | an entry file from a promoted stage pack (`node` or `sh`), version string | entry digest, interpreter name/version/digest, argv, environment variable names, image when containerised |
 | `agent` | the host (the CLI) with network through Sentinel's child proxy | a runner (`claude-cli`, `copilot-cli`, `hosted-api` behind the flag), a model, a prompt, ordered skills, a mode | runner executable digest, requested and reported model, prompt and skill digests, every request wire, turns, tokens in/out, cost or `unobserved`, deadline used |
+
+The contract today has `StageKind = 'coded' | 'agentic' | 'external-tool'` (`contracts/work.ts`) and two closed stage
+enums, `PlanStage = 'capture' | 'parse' | 'inventory' | 'check'` and `ReviewPlanStage` (`contracts/plan.ts`). The four
+kinds above map onto it additively: `builtin` is `coded`, `tool` is `external-tool`, `agent` is `agentic`, and `script` is
+the one new value; the stage enums widen to a stage id with the five built-in ids kept, so every retained envelope still
+validates.
 
 Every stage declares `needs` (typed inputs: `source`, `parse`, `inventory`, or `{stage, output}`), `produces` (typed
 outputs: `findings`, `coverage`, `observations`, `walkthrough-md`, or `{schema}`), optional `after` (ordering only),
@@ -96,6 +110,32 @@ before anything runs. The existing check matrix stays the coverage engine: a `to
 observable; the output schema makes the result consumable by the next stage. Each runner is qualified separately on a
 pinned version (today: Copilot 1.0.103 qualified; Claude CLI pinned to 2.1.282 with a sandbox profile but unqualified).
 Both modes record the same `Provenance` shape, so the UI and the report draw them the same way.
+
+Installed on the development machine on 2026-10-27: Copilot CLI **1.0.105** and Claude CLI **2.1.282**. The qualified
+Copilot profile pins 1.0.103 and that version's package cache path (`review/providers/cli-copilot-profile.ts`), so the
+installed binary is refused as `capabilityUntested` until it is re-qualified. Re-qualification means: run the isolation
+(seatbelt deny-default), zero-contact (only the child proxy's allowlist is reachable) and replay controls against the
+1.0.105 bytes, record a new profile id (`copilot-1.0.105-darwin-arm64-seatbelt-v6`, and a `native-v1` profile for the
+native mode's read-tool allowances), keep 1.0.103's record, and re-record the retained wire if the JSONL changed. A profile
+id is the CLI version, the platform and the sandbox profile revision.
+
+The flags the native mode uses, read from each CLI's `--help` on 2026-10-27 (no live call):
+
+| purpose | Copilot CLI 1.0.105 | Claude CLI 2.1.282 |
+|---|---|---|
+| one prompt, non-interactive | `-p <text>` (or the prompt on stdin, as the brokered adapter does today; the two are exclusive) | `-p` / `--print` with the task as the argument, `--system-prompt-file <prompt>` |
+| model | `--model <id>`, `--reasoning-effort <level>` | `--model <id>`, `--effort <level>` |
+| machine output | `--output-format json` (JSONL, one object per line), `-s` | `--output-format stream-json --verbose` (every tool call and read) |
+| the transcript to retain | `--share <path>` writes the session as Markdown after completion; the JSONL stream beside it | the stream-json output is the transcript |
+| the output against the stage's schema | validated by Sentinel after exit | `--json-schema <schema>` at the CLI, validated again by Sentinel |
+| usage | `--usage-output-file <path>` (what the brokered adapter reads today) | the `result` event's usage in the stream |
+| tools | `--available-tools <names>` (only these exist for the model), `--deny-tool shell --deny-tool write`, `--excluded-tools mcp:* custom:*`, `--disable-builtin-mcps`; the exact read-tool names are recorded from the first dry run | `--tools "Read,Grep,Glob"`, `--disallowedTools "Bash,Edit,Write,WebFetch,WebSearch"`, `--restricted`, `--permission-mode dontAsk --permission-prompts none` |
+| the scratch tree | `-C <scratch>`, `--trust-folder` (one session, nothing saved), `--disallow-temp-dir` | `--add-dir <scratch>` |
+| skills | materialised as `<scratch>/.github/skills/<id>/SKILL.md`; `--add-dir <scratch>` loads them as trusted (`copilot skill --help` also lists `.agents/skills/` and `.claude/skills/`) | materialised as `<scratch>/.claude/skills/<id>/SKILL.md`, loaded with `--setting-sources project`; today's adapter passes `--setting-sources ''` and `--disable-slash-commands`, which native mode drops |
+| instructions | `.github/copilot-instructions.md` in the scratch tree, or `--agent <name>` for `.github/agents/<name>.md`; today's `--no-custom-instructions` is dropped | the system prompt file; `CLAUDE.md` in the scratch tree |
+| MCP, hooks, network | `--disable-builtin-mcps`, `--deny-url`/`--allow-url`, `--secret-env-vars`, the child proxy as today | `--strict-mcp-config --mcp-config '{"mcpServers":{}}'`, `--settings '{"disableAllHooks":true}'`, the sandbox profile and the child proxy as today |
+| budget | `--max-ai-credits <n>` and the stage deadline | `--max-turns <n>`, `--max-budget-usd <x>` and the stage deadline |
+| hygiene | `--no-auto-update --disable-client-telemetry --sync-session=off --log-level none --no-color --no-ask-user --no-experimental --no-bash-env` (today's list) | `--no-session-persistence`; never `--bare` (it skips the keychain, so the subscription login is not found) |
 
 ### 3.3 The config file
 
@@ -356,7 +396,132 @@ Re-printing 617 real files gave zero differences; every planted semantic edit (`
 template, `'a':` → `a:`, an ASI hazard, moved braces) was caught.
 
 
-## 8. Sequencing, and what done looks like
+## 8. Phase 0b: CI speed and affected checks
+
+Every lane PR waits for the required checks, so CI's wall time is the pace of the whole slice. Measured on `main` at
+`5aad3a6b` (run 40611895128, 2026-10-28T00:55Z) and the four runs before it, with `gh run view --json jobs` and the job
+logs' timestamps:
+
+| job | wall | where the time goes |
+|---|---|---|
+| validate | 586 s (586 to 983 s over five runs) | install 4, build 17, `pnpm -r typecheck` 14, **`pnpm -r test` 500**, `test:scripts` 30. Inside the test step, Sentinel's 198 files run **456 s** (00:57:06 to 01:04:42); echo 64 s, server 20 s, cli 18 s, parsers 10 s, core 4 s, the rest under 3 s, several in parallel |
+| sentinel-package | 680 s (443 to 680 s) | the two CLI pack checks 56, pack Sentinel 18, **the eight consumer scripts in one serial chain 449**, the npm acceptance of both tarballs 130 |
+| e2e | 367 s (321 to 374 s) | build 29, browsers from cache 14, the four Sentinel browser steps and their two packs 50, **`pnpm e2e` 221**, the small perf preset 28 |
+| sentinel-service | 195 s (195 to 296 s) | 31 process-spawning test files, 165 s; these same files also run inside validate's Sentinel step |
+| sentinel-isolation | 122 s | two image pulls 12, build 12, canaries 38, the installed secret scan 30 |
+| sentinel-recovery · lint · echo-package · affected checks · secrets | 57 · 64 · 55 · 12 · 10 s | |
+| sentinel-scanner-cli (its own workflow, not required) | 860 to 1,202 s | provisions four images and the checks bundle, runs the drivers and the installed four-engine consumer; selected by the union of the package and isolation inputs, so any Sentinel source change runs it |
+
+A phase-0 PR's run took 14 to 16 minutes end to end. The pnpm store and the Playwright browser caches hit on every run
+(install 2 to 5 s, browser restore 14 s); build sharing was measured and dropped: a build is 17 to 29 s per job, and an
+artifact round trip of `dist/` costs about the same.
+
+What the selector does today: a `packages/sentinel/src` change selects validate, e2e, sentinel-package, sentinel-isolation and
+sentinel-recovery; any package change runs **every** package's tests in validate; the scanner CLI workflow runs for any
+Sentinel source. The tactics, each with the file it touches, in the order of return:
+
+| id | tactic | files | saves |
+|---|---|---|---|
+| C-1 | **test the packages a change reaches, not all of them.** The selector emits the merge base; validate runs `pnpm -r --filter "...[<merge-base>]" test`, pnpm's changed-since filter with dependents, read from the manifests. A root file, the lockfile, `scripts/`, `schemas/` or `examples/` still runs everything; a missing output still runs everything; the required check names do not change | `scripts/ci-changes.mjs`, `scripts/test/ci-changes.test.mjs`, `.github/workflows/ci.yml` (validate), `docs/CI.md` | a viewer or server PR no longer runs Sentinel's 456 s; a Sentinel PR no longer runs echo's 64 s |
+| C-2 | **split Sentinel's unit suite from its process suite.** One list file names the 31 process-spawning files `sentinel-service` already runs; `pnpm --filter @farsight/sentinel test:unit` runs the rest with `--test-concurrency` at the core count, `test:process` runs the list, and `ci.yml`'s service job reads the same list. The 22 Docker-gated files keep skipping without `SENTINEL_ISOLATION` | `packages/sentinel/package.json`, `packages/sentinel/test/process-suite.txt`, `scripts/sentinel-tests.mjs`, `.github/workflows/ci.yml` (sentinel-service) | validate's Sentinel step 456 s to under 200 s; the 31 files run once, not twice |
+| C-3 | **run the eight package consumers in parallel.** After one pack, `scripts/test-sentinel-consumers.mjs` runs the consumer scripts three at a time, each in its own scratch prefix, logs prefixed per consumer; `test:sentinel:package` calls it; the npm acceptance runs beside them | `scripts/test-sentinel-consumers.mjs`, `package.json`, `.github/workflows/ci.yml` (sentinel-package) | 449 s to about 180 s; the job under 6 min |
+| C-4 | **the Sentinel browser steps only when Sentinel is selected.** The four steps and the two packs in `e2e` get `if: needs.changes.outputs.sentinel != 'false'` | `.github/workflows/ci.yml` (e2e) | 70 s on a viewer PR |
+| C-5 | **drop the duplicate typecheck.** `tsc -p` already type-checks what it emits; `pnpm -r typecheck` after `pnpm build` repeats it. `e2e:typecheck` stays (e2e is not built) | `.github/workflows/ci.yml` (validate) | 14 s |
+| C-6 | **select the scanner CLI workflow by the scanner closure**, not by any Sentinel source: `adapters/`, `execution/`, `rules/`, `assets/`, `service/scanner-*.ts`, `service/trusted-profile.ts`, `scripts/test-sentinel-scanner-consumer.mjs`, `scripts/npm-consumer.mjs`, the workflow itself. It stays non-required | `scripts/ci-changes.mjs` (a `scannerCli` output), `.github/workflows/sentinel-scanner-cli.yml`, `docs/CI.md` | 14 to 20 runner-minutes on every UX, review, report or cleanup PR |
+| C-7 | **a minutes budget on every job**: `timeout-minutes` at 1.5× the target, a table in `docs/CI.md` with the measured and the budget per job, re-measured when a job crosses it | `.github/workflows/ci.yml`, `docs/CI.md` | nothing directly; a regression is a red check, not a slow one |
+| C-8 (later) | tsc incremental output cached on a source hash; measured at under 20 s per job today, so after C-1 to C-7 | `tsconfig.base.json`, `.github/workflows/ci.yml` | under 20 s per job |
+
+Targets, wall time of the required set on a PR:
+
+| change | today | target |
+|---|---|---|
+| documentation only | 0 runtime jobs (affected checks 12 s, secrets, commits) | unchanged |
+| viewer or server only | validate 10 to 16 min beside e2e 6 min | validate under 3 min, e2e under 5 min: **under 5 min** |
+| Sentinel source only | validate 10 to 16, sentinel-package 7 to 11, e2e 6, service 3 to 5 min; the scanner CLI 14 to 20 min beside | **under 8 min**; the scanner CLI only for the scanner closure |
+| core, graph or a dependency | everything, 16 min | under 10 min |
+
+Invariants that do not move: a missing or failed selector output runs everything; every required check reports on every
+PR (skipped explicitly, never pending); `commits` and `secrets` stay as they are; `cancel-in-progress` stays. The phase is
+one Opus lane (L-CI) and lands before the other lanes' first PRs need it; it is reviewed like any other lane.
+
+## 9. Sequencing: the thin slice in lanes
+
+The slice, in the owner's words: run Farsight, add a repository from the GUI and load it, press **Scan**, watch the pipeline
+run, configure it before or after, re-run parts, generate a report, and see every stage's steps and change them: the agent,
+its skills, its prompt, a different coded step. Adding a source and syncing it already exists (`shell.js` `addSource` and
+`syncNow` over `PUT /api/settings` and `POST /api/sync`); the slice starts at the Scan button.
+
+The slice done, on the invoice-app example: the SENTINEL tab's SCANS stop says *no scan yet* and offers **Scan**; one
+confirmation in the browser; the PIPELINE stop draws the ladder as it runs: capture, parse, inventory, secrets (a `tool`
+stage, from a recorded fixture when Docker is off), review (an `agent` stage, Copilot CLI in native mode with the built-in
+prompt and one skill), report; the STAGE stop shows the review stage's prompt, turns, tokens, cost `unobserved` and the
+transcript; Configure changes the review stage's runner to Claude CLI, edits the prompt, adds a skill, changes the model;
+*rerun this stage* creates a linked child run; Report downloads HTML and Markdown; a `script` stage on the host runs a coded
+step behind `hostScripts`. Everything else (ENTRY POINTS, PATH, compare, hosted APIs, per-entry fan-out, the move-only
+reshuffle) is a follow-up in tasks.md.
+
+Seven lanes, each one Opus implementer in its own worktree under `../farsight-wt/<lane>/`, one PR per task, Sol reviewing
+every PR over the bridge before the lead merges. Owned paths never overlap; a lane that needs a line in another lane's file
+asks for it in its PR description and the owning lane makes the edit.
+
+| lane | owns | first PR | starts |
+|---|---|---|---|
+| **L-CI** | `.github/workflows/`, `scripts/ci-changes.mjs` and its test, `scripts/sentinel-tests.mjs`, `scripts/test-sentinel-consumers.mjs`, `packages/sentinel/package.json` scripts, `docs/CI.md` | `ci: test only the packages a change reaches` | now |
+| **L-PIPELINE** | `packages/sentinel/src/contracts/`, `schemas.generated.ts`, `planner/`, `execution/`, `cli.ts`, `cli/`, `capabilities.ts`, `index.ts`, `policy/features.ts` (new), `service/{local,canonical,launch,owner-service,controls,scanner-assets,scanner-profile,trusted-profile}.ts`, new `app/`, the matching tests and `strings-sentinel-{cli,plan,service,execution,policy}.ts` | `feat(sentinel): the pipeline and stage contracts and the flag registry` | now; P-1 lands first, the other lanes rebase onto it |
+| **L-ADAPTER** | `packages/sentinel/src/review/` (all of it), `service/review-adapter.ts`, the review, providers, cli-copilot, cli-native, model and agentic-only tests and fixtures, `strings-sentinel-{providers,review,instructions}.ts` | `refactor(sentinel): one AgentRunner over the two CLI adapters` | now, against today's contracts; rebases when P-1 lands |
+| **L-UX** | `packages/server/public/app/surfaces/sentinel.js`, new `lib/sentinel-*.js`, the `/api/sentinel/companion` block of `packages/server/src/index.ts`, `packages/core/src/sentinel-companion.ts`, `strings-sentinel-owner-ui.ts`, new `strings-sentinel-viewer.ts`, `packages/sentinel/src/owner-ui/`, new `packages/sentinel/src/transport/http/`, the owner-ui tests, `scripts/test-sentinel-owner-ui-consumer.mjs`, new `e2e/tests/sentinel-*.pw.spec.ts`, the Sentinel sections of `docs/COUNTS.md` and `docs/MAP-VIEWER.md` | `feat(sentinel): the read model for the viewer` | now, on today's runs and units; the configure step waits for P-2 and P-3 |
+| **L-CLEAN-A** | new `packages/sentinel/src/kernel/`, `store/`, `snapshot/`, `adapters/`, `frameworks/`, `rules/`, `policy/` (except `features.ts`), `validate.ts` (as a shim), `eslint.config.mjs` (the boundaries rule), the matching tests and catalogs; JSDoc on `contracts/` after P-1 lands | `refactor(sentinel): kernel` | now; A-1 lands first, small |
+| **L-CLEAN-B** | `findings/`, `evidence/`, `imports/`, `analysis/`, `reports/`, `transport/ipc.ts` and `transport/index.ts`, `service/{preparation-*,path-*,full-report,inspection-report,report-key,publish-once,readonly,rule-locks,run-failure,scratch-lease,framework-adapter,mcp,package-paths,preview-driver}.ts`, the matching tests and catalogs | `docs(sentinel): JSDoc on reports, findings and the report service` | B-1 now (comments only); B-2 after A-1 lands |
+| **L-VERIFY** | nothing in the source; writes `docs/proposals/sentinel-v2/verify-2026-10-27.md` | (a report, not a PR series; its findings become issues or lane items) | V-1 now; V-2 after P-4, A-2 and U-2 merge; V-3 (Docker) last |
+
+How the lanes meet: L-PIPELINE's P-1 defines `StageDefinition`, `Provenance` and `StageRun`; L-ADAPTER's runner takes a
+`StageDefinition`-shaped input and L-UX's read model emits `Provenance`, both coded against §3 until P-1 lands and then
+imported. The coordinator keeps calling `review/dispatch.ts` (L-ADAPTER's file) for an agent unit, so the native mode needs
+no coordinator edit; the planner (L-PIPELINE) decides which units exist. Farsight's server imports no Sentinel code (ADR 18),
+so the read model is served by Sentinel's own loopback host, the origin the companion uses today, and the viewer fetches it
+cross-origin as it does the companion. The cleanup lanes finish their JSDoc PRs on `reports/` and `service/full-report.ts`
+first, because L-PIPELINE's last PR takes those files over for the report fold.
+
+Review and merge: Sol reads each PR's diff against its done-when and the owned-paths list and answers *may merge* or *not
+yet* with findings at file:line; blocking findings go back to the lane; the lead merges with `gh pr merge --squash` after the
+required checks are green, in the order lanes finish, and tells the running lanes to merge `main`. Docker runs only in
+L-VERIFY's last step; every other lane exercises tool stages on the recorded fixtures with `SENTINEL_ISOLATION` unset. Live
+model calls are allowed for L-ADAPTER's one acceptance per CLI under the stage budget; every other test replays recorded
+wires.
+
+## 10. The scan process today, against the owner's flow
+
+Read on `main` at `5aad3a6b` on 2026-10-27 (`cli.ts`, `cli/`, the 33 files of `service/`, `planner/`, `execution/coordinator.ts`
+and `supervisor.ts`, `review/dispatch.ts`, `review/providers/broker.ts`, `cli-copilot-call.ts`, `cli-native-call.ts`,
+`owner-ui/operations.ts` and `server.ts`). This is L-VERIFY's checklist; each row is a place its V-1 run must reach.
+
+| the owner's flow needs | today | where |
+|---|---|---|
+| add a repository from the GUI and load it | exists: Settings adds a source, *Sync* ingests it | `packages/server/public/app/shell.js` `addSource`, `syncNow`; `packages/server/src/index.ts` `PUT /api/settings`, `POST /api/sync` |
+| press Scan | no button. The SENTINEL tab iframes a companion page at another origin; a run starts from the CLI or the companion's paired confirm | `surfaces/sentinel.js` (155 lines), `owner-ui/server.ts`, `index.ts` `/api/sentinel/companion` |
+| one `scan` verb | none. A first scan is init, settings adopt, rules promote, plan, run `<id>` --confirm [--confirm-models], report, ids retyped; the profiles are `static`, `scanners`, `secrets`; `bundle` answers *PR 26* | `cli/args.ts` `COMMANDS`, `cli/init.ts` `PROFILES`, `cli.ts` the `plan`, `run` and `report` branches |
+| read while a run is live | `plan`, `paths`, `run`, `retry`, `rerun`, `report --full`, `compare` and `report --instructions` refuse with `ownerServiceRunning`; `status` and the preview report go through the service | `cli.ts` the `live &&` branches and `fullReportCommand` |
+| a declared pipeline | the stage set is derived: bootstrap capture, parse, inventory; then checks from rule × scope batched per adapter; then two review units appended to the sealed plan and its digest recomputed | `contracts/plan.ts` `PlanStage`, `ReviewPlanStage`; `planner/planner.ts` `planBootstrap`, `planAnalysis`; `review/plan.ts` `withReviewUnits` |
+| a stage consumes another stage's output | one hard-coded case: the hosted review reads the Gitleaks publication | `review/dispatch.ts` `reviewSecretsKnown`, `requireHostedSecretCoverage` |
+| rerun one stage | `rerun <run> --stage` takes unit ids, not stage ids | `service/local.ts` `followWorkspaceRun`; `cli.ts` the `retry`/`rerun` branch |
+| choose the agent per stage | one provider binding per run from settings; the stage or segment choice is audit data and never admits a call | `review/providers/broker.ts` `openEnvelope`; `review/providers/selection.ts` `isApiKind` |
+| the agent runs its own loop with skills | both CLIs are single-turn text engines: tools excluded, custom instructions off, Claude at `--max-turns 1`; skills are modelled (16 per stage) and always passed as `[]` | `review/providers/cli-copilot-call.ts` `copilotInvocationArguments`; `cli-native-call.ts` the argv block; `service/review-adapter.ts` `skills: []`; `review/instructions.ts` `INSTRUCTION_LIMITS` |
+| edit the prompt | the prompt is the bundled manifest's bytes; no verb promotes a stage pack | `review/plan.ts` `readReviewSpec` |
+| a coded step on the host | no kind: `operation` runs in-process, `external` in a container, `built-in` as a child from a closed list; the supervisor branches on the kind nine times | `execution/supervisor.ts`; `contracts/work.ts` `StageKind` |
+| every stage's provenance one click away | stored (tokens, cost, image and prompt digests, container or child) but not folded for a reader; the companion lists hashes; the service's op table has no scans list and no stage read | `owner-ui/process.ts`; `service/owner-service.ts` the op switch |
+| the qualified Copilot on this machine | the profile pins 1.0.103 and its package cache path; 1.0.105 is installed, so the call is `capabilityUntested` until re-qualified | `review/providers/cli-copilot-profile.ts` |
+| capabilities for a human | the human output crashes after two rows; `--json` works | `capabilities.ts` |
+| cost | a subscription CLI records `null`; nothing prints `unobserved` | `review/providers/broker.ts` settlement; `providers/budget.ts` |
+| the read model without Farsight importing Sentinel | ADR 18 holds: the companion's loopback host is the only place to serve it | `packages/core/src/sentinel-companion.ts`; `owner-ui/host.ts` |
+
+Five of these decide the slice: no `scan` verb and no run list; reads refused while the service holds the store; the stage
+set derived, closed and sealed; both CLIs stripped to single-turn text engines with skills `[]`; the UI an iframe to the
+coordinator's objects with no door from a source. The rest are what the lanes close on the way.
+
+## 11. The phases as reference
+
+The phase order below was the plan of 2026-10-23. Since 2026-10-27 the lanes in §9 are the order; every task in tasks.md's
+phase tables is mapped to a lane or to the follow-ups table there, so the definitions stay and nothing is lost.
 
 | phase | what lands | why in this order | done when |
 |---|---|---|---|
@@ -367,12 +532,7 @@ template, `'a':` → `a:`, an ASI hazard, moved braces) was caught.
 | 4 · runners | `AgentRunner` native mode, Claude CLI qualified, Copilot native mode, custom prompts and skills, hosted API behind the flag, cost on every stage, per-entry fan-out | qualification is paid and slow; it runs beside phase 3, not before it | both CLIs pass the isolation, zero-contact and replay controls on macOS arm64 and Linux amd64 |
 | 5 · release | Farsight 0.4.0 and Sentinel 0.1.0 through the release PR flow; the deferred gates | unchanged from the closeout | published URLs install in clean npm-only prefixes |
 
-Phases 3 and 4 run in parallel after phase 2. Phase 0 is one lead-owned PR between merges; everything else is one PR per
-task in its own worktree with an independent review, as the ledger already prescribes. Nothing in phases 1–4 removes the
-qualified Copilot path until its replacement has passed the same workflows.
 
 **The bar, in Farsight's own words:** a person who opens Sentinel on a real application understands what was checked,
 by what, where it ran and what it cost, before they understand the tool; and from any entry point they can read the
 whole path under it and see what sits on it.
-
-
