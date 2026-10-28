@@ -1,12 +1,10 @@
 # Sentinel's process suite: the test files that start a Node.js process or a package manager, from the test or from
 # the code under test (the CLI, the detached owner service, workers, scripts, a packed tarball). The sentinel-service
 # CI job runs exactly these on native amd64 as a non-root user, with zero skips; validate runs every other
-# test/*.test.ts (scripts/sentinel-tests.mjs --suite unit). Measured with `node scripts/sentinel-tests.mjs --launches`.
+# test/*.test.ts (scripts/sentinel-tests.mjs --suite unit). Measured and enforced with `--launches`.
 #
-# Five files that start Node.js processes stay in the unit suite, because some of their cases skip on CI by design
-# and the service job allows no skip: store-integration and store-runtime (host and user checks that skip on Linux
-# CI), review-operation (FARSIGHT_LIVE opt-in), service-full-report-authority (SENTINEL_ISOLATION) and build-identity
-# (SENTINEL_BASELINE_PACKAGE opt-in).
+# Files that start Node.js processes but have cases that skip on CI by design stay in the unit suite: the zero-skip
+# service job cannot hold them. unit-launchers.txt names them (six today), and the --launches rule enforces both lists.
 #
 # One path per line, relative to packages/sentinel; a listed file that does not exist fails both suites.
 test/agentic-only-policy.test.ts
@@ -36,6 +34,7 @@ test/execution-container-faults.test.ts
 test/execution-coordinator.test.ts
 test/execution-driver-boundaries.test.ts
 test/execution-framing-budget.test.ts
+test/execution-host-script.test.ts
 test/execution-launch-gate.test.ts
 test/execution-memory-start.test.ts
 test/execution-plans.test.ts
@@ -59,6 +58,8 @@ test/next-package.test.ts
 test/owner-decision-report.test.ts
 test/owner-decisions.test.ts
 test/owner-ui-lifecycle.test.ts
+test/owner-ui-read-http.test.ts
+test/owner-ui-read-model.test.ts
 test/owner-ui-service.test.ts
 test/package.test.ts
 test/path-admission.test.ts

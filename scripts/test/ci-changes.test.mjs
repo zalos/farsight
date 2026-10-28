@@ -27,8 +27,21 @@ const none = {
   isolation: false,
   recovery: false,
   service: false,
+  scannerCli: false,
 };
-const full = { validate: true, e2e: true, echo: true, sentinel: true, isolation: true, recovery: true, service: true };
+const full = {
+  validate: true,
+  e2e: true,
+  echo: true,
+  sentinel: true,
+  isolation: true,
+  recovery: true,
+  service: true,
+  scannerCli: true,
+};
+// Root scripts in the scanner workflow load files by computed paths, so a root script lies in the area those loads
+// select and starts that workflow (scannerCliClosure in scripts/ci-changes.mjs)
+const scripts = { scannerCli: true };
 const every = { scope: 'all', packages: [], also: [] };
 const some = (packages, also = []) => ({ scope: 'packages', packages, also });
 const repoRoot = new URL('../../', import.meta.url).pathname;
@@ -51,10 +64,15 @@ test('ordinary docs skip runtime checks; packaged docs still check their tarball
 });
 
 test('e2e and unit test changes select their own check; mixed edits take the union', () => {
-  assert.deepEqual(selectChecks(['e2e/tests/chrome.pw.spec.ts', 'scripts/e2e.mjs']), { ...none, e2e: true });
+  assert.deepEqual(selectChecks(['e2e/tests/chrome.pw.spec.ts', 'scripts/e2e.mjs']), {
+    ...none,
+    e2e: true,
+    ...scripts,
+  });
+  assert.deepEqual(selectChecks(['e2e/tests/chrome.pw.spec.ts']), { ...none, e2e: true });
   assert.deepEqual(
     selectChecks(['scripts/synth-graph.mjs']),
-    { ...none, e2e: true, validate: true, service: true },
+    { ...none, e2e: true, validate: true, service: true, ...scripts },
     "the perf suite's synthetic workspace is also imported by the server's unit tests",
   );
   // a script change tests every package, Sentinel's process suite with them
@@ -62,12 +80,14 @@ test('e2e and unit test changes select their own check; mixed edits take the uni
     ...none,
     validate: true,
     service: true,
+    ...scripts,
   });
   assert.deepEqual(selectChecks(['docs/CI.md', 'scripts/release.mjs', 'e2e/fixture/serve.mjs']), {
     ...none,
     validate: true,
     e2e: true,
     service: true,
+    ...scripts,
   });
 });
 
@@ -91,7 +111,14 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
     // validate tests Sentinel (so sentinel-service runs) for the parsers, whose dist its report tests ingest through,
     // and for examples/ (every package)
     const service = /^(?:packages\/parsers|examples)\//.test(path);
-    assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true, sentinel: true, service }, path);
+    // the scanner workflow ingests the example application through the parsers' dist, so their code and the
+    // example (not the CLI's code) reach it too
+    const scannerCli = /^(?:packages\/parsers|examples\/invoice-app)\//.test(path);
+    assert.deepEqual(
+      selectChecks([path]),
+      { ...none, validate: true, e2e: true, sentinel: true, service, scannerCli },
+      path,
+    );
   }
   for (const path of [
     'packages/graph/src/graph.ts',
@@ -110,10 +137,19 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
   }
   assert.deepEqual(
     selectChecks(['packages/code-parser/src/tsjs.ts']),
-    { ...none, validate: true, e2e: true, sentinel: true, isolation: true, recovery: true, service: true },
+    {
+      ...none,
+      validate: true,
+      e2e: true,
+      sentinel: true,
+      isolation: true,
+      recovery: true,
+      service: true,
+      scannerCli: true,
+    },
     'the public parser now belongs to Sentinel’s own build closure',
   );
-  assert.deepEqual(selectChecks(['scripts/pack-echo.mjs']), { ...none, echo: true });
+  assert.deepEqual(selectChecks(['scripts/pack-echo.mjs']), { ...none, echo: true, ...scripts });
   for (const path of [
     'scripts/pack.mjs',
     'scripts/pack-preflight.mjs',
@@ -131,6 +167,7 @@ test('the release scripts select their own checks: the acceptance runs in sentin
     validate: true,
     sentinel: true,
     service: true,
+    ...scripts,
   });
   for (const path of [
     'scripts/release-manifest.mjs',
@@ -138,11 +175,11 @@ test('the release scripts select their own checks: the acceptance runs in sentin
     'scripts/release.mjs',
     'scripts/changelog.mjs',
   ]) {
-    assert.deepEqual(selectChecks([path]), { ...none, validate: true, service: true }, path);
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true, service: true, ...scripts }, path);
   }
   assert.deepEqual(
     selectChecks(['scripts/test/helpers/acceptance-standins.mjs']),
-    { ...none, validate: true, service: true },
+    { ...none, validate: true, service: true, ...scripts },
     'a test helper is a script test',
   );
   for (const path of [
@@ -220,25 +257,39 @@ test('Sentinel code and tests select offline report delivery in the browser job;
   ]) {
     assert.deepEqual(
       selectChecks([path]),
-      { ...none, validate: true, e2e: true, sentinel: true, isolation: true, recovery: true, service: true },
+      {
+        ...none,
+        validate: true,
+        e2e: true,
+        sentinel: true,
+        isolation: true,
+        recovery: true,
+        service: true,
+        scannerCli: true,
+      },
       path,
     );
   }
+  // the scanner workflow runs neither test file: no step executes them
   assert.deepEqual(
-    selectChecks([
-      'packages/sentinel/test/reports.test.ts',
-      'packages/sentinel/test/contracts.test.ts',
-      'packages/sentinel/test/fixtures/feasibility/a.ts',
-    ]),
+    selectChecks(['packages/sentinel/test/reports.test.ts', 'packages/sentinel/test/contracts.test.ts']),
     { ...none, validate: true, e2e: true, isolation: true, recovery: true, service: true },
   );
-  assert.deepEqual(selectChecks(['packages/sentinel/README.md', 'scripts/test-sentinel-package.mjs']), {
-    ...none,
-    sentinel: true,
-  });
+  assert.deepEqual(
+    selectChecks(['packages/sentinel/test/fixtures/feasibility/a.ts']),
+    { ...none, validate: true, e2e: true, isolation: true, recovery: true, service: true, scannerCli: true },
+    'a fixture lies in the area of the computed loads in the scanner tests’ helpers',
+  );
+  assert.deepEqual(
+    selectChecks(['packages/sentinel/test/cli-scanners-e2e.test.ts']),
+    { ...none, validate: true, e2e: true, isolation: true, recovery: true, service: true, scannerCli: true },
+    'a test file the scanner workflow runs',
+  );
+  assert.deepEqual(selectChecks(['packages/sentinel/README.md']), { ...none, sentinel: true, scannerCli: true });
+  assert.deepEqual(selectChecks(['scripts/test-sentinel-package.mjs']), { ...none, sentinel: true, ...scripts });
   assert.deepEqual(
     selectChecks(['scripts/pack-sentinel.mjs']),
-    { ...none, validate: true, sentinel: true, service: true },
+    { ...none, validate: true, sentinel: true, service: true, scannerCli: true },
     "Sentinel's review-package unit test packs the tarball too",
   );
   assert.deepEqual(selectChecks(['packages/core/src/counts.ts']), full, 'core feeds Echo and Sentinel');
@@ -335,7 +386,7 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
     assert.equal(
       readFileSync(output, 'utf8'),
       'validate=false\ne2e=false\necho=false\nsentinel=false\nisolation=false\nrecovery=false\nservice=false\n' +
-        'testScope=all\ntestPackages=\n',
+        'scannerCli=false\ntestScope=all\ntestPackages=\n',
     );
     assert.match(readFileSync(summary, 'utf8'), /e2e: skip/);
     assert.match(readFileSync(summary, 'utf8'), /sentinel-package: skip/);
@@ -363,6 +414,66 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
       readFileSync(summary, 'utf8'),
       /validate tests: @farsight\/cli, @farsight\/mcp, @farsight\/server \(the changed packages and their dependents, with @farsight\/mcp, whose tests read a reached package's files\)/,
     );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a deleted or renamed scanner dependency still starts the scanner workflow, from a real range', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'farsight-ci-scanner-'));
+  const git = (args) =>
+    execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const write = (path) => {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), 'export {};\n');
+  };
+  const commit = (message) => {
+    git(['add', '-A']);
+    git([
+      '-c',
+      'user.name=Test',
+      '-c',
+      'user.email=dev@example.com',
+      '-c',
+      'core.hooksPath=/dev/null',
+      'commit',
+      '-m',
+      message,
+    ]);
+    return git(['rev-parse', 'HEAD']);
+  };
+  // the range comes from this repository; the closure from the real tree, as on CI (the PR head is checked out)
+  const scanner = (base, head) => detectChecks({ base, head, event: 'pull_request', cwd: dir }).checks.scannerCli;
+  try {
+    git(['init', '-b', 'main']);
+    // a file the workflow executes (the coordinator), one it does not (the server's), and a source this tree no longer
+    // has, so a deletion cannot be checked against the closure of the tree as it is now
+    const reached = 'packages/sentinel/src/execution/coordinator.ts';
+    const unreached = 'packages/server/src/index.ts';
+    const retired = 'packages/sentinel/src/execution/retired-driver.ts';
+    for (const path of [reached, unreached, retired, 'docs/README.md']) write(path);
+    const base = commit('chore: initial');
+
+    rmSync(join(dir, retired));
+    const deleted = commit('refactor(sentinel): retire a driver');
+    assert.deepEqual(changedPaths({ base, head: deleted, event: 'pull_request', cwd: dir }), [retired]);
+    assert.equal(scanner(base, deleted), true, 'a deleted source selects the scanner workflow');
+
+    git(['switch', '-c', 'rename', base]);
+    renameSync(join(dir, reached), join(dir, 'packages/sentinel/src/execution/coordinator-moved.ts'));
+    const renamed = commit('refactor(sentinel): rename the coordinator');
+    assert.ok(changedPaths({ base, head: renamed, event: 'pull_request', cwd: dir }).includes(reached));
+    assert.equal(scanner(base, renamed), true, 'a scanner dependency renamed away selects the scanner workflow');
+
+    git(['switch', '-c', 'docs', base]);
+    renameSync(join(dir, reached), join(dir, 'docs/coordinator.md'));
+    const intoDocs = commit('docs: move the coordinator');
+    assert.equal(scanner(base, intoDocs), true, 'renamed into docs, its old path still counts');
+
+    git(['switch', '-c', 'review', base]);
+    renameSync(join(dir, unreached), join(dir, 'docs/server.md'));
+    const review = commit('docs: move the server');
+    assert.equal(scanner(base, review), false, 'a file no scanner step executes, moved away, does not');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -525,12 +636,12 @@ test('the outputs carry only strict values; a package name that could add a reco
   assert.equal(
     selectorOutput(checks, { scope: 'packages', packages: ['@farsight/cli', '@farsight/server'], also: [] }),
     'validate=true\ne2e=false\necho=false\nsentinel=false\nisolation=false\nrecovery=false\nservice=false\n' +
-      'testScope=packages\ntestPackages=@farsight/cli @farsight/server\n',
+      'scannerCli=false\ntestScope=packages\ntestPackages=@farsight/cli @farsight/server\n',
   );
   assert.match(selectorOutput(checks, { scope: 'none', packages: [], also: [] }), /\ntestScope=none\ntestPackages=\n$/);
   const everything =
     'validate=true\ne2e=true\necho=true\nsentinel=true\nisolation=true\nrecovery=true\nservice=true\n' +
-    'testScope=all\ntestPackages=\n';
+    'scannerCli=true\ntestScope=all\ntestPackages=\n';
   for (const tests of [
     { scope: 'packages', packages: ['@farsight/x\nvalidate=false\ne2e=false'], also: [] },
     { scope: 'packages', packages: ['@farsight/cli', '@farsight/x testScope=none'], also: [] },
