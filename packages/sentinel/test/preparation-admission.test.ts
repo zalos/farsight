@@ -1,4 +1,5 @@
-// Genuine store rows and physically re-hashed bytes. Faults delay real I/O/SQL, never fabricate acceptance.
+// Genuine store rows and physically re-hashed bytes. Faults act only after a real I/O or SQL step has completed, and
+// never fabricate acceptance.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -12,10 +13,31 @@ import { GitReadBudget } from '../dist/snapshot/git.js';
 import { admitPlan } from '../dist/execution/plans.js';
 import { planBootstrap } from '../dist/planner/index.js';
 import { foundationProfile } from '../dist/service/trusted-profile.js';
-import { preparationClock, PreparationError } from '../dist/service/preparation-clock.js';
+import { preparationClock, PreparationError, tightenPreparationClock } from '../dist/service/preparation-clock.js';
 import { needsStore, openCaptureStore, scratch } from './snapshot-helpers.ts';
 const code = (s: string) => (e: any) => e?.code === s;
 const sleep = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+// How far ahead a crossing test sets the deadline. The work before the boundary cannot use it up however loaded the
+// machine is (a fixed 500 ms window could, and on CI it did); a boundary never reached still fails, with its message.
+const LEAD_MS = 60_000;
+/**
+ * Crosses the ORIGINAL clock at the boundary a test stands at: its run deadline drops to just ahead of now
+ * (tightening keeps the original acceptedAt and monotonic origin, never a fresh duration) and real time passes it, so
+ * the next check after the boundary is the first one past the deadline.
+ */
+function crossNow(
+  store: Parameters<typeof tightenPreparationClock>[0],
+  clock: Parameters<typeof tightenPreparationClock>[1],
+): void {
+  const ceiling = Date.now() + 50;
+  try {
+    tightenPreparationClock(store, clock, new Date(ceiling).toISOString());
+  } catch (e) {
+    // A stall past the new ceiling inside the call has already crossed it; the clock keeps that first refusal.
+    if (!code('sentinel.preparation.expired')(e)) throw e;
+  }
+  for (let left = ceiling - Date.now(); left > 0; left = ceiling - Date.now()) sleep(left);
+}
 for (const phase of ['snapshot', 'plan'] as const)
   for (const boundary of ['physical verification', 'last transaction insert'] as const)
     test(`${phase} rolls back acceptance after ${boundary} crosses the ORIGINAL clock`, needsStore, async (t) => {
@@ -24,7 +46,7 @@ for (const phase of ['snapshot', 'plan'] as const)
         root = join(dir, 'repo');
       mkdirSync(root);
       writeFileSync(join(root, 'one.ts'), 'export const one=1;');
-      const deadlineAt = new Date(Date.now() + 500).toISOString(),
+      const deadlineAt = new Date(Date.now() + LEAD_MS).toISOString(),
         clock = preparationClock(store, {
           acceptedAt: new Date(Date.parse(deadlineAt) - 600000).toISOString(),
           deadlineAt,
@@ -36,7 +58,7 @@ for (const phase of ['snapshot', 'plan'] as const)
           const r = (original as any).apply(this, args);
           if (!delayed) {
             delayed = true;
-            sleep(750);
+            crossNow(store, clock);
           }
           return r;
         });
@@ -48,8 +70,10 @@ for (const phase of ['snapshot', 'plan'] as const)
             const run = stmt.run;
             t.mock.method(stmt, 'run', function (this: any, ...args: any[]) {
               const result = (run as any).apply(this, args);
-              delayed = true;
-              sleep(750);
+              if (!delayed) {
+                delayed = true;
+                crossNow(store, clock);
+              }
               return result;
             });
           }
@@ -233,7 +257,7 @@ for (const boundary of ['physical verification', 'last transaction insert'] as c
         runId = `run-prep-boot-${boundary === 'physical verification' ? 'verify' : 'sql'}`;
       const plan = planBootstrap({ runId, sourceIds: ['workspace'], profile: profile.planner });
       await admitPlan(store, { plan, profile: profile.record, ruleLock: null, policy: null });
-      const deadlineAt = new Date(Date.now() + 1000).toISOString(),
+      const deadlineAt = new Date(Date.now() + LEAD_MS).toISOString(),
         acceptedAt = new Date(Date.parse(deadlineAt) - 600000).toISOString(),
         clock = preparationClock(store, { acceptedAt, deadlineAt });
       store.ledger.createRun({
@@ -269,7 +293,7 @@ for (const boundary of ['physical verification', 'last transaction insert'] as c
           const result = (original as any).apply(this, args);
           if (publishing && !delayed) {
             delayed = true;
-            sleep(1250);
+            crossNow(store, clock);
           }
           return result;
         });
@@ -283,7 +307,7 @@ for (const boundary of ['physical verification', 'last transaction insert'] as c
               const result = (run as any).apply(this, args);
               if (!delayed) {
                 delayed = true;
-                sleep(1250);
+                crossNow(store, clock);
               }
               return result;
             });
