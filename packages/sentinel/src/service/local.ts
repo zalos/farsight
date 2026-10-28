@@ -2110,6 +2110,18 @@ export async function privateReviewTrace(ws: Workspace, runId: string): Promise<
     const units = plan.plan.units.filter((u) => u.review);
     if (units.length > 32) throw new ExecutionError('sentinel.execution.planInvalid', {});
     for (const unit of units) {
+      // A review that never published (refused, held or not run yet) has no instruction record to read: it is listed
+      // with the state and reason the ledger holds, never as an integrity failure of a record that does not exist.
+      if (!store.ledger.getPublication({ id: unit.id, revision: unit.revision })) {
+        const work = store.ledger.getWork({ id: unit.id, revision: unit.revision });
+        traces.push({
+          work: { id: unit.id, revision: unit.revision },
+          published: false,
+          state: work?.state ?? 'not-created',
+          reasonCode: work?.reason ?? null,
+        });
+        continue;
+      }
       const trace = await readPublishedInstructions(store, unit, { signal, deadlineAt });
       const value = {
         work: { id: unit.id, revision: unit.revision },

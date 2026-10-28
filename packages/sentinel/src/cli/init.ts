@@ -26,16 +26,18 @@ import {
   GITLEAKS_SUPPORTED_RULES,
 } from '../adapters/drivers/index.js';
 import { PREVIEW_RULE } from '../adapters/preview-detector.js';
-import { PIPELINE_PATH, parsePipeline } from '../app/pipeline.js';
+import { PIPELINE_PATH, parsePipeline, previewPipeline } from '../app/pipeline.js';
+import type { ActionEffect } from '../contracts/policy.js';
 import { profilePipeline, PROFILES, PROFILE_PACKS } from '../app/pipeline-profiles.js';
 
 /** The settings file's place in a workspace, and its scrubbed defaults: PR 06's own, so init writes what policy reads. */
 export { SETTINGS_PATH, DEFAULT_SETTINGS };
 
 /**
- * What init writes for a profile: PR 06's defaults plus two grants for the owner (a human, never an agent): capture,
- * run, pause and cancel that profile, and promote rule packs (an owner action, which still needs the owner's own
- * confirmation every time). No provider, no budget, no agent action; the file grants nothing until it is adopted.
+ * What init writes for a profile: the policy's defaults plus two grants for the owner (a human, never an agent):
+ * capture, run, pause and cancel, with exactly the effects that profile's stages have, and promote rule packs (an owner
+ * action, which still needs the owner's own confirmation every time). No provider, no budget, no agent action; the
+ * file grants nothing until it is adopted.
  */
 export function initialSettings(profile: string) {
   // The one rule this build can check, the foundation-preview rule, is what the owner's settings ask for; it is
@@ -65,11 +67,22 @@ export function initialSettings(profile: string) {
       {
         actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'],
         principals: ['human'],
-        scope: { profiles: ['static'] },
+        // Exactly the effects this profile's stages have: a grant that named none would admit every effect, so a
+        // model stage added later is admitted only once the owner lists its effects here too.
+        scope: { profiles: ['static'], effects: profileEffects(profile) },
       },
       { actions: ['rule.promote', 'tool.acquire', 'context.pin'], principals: ['human'] },
     ],
   };
+}
+
+/** The effects the profile's own pipeline has, stage by stage (app/pipeline.ts previewPipeline), and local artifacts. */
+function profileEffects(profile: string): ActionEffect[] {
+  const pipeline = profilePipeline(profile);
+  const effects = new Set<ActionEffect>(['local-artifacts']);
+  for (const stage of previewPipeline(pipeline, pipeline).stages)
+    for (const e of stage.effects) if (e !== 'host-execution') effects.add(e);
+  return [...effects].sort();
 }
 
 // The profiles and the rule packs each uses live beside their pipelines (app/pipeline-profiles.ts).

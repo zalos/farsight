@@ -60,6 +60,19 @@ import { SENTINEL_OWNER_UI_STRINGS } from '@farsight/core/dist/strings-sentinel-
 import { sentinelServiceWord, SENTINEL_SERVICE_STRINGS } from '@farsight/core/dist/strings-sentinel-service.js';
 import { STRINGS } from '@farsight/core/dist/strings.js';
 
+/** A placeholder no value filled. */
+const HOLE = /\{[a-zA-Z]+\}/;
+/** The string and number fields of an error's detail (a list joined), or the detail itself when it is text. */
+function detailValues(detail: unknown): Record<string, string | number> {
+  if (typeof detail === 'string') return { detail };
+  const values: Record<string, string | number> = {};
+  if (detail && typeof detail === 'object')
+    for (const [k, v] of Object.entries(detail)) {
+      if (typeof v === 'string' || typeof v === 'number') values[k] = v;
+      else if (Array.isArray(v)) values[k] = v.join(', ');
+    }
+  return values;
+}
 const fill = (text: string, values: Record<string, string | number>) =>
   Object.entries(values).reduce((t, [name, value]) => t.replaceAll(`{${name}}`, String(value)), text);
 /**
@@ -77,6 +90,27 @@ const word = (key: string, values: Record<string, string | number> = {}) =>
         : Object.hasOwn(STRINGS, key)
           ? fill(STRINGS[key]!.professional, values)
           : key;
+
+/**
+ * The build identity the packed tarball carries beside this file (scripts/pack-sentinel.mjs writes
+ * dist/build-stamp.json): when it was built, the commit and whether that commit had uncommitted changes. A workspace
+ * build has none; a fact that cannot be read is absent, never guessed.
+ */
+function buildStamp(): { built?: string; commit?: string; dirty?: boolean } {
+  try {
+    const s = JSON.parse(readFileSync(new URL('./build-stamp.json', import.meta.url), 'utf8')) as Record<
+      string,
+      unknown
+    >;
+    return {
+      ...(typeof s.built === 'string' ? { built: s.built } : {}),
+      ...(typeof s.commit === 'string' ? { commit: s.commit } : {}),
+      ...(typeof s.dirty === 'boolean' ? { dirty: s.dirty } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
 
 function version(): string {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
@@ -1097,9 +1131,19 @@ async function owner(p: ParsedCommand): Promise<number> {
       const message = (e as Error).message;
       let said: string;
       try {
-        const plain = word(code!);
-        const detailed = word(code!, { detail: message });
-        said = detailed !== plain ? detailed : message && message !== code ? `${plain} (${message})` : plain;
+        // The error's own structured detail fills its words (a store error names the SQLite it found and the host);
+        // a word that still has a hole is not said, and the safe message is said beside the word instead.
+        const values = detailValues((e as { detail?: unknown }).detail);
+        const plain = word(code!, values);
+        const detailed = word(code!, { detail: message, ...values });
+        said =
+          detailed !== plain && !HOLE.test(detailed)
+            ? detailed
+            : !HOLE.test(plain)
+              ? plain
+              : message && message !== code
+                ? message
+                : plain;
       } catch {
         said = `${code}: ${message}`;
       }
@@ -1388,9 +1432,23 @@ async function dispatch(p: ParsedCommand): Promise<number> {
       out(help());
       return 0;
     case 'version': {
-      const facts = { version: version(), contracts: ENVELOPES.run.schema.split('/')[1]! };
+      const stamp = buildStamp();
+      const facts = { version: version(), contracts: ENVELOPES.run.schema.split('/')[1]!, ...stamp };
       if (p.json) return finish(result('version', 'answered', { facts }));
-      out(word('sentinel.cli.version', { version: facts.version, draft: facts.contracts }));
+      // A packed tarball also says when it was built and from which commit, as `farsight --version` does.
+      out(
+        [
+          word('sentinel.cli.version', { version: facts.version, draft: facts.contracts }),
+          ...(stamp.built ? [word('sentinel.cli.versionBuilt', { built: stamp.built })] : []),
+          ...(stamp.commit
+            ? [
+                word(stamp.dirty ? 'sentinel.cli.versionCommitDirty' : 'sentinel.cli.versionCommit', {
+                  commit: stamp.commit,
+                }),
+              ]
+            : []),
+        ].join(' · '),
+      );
       return 0;
     }
     case 'decision': {
