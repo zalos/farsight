@@ -17,10 +17,12 @@
 // system and network, like any script the owner runs, and only while the adopted settings turn `stage.host-scripts`
 // on. Its provenance says so (`where: 'host'`, `confinement: 'none'`). It is started with nothing to read but its
 // folder and nothing it writes outside stdout is kept, but nothing confines it to that. It runs in its own process
-// group: at its deadline, at its output bound and when the interpreter exits, the whole group is killed, so a
-// descendant can neither outlive the attempt nor hold it open. The supervisor's memory and process limits are not
+// group, and its descendants are listed while it runs: at its deadline, at its output bound and when the interpreter
+// exits, its group and every descendant that left it (a `detached` child in a group of its own) are frozen and killed,
+// so a descendant can neither outlive the attempt nor hold it open. The limit of that guarantee: a descendant that
+// leaves the tree before a listing sees it (within TREE_POLL_MS), or is spawned between the last listing and the kill. The supervisor's memory and process limits are not
 // applied to it; only the deadline and the output bound are.
-import { spawn, spawnSync } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { Ajv } from 'ajv';
@@ -264,16 +266,106 @@ export async function runHostScript(request: HostScriptRequest): Promise<Prepare
   }
 }
 
+/** One process as `ps` lists it: its id, its parent, its group, and when it started (its identity across pid reuse). */
+export interface ProcessRow {
+  readonly pid: number;
+  readonly ppid: number;
+  readonly pgid: number;
+  readonly started: string;
+}
+
+/** How often a running script's descendants are listed, so one that leaves the tree is still known at the end. */
+const TREE_POLL_MS = 100;
+/** How long one listing of the process table may take before the attempt settles without it. */
+const PS_TIMEOUT_MS = 2_000;
+
+/** The process table, from `ps` with a fixed environment; empty when it cannot be listed. */
+export function processTable(): Promise<ProcessRow[]> {
+  return new Promise((resolve) => {
+    execFile(
+      'ps',
+      ['-A', '-o', 'pid=,ppid=,pgid=,lstart='],
+      { env: { PATH: '/bin:/usr/bin', LC_ALL: 'C' }, timeout: PS_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 },
+      (error, stdout) => {
+        if (error) return resolve([]);
+        const rows: ProcessRow[] = [];
+        for (const line of String(stdout).split('\n')) {
+          const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
+          if (m) rows.push({ pid: Number(m[1]), ppid: Number(m[2]), pgid: Number(m[3]), started: m[4]! });
+        }
+        resolve(rows);
+      },
+    );
+  });
+}
+
+/**
+ * The processes of `table` that are the script's: every row whose identity (pid and start) is already `known`, every
+ * row whose pid is `live` (the interpreter, while it has not exited), and every descendant of those by parent.
+ */
+export function treeOf(table: readonly ProcessRow[], known: ReadonlyMap<number, string>, live?: number): ProcessRow[] {
+  const ours = new Map<number, ProcessRow>();
+  for (const r of table) if (known.get(r.pid) === r.started || r.pid === live) ours.set(r.pid, r);
+  const children = new Map<number, ProcessRow[]>();
+  for (const r of table) children.set(r.ppid, [...(children.get(r.ppid) ?? []), r]);
+  const queue = [...ours.values()];
+  while (queue.length) {
+    for (const c of children.get(queue.pop()!.pid) ?? [])
+      if (!ours.has(c.pid)) {
+        ours.set(c.pid, c);
+        queue.push(c);
+      }
+  }
+  return [...ours.values()];
+}
+
+const send = (pid: number, sig: NodeJS.Signals) => {
+  try {
+    process.kill(pid, sig);
+  } catch {
+    /* it has ended */
+  }
+};
+
+/**
+ * Ends every process of a script: the interpreter's group, and every descendant that left it (a `detached` child in
+ * a group or session of its own). The tree is listed and frozen (SIGSTOP, so nothing in it forks again), listed once
+ * more for what was spawned before it stopped, then every process and every group one of them leads is killed, and
+ * the table is read once more to kill whatever survived. Its limit: a descendant that left the tree (its parent
+ * exited) before any listing saw it, or that was spawned between the last listing and the kill, is not known.
+ */
+async function reapTree(group: number | undefined, known: Map<number, string>, live: number | undefined) {
+  if (group !== undefined) send(-group, 'SIGSTOP');
+  const first = treeOf(await processTable(), known, live);
+  for (const r of first) {
+    known.set(r.pid, r.started);
+    send(r.pid, 'SIGSTOP');
+  }
+  const tree = treeOf(await processTable(), known, live);
+  for (const r of tree) known.set(r.pid, r.started);
+  const kill = (rows: readonly ProcessRow[]) => {
+    if (group !== undefined) send(-group, 'SIGKILL');
+    for (const r of rows) {
+      if (r.pgid === r.pid) send(-r.pgid, 'SIGKILL');
+      send(r.pid, 'SIGKILL');
+    }
+  };
+  kill(tree);
+  kill(treeOf(await processTable(), known));
+}
+
 /**
  * The child in its own process group, under its deadline and output bound, with an empty environment and no stdin.
- * The attempt settles when the interpreter exits, whatever its descendants do: the group is killed then (and at the
- * deadline or the output bound), and a stream a descendant still holds open is not waited for beyond a short grace.
+ * The attempt settles when the interpreter exits, whatever its descendants do: its whole tree is killed then (and at
+ * the deadline or the output bound; see reapTree), and a stream a descendant still holds open is not waited for beyond
+ * a short grace. While it runs, its descendants are listed every TREE_POLL_MS, so one that leaves the interpreter's
+ * group or loses its parent is still known when the tree is killed.
  */
-function spawnBounded(
+export function spawnBounded(
   command: string,
   argv: readonly string[],
   cwd: string,
-  request: HostScriptRequest,
+  request: Pick<HostScriptRequest, 'signal' | 'deadlineMs' | 'maxOutputBytes'>,
 ): Promise<{ exitCode: number | null; signal: string | null; stdout: Buffer }> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, [...argv], {
@@ -288,30 +380,41 @@ function spawnBounded(
     let errBytes = 0;
     let refusal: ExecutionError | undefined;
     let exited: { code: number | null; signal: string | null } | undefined;
-    let settled = false;
-    const killGroup = () => {
-      try {
-        if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
-      } catch {
-        /* the group has ended */
-      }
+    let settling = false;
+    /** Every process seen in the script's tree, by pid and start time. */
+    const known = new Map<number, string>();
+    let polling: Promise<void> | undefined;
+    const poll = () => {
+      if (settling || exited || polling) return;
+      polling = processTable().then((table) => {
+        for (const r of treeOf(table, known, exited ? undefined : child.pid)) known.set(r.pid, r.started);
+        polling = undefined;
+      });
     };
+    const ticker = setInterval(poll, TREE_POLL_MS);
+    poll();
     const settle = () => {
-      if (settled) return;
-      settled = true;
+      if (settling) return;
+      settling = true;
+      clearInterval(ticker);
       clearTimeout(timer);
       clearTimeout(grace);
       request.signal.removeEventListener('abort', onAbort);
-      killGroup();
-      child.stdout.destroy();
-      child.stderr.destroy();
-      if (refusal) reject(refusal);
-      else if (exited) resolve({ exitCode: exited.code, signal: exited.signal, stdout: Buffer.concat(out) });
-      else reject(new ExecutionError('sentinel.execution.commandFailed', { reason: 'the script did not exit' }));
+      const live = exited ? undefined : child.pid;
+      // The attempt settles whatever the reap finds: a listing that fails or times out leaves only the group kill.
+      void (polling ?? Promise.resolve())
+        .then(() => reapTree(child.pid, known, live))
+        .catch(() => undefined)
+        .then(() => {
+          child.stdout.destroy();
+          child.stderr.destroy();
+          if (refusal) reject(refusal);
+          else if (exited) resolve({ exitCode: exited.code, signal: exited.signal, stdout: Buffer.concat(out) });
+          else reject(new ExecutionError('sentinel.execution.commandFailed', { reason: 'the script did not exit' }));
+        });
     };
     const stop = (why: ExecutionError) => {
       refusal ??= why;
-      killGroup();
       settle();
     };
     const timer = setTimeout(
@@ -322,6 +425,7 @@ function spawnBounded(
     const onAbort = () => stop(new ExecutionError('sentinel.execution.canceled', { reason: 'the run was stopped' }));
     request.signal.addEventListener('abort', onAbort, { once: true });
     child.stdout.on('data', (chunk: Buffer) => {
+      if (settling) return;
       outBytes += chunk.length;
       if (outBytes > request.maxOutputBytes)
         stop(new ExecutionError('sentinel.execution.outputTooLarge', { limit: request.maxOutputBytes }));
@@ -334,11 +438,10 @@ function spawnBounded(
     child.on('error', () =>
       stop(new ExecutionError('sentinel.execution.commandFailed', { reason: 'the interpreter could not start' })),
     );
-    // The interpreter's exit ends the attempt: its descendants are killed with the group, and the output it wrote is
-    // read until its stream closes or a short grace passes (a descendant cannot hold the attempt open).
+    // The interpreter's exit ends the attempt: its tree is killed, and the output it wrote is read until its stream
+    // closes or a short grace passes (a descendant cannot hold the attempt open).
     child.on('exit', (code, signal) => {
       exited = { code, signal };
-      killGroup();
       grace = setTimeout(settle, EXIT_GRACE_MS);
     });
     child.on('close', () => {
