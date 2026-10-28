@@ -1,4 +1,6 @@
 // Actual process death in the private journal writer, before canonical association. No forged accepted state.
+// Every wait here ends on a signal the service gives, bounded by a deadline: the service's own "serving" line (printed
+// once its socket listens and its descriptor is written) before the request, then the line the held write prints.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFile } from 'node:child_process';
@@ -14,10 +16,20 @@ const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url)),
   exec = promisify(execFile),
   by = { principal: 'agent' as const, channel: 'local-service' as const },
   key = 'journal_crash_request_original_0001';
+/** How long the service may take to listen, and the request to reach its held write, on a loaded machine. */
+const LISTEN_MS = 30_000,
+  CHECKPOINT_MS = 30_000;
+/** `event`, or a rejection with `reason()` once `ms` pass; the timer never keeps the process alive. */
+function within<T>(event: Promise<T>, ms: number, reason: () => string): Promise<T> {
+  return Promise.race([
+    event,
+    new Promise<never>((_, reject) => setTimeout(() => reject(Error(reason())), ms).unref()),
+  ]);
+}
 for (const cut of ['record-before-link', 'record-linked', 'update-before-rename', 'bundle-linked'])
   test(
     `real owned service SIGKILL at ${cut} preserves canonical authority and leaves other service operations usable`,
-    { ...needsStore, timeout: 60000 },
+    { ...needsStore, timeout: 120000 },
     async (t) => {
       const f = await preparationFixture(t);
       f.store.close();
@@ -32,10 +44,22 @@ for (const cut of ['record-before-link', 'record-linked', 'update-before-rename'
         child = spawn(
           process.execPath,
           ['--import', preload, cli, 'serve', '--workspace', f.ws.path, '--idle-ms', '0'],
-          { env, stdio: ['ignore', 'ignore', 'pipe', 'pipe'] },
+          { env, stdio: ['ignore', 'pipe', 'pipe', 'pipe'] },
         );
-      let errors = '';
+      let errors = '',
+        output = '';
       child.stderr!.on('data', (b) => (errors += b));
+      // `serve` prints one line once it listens; until then a client finds no descriptor. An early exit fails at once.
+      const listening = new Promise<void>((resolve, reject) => {
+        child.stdout!.on('data', (b) => {
+          output += b;
+          if (output.includes('\n')) resolve();
+        });
+        child.once('exit', (code, signal) =>
+          reject(Error(`the service exited before it listened (${code ?? signal}): ${errors}`)),
+        );
+      });
+      void listening.catch(() => {});
       const exited = new Promise<void>((r) => child.once('exit', () => r()));
       t.after(async () => {
         if (child.exitCode === null && child.signalCode === null) {
@@ -48,25 +72,17 @@ for (const cut of ['record-before-link', 'record-linked', 'update-before-rename'
       child.stdio[3]!.on('data', (b) => {
         if (b.toString() === 'journal-checkpoint\n') hit();
       });
-      for (let i = 0; ; i++) {
-        const c = await connectService(f.ws, 'cli');
-        if (c) {
-          c.close();
-          break;
-        }
-        assert.ok(i < 200, errors);
-        await new Promise((r) => setTimeout(r, 20));
-      }
+      await within(listening, LISTEN_MS, () => `the service did not listen within ${LISTEN_MS} ms: ${errors}`);
+      const c = await connectService(f.ws, 'cli');
+      assert.ok(c, errors);
+      c.close();
       const pending = exec(
         process.execPath,
         [cli, 'prepare', '--confirm', '--request-key', key, '--workspace', f.ws.path, '--json'],
         { env, timeout: 30000 },
       );
       void pending.catch(() => {});
-      await Promise.race([
-        observed,
-        new Promise((_, reject) => setTimeout(() => reject(Error('checkpoint not reached: ' + errors)), 15000).unref()),
-      ]);
+      await within(observed, CHECKPOINT_MS, () => 'checkpoint not reached: ' + errors);
       const canonical = readdirSync(records).filter((n) => /^[a-f0-9]{64}\.json$/.test(n)),
         before = canonical.length ? JSON.parse(readFileSync(join(records, canonical[0]!), 'utf8')) : null;
       child.kill('SIGKILL');

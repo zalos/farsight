@@ -1,6 +1,6 @@
 // Explicit foreground companion. Reuses the existing owner socket; never opens/acquires a store.
 import { createServer, type ServerResponse } from 'node:http';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import {
   companionOrigin,
   companionDirectory,
@@ -27,6 +27,14 @@ import { ownerHost } from './host.js';
 import { OwnerUiSession, OwnerUiError } from './session.js';
 import { publishOwnerCompanion } from './descriptor.js';
 import { ownerUiHtml, ownerUiRecoveryHtml, ownerUiScript, ownerUiCss } from './view.js';
+import {
+  corsHeaders,
+  isReadModelPath,
+  preflightHeaders,
+  readRoute,
+  routeOperation,
+  REPORT_MEDIA,
+} from '../transport/http/routes.js';
 const fields = (v: unknown, keys: readonly string[]) => {
   if (!v || typeof v !== 'object' || Array.isArray(v) || Object.keys(v).some((k) => !keys.includes(k)))
     throw new OwnerUiError();
@@ -157,6 +165,87 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
     current(cap, revision, signal);
     return revision;
   }
+  // The viewer's read model on this loopback origin (transport/http/): GET only, from the exact paired Farsight
+  // origin, with the read pass the paired frame handed its parent. The answers come from the closed owner-ui read
+  // operations under this session's proof and view revision; nothing here can preview, confirm or write.
+  const readStatus: Record<string, number> = {
+    'sentinel.viewer.notPaired': 401,
+    'sentinel.ownerUi.expired': 401,
+    'sentinel.ownerUi.replaced': 401,
+    'sentinel.viewer.readOnly': 405,
+    'sentinel.viewer.scanUnknown': 404,
+    'sentinel.viewer.stageUnknown': 404,
+    'sentinel.viewer.unitUnknown': 404,
+    'sentinel.viewer.absent.notFinished': 409,
+  };
+  async function readModel(
+    req: import('node:http').IncomingMessage,
+    res: ServerResponse,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const cors = corsHeaders(req.headers.origin, farsightOrigin);
+    const answer = (status: number, value: unknown) => {
+      if (res.destroyed) return;
+      res.writeHead(status, { 'content-type': 'application/json', ...cors });
+      res.end(JSON.stringify(value));
+    };
+    try {
+      if (req.method === 'OPTIONS') {
+        const headers = preflightHeaders(req.headers.origin, farsightOrigin);
+        if (!headers) throw new OwnerUiError('sentinel.viewer.notPaired');
+        res.writeHead(204, headers);
+        res.end();
+        return;
+      }
+      if (req.method !== 'GET') {
+        res.setHeader('allow', 'GET, OPTIONS');
+        throw new OwnerUiError('sentinel.viewer.readOnly');
+      }
+      const route = readRoute(req.url ?? '');
+      if (!route) throw new OwnerUiError('sentinel.ownerUi.invalid');
+      const header = req.headers.authorization;
+      if (typeof header !== 'string' || !/^Bearer [a-f0-9]{64}$/.test(header))
+        throw new OwnerUiError('sentinel.viewer.notPaired');
+      descriptor.assertCurrent();
+      const view = session.authenticateRead(header.slice(7));
+      if (!proof) throw new OwnerUiError('sentinel.viewer.notPaired');
+      const { op, body } = routeOperation(route);
+      const value: any = await ask(op, { proof, revision: view.revision, ...body }, signal);
+      if (route.kind !== 'report') {
+        answer(200, value);
+        return;
+      }
+      // The rendering, read whole from the retained delivery and checked against its digest before it is sent.
+      const chunks: Buffer[] = [];
+      let offset = 0;
+      for (let i = 0; i < 4096 && offset < value.formatBytes; i++) {
+        const chunk: any = await ask('delivery.read', { deliveryId: value.deliveryId, offset }, signal);
+        const bytes = Buffer.from(String(chunk.base64), 'base64');
+        if (!bytes.length) break;
+        chunks.push(bytes);
+        offset += bytes.length;
+      }
+      const text = Buffer.concat(chunks);
+      if (
+        text.length !== value.formatBytes ||
+        'sha256:' + createHash('sha256').update(text).digest('hex') !== value.formatDigest
+      )
+        throw new OwnerUiError('sentinel.service.deliveryInvalid');
+      res.writeHead(200, {
+        'content-type': REPORT_MEDIA[route.format],
+        'content-disposition': `attachment; filename="sentinel-scan-${Number.isSafeInteger(value.number) ? value.number : 'report'}.${route.format === 'sarif' ? 'sarif.json' : route.format}"`,
+        'content-security-policy': "sandbox; default-src 'none'",
+        'x-sentinel-format-digest': value.formatDigest,
+        ...cors,
+      });
+      res.end(text);
+    } catch (error) {
+      const candidate = (error as { code?: unknown })?.code,
+        code =
+          typeof candidate === 'string' && Object.hasOwn(STRINGS, candidate) ? candidate : 'sentinel.ownerUi.failed';
+      answer(readStatus[code] ?? 400, { error: code, message: STRINGS[code]?.professional });
+    }
+  }
   const server = createServer(async (req, res) => {
     const abort = new AbortController();
     res.once('close', () => {
@@ -168,6 +257,10 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
       res.setHeader('cache-control', 'no-store');
       res.setHeader('x-content-type-options', 'nosniff');
       const csp = `default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors ${farsightOrigin}; base-uri 'none'; form-action 'none'; object-src 'none'`;
+      if (isReadModelPath(req.url)) {
+        await readModel(req, res, abort.signal);
+        return;
+      }
       if (req.method === 'GET') {
         if (req.url === '/capabilities') {
           const header = req.headers.authorization;
@@ -254,6 +347,12 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
         if (challenge && session.authenticate(cap).mode !== 'live')
           challenge.reject(new OwnerUiError('sentinel.ownerUi.readOnly'));
         send(res, 200, { revision: session.authenticate(cap).revision });
+        return;
+      }
+      if (req.url === '/viewer-pass') {
+        fields(body, []);
+        // A read pass for the parent page: the read model's GET routes and nothing else (transport/http/).
+        send(res, 200, session.readPass(cap));
         return;
       }
       if (req.url === '/events') {
