@@ -17,9 +17,10 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 // `providers` are folders the plan adds. The rule is an error. Every upward import that existed when it arrived is
 // frozen in eslint-suppressions.json, file by file with its count, so a new one anywhere fails `pnpm lint`, inside a
 // folder pair that already has debt too; an import that is removed leaves its suppression unused until it is pruned
-// (`pnpm lint --prune-suppressions`). packages/sentinel/test/import-matrix.test.ts checks what lint cannot: that this
-// table names every folder, that the rule reports exactly the edges the table says point up, and that the import
-// cycle gains no member.
+// (`pnpm lint --prune-suppressions`); `pnpm lint:boundaries` prints them all. The import-matrix test in
+// packages/sentinel/test checks what a count cannot: the exact set of upward imports (one replaced by another
+// fails), that this table names every folder, that the rule reports exactly the imports the table says point up,
+// and that the import cycle gains no member.
 export const SENTINEL_LAYERS = Object.freeze({
   kernel: 0,
   contracts: 1,
