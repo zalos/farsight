@@ -115,23 +115,24 @@ export const PREPARATION_OPERATIONS = Object.freeze([
   'prepare.cancel',
 ] as const);
 export const PREPARATION_WRITES = Object.freeze(['prepare.accept', 'prepare.resume', 'prepare.cancel'] as const);
+/** The argument names an operation takes: a request key, and a parent for a preview or a preview for an accept. */
+function allowedArguments(op: string): string[] {
+  if (op === 'configuration.preview') return ['requestKey', 'parentId'];
+  if (op === 'prepare.accept') return ['requestKey', 'previewId'];
+  return ['requestKey'];
+}
 /** Advertised SDK schemas do not enforce runtime arguments. No actor, receipt, path or arbitrary recipe passes. */
 export function checkPreparationArguments(op: string, value: unknown): void {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw Object.assign(new Error('sentinel.service.requestInvalid'), { code: 'sentinel.service.requestInvalid' });
   const v = value as Record<string, unknown>,
     keys = Object.keys(v),
-    allowed =
-      op === 'configuration.preview'
-        ? ['requestKey', 'parentId']
-        : op === 'prepare.accept'
-          ? ['requestKey', 'previewId']
-          : ['requestKey'];
+    allowed = allowedArguments(op);
   const bad = () => {
     throw Object.assign(new Error('sentinel.service.requestInvalid'), { code: 'sentinel.service.requestInvalid' });
   };
   if (
-    !PREPARATION_OPERATIONS.includes(op as any) ||
+    !(PREPARATION_OPERATIONS as readonly string[]).includes(op) ||
     keys.some((k) => !allowed.includes(k)) ||
     typeof v.requestKey !== 'string' ||
     !/^[A-Za-z0-9_-]{16,128}$/.test(v.requestKey)

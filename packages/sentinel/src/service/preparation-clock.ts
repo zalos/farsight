@@ -3,6 +3,7 @@
 import { performance } from 'node:perf_hooks';
 import type { SentinelStore } from '../store/index.js';
 import { boundOwner } from '../store/owner-binding.js';
+import { SentinelError } from '../kernel/errors.js';
 
 export const PREPARATION_LIMIT_MS = 600_000;
 export type PreparationErrorCode =
@@ -14,9 +15,10 @@ export type PreparationErrorCode =
   | 'sentinel.preparation.retentionRequired'
   | 'sentinel.preparation.busy'
   | 'sentinel.preparation.ownerRestarted';
-export class PreparationError extends Error {
-  constructor(readonly code: PreparationErrorCode) {
-    super(code);
+/** A preparation that stopped, by its `PreparationErrorCode`; its message is the code itself. */
+export class PreparationError extends SentinelError<PreparationErrorCode> {
+  constructor(code: PreparationErrorCode) {
+    super(code, code);
     this.name = 'PreparationError';
   }
 }

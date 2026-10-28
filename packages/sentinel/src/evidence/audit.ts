@@ -116,17 +116,22 @@ export function forecastAdmission(
   boundedAudit({ receipt, admission });
   return { receipt, admission };
 }
-export function verifyRetainedAudit(
-  context: ImportOwnerContext,
-  value: {
-    receipt: ReceiptEnvelope;
-    receiptDigest: string;
-    admission: AdmissionEnvelope;
-    intent: ActionIntent;
-    stateDigest: string;
-    policyRevision: string;
-  },
-): void {
+/** A retained import's audit: its receipt and digest, its admission and the intent, state and policy it bound. */
+interface RetainedAudit {
+  receipt: ReceiptEnvelope;
+  receiptDigest: string;
+  admission: AdmissionEnvelope;
+  intent: ActionIntent;
+  stateDigest: string;
+  policyRevision: string;
+}
+/**
+ * Verifies a retained import's audit against the owner's receipt files: the receipt must be the one issued and spent,
+ * spent inside its validity, for exactly this intent, state and policy, and the admission must have admitted it for the
+ * human owner on the owner CLI with every verdict asked and allowed. Anything else is `auditUnavailable`; the owner is
+ * checked again at the end.
+ */
+export function verifyRetainedAudit(context: ImportOwnerContext, value: RetainedAudit): void {
   const c = ownerContextOf(context),
     checked = validateEnvelope('receipt', value.receipt),
     record = validateEnvelope('admission', value.admission);
@@ -143,7 +148,16 @@ export function verifyRetainedAudit(
     return auditUnavailable();
   }
   const when = spent.toString('utf8');
-  if (
+  if (receiptDiffers(issued, r, value, when) || admissionDiffers(a, r, value.receiptDigest, when)) auditUnavailable();
+  boundedAudit(value);
+  ownerContextOf(context);
+}
+/**
+ * True unless the retained receipt is the one issued, has the expected digest, was spent at a calendar time inside its
+ * validity, and names the retained intent, state and policy revision.
+ */
+function receiptDiffers(issued: unknown, r: ReceiptEnvelope, value: RetainedAudit, when: string): boolean {
+  return (
     canonicalJson(issued) !== canonicalJson(r) ||
     digestOf(r) !== value.receiptDigest ||
     !isCalendarTimestamp(when) ||
@@ -152,13 +166,22 @@ export function verifyRetainedAudit(
     r.action !== value.intent.action ||
     r.intentDigest !== intentDigest(value.intent) ||
     r.stateDigest !== value.stateDigest ||
-    r.policyRevision !== value.policyRevision ||
+    r.policyRevision !== value.policyRevision
+  );
+}
+/**
+ * True unless the retained admission admitted exactly this receipt's action, intent and policy for the human owner on
+ * the owner CLI, at the moment the receipt was spent, with all three verdicts asked and allowed and a local-only
+ * credential.
+ */
+function admissionDiffers(a: AdmissionEnvelope, r: ReceiptEnvelope, receiptDigest: string, when: string): boolean {
+  return (
     a.action !== r.action ||
     a.intentDigest !== r.intentDigest ||
     a.policyRevision !== r.policyRevision ||
     r.actor.principal !== a.requestedBy.principal ||
     r.actor.channel !== a.requestedBy.channel ||
-    a.receipt !== value.receiptDigest ||
+    a.receipt !== receiptDigest ||
     a.outcome !== 'admitted' ||
     a.requestedBy.principal !== 'human' ||
     a.requestedBy.channel !== 'owner-cli' ||
@@ -173,8 +196,5 @@ export function verifyRetainedAudit(
     !a.verdicts.credential.allowed ||
     !a.verdicts.credential.asked ||
     a.verdicts.credential.basis !== 'local-only'
-  )
-    auditUnavailable();
-  boundedAudit(value);
-  ownerContextOf(context);
+  );
 }

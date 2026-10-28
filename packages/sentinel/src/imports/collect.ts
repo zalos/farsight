@@ -38,6 +38,12 @@ export interface CookieObservation {
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 export const bounded = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
+/** Why a response's Set-Cookie lines are not read: a redirect, or a status below 200; otherwise none. */
+function statusReasonOf(status: number): ImportUnknownCode | undefined {
+  if (status >= 300 && status < 400) return 'sentinel.import.redirect';
+  if (status < 200) return 'sentinel.import.statusMalformed';
+  return undefined;
+}
 
 export class Collector {
   readonly claims: Json[] = [];
@@ -154,12 +160,7 @@ export class Collector {
       return;
     }
     const status = response.status;
-    const statusReason: ImportUnknownCode | undefined =
-      status >= 300 && status < 400
-        ? 'sentinel.import.redirect'
-        : status < 200
-          ? 'sentinel.import.statusMalformed'
-          : undefined;
+    const statusReason = statusReasonOf(status);
     const parsed = (lines as readonly string[]).map((l) => {
       this.budget.work(Math.ceil(l.length / 64) + 1);
       return statusReason ? null : parseSetCookie(l);

@@ -7,6 +7,8 @@
 // code does; it is not preemptive I/O or memory enforcement. objectMembers is per object; jsonValues, decoded
 // UTF-8 string bytes and work bound the aggregate document.
 
+import { SentinelError } from '../kernel/errors.js';
+
 /** Why a whole import is refused. Fixed codes and a bounded opaque diagnostic path: never a member name or value from the report. */
 export const IMPORT_REFUSAL_CODES = Object.freeze([
   'sentinel.import.fileUnreadable',
@@ -115,25 +117,30 @@ export const IMPORT_CEILINGS = Object.freeze({
 });
 export type ImportLimits = { -readonly [K in keyof typeof IMPORT_CEILINGS]: number };
 
-export class ImportRefusal extends Error {
+/**
+ * Diagnostics never echo member names, including names supplied to `ImportRefusal` directly. Only numeric positions
+ * survive; all member segments are opaque. Bound before splitting as well as on the stored property.
+ */
+function opaquePointer(pointer: string | null): string | null {
+  if (pointer === null) return null;
+  return pointer.slice(0, 256).split('/').map(opaqueSegment).join('/').slice(0, 256);
+}
+/** One pointer segment: the leading empty segment and numeric positions survive; any other segment is `*`. */
+function opaqueSegment(part: string, i: number): string {
+  if (i === 0 && part === '') return '';
+  if (/^[0-9]{1,10}$/.test(part)) return part;
+  return '*';
+}
+/**
+ * A whole import refused, by `ImportRefusalCode`, with the opaque position it was refused at when there is one. The
+ * message is the code, followed by ` at <pointer>` when a pointer is given.
+ */
+export class ImportRefusal extends SentinelError<ImportRefusalCode> {
   readonly pointer: string | null;
 
-  constructor(
-    readonly code: ImportRefusalCode,
-    pointer: string | null = null,
-  ) {
-    // Diagnostics never echo member names, including names supplied to this constructor directly. Only numeric
-    // positions survive; all member segments are opaque. Bound before splitting as well as on the stored property.
-    const safe =
-      pointer === null
-        ? null
-        : pointer
-            .slice(0, 256)
-            .split('/')
-            .map((part, i) => (i === 0 && part === '' ? '' : /^[0-9]{1,10}$/.test(part) ? part : '*'))
-            .join('/')
-            .slice(0, 256);
-    super(safe === null ? code : `${code} at ${safe}`);
+  constructor(code: ImportRefusalCode, pointer: string | null = null) {
+    const safe = opaquePointer(pointer);
+    super(code, safe === null ? code : `${code} at ${safe}`);
     this.pointer = safe;
     this.name = 'ImportRefusal';
   }

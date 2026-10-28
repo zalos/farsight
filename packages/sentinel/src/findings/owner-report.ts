@@ -59,6 +59,12 @@ function optionalFailure(store: SentinelStore, error: unknown): void {
   ]);
   if (typeof code !== 'string' || !unavailable.has(code)) throw error;
 }
+/** The decision section's reason: `limit` when the evaluation bound was reached, else `partial` or `complete`. */
+function sectionReason(limited: boolean, partial: boolean): 'limit' | 'partial' | 'complete' {
+  if (limited) return 'limit';
+  if (partial) return 'partial';
+  return 'complete';
+}
 function projected(
   document: ReportEnvelope,
   decisions: ReportEnvelope['decisions'],
@@ -194,10 +200,5 @@ export async function withOwnerDecisions(
     optionalFailure(store, error);
     return projected(document, [], 'unavailable', 'unavailable');
   }
-  return projected(
-    document,
-    decisions,
-    partial ? 'partial' : 'complete',
-    limited ? 'limit' : partial ? 'partial' : 'complete',
-  );
+  return projected(document, decisions, partial ? 'partial' : 'complete', sectionReason(limited, partial));
 }

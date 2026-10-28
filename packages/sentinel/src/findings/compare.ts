@@ -146,7 +146,9 @@ function detectionEquivalent(
 /** The one assessment of a rule family in a run; several (or none) cannot establish anything. */
 function checkOf(side: AssessmentSide, rule: string): CheckAssessment | 'none' | 'several' {
   const hits = side.checks.filter((c) => c.ruleFamilyId === rule);
-  return hits.length === 0 ? 'none' : hits.length > 1 ? 'several' : hits[0]!;
+  if (hits.length === 0) return 'none';
+  if (hits.length > 1) return 'several';
+  return hits[0]!;
 }
 
 const fileKey = (a: {
@@ -247,28 +249,7 @@ export function compareAssessments<F extends ComparableFinding>(request: Compari
       });
       continue;
     }
-    const bc = checkOf(baseline, c.ruleFamilyId);
-    const cc = checkOf(current, c.ruleFamilyId);
-    if (
-      bc !== 'none' &&
-      bc !== 'several' &&
-      cc !== 'none' &&
-      cc !== 'several' &&
-      !detectionEquivalent(c.ruleFamilyId, bc.conditions, cc.conditions, mappings)
-    ) {
-      out.push({ findingId: id, label: 'changed-detection', reasonCode: 'sentinel.compare.detectionChanged' });
-    } else {
-      const assessed =
-        bc !== 'none' &&
-        bc !== 'several' &&
-        bc.status === 'complete' &&
-        c.anchors.every((a) => bc.files.has(fileKey(a)));
-      out.push({
-        findingId: id,
-        label: 'new',
-        reasonCode: assessed ? 'sentinel.compare.newInAssessedScope' : 'sentinel.compare.notPreviouslyAssessed',
-      });
-    }
+    out.push(uncontinuedOutcome(id, c, baseline, current, mappings));
   }
 
   // Baseline findings nothing continues: each keeps a reason; only a comparable clean check resolves one.
@@ -280,6 +261,39 @@ export function compareAssessments<F extends ComparableFinding>(request: Compari
     current: out.sort((a, b) => (a.findingId < b.findingId ? -1 : 1)),
     historical: historical.sort((a, b) => (a.baselineFindingId < b.baselineFindingId ? -1 : 1)),
   };
+}
+
+/**
+ * The outcome of a current finding that continues no baseline finding and reopens none: `changed-detection` when each
+ * run has one check of its rule family and their detection differs, otherwise `new`, in an assessed scope when the
+ * baseline's one check of the family was complete over every file the finding cites.
+ */
+function uncontinuedOutcome(
+  id: string,
+  c: ComparableFinding,
+  baseline: AssessmentSide,
+  current: AssessmentSide,
+  mappings: readonly CompatibilityMapping[],
+): CurrentOutcome {
+  const bc = checkOf(baseline, c.ruleFamilyId);
+  const cc = checkOf(current, c.ruleFamilyId);
+  if (
+    bc !== 'none' &&
+    bc !== 'several' &&
+    cc !== 'none' &&
+    cc !== 'several' &&
+    !detectionEquivalent(c.ruleFamilyId, bc.conditions, cc.conditions, mappings)
+  ) {
+    return { findingId: id, label: 'changed-detection', reasonCode: 'sentinel.compare.detectionChanged' };
+  } else {
+    const assessed =
+      bc !== 'none' && bc !== 'several' && bc.status === 'complete' && c.anchors.every((a) => bc.files.has(fileKey(a)));
+    return {
+      findingId: id,
+      label: 'new',
+      reasonCode: assessed ? 'sentinel.compare.newInAssessedScope' : 'sentinel.compare.notPreviouslyAssessed',
+    };
+  }
 }
 
 function historicalOutcome(

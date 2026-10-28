@@ -48,6 +48,33 @@ function ancestorOf(value: RetainedSourceAncestor): RetainedSourceAncestor {
     sourceId: value.sourceId,
   });
 }
+/**
+ * The `evidence.import` intent admission is asked about before any file is read: it names this store, workspace and
+ * source ancestor, not a candidate, so a denial costs no read.
+ */
+function preflightIntent(
+  store: SentinelStore,
+  workspaceDigest: string,
+  ancestor: RetainedSourceAncestor,
+  profile: ActionIntent['scope']['profile'],
+): ActionIntent {
+  return {
+    action: 'evidence.import',
+    input: digestOf({
+      domain: 'report-import-preflight',
+      storeId: store.storeId,
+      workspaceDigest,
+      ancestor,
+    }),
+    effects: ['local-artifacts'],
+    budget: { maxTokens: null, maxCost: null, currency: null },
+    scope: {
+      profile,
+      provider: null,
+      targets: ['report-import', ancestor.runId, `revision:${ancestor.revision}`, ancestor.sourceId],
+    },
+  };
+}
 /** ws is the trusted existing Workspace selected by local/OwnerService, never any input report/root JSON. */
 export async function acceptReportImportFiles(
   store: SentinelStore,
@@ -68,22 +95,7 @@ export async function acceptReportImportFiles(
     policy = currentImportPolicy(context);
   const run = store.ledger.getRun(ancestor.runId);
   if (!run) auditUnavailable();
-  const preflight: ActionIntent = {
-    action: 'evidence.import',
-    input: digestOf({
-      domain: 'report-import-preflight',
-      storeId: store.storeId,
-      workspaceDigest: c.workspaceDigest,
-      ancestor,
-    }),
-    effects: ['local-artifacts'],
-    budget: { maxTokens: null, maxCost: null, currency: null },
-    scope: {
-      profile: run.envelope.requestedScope.profile,
-      provider: null,
-      targets: ['report-import', ancestor.runId, `revision:${ancestor.revision}`, ancestor.sourceId],
-    },
-  };
+  const preflight = preflightIntent(store, c.workspaceDigest, ancestor, run.envelope.requestedScope.profile);
   const before = admit(
     admissionRequest(
       context,

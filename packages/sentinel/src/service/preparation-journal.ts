@@ -11,6 +11,7 @@ import {
   fstatSync,
   unlinkSync,
   constants as FS,
+  type BigIntStats,
 } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -167,6 +168,15 @@ function checked(value: unknown): PreparationRecord {
   return Object.freeze(structuredClone(v));
 }
 
+/** The path's own status (links not followed), or undefined when nothing is there; any other failure throws. */
+function lstatIfPresent(path: string): BigIntStats | undefined {
+  try {
+    return lstatSync(path, { bigint: true });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    return undefined;
+  }
+}
 export class PreparationJournal {
   readonly #store: SentinelStore;
   readonly #root: string;
@@ -217,12 +227,7 @@ export class PreparationJournal {
               ![1n, 2n].includes(st.nlink)
             )
               return fail();
-            let named;
-            try {
-              named = lstatSync(canonical, { bigint: true });
-            } catch (e) {
-              if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
-            }
+            const named = lstatIfPresent(canonical);
             const alias = named !== undefined && identityOf(named) === identityOf(st);
             if (
               st.nlink === 2n &&

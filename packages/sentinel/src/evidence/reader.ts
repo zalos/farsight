@@ -19,7 +19,14 @@ import { canonicalJson, digestOf } from '../store/ledger-json.js';
 import { compareTimestamps, isCalendarTimestamp } from '../validate.js';
 import { deepFreeze } from '../policy/immutable.js';
 import { auditUnavailable, boundedAudit, verifyRetainedAudit } from './audit.js';
-import { admissionOf, rootOf, EVIDENCE_LIMITS, checkEvidenceBounds } from './import-operation.js';
+import {
+  admissionOf,
+  rootOf,
+  EVIDENCE_LIMITS,
+  checkEvidenceBounds,
+  type EvidenceIdentity,
+  type ImportPublication,
+} from './import-operation.js';
 import { importOwnerContext, ownerContextOf, type ImportOwnerContext } from './owner-context.js';
 import { evidencePoint } from './test-hooks.js';
 
@@ -35,22 +42,27 @@ interface ReadState {
 }
 const accepted = new WeakMap<object, ReadState>();
 const same = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b);
-const sortedEdges = (v: readonly { parent: string; child: string }[]) =>
-  [...v].sort((a, b) =>
-    a.parent < b.parent ? -1 : a.parent > b.parent ? 1 : a.child < b.child ? -1 : a.child > b.child ? 1 : 0,
-  );
-const json = (b: Buffer): any => JSON.parse(new TextDecoder('utf8', { fatal: true }).decode(b));
+type Edge = { parent: string; child: string };
+/** Orders link edges by parent, then by child. */
+function byEdge(a: Edge, b: Edge): number {
+  if (a.parent < b.parent) return -1;
+  if (a.parent > b.parent) return 1;
+  if (a.child < b.child) return -1;
+  if (a.child > b.child) return 1;
+  return 0;
+}
+const sortedEdges = (v: readonly Edge[]) => [...v].sort(byEdge);
+const json = (b: Buffer): unknown => JSON.parse(new TextDecoder('utf8', { fatal: true }).decode(b));
+type OwnerContext = ReturnType<typeof ownerContextOf>;
+type Normalized = Extract<ReturnType<typeof normalizeImport>, { status: 'normalized' }>;
 
-/** Internal retained read, used for lost acknowledgements before a fresh spend. */
-export async function validateAcceptedImport(
-  context: ImportOwnerContext,
-  candidateDigest: string,
-): Promise<AcceptedImportedReport> {
-  const c = ownerContextOf(context),
-    store = c.store,
-    ops = evidenceLedgerFor(store),
-    record = ops.acceptance(candidateDigest);
-  if (!record) auditUnavailable();
+/**
+ * The publication of an acceptance record, once the record, its operation identity and its acceptance event agree on
+ * one acceptance of this candidate in this store and workspace, and its five role ids are distinct digests, apart from
+ * the root. Anything else is `auditUnavailable`.
+ */
+function acceptedPublication(record: EvidenceAcceptance, c: OwnerContext, candidateDigest: string): ImportPublication {
+  const store = c.store;
   const i = record.identity,
     p = i.publication;
   if (
@@ -87,16 +99,18 @@ export async function validateAcceptedImport(
     p.roles.candidate !== candidateDigest
   )
     auditUnavailable();
-  const proof = await retainedSourceForAdmission(store, i.ancestor, { signal: c.signal, deadlineAt: c.deadlineAt });
-  ownerContextOf(context);
-  const source = readRetainedSourceProof(store, proof, i.ancestor, { signal: c.signal, deadlineAt: c.deadlineAt });
-  const closure = [...new Set(source.closure.map((v) => v.id))].sort();
-  if (
-    !same(closure, i.closure) ||
-    i.bindingDigest !== digestOf({ domain: 'report-import', storeId: store.storeId, ancestor: i.ancestor })
-  )
-    auditUnavailable();
-  const ids = [p.roles.raw, p.roles.manifest, p.roles.normalized, p.roles.candidate, p.roles.admission, p.root];
+  return p;
+}
+
+/**
+ * Reads the retained objects `ids` in order, checking the owner before and after each read. Every one must exist,
+ * declare a size of at most 16 MiB with the total within the evidence byte bound, and read back at exactly that size.
+ */
+async function readRetainedObjects(
+  context: ImportOwnerContext,
+  store: SentinelStore,
+  ids: readonly string[],
+): Promise<{ bytes: Map<string, Buffer>; size: number }> {
   const bytes = new Map<string, Buffer>();
   let size = 0;
   for (const id of ids) {
@@ -117,6 +131,14 @@ export async function validateAcceptedImport(
     size += data.length;
     bytes.set(id, data);
   }
+  return { bytes, size };
+}
+
+/**
+ * Parses the retained root, admission and candidate, and checks that the root and the admission are exactly what the
+ * operation identity derives and that all three are stored as their canonical bytes. Returns the parsed candidate.
+ */
+function retainedCandidate(bytes: ReadonlyMap<string, Buffer>, p: ImportPublication, i: EvidenceIdentity): unknown {
   const root = json(bytes.get(p.root)!),
     audit = json(bytes.get(p.roles.admission)!),
     candidate = json(bytes.get(p.roles.candidate)!);
@@ -129,14 +151,15 @@ export async function validateAcceptedImport(
     !bytes.get(p.roles.candidate)!.equals(Buffer.from(canonicalJson(candidate)))
   )
     auditUnavailable();
-  verifyRetainedAudit(context, {
-    receipt: i.receipt,
-    receiptDigest: i.receiptDigest,
-    admission: p.admission,
-    intent: i.intent,
-    stateDigest: i.stateDigest,
-    policyRevision: i.policyRevision,
-  });
+  return candidate;
+}
+
+/**
+ * Checks that the operation's intent is exactly the `evidence.import` of this run's profile and source, and that its
+ * state digest binds this store, binding, candidate, prior head, workspace and epoch.
+ */
+function checkImportIntent(c: OwnerContext, i: EvidenceIdentity): void {
+  const store = c.store;
   const run = store.ledger.getRun(i.ancestor.runId);
   if (!run) auditUnavailable();
   const expectedIntent = {
@@ -163,6 +186,20 @@ export async function validateAcceptedImport(
       })
   )
     auditUnavailable();
+}
+
+/**
+ * Normalizes the retained raw report and manifest again, checks that the result is the retained normalized document
+ * and that the candidate is exactly the one derived from it over this source closure, and returns the normalization.
+ */
+function renormalized(
+  c: OwnerContext,
+  bytes: ReadonlyMap<string, Buffer>,
+  p: ImportPublication,
+  i: EvidenceIdentity,
+  { candidate, closure }: { readonly candidate: unknown; readonly closure: readonly string[] },
+): Normalized {
+  const store = c.store;
   const normalized = normalizeImport(bytes.get(p.roles.raw)!, bytes.get(p.roles.manifest)!);
   if (
     normalized.status !== 'normalized' ||
@@ -184,6 +221,26 @@ export async function validateAcceptedImport(
     authority: 'owner-associated-imported-claims',
   };
   if (!same(candidate, expectedCandidate) || digestOf(candidate) !== i.candidateDigest) auditUnavailable();
+  return normalized;
+}
+
+/**
+ * Checks the operation's staged artifacts, the acceptance's links and its privacy floors against what an accepted
+ * import of these roles over this source closure must have (every role at least source-derived, every source body
+ * `source`), then the evidence bounds.
+ */
+function checkAcceptedArtifacts(
+  record: EvidenceAcceptance,
+  p: ImportPublication,
+  i: EvidenceIdentity,
+  read: {
+    readonly ids: readonly string[];
+    readonly size: number;
+    readonly closure: readonly string[];
+    readonly source: ReturnType<typeof readRetainedSourceProof>;
+  },
+): void {
+  const { ids, size, closure, source } = read;
   const expectedArtifacts = [
     { id: p.roles.raw, schema: 'application/octet-stream', privacy: 'source-derived', links: [] },
     { id: p.roles.manifest, schema: 'sentinel-import-manifest/draft-1', privacy: 'source-derived', links: [] },
@@ -212,6 +269,17 @@ export async function validateAcceptedImport(
   for (const entry of source.closure)
     if (entry.role === 'source-content' && floors.get(entry.id) !== 'source') auditUnavailable();
   checkEvidenceBounds(ids.length, size, closure.length, expectedLinks.length);
+}
+
+/**
+ * Checks that an acceptance's predecessor, when it names one, is an earlier acceptance under the same binding, and that
+ * the acceptance has not changed while it was read.
+ */
+function checkAcceptanceChain(
+  ops: ReturnType<typeof evidenceLedgerFor>,
+  record: EvidenceAcceptance,
+  candidateDigest: string,
+): void {
   if (record.previous) {
     const previous = ops.acceptance(record.previous);
     if (!previous || previous.bindingDigest !== record.bindingDigest || previous.sequence >= record.sequence)
@@ -219,6 +287,49 @@ export async function validateAcceptedImport(
   }
   const unchanged = ops.acceptance(candidateDigest);
   if (!unchanged || !same(unchanged, record)) auditUnavailable();
+}
+
+/**
+ * Internal retained read, used for lost acknowledgements before a fresh spend. Authenticates one accepted import of
+ * `candidateDigest` from its retained records alone: the acceptance, its source proof, its six role objects, its
+ * audited admission, its intent, a fresh normalization and its artifacts, links and floors, each refusing with
+ * `auditUnavailable`. Returns an opaque handle `reportImportView` reads; nothing else accepts it.
+ */
+export async function validateAcceptedImport(
+  context: ImportOwnerContext,
+  candidateDigest: string,
+): Promise<AcceptedImportedReport> {
+  const c = ownerContextOf(context),
+    store = c.store,
+    ops = evidenceLedgerFor(store),
+    record = ops.acceptance(candidateDigest);
+  if (!record) auditUnavailable();
+  const i = record.identity,
+    p = acceptedPublication(record, c, candidateDigest);
+  const proof = await retainedSourceForAdmission(store, i.ancestor, { signal: c.signal, deadlineAt: c.deadlineAt });
+  ownerContextOf(context);
+  const source = readRetainedSourceProof(store, proof, i.ancestor, { signal: c.signal, deadlineAt: c.deadlineAt });
+  const closure = [...new Set(source.closure.map((v) => v.id))].sort();
+  if (
+    !same(closure, i.closure) ||
+    i.bindingDigest !== digestOf({ domain: 'report-import', storeId: store.storeId, ancestor: i.ancestor })
+  )
+    auditUnavailable();
+  const ids = [p.roles.raw, p.roles.manifest, p.roles.normalized, p.roles.candidate, p.roles.admission, p.root];
+  const { bytes, size } = await readRetainedObjects(context, store, ids);
+  const candidate = retainedCandidate(bytes, p, i);
+  verifyRetainedAudit(context, {
+    receipt: i.receipt,
+    receiptDigest: i.receiptDigest,
+    admission: p.admission,
+    intent: i.intent,
+    stateDigest: i.stateDigest,
+    policyRevision: i.policyRevision,
+  });
+  checkImportIntent(c, i);
+  const normalized = renormalized(c, bytes, p, i, { candidate, closure });
+  checkAcceptedArtifacts(record, p, i, { ids, size, closure, source });
+  checkAcceptanceChain(ops, record, candidateDigest);
   evidencePoint('after-payload-reads');
   ownerContextOf(context);
   readRetainedSourceProof(store, proof, i.ancestor, { signal: c.signal, deadlineAt: c.deadlineAt });

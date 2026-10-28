@@ -124,6 +124,15 @@ const failure = (e: unknown): string =>
 const invalid = (): never => {
   throw new PreparationError('sentinel.preparation.invalid');
 };
+/**
+ * The phase a failed preparation ends in: `interrupted` when the controller is stopping, `canceled` when it was aborted
+ * for any reason but its deadline, otherwise `failed`.
+ */
+function failurePhase(stopping: boolean, signal: AbortSignal): 'interrupted' | 'canceled' | 'failed' {
+  if (stopping) return 'interrupted';
+  if (signal.aborted && signal.reason?.code !== 'sentinel.preparation.expired') return 'canceled';
+  return 'failed';
+}
 function requestKey(key: unknown): string {
   if (typeof key !== 'string' || !KEY.test(key)) return invalid();
   return canonicalDigest({ requestKey: key });
@@ -886,11 +895,7 @@ export class PreparationController {
         errorCode: reused ? 'sentinel.preparation.alreadyPrepared' : null,
       });
     } catch (error) {
-      const phase = active.stopping
-        ? 'interrupted'
-        : active.abort.signal.aborted && active.abort.signal.reason?.code !== 'sentinel.preparation.expired'
-          ? 'canceled'
-          : 'failed';
+      const phase = failurePhase(active.stopping, active.abort.signal);
       try {
         this.#update(active, { phase, errorCode: failure(error) });
       } catch {

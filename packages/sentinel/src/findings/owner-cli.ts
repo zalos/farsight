@@ -58,11 +58,11 @@ export function decisionWire(output: OwnerDecisionOutput, json: boolean): { resu
       ? JSON.stringify(r) + '\n'
       : [
           r.reasonCode
-            ? (STRINGS as any)[r.reasonCode]?.professional
-            : (STRINGS as any)['sentinel.outcome.' + r.outcome.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())]
+            ? STRINGS[r.reasonCode]?.professional
+            : STRINGS['sentinel.outcome.' + r.outcome.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())]
                 ?.professional,
           typeof r.facts.decisionId === 'string' && DECISION.test(r.facts.decisionId)
-            ? (STRINGS as any)['sentinel.decision.identifier'].professional.replace('{id}', r.facts.decisionId)
+            ? STRINGS['sentinel.decision.identifier']!.professional.replace('{id}', r.facts.decisionId)
             : undefined,
           r.facts.document ? JSON.stringify(r.facts.document, null, 2) : undefined,
         ]
@@ -147,6 +147,61 @@ function page(
   ownerContextOf(context);
   return doc;
 }
+/** The failure codes a refused decision command reports as its own reason; any other failure is `unavailable`. */
+const REFUSAL_CAUSES: readonly string[] = [
+  'sentinel.receipt.expired',
+  'sentinel.receipt.mismatch',
+  'sentinel.receipt.unknown',
+  'sentinel.receipt.alreadyUsed',
+  'sentinel.decision.invalidInput',
+  'sentinel.decision.corruptHistory',
+  'sentinel.decision.staleState',
+  'sentinel.decision.notFound',
+  'sentinel.decision.scopeExceeded',
+  'sentinel.decision.unauthorized',
+];
+/**
+ * True when the arguments do not fit the decision command's action: an unknown action, a malformed run, baseline or
+ * decision id, a page limit outside its bounds, or a proposal without its file or finding id.
+ */
+function decisionArgumentsRefused(a: {
+  readonly action: string | undefined;
+  readonly target: string;
+  readonly baseline: string | undefined;
+  readonly limit: number;
+  readonly file: string | undefined;
+  readonly findingId: string | undefined;
+}): boolean {
+  const { action, target, baseline, limit, file, findingId } = a;
+  return (
+    !['propose', 'approve', 'read', 'list'].includes(action ?? '') ||
+    !ID.test(target) ||
+    (baseline !== undefined && !ID.test(baseline)) ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > DECISION_CLI_LIMITS.maxPage ||
+    (action === 'propose' && (!file || !findingId || !/^finding\.[0-9a-f]{40}$/.test(findingId))) ||
+    ((action === 'approve' || action === 'read') && !DECISION.test(target))
+  );
+}
+/**
+ * The reason a failed decision command is refused with: `sentinel.decision.publicationUncertain` when its publication
+ * may have happened, `sentinel.decision.confirmationUncertain` when the receipt's consumption was attempted,
+ * `sentinel.decision.spentNotPublished` when it was spent, else the failure's own code when it is one of `allowed`,
+ * else `sentinel.decision.unavailable`.
+ */
+function refusalCode(
+  publication: unknown,
+  phase: ReturnType<typeof ownerDecisionFailurePhase>,
+  cause: unknown,
+  allowed: readonly string[],
+): string {
+  if (publication === 'unknown') return 'sentinel.decision.publicationUncertain';
+  if (phase === 'consumption-attempted') return 'sentinel.decision.confirmationUncertain';
+  if (phase === 'spent') return 'sentinel.decision.spentNotPublished';
+  if (typeof cause === 'string' && allowed.includes(cause)) return cause;
+  return 'sentinel.decision.unavailable';
+}
 /** Proposal reads follow current shared-policy preflight; busy/denied paths never read the caller's file. */
 export async function ownerDecisionCommand(ws: Workspace, p: ParsedCommand): Promise<OwnerDecisionOutput> {
   const action = p.args.action,
@@ -158,24 +213,17 @@ export async function ownerDecisionCommand(ws: Workspace, p: ParsedCommand): Pro
     file = val('--proposal'),
     confirm = p.flags['--confirm'] === true;
   const limit = val('--limit') === undefined ? DECISION_CLI_LIMITS.defaultPage : Number(val('--limit'));
-  if (
-    !target ||
-    !['propose', 'approve', 'read', 'list'].includes(action ?? '') ||
-    !ID.test(target) ||
-    (baseline !== undefined && !ID.test(baseline)) ||
-    !Number.isSafeInteger(limit) ||
-    limit < 1 ||
-    limit > DECISION_CLI_LIMITS.maxPage ||
-    (action === 'propose' && (!file || !findingId || !/^finding\.[0-9a-f]{40}$/.test(findingId))) ||
-    ((action === 'approve' || action === 'read') && !DECISION.test(target))
-  )
+  if (!target || decisionArgumentsRefused({ action, target, baseline, limit, file, findingId }))
     return { result: refused(command, 'inputRefused') };
   let store: SentinelStore;
   try {
     store = await openStore(ws.storePath);
   } catch (e) {
     return {
-      result: refused(command, (e as any)?.code === 'sentinel.store.ownedElsewhere' ? 'ownerBusy' : 'unavailable'),
+      result: refused(
+        command,
+        (e as { code?: unknown })?.code === 'sentinel.store.ownedElsewhere' ? 'ownerBusy' : 'unavailable',
+      ),
     };
   }
   const timing = { signal: new AbortController().signal, deadlineAt: performance.now() + 120000 };
@@ -278,18 +326,7 @@ export async function ownerDecisionCommand(ws: Workspace, p: ParsedCommand): Pro
     else if (phase === 'consumption-attempted')
       metadata = { ...metadata, publication: 'not-established', confirmation: 'unknown' };
     else if (phase === 'spent') metadata = { ...metadata, publication: 'not-established', confirmation: 'spent' };
-    const allowed = [
-      'sentinel.receipt.expired',
-      'sentinel.receipt.mismatch',
-      'sentinel.receipt.unknown',
-      'sentinel.receipt.alreadyUsed',
-      'sentinel.decision.invalidInput',
-      'sentinel.decision.corruptHistory',
-      'sentinel.decision.staleState',
-      'sentinel.decision.notFound',
-      'sentinel.decision.scopeExceeded',
-      'sentinel.decision.unauthorized',
-    ];
+    const allowed = REFUSAL_CAUSES;
     if (metadata.publication === 'retained')
       return {
         result: result(command, 'delivery-failed', {
@@ -297,16 +334,7 @@ export async function ownerDecisionCommand(ws: Workspace, p: ParsedCommand): Pro
           facts: metadata,
         }),
       };
-    const code =
-      metadata.publication === 'unknown'
-        ? 'sentinel.decision.publicationUncertain'
-        : phase === 'consumption-attempted'
-          ? 'sentinel.decision.confirmationUncertain'
-          : phase === 'spent'
-            ? 'sentinel.decision.spentNotPublished'
-            : typeof cause === 'string' && allowed.includes(cause)
-              ? cause
-              : 'sentinel.decision.unavailable';
+    const code = refusalCode(metadata.publication, phase, cause, allowed);
     return { result: result(command, 'refused', { reasonCode: code, facts: metadata }) };
   } finally {
     try {
