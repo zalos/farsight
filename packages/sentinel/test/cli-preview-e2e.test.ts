@@ -153,6 +153,13 @@ test('init → adopt → plan → run → status → report, twice where it matt
     { ...json2.facts.report, generatedAt: null },
     'the report regenerates from stored results alone',
   );
+  // The only folder boundary is the store this process held, excluded by policy: out of scope, not unknown, so the
+  // preview counts no folder never listed, as the full report does (service/full-report.ts).
+  assert.equal(
+    json.facts.report.counts.find((c: { unit: string }) => c.unit === 'sentinel.count.unknownBoundaries').n,
+    0,
+  );
+  assert.match(report.stdout, /0 folders never listed/);
 
   // In the background: only the owner's confirmation hands a run over; a finished run prints its result again.
   const unconfirmed = run('run', planId, '--detach');

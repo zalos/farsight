@@ -94,7 +94,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts",
+    "test": "node ../../scripts/sentinel-tests.mjs",
+    "test:unit": "node ../../scripts/sentinel-tests.mjs --suite unit",
+    "test:process": "node ../../scripts/sentinel-tests.mjs --suite process",
     "schemas": "node scripts/generate-schemas.mjs",
     "schemas:check": "node scripts/generate-schemas.mjs --check"
   },

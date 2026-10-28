@@ -19,7 +19,7 @@ jobs:
   changes:
     name: scanner CLI affected checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 2
     outputs:
       run: ${{ steps.select.outputs.run }}
     steps:
@@ -31,7 +31,7 @@ jobs:
           node-version-file: .nvmrc
       - name: Check selection and workflow pins
         run: node --test scripts/test/ci-changes.test.mjs scripts/test/sentinel-scanner-cli-workflow.test.mjs
-      - name: Select the package and isolation dependency union
+      - name: Select the scanner closure
         id: select
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -39,11 +39,14 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import { appendFileSync } from 'node:fs';
-          import { detectChecks } from './scripts/ci-changes.mjs';
-          const { checks, reason } = detectChecks({ base: process.env.BASE_SHA, head: process.env.HEAD_SHA, event: process.env.GITHUB_EVENT_NAME });
-          const run = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || checks.sentinel || checks.isolation;
+          import { detectChecks, scannerLoadsText } from './scripts/ci-changes.mjs';
+          const { checks, reason, scannerLoads } = detectChecks({ base: process.env.BASE_SHA, head: process.env.HEAD_SHA, event: process.env.GITHUB_EVENT_NAME });
+          // Every file this workflow's steps execute, followed from the tests, scripts and command they name through
+          // their imports, and the whole area around each load it cannot follow (scannerCliClosure in
+          // scripts/ci-changes.mjs, which lists those loads below); an unavailable range selects it
+          const run = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || checks.scannerCli;
           appendFileSync(process.env.GITHUB_OUTPUT, `run=${run}\n`);
-          console.log(`${reason}; scanner CLI: ${run ? 'run' : 'skip'}`);
+          console.log(`${reason}; scanner CLI: ${run ? 'run' : 'skip'}\n${scannerLoadsText(scannerLoads)}`);
           JS
 
   scanner-cli-linux-amd64:

@@ -6,11 +6,17 @@ import { spawn } from 'node:child_process';
 import { dirname, basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseNativeClaudeToken, type NativeClaudeToken } from './cli-native-auth.js';
-import { fail, ProviderError, NativeCredentialError, parseNativeAuthDiagnostic } from './errors.js';
+import {
+  fail,
+  ProviderError,
+  NativeCredentialError,
+  parseNativeAuthDiagnostic,
+  type NativeAuthDiagnostic,
+} from './errors.js';
 import { claimNativeLogin, assertNativeLoginActive, type NativeCallAuthority } from './authority.js';
 import type { NativeTiming } from './cli-native-profile.js';
 
-export const NATIVE_HELPER_SOURCE = 'sha256:6192b46a93c6352f7f7795543b51b6f75c2f75ee89e91fbcce523a9cf3a3d0cf';
+export const NATIVE_HELPER_SOURCE = 'sha256:e8abcc38b6217540235dd8614f32d41678d643d8c5d1c97fc2796532ea839e46';
 export interface NativeHelper {
   readonly digest: string;
   readonly protocol: 'claude-keychain-token/1';
@@ -197,4 +203,47 @@ export async function readNativeLogin(
   } finally {
     bytes.fill(0);
   }
+}
+
+/** Whether the Claude login answers from this process's session: a closed class, never the item or a token. */
+export type NativeLoginProbe =
+  | Readonly<{ reachable: true }>
+  | Readonly<{ reachable: false; reason: NativeAuthDiagnostic['reason'] | 'unavailable' }>;
+/**
+ * Probes the credential path once, for a qualification record: the qualified helper's `--probe` runs the same no-UI
+ * lookup and validation and writes only a fixed literal, so the login never leaves the helper process. A locked
+ * keychain, a missing or expired login, or a lookup that would need interaction answers unreachable with its class.
+ */
+export async function probeNativeLogin(helper: NativeHelper, timing: NativeTiming): Promise<NativeLoginProbe> {
+  const held = helpers.get(helper);
+  if (!held) return fail('sentinel.provider.notTrusted', 'native helper is not qualified');
+  const observed = await hash(held.path, timing);
+  if (observed.digest !== held.digest) return fail('sentinel.provider.capabilityUntested', 'native helper changed');
+  const deadlineAt = Math.min(timing.deadlineAt, Date.now() + 5000);
+  return new Promise((resolve) => {
+    const child = spawn(held.path, ['--probe'], { env: { PATH: '/usr/bin:/bin' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const out: Buffer[] = [],
+      err: Buffer[] = [];
+    let bytes = 0;
+    const timer = setTimeout(() => child.kill('SIGKILL'), Math.max(1, deadlineAt - Date.now()));
+    child.stdout.on('data', (d: Buffer) => {
+      bytes += d.length;
+      if (bytes > 256) child.kill('SIGKILL');
+      else out.push(d);
+    });
+    child.stderr.on('data', (d: Buffer) => {
+      bytes += d.length;
+      if (bytes > 512) child.kill('SIGKILL');
+      else err.push(d);
+    });
+    child.once('error', () => resolve(Object.freeze({ reachable: false as const, reason: 'unavailable' as const })));
+    child.once('close', (code, signal) => {
+      clearTimeout(timer);
+      const text = Buffer.concat(out).toString('utf8');
+      if (code === 0 && signal === null && text === '{"schema":"sentinel-native-auth-probe/1","reachable":true}\n')
+        return resolve(Object.freeze({ reachable: true as const }));
+      const detail = signal === null ? parseNativeAuthDiagnostic(Buffer.concat(err)) : undefined;
+      resolve(Object.freeze({ reachable: false as const, reason: detail?.reason ?? ('unavailable' as const) }));
+    });
+  });
 }

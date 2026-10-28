@@ -504,9 +504,9 @@ for (const mode of ['object', 'shape', 'duplicate'] as const)
     );
   });
 
-// `.farsight/sentinel/settings.json` is ordinary captured source now. The preview rule applies to TypeScript,
-// JavaScript and Java source files only, so no check is planned over the settings file: a genuine selection gap,
-// not an accounting error. The report says so; nothing marks those bytes covered.
+// `.farsight/sentinel/settings.json` and the `pipeline.json` init writes beside it are ordinary captured source now.
+// The preview rule applies to TypeScript, JavaScript and Java source files only, so no check is planned over either
+// file: a genuine selection gap, not an accounting error. The report says so; nothing marks those bytes covered.
 async function settingsOnlyUnchecked(f: any, doc: any) {
   assert.equal(doc.completeness, 'partial');
   assert.equal(doc.counts.unknownScopeBoundaries.n, 0);
@@ -518,9 +518,9 @@ async function settingsOnlyUnchecked(f: any, doc: any) {
   const planned = new Set(admitted.plan.units.flatMap((u: any) => u.inputs.map((i: any) => i.relativePath)));
   assert.deepEqual(
     included.filter((p: string) => !planned.has(p)),
-    ['.farsight/sentinel/settings.json'],
+    ['.farsight/sentinel/pipeline.json', '.farsight/sentinel/settings.json'],
   );
-  assert.equal(doc.counts.seenByNoStage.n, 1);
+  assert.equal(doc.counts.seenByNoStage.n, 2);
 }
 
 test('accepted preview retains genuine findings beside unrelated auxiliary JSON', async (t) => {

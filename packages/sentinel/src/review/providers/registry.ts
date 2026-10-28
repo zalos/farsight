@@ -19,6 +19,9 @@ import {
   finishCopilotCall,
   finishNativeCall,
   finishCopilotAgentCall,
+  issueClaudeAgentCall,
+  finishClaudeAgentCall,
+  type ClaudeAgentAuthority,
   type CopilotAgentAuthority,
   type NativeLimits,
 } from './authority.js';
@@ -33,13 +36,18 @@ import { nativeCopilotAgentCall, type CopilotAgentRequest, type CopilotAgentResu
 import { nativeCopilotCall } from './cli-copilot-call.js';
 import { renderNativeCopilotWire } from './cli-copilot-wire.js';
 import {
-  CLAUDE_NATIVE_PROFILE,
+  claudeProfileById,
+  claudeProfileMode,
+  claudeRuntimeInstallation,
   nativeRuntimeHelper,
   qualifyInstalledNativeClaude,
   type NativeClaudeRuntime,
   type NativeTiming,
 } from './cli-native-profile.js';
 import { nativeClaudeCall } from './cli-native-call.js';
+import { nativeClaudeAgentCall, type ClaudeAgentRequest } from './cli-native-agent.js';
+import type { Secret } from './credentials.js';
+import { runnerQualified } from '../qualification.js';
 import { renderNativeClaudeWire, type NativeReviewWire } from './cli-native-wire.js';
 
 /** What a sandboxed CLI kind needs from the broker to qualify, bind, render and run one admitted turn. */
@@ -53,6 +61,12 @@ export interface CliKind {
   qualify(binding: ProviderBinding, given: { nativeClaude?: NativeClaudeRuntime }): Promise<object>;
   /** The credential verdict's detail: native authentication stays inside the pinned process. */
   readonly credentialDetail: string;
+  /**
+   * Where the adopted pin's login comes from: `vendor`, the CLI's own login, which the broker never reads; or
+   * `reference`, the owner's token under the adopted `keychain:farsight/…` reference, read in-process by the broker
+   * and handed to the pinned process on an anonymous descriptor only.
+   */
+  credentialSource(binding: ProviderBinding): 'vendor' | 'reference';
   /** One start authority for one dispatched reservation; the call consumes it. */
   issue(context: {
     runtime: object;
@@ -75,8 +89,10 @@ export interface CliKind {
   readonly agent?: Readonly<{
     issue(context: {
       runtime: object;
-      request: CopilotAgentRequest;
+      request: AgentCallRequest;
       limits: NativeTiming;
+      /** The adopted reference's value for a `reference` pin; null for a vendor login. */
+      credential: Secret | null;
       ledger: BudgetLedger;
       reservationId: string;
       receipt: ConsumedReceipt;
@@ -85,14 +101,20 @@ export interface CliKind {
     release(authority: object): void;
     /** The qualified installation that runs: its category and exact executable path (private provenance). */
     installation(runtime: object): Readonly<{ source: string; executable: string }>;
+    /** Whether the reported model is the requested one; exact equality when absent. */
+    sameModel?(requested: string, reported: string): boolean;
   }>;
   /** A release gate the adopted settings must open before a stage may select this CLI. */
   readonly releaseGate?: Readonly<{
-    open(settings: SettingsEnvelope): boolean;
+    /** Open when the adopted pin has a complete qualification record, or the owner turned its runner flag on. */
+    open(settings: SettingsEnvelope, provider: ProviderSettings): boolean;
     code: 'sentinel.provider.nativeClaudeDisabled';
     detail: string;
   }>;
 }
+
+/** One native run's request: the Copilot fields, plus the output schema and dollar cap a CLI enforces itself. */
+export type AgentCallRequest = CopilotAgentRequest & Readonly<{ jsonSchema?: string; maxUsd?: string }>;
 
 export interface ProviderKindEntry {
   readonly kind: ProviderKind;
@@ -113,34 +135,54 @@ const DIGEST = /^sha256:[a-f0-9]{64}$/;
 const subscriptionBudget = (s: ProviderSettings) =>
   s.budget.maxTokens !== null && s.budget.maxCost === null && s.budget.currency === null;
 
+const CLAUDE_MODEL = /^claude-[a-z0-9][a-z0-9.-]{0,63}$/;
+const KEYCHAIN = /^keychain:farsight\/[a-z0-9][a-z0-9-]{0,62}$/;
+const claudePinned = (binding: { nativeProfile?: ProviderSettings['nativeProfile'] }) =>
+  binding.nativeProfile ? claudeProfileById(binding.nativeProfile.id) : undefined;
+
 const CLAUDE_CLI = Object.freeze<CliKind>({
   profileField: 'nativeProfile' as const,
   checkBinding(settings: ProviderSettings, model: ModelSettings, limits: ModelLimits) {
-    const p = settings.nativeProfile;
-    if (
-      !p ||
-      p.id !== CLAUDE_NATIVE_PROFILE.id ||
-      p.executableDigest !== CLAUDE_NATIVE_PROFILE.executableDigest ||
-      !DIGEST.test(p.helperDigest) ||
-      !DIGEST.test(p.profileDigest) ||
-      settings.endpoint !== 'https://api.anthropic.com' ||
-      settings.disclosure !== 'hosted' ||
-      settings.credential !== null ||
-      model.model !== 'claude-haiku-4-5-20251001' ||
-      limits.contextTokens !== 200000 ||
-      limits.maxRequestBytes > 65536 ||
-      limits.maxOutputTokens > 4096 ||
-      limits.maxMessages > 32 ||
-      !subscriptionBudget(settings)
-    )
+    const p = settings.nativeProfile,
+      pinned = claudePinned(settings);
+    const common =
+      !!p &&
+      !!pinned &&
+      p.executableDigest === pinned.executableDigest &&
+      DIGEST.test(p.helperDigest) &&
+      DIGEST.test(p.profileDigest) &&
+      settings.copilotProfile === undefined &&
+      settings.endpoint === 'https://api.anthropic.com' &&
+      settings.disclosure === 'hosted' &&
+      limits.maxRequestBytes <= 65536 &&
+      limits.maxMessages <= 32 &&
+      subscriptionBudget(settings);
+    const bounded =
+      pinned && claudeProfileMode(pinned) === 'native'
+        ? // Native: the owner's own token under an adopted reference, any Claude model id, a stage-sized context.
+          typeof settings.credential === 'string' &&
+          KEYCHAIN.test(settings.credential) &&
+          CLAUDE_MODEL.test(model.model) &&
+          Number.isSafeInteger(limits.contextTokens) &&
+          limits.contextTokens >= 1 &&
+          limits.contextTokens <= 1000000 &&
+          limits.maxOutputTokens <= 32000
+        : // Brokered: the vendor login through the fixed helper, the one fixed model and context.
+          settings.credential === null &&
+          model.model === 'claude-haiku-4-5-20251001' &&
+          limits.contextTokens === 200000 &&
+          limits.maxOutputTokens <= 4096;
+    if (!common || !bounded)
       fail('sentinel.provider.invalidProfile', 'the adopted native CLI profile is missing or outside its fixed bounds');
   },
   renderWire: renderNativeClaudeWire,
   async qualify(binding: ProviderBinding, given: { nativeClaude?: NativeClaudeRuntime }) {
-    const runtime = given.nativeClaude ?? (await qualifyInstalledNativeClaude({ deadlineAt: Date.now() + 5000 }));
-    const p = binding.nativeProfile;
+    const p = binding.nativeProfile,
+      pinned = claudePinned(binding);
+    if (!p || !pinned) return fail('sentinel.provider.capabilityUntested', 'adopted Claude profile is not a known one');
+    const runtime =
+      given.nativeClaude ?? (await qualifyInstalledNativeClaude({ deadlineAt: Date.now() + 5000 }, pinned));
     if (
-      !p ||
       runtime.profileId !== p.id ||
       runtime.executableDigest !== p.executableDigest ||
       runtime.helperDigest !== p.helperDigest ||
@@ -151,15 +193,42 @@ const CLAUDE_CLI = Object.freeze<CliKind>({
     return runtime;
   },
   credentialDetail: 'fixed no-UI native read capability; login validity remains unobserved until admitted call',
-  mode: () => 'brokered' as const,
+  credentialSource: (binding: ProviderBinding) => {
+    const pinned = claudePinned(binding);
+    return pinned && claudeProfileMode(pinned) === 'native' ? ('reference' as const) : ('vendor' as const);
+  },
+  mode: (binding: ProviderBinding) => {
+    const pinned = claudePinned(binding);
+    return pinned ? claudeProfileMode(pinned) : 'brokered';
+  },
+  agent: Object.freeze({
+    issue: (c: Parameters<NonNullable<CliKind['agent']>['issue']>[0]) => {
+      if (typeof c.request.jsonSchema !== 'string')
+        return fail('sentinel.provider.invalidProfile', 'a native Claude run names its output schema');
+      return issueClaudeAgentCall({
+        ...c,
+        runtime: c.runtime as NativeClaudeRuntime,
+        request: c.request as ClaudeAgentRequest,
+      });
+    },
+    call: (authority: object) => nativeClaudeAgentCall(authority as ClaudeAgentAuthority),
+    release: (authority: object) => finishClaudeAgentCall(authority as ClaudeAgentAuthority),
+    installation: (runtime: object) => claudeRuntimeInstallation(runtime),
+    // An alias answers as its own dated snapshot (`claude-x-y` as `claude-x-y-20261001`); nothing looser.
+    sameModel: (requested: string, reported: string) =>
+      reported === requested ||
+      (reported.startsWith(requested + '-') && /^\d{8}$/.test(reported.slice(requested.length + 1))),
+  }),
   issue: (c) => issueNativeCall({ ...c, runtime: c.runtime as NativeClaudeRuntime }),
   call: (authority: object) => nativeClaudeCall(authority as Parameters<typeof nativeClaudeCall>[0]),
   release: (authority: object) => finishNativeCall(authority as Parameters<typeof finishNativeCall>[0]),
   capsTurnDeadline: false,
   releaseGate: Object.freeze({
-    open: (settings: SettingsEnvelope) => featureEnabled(settings, 'runner.claude-cli'),
+    open: (settings: SettingsEnvelope, provider: ProviderSettings) =>
+      (provider.nativeProfile !== undefined && runnerQualified(provider.nativeProfile.id)) ||
+      featureEnabled(settings, 'runner.claude-cli'),
     code: 'sentinel.provider.nativeClaudeDisabled' as const,
-    detail: 'native Claude execution is deferred until separately enabled and qualified',
+    detail: "native Claude execution needs a qualified profile or the owner's runner.claude-cli flag",
   }),
 });
 
@@ -207,13 +276,21 @@ const COPILOT_CLI = Object.freeze<CliKind>({
   },
   credentialDetail:
     'pinned vendor native keychain capability; shared securityd trust, login unobserved until invocation',
+  credentialSource: () => 'vendor' as const,
   mode: (binding: ProviderBinding) => {
     const pinned = binding.copilotProfile ? copilotProfileById(binding.copilotProfile.id) : undefined;
     return pinned ? copilotProfileMode(pinned) : 'brokered';
   },
   agent: Object.freeze({
-    issue: (c: Parameters<typeof issueCopilotAgentCall>[0] & { runtime: object }) =>
-      issueCopilotAgentCall({ ...c, runtime: c.runtime as NativeCopilotRuntime }),
+    issue: (c: Parameters<NonNullable<CliKind['agent']>['issue']>[0]) =>
+      issueCopilotAgentCall({
+        runtime: c.runtime as NativeCopilotRuntime,
+        request: c.request,
+        limits: c.limits,
+        ledger: c.ledger,
+        reservationId: c.reservationId,
+        receipt: c.receipt,
+      }),
     call: (authority: object) => nativeCopilotAgentCall(authority as CopilotAgentAuthority),
     release: (authority: object) => finishCopilotAgentCall(authority as CopilotAgentAuthority),
     installation: (runtime: object) => copilotRuntimeInstallation(runtime),
