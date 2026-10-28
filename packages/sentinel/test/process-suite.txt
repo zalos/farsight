@@ -10,6 +10,7 @@
 #
 # One path per line, relative to packages/sentinel; a listed file that does not exist fails both suites.
 test/agentic-only-policy.test.ts
+test/app-service.test.ts
 test/builtin-workers.test.ts
 test/capture-finalization.test.ts
 test/cli-copilot-public.test.ts
