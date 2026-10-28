@@ -826,6 +826,14 @@ test(
       assert.equal(stage.counts.tokensOut.n, 6);
       assert.equal(stage.counts.turns.n, 2);
       assert.equal(stage.cost.basis, 'recorded');
+      // the runner is what the review ran through, read from the admitted review; the provider entry stays apart
+      assert.deepEqual(stage.provenance.runner, { id: 'hosted-api', mode: 'brokered', local: true });
+      // the turn limit is the admitted spec's own (the session's maxSteps), read by the id the plan pins
+      assert.equal(stage.counts.turns.unit, 'sentinel.viewer.count.turnsOf');
+      assert.equal(stage.counts.turns.of, 12);
+      assert.deepEqual(stage.review.outcome, 'completed');
+      assert.equal(stage.counts.inspected.n, 1, 'the model asked for one file');
+      assert.equal(stage.counts.inspected.of, stage.counts.inputs.n, 'of the files the review was given');
     }
     const general = agents.find((s: any) => s.name === 'sentinel.viewer.stage.reviewGeneral');
     const stage = await f.call('owner-ui.stage', { runId: f.runId, stage: general.id });
@@ -861,3 +869,57 @@ test(
     }
   },
 );
+
+test('a review names its runner apart from its provider, the files the model read of those given, and an unfinished end', () => {
+  const base = synthetic();
+  const trace = base.review.units[0]!;
+  const ran = synthetic({
+    review: {
+      status: 'available',
+      units: [
+        {
+          ...trace,
+          runner: 'copilot-cli',
+          mode: 'brokered',
+          disclosure: 'hosted',
+          turnLimit: 3,
+          verdict: null,
+          outcome: 'unfinished',
+        },
+      ],
+    },
+  });
+  const answer = scanAnswer('example-app', ran);
+  const review = answer.stages.find((s) => s.kind === 'agent')!;
+  assert.deepEqual(review.provenance.runner, { id: 'copilot-cli', mode: 'brokered', local: false });
+  assert.deepEqual(review.provenance.provider, { id: 'local-review', model: 'review' }, 'the provider entry, apart');
+  // given and read are two counts with their own words: two files given, one asked for
+  assert.equal(review.counts.inputs.n, 2);
+  assert.equal(review.counts.inputs.unit, 'sentinel.viewer.count.inputs');
+  assert.deepEqual(
+    [review.counts.inspected!.n, review.counts.inspected!.of, review.counts.inspected!.unit],
+    [1, 2, 'sentinel.viewer.count.inspected'],
+  );
+  // the work is done; the review's own record says unfinished, after 2 of the 3 turns it was allowed
+  assert.equal(review.status, 'done');
+  assert.equal(review.review!.outcome, 'unfinished');
+  assert.deepEqual([review.review!.unfinished.n, review.review!.unfinished.of], [1, 1]);
+  assert.deepEqual(
+    [review.counts.turns!.n, review.counts.turns!.of, review.counts.turns!.unit, review.counts.turns!.bizUnit],
+    [2, 3, 'sentinel.viewer.count.turnsOf', 'sentinel.viewer.count.exchangesOf'],
+  );
+  const stage = stageAnswer('example-app', ran, review.id)!;
+  const row = stage.units[0]!;
+  assert.equal(row.review!.outcome, 'unfinished');
+  assert.deepEqual(row.review!.runner, { id: 'copilot-cli', mode: 'brokered', local: false });
+  assert.deepEqual([row.counts.turns!.n, row.counts.turns!.of], [2, 3]);
+  assert.deepEqual([row.counts.inspected!.n, row.counts.inspected!.of], [1, 2]);
+  assert.ok(assertCountsSound(answer) > 20);
+  assertCountsSound(stage);
+  // an older record names no runner and no limit: the runner is unknown and the turns are counted alone
+  const older = scanAnswer('example-app', base).stages.find((s) => s.kind === 'agent')!;
+  assert.equal(older.provenance.runner, null);
+  assert.equal(older.counts.turns!.unit, 'sentinel.viewer.count.turns');
+  assert.equal(older.counts.turns!.of, undefined);
+  assert.equal(older.review!.outcome, 'completed');
+});

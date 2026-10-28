@@ -42,16 +42,99 @@ const RECORDED: Json = JSON.parse(
 const RUN: string = RECORDED.scan.scan.id;
 const AT = '#/sentinel/' + RUN;
 
+/**
+ * The recorded answers as a Copilot review that used every turn reads (the demo's: two turns allowed, both used, no
+ * answer): each review stage and its unit name their runner, their turn limit, the files the model asked for and the
+ * record's own `unfinished`, the fields the read model now carries (owner-ui-read-model.test.ts folds them for real).
+ */
+function unfinishedReviews(recorded: Json): Json {
+  const r: Json = structuredClone(recorded);
+  const runner = { id: 'copilot-cli', mode: 'brokered', local: false };
+  const counted = (n: number, of: number, unit: string, bizUnit: string, scope: string) => ({
+    n,
+    of,
+    unit,
+    bizUnit,
+    scope,
+    source: 'sentinel viewer read model draft-1 · review records',
+  });
+  const patch = (c: Json, scope: string) => {
+    c.turns = counted(
+      c.turns.n,
+      c.turns.n,
+      'sentinel.viewer.count.turnsOf',
+      'sentinel.viewer.count.exchangesOf',
+      scope,
+    );
+    c.inspected = counted(1, c.inputs.n, 'sentinel.viewer.count.inspected', 'sentinel.viewer.count.inspected', scope);
+  };
+  // an unfinished review gave no answer, so it left no observation
+  const none = (c: Json) => {
+    if (c?.modelObservations) c.modelObservations = { ...c.modelObservations, n: 0 };
+  };
+  const stageOf = (st: Json) => {
+    if (st.kind !== 'agent') return;
+    st.provenance.runner = runner;
+    patch(st.counts, 'sentinel.viewer.scope.stage');
+    none(st.counts);
+    st.produces = st.produces.filter((io: Json) => io.key !== 'sentinel.viewer.io.observations');
+    st.review = {
+      outcome: 'unfinished',
+      unfinished: counted(
+        st.counts.units.n,
+        st.counts.units.n,
+        'sentinel.viewer.count.unfinished',
+        'sentinel.viewer.count.unfinished',
+        'sentinel.viewer.scope.stage',
+      ),
+    };
+  };
+  r.scan.stages.forEach(stageOf);
+  for (const answer of Object.values(r.stages) as Json[]) {
+    stageOf(answer.stage);
+    for (const u of answer.units)
+      if (u.review) {
+        u.review.runner = runner;
+        u.review.outcome = 'unfinished';
+        u.review.verdict = null;
+        u.review.observations = [];
+        patch(u.counts, 'sentinel.viewer.scope.review');
+        none(u.counts);
+      }
+  }
+  for (const row of [r.scan.scan, ...r.scans.scans, ...Object.values(r.stages).map((a: Json) => a.scan)])
+    none(row.counts);
+  for (const opened of Object.values(r.units) as Json[])
+    for (const answer of Object.values(opened) as Json[])
+      if (answer.unit?.review) {
+        answer.unit.review.runner = runner;
+        answer.unit.review.outcome = 'unfinished';
+        answer.unit.review.verdict = null;
+        answer.unit.review.observations = [];
+        patch(answer.unit.counts, 'sentinel.viewer.scope.review');
+        none(answer.unit.counts);
+      }
+  return r;
+}
+
 async function standIn(
   page: Page,
   baseURL: string | undefined,
-  opts: { scanAction?: Json; readOnly?: boolean; holdScans?: Promise<void>; scanState?: string } = {},
+  opts: {
+    scanAction?: Json;
+    readOnly?: boolean;
+    holdScans?: Promise<void>;
+    scanState?: string;
+    unfinished?: boolean;
+    companion?: Json;
+  } = {},
 ) {
+  const REC: Json = opts.unfinished ? unfinishedReviews(RECORDED) : RECORDED;
   // the viewer's own origin: the stand-in answers only it, as the companion does
   const origin = new URL(baseURL ?? 'http://localhost').origin;
   const version: Json = await (await page.request.get('/api/version')).json();
   const instance = version.session.instance;
-  const scans = { ...RECORDED.scans, ...(opts.scanAction ? { scanAction: opts.scanAction } : {}) };
+  const scans = { ...REC.scans, ...(opts.scanAction ? { scanAction: opts.scanAction } : {}) };
   // The page Farsight serves names the companion it may frame; the server would, with a live descriptor.
   await page.route(
     (url) => url.pathname === '/' || url.pathname === '/index.html',
@@ -76,7 +159,10 @@ async function standIn(
       await route.fulfill({ response, json: { ...v, session: { ...v.session, readOnly: true, why: 'flag' } } });
     });
   await page.route('**/api/sentinel/companion', (route) =>
-    route.fulfill({ json: { available: true, ownerOrigin: STUB }, headers: { 'cache-control': 'no-store' } }),
+    route.fulfill({
+      json: opts.companion ?? { available: true, ownerOrigin: STUB },
+      headers: { 'cache-control': 'no-store' },
+    }),
   );
   // The paired owner frame: asks its parent for the context, then hands it a read pass; a Scan press is noted.
   await page.route(`${STUB}/frame`, (route) =>
@@ -158,11 +244,11 @@ async function standIn(
             ? null
             : !stage
               ? opts.scanState
-                ? { ...RECORDED.scan, scan: { ...RECORDED.scan.scan, state: opts.scanState } }
-                : RECORDED.scan
+                ? { ...REC.scan, scan: { ...REC.scan.scan, state: opts.scanState } }
+                : REC.scan
               : !m[4]
-                ? RECORDED.stages[stage]
-                : RECORDED.units[stage]?.[m[4]];
+                ? REC.stages[stage]
+                : REC.units[stage]?.[m[4]];
     return answer
       ? route.fulfill({ headers: cors, json: answer })
       : route.fulfill({ status: 404, headers: cors, json: { error: 'sentinel.viewer.scanUnknown' } });
@@ -257,6 +343,97 @@ test.describe('the Sentinel ladder', () => {
     await page.getByText('read the full prompt').click();
     await expect(page.locator('.snt-turn.sys .snt-pre')).toContainText('You are reviewing');
     await expect(page.locator('.snt-crumb')).toContainText(/stage \d of 6/);
+  });
+
+  test('an unfinished review says so with its turns; the dock names its runner apart from its provider, and the files the model read apart from those given', async ({
+    page,
+    baseURL,
+  }) => {
+    await standIn(page, baseURL, { unfinished: true });
+    const general = reviewId('general');
+    const card = page.locator(`.snt-card[data-stage="${general}"]`);
+    const dock = page.locator('.snt-dock [data-pane="stage"]');
+    const row = (label: string) =>
+      dock.locator('dt', { hasText: new RegExp(`^${label}$`, 'i') }).locator('xpath=following-sibling::dd[1]');
+    for (const lens of ['hybrid', 'code', 'business']) {
+      await gotoReady(page, AT + '?pick=' + encodeURIComponent(general) + '&lens=' + lens);
+      const exchanges = lens === 'business' ? /2 of 2 exchanges with the model/ : /2 of 2 turns/;
+      // the work finished; the review's record says unfinished, and how many of its turns it used
+      await expect(card.locator('.snt-stc')).toContainText(/unfinished/);
+      await expect(card.locator('.snt-stc')).not.toContainText(/\bdone\b/);
+      await expect(card.locator('.snt-stc')).toContainText(exchanges);
+      await expect(dock.locator('.snt-row').first()).toContainText(/unfinished/);
+      // the runner is what it ran through, in every register; the provider entry is an identifier, code registers only
+      await expect(row('runner')).toContainText('Copilot command line · Brokered');
+      if (lens === 'business') {
+        const words = await visibleWords(page, '.snt-chrome, .snt-stage, .snt-dock');
+        expect(words.match(IDENTIFIER) || [], 'identifier-shaped words in the business register').toEqual([]);
+        await expect(dock.locator('dt', { hasText: /^provider$/i })).toHaveCount(0);
+        await expect(dock).not.toContainText('local-review');
+        await expect(dock).not.toContainText('copilot-cli');
+      } else {
+        await expect(row('runner')).toContainText('copilot-cli');
+        await expect(row('provider')).toHaveText('local-review');
+      }
+      // given and read, each with its own words
+      await expect(row('files given')).toHaveText('1 captured file given');
+      await expect(row('model read')).toHaveText('1 of 1 files the model read');
+      // the planner's profile is an internal name: the code register's crumb only
+      if (lens === 'code') await expect(page.locator('.snt-crumb')).toContainText('planner static-scanners');
+      else await expect(page.locator('.snt-crumb')).not.toContainText('static-scanners');
+    }
+    // STAGE: the review in the list and its head say unfinished, with its turns and the files the model read
+    await gotoReady(page, AT + '/' + encodeURIComponent(general) + '?lens=hybrid');
+    await expect(page.locator('.snt-ent').first()).toContainText(/unfinished/);
+    const head = page.locator('.snt-turns > .snt-row').first();
+    await expect(head).toContainText(/unfinished/);
+    await expect(head).toContainText(/2 of 2 turns/);
+    await expect(head).toContainText(/1 of 1 files the model read/);
+  });
+
+  test('a completed review keeps its status word; the recorded answers, read as recorded, print no limit or runner', async ({
+    page,
+    baseURL,
+  }) => {
+    await standIn(page, baseURL);
+    const general = reviewId('general');
+    await gotoReady(page, AT + '?pick=' + encodeURIComponent(general) + '&lens=hybrid');
+    const card = page.locator(`.snt-card[data-stage="${general}"]`);
+    await expect(card.locator('.snt-stc')).toContainText(/done/);
+    await expect(card.locator('.snt-stc')).not.toContainText(/unfinished/);
+    const dock = page.locator('.snt-dock [data-pane="stage"]');
+    await expect(dock.locator('dt', { hasText: /^model read$/i })).toHaveCount(0);
+    await expect(dock.locator('dt', { hasText: /^files given$/i })).toHaveCount(1);
+  });
+
+  test('a companion paired with the other loopback spelling of this server: the view says where, and links there', async ({
+    page,
+    baseURL,
+  }) => {
+    const here = new URL(baseURL ?? 'http://localhost');
+    const other = `http://${here.hostname === 'localhost' ? '127.0.0.1' : 'localhost'}:${here.port}`;
+    await standIn(page, baseURL, {
+      companion: { available: false, reasonCode: 'sentinel.ownerUi.launch', pairedWith: other },
+    });
+    for (const lens of ['hybrid', 'business']) {
+      await gotoReady(page, AT + '?lens=' + lens);
+      const line = page.locator('.snt-stage .snt-empty[data-paired-with]');
+      await expect(line).toHaveText(`The owner companion is paired with ${other} — open Sentinel there.`);
+      await expect(line.locator('a')).toHaveAttribute('href', other + '/' + AT + '?lens=' + lens);
+      await expect(page.locator('iframe.snt-frame')).toHaveCount(0); // nothing is framed here
+    }
+    // a pairedWith that is not this server under its other name is not followed: the launch line as before
+    await page.unroute('**/api/sentinel/companion');
+    await page.route('**/api/sentinel/companion', (route) =>
+      route.fulfill({
+        json: { available: false, reasonCode: 'sentinel.ownerUi.launch', pairedWith: 'http://127.0.0.1:1' },
+        headers: { 'cache-control': 'no-store' },
+      }),
+    );
+    await gotoReady(page, AT + '?lens=hybrid');
+    await page.reload(); // the lookup is read when the view mounts
+    await expect(page.locator('.snt-stage .snt-empty[data-paired-with]')).toHaveCount(0);
+    await expect(page.locator('.snt-stage .snt-empty')).toContainText(/Launch the owner companion/);
   });
 
   test("a scan's Start, Pause and Cancel ask the owner panel, with the run id; the view confirms nothing", async ({

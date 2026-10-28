@@ -45,12 +45,39 @@ const digestId = (v: unknown) => {
   if (typeof v !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(v)) throw new OwnerUiError();
   return v;
 };
-export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
+/** How long the companion polls for a service that is not answering yet, and how often. */
+export const SERVICE_WAIT = Object.freeze({ defaultMs: 30_000, everyMs: 250 });
+
+/**
+ * The workspace's service, waiting up to `waitMs` for one that is still starting (its descriptor not yet written, or
+ * its socket not yet listening): `onWaiting` is told once, before the first wait. Never starts a service. After the
+ * wait, still no service refuses as before (`sentinel.service.operationUnavailable`).
+ */
+async function serviceFor(ws: Workspace, waitMs: number, onWaiting?: (waitMs: number) => void) {
+  const until = Date.now() + waitMs;
+  let told = false;
+  for (;;) {
+    const client = await connectService(ws, 'owner-ui');
+    if (client) return client;
+    if (Date.now() + SERVICE_WAIT.everyMs > until) throw new OwnerUiError('sentinel.service.operationUnavailable');
+    if (!told) onWaiting?.(waitMs);
+    told = true;
+    await new Promise((r) => setTimeout(r, SERVICE_WAIT.everyMs));
+  }
+}
+
+export interface StartOwnerUiOptions {
+  /** Wait this long for a service that is still starting; 0 (the default) refuses at once when none answers. */
+  readonly waitForServiceMs?: number;
+  /** Told once when the companion starts waiting for the service. */
+  readonly onWaiting?: (waitMs: number) => void;
+}
+
+export async function startOwnerUi(ws: Workspace, farsightOrigin: string, options: StartOwnerUiOptions = {}) {
   companionOrigin(farsightOrigin);
   const host = await ownerHost(farsightOrigin),
     session = new OwnerUiSession(host.instance),
-    client = await connectService(ws, 'owner-ui');
-  if (!client) throw new OwnerUiError('sentinel.service.operationUnavailable');
+    client = await serviceFor(ws, Math.max(0, options.waitForServiceMs ?? 0), options.onWaiting);
   try {
     preparationCapabilities(await client.request('service.preparation-capabilities', {}));
     const caps: any = await client.request('service.owner-ui-capabilities', {});
@@ -592,7 +619,14 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
   return controller;
 }
 export async function runOwnerUi(ws: Workspace, origin: string) {
-  const running = await startOwnerUi(ws, origin);
+  // Started beside a service that is still opening, the companion waits for it and says so, instead of exiting.
+  const running = await startOwnerUi(ws, origin, {
+    waitForServiceMs: SERVICE_WAIT.defaultMs,
+    onWaiting: (ms) =>
+      process.stdout.write(
+        `${STRINGS['sentinel.ownerUi.waitingForService']!.professional.split('{s}').join(String(Math.round(ms / 1000)))}\n`,
+      ),
+  });
   // The door: the Sentinel view in the paired Farsight, where the owner panel lives now (no page of its own).
   process.stdout.write(
     `${STRINGS['sentinel.ownerUi.openSentinel']!.professional.split('{url}').join(origin + '/#/sentinel')}\n`,

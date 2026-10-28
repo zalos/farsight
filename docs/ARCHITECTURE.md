@@ -2246,8 +2246,13 @@ section, and the linked-rerun preview; the companion routes only it used (`/runs
 `/process`, `/inspect`, `/page`, `/report`, `/delivery`, `GET /capabilities`); the owner-ui operations `owner-ui.runs`,
 `owner-ui.select` and `owner-ui.process` with `owner-ui/process.ts` and `process-layout.ts`; and the page's catalog
 words. The capability document no longer sets the optional `processInspection`. `farsight-sentinel owner-ui` prints the
-Sentinel view's address in the paired Farsight. *Unchanged:* Farsight's `/api/sentinel/companion` discovery, the read
-routes the view reads (`/api/sentinel/...`), every receipt and admission rule above, and the owner CLI. *Why:* one
+Sentinel view's address in the paired Farsight, and started before the service has opened it waits for it (thirty
+seconds at most, saying so once) rather than exiting. `farsight serve` prints the origin it binds,
+`http://127.0.0.1:<port>`; when a page reaches the same server under the other loopback spelling (`localhost` ⇄
+`127.0.0.1`, same port), `/api/sentinel/companion` answers `{ available: false, pairedWith: <origin> }` and the view
+links there. *Unchanged:* the companion pairs with one exact Farsight origin, and is framed and answers reads under it
+only — the other spelling frames nothing and gets no read pass; the read routes the view reads (`/api/sentinel/...`),
+every receipt and admission rule above, and the owner CLI. *Why:* one
 place reads a scan (the view, in the three registers, with every number a `Counted`), and the owner-origin frame keeps
 only what must stay off the application host — the confirmations. A comparison report and a rerun from the browser
 are the owner CLI's until the view has its own (P-4b for the rerun).

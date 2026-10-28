@@ -197,6 +197,16 @@ export interface ReviewRecord {
     readonly digest: string;
     readonly bytes: number;
   }[];
+  /**
+   * What the review ran through: a native review's own runner, else the runner its requests' wire names (the full
+   * report's rule). Null when the record carried none (an older reader).
+   */
+  readonly runner: 'copilot-cli' | 'claude-cli' | 'hosted-api' | null;
+  readonly mode: 'brokered' | 'native';
+  /** The admitted review's disclosure: `local-only` for a model server on this computer, `hosted` off it. */
+  readonly disclosure: 'local-only' | 'hosted' | null;
+  /** The turns the admitted spec allowed the session; null when the spec could not be read. */
+  readonly turnLimit: number | null;
   readonly verdict: string | null;
   readonly outcome: string;
   readonly totals: {
@@ -323,7 +333,13 @@ export interface Provenance {
   /** What the first check's try ran, from its retained invocation record; null with a reason when there is none. */
   readonly invocation: InvocationView | null;
   readonly invocationAbsent: string | null;
+  /** The adopted provider entry the stage's reviews were bound to: an identifier, for the code registers. */
   readonly provider: { readonly id: string; readonly model: string } | null;
+  /**
+   * What the reviews ran through and how, when every review of the stage agrees; else null. `local` says the
+   * `hosted-api` runner reached a model server on this computer (the admitted review disclosed nothing off it).
+   */
+  readonly runner: RunnerView | null;
   readonly model: {
     readonly requested: string | null;
     readonly reported: string | null;
@@ -339,6 +355,12 @@ export interface Provenance {
     | readonly { readonly name: string; readonly revision: number; readonly digest: string; readonly bytes: Counted }[]
     | null;
   readonly deadline: Duration | null;
+}
+
+export interface RunnerView {
+  readonly id: string;
+  readonly mode: 'brokered' | 'native';
+  readonly local: boolean;
 }
 
 export interface IoChip {
@@ -364,13 +386,29 @@ export interface StageCard {
     /** The stage's units: *checks* for a tool or built-in stage, *reviews* for an agent stage. */
     readonly units: Counted;
     readonly attempts: Counted;
+    /** The captured files the stage's checks or reviews were given, each once per unit given it. */
     readonly inputs: Counted;
+    /**
+     * Of those, the files Sentinel served to a model because it asked (each once per review): `of` is the files the
+     * reviews were given. Null for a stage that is not a review, or until every review's record is read.
+     */
+    readonly inspected: Counted | null;
     readonly findings: Counted | null;
     readonly modelObservations: Counted | null;
+    /** The reviews' turns; `of` is the turns their admitted specs allowed, when every limit was read. */
     readonly turns: Counted | null;
     readonly tokensIn: Counted | null;
     readonly tokensOut: Counted | null;
   };
+  /**
+   * What the reviews' records concluded, apart from whether their work finished: `completed` or `unfinished` when
+   * every review agrees, else `mixed`; `unfinished` counts the reviews that ended unfinished, of every review.
+   * Null for a stage that is not a review, or until every review's record is read.
+   */
+  readonly review: {
+    readonly outcome: 'completed' | 'unfinished' | 'mixed';
+    readonly unfinished: Counted;
+  } | null;
   readonly cost: Cost;
   readonly reads: readonly IoChip[];
   readonly produces: readonly IoChip[];
@@ -532,8 +570,11 @@ export interface UnitRow {
     readonly files: Counted;
     readonly attempts: Counted;
     readonly inputs: Counted;
+    /** For a review: the files Sentinel served the model because it asked, of the files it was given. */
+    readonly inspected: Counted | null;
     readonly tokensIn: Counted | null;
     readonly tokensOut: Counted | null;
+    /** For a review: its turns; `of` is the turns its admitted spec allowed, when that was read. */
     readonly turns: Counted | null;
     readonly modelObservations: Counted | null;
   };
@@ -544,6 +585,7 @@ export interface UnitRow {
       readonly reported: string | null;
       readonly source: string;
     } | null;
+    readonly runner: RunnerView | null;
     readonly verdict: string | null;
     readonly outcome: string;
     readonly turns: readonly TurnRow[];
@@ -946,6 +988,40 @@ function invocationView(v: InvocationRecordView, scope: string): InvocationView 
 
 const isInvocation = (v: InvocationRead | null | undefined): v is InvocationRecordView => !!v && !('absent' in v);
 
+/** A review's turns, of the turns its admitted spec allowed when that limit was read (*3 of 3 turns*). */
+function turnsCount(used: number, limit: number | null, scope: string, source: string): Counted {
+  return limit === null
+    ? count(used, 'sentinel.viewer.count.turns', scope, source, { bizUnit: 'sentinel.viewer.count.exchanges' })
+    : count(used, 'sentinel.viewer.count.turnsOf', scope, `${source}; admitted review spec, turn limit`, {
+        of: limit,
+        bizUnit: 'sentinel.viewer.count.exchangesOf',
+      });
+}
+
+/** The files Sentinel served a model because it asked, of the files its review was given (*1 of 30 files*). */
+function inspectedCount(read: number, given: number, scope: string, source: string): Counted {
+  return count(read, 'sentinel.viewer.count.inspected', scope, `${source}; plan units, inputs`, {
+    of: given,
+    bizUnit: 'sentinel.viewer.count.inspected',
+  });
+}
+
+/** Files one review's record says were served to its model, each once. */
+const inspectedOf = (t: ReviewRecord) => new Set(t.inspected).size;
+
+/** What every review ran through, when they agree on runner and mode; else null (an older record names none). */
+function runnerOf(traces: readonly ReviewRecord[]): Provenance['runner'] {
+  const first = traces[0];
+  if (!first?.runner) return null;
+  const mode = first.mode ?? 'brokered',
+    local = first.disclosure === 'local-only';
+  return traces.every(
+    (t) => t.runner === first.runner && (t.mode ?? 'brokered') === mode && (t.disclosure === 'local-only') === local,
+  )
+    ? { id: first.runner, mode, local }
+    : null;
+}
+
 function provenanceOf(
   scan: ScanRecord,
   units: readonly UnitRecord[],
@@ -981,6 +1057,7 @@ function provenanceOf(
           ? 'sentinel.viewer.invocation.notRead'
           : 'sentinel.viewer.where.notYet',
     provider: first.review ? { id: first.review.providerId, model: first.review.modelId } : null,
+    runner: runnerOf(traces),
     model: traces.length && models.size === 1 ? traces[0]!.model : null,
     prompt:
       traces.length && prompts.size === 1
@@ -1028,6 +1105,9 @@ function stageCard(
     tOut = tokens(attempts, 'outputTokens');
   const observations = traces.reduce((n, t) => n + t.observations.length, 0);
   const turns = traces.reduce((n, t) => n + t.turns.length, 0);
+  const limits = traces.map((t) => t.turnLimit ?? null);
+  const turnLimit = limits.includes(null) ? null : (limits as number[]).reduce((n, m) => n + m, 0);
+  const unfinished = traces.filter((t) => t.outcome !== 'completed').length;
   const allTraced = review && traces.length === stage.units.length && !scan.withheld;
   const findingsN =
     'findings' in scan.report && first.adapterId ? (scan.report.findingsByAdapter[first.adapterId] ?? 0) : null;
@@ -1082,6 +1162,14 @@ function stageCard(
       inputs: count(inputs, 'sentinel.viewer.count.inputs', SCOPE.stage, 'plan units, inputs', {
         bizUnit: 'sentinel.viewer.count.inputs',
       }),
+      inspected: allTraced
+        ? inspectedCount(
+            traces.reduce((n, t) => n + inspectedOf(t), 0),
+            inputs,
+            SCOPE.stage,
+            'review records, inspected',
+          )
+        : null,
       findings:
         findingsN === null || kind === 'agent' || first.stage !== 'check'
           ? null
@@ -1093,14 +1181,19 @@ function stageCard(
             bizUnit: 'sentinel.viewer.count.modelNotes',
           })
         : null,
-      turns: allTraced
-        ? count(turns, 'sentinel.viewer.count.turns', SCOPE.stage, 'review records, operations', {
-            bizUnit: 'sentinel.viewer.count.exchanges',
-          })
-        : null,
+      turns: allTraced ? turnsCount(turns, turnLimit, SCOPE.stage, 'review records, operations') : null,
       tokensIn: tIn === null ? null : count(tIn, 'sentinel.viewer.count.tokensIn', SCOPE.stage, 'attempt usage'),
       tokensOut: tOut === null ? null : count(tOut, 'sentinel.viewer.count.tokensOut', SCOPE.stage, 'attempt usage'),
     },
+    review: allTraced
+      ? {
+          outcome: unfinished === 0 ? 'completed' : unfinished === traces.length ? 'unfinished' : 'mixed',
+          unfinished: count(unfinished, 'sentinel.viewer.count.unfinished', SCOPE.stage, 'review records, outcome', {
+            of: traces.length,
+            bizUnit: 'sentinel.viewer.count.unfinished',
+          }),
+        }
+      : null,
     cost: costOf(attempts, SCOPE.stage, 'attempt usage'),
     reads,
     produces: [...produced].map(([key, c]) => (c ? { key, count: c } : { key })),
@@ -1432,12 +1525,11 @@ function unitRow(
       inputs: count(unit.inputs, 'sentinel.viewer.count.inputs', scope, 'plan unit, inputs', {
         bizUnit: 'sentinel.viewer.count.inputs',
       }),
+      inspected: review ? inspectedCount(inspectedOf(review), unit.inputs, scope, 'review record, inspected') : null,
       tokensIn: tIn === null ? null : count(tIn, 'sentinel.viewer.count.tokensIn', scope, 'attempt usage'),
       tokensOut: tOut === null ? null : count(tOut, 'sentinel.viewer.count.tokensOut', scope, 'attempt usage'),
       turns: review
-        ? count(review.turns.length, 'sentinel.viewer.count.turns', scope, 'review record, operations', {
-            bizUnit: 'sentinel.viewer.count.exchanges',
-          })
+        ? turnsCount(review.turns.length, review.turnLimit ?? null, scope, 'review record, operations')
         : null,
       modelObservations: review
         ? count(
@@ -1455,6 +1547,7 @@ function unitRow(
     review: review
       ? {
           model: review.model,
+          runner: runnerOf([review]),
           verdict: review.verdict,
           outcome: review.outcome,
           turns: review.turns.slice(0, READ_MODEL_LIMITS.turnsPerUnit).map((t, i) => {

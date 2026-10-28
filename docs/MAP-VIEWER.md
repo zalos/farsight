@@ -1515,7 +1515,8 @@ The Sentinel tab is a ladder with the Map's shape: a chrome that holds still and
 five stops SCANS · PIPELINE · STAGE · ENTRY POINTS · PATH (`.map-lvls`, the last two greyed *not yet built* — a press
 goes nowhere), the LAYOUT slot (`list · compare` at SCANS with compare greyed, `ladder · table` at PIPELINE,
 `detail · table` at STAGE) and the tools (**Scan**, Refresh). **Row 2**: the crumb (workspace › scan #n · when · source
-commit and profile outside the business register · the stage tally; at STAGE *stage n of m* and its kind) and the
+commit outside the business register and the planner's profile in the code register only · the stage tally; at STAGE
+*stage n of m* and its kind) and the
 verdict chips (required coverage, the report's findings, model observations when a stage is agentic, the policy word).
 Beside Scan, **Edit pipeline** opens the edit mode and, on a finished scan, **Report · HTML** and **Report · Markdown**
 read the retained report with the pass and save it as a file.
@@ -1524,18 +1525,23 @@ read the retained report with the pass and save it as a file.
 |---|---|---|
 | scans (`#/sentinel[?before=<n>]`) | one page of retained scans, newest first: #number, when, findings, model observations, policy word, stages, agentic stages, cost, duration; *Older scans* / *Newest scans* page by number | the owner panel |
 | pipeline, edit mode (`#/sentinel?edit=1[&pick=<stage>]`) | the workspace's pipeline file (`GET <companion>/api/sentinel/pipeline`) as its ladder, one row a stage: number, id, kind, scanner or runner (not in business), where it runs and, after a check, *reuses* · *changed* · *runs again* · *added*; *edited* and *problem* marks; `+ add a stage here · built in · tool · script · agent` under the picked stage; the picked stage's JSON beneath (*what this writes*, not in business) | the editor drawer: kind, the kind's own fields and the shared ones (reads, produces, after, one per, required, budget), the service's problems on this stage; *Check*, *Remove stage* |
-| pipeline (`#/sentinel/<run id>[?layout=table][&pick=<stage>]`) | the stages top to bottom on a rail; a level of two or more stages draws as one row side by side; each card its kind, provenance line (code and hybrid only: adapter and version, the image its try ran), status and time, findings or observations, cost, what it read and its primary outputs | the picked stage (else the running one, else the first agent): where it ran, runner, model requested and reported, prompt and skills, turns, tokens (not in business), cost, tries, what ran (from its first check's try: image, scrubbed command, environment names, limits), implementation digest and whether this installation still holds it, everything it read and produced; *Open the stage*, *Rerun this stage* greyed with its reason and, outside business, the owner command line's two lines (`pipeline adopt --confirm`, `rerun <run> --stage <stage> --confirm`) |
+| pipeline (`#/sentinel/<run id>[?layout=table][&pick=<stage>]`) | the stages top to bottom on a rail; a level of two or more stages draws as one row side by side; each card its kind, provenance line (code and hybrid only: adapter and version, the image its try ran), status and time, findings or observations, cost, what it read and its primary outputs | the picked stage (else the running one, else the first agent): where it ran, runner (a review's command line or model service and how Sentinel drove it, in every register; a check's adapter and version outside business), the provider entry (outside business), model requested and reported, prompt and skills, turns (*n of m* when the admitted limit was read), tokens (not in business), cost, tries, files given and the files the model read of them, what ran (from its first check's try: image, scrubbed command, environment names, limits), implementation digest and whether this installation still holds it, everything it read and produced; *Open the stage*, *Rerun this stage* greyed with its reason and, outside business, the owner command line's two lines (`pipeline adopt --confirm`, `rerun <run> --stage <stage> --confirm`) |
 | stage (`#/sentinel/<run id>/<stage>[?unit=<k>][&layout=table]`) | its checks or reviews on the left (the file each covered, a guided review's rule; *n files* in business); on the right the open one (`unit=`, read on its own): a review's instructions (the prompt, folded), each exchange by the reply grammar (*asked to read lines*, *answered*, a refusal's reason) with its tokens and, outside business, its retained words behind *read the words*, and the cited observations; a check's tries, what its try ran and what it left (each output's size and, when its class and the scan allow, its text) | the stage |
 
 Every number is a `Counted` from the read model (docs/COUNTS.md § Sentinel read model) printed through
 `lib/counted.js`; a duration and a cost carry their scope as a tip; a cost never prints `$0` for an unobserved price.
 The business register prints no provenance line, digest, commit, profile id, path or token count (the e2e spec walks
-all three stops for identifier-shaped words). `lib/sentinel-model.js` is pure and unit-tested
+all three stops for identifier-shaped words). A review whose record says *unfinished* (the model gave no final answer)
+prints *unfinished* and its turns where a finished stage prints *done* — on its card, in the dock, in the STAGE list and
+at the head of the open review (`reviewState()`); a stage whose reviews disagree prints *n of m reviews unfinished*. `lib/sentinel-model.js` is pure and unit-tested
 (`packages/server/test/sentinel-model.test.ts`): the address grammar, the words of a duration and a cost, the ladder's
 rows, the picked stage, the card's outputs and the Scan button's state.
 
 **Where the data comes from.** Farsight's server imports no Sentinel code (ADR 18). The page discovers the companion
-origin from `GET /api/sentinel/companion` (and the served page's `data-sentinel-owner-origin`), mounts the companion's
+origin from `GET /api/sentinel/companion` (and the served page's `data-sentinel-owner-origin`); when the companion is
+paired with this server's other loopback spelling (`localhost` ⇄ `127.0.0.1`, same port) the answer names it
+(`pairedWith`) and the view prints *The owner companion is paired with <origin> — open Sentinel there* as a link to the
+same address there, framing nothing; mounts the companion's
 own frame in the dock's *Owner panel* pane (built once and only shown or hidden: moving an iframe reloads it, and the
 frame's page is its pairing), and reads the read model cross-origin — `GET <companion>/api/sentinel/scans`,
 `/scans/before/<n>`, `/scans/<run id>`, `/scans/<run id>/stages/<stage>`, `.../units/<k>` — with the **read pass** the paired frame posts it (`sentinel-owner-read`, bound to the

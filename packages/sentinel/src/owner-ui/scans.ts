@@ -56,6 +56,8 @@ const LIST_COUNT_MS = 5000;
 /** The largest retained output read for its text, and the largest invocation record read at all. */
 const OUTPUT_READ_BYTES = 4 * 1024 * 1024;
 const INVOCATION_READ_BYTES = 256 * 1024;
+/** The admitted review spec is read only for its turn limit and mode; one larger than this leaves the limit unknown. */
+const REVIEW_SPEC_READ_BYTES = 4 * 1024 * 1024;
 const FINAL = new Set(['completed', 'canceled']);
 const PRIVACY = new Set<OutputPrivacy>(['metadata', 'source-derived', 'source']);
 /**
@@ -305,6 +307,37 @@ export class OwnerUiScans {
       this.#cache.set(runId, { key, full: want.full, record });
     }
     return record;
+  }
+
+  /**
+   * What the admitted review says the session could do: its mode and, for a native review, its runner, the turn
+   * limit (a native stage's own `turns`, else the session's `maxSteps`) and whether the source left this computer. Read by the id the admitted plan pins,
+   * so the bytes are the ones admitted; anything unreadable or larger than its bound leaves both unknown.
+   */
+  async #reviewTerms(unit: PlanWork, signal?: AbortSignal): Promise<ReviewTerms> {
+    const disclosure = unit.review?.terms.disclosure ?? null;
+    const unknown: ReviewTerms = { native: null, turnLimit: null, disclosure };
+    const id = unit.review?.spec;
+    if (!id) return unknown;
+    if (signal?.aborted) throw new OwnerUiError('sentinel.ownerUi.changed');
+    const size = this.#size(id);
+    if (size === null || size > REVIEW_SPEC_READ_BYTES) return unknown;
+    let v: any;
+    try {
+      v = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await this.#store.readArtifact(id)));
+    } catch {
+      return unknown;
+    }
+    this.#store.assertHeld();
+    const spec = v?.schema === 'sentinel-admitted-review/draft-1' ? v.spec : null;
+    const whole = (x: unknown) => (Number.isSafeInteger(x) && (x as number) > 0 ? (x as number) : null);
+    const runner = spec?.native?.runner;
+    const native = typeof runner === 'string' && RUNNERS.has(runner) ? (runner as ReviewRecord['runner']) : null;
+    return {
+      native,
+      turnLimit: spec?.native ? whole(spec.native.budget?.turns) : whole(spec?.budget?.maxSteps),
+      disclosure,
+    };
   }
 
   /** The decoded size the store recorded for an artifact, or null. */
@@ -662,6 +695,7 @@ export class OwnerUiScans {
                 u.key,
                 named,
                 await readPublishedInstructions(store, d.unit, { signal: want.signal }),
+                await this.#reviewTerms(d.unit, want.signal),
                 this.#scrub,
               ),
             );
@@ -735,10 +769,34 @@ const lastOf = (messages: readonly { role: string; content: string }[], role: st
  * fold reads the STAGE list by their closed grammar and gives their bounded words only to one opened review), the
  * observations and the prompt text.
  */
+/** The runners a review record can name: the read model prints each through the editor's runner words. */
+const RUNNERS: ReadonlySet<string> = new Set(['copilot-cli', 'claude-cli', 'hosted-api']);
+
+interface ReviewTerms {
+  readonly native: ReviewRecord['runner'];
+  readonly turnLimit: number | null;
+  /** Whether the admitted review sends source off this computer (`hosted`) or keeps it here (`local-only`). */
+  readonly disclosure: ReviewRecord['disclosure'];
+}
+
+/**
+ * The runner a brokered review ran through, by the wire its requests carried: the full report's own rule
+ * (`service/full-report.ts`), so the two never name different runners for one review.
+ */
+function brokeredRunner(trace: Awaited<ReturnType<typeof readPublishedInstructions>>): ReviewRecord['runner'] {
+  const encoding = trace.requests.find((r) => r.wire)?.wire?.encoding;
+  return encoding === 'sentinel-claude-chat/v1'
+    ? 'claude-cli'
+    : encoding === 'sentinel-copilot-chat/v1'
+      ? 'copilot-cli'
+      : 'hosted-api';
+}
+
 function reviewRecord(
   unitKey: string,
   identity: Extract<Awaited<ReturnType<typeof reviewIdentityIn>>, { status: 'available' }>['reviews'][number],
   trace: Awaited<ReturnType<typeof readPublishedInstructions>>,
+  terms: ReviewTerms,
   scrub: (text: string) => string,
 ): ReviewRecord {
   const clean = (text: string | null) => (text === null ? null : scrub(text));
@@ -788,6 +846,10 @@ function reviewRecord(
       digest: s.digest,
       bytes: s.bytes,
     })),
+    runner: terms.native ?? brokeredRunner(trace),
+    mode: terms.native ? 'native' : 'brokered',
+    disclosure: terms.disclosure,
+    turnLimit: terms.turnLimit,
     verdict: record.verdict ?? null,
     outcome: record.outcome,
     totals: { ...record.totals },
