@@ -18,6 +18,7 @@
 import type { ControlFactsEnvelope, ControlProperty, ControlVerdict } from '../../contracts/controls.js';
 import type { ScopedReason } from '../../contracts/common.js';
 
+/** A control property the framework libraries model: authentication, authorization or input validation. */
 export type InspectedProperty = Extract<ControlProperty, 'authentication' | 'authorization' | 'input-validation'>;
 /** The inspection rule families, one per property the libraries actually model. No other property is inspected. */
 export const CONTROL_FAMILIES: Readonly<Record<string, InspectedProperty>> = Object.freeze({
@@ -25,14 +26,18 @@ export const CONTROL_FAMILIES: Readonly<Record<string, InspectedProperty>> = Obj
   'sentinel.controls.authorization': 'authorization',
   'sentinel.controls.input-validation': 'input-validation',
 });
+/** Every inspected property, in report order. */
 export const INSPECTED_PROPERTIES: readonly InspectedProperty[] = Object.freeze([
   'authentication',
   'authorization',
   'input-validation',
 ] as const);
+/** The framework libraries an inspection runs, in a fixed order. */
 export const FRAMEWORKS = Object.freeze(['next', 'express', 'nest', 'spring'] as const);
+/** One of {@link FRAMEWORKS}. */
 export type FrameworkName = (typeof FRAMEWORKS)[number];
 
+/** Why an inspected surface and property is not established: each is a catalog key. */
 export const CONTROLS_REASONS = Object.freeze([
   'sentinel.controls.unclaimed',
   'sentinel.controls.propertyNotModeled',
@@ -43,6 +48,7 @@ export const CONTROLS_REASONS = Object.freeze([
   'sentinel.controls.surfaceExtentUnproven',
   'sentinel.controls.surfaceOutsideExtent',
 ] as const);
+/** One of {@link CONTROLS_REASONS}. */
 export type ControlsReason = (typeof CONTROLS_REASONS)[number];
 
 /** What one library did over the source: its envelopes, or the fixed reason it could not run. */
@@ -64,6 +70,7 @@ export interface InspectionCheck {
   readonly scopeId: string;
 }
 
+/** The coverage an inspection reports: aggregate, with the checks it covered, what it read and what it could not. */
 export interface InspectionCoverage {
   readonly granularity: 'aggregate';
   readonly coveredChecks: { checkId: string; coverage: string }[];
@@ -83,6 +90,10 @@ export interface CheckInspection {
   readonly reasons: readonly string[];
 }
 
+/**
+ * One surface and property across the libraries: established only when every library claiming the surface answers
+ * the property, none answers unknown, all agree and none refused; partial with the limiting reason otherwise.
+ */
 export interface InspectedRow {
   readonly surfaceId: string;
   readonly property: InspectedProperty;

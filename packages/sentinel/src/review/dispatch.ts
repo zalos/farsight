@@ -1,5 +1,6 @@
 // Two fixed coordinator operations, over a genuine admitted plan. No repository code or generic worker is called.
 import type { WorkRef } from '../contracts/common.js';
+import type { StageInputBinding } from '../contracts/pipeline.js';
 import type { Principal } from '../contracts/policy.js';
 import type { DecisionChannel } from '../contracts/disposition.js';
 import type { SentinelStore } from '../store/index.js';
@@ -17,9 +18,10 @@ import type { BudgetLedger } from './providers/budget.js';
 import type { ModelBroker } from './providers/broker.js';
 import { resolveReviewModel } from './providers/selection.js';
 import { readReviewSpec } from './plan.js';
+import { recheckPacks } from './packs.js';
 import { providerCaller } from './caller.js';
 import { LedgerCheckpointStore } from './checkpoints.js';
-import { runSession } from './session.js';
+import { runnerForKind } from './runner.js';
 import { reviewFail } from './errors.js';
 import { usageOf } from './operation.js';
 export const REVIEW_IMPLEMENTATION_URL = import.meta.url;
@@ -34,6 +36,8 @@ class ReviewWithheld extends Error {
   }
 }
 export interface ReviewRuntime {
+  /** The workspace trust folder: a spec's promoted pack bytes are re-checked there before the session starts. */
+  readonly trustDir?: string;
   readonly ledger: BudgetLedger;
   readonly broker: ModelBroker;
   readonly currentPolicy: () => EffectivePolicy;
@@ -63,8 +67,13 @@ export async function prepareAdmittedReview(
   const unit = plan.unitOf(ref).unit;
   if (!unit.review || plan.admitted.plan.pins.snapshotId !== plan.run.snapshotId) return bad();
   if (await reviewSecretsKnown(store, plan.run.id, plan.admitted)) throw new ReviewWithheld();
-  const spec = await readReviewSpec(store, unit),
-    policy = runtime.currentPolicy(),
+  const spec = await readReviewSpec(store, unit);
+  // The prompt and skills the spec sealed came from promoted packs: the trust folder must still hold exactly them.
+  if (spec.packs?.length) {
+    if (!runtime.trustDir) return bad();
+    recheckPacks(runtime.trustDir, spec.packs);
+  }
+  const policy = runtime.currentPolicy(),
     resolved = resolveReviewModel(policy, spec.kind, spec.segmentId!);
   // The owner may select model review without an external scanner. A requested secret rule remains a gate even
   // when missing assets prevented a scanner unit from being planned; failed/partial scans never become optional.
@@ -134,6 +143,12 @@ export async function runAdmittedReview(
   prepared: Awaited<ReturnType<typeof prepareAdmittedReview>>,
   signal: AbortSignal,
   deadlineAt: number,
+  /**
+   * The unit's declared inputs as the coordinator sealed them into its invocation: the exact accepted upstream
+   * artifacts after the secret-withholding fold. They are the only upstream content the session may read, beside
+   * its own captured scope; a binding that did not resolve, or was not folded, refuses the review.
+   */
+  stageInputs?: readonly StageInputBinding[],
 ): Promise<PreparedOutputs> {
   const seal = prepared && preparedFor.get(prepared);
   if (
@@ -160,15 +175,43 @@ export async function runAdmittedReview(
       return bad();
     return r.binding;
   };
-  const result = await runSession(
-    { ...spec, attemptId },
+  // What the session may read: its own captured scope and the fold-applied upstream artifacts it was bound to.
+  for (const b of stageInputs ?? [])
+    if (b.state !== 'resolved' || (b.secretFold !== 'applied' && b.secretFold !== 'not-applicable')) return bad();
+  const readable = new Set<string>([
+    ...spec.scope.files.map((f) => f.content),
+    ...(stageInputs ?? []).flatMap((b) => b.artifacts),
+  ]);
+  // The admitted turn loop runs through the stage's agent runner; brokered mode is exactly the session below.
+  const binding = prepared.resolved.binding,
+    runner = runnerForKind(binding.kind);
+  const ran = await runner.run(
     {
-      caller: providerCaller(runtime.broker, envelope, current, { deadlineAt }),
-      checkpoints: new LedgerCheckpointStore(runtime.ledger, store.epoch),
-      read: (id) => store.readArtifact(id),
-      signal,
+      id: unit.stage,
+      kind: 'agent',
+      mode: 'brokered',
+      runner: runner.id,
+      model: binding.model,
+      budget: { turns: spec.budget.maxSteps, seconds: Math.ceil(spec.budget.deadlineMs / 1000) },
+    },
+    [],
+    {
+      brokered: {
+        spec: { ...spec, attemptId },
+        options: {
+          caller: providerCaller(runtime.broker, envelope, current, { deadlineAt }),
+          checkpoints: new LedgerCheckpointStore(runtime.ledger, store.epoch),
+          read: (id) => {
+            if (!readable.has(id)) return bad();
+            return store.readArtifact(id);
+          },
+          signal,
+        },
+      },
     },
   );
+  if (ran.mode !== 'brokered') return bad();
+  const result = ran.session;
   store.assertHeld();
   current();
   const artifacts = result.privateArtifacts ?? [],

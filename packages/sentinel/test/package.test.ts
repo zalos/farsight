@@ -108,34 +108,22 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'reports/scanner.js': ['@farsight/core/dist/counts.js', '@farsight/core/dist/strings.js'],
   // The pattern adapter (PR 10): hashing and its own job files only; the engine runs through execution/ in a container.
   'adapters/drivers/canonical.js': ['node:fs'],
-  'adapters/drivers/common.js': ['node:crypto'],
-  'adapters/pattern/adapter.js': ['node:crypto'],
   'adapters/pattern/job.js': ['node:crypto', 'node:fs', 'node:path'],
-  'adapters/pattern/normalize.js': ['node:crypto'],
-  'adapters/pattern/resolved.js': ['node:crypto'],
   'adapters/pattern/run.js': ['node:fs', 'node:path'],
   // The OSV advisory adapter (PR 12): hashing, its own job and snapshot files; the engine runs through execution/.
   'adapters/osv/acquire.js': ['node:crypto', 'node:fs', 'node:path'],
-  'adapters/osv/adapter.js': ['node:crypto'],
   'adapters/osv/job.js': ['node:crypto', 'node:fs', 'node:path'],
-  'adapters/osv/normalize.js': ['node:crypto'],
   'adapters/osv/run.js': ['node:fs', 'node:path'],
   'adapters/sealed-input.js': ['node:fs', 'node:path'],
   // The Trivy misconfiguration adapter (PR 13): its job and bundle files and hashing; the engine runs through execution/.
-  'adapters/trivy/adapter.js': ['node:crypto'],
   'adapters/trivy/bundle.js': ['node:crypto', 'node:fs', 'node:path'],
-  'adapters/trivy/job.js': ['node:crypto', 'node:fs', 'node:path'],
-  'adapters/trivy/normalize.js': ['node:crypto'],
+  'adapters/trivy/job.js': ['node:fs', 'node:path'],
   'adapters/trivy/run.js': ['node:fs', 'node:path'],
   // The zizmor CI-configuration adapter (PR 13): its job file and hashing; the engine runs through execution/.
-  'adapters/zizmor/adapter.js': ['node:crypto'],
-  'adapters/zizmor/job.js': ['node:crypto', 'node:fs', 'node:path'],
-  'adapters/zizmor/normalize.js': ['node:crypto'],
+  'adapters/zizmor/job.js': ['node:fs', 'node:path'],
   'adapters/zizmor/run.js': ['node:fs', 'node:path'],
   // The Gitleaks secret-scan adapter (PR 11): hashing and its own job files; the engine runs through execution/.
-  'adapters/gitleaks/adapter.js': ['node:crypto'],
   'adapters/gitleaks/job.js': ['node:crypto', 'node:fs', 'node:path'],
-  'adapters/gitleaks/normalize.js': ['node:crypto'],
   'adapters/gitleaks/run.js': ['node:fs', 'node:path'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/assets.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
@@ -158,7 +146,6 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
   // The Nest pack (PR 16) reads captured bytes with the parser's own pinned oxc-parser, loaded on first analysis only.
-  'frameworks/nest/analyze.js': ['node:crypto'],
   'frameworks/nest/errors.js': ['@farsight/core/dist/strings-sentinel-nest.js'],
   'frameworks/nest/syntax.js': ['dynamic:oxc-parser'],
 
@@ -178,14 +165,20 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'review/providers/transport.js': ['node:http', 'node:https'],
 
   // The Next pack (PR 14) reads literal syntax with Oxc, loaded on first read only; it never runs application code.
-  'frameworks/next/analyze.js': ['node:crypto'],
   'frameworks/next/config.js': ['dynamic:oxc-parser'],
   'frameworks/next/errors.js': ['@farsight/core/dist/strings-sentinel-next.js'],
   // Fixed native CLI boundary: exact helper and executable, anonymous token FD, owned fixed TLS egress only.
-  'review/providers/cli-copilot-call.js': ['node:child_process', 'node:fs', 'node:fs/promises'],
-  'review/providers/cli-copilot-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:os', 'node:path'],
+  'review/providers/cli-copilot-call.js': ['node:fs/promises'],
+  'review/providers/cli-copilot-profile.js': [
+    'node:child_process',
+    'node:crypto',
+    'node:fs',
+    'node:fs/promises',
+    'node:os',
+    'node:path',
+  ],
   'review/providers/cli-copilot-proxy.js': ['node:dns/promises', 'node:net'],
-  'review/providers/cli-native-call.js': ['node:child_process', 'node:fs/promises'],
+  'review/providers/cli-native-call.js': ['node:fs/promises'],
   'review/providers/cli-native-helper.js': [
     'node:child_process',
     'node:crypto',
@@ -196,9 +189,16 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   ],
   'review/providers/cli-native-profile.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:path'],
   'review/providers/cli-native-proxy.js': ['node:dns/promises', 'node:net'],
+  // The one sandboxed CLI runner both native CLIs build on: the only process start in review/ outside the helper.
+  'review/providers/sandboxed-cli.js': ['node:child_process', 'node:fs', 'node:fs/promises'],
+  // Copilot native mode: the scratch tree is written under the runner's owned root; no process of its own.
+  'review/providers/cli-copilot-agent.js': ['node:crypto', 'node:fs/promises', 'node:path'],
+  // Stage packs: owner-promoted prompt and skill bytes, copied into the trust folder and re-checked by digest.
+  'review/packs.js': ['node:crypto', 'node:fs', 'node:path'],
+  'review/runner.js': ['node:crypto'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   // The Spring pack: tree-sitter's Java grammar, loaded on first analysis only; graph is pure JSON helpers.
-  'frameworks/spring/pack.js': ['@farsight/graph', 'node:crypto'],
+  'frameworks/spring/pack.js': ['@farsight/graph'],
   'frameworks/spring/syntax.js': ['dynamic:@vscode/tree-sitter-wasm', 'node:path', 'node:url'],
   'policy/admission.js': ['@farsight/core/dist/grants.js'],
   'policy/adoption.js': ['node:fs', 'node:os', 'node:path'],
@@ -229,7 +229,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   ],
   'cli/init.js': ['node:crypto', 'node:fs', 'node:path'],
   // The foundation-preview detector, a built-in worker: it reads its copied inputs and writes one artifact.
-  'adapters/preview-detector.js': ['node:crypto', 'node:fs'],
+  'adapters/preview-detector.js': ['node:fs'],
   // This package's own executable and shipped rule packs, found from the module's folder upward.
   'service/package-paths.js': ['node:fs', 'node:path', 'node:url'],
   'service/framework-adapter.js': ['node:path'],
@@ -268,7 +268,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'evidence/import-operation.js': ['node:crypto'],
   'evidence/owner-context.js': ['node:fs', 'node:path'],
   'evidence/audit.js': ['node:fs', 'node:path'],
-  'store/ledger-json.js': ['node:crypto'],
+  // The kernel: one canonical JSON form and one SHA-256 helper; nothing else imported, nothing started.
+  'kernel/digest.js': ['node:crypto'],
   // Scope-local counters and a monotonic clock; neither performs I/O or starts work on import.
   'store/admission-fence.js': ['node:async_hooks'],
   'store/read-budget.js': ['node:async_hooks', 'node:perf_hooks', 'node:timers/promises'],
@@ -330,16 +331,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'imports/sarif.js': ['@farsight/graph'],
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
   // The framework inspection worker (ADR 44): sealed inputs by digest, one output file; it runs only as its own entry.
-  'frameworks/controls/closure.js': [
-    'node:crypto',
-    'node:fs',
-    'node:module',
-    'node:path',
-    'node:url',
-    'require:oxc-parser',
-  ],
-  'frameworks/controls/worker.js': ['node:crypto', 'node:fs', 'node:url'],
-  'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],
+  'frameworks/controls/closure.js': ['node:fs', 'node:module', 'node:path', 'node:url', 'require:oxc-parser'],
+  'frameworks/controls/worker.js': ['node:fs', 'node:url'],
+  'frameworks/express/pack.js': ['@farsight/graph'],
   'frameworks/express/syntax.js': ['dynamic:oxc-parser'],
   'snapshot/worktree.js': ['node:fs'],
 };

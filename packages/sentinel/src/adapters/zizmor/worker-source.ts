@@ -8,6 +8,7 @@
 // those paths so zizmor collects them by its own layout rules. No token is present: the GitHub variables zizmor reads
 // are unset and it runs with --offline. The engine log never leaves the container: only the job's own paths, audit
 // identifiers ([a-z-]) and the engine's version digits are extracted from it.
+/** The worker's source text; `[MAX_OUT]` and `[ENGINE_ARGS]` are filled by buildZizmorAdapter. */
 export const ZIZMOR_WORKER_SOURCE = `# Sentinel zizmor worker (sentinel-zizmor-worker/1). Original; POSIX sh only.
 set -u
 P='sentinel-worker/draft-1'

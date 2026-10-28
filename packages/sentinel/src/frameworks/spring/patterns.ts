@@ -6,6 +6,7 @@
 // is unknown. A trailing slash is never trimmed: Spring Framework 6.2's path patterns do not treat `/x/` and `/x` as
 // the same path by default, and a configuration can change that, so a pattern or route ending in `/` is unknown.
 
+/** Whether a request path matches a pattern: yes, no, or not decidable within the supported subset. */
 export type MatchResult = 'match' | 'no-match' | 'unknown';
 
 type Segment = { kind: 'literal'; text: string } | { kind: 'one' } | { kind: 'rest' };

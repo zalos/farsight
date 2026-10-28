@@ -23,6 +23,7 @@ export interface JsNode {
   readonly [key: string]: unknown;
 }
 
+/** One parsed captured file: its path, bytes as text, program and whether byte spans are exact. */
 export interface JsFile {
   readonly path: string;
   readonly content: string;
@@ -35,9 +36,14 @@ export interface JsFile {
   span(node: JsNode): { startByte: number; endByte: number } | undefined;
 }
 
+/** The file extensions the pack parses as JavaScript or TypeScript. */
 export const JS_EXTENSIONS = ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs'] as const;
+/** True for a path the pack parses: a JS or TS source, never a declaration file. */
 export const isJsPath = (p: string) => JS_EXTENSIONS.some((e) => p.endsWith(e)) && !/\.d\.[cm]?ts$/.test(p);
 
+/**
+ * Parses one captured file. Spans are exact only when the bytes are exactly UTF-8; otherwise every span is undefined.
+ */
 export function parseJs(path: string, content: string, raw: Buffer): JsFile {
   const text = raw.toString('utf8');
   const exact = Buffer.from(text, 'utf8').equals(raw);
@@ -79,6 +85,7 @@ export function parseJs(path: string, content: string, raw: Buffer): JsFile {
   };
 }
 
+/** True for a syntax node: an object with a string `type`. */
 export const isNode = (v: unknown): v is JsNode =>
   typeof v === 'object' && v !== null && typeof (v as { type?: unknown }).type === 'string';
 
@@ -147,6 +154,7 @@ export function parseProgram(path: string, text: string): { program: JsNode; err
   };
 }
 
+/** The value of a numeric literal, through parentheses and type assertions; undefined for anything else. */
 export function numberValue(node: JsNode | undefined): number | undefined {
   const n = unwrap(node);
   return n && (n.type === 'Literal' || n.type === 'NumericLiteral') && typeof n.value === 'number'
@@ -154,6 +162,7 @@ export function numberValue(node: JsNode | undefined): number | undefined {
     : undefined;
 }
 
+/** The name of an identifier, through parentheses and type assertions; undefined for anything else. */
 export const identifierName = (node: JsNode | undefined): string | undefined => {
   const n = unwrap(node);
   return n?.type === 'Identifier' ? (n.name as string) : undefined;
@@ -173,5 +182,6 @@ export function memberPath(node: JsNode | undefined): string[] | undefined {
   return undefined;
 }
 
+/** True for an arrow function, a function expression or a function declaration. */
 export const isFunction = (n: JsNode | undefined): boolean =>
   !!n && (n.type === 'ArrowFunctionExpression' || n.type === 'FunctionExpression' || n.type === 'FunctionDeclaration');

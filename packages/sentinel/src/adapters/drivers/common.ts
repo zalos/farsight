@@ -2,7 +2,8 @@
 // plan's checks to file scopes, and assembling the canonical result from per-file evidence. Coverage is never claimed
 // here: a check is listed as covered only when the driver's adapter reports its exact rule ran on its exact file;
 // everything else is a not-run check with a fixed reason. The coordinator computes coverage records from the result.
-import { createHash } from 'node:crypto';
+import { sha256Id } from '../../kernel/digest.js';
+import { SentinelError } from '../../kernel/errors.js';
 import type { ArtifactId, ScopeId, ScopedReason } from '../../contracts/common.js';
 import type { PlanCheck, PlanInput } from '../../contracts/plan.js';
 import type { CoverageGranularity } from '../../contracts/coverage.js';
@@ -11,6 +12,7 @@ import { canonicalDigest } from '../../policy/digest.js';
 import type { ResolvedRule } from '../../rules/resolve.js';
 import type { DriverRecord, DriverRules, ResultBinding, SupportedRule } from './types.js';
 
+/** Why a driver did not run a check: each is a catalog key, and a check with one is never covered. */
 export const DRIVER_REASONS = [
   'sentinel.drivers.ruleUnsupported',
   'sentinel.drivers.scopeUnsupported',
@@ -19,19 +21,22 @@ export const DRIVER_REASONS = [
   'sentinel.drivers.notReported',
   'sentinel.drivers.nothingApplicable',
 ] as const;
+/** One of {@link DRIVER_REASONS}. */
 export type DriverReason = (typeof DRIVER_REASONS)[number];
 
-export class DriverError extends Error {
-  constructor(
-    readonly code: 'sentinel.drivers.contextInvalid' | 'sentinel.drivers.ruleBytesInvalid' | DriverReason,
-    message: string,
-  ) {
-    super(message);
+/** The codes a DriverError carries: a malformed context, rule bytes that are not the shipped ones, or a reason. */
+export type DriverErrorCode = 'sentinel.drivers.contextInvalid' | 'sentinel.drivers.ruleBytesInvalid' | DriverReason;
+
+/** A canonical driver refused its context, its rule bytes or a unit it cannot run; `code` is a catalog key. */
+export class DriverError extends SentinelError<DriverErrorCode> {
+  constructor(code: DriverErrorCode, message: string) {
+    super(code, message);
     this.name = 'DriverError';
   }
 }
 
-export const sha256 = (b: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(b).digest('hex')}`;
+/** The content address of bytes (the kernel's sha256Id), under the name the drivers have always used. */
+export const sha256 = (b: Uint8Array): ArtifactId => sha256Id(b);
 /** The plan's file scope for a captured input. */
 export const fileScope = (input: Pick<PlanInput, 'sourceId' | 'relativePath'>): ScopeId =>
   `${input.sourceId}:${input.relativePath}`;

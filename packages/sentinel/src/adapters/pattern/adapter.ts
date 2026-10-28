@@ -1,7 +1,7 @@
 // The pattern adapter: Semgrep 1.181.0 at its measured image digest, behind the original protocol shim, run only
 // through PR 07's isolated execution service. This module holds the pins and the support statement; job.ts builds an
 // attempt's inputs, normalize.ts reads its outputs. Nothing here starts a process.
-import { createHash } from 'node:crypto';
+import { sha256Id } from '../../kernel/digest.js';
 import type { ExternalAdapterDefinition } from '../../execution/registry.js';
 import { PATTERN_WORKER_SOURCE } from './worker-source.js';
 
@@ -63,6 +63,7 @@ export const PATTERN_IMAGE_PLATFORMS = Object.freeze([
       'native Ubuntu 24.04.5 x64, Docker 28.0.4, Node 24.21.0; 22 conformance tests, zero skips and installed worker six findings; https://github.com/zalos/farsight/actions/runs/39790599932',
   }),
 ]);
+/** The architectures the pinned engine image was measured on; any other is unqualified. */
 export const MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(
   PATTERN_IMAGE_PLATFORMS.filter((p) => p.state === 'measured').map((p) => p.architecture),
 );
@@ -92,7 +93,7 @@ export function buildPatternAdapter(
     PATTERN_WORKER_SOURCE.replace('[ENGINE_ARGS_JSON]', JSON.stringify(engineArgs)),
     'utf8',
   );
-  const workerDigest = `sha256:${createHash('sha256').update(workerBytes).digest('hex')}`;
+  const workerDigest = sha256Id(workerBytes);
   const definition = Object.freeze({
     id: options.id ?? 'pattern-semgrep',
     version: PATTERN_ENGINE.version,
@@ -107,6 +108,7 @@ export function buildPatternAdapter(
 const PRODUCTION = buildPatternAdapter();
 /** The shim's bytes, as supplied to the attempt as an input artifact. */
 export const PATTERN_WORKER_BYTES: Buffer = PRODUCTION.workerBytes;
+/** The shim's content address; the registry definition's fixed command names it. */
 export const PATTERN_WORKER_DIGEST = PRODUCTION.workerDigest;
 
 /**

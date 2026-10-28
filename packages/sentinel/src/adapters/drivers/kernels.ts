@@ -18,6 +18,7 @@ export { TRIVY_SUPPORTED_RULES, TRIVY_CHECKS_DATABASE_ID } from './trivy.js';
 export { ZIZMOR_SUPPORTED_RULES } from './zizmor.js';
 export type * from './types.js';
 
+/** What the scanner kernels need from the owner's settings. */
 export interface ScannerOptions {
   /** The owner's advisory freshness bound: a snapshot older than this is stale (never complete). */
   readonly maxAdvisoryAgeMs: number;
