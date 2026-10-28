@@ -4,6 +4,7 @@
 import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, openSync, readSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { sha256Id as sha256 } from '../../kernel/digest.js';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { CapturedInput } from '../../execution/supervisor.js';
 import { isSafeRelativePath } from '../../validate.js';
@@ -15,7 +16,9 @@ import {
 } from './adapter.js';
 import { patternFail } from './errors.js';
 
+/** A language the pattern rules are written for. */
 export type PatternLanguage = 'typescript' | 'javascript' | 'java';
+/** What a rule's finding can show: a structural location only, or a same-file source-to-sink trace. */
 export type PatternEvidenceKind = 'structural-locator' | 'local-taint';
 
 /** One rule as the adapter runs it: the engine rule object and what kind of evidence it may produce. */
@@ -41,6 +44,7 @@ export interface PatternTarget {
   readonly path: string;
 }
 
+/** The job a worker runs: the rules file, the targets with their captured identities and the engine's bounds. */
 export interface PatternJob {
   readonly schema: 'sentinel-pattern-job/draft-1';
   readonly worker: string;
@@ -53,6 +57,7 @@ export interface PatternJob {
   readonly engineTimeoutSeconds: number;
 }
 
+/** A built job: the job, its digest and its rules file's digest, and the sealed inputs the attempt needs. */
 export interface BuiltPatternJob {
   readonly job: PatternJob;
   readonly jobDigest: ArtifactId;
@@ -86,7 +91,6 @@ const RULE_KEYS: ReadonlySet<string> = new Set([
   'metavariable-pattern',
   'metadata',
 ]);
-const sha256 = (b: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
 /** The language a target path is scanned as, or undefined when no rule language applies. */
 export function languageOf(relativePath: string): PatternLanguage | undefined {

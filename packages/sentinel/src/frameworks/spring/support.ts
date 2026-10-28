@@ -1,5 +1,6 @@
 // What the Spring pack models, stated as data. It is part of the pack digest, so a change to the supported subset
 // invalidates every fact computed under the old one. Anything not listed here is reported as unknown with a reason.
+/** The supported subset, as data; it is part of the pack digest. */
 export const SPRING_SUPPORT = Object.freeze({
   versions: Object.freeze({
     springBoot: '3.4.3',

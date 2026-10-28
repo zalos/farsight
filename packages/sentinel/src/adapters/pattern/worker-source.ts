@@ -9,6 +9,7 @@
 //
 // Kept as a string so the package ships it inside dist with no extra build step; its SHA-256 is part of the adapter's
 // fixed command and therefore of the adapter digest. Avoid backticks and dollar-brace in the Python below.
+/** The worker's source text, a standard-library Python script the container runs; its digest is the shim's. */
 export const PATTERN_WORKER_SOURCE = String.raw`# Sentinel pattern worker (sentinel-pattern-worker/1). Original; standard library only.
 import hashlib, json, os, subprocess, sys, threading, time
 
