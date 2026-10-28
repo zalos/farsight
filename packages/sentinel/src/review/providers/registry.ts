@@ -15,11 +15,21 @@ import { OLLAMA_WIRE, OPENAI_COMPATIBLE_WIRE, type HttpKindWire } from './http-k
 import {
   issueCopilotCall,
   issueNativeCall,
+  issueCopilotAgentCall,
   finishCopilotCall,
   finishNativeCall,
+  finishCopilotAgentCall,
+  type CopilotAgentAuthority,
   type NativeLimits,
 } from './authority.js';
-import { COPILOT_NATIVE_PROFILE, qualifyInstalledNativeCopilot } from './cli-copilot-profile.js';
+import {
+  copilotProfileById,
+  copilotProfileMode,
+  copilotRuntimeInstallation,
+  qualifyInstalledNativeCopilot,
+  type NativeCopilotRuntime,
+} from './cli-copilot-profile.js';
+import { nativeCopilotAgentCall, type CopilotAgentRequest, type CopilotAgentResult } from './cli-copilot-agent.js';
 import { nativeCopilotCall } from './cli-copilot-call.js';
 import { renderNativeCopilotWire } from './cli-copilot-wire.js';
 import {
@@ -27,6 +37,7 @@ import {
   nativeRuntimeHelper,
   qualifyInstalledNativeClaude,
   type NativeClaudeRuntime,
+  type NativeTiming,
 } from './cli-native-profile.js';
 import { nativeClaudeCall } from './cli-native-call.js';
 import { renderNativeClaudeWire, type NativeReviewWire } from './cli-native-wire.js';
@@ -58,6 +69,23 @@ export interface CliKind {
   readonly sessionBudget?: Readonly<{ maxSteps: number; deadlineMs: number }>;
   /** Each turn's deadline is the unit's, capped at the model's own timeout. */
   readonly capsTurnDeadline: boolean;
+  /** Which mode the adopted pin runs: brokered turns, or the CLI's own native loop over a scratch tree. */
+  mode(binding: ProviderBinding): 'brokered' | 'native';
+  /** The native mode, where the CLI has a qualified native profile. */
+  readonly agent?: Readonly<{
+    issue(context: {
+      runtime: object;
+      request: CopilotAgentRequest;
+      limits: NativeTiming;
+      ledger: BudgetLedger;
+      reservationId: string;
+      receipt: ConsumedReceipt;
+    }): object;
+    call(authority: object): Promise<CopilotAgentResult>;
+    release(authority: object): void;
+    /** The qualified installation that runs: its category and exact executable path (private provenance). */
+    installation(runtime: object): Readonly<{ source: string; executable: string }>;
+  }>;
   /** A release gate the adopted settings must open before a stage may select this CLI. */
   readonly releaseGate?: Readonly<{
     open(settings: SettingsEnvelope): boolean;
@@ -123,6 +151,7 @@ const CLAUDE_CLI = Object.freeze<CliKind>({
     return runtime;
   },
   credentialDetail: 'fixed no-UI native read capability; login validity remains unobserved until admitted call',
+  mode: () => 'brokered' as const,
   issue: (c) => issueNativeCall({ ...c, runtime: c.runtime as NativeClaudeRuntime }),
   call: (authority: object) => nativeClaudeCall(authority as Parameters<typeof nativeClaudeCall>[0]),
   release: (authority: object) => finishNativeCall(authority as Parameters<typeof finishNativeCall>[0]),
@@ -137,19 +166,20 @@ const CLAUDE_CLI = Object.freeze<CliKind>({
 const COPILOT_CLI = Object.freeze<CliKind>({
   profileField: 'copilotProfile' as const,
   checkBinding(settings: ProviderSettings, model: ModelSettings, limits: ModelLimits) {
-    const p = settings.copilotProfile;
+    const p = settings.copilotProfile,
+      pinned = p ? copilotProfileById(p.id) : undefined;
     if (
       !p ||
-      p.id !== COPILOT_NATIVE_PROFILE.id ||
-      p.executableDigest !== COPILOT_NATIVE_PROFILE.executableDigest ||
-      p.runtimeDigest !== COPILOT_NATIVE_PROFILE.runtimeDigest ||
+      !pinned ||
+      p.executableDigest !== pinned.executableDigest ||
+      p.runtimeDigest !== pinned.runtimeDigest ||
       !DIGEST.test(p.profileDigest) ||
       settings.nativeProfile !== undefined ||
       settings.endpoint !== 'https://api.githubcopilot.com' ||
       settings.disclosure !== 'hosted' ||
       settings.credential !== null ||
-      model.model !== COPILOT_NATIVE_PROFILE.model ||
-      limits.contextTokens !== COPILOT_NATIVE_PROFILE.contextReservation ||
+      model.model !== pinned.model ||
+      limits.contextTokens !== pinned.contextReservation ||
       limits.maxRequestBytes > 65536 ||
       limits.maxResponseBytes > 16384 ||
       limits.timeoutMs > 60000 ||
@@ -161,10 +191,12 @@ const COPILOT_CLI = Object.freeze<CliKind>({
   },
   renderWire: renderNativeCopilotWire,
   async qualify(binding: ProviderBinding) {
-    const runtime = await qualifyInstalledNativeCopilot({ deadlineAt: Date.now() + 5000 });
-    const p = binding.copilotProfile;
+    const p = binding.copilotProfile,
+      pinned = p ? copilotProfileById(p.id) : undefined;
+    if (!p || !pinned)
+      return fail('sentinel.provider.capabilityUntested', 'adopted Copilot profile is not a qualified one');
+    const runtime = await qualifyInstalledNativeCopilot({ deadlineAt: Date.now() + 5000 }, pinned);
     if (
-      !p ||
       runtime.profileId !== p.id ||
       runtime.executableDigest !== p.executableDigest ||
       runtime.runtimeDigest !== p.runtimeDigest ||
@@ -175,6 +207,17 @@ const COPILOT_CLI = Object.freeze<CliKind>({
   },
   credentialDetail:
     'pinned vendor native keychain capability; shared securityd trust, login unobserved until invocation',
+  mode: (binding: ProviderBinding) => {
+    const pinned = binding.copilotProfile ? copilotProfileById(binding.copilotProfile.id) : undefined;
+    return pinned ? copilotProfileMode(pinned) : 'brokered';
+  },
+  agent: Object.freeze({
+    issue: (c: Parameters<typeof issueCopilotAgentCall>[0] & { runtime: object }) =>
+      issueCopilotAgentCall({ ...c, runtime: c.runtime as NativeCopilotRuntime }),
+    call: (authority: object) => nativeCopilotAgentCall(authority as CopilotAgentAuthority),
+    release: (authority: object) => finishCopilotAgentCall(authority as CopilotAgentAuthority),
+    installation: (runtime: object) => copilotRuntimeInstallation(runtime),
+  }),
   issue: (c) => issueCopilotCall({ ...c, runtime: c.runtime as Parameters<typeof issueCopilotCall>[0]['runtime'] }),
   call: (authority: object) => nativeCopilotCall(authority as Parameters<typeof nativeCopilotCall>[0]),
   release: (authority: object) => finishCopilotCall(authority as Parameters<typeof finishCopilotCall>[0]),
