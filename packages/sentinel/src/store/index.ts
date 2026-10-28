@@ -72,6 +72,7 @@ export type {
   PublishInput,
   PublicationReceipt,
   EndAttemptInput,
+  RetainedAttempt,
   AttemptEndState,
   AdmitSnapshotInput,
   SnapshotRecord,
@@ -110,6 +111,7 @@ export type StoreLedger = Pick<
   | 'createWork'
   | 'startAttempt'
   | 'endAttempt'
+  | 'retainedOf'
   | 'registerStaging'
   | 'abortStaging'
   | 'publish'
@@ -237,6 +239,7 @@ const LEDGER_METHODS = [
   'createWork',
   'startAttempt',
   'endAttempt',
+  'retainedOf',
   'registerStaging',
   'abortStaging',
   'publish',

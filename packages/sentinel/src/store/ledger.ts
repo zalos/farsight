@@ -46,6 +46,7 @@ import {
   type MigrationReport,
   type ObjectVerifier,
   type ObjectReceipt,
+  type RetainedAttempt,
   type OpenLedgerOptions,
   type PublicationReceipt,
   type PublishInput,
@@ -994,7 +995,10 @@ export class Ledger {
       },
       true,
       commitPoint,
-      operation === 'admitSnapshot' || operation === 'admitPlan' || operation === 'publish',
+      operation === 'admitSnapshot' ||
+        operation === 'admitPlan' ||
+        operation === 'publish' ||
+        commitPoint === 'end:before-commit',
     );
   }
 
@@ -1329,7 +1333,7 @@ export class Ledger {
     }
   }
 
-  #checkError(error: AttemptError | undefined): AttemptError | undefined {
+  #checkError(error: AttemptError | undefined, pendingRecord?: string): AttemptError | undefined {
     if (error === undefined) return undefined;
     if (
       !error ||
@@ -1341,7 +1345,10 @@ export class Ledger {
     }
     if (error.diagnostics !== undefined) {
       checkDigest(error.diagnostics, 'error diagnostics');
-      if (!this.#get('SELECT 1 AS x FROM artifacts WHERE id = ?', error.diagnostics)) {
+      if (
+        error.diagnostics !== pendingRecord &&
+        !this.#get('SELECT 1 AS x FROM artifacts WHERE id = ?', error.diagnostics)
+      ) {
         throw new LedgerError('sentinel.store.notFound', 'error diagnostics name an artifact that is not accepted');
       }
     }
@@ -1396,6 +1403,30 @@ export class Ledger {
       throw invalid('not an end state');
     if (input.workState !== 'ready' && input.workState !== 'failed') throw invalid('work ends ready or failed');
     checkTime(input.endedAt, 'endedAt');
+    const retained = input.retained;
+    let receipts: ObjectReceipt[] | undefined;
+    if (retained) {
+      if (this.migration.to < 7)
+        throw new LedgerError('sentinel.store.wrongState', 'this ledger predates attempt retention');
+      if (!['failed', 'canceled', 'canceled-after-spend'].includes(input.state))
+        throw new LedgerError('sentinel.store.wrongState', 'only a failed or canceled attempt can retain artifacts');
+      if (!input.error) throw invalid('retained attempt needs an error');
+      checkId(retained.stageId, 'stage id');
+      checkDigest(retained.record, 'retained record');
+      if (!Array.isArray(retained.receipts) || retained.receipts.length === 0 || retained.receipts.length > MAX_STAGED)
+        throw invalid('retained receipts');
+      retained.receipts.forEach((r) => this.#checkReceipt(r));
+      if (new Set(retained.receipts.map((r) => r.id)).size !== retained.receipts.length)
+        throw invalid('retained receipts name an artifact twice');
+      if (input.error.diagnostics !== undefined && input.error.diagnostics !== retained.record)
+        throw invalid('error diagnostics differ from the retained record');
+      receipts = [...retained.receipts].sort((a, b) =>
+        a.id < b.id ? -1 : a.id > b.id ? 1 : a.codec < b.codec ? -1 : 1,
+      );
+      this.#verifyReceipts(receipts, 'attempt retention');
+      admissionFenceCheckpoint(this.#owner);
+    }
+    const errorInput = retained && input.error ? { ...input.error, diagnostics: retained.record } : input.error;
     const request = {
       work: ref,
       attemptId: input.attemptId,
@@ -1403,27 +1434,92 @@ export class Ledger {
       endedAt: input.endedAt,
       workState: input.workState,
       usage: input.usage ?? null,
-      error: input.error ?? null,
+      error: errorInput ?? null,
+      retained: retained ? { stageId: retained.stageId, receipts, record: retained.record } : null,
     };
-    return this.#mutate('endAttempt', request, input.idempotency, () => {
-      const error = this.#checkError(input.error);
-      const { runId } = this.#fenceAttempt(ref, input.attemptId);
-      this.#finishAttempt(input.attemptId, input.state, input.endedAt, input.usage, [], false, error);
-      this.#run(
-        'UPDATE work_units SET state = ?, active_attempt_id = NULL WHERE id = ? AND revision = ?',
-        input.workState,
-        ref.id,
-        ref.revision,
-      );
-      return {
-        attemptId: input.attemptId,
-        sequence: this.#event('attempt-ended', runId, ref, {
+    return this.#mutate(
+      'endAttempt',
+      request,
+      input.idempotency,
+      () => {
+        const error = this.#checkError(errorInput, retained?.record);
+        const { runId } = this.#fenceAttempt(ref, input.attemptId);
+        let staged: Map<string, Row> | undefined;
+        if (retained && receipts) {
+          const stage = this.#get(
+            'SELECT coordinator_epoch, work_id, work_revision, attempt_id, evidence_operation_id FROM staging WHERE stage_id = ?',
+            retained.stageId,
+          );
+          if (
+            !stage ||
+            stage.evidence_operation_id != null ||
+            stage.coordinator_epoch !== this.epoch ||
+            stage.work_id !== ref.id ||
+            stage.work_revision !== ref.revision ||
+            stage.attempt_id !== input.attemptId
+          )
+            throw new LedgerError('sentinel.store.stagingMismatch', 'the stage belongs to another attempt or epoch');
+          staged = new Map(
+            this.#all(
+              'SELECT artifact_id, schema, privacy FROM staging_artifacts WHERE stage_id = ?',
+              retained.stageId,
+            ).map((r) => [String(r.artifact_id), r]),
+          );
+          const received = new Set(receipts.map((r) => r.id));
+          if (
+            received.size !== staged.size ||
+            [...received].some((id) => !staged!.has(id)) ||
+            !staged.has(retained.record)
+          )
+            throw new LedgerError(
+              'sentinel.store.stagingMismatch',
+              'receipts or record do not match the staged artifacts',
+            );
+        }
+        this.#finishAttempt(input.attemptId, input.state, input.endedAt, input.usage, [], false, error);
+        this.#run(
+          'UPDATE work_units SET state = ?, active_attempt_id = NULL WHERE id = ? AND revision = ?',
+          input.workState,
+          ref.id,
+          ref.revision,
+        );
+        const sequence = this.#event('attempt-ended', runId, ref, {
           attemptId: input.attemptId,
           state: input.state,
           ...(error ? { code: error.code } : {}),
-        }),
-      };
-    });
+        });
+        if (retained && receipts && staged) {
+          this.#acceptArtifacts(receipts, staged, sequence);
+          for (const link of this.#all(
+            'SELECT parent_id, child_id FROM staging_links WHERE stage_id = ?',
+            retained.stageId,
+          )) {
+            this.#run(
+              'INSERT OR IGNORE INTO artifact_links (parent_id, child_id) VALUES (?, ?)',
+              String(link.parent_id),
+              String(link.child_id),
+            );
+          }
+          for (const [id, artifact] of staged) {
+            this.#run(
+              `INSERT INTO attempt_retained (attempt_id, work_id, work_revision, artifact_id, role, schema, privacy, sequence)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              input.attemptId,
+              ref.id,
+              ref.revision,
+              id,
+              id === retained.record ? 'record' : 'linked',
+              String(artifact.schema),
+              String(artifact.privacy),
+              sequence,
+            );
+          }
+          this.#run('DELETE FROM staging WHERE stage_id = ?', retained.stageId);
+        }
+        return { attemptId: input.attemptId, sequence };
+      },
+      retained ? 'end:before-commit' : undefined,
+    );
   }
 
   /**
@@ -2627,6 +2723,46 @@ export class Ledger {
       : null;
   }
 
+  /** Private retention metadata for one ended attempt; object bytes are never returned here. */
+  retainedOf(attemptId: Id): RetainedAttempt | undefined {
+    checkId(attemptId, 'attempt id');
+    if (this.migration.to < 7) return undefined;
+    return this.#read(() => {
+      const rows = this.#all(
+        `SELECT r.work_id, r.work_revision, r.artifact_id, r.role, r.schema, r.privacy, r.sequence,
+          a.state, a.final_envelope
+         FROM attempt_retained r JOIN attempts a ON a.id = r.attempt_id
+         WHERE r.attempt_id = ? ORDER BY r.role DESC, r.artifact_id`,
+        attemptId,
+      );
+      if (rows.length === 0) return undefined;
+      const record = rows.find((r) => r.role === 'record');
+      if (!record) throw new LedgerError('sentinel.store.corruptRecord', 'a retained attempt has no record');
+      let envelope: AttemptEnvelope;
+      try {
+        envelope = JSON.parse(String(record.final_envelope)) as AttemptEnvelope;
+      } catch {
+        throw new LedgerError('sentinel.store.corruptRecord', 'a retained attempt has no final envelope');
+      }
+      if (envelope.state === 'running' || !envelope.error?.code || envelope.error.diagnostics !== record.artifact_id)
+        throw new LedgerError('sentinel.store.corruptRecord', 'the retained record differs from the attempt error');
+      const artifact = (r: Row) => ({
+        id: String(r.artifact_id),
+        schema: String(r.schema),
+        privacy: r.privacy as ArtifactPrivacy,
+      });
+      return {
+        attemptId,
+        work: { id: String(record.work_id), revision: Number(record.work_revision) },
+        state: String(record.state) as RetainedAttempt['state'],
+        code: envelope.error.code,
+        record: artifact(record),
+        linked: rows.filter((r) => r.role === 'linked').map(artifact),
+        sequence: Number(record.sequence),
+      };
+    });
+  }
+
   getPublication(
     ref: WorkRef,
   ): (PublicationReceipt & { outputs: Array<{ id: string; schema: string; privacy: ArtifactPrivacy }> }) | null {
@@ -2675,7 +2811,7 @@ export class Ledger {
         sequence,
         // Accepted references: publication outputs and links, and every admitted snapshot's manifest and materialization.
         referenced: col(`SELECT artifact_id FROM artifact_refs UNION SELECT manifest_id FROM snapshots
-          UNION SELECT materialization_id FROM snapshots ${this.migration.to >= 4 ? 'UNION SELECT plan_id FROM plans' : ''} ${this.migration.to >= 6 ? 'UNION SELECT root_id FROM evidence_acceptances' : ''} ORDER BY 1`),
+          UNION SELECT materialization_id FROM snapshots ${this.migration.to >= 4 ? 'UNION SELECT plan_id FROM plans' : ''} ${this.migration.to >= 6 ? 'UNION SELECT root_id FROM evidence_acceptances' : ''} ${this.migration.to >= 7 ? 'UNION SELECT artifact_id FROM attempt_retained' : ''} ORDER BY 1`),
         staged: col('SELECT DISTINCT artifact_id FROM staging_artifacts ORDER BY artifact_id'),
         reports: col('SELECT DISTINCT artifact_id FROM report_artifacts ORDER BY artifact_id'),
         retained: [...retained].sort(),
