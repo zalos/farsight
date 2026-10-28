@@ -443,10 +443,12 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
   assert.deepEqual([...unit, ...processSuite].sort(), every, 'every test file is in exactly one suite');
   assert.deepEqual(unit.slice(0, noSkipSuite.length), noSkipSuite, 'the unit suite runs its no-skip group first');
   assert.ok(!noSkipSuite.some((file) => processSuite.includes(file)), 'no file is in both lists');
-  // the files whose clock and SIGKILL races failed on CI at core-count concurrency run one at a time
+  // the files whose clock and SIGKILL races failed on CI at core-count concurrency run one at a time, until their
+  // checkpoints are deterministic: preparation-publication-crash's is (#233), so it runs in the parallel group again
   const { serialSuite } = await import('../sentinel-tests.mjs');
-  for (const name of ['preparation-admission', 'preparation-publication-crash'])
-    assert.ok(serialSuite().includes(`test/${name}.test.ts`), name);
+  assert.ok(serialSuite().includes('test/preparation-admission.test.ts'));
+  assert.ok(!serialSuite().includes('test/preparation-publication-crash.test.ts'));
+  assert.ok(processSuite.includes('test/preparation-publication-crash.test.ts'), 'still with zero skips');
   for (const file of serialSuite()) assert.ok(every.includes(file), file);
   // the twelve in-process files that left sentinel-service's zero-skip list keep the guarantee in validate
   for (const name of [
