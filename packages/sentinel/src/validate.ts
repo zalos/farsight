@@ -60,7 +60,7 @@ import type {
   ReviewRequestEnvelope,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
-import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf, reviewUnitIdOf } from './planner/identity.js';
+import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf, reviewUnitIdOf, scriptUnitIdOf } from './planner/identity.js';
 import { OWNER_ACTIONS } from './contracts/index.js';
 
 export interface EnvelopeTypes {
@@ -814,6 +814,8 @@ const plan: Check<PlanEnvelope> = (v, out) => {
   const covered = new Map<string, string>();
   v.units.forEach((w, i) => {
     const reviewing = w.stage === 'review-guided' || w.stage === 'review-general';
+    // A unit of a declared script stage carries that stage's id, the script runner it is pinned to, and no check.
+    const declared = !reviewing && w.stage !== 'check' && !BOOTSTRAP_STAGES.has(w.stage);
     if (
       reviewing &&
       (!w.review ||
@@ -827,7 +829,7 @@ const plan: Check<PlanEnvelope> = (v, out) => {
       out.add(err(`/units/${i}/review`, 'a review binds one exact source/segment/spec and no deterministic checks'));
     if (!reviewing && w.review !== undefined)
       out.add(err(`/units/${i}/review`, 'only review work carries model inputs'));
-    if (analysis !== (w.stage === 'check' || reviewing))
+    if (analysis !== (w.stage === 'check' || reviewing || declared))
       out.add(
         err(
           `/units/${i}/stage`,
@@ -839,7 +841,9 @@ const plan: Check<PlanEnvelope> = (v, out) => {
     if (!analysis && !BOOTSTRAP_STAGES.has(w.stage)) out.add(err(`/units/${i}/stage`, 'unknown bootstrap stage'));
     if (w.stage === 'check' && w.adapterId === null)
       out.add(err(`/units/${i}/adapterId`, 'check work names its registered adapter'));
-    if (w.stage !== 'check' && !reviewing) {
+    if (declared && (w.adapterId === null || w.contract !== 'sentinel.stage.script.host'))
+      out.add(err(`/units/${i}/adapterId`, 'a declared stage unit runs the script runner its plan pins'));
+    if (w.stage !== 'check' && !reviewing && !declared) {
       const op = v.pins.operations[w.stage as 'capture' | 'parse' | 'inventory'];
       if (
         (op?.adapterId ?? null) !== w.adapterId ||
@@ -921,6 +925,13 @@ const plan: Check<PlanEnvelope> = (v, out) => {
           })
       )
         out.add(err(`/units/${i}/id`, 'review id binds its exact admitted segment and spec'));
+    } else if (w.contract === 'sentinel.stage.script.host') {
+      if (
+        w.sourceId !== null ||
+        w.id !==
+          scriptUnitIdOf({ runId: v.runId, revision: v.revision, stage: w.stage, inputFingerprint: w.inputFingerprint })
+      )
+        out.add(err(`/units/${i}/id`, 'a script unit id is the digest of its run, revision, stage and fingerprint'));
     } else if (
       w.id !== bootstrapUnitIdOf({ runId: v.runId, revision: v.revision, stage: w.stage, sourceId: w.sourceId })
     ) {

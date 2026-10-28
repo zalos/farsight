@@ -359,7 +359,21 @@ export type EnvironmentName = string;
 export interface ScriptProvenance extends ProvenanceBase {
   kind: 'script';
   entryDigest: Digest;
-  interpreter: { name: 'node' | 'sh'; version: ShortText; digest: Digest | null };
+  /** `path`: the interpreter binary that ran, by absolute path, when it ran on the host. */
+  interpreter: { name: 'node' | 'sh'; version: ShortText; digest: Digest | null; path?: ShortText };
+  /**
+   * `none`: a host script is unconfined by design. It runs as the owner, with the owner's file system and network,
+   * like any script the owner runs, and only while the adopted settings turn `stage.host-scripts` on. At its deadline,
+   * its output bound and the interpreter's exit, its process group and every descendant listed while it ran are frozen
+   * and killed, each only after its pid, parent, group and start time are read again while it is stopped (a process
+   * that no longer matches is continued at once and left alone). A process is the script's only when a listing saw it
+   * descend from the live interpreter, never by process group alone. The limit of that guarantee is a descendant that
+   * left the tree before a listing saw it (it is left running), one spawned between the last listing and the kill,
+   * and, on macOS, a pid reused within the same second by a process with the same parent and group.
+   */
+  confinement?: 'none';
+  /** The schema its output document was validated against before publication, by digest. */
+  outputSchema?: { id: OutputSchemaId; digest: Digest };
   /** @maxItems 64 */
   argv: ScriptArgument[];
   /** @maxItems 128 */

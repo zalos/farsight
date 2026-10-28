@@ -1,0 +1,19 @@
+# Unit-suite files that must never skip on CI. They run in validate (scripts/sentinel-tests.mjs --suite unit runs
+# them first as their own group and fails on any skipped or todo test), where the rest of the unit suite skips its
+# Docker, browser and opt-in cases by design. These were in the sentinel-service job's zero-skip list before the
+# process suite was measured; they run in one process, so they moved here and keep the guarantee. A file here cannot
+# also be in process-suite.txt, whose job already allows no skip.
+#
+# One path per line, relative to packages/sentinel; a listed file that does not exist fails both suites.
+test/owner-ui-descriptor.test.ts
+test/owner-ui-host.test.ts
+test/owner-ui-model-start.test.ts
+test/owner-ui-process.test.ts
+test/owner-ui-session.test.ts
+test/preparation-admission.test.ts
+test/preparation-journal.test.ts
+test/preparation-profile.test.ts
+test/preparation-receipt-admission.test.ts
+test/service-policy.test.ts
+test/store-read-budget.test.ts
+test/trusted-profile.test.ts
