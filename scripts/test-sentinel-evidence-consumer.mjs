@@ -25,7 +25,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { npmConsumer } from './npm-consumer.mjs';
 import { repackAtOriginalBuildTime } from './sentinel-evidence-provenance.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..'),
@@ -239,7 +239,7 @@ try {
     );
     writeFileSync(
       harness,
-      `import {writeFileSync} from 'node:fs';\nimport {evidenceIo} from ${JSON.stringify(pathToFileURL(join(privateDist, 'evidence/test-hooks.js')).href)};\nevidenceIo.after=point=>{if(point==='after-stage'){writeFileSync(${JSON.stringify(marker)},'after-stage',{flag:'wx',mode:0o600});Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,120000);throw Error('private controlled hold expired')}};\nawait import(${JSON.stringify(pathToFileURL(join(privateDist, 'cli.js')).href)});\n`,
+      `import {writeFileSync} from 'node:fs';\nimport {evidenceIo} from ${JSON.stringify(new URL('../packages/sentinel/dist/evidence/test-hooks.js', import.meta.url).href)};\nevidenceIo.after=point=>{if(point==='after-stage'){writeFileSync(${JSON.stringify(marker)},'after-stage',{flag:'wx',mode:0o600});Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,120000);throw Error('private controlled hold expired')}};\nawait import(${JSON.stringify(new URL('../packages/sentinel/dist/cli.js', import.meta.url).href)});\n`,
     );
     const child = spawn(process.execPath, [harness, ...importing(detachedId), '--confirm', '--json'], {
       cwd: ws,
