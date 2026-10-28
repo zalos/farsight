@@ -2,6 +2,11 @@
 // caller input is data, never actor, receipt or retained authority. The canonical in-memory request is parsed once.
 import { constants as FS, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { parsePathRequest, MAX_PATH_REQUEST_BYTES, PathRequestError } from '../analysis/paths/request.js';
+/**
+ * Reads one path request file through a bounded no-follow descriptor (a single-link regular file, with no special mode
+ * bits and not group- or world-writable, unchanged while read) and parses it. Anything else is `PathRequestError` with
+ * `sentinel.paths.invalidInput`; `boundary` is checked between reads.
+ */
 export function readPathRequestFile(path: string, boundary: () => void) {
   boundary();
   let fd: number | undefined;
