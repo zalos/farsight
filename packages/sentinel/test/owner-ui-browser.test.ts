@@ -455,11 +455,35 @@ test(
       assert.equal(await confirmWrite.count(), 0, 'a discarded draft offers no confirmation');
       assert.deepEqual(JSON.parse(readFileSync(pipelinePath, 'utf8')), before);
       await page.locator('.snt-erow[data-estage="report"]').click();
+      // The same bytes checked twice, the first answer late: each check has its own token, so only the second check's
+      // answer offers a confirmation.
+      const holds: Array<() => void> = [];
+      await page.route('**/pipeline-preview', async (route) => {
+        await new Promise<void>((r) => holds.push(r));
+        await route.continue();
+      });
       await page.locator('.snt-tabs [data-tab="stage"]').click();
       await seconds.fill('120');
       await seconds.press('Tab');
       await page.locator('.snt-tools [data-act="echeck"]').click();
+      for (let i = 0; i < 200 && holds.length < 1; i++) await new Promise((r) => setTimeout(r, 25));
+      await page.locator('.snt-tabs [data-tab="stage"]').click();
+      await seconds.fill('125');
+      await seconds.press('Tab');
+      await seconds.fill('120');
+      await seconds.press('Tab');
+      await page.locator('.snt-tools [data-act="echeck"]').click();
+      for (let i = 0; i < 200 && holds.length < 2; i++) await new Promise((r) => setTimeout(r, 25));
+      assert.equal(holds.length, 2, 'two checks of the same bytes are out');
+      const firstAnswer = page.waitForResponse((r) => r.url().endsWith('/pipeline-preview'));
+      holds[0]!();
+      await firstAnswer;
+      await new Promise((r) => setTimeout(r, 300));
+      await page.locator('.snt-tabs [data-tab="owner"]').click();
+      assert.equal(await confirmWrite.count(), 0, 'the earlier check of the same bytes offers nothing');
+      holds[1]!();
       await confirmWrite.waitFor({ timeout: 15000 });
+      await page.unroute('**/pipeline-preview');
       assert.deepEqual(JSON.parse(readFileSync(pipelinePath, 'utf8')), before, 'checking writes nothing');
       await page.screenshot({ path: join(evidence, 'pipeline-checked.png') });
       await confirmWrite.click();

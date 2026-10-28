@@ -596,6 +596,36 @@ test.describe('the PIPELINE edit mode', () => {
     expect(state.checks[2].draftDigest).not.toBe(state.checks[0].draftDigest);
   });
 
+  test('a write answered while the page is still hashing its draft never clears an edit made meanwhile', async ({
+    page,
+    baseURL,
+  }) => {
+    // the page hashes its draft before it compares an answer; slowed here, so an edit lands inside that await
+    await page.addInitScript(() => {
+      const digest = crypto.subtle.digest.bind(crypto.subtle);
+      crypto.subtle.digest = async (algorithm: AlgorithmIdentifier, data: BufferSource) => {
+        if ((globalThis as any).__slowDigest) await new Promise((r) => setTimeout(r, 700));
+        return digest(algorithm, data);
+      };
+    });
+    await standIn(page, baseURL);
+    await gotoReady(page, EDIT + '&pick=report');
+    const seconds = page.locator('.snt-dock [data-ebudget="seconds"]');
+    await seconds.fill('120');
+    await seconds.press('Tab');
+    await page.locator('.snt-tools [data-act="echeck"]').click();
+    const confirm = frame(page).getByRole('button', { name: 'Confirm writing the pipeline' });
+    await expect(confirm).toBeVisible();
+    await page.evaluate(() => ((globalThis as any).__slowDigest = true));
+    await confirm.click(); // the frame answers written for the 120 bytes; the page starts hashing its draft
+    await page.locator('.snt-tabs [data-tab="stage"]').click();
+    await seconds.fill('150');
+    await seconds.press('Tab');
+    await expect(page.locator('.snt-verdicts')).toContainText(/written · an earlier version/i);
+    await expect(page.locator('.snt-crumb')).toContainText(/edited, not written/i);
+    await expect(seconds).toHaveValue('150');
+  });
+
   for (const width of [1440, 1280])
     test(`nothing scrolls sideways at ${width}, with the drawer open and a check answered`, async ({
       page,

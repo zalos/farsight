@@ -209,19 +209,20 @@ function browserMain(layout: typeof processLayout) {
       void run(async () => {
         notice(text('pipelineChecking'));
         withdrawPipeline(false);
-        // the check in flight: a withdrawal or a newer check while it is out drops its answer
-        pendingDraft = draftDigest;
+        // this check's own token: a withdrawal or any newer check — even of the same bytes — drops its answer
+        const token = ++checkSeq;
+        pendingCheck = token;
         try {
           // The page names the draft by the digest of the bytes it would write; the panel confirms exactly those.
           if ((await textDigest(JSON.stringify(pipeline, null, 2) + '\n')) !== draftDigest)
             throw Object.assign(Error('changed'), { code: 'sentinel.ownerUi.changed' });
           const answer = await call('/pipeline-preview', { pipeline, expectDigest });
-          if (pendingDraft !== draftDigest) return;
-          pendingDraft = null;
+          if (pendingCheck !== token) return;
+          pendingCheck = 0;
           showPipeline(answer, draftDigest);
         } catch (error: any) {
-          if (pendingDraft !== draftDigest) return;
-          pendingDraft = null;
+          if (pendingCheck !== token) return;
+          pendingCheck = 0;
           tellPipeline({ state: 'failed', reasonCode: error?.code ?? 'sentinel.ownerUi.failed', draftDigest });
           throw error;
         }
@@ -712,12 +713,13 @@ function browserMain(layout: typeof processLayout) {
   }
   /** The draft a pipeline confirmation here is for; the page's later edit withdraws it. */
   let pipelineDraft: string | null = null,
-    /** The draft whose check is still out with the service; its answer is dropped once this no longer names it. */
-    pendingDraft: string | null = null;
+    /** The check still out with the service, by its own token (0: none); its answer counts only while it is current. */
+    pendingCheck = 0,
+    checkSeq = 0;
   /** The page withdrew its check (an edit, a discard): a pending check is dropped and an offered confirmation goes. */
   function withdrawPipeline(say = true) {
-    const had = pipelineDraft !== null || pendingDraft !== null;
-    pendingDraft = null;
+    const had = pipelineDraft !== null || pendingCheck !== 0;
+    pendingCheck = 0;
     if (pipelineDraft !== null) {
       pipelineDraft = null;
       confirmation = null;

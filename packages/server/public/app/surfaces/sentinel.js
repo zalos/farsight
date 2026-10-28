@@ -1724,7 +1724,12 @@ async function checkPipeline() {
  */
 async function pipelineResult(v) {
   if (typeof v.draftDigest !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(v.draftDigest)) return;
-  const current = SN.draft ? await draftDigest(SN.draft) : null;
+  // the draft on screen when the comparison is made: an edit during the digest's await is compared, never cleared
+  let draft, current;
+  do {
+    draft = SN.draft;
+    current = draft ? await draftDigest(draft) : null;
+  } while (draft !== SN.draft);
   // (a write after the draft was discarded is simply the file's new state)
   if (current !== v.draftDigest && !(v.state === 'written' && !SN.draft)) {
     if (v.state !== 'written') return;
