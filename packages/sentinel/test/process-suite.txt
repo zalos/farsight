@@ -56,6 +56,8 @@ test/next-package.test.ts
 test/owner-decision-report.test.ts
 test/owner-decisions.test.ts
 test/owner-ui-lifecycle.test.ts
+test/owner-ui-read-http.test.ts
+test/owner-ui-read-model.test.ts
 test/owner-ui-service.test.ts
 test/package.test.ts
 test/path-admission.test.ts
