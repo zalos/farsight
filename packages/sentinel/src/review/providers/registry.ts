@@ -77,6 +77,8 @@ export interface ProviderKindEntry {
   readonly accounting: 'rates-or-no-fee' | 'subscription-quota';
   readonly http?: HttpKindWire;
   readonly cli?: CliKind;
+  /** The agent runner this kind's stages run on (`review/runner.ts`). */
+  readonly runner: 'copilot-cli' | 'claude-cli' | 'hosted-api';
 }
 
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
@@ -183,6 +185,7 @@ const COPILOT_CLI = Object.freeze<CliKind>({
 const ENTRIES: readonly ProviderKindEntry[] = Object.freeze([
   Object.freeze({
     kind: 'ollama' as const,
+    runner: 'hosted-api' as const,
     transport: 'http' as const,
     apiKind: true,
     identitySource: 'host-reported' as const,
@@ -191,6 +194,7 @@ const ENTRIES: readonly ProviderKindEntry[] = Object.freeze([
   }),
   Object.freeze({
     kind: 'openai-compatible' as const,
+    runner: 'hosted-api' as const,
     transport: 'http' as const,
     apiKind: true,
     identitySource: 'provider-response' as const,
@@ -199,6 +203,7 @@ const ENTRIES: readonly ProviderKindEntry[] = Object.freeze([
   }),
   Object.freeze({
     kind: 'claude-cli' as const,
+    runner: 'claude-cli' as const,
     transport: 'sandboxed-cli' as const,
     apiKind: false,
     identitySource: 'host-reported' as const,
@@ -207,6 +212,7 @@ const ENTRIES: readonly ProviderKindEntry[] = Object.freeze([
   }),
   Object.freeze({
     kind: 'copilot-cli' as const,
+    runner: 'copilot-cli' as const,
     transport: 'sandboxed-cli' as const,
     apiKind: false,
     identitySource: 'host-reported' as const,

@@ -18,11 +18,16 @@ import { PassThrough } from 'node:stream';
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { scratch } from './snapshot-helpers.ts';
 import { DEFAULT_SETTINGS, parseSettings, effectivePolicy, ReceiptBook } from '../dist/policy/index.js';
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
 import { canonicalDigest } from '../dist/policy/digest.js';
 import { BudgetLedger, ModelBroker, bindProvider, envelopeIntent } from '../dist/review/providers/index.js';
+import { providerCaller } from '../dist/review/caller.js';
+import { FileCheckpointStore } from '../dist/review/session.js';
+import { guidedSpec } from '../dist/review/guided.js';
+import { COPILOT_RUNNER, AGENT_RUNNERS, runnerForKind } from '../dist/review/runner.js';
 import {
   COPILOT_NATIVE_PROFILE,
   qualifyInstalledNativeCopilot,
@@ -131,7 +136,7 @@ interface Launch {
 }
 
 /** One intercepted launch of the Copilot sandbox; every other spawn is the real one. */
-function interceptCopilotSpawn(t: { after(fn: () => void): void }, launches: Launch[]) {
+function interceptCopilotSpawn(t: { after(fn: () => void): void }, launches: Launch[], reply = REPLY) {
   const require = createRequire(import.meta.url);
   const cp = require('node:child_process') as typeof import('node:child_process');
   const real = cp.spawn;
@@ -170,7 +175,7 @@ function interceptCopilotSpawn(t: { after(fn: () => void): void }, launches: Lau
     stdin.on('finish', () => {
       launch.stdin = Buffer.concat(chunks).toString('utf8');
       writeFileSync(args[args.indexOf('--usage-output-file') + 1]!, JSON.stringify(USAGE), { mode: 0o600 });
-      stdout.end(Buffer.from(REPLY));
+      stdout.end(Buffer.from(reply));
       stderr.end();
       setImmediate(() => child.emit('close', 0, null));
     });
@@ -214,60 +219,66 @@ export function normalizeLaunch(launch: Launch, home: string) {
   return deep(launch) as Launch;
 }
 
+/** One genuine admission of the qualified profile: owner receipt, envelope, durable budget ledger. */
+async function admittedCopilot(t: { after(fn: () => void): void }) {
+  const dir = scratch(t, 'retained-wire-'),
+    copilotHome = join(dir, 'copilot-home');
+  mkdirSync(copilotHome, { mode: 0o700 });
+  writeFileSync(
+    join(copilotHome, 'config.json'),
+    JSON.stringify({ lastLoggedInUser: SELECTOR, loggedInUsers: [SELECTOR] }),
+  );
+  const prior = process.env.COPILOT_HOME;
+  process.env.COPILOT_HOME = copilotHome;
+  t.after(() => {
+    if (prior === undefined) delete process.env.COPILOT_HOME;
+    else process.env.COPILOT_HOME = prior;
+  });
+  const runtime = await qualifyInstalledNativeCopilot({ deadlineAt: Date.now() + 20000 });
+  const parsed = parseSettings(Buffer.from(JSON.stringify(settingsFor(runtime.profileDigest))));
+  const policy = effectivePolicy({
+    trust: 'adopted',
+    settings: parsed,
+    settingsDigest: canonicalDigest(parsed),
+    repoConfig: null,
+    repoConfigDigest: null,
+  });
+  const binding = bindProvider(policy, 'native-copilot', 'luna');
+  const ledger = await BudgetLedger.open(join(dir, 'budget.sqlite'));
+  t.after(() => ledger.close());
+  const book = new ReceiptBook(join(dir, 'receipts'));
+  const stateDigest = canonicalDigest({ retainedWire: 'original-state' });
+  const budget = binding.settingsBudget;
+  const receipt = issueReceipt(
+    book,
+    { channel: 'owner-cli', principal: 'owner' },
+    { intent: envelopeIntent(binding, 'original-run', budget), stateDigest, policyRevision: policy.revision },
+    { now: new Date(), ttlMs: 60000 },
+  );
+  const broker = new ModelBroker({
+    ledger,
+    credentials: async () => {
+      throw Error('a native subscription reads no credential');
+    },
+    epoch: 'original-epoch',
+  });
+  const env = await broker.openEnvelope({
+    binding,
+    policy,
+    runId: 'original-run',
+    budget,
+    requestedBy: { principal: 'human', channel: 'owner-cli' },
+    stateDigest,
+    receipt: { book, id: receipt.id },
+  });
+  return { broker, env, binding, dir };
+}
+
 test(
   'the qualified Copilot brokered turn hands the OS the retained argv, seatbelt profile, environment, state files, wire and usage capture',
   { skip: !genuine && 'needs the pinned Copilot 1.0.103 launcher first on PATH and its package cache; no login' },
   async (t) => {
-    const dir = scratch(t, 'retained-wire-'),
-      copilotHome = join(dir, 'copilot-home');
-    mkdirSync(copilotHome, { mode: 0o700 });
-    writeFileSync(
-      join(copilotHome, 'config.json'),
-      JSON.stringify({ lastLoggedInUser: SELECTOR, loggedInUsers: [SELECTOR] }),
-    );
-    const prior = process.env.COPILOT_HOME;
-    process.env.COPILOT_HOME = copilotHome;
-    t.after(() => {
-      if (prior === undefined) delete process.env.COPILOT_HOME;
-      else process.env.COPILOT_HOME = prior;
-    });
-    const runtime = await qualifyInstalledNativeCopilot({ deadlineAt: Date.now() + 20000 });
-    const parsed = parseSettings(Buffer.from(JSON.stringify(settingsFor(runtime.profileDigest))));
-    const policy = effectivePolicy({
-      trust: 'adopted',
-      settings: parsed,
-      settingsDigest: canonicalDigest(parsed),
-      repoConfig: null,
-      repoConfigDigest: null,
-    });
-    const binding = bindProvider(policy, 'native-copilot', 'luna');
-    const ledger = await BudgetLedger.open(join(dir, 'budget.sqlite'));
-    t.after(() => ledger.close());
-    const book = new ReceiptBook(join(dir, 'receipts'));
-    const stateDigest = canonicalDigest({ retainedWire: 'original-state' });
-    const budget = binding.settingsBudget;
-    const receipt = issueReceipt(
-      book,
-      { channel: 'owner-cli', principal: 'owner' },
-      { intent: envelopeIntent(binding, 'original-run', budget), stateDigest, policyRevision: policy.revision },
-      { now: new Date(), ttlMs: 60000 },
-    );
-    const broker = new ModelBroker({
-      ledger,
-      credentials: async () => {
-        throw Error('a native subscription reads no credential');
-      },
-      epoch: 'original-epoch',
-    });
-    const env = await broker.openEnvelope({
-      binding,
-      policy,
-      runId: 'original-run',
-      budget,
-      requestedBy: { principal: 'human', channel: 'owner-cli' },
-      stateDigest,
-      receipt: { book, id: receipt.id },
-    });
+    const { broker, env, binding } = await admittedCopilot(t);
     const wire = broker.renderRequest(binding, MESSAGES, 512)!;
     const launches: Launch[] = [];
     interceptCopilotSpawn(t, launches);
@@ -304,6 +315,78 @@ test(
     if (record) writeFileSync(GOLDEN, JSON.stringify(observed, null, 2) + '\n');
     const golden = JSON.parse(readFileSync(GOLDEN, 'utf8'));
     assert.deepEqual(observed, golden);
+  },
+);
+
+test(
+  'the admitted brokered path through AgentRunner.run hands the OS the same retained launch, byte for byte',
+  { skip: !genuine && 'needs the pinned Copilot 1.0.103 launcher and its package cache; no login' },
+  async (t) => {
+    const { broker, env, binding, dir } = await admittedCopilot(t);
+    const source = Buffer.from('export const original = (x: string) => x;\n');
+    const content = 'sha256:' + createHash('sha256').update(source).digest('hex');
+    const spec = guidedSpec({
+      runId: 'original-run',
+      attemptId: 'original-attempt',
+      snapshotId: 'original-snapshot',
+      sourceId: 'web',
+      limits: { maxSliceLines: 200, maxSliceBytes: 65536, maxToolCalls: 20, maxServedBytes: 262144 },
+      budget: { maxSteps: 3, maxInvalidReplies: 2, maxInputBytes: 4194304, maxOutputTokens: 512, deadlineMs: 120000 },
+      check: {
+        checkId: 'original-check',
+        familyId: 'sentinel.sql.dynamic-query',
+        revisionDigest: content,
+        ruleText: 'Untrusted text concatenated into SQL.',
+        files: [{ relativePath: 'src/original.ts', content, bytes: source.byteLength }],
+      },
+    });
+    const launches: Launch[] = [];
+    const final = JSON.stringify({ action: 'final', verdict: 'no-finding', claims: [], inspected: [] }) + '\n';
+    interceptCopilotSpawn(t, launches, final);
+    const stage = {
+      id: 'review-guided',
+      kind: 'agent' as const,
+      mode: 'brokered' as const,
+      runner: 'copilot-cli' as const,
+      model,
+      budget: { turns: 3, seconds: 120 },
+    };
+    const run = await COPILOT_RUNNER.run(stage, [], {
+      brokered: {
+        spec,
+        options: {
+          caller: providerCaller(broker, env, () => binding, { deadlineAt: Date.now() + 110000 }),
+          checkpoints: new FileCheckpointStore(join(dir, 'checkpoints')),
+          read: async (id: string) => {
+            if (id !== content) throw Error('no such content');
+            return source;
+          },
+        },
+      },
+    });
+    assert.equal(run.mode, 'brokered');
+    assert.equal(run.session.record.outcome, 'completed');
+    assert.equal(run.session.record.callerKind, 'provider');
+    assert.deepEqual(
+      [run.session.record.totals.inputTokens, run.session.record.totals.outputTokens],
+      [1234, 56],
+      'the owned usage file settles the turn the session ran',
+    );
+    assert.equal(launches.length, 1, 'one sandboxed process for the one brokered turn');
+    const golden = JSON.parse(readFileSync(GOLDEN, 'utf8'));
+    const { stdin, ...launch } = normalizeLaunch(launches[0]!, homedir());
+    const { stdin: goldenStdin, ...goldenLaunch } = golden.launch;
+    assert.deepEqual(launch, goldenLaunch, 'argv, seatbelt profile, environment and state files are the golden ones');
+    assert.notEqual(stdin, goldenStdin, 'the session pipes its own messages');
+    const piped = JSON.parse(stdin);
+    assert.equal(piped.encoding, 'sentinel-copilot-chat/v1');
+    assert.equal(piped.messages[0].content, spec.prompt.text, "the piped wire carries the session's own prompt");
+    assert.equal(piped.requestedMaxOutputTokens, 512);
+    await assert.rejects(
+      COPILOT_RUNNER.run({ ...stage, mode: 'native' }, [], {}),
+      (e: any) => e.code === 'sentinel.provider.capabilityUntested',
+      'native stays deferred: no qualified native profile here',
+    );
   },
 );
 
@@ -373,9 +456,28 @@ test('every contract provider kind is one registry entry, and no review module s
     assert.equal(e.transport === 'http', e.http !== undefined);
     assert.equal(e.apiKind, e.transport === 'http');
   }
-  assert.throws(
-    () => providerKind('anthropic'),
-    (e: any) => e.code === 'sentinel.provider.invalidProfile',
+  // A kind the registry does not hold is refused wherever a kind is looked up, never defaulted.
+  for (const lookup of [providerKind, runnerForKind])
+    assert.throws(
+      () => lookup('unregistered-kind'),
+      (e: any) => e.code === 'sentinel.provider.invalidProfile',
+    );
+  assert.deepEqual(
+    PROVIDER_KIND_ENTRIES.map((e) => [e.kind, runnerForKind(e.kind).id]),
+    [
+      ['ollama', 'hosted-api'],
+      ['openai-compatible', 'hosted-api'],
+      ['claude-cli', 'claude-cli'],
+      ['copilot-cli', 'copilot-cli'],
+    ],
+  );
+  assert.deepEqual(
+    AGENT_RUNNERS.map((r) => [r.id, [...r.modes]]),
+    [
+      ['copilot-cli', ['brokered']],
+      ['claude-cli', ['brokered']],
+      ['hosted-api', ['brokered']],
+    ],
   );
   const root = new URL('../src/', import.meta.url);
   const files = [
