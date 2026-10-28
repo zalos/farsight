@@ -127,24 +127,61 @@ test('every feature word is in the two-register catalog with a define, and the b
 });
 
 // The lint rule: a gated feature is read through the registry and nowhere else. A read of one of its settings keys in
-// any other source file fails here. The contracts declare the keys; the registry reads them.
+// any other source file fails here: a property read (`settings.hostScripts`), an element read
+// (`settings['hostScripts']`) or a destructuring (`const { hostScripts } = settings`, `({ hostScripts }) =>`). The
+// contracts declare the keys; the registry reads them. Writing a key (`{ hostScripts: true }`) is not a read.
 const files = (dir: string): string[] =>
   readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
     return statSync(path).isDirectory() ? files(path) : path.endsWith('.ts') ? [path] : [];
   });
+const KEYS = FEATURE_FLAGS.flatMap((f) => (f.setting === null ? [] : [f.setting]));
+/** How many times `text` reads one of the flags' settings keys. */
+function flagReads(text: string): number {
+  const key = `(?:${KEYS.join('|')})`;
+  const patterns = [
+    new RegExp(`\\.\\s*${key}\\b`, 'g'),
+    new RegExp(`\\[\\s*['"\`]${key}['"\`]\\s*\\]`, 'g'),
+    // A destructuring assignment or declaration: `{ …key… } =` (not `==` or `=>`).
+    new RegExp(`\\{[^{}]*\\b${key}\\b[^{}]*\\}\\s*=(?![=>])`, 'g'),
+    // A destructured parameter: `({ …key… })` or `({ …key… }: Type)`.
+    new RegExp(`\\(\\s*\\{[^{}]*\\b${key}\\b[^{}]*\\}\\s*[:),]`, 'g'),
+  ];
+  return patterns.reduce((n, p) => n + [...text.matchAll(p)].length, 0);
+}
 // Reads that predate the registry, in files another lane owns. Each is to become a `featureEnabled` call; nothing may
 // be added to this list.
 const PENDING: Record<string, number> = { 'review/providers/selection.ts': 2 };
+
+test('the flag-read rule sees every spelling of a read and no write', () => {
+  for (const read of [
+    'if (policy.settings.hostedApiReviewEnabled !== true) fail();',
+    "const on = settings['nativeClaudeReviewEnabled'];",
+    'const on = settings[ "hostScripts" ];',
+    'const { hostScripts } = settings;',
+    'const { nativeClaudeReviewEnabled: on, providers } = policy.settings;',
+    'let a; ({ hostedApiReviewEnabled: a } = settings);',
+    'const f = ({ hostScripts }) => hostScripts;',
+    'function f({ hostScripts }: SettingsEnvelope) {}',
+    'settings\n  .hostScripts',
+  ])
+    assert.equal(flagReads(read), 1, read);
+  for (const other of [
+    'const s = { hostScripts: true };',
+    'settings = { ...settings, hostedApiReviewEnabled: false };',
+    'x.hostScriptsCount',
+    'const nativeClaudeReviewEnabledLabel = 1;',
+    'if ({ hostScripts } == x) {}',
+  ])
+    assert.equal(flagReads(other), 0, other);
+});
+
 test('every flag read goes through the registry', () => {
-  const keys = FEATURE_FLAGS.flatMap((f) => (f.setting === null ? [] : [f.setting]));
-  const read = new RegExp(`(\\.|\\[\\s*['"\`])(${keys.join('|')})\\b`, 'g');
   const found: Record<string, number> = {};
   for (const file of files(src)) {
     const rel = relative(src, file).split('\\').join('/');
     if (rel.startsWith('contracts/') || rel === 'policy/features.ts' || rel === 'schemas.generated.ts') continue;
-    const text = readFileSync(file, 'utf8');
-    const count = [...text.matchAll(read)].length;
+    const count = flagReads(readFileSync(file, 'utf8'));
     if (count) found[rel] = count;
   }
   for (const [file, count] of Object.entries(found))
