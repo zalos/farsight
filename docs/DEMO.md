@@ -10,9 +10,9 @@ was shortened; a comment on a command's own line is a note (its time, its exit c
 > clean npm prefix, macOS on Apple silicon, Node 24.21.0, Copilot CLI 1.0.105, no Docker; steps 2 and 4c again on
 > `3f82c972` (the viewer's SCANS · PIPELINE · STAGE ladder, #227); steps 2 and 4a, 4b up to the model confirmation,
 > and mistakes 1, 2, 3a and 3b again on `4fd4e251` (the `scan` command, #237); steps 2 to 4c with the `review` profile
-> on #249's head `430fef90`, and steps 2 to 4b end to end as written on `671c6861`, with one live Copilot review. The
-> serve line, the waiting companion and the dock's runner, provider and unfinished words in 4c follow #246 and were
-> not dry-run. This file is re-run and updated as later changes land.
+> on #249's head `430fef90`, and steps 2 to 4b end to end as written on `671c6861`, with one live Copilot review; the
+> serve line, the waiting companion and the dock's runner, provider and unfinished words in 4c again on main
+> `59213a6c` (#246). This file is re-run and updated as later changes land.
 
 | step | what you do | time |
 |---|---|---|
@@ -274,7 +274,8 @@ report line is named `review-general`. A later change refuses a review that only
 ### 4c. Sentinel in the viewer
 
 Start Sentinel's owner service in a third terminal and its companion in a fourth (same PATH, same folder), bound to
-the viewer's exact origin. A companion started before the service has opened waits for it, up to 30 s (#246).
+the viewer's exact origin. A companion started before the service has opened waits for it, up to 30 s, and says so:
+*Waiting up to 30 s for this workspace’s Sentinel service; start it with farsight-sentinel serve in this folder.*
 
 ```sh
 # third terminal
@@ -284,7 +285,8 @@ farsight-sentinel serve --idle-ms 600000
 
 # fourth terminal
 nvm use 24 && export PATH="$HOME/farsight-demo/prefix/bin:$PATH" && cd ~/farsight-demo/app
-farsight-sentinel owner-ui --workspace . --farsight-origin http://127.0.0.1:4581   # it prints the view's address and keeps running
+farsight-sentinel owner-ui --workspace . --farsight-origin http://127.0.0.1:4581   # it keeps running
+#   Open Sentinel in Farsight: http://127.0.0.1:4581/#/sentinel
 ```
 
 Open **SENTINEL** in the viewer (or press *Reconnect* if it was already open). The tab pairs with the companion
@@ -299,7 +301,7 @@ or is no longer available*, and the fix is to stop and relaunch `owner-ui`, then
   stage; for the review it reads `RUNNER Copilot command line · Brokered` (with `copilot-cli` outside the business
   register), `PROVIDER native-copilot`, `MODEL requested gpt-6-luna · reported gpt-6-luna`,
   `PROMPT sentinel.review.general · rev 1`, `SKILLS none`, `TOKENS 12403 tokens in · 253 tokens out`,
-  `COST cost unobserved`, and the review's card says *unfinished · 3 of 3 turns* (#246).
+  `COST cost unobserved`, and the review's card says `UNFINISHED` with `3 of 3 turns`.
 - Press **OPEN THE STAGE** in the dock for **STAGE**: the review's instructions, then each turn (Sentinel's message and
   its tokens in, the model's request and its tokens out: *asked for the file list*, *asked to read lines
   src/server/auth.ts:1–40*), and what it left. The address is `#/sentinel/<run id>/sentinel.stage.review.general`.
