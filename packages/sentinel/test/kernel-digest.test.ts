@@ -252,7 +252,7 @@ test(
         assert.equal(`sha256:${sha(objectsCanonicalJson(rest))}`, digest, `retained ${name[1]}: its seal`);
         sealed++;
       }
-      const schema = (value as { schema?: unknown })?.schema;
+      const { schema = (value as { format?: unknown })?.format } = value as { schema?: unknown };
       const kind = typeof schema === 'string' ? schema : `a JSON ${Array.isArray(value) ? 'array' : typeof value}`;
       kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
     }

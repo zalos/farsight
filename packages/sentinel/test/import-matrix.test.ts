@@ -1,12 +1,13 @@
-// Sentinel's import matrix, measured with the boundaries rule in eslint.config.mjs and held against its known debt
-// (docs/proposals/sentinel-v2 K-1). The rule is report-only: the matrix grew without layers, and 18 folders import
-// each other in one cycle. This test is the gate instead. It fails on:
+// Sentinel's import matrix, measured with the boundaries rule in eslint.config.mjs (docs/proposals/sentinel-v2 K-1).
+// The rule is an error and every upward import that existed when it arrived is frozen in eslint-suppressions.json,
+// site by site, so `pnpm lint` fails on any new one. This test checks what lint cannot, and fails on:
 //   - a folder or root file of packages/sentinel/src that SENTINEL_LAYERS gives no layer,
-//   - an upward edge (a folder importing a higher layer) that import-matrix.json does not list as known debt,
-//   - a folder joining the import cycle that import-matrix.json does not list,
-//   - the rule and this test disagreeing about which edges point up.
-// Debt that disappears is reported, not failed; `SENTINEL_IMPORT_MATRIX=prune` rewrites import-matrix.json without
-// it. Adding debt is a hand edit to that file, so it shows in review.
+//   - the rule and the layer table disagreeing about which edges point up,
+//   - a folder joining the import cycle that import-matrix.json does not list as known debt.
+// It also plants upward imports and lints them the way `pnpm lint` does (the repository's config and suppressions):
+// one in a new file, and one more in an existing file whose folder pair is already frozen debt; both must fail.
+// A cycle member that leaves is reported, not failed; `SENTINEL_IMPORT_MATRIX=prune` rewrites import-matrix.json
+// without it. Adding a member is a hand edit to that file, so it shows in review.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -20,18 +21,19 @@ const SRC = 'packages/sentinel/src';
 const config = await import(pathToFileURL(join(root, 'eslint.config.mjs')).href);
 const LAYERS: Readonly<Record<string, number>> = config.SENTINEL_LAYERS;
 const DEBT_FILE = fileURLToPath(new URL('./import-matrix.json', import.meta.url));
-const debt: { upward: string[]; cycle: string[] } = JSON.parse(readFileSync(DEBT_FILE, 'utf8'));
+const debt: { cycle: string[] } = JSON.parse(readFileSync(DEBT_FILE, 'utf8'));
 
+const RULE = 'boundaries/dependencies';
 const UP = /^sentinel layers: (\S+) → (\S+) points up/;
 const EDGE = /^edge (\S+) → (\S+)$/;
 type Sites = Map<string, string[]>; // "from → to" → file:line of each import
 
-/** Lints with the configured layer rule and, beside it, the same plugin with no policy, which reports every edge. */
-function linter(): ESLint {
+/** The configured layer rule and, beside it, the same plugin with no policy, which reports every edge. */
+function measuring(): ESLint {
   return new ESLint({
     cwd: root,
     cache: false,
-    ruleFilter: ({ ruleId }) => ruleId === 'boundaries/dependencies' || ruleId === 'every-edge/dependencies',
+    ruleFilter: ({ ruleId }) => ruleId === RULE || ruleId === 'every-edge/dependencies',
     overrideConfig: {
       files: [`${SRC}/**/*.ts`],
       plugins: { 'every-edge': boundaries },
@@ -45,12 +47,16 @@ function linter(): ESLint {
   });
 }
 
+/** The layer rule as `pnpm lint` runs it: the repository's config and its suppressions file, nothing overridden. */
+const asLint = () =>
+  new ESLint({ cwd: root, cache: false, applySuppressions: true, ruleFilter: ({ ruleId }) => ruleId === RULE });
+
 function collect(results: ESLint.LintResult[]): { up: Sites; edges: Sites } {
   const up: Sites = new Map(),
     edges: Sites = new Map();
   for (const r of results)
     for (const m of r.messages) {
-      const layered = m.ruleId === 'boundaries/dependencies';
+      const layered = m.ruleId === RULE;
       if (!layered && m.ruleId !== 'every-edge/dependencies') continue;
       const into = layered ? up : edges;
       const pair = (layered ? UP : EDGE).exec(m.message);
@@ -105,10 +111,8 @@ const pointsUp = (edge: string) => {
   const [from, to] = edge.split(' → ') as [string, string];
   return LAYERS[from]! < LAYERS[to]!;
 };
-const listed = (sites: Sites, keys: string[]) =>
-  keys.map((k) => `${k} (${sites.get(k)!.slice(0, 3).join(', ')}${sites.get(k)!.length > 3 ? ', …' : ''})`).join('; ');
 
-const measured = collect(await linter().lintFiles([SRC]));
+const measured = collect(await measuring().lintFiles([SRC]));
 
 test('every folder and root file of the package has a layer', () => {
   const entries = readdirSync(join(root, SRC), { withFileTypes: true })
@@ -120,24 +124,11 @@ test('every folder and root file of the package has a layer', () => {
     assert.ok(nested.split('/')[0]! in LAYERS, `${nested} is inside a layered folder`);
 });
 
-test('the boundaries rule reports exactly the edges that point up', () => {
+test('the boundaries rule reports exactly the edges the layer table says point up', (t) => {
   const computed = [...measured.edges.keys()].filter(pointsUp).sort();
   assert.ok(measured.edges.size > 100, `only ${measured.edges.size} edges were measured: is the resolver loaded?`);
   assert.deepEqual([...measured.up.keys()].sort(), computed);
-});
-
-test('no new upward edge: every import that points up is known debt', (t) => {
-  const known = new Set(debt.upward);
-  const added = [...measured.up.keys()].filter((e) => !known.has(e)).sort();
-  assert.deepEqual(
-    added,
-    [],
-    `imports point down only (docs/proposals/sentinel-v2/README.md §6): ${listed(measured.up, added)}`,
-  );
-  const gone = debt.upward.filter((e) => !measured.up.has(e));
-  if (gone.length)
-    t.diagnostic(`known debt that is gone (SENTINEL_IMPORT_MATRIX=prune removes it): ${gone.join('; ')}`);
-  t.diagnostic(`${measured.up.size} upward edges over ${[...measured.up.values()].flat().length} imports, all known`);
+  t.diagnostic(`${measured.up.size} upward folder pairs over ${[...measured.up.values()].flat().length} imports`);
 });
 
 test('the import cycle has no new member', (t) => {
@@ -146,29 +137,38 @@ test('the import cycle has no new member', (t) => {
   const joined = members.filter((m) => !known.has(m));
   assert.deepEqual(joined, [], `these joined the import cycle: ${joined.join(', ')}`);
   assert.ok(!members.includes('kernel'), 'the kernel imports nothing from the package');
+  const left = debt.cycle.filter((m) => !members.includes(m));
+  if (left.length) t.diagnostic(`left the cycle (SENTINEL_IMPORT_MATRIX=prune removes them): ${left.join(', ')}`);
   t.diagnostic(`${members.length} folders in the cycle: ${members.join(', ')}`);
-  if (process.env.SENTINEL_IMPORT_MATRIX === 'prune') {
-    const pruned = {
-      ...debt,
-      upward: debt.upward.filter((e) => measured.up.has(e)),
-      cycle: debt.cycle.filter((m) => members.includes(m)),
-    };
-    writeFileSync(DEBT_FILE, `${JSON.stringify(pruned, null, 2)}\n`);
-  }
+  if (process.env.SENTINEL_IMPORT_MATRIX === 'prune')
+    writeFileSync(
+      DEBT_FILE,
+      `${JSON.stringify({ ...debt, cycle: debt.cycle.filter((m) => members.includes(m)) }, null, 2)}\n`,
+    );
 });
 
-test('a planted upward import is reported and is not known debt; a downward one is not reported', async () => {
-  const lint = async (file: string, code: string) =>
-    collect(await linter().lintText(code, { filePath: join(root, SRC, file) })).up;
-  const up = await lint(
-    'kernel/planted.ts',
-    "import { openStore } from '../store/index.js';\nexport const o = openStore;\n",
+test('as pnpm lint runs it, an upward import fails in a new file and as one more import on a frozen folder pair', async () => {
+  const errors = async (file: string, code: string) =>
+    (await asLint().lintText(code, { filePath: join(root, SRC, file) }))
+      .flatMap((r) => r.messages)
+      .filter((m) => m.ruleId === RULE && m.severity === 2)
+      .map((m) => UP.exec(m.message)?.slice(1).join(' → '));
+  // A new file: nothing of it is frozen.
+  assert.deepEqual(
+    await errors('kernel/planted.ts', "import { openStore } from '../store/index.js';\nexport const o = openStore;\n"),
+    ['kernel → store'],
   );
-  assert.deepEqual([...up.keys()], ['kernel → store']);
-  assert.ok(!debt.upward.includes('kernel → store'));
-  const down = await lint(
-    'store/planted.ts',
-    "import { digestOf } from '../kernel/digest.js';\nexport const d = digestOf;\n",
+  // store → evidence is frozen debt in store/ledger.ts: the file as it is passes, one more such import fails.
+  const ledger = readFileSync(join(root, SRC, 'store/ledger.ts'), 'utf8');
+  assert.deepEqual(await errors('store/ledger.ts', ledger), [], 'the frozen sites pass as they are');
+  const more = await errors('store/ledger.ts', `import '../evidence/accept.js';\n${ledger}`);
+  assert.ok(
+    more.length > 1 && more.every((e) => e === 'store → evidence'),
+    `one more frozen-pair import fails: ${more}`,
   );
-  assert.equal(down.size, 0);
+  // A downward import is never reported.
+  assert.deepEqual(
+    await errors('store/planted.ts', "import { digestOf } from '../kernel/digest.js';\nexport const d = digestOf;\n"),
+    [],
+  );
 });
