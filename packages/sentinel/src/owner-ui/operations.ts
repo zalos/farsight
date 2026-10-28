@@ -130,9 +130,15 @@ export class OwnerUiOperations {
           kind === 'model'
             ? { available: true, detail: 'exact configured model capability' }
             : { available: true, detail: 'exact implemented deterministic owner service operation' },
+        // A model envelope's credential is read by the broker when the envelope opens, never at preview: the panel
+        // asks the policy and the capability here, and the broker's own admission decides the credential then.
         credential: () =>
           kind === 'model'
-            ? { basis: 'unknown' as const, detail: 'read when the envelope opens' }
+            ? {
+                basis: 'keychain-scope' as const,
+                allowed: true,
+                detail: 'not read at preview; read when the envelope opens',
+              }
             : { basis: 'local-only' as const, detail: 'no provider/model admission is included' },
       },
       proof,
@@ -142,9 +148,11 @@ export class OwnerUiOperations {
       return {
         refusal: result('owner-ui', 'configuration-failure', {
           verdicts: printed(decision.record),
-          reasonCode: decision.record.verdicts.policy.allowed
-            ? decision.record.verdicts.capability.reasonCode
-            : decision.record.verdicts.policy.reasonCode,
+          reasonCode: !decision.record.verdicts.policy.allowed
+            ? decision.record.verdicts.policy.reasonCode
+            : !decision.record.verdicts.capability.allowed
+              ? decision.record.verdicts.capability.reasonCode
+              : decision.record.verdicts.credential.reasonCode,
         }),
       };
     return { decision };

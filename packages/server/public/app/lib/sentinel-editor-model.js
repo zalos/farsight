@@ -25,7 +25,7 @@ export const STAGE_FIELDS = Object.freeze({
   ],
   agent: [
     { key: 'mode', choices: ['brokered', 'native'] },
-    { key: 'runner', choices: ['copilot-cli', 'claude-cli', 'hosted-api'] },
+    { key: 'runner', choices: ['copilot-cli', 'claude-cli', 'hosted-api', 'ollama'] },
     { key: 'provider', optional: true },
     { key: 'model' },
     { key: 'prompt', optional: true },

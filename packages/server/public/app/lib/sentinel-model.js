@@ -8,7 +8,8 @@
 // `#/sentinel/<run id>/<stage>` (STAGE; `unit=<k>` the check or review opened), with `layout=` the stop's layout and
 // `pick=` the stage the PIPELINE dock shows. A scan is addressed by its run id, as the read model addresses it; its
 // number (#n) is a display ordinal the answers carry. ENTRY POINTS and PATH are drawn greyed, *not yet built*, with no
-// address of their own.
+// address of their own. `#/sentinel?edit=1` is the PIPELINE stop's edit mode: the workspace's declared pipeline
+// (`.farsight/sentinel/pipeline.json`), not a scan's, with `pick=` the stage the editor drawer has open.
 
 /** The five stops, in order; the last two are not built yet. */
 export const SENTINEL_STOPS = Object.freeze([
@@ -55,7 +56,17 @@ function decoded(seg) {
  */
 export function sentinelPlace(hash) {
   const h = String(hash || '');
-  const out = { stop: 'scans', scan: null, stage: null, unit: null, before: null, layout: null, pick: null, act: null };
+  const out = {
+    stop: 'scans',
+    scan: null,
+    stage: null,
+    unit: null,
+    before: null,
+    layout: null,
+    pick: null,
+    act: null,
+    edit: false,
+  };
   if (!h.startsWith('#/sentinel')) return out;
   const qi = h.indexOf('?');
   const path = (qi >= 0 ? h.slice(0, qi) : h).replace(/@sync:\d+$/, '');
@@ -76,9 +87,14 @@ export function sentinelPlace(hash) {
       }
     }
   }
+  // the edit mode: the workspace's pipeline, on the PIPELINE stop, drawn as its ladder
+  if (out.stop === 'scans' && q.get('edit') === '1') {
+    out.stop = 'pipeline';
+    out.edit = true;
+  }
   const layouts = SENTINEL_LAYOUTS[out.stop] || [];
   const layout = q.get('layout');
-  out.layout = layouts.some((l) => l.id === layout && l.built) ? layout : layouts[0].id;
+  out.layout = !out.edit && layouts.some((l) => l.id === layout && l.built) ? layout : layouts[0].id;
   const pick = q.get('pick');
   if (out.stop === 'pipeline' && pick && STAGE.test(pick)) out.pick = pick;
   // a door that asks for a scan (the Settings source row's): the SCANS stop opens the owner panel's preview once
@@ -90,6 +106,7 @@ export function sentinelPlace(hash) {
 
 /** The hash for a place (the inverse of sentinelPlace); the default layout is left out of the address. */
 export function sentinelHash(place) {
+  if (place.edit) return '#/sentinel?edit=1' + (place.pick ? '&pick=' + encodeURIComponent(place.pick) : '');
   let h = '#/sentinel';
   if (place.scan) {
     h += '/' + encodeURIComponent(place.scan);
@@ -216,6 +233,8 @@ export function whereKey(where) {
       container: 'sentinel.viewer.where.container',
       external: 'sentinel.viewer.where.external',
       provider: 'sentinel.viewer.where.provider',
+      host: 'sentinel.viewer.where.host',
+      'sandboxed-cli': 'sentinel.viewer.where.sandboxedCli',
     }[where] || 'sentinel.viewer.where.notYet'
   );
 }

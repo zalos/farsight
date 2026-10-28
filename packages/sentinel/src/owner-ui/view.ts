@@ -172,12 +172,35 @@ function browserMain(layout: typeof processLayout) {
       event.source !== parent ||
       event.origin !== parentOrigin ||
       !event.data ||
-      !['sentinel-owner-read-request', 'sentinel-owner-scan'].includes(event.data.type) ||
+      !['sentinel-owner-read-request', 'sentinel-owner-scan', 'sentinel-owner-pipeline'].includes(event.data.type) ||
       event.data.frameNonce !== frameNonce ||
       event.data.documentId !== documentId
     )
       return;
     if (event.data.type === 'sentinel-owner-read-request') void handPass().catch(() => {});
+    else if (event.data.type === 'sentinel-owner-pipeline') {
+      // The parent's edited pipeline: this panel has the service check it and preview it, and the owner confirms the
+      // write here. What comes back to the parent is the service's answer, never a capability or a receipt.
+      const { pipeline, expectDigest } = event.data;
+      if (
+        !cap ||
+        sessionLost ||
+        !pipeline ||
+        typeof pipeline !== 'object' ||
+        Array.isArray(pipeline) ||
+        !(expectDigest === null || (typeof expectDigest === 'string' && /^sha256:[a-f0-9]{64}$/.test(expectDigest)))
+      )
+        return;
+      void run(async () => {
+        notice(text('pipelineChecking'));
+        try {
+          showPipeline(await call('/pipeline-preview', { pipeline, expectDigest }));
+        } catch (error: any) {
+          tellPipeline({ state: 'failed', reasonCode: error?.code ?? 'sentinel.ownerUi.failed' });
+          throw error;
+        }
+      });
+    }
     // The parent's Scan button: this panel previews a fresh capture and waits for the owner's confirmation here, then
     // previews the start for a second confirmation (the facade's one composite receipt replaces the two later).
     else if (cap && !sessionLost)
@@ -656,6 +679,91 @@ function browserMain(layout: typeof processLayout) {
     }
     (document.getElementById('more') as HTMLButtonElement).disabled = !nextCursor;
   }
+  /** What the parent page may know of a pipeline check or write: the service's own answer, in its own words. */
+  function tellPipeline(answer: {
+    state: 'checked' | 'refused' | 'written' | 'failed';
+    reasonCode?: string | null;
+    problems?: unknown;
+    preview?: unknown;
+    written?: unknown;
+  }) {
+    parent.postMessage(
+      {
+        type: 'sentinel-owner-pipeline-result',
+        frameNonce,
+        documentId,
+        hostInstance,
+        state: answer.state,
+        reasonCode: typeof answer.reasonCode === 'string' ? answer.reasonCode : null,
+        problems: Array.isArray(answer.problems) ? answer.problems : [],
+        preview: answer.preview && typeof answer.preview === 'object' ? answer.preview : null,
+        written: answer.written && typeof answer.written === 'object' ? answer.written : null,
+      },
+      parentOrigin,
+    );
+  }
+  function showPipeline(answer: any) {
+    const e = document.getElementById('preview')!;
+    e.replaceChildren();
+    const checked = answer.preview ?? answer;
+    if (answer.unavailable || !answer.confirmation) {
+      notice(text(checked.reasonCode || 'pipelineRefused'), true);
+      tellPipeline({
+        state: 'refused',
+        reasonCode: checked.reasonCode,
+        problems: checked.problems,
+        preview: checked.preview,
+      });
+      return;
+    }
+    tellPipeline({ state: 'checked', problems: checked.problems, preview: checked.preview });
+    notice(text('pipelineReady'));
+    confirmation = answer.confirmation;
+    const p = element('p', 'pipelineWriteOnly', e);
+    p.className = 'notice';
+    const list = element('ul', undefined, e);
+    for (const stage of checked.preview?.stages ?? []) {
+      const li = element('li', undefined, list);
+      li.textContent = String(stage.id) + ' · ' + text('change.' + stage.change);
+    }
+    for (const id of checked.preview?.removed ?? []) {
+      const li = element('li', undefined, list);
+      li.textContent = String(id) + ' · ' + text('change.removed');
+    }
+    for (const problem of checked.problems ?? []) {
+      const li = element('li', undefined, list);
+      li.className = 'warn';
+      li.textContent = (problem.stage ? String(problem.stage) + ' · ' : '') + text(problem.code);
+    }
+    const confirm = button(
+      e,
+      'confirmPipeline',
+      async () => {
+        const current = confirmation;
+        if (!current) return;
+        confirmation = null;
+        confirm.remove();
+        notice(text('actionPending'));
+        const done = await call('/confirm', { id: current.id, revision: current.revision });
+        if (done.outcome === 'prepared' && done.facts?.written) {
+          notice(text('pipelineWritten'));
+          tellPipeline({
+            state: 'written',
+            problems: done.facts.problems,
+            preview: done.facts.preview,
+            written: { fileDigest: done.facts.fileDigest, digest: done.facts.digest, trust: done.facts.trust },
+          });
+        } else {
+          notice(text(done.reasonCode || 'failed'), true);
+          tellPipeline({ state: 'refused', reasonCode: done.reasonCode, problems: done.facts?.problems });
+        }
+      },
+      true,
+    );
+    confirm.id = 'confirm';
+    confirm.className = 'primary';
+    writes();
+  }
   function showPreview(answer: any) {
     const e = document.getElementById('preview')!;
     e.replaceChildren();
@@ -683,6 +791,29 @@ function browserMain(layout: typeof processLayout) {
         chip.className = 'pill';
         chip.textContent = String(stage.stage);
       }
+    // A start that calls models is one composite: the stages it runs and each model with its budget, confirmed once
+    // here with one receipt for the start and one for each model's budget (ADR 48 as amended by U-3).
+    if (answer.preview.composite) {
+      const c = answer.preview.composite;
+      element('p', 'compositeStart', e).className = 'notice';
+      for (const stage of c.stages ?? []) {
+        const chip = element('span', undefined, e);
+        chip.className = 'pill';
+        chip.textContent = String(stage);
+      }
+      const models = element('ul', undefined, e);
+      for (const m of c.models ?? []) {
+        const li = element('li', undefined, models);
+        const b = m.budget ?? {};
+        li.textContent =
+          String(m.model ?? m.modelId) +
+          ' · ' +
+          String(m.runner ?? '') +
+          ' · ' +
+          text('budgetTokens').replace('{n}', String(b.maxTokens ?? '')) +
+          (b.maxCost ? ' · ' + String(b.maxCost) + ' ' + String(b.currency ?? '') : '');
+      }
+    }
     const preparing = !!answer.preview.mode;
     const confirm = button(
       e,
