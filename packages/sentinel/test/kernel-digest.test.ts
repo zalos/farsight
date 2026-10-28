@@ -364,6 +364,8 @@ test('the four inputs on which the replaced implementations disagreed are refuse
     assert.deepEqual(refusal, { reason, message }, name);
     assert.throws(() => objectsCanonicalJson(value), { code: 'sentinel.object.notCanonical', message }, name);
     assert.throws(() => objects.canonicalJson(value), { code: 'sentinel.object.notCanonical', message }, name);
+    assert.throws(() => ledgerJson.canonicalJson(value), TypeError, name);
+    assert.throws(() => ledgerJson.digestOf(value), TypeError, name);
   }
 });
 
