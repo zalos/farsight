@@ -228,9 +228,13 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `sentinel-package` CI job; `scripts/npm-consumer.mjs` is their shared `npm init -y` consumer.
 
   The command line and local service (ADR 37): `src/cli.ts` (the owner's entrypoint, and the preview worker when the
-  coordinator starts it), `src/cli/` (`args.ts` typed parsing, `outcome.ts` typed results and exit codes, `actor.ts`
-  the entrypoint actor rule, `init.ts`), `src/service/local.ts` (adopt, plan, run, status, report in the owner's
-  process), `src/service/canonical.ts` (plan and run through the canonical planner, admission and coordinator; results from the
+  coordinator starts it), `src/cli/` (`args.ts` typed parsing, `init.ts`; `outcome.ts` and `actor.ts` re-export
+  `src/app/`), `src/app/service.ts` (the `SentinelService` facade every caller goes through: scan, plan, start
+  preview, rerun, status, report, scans, a stage read; `LocalSentinelService` in the owner's process,
+  `RemoteSentinelService` through the running service, `HeldSentinelService` inside it), `src/app/principal.ts` (the
+  owner principal only the command line mints, an agent principal per connection), `src/app/outcome.ts` (typed results
+  and exit codes), `src/app/actor.ts` (the entrypoint actor rule), `src/service/local.ts` (adopt, plan, run, status,
+  report in the owner's process; the composite start and its model envelope receipts), `src/service/canonical.ts` (plan and run through the canonical planner, admission and coordinator; results from the
   ledger; `selectedRerun` plans a strict-subset rerun, ADR 43), `src/execution/selection.ts` (the admitted
   `sentinel-rerun-selection/draft-1` record and its check), `src/service/owner-service.ts` (the background service: socket, descriptor, receipts bound to their instance,
   one run at a time, pause/cancel/wait), `src/service/scratch-lease.ts` (a run's scratch lease inside the held store,

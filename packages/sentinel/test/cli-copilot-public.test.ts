@@ -142,14 +142,16 @@ test(
     } finally {
       store.close();
     }
+    // Refused before model admission (ADR 48, the composite start): the confirmed start issued exactly its one
+    // paid.admit receipt, and nothing spent it. No envelope opened (the budget ledger above has none for this run), no
+    // attempt and no publication (above), and the vendor CLI never ran (no marker, above): no auth.
     const book = receiptBook(workspaceOf(ws, env));
-    assert.equal(
-      readdirSync(book.directory)
-        .filter((n) => n.endsWith('.json'))
-        .map((n) => JSON.parse(readFileSync(join(book.directory, n), 'utf8')))
-        .filter((r) => r.action === 'paid.admit').length,
-      0,
-      'no model confirmation created before complete secret coverage',
-    );
+    const paid = readdirSync(book.directory)
+      .filter((n) => n.endsWith('.json'))
+      .map((n) => JSON.parse(readFileSync(join(book.directory, n), 'utf8')))
+      .filter((r) => r.action === 'paid.admit');
+    assert.equal(paid.length, 1, "exactly the composite's one model envelope receipt");
+    assert.equal(existsSync(join(book.directory, paid[0].id + '.spent')), false, 'never spent');
+    assert.equal(existsSync(marker), false, 'no auth: the vendor CLI never ran');
   },
 );

@@ -12,6 +12,12 @@ import { ProviderError } from '../review/providers/errors.js';
 // Pause and cancel are writes too, decided the same way with their own actions (`run.pause`, `run.cancel`): a
 // receipt for one is never a receipt for another. Status, wait and report read.
 //
+// A start of a plan with model stages needs the owner's composite confirmation: the start receipt (bound to the plan
+// digest, its stages and each model binding with its budget) and one receipt for each model envelope the run opens,
+// all issued by the owner's own CLI in one --confirm (local.ts confirmForService). The service checks every envelope
+// receipt before it spends the start receipt and hands each to the run only for the exact envelope it was issued for;
+// it never issues an owner receipt itself, and a start without them opens no envelope (ADR 48, as amended).
+//
 // One run executes at a time. A second start for the plan being run joins it (one run, never two); a start for a run
 // that already finished prints its result again without executing anything. A run interrupted by the service
 // stopping, however it stopped, is recovered by the coordinator when it is resumed.
@@ -48,15 +54,13 @@ import {
   runWriteBinding,
   printed,
   receiptBook,
-  reportIn,
   retainedFact,
   runStateIn,
-  statusIn,
   checkWorkspaceLayout,
   writeWorkspacePipeline,
   type Workspace,
 } from './local.js';
-import { assertSupportedRules, canonicalResult, currentPlan, rerunEnvelopeOf } from './canonical.js';
+import { assertSupportedRules, canonicalResult, currentPlan, rerunEnvelopeOf, type CurrentPlan } from './canonical.js';
 import { loadPlan } from '../execution/plans.js';
 import { publicRegistry, scannerExecution } from './scanner-profile.js';
 import { ReadonlyViews, READONLY_OPERATIONS } from './readonly.js';
@@ -64,6 +68,12 @@ import { controlCapabilities } from './controls.js';
 import { PreparationController } from './preparation-controller.js';
 import { PreparationError } from './preparation-clock.js';
 import { recordRunFailure, runFailureCode } from './run-failure.js';
+import { compositeReviewRuntime, envelopeBinding, OWNER as OWNER_REQUESTER, type ModelAuthority } from './local.js';
+import { bindProvider } from '../review/providers/profile.js';
+import type { ReceiptBook } from '../policy/index.js';
+import type { ReviewRuntime } from '../review/dispatch.js';
+import { HeldSentinelService } from '../app/service.js';
+import { agentPrincipal } from '../app/principal.js';
 
 export type ServiceErrorCode =
   | 'sentinel.service.unknownOperation'
@@ -168,6 +178,10 @@ export class OwnerService {
   readonly #preparations: PreparationController;
   #idleSince = Date.now();
   #stopping = false;
+  /** A plan this service is capturing and bootstrapping now: one at a time, never beside a run. */
+  #planning = false;
+  /** The facade over the store this service holds, for its connections (app/service.ts). */
+  readonly #facade: HeldSentinelService;
 
   constructor(store: SentinelStore, ws: Workspace, options: OwnerServiceOptions = {}) {
     this.#store = store;
@@ -183,11 +197,15 @@ export class OwnerService {
       (op, body, by, context) => this.handle(op, body, by, context),
       (kind, body, by) => this.#preparations.ownerUiConfirmation(kind, body, by),
     );
+    this.#facade = new HeldSentinelService(store, ws, {
+      executing: (runId) => this.#active.has(runId),
+      registry: () => this.#registry,
+    });
     this.#preparations = new PreparationController(
       store,
       ws,
       this.#registry,
-      () => this.#active.size > 0,
+      () => this.#active.size > 0 || this.#planning,
       () => {
         this.#idleSince = Date.now();
       },
@@ -196,7 +214,7 @@ export class OwnerService {
 
   /** True while a run executes. */
   get busy(): boolean {
-    return this.#active.size > 0 || this.#preparations.busy;
+    return this.#active.size > 0 || this.#preparations.busy || this.#planning;
   }
   /** Bounded unexpired buffers keep a detached owner alive, without renewing their absolute TTLs. */
   get retainingReads(): boolean {
@@ -275,18 +293,84 @@ export class OwnerService {
         };
       }
       case 'run.start': {
-        const f = fields(body, ['planId'], ['receiptId']);
-        return this.#start(f.planId as string, f.receiptId as string | undefined, by);
+        // `envelopeReceipts`: the owner's receipts for the model envelopes, beside the start's own (at most 32 ids).
+        const { envelopeReceipts, ...rest } = isRecord(body) ? body : ({} as Record<string, unknown>);
+        if (
+          envelopeReceipts !== undefined &&
+          !(
+            Array.isArray(envelopeReceipts) &&
+            envelopeReceipts.length >= 1 &&
+            envelopeReceipts.length <= 32 &&
+            envelopeReceipts.every((x) => typeof x === 'string' && ID.test(x)) &&
+            new Set(envelopeReceipts).size === envelopeReceipts.length
+          )
+        )
+          throw new ServiceError('sentinel.service.requestInvalid');
+        const f = fields(isRecord(body) ? rest : body, ['planId'], ['receiptId']);
+        return this.#start(
+          f.planId as string,
+          f.receiptId as string | undefined,
+          by,
+          envelopeReceipts as readonly string[] | undefined,
+        );
       }
       case 'run.status': {
-        const f = fields(body, ['runId'], ['after', 'limit']);
-        return statusIn(this.#store, {
-          runId: f.runId as string,
-          executing: this.#active.has(f.runId as string),
-          registry: this.#registry,
+        // Without a run id: the newest scan's (app/service.ts).
+        const f = fields(body, [], ['runId', 'after', 'limit']);
+        return this.#facade.status(agentPrincipal(by), {
+          ...(f.runId === undefined ? {} : { runId: f.runId as string }),
           ...(f.after === undefined ? {} : { after: f.after as number }),
           ...(f.limit === undefined ? {} : { limit: f.limit as number }),
         });
+      }
+      case 'scans': {
+        const f = fields(body, [], ['limit']);
+        return this.#facade.scans(agentPrincipal(by), f.limit === undefined ? {} : { limit: f.limit as number });
+      }
+      case 'stage.read': {
+        const f = fields(body, ['stageId'], ['runId']);
+        return this.#facade.stage(agentPrincipal(by), {
+          stageId: f.stageId as string,
+          ...(f.runId === undefined ? {} : { runId: f.runId as string }),
+        });
+      }
+      case 'start.preview': {
+        // The composite a start of the run confirms (U-3's preview): read only, nothing issued or spent.
+        const f = fields(body, [], ['runId']);
+        return this.#facade.startPreview(agentPrincipal(by), {
+          ...(f.runId === undefined ? {} : { runId: f.runId as string }),
+          now: this.#now(),
+        });
+      }
+      case 'scan': {
+        // What a scan would run, for a connection to read; a connection never confirms one (`confirm` is refused
+        // as owner-only, with nothing captured, admitted or opened).
+        if (
+          !isRecord(body) ||
+          Object.keys(body).some((k) => k !== 'confirm') ||
+          !(body.confirm === undefined || typeof body.confirm === 'boolean')
+        )
+          throw new ServiceError('sentinel.service.requestInvalid');
+        return this.#facade.scan(agentPrincipal(by), { confirm: body.confirm === true, now: this.#now() });
+      }
+      case 'plan': {
+        // Capture and plan in the store this service holds, on the owner's receipt for exactly that capture here
+        // (local.ts confirmPlanForService), spent once; never beside a run, a preparation or another plan.
+        if (this.#stopping) throw new ServiceError('sentinel.service.requestInvalid');
+        const f = fields(body, [], ['receiptId']);
+        if (this.#planning || this.#active.size > 0 || this.#preparations.busy)
+          return result('plan', 'configuration-failure', { reasonCode: 'sentinel.service.anotherRunActive' });
+        this.#planning = true;
+        try {
+          return await this.#facade.plan(agentPrincipal(by), {
+            confirm: false,
+            ...(f.receiptId === undefined ? {} : { receiptId: f.receiptId as string }),
+            now: this.#now(),
+          });
+        } finally {
+          this.#planning = false;
+          this.#idleSince = Date.now();
+        }
       }
       case 'run.wait': {
         const f = fields(body, ['runId'], ['timeoutMs']);
@@ -308,8 +392,13 @@ export class OwnerService {
         const f = fields(body, ['runId']);
         return (await currentPlan(this.#store, f.runId as string)) ?? null;
       }
-      case 'report':
-        return reportIn(this.#store, this.#ws, { runId: fields(body, ['runId']).runId as string, now: this.#now() });
+      case 'report': {
+        const f = fields(body, [], ['runId']);
+        return this.#facade.report(agentPrincipal(by), {
+          ...(f.runId === undefined ? {} : { runId: f.runId as string }),
+          now: this.#now(),
+        });
+      }
       case 'pipeline.write': {
         // Validate, preview and, with the owner's receipt for exactly these bytes, write the workspace's pipeline file;
         // never adopt, never run. Writing is the owner action `settings.adopt`: without a receipt, admission decides,
@@ -336,7 +425,9 @@ export class OwnerService {
   /**
    * Decides one owner-action write that is not on a run (a pipeline file): the owner's receipt for exactly this
    * binding under the current policy, spent once; otherwise admission with the connection's own requester, which no
-   * grant passes for an owner action. Being connected grants nothing.
+   * grant passes for an owner action. Being connected grants nothing. The owner's receipt is the CLI's, or, on the
+   * paired browser's live proof, its own `settings.adopt` receipt for exactly these bytes (U-3): writing only; the
+   * file is adopted by the CLI owner alone.
    */
   #authorizeOwnerWrite(
     command: string,
@@ -350,6 +441,26 @@ export class OwnerService {
         ? adopted.policy
         : effectivePolicy(loadPolicyInputs({ workspace: this.#ws.path, trustDir: this.#ws.trustDir }));
     const now = this.#now();
+    const uiProof = by.channel === 'owner-ui' ? activeOwnerUiProof() : null;
+    if (receiptId !== undefined && uiProof) {
+      // The paired browser's receipt, checked by its own book under the live proof: the same shape the composite
+      // start's owner-UI envelope receipts use. An unknown, spent, mismatched or uncovered one refuses.
+      try {
+        const spent = new OwnerUiReceiptBook(join(this.#ws.trustDir, 'receipts'), uiProof).consume(
+          receiptId,
+          { ...binding, policyRevision: policy.revision },
+          now,
+        );
+        return { facts: { receipt: spent.digest, receiptIssuer: 'owner-ui' } };
+      } catch (e) {
+        const code = (e as { code?: unknown }).code;
+        return {
+          refusal: result(command, 'configuration-failure', {
+            reasonCode: typeof code === 'string' && code.startsWith('sentinel.') ? code : 'sentinel.receipt.mismatch',
+          }),
+        };
+      }
+    }
     if (receiptId !== undefined) {
       try {
         const spent = receiptBook(this.#ws).consume(receiptId, { ...binding, policyRevision: policy.revision }, now);
@@ -392,7 +503,10 @@ export class OwnerService {
     planId: string,
     receiptId: string | undefined,
     by: RequestedBy,
-  ): Promise<{ verdicts: PrintedVerdicts; facts: Record<string, unknown> } | { refusal: CommandResult }> {
+    envelopeReceipts?: readonly string[],
+  ): Promise<
+    { verdicts: PrintedVerdicts; facts: Record<string, unknown>; models?: ModelAuthority } | { refusal: CommandResult }
+  > {
     const facts: Record<string, unknown> = { planId };
     // The run's current admitted analysis revision, read back from the ledger and verified: what the write acts on.
     const record = await currentPlan(this.#store, planId);
@@ -418,21 +532,33 @@ export class OwnerService {
         return { refusal: result(command, 'configuration-failure', { reasonCode: error.code, facts }) };
       }
     }
+    const now = this.#now();
+    // A start that calls models: only with the owner's composite confirmation, every envelope receipt checked here
+    // before the start receipt is spent. Without it nothing is spent and no envelope can open.
+    let models: ModelAuthority | undefined;
     if (
       action === 'run.start' &&
       record.effects.includes('paid-inference') &&
       !['completed', 'canceled'].includes(this.#store.ledger.getRun(planId)?.state ?? '')
-    )
-      return {
-        refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.review.foregroundRequired', facts }),
-      };
+    ) {
+      if (receiptId === undefined || !envelopeReceipts?.length)
+        return {
+          refusal: result(command, 'configuration-failure', {
+            reasonCode: 'sentinel.review.foregroundRequired',
+            facts,
+          }),
+        };
+      const checked = this.#modelAuthority(record, policy, envelopeReceipts, uiProof, now);
+      if ('refusal' in checked)
+        return { refusal: result(command, 'configuration-failure', { reasonCode: checked.refusal, facts }) };
+      models = checked.models;
+    }
     // The write is on this workspace's store and this run: a receipt confirmed for another instance does not match.
     const { intent, stateDigest } = runWriteBinding(this.#ws, action, record, {
       storeId: this.#store.storeId,
       runId: planId,
     });
     facts.effects = intent.effects;
-    const now = this.#now();
     if (receiptId !== undefined && uiProof) {
       assertOwnerUiProof(uiProof, action);
       const decision = admitOwnerUi(
@@ -459,7 +585,11 @@ export class OwnerService {
             reasonCode: decision.record.verdicts.policy.reasonCode,
           }),
         };
-      return { verdicts: printed(decision.record), facts: { ...facts, receipt: decision.receipt?.digest } };
+      return {
+        verdicts: printed(decision.record),
+        facts: { ...facts, receipt: decision.receipt?.digest },
+        ...(models ? { models } : {}),
+      };
     }
     if (receiptId !== undefined) {
       // The owner's receipt: checked against exactly this action, plan digest and policy revision, and spent once.
@@ -470,7 +600,11 @@ export class OwnerService {
           { intent, stateDigest, policyRevision: policy.revision },
           now,
         );
-        return { verdicts: RECEIPT_VERDICTS, facts: { ...facts, receipt: spent.digest } };
+        return {
+          verdicts: RECEIPT_VERDICTS,
+          facts: { ...facts, receipt: spent.digest },
+          ...(models ? { models } : {}),
+        };
       } catch (e) {
         if (!(e instanceof PolicyError)) throw e;
         return { refusal: result(command, 'configuration-failure', { reasonCode: e.code, facts }) };
@@ -505,8 +639,58 @@ export class OwnerService {
     return { verdicts, facts };
   }
 
-  async #start(planId: string, receiptId: string | undefined, by: RequestedBy): Promise<CommandResult> {
-    const decided = await this.#authorize('run', 'run.start', planId, receiptId, by);
+  /**
+   * The model envelopes of a start, matched to the owner's receipts: the run's one binding is resolved again under the
+   * current policy and must be the admitted one; each envelope then needs exactly one receipt that the book checks
+   * against exactly that envelope (`book.check`, nothing spent), and every receipt given must fit an envelope.
+   */
+  #modelAuthority(
+    record: CurrentPlan,
+    policy: import('../policy/index.js').EffectivePolicy,
+    envelopeReceipts: readonly string[],
+    uiProof: ReturnType<typeof activeOwnerUiProof>,
+    now: Date,
+  ): { models: ModelAuthority } | { refusal: string } {
+    if (record.modelConflict || !record.model?.modelId) return { refusal: 'sentinel.provider.bindingChanged' };
+    let binding;
+    try {
+      binding = bindProvider(policy, record.model.providerId, record.model.modelId);
+    } catch {
+      return { refusal: 'sentinel.provider.bindingChanged' };
+    }
+    if (binding.digest !== record.model.bindingDigest) return { refusal: 'sentinel.provider.bindingChanged' };
+    const envelope = envelopeBinding(binding, record, this.#store.storeId, policy.revision, record.model.budget);
+    // The owner's own CLI receipts, or (U-3) the paired browser's under its live proof; the requester is the issuer's.
+    const book: { check: ReceiptBook['check'] } = uiProof
+      ? new OwnerUiReceiptBook(join(this.#ws.trustDir, 'receipts'), uiProof)
+      : receiptBook(this.#ws);
+    // A receipt the book cannot check for this envelope (unknown, spent, expired, another binding, or an owner-UI proof
+    // that does not cover the action) fits nothing: refused below, never an error that leaves the start half-decided.
+    const fits = envelopeReceipts.filter((id) => {
+      try {
+        book.check(id, envelope, now);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (fits.length !== 1 || envelopeReceipts.length !== 1) return { refusal: 'sentinel.receipt.mismatch' };
+    return {
+      models: Object.freeze({
+        book,
+        receipts: new Map([[envelope.stateDigest, fits[0]!]]),
+        requestedBy: uiProof ? uiProof.requestedBy : OWNER_REQUESTER,
+      }),
+    };
+  }
+
+  async #start(
+    planId: string,
+    receiptId: string | undefined,
+    by: RequestedBy,
+    envelopeReceipts?: readonly string[],
+  ): Promise<CommandResult> {
+    const decided = await this.#authorize('run', 'run.start', planId, receiptId, by, envelopeReceipts);
     if ('refusal' in decided) return decided.refusal;
     const { verdicts, facts } = decided;
     // One run per plan: a second start joins the run already executing, once it is accepted.
@@ -519,7 +703,7 @@ export class OwnerService {
         facts: { ...facts, runId: planId, joined: true, state: runStateIn(this.#store, planId) },
       });
     }
-    if (this.#stopping || this.#active.size > 0 || this.#preparations.busy)
+    if (this.#stopping || this.#active.size > 0 || this.#preparations.busy || this.#planning)
       return result('run', 'configuration-failure', {
         verdicts,
         facts,
@@ -535,7 +719,7 @@ export class OwnerService {
       });
     // Accepted only once the coordinator has opened the admitted revision under this installation's registry: a plan
     // this installation cannot execute is refused here, with why, never answered `submitted` and left looking queued.
-    const failed = await this.#launch(planId, { pause: false, cancel: false }).opened;
+    const failed = await this.#launch(planId, { pause: false, cancel: false }, decided.models).opened;
     if (failed) return this.#notAccepted('run', planId, failed, verdicts, facts);
     return result('run', 'submitted', {
       verdicts,
@@ -557,7 +741,7 @@ export class OwnerService {
     });
   }
 
-  #launch(planId: string, flags: { pause: boolean; cancel: boolean }): ActiveRun {
+  #launch(planId: string, flags: { pause: boolean; cancel: boolean }, models?: ModelAuthority): ActiveRun {
     let settle!: (v: { error: string; reason?: string } | undefined) => void;
     const run: ActiveRun = {
       planId,
@@ -570,6 +754,7 @@ export class OwnerService {
     this.#active.set(planId, run);
     run.task = (async () => {
       let lease: ScratchLease | undefined;
+      let review: (ReviewRuntime & { close(): void }) | undefined;
       try {
         lease = openScratchLease(this.#store);
         const scratch = lease.path;
@@ -582,6 +767,9 @@ export class OwnerService {
         const assets = this.#drivers
           ? { drivers: this.#drivers }
           : await scannerExecution(this.#store, planId, this.#ws.trustDir, scratch, this.#registry, lease.wrapRunner);
+        // The model runtime exists only for a start the owner confirmed as a composite: each envelope opens on the
+        // receipt issued for exactly it, checked again before it is handed over; no receipt is issued here.
+        if (models) review = await compositeReviewRuntime(this.#store, this.#ws, models);
         const coordinator = await Coordinator.open({
           ...assets,
           store: this.#store,
@@ -590,6 +778,7 @@ export class OwnerService {
           registry: this.#registry,
           backendOptions: { wrapRunner: lease.wrapRunner },
           ...(first ? { run: first } : {}),
+          ...(review ? { review } : {}),
         });
         run.coordinator = coordinator;
         settle(undefined);
@@ -611,6 +800,11 @@ export class OwnerService {
         // Before the coordinator opened, nothing was accepted: the start (and any joiner) is refused with this.
         settle(failureOf(e));
       } finally {
+        try {
+          review?.close();
+        } catch {
+          /* the run's own outcome is what is reported */
+        }
         // Removed only when every consumer is proven stopped; otherwise retained, and the service says so.
         try {
           const released = lease ? releaseScratchLease(this.#store, lease) : { removed: true as const };
