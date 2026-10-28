@@ -466,6 +466,13 @@ export function pipelineEnvironment(ws: Workspace, policy: EffectivePolicy | nul
   });
 }
 
+/**
+ * What `pipeline validate` checks a file against: this workspace's adopted settings (or none), its promoted stage and
+ * skill packs, its rule lock and the tools the owner adopted, exactly as `pipeline show` and `plan` do.
+ */
+export const workspacePipelineEnvironment = (ws: Workspace): PipelineEnvironment =>
+  pipelineEnvironment(ws, adoptedOrNull(ws));
+
 /** Every problem with the workspace's pipeline here, or [] when there is no readable pipeline file. */
 function pipelineProblems(ws: Workspace, policy: EffectivePolicy | null): readonly PipelineProblem[] {
   const loaded = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
@@ -1622,17 +1629,29 @@ export async function heldUnitsIn(
   store: SentinelStore,
   runId: string,
 ): Promise<{
-  held: readonly { unit: string; stage: string; state: string; reasonCode: string }[];
+  held: readonly HeldUnit[];
   pipeline?: RunPipeline;
 }> {
   const plan = await currentPlan(store, runId);
   if (!plan) return { held: [] };
   const admitted = await loadPlan(store, runId, plan.revision);
-  const held: { unit: string; stage: string; state: string; reasonCode: string }[] = [];
+  const held: HeldUnit[] = [];
   for (const u of admitted.plan.units) {
     const work = store.ledger.getWork({ id: u.id, revision: u.revision });
     if (work && (work.state === 'blocked' || work.state === 'disabled-by-policy') && work.reason)
-      held.push(Object.freeze({ unit: u.id, stage: String(u.stage), state: work.state, reasonCode: work.reason }));
+      held.push(
+        Object.freeze({
+          unit: u.id,
+          stage: String(u.stage),
+          state: work.state,
+          reasonCode: work.reason,
+          // What the reason is about: the model a review asked for, or the adapter a check runs. The ledger keeps the
+          // reason's code only, so its words are filled from the plan.
+          detail: u.review
+            ? `${u.review.selection.providerId} ${u.review.selection.modelId}`
+            : String(u.adapterId ?? u.stage),
+        }),
+      );
   }
   const recorded = admitted.profile.pipeline;
   const source = pipelineSourceOf(admitted.profile);
@@ -1646,6 +1665,16 @@ export async function heldUnitsIn(
         ? { path: 'default-of', profile: source.profile }
         : { path: 'default' },
   };
+}
+
+/** A unit of a run that is held: blocked or disabled by policy, with the reason the ledger recorded. */
+export interface HeldUnit {
+  readonly unit: string;
+  readonly stage: string;
+  readonly state: string;
+  readonly reasonCode: string;
+  /** What the reason is about, for its words: the provider and model a review asked for, or a check's adapter. */
+  readonly detail: string;
 }
 
 /** The pipeline a run was planned from, as its admitted profile records it. */

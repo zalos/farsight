@@ -1,7 +1,7 @@
 // The pipeline each init profile writes. `static`, `scanners` and `secrets` declare exactly the stages those
 // profiles plan today (capture, a parse per source, the inventory, the checks their rules select, the report), so
-// declared planning reproduces today's units; `agentic` is the plan's example (README §3.3) with this build's
-// registered adapter ids.
+// declared planning reproduces today's units; `agentic` is the plan's example (README §3.3) as this build can plan
+// it, and `review` is its model half alone: the walkthrough and a Copilot review, with no scanner and no container.
 import type { PipelineDefinition, StageDefinition } from '../contracts/index.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import {
@@ -35,19 +35,43 @@ const pipeline = (stages: StageDefinition[], flags?: PipelineDefinition['flags']
 });
 
 /**
- * The scan profiles init describes: the foundation preview, the five pinned scanners, the secret scan alone, and the
- * plan's agentic example (the secret and pattern scanners, the walkthrough, a brokered Copilot review and a native
- * Claude triage).
+ * The scan profiles init describes: the foundation preview, the five pinned scanners, the secret scan alone, the
+ * plan's agentic example (the secret and pattern scanners, the walkthrough and a brokered Copilot review), and that
+ * review alone over the walkthrough, which needs no container and runs no secret scan first.
  */
-export const PROFILES = ['static', 'scanners', 'secrets', 'agentic'] as const;
+export const PROFILES = ['static', 'scanners', 'secrets', 'agentic', 'review'] as const;
+export type Profile = (typeof PROFILES)[number];
 
 /** The rule packs a profile's owner promotes before planning: the packs this package ships, by name. */
-export const PROFILE_PACKS: Readonly<Record<(typeof PROFILES)[number], readonly string[]>> = Object.freeze({
+export const PROFILE_PACKS: Readonly<Record<Profile, readonly string[]>> = Object.freeze({
   static: ['foundation-preview'],
   scanners: ['pattern', 'advisories', 'infrastructure', 'ci', 'secrets'],
   secrets: ['secrets'],
   agentic: ['secrets', 'pattern'],
+  // A plan rests on a promoted rule lock; this profile selects none of its rules, so no check is planned from it.
+  review: ['foundation-preview'],
 });
+
+/** The Copilot general review both model profiles declare, over the stage outputs it reads. */
+const copilotReview = (needs: { stage: string; output: string }[], after?: string[]): StageDefinition => ({
+  id: 'review',
+  kind: 'agent',
+  mode: 'brokered',
+  runner: 'copilot-cli',
+  model: 'gpt-6-luna',
+  needs,
+  ...(after ? { after } : {}),
+  // One general review of the run (planner/pipeline.ts maps per-run to the general review).
+  fanOut: 'per-run',
+  budget: { turns: 3, tokens: 20000, seconds: 120 },
+});
+const walk: StageDefinition = {
+  id: 'walk',
+  kind: 'builtin',
+  operation: 'walkthrough',
+  needs: ['parse'],
+  fanOut: 'per-entry',
+};
 
 /** The pipeline `init --profile <profile>` writes. */
 export function profilePipeline(profile: string): PipelineDefinition {
@@ -78,26 +102,23 @@ export function profilePipeline(profile: string): PipelineDefinition {
             rules: 'pack:builtin:pattern',
             needs: ['capture', 'parse'],
           },
-          { id: 'walk', kind: 'builtin', operation: 'walkthrough', needs: ['parse'], fanOut: 'per-entry' },
-          {
-            id: 'review',
-            kind: 'agent',
-            mode: 'brokered',
-            runner: 'copilot-cli',
-            model: 'gpt-6-luna',
-            needs: [
+          walk,
+          copilotReview(
+            [
               { stage: 'walk', output: 'walkthrough' },
               { stage: 'patterns', output: 'findings' },
             ],
-            after: ['secrets'],
-            // One general review of the run (planner/pipeline.ts maps per-run to the general review).
-            fanOut: 'per-run',
-            budget: { turns: 3, tokens: 20000, seconds: 120 },
-          },
+            ['secrets'],
+          ),
           report(['secrets', 'patterns', 'review', 'walk']),
         ],
         { 'review.hosted-api': false },
       );
+    case 'review':
+      // The review alone: no scanner, so no container. Its settings choose to review without a secret scan first.
+      return pipeline([walk, copilotReview([{ stage: 'walk', output: 'walkthrough' }]), report(['review', 'walk'])], {
+        'review.hosted-api': false,
+      });
     default:
       return pipeline([tool('preview', PREVIEW_DETECTOR_ID, [PREVIEW_RULE]), report(['preview'])]);
   }

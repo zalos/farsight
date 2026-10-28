@@ -25,6 +25,7 @@ import {
   PolicyError,
   fullReportIn,
   type Workspace,
+  workspacePipelineEnvironment,
 } from './service/local.js';
 import { connectService, readServiceDescriptor, serveWorkspace } from './service/owner-service.js';
 import { LocalSentinelService, RemoteSentinelService, type SentinelService } from './app/service.js';
@@ -307,14 +308,17 @@ function init(p: ParsedCommand): number {
     // The profile in effect is what the settings file holds: a kept file is used as it is, whatever was asked for.
     const kept = done.settings.outcome === 'kept';
     const inEffect = kept ? done.settings.holds : done.profile;
+    // What the profile in effect plans and what it needs, in its own words; an edited file is described by neither.
+    const about = (profile: string) => profile.charAt(0).toUpperCase() + profile.slice(1);
     out(
       inEffect === done.profile
-        ? word('sentinel.init.profile', { profile: done.profile })
+        ? word(`sentinel.init.about${about(done.profile)}`)
         : inEffect === null
           ? word('sentinel.init.profileEdited', { asked: done.profile })
           : word('sentinel.init.profileKept', { profile: inEffect, asked: done.profile }),
     );
-    out(word('sentinel.init.prerequisites'));
+    if (inEffect === 'review') out(word('sentinel.init.noSecretScan'));
+    out(word(inEffect === null ? 'sentinel.init.prerequisites' : `sentinel.init.needs${about(inEffect)}`));
     out(word('sentinel.init.credentials'));
     out(word('sentinel.init.noEffects'));
     const packs = inEffect === null ? [] : (PROFILE_PACKS[inEffect as keyof typeof PROFILE_PACKS] ?? []);
@@ -341,8 +345,13 @@ function serviceOut(r: CommandResult, lines: string[] = [], values: Record<strin
   if (!jsonOut) {
     for (const l of lines) out(l);
     const head = word(`sentinel.outcome.${r.outcome.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())}`);
+    // A start that calls a model waits for both flags; its reason says so (the code stays the one the service gave).
+    const reason =
+      r.reasonCode === 'sentinel.service.needsOwnerConfirm' && r.facts.requiredFlag === '--confirm-models'
+        ? 'sentinel.cli.needsModelConfirm'
+        : r.reasonCode;
     (r.exitCode === 0 ? out : errOut)(
-      r.reasonCode && r.reasonCode !== 'sentinel.outcome.unavailable' ? `${head}: ${word(r.reasonCode, values)}` : head,
+      reason && reason !== 'sentinel.outcome.unavailable' ? `${head}: ${word(reason, values)}` : head,
     );
   }
   return finish(r);
@@ -415,7 +424,9 @@ function pipelineCommand(p: ParsedCommand, ws: Workspace, confirm: boolean, now:
     }
     let problems: readonly PipelineProblem[];
     try {
-      problems = checkPipeline(parsePipeline(bytes));
+      // Checked here, against this workspace: a pack it does not hold, a tool it has not adopted, a runner its
+      // settings do not bind (V-2): the same problems `pipeline show` and `plan` report.
+      problems = checkPipeline(parsePipeline(bytes), workspacePipelineEnvironment(ws));
     } catch (e) {
       if (!(e instanceof PipelineError)) throw e;
       errOut(word(e.code, { detail: e.detail }));
@@ -473,18 +484,42 @@ const me = (): OwnerPrincipal => {
 /** Each model a start would call, in words: provider, model, runner and budget. */
 function modelLines(models: unknown): string[] {
   if (!Array.isArray(models)) return [];
-  // One line per stage and model: a review stage of many units names its model once.
+  // One line per stage and model: a review stage of many units names its model once. A declared stage no provider
+  // binds says so; one whose binding names another runner or model says what it declared, beside what runs.
   return [
     ...new Set(
-      models.map((m: Record<string, unknown>) =>
-        word('sentinel.cli.scanModel', {
-          stage: m.segmentId ? `${String(m.stage ?? 'review')} ${String(m.segmentId)}` : String(m.stage ?? 'review'),
-          runner: String(m.runner ?? m.providerId),
-          model: String(m.model ?? m.modelId),
-          provider: String(m.providerId),
-          budget: budgetWords(m.budget),
-        }),
-      ),
+      models.flatMap((m: Record<string, unknown>) => {
+        const stage = m.segmentId
+          ? `${String(m.stage ?? 'review')} ${String(m.segmentId)}`
+          : String(m.stage ?? 'review');
+        if (m.providerId === null)
+          return [
+            word('sentinel.cli.scanModelUnbound', {
+              stage,
+              runner: String(m.runner),
+              model: String(m.model),
+              review: String(m.review ?? 'general'),
+            }),
+          ];
+        const declared = m.declared as { runner?: unknown; model?: unknown } | undefined;
+        return [
+          word('sentinel.cli.scanModel', {
+            stage,
+            runner: String(m.runner ?? m.providerId),
+            model: String(m.model ?? m.modelId),
+            provider: String(m.providerId),
+            budget: budgetWords(m.budget),
+          }),
+          ...(declared
+            ? [
+                word('sentinel.cli.scanModelDeclared', {
+                  runner: String(declared.runner),
+                  model: String(declared.model),
+                }),
+              ]
+            : []),
+        ];
+      }),
     ),
   ];
 }
@@ -524,7 +559,11 @@ function stagesLine(path: unknown): string[] {
 function heldLines(held: unknown): string[] {
   if (!Array.isArray(held)) return [];
   return held.map((h: Record<string, unknown>) =>
-    word('sentinel.cli.held', { unit: String(h.unit), stage: String(h.stage), reason: word(String(h.reasonCode)) }),
+    word('sentinel.cli.held', {
+      unit: String(h.unit),
+      stage: String(h.stage),
+      reason: word(String(h.reasonCode), { detail: String(h.detail ?? h.stage) }),
+    }),
   );
 }
 
@@ -555,7 +594,13 @@ function runLines(r: CommandResult, command: string): string[] {
     ];
   if (!f.runId || f.state === undefined) return [];
   return [
-    `run ${String(f.runId)} · ${String(f.state)}${f.previewFindings === undefined ? '' : ` · preview findings: ${String(f.previewFindings)}`}`,
+    f.previewFindings === undefined
+      ? word('sentinel.cli.runState', { run: String(f.runId), state: String(f.state) })
+      : word('sentinel.cli.runStateFindings', {
+          run: String(f.runId),
+          state: String(f.state),
+          findings: String(f.previewFindings),
+        }),
   ];
 }
 
@@ -617,6 +662,7 @@ async function scanCommand(
             ? [word('sentinel.cli.scanDefaultStages')]
             : []),
         ...stagesLine((f.pipeline as { path?: unknown } | null)?.path),
+        ...problemLines((f.pipeline as { problems?: unknown } | null)?.problems),
         ...modelLines(f.models),
         ...(r.outcome === 'awaiting-confirmation'
           ? [

@@ -1155,7 +1155,12 @@ export async function rerunRun(
   const preview = await previewRerun(store, parentId, selected);
   if ('reasonCode' in preview) return preview;
   if (preview.all) {
-    const planned = await planWorkspaceCanonical(store, { ...options, parentId, snapshotId: preview.snapshotId });
+    const planned = await planWorkspaceCanonical(store, {
+      ...options,
+      ...(await parentDeclaration(store, parentId)),
+      parentId,
+      snapshotId: preview.snapshotId,
+    });
     return { ...planned, preview };
   }
   const planned = await selectedRerun(store, parentId, preview.selected, options);
@@ -1202,5 +1207,28 @@ export async function followRun(
   if (parent.state !== 'completed' && parent.state !== 'canceled')
     return { reasonCode: 'sentinel.service.runNotEnded' };
   void mode;
-  return planWorkspaceCanonical(store, { ...options, parentId, snapshotId: parent.envelope.snapshotId });
+  return planWorkspaceCanonical(store, {
+    ...options,
+    ...(await parentDeclaration(store, parentId)),
+    parentId,
+    snapshotId: parent.envelope.snapshotId,
+  });
+}
+
+/**
+ * What a whole rerun or a retry plans from: the parent's own declaration, as its current revision's profile records it
+ * (its declared pipeline, or the profile whose defaults it planned), so a child of a declared run keeps its stage ids
+ * (V-2). A parent that recorded neither plans the defaults for the terms now, as before.
+ */
+async function parentDeclaration(
+  store: SentinelStore,
+  parentId: string,
+): Promise<{ pipeline?: PipelineDefinition; pipelineSource?: PipelineSource }> {
+  const parent = store.ledger.getRun(parentId);
+  if (!parent) return {};
+  const admitted = await loadPlan(store, parentId, parent.planRevision);
+  const declared = admitted.profile.pipeline;
+  if (declared) return { pipeline: declared };
+  const source = pipelineSourceOf(admitted.profile);
+  return source ? { pipelineSource: source } : {};
 }

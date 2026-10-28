@@ -31,7 +31,10 @@ import { realpathSync } from 'node:fs';
 import { readCheckoutFile } from '../policy/user-state.js';
 import { MAX_SETTINGS_BYTES } from '../policy/settings.js';
 import { join } from 'node:path';
-import { previewPipeline } from './pipeline.js';
+import { checkPipeline, previewPipeline, type PipelineProblem } from './pipeline.js';
+import { stageModel } from '../planner/pipeline.js';
+import { readPackDirectory, validatePack } from '../rules/index.js';
+import type { PipelineDefinition, SettingsEnvelope } from '../contracts/index.js';
 import { isOwner, principalOf, type Principal } from './principal.js';
 import {
   adoptedPolicy,
@@ -41,6 +44,7 @@ import {
   promoteRulePack,
   confirmPlanForService,
   pipelinePathOf,
+  pipelineEnvironment,
   followWorkspaceRun,
   planWorkspace,
   planWorkspaceHeld,
@@ -246,8 +250,21 @@ export function scanPreviewOf(ws: Workspace, by: Principal, now: Date = new Date
     } catch {
       return { ...adopted.refusal, command: 'scan' };
     }
+  // A pipeline file the setup cannot adopt: the scan cannot run it, so the preview says why and offers nothing.
+  const refusedPipeline = setup.find((x) => x.kind === 'adopt')?.detail.pipeline as
+    { adopted?: boolean; reasonCode?: string; detail?: string } | undefined;
+  if (refusedPipeline?.adopted === false && refusedPipeline.reasonCode)
+    return result('scan', 'configuration-failure', {
+      reasonCode: refusedPipeline.reasonCode,
+      facts: { setup: setup.map((x) => ({ kind: x.kind, ...x.detail })), detail: refusedPipeline.detail ?? '' },
+    });
   const loaded = loadPipeline({ workspace: ws.path, trustDir: ws.trustDir, resolve: promotedPacks(ws.trustDir) });
   const pipeline = loaded.read?.pipeline;
+  const path = loaded.read ? pipelinePathOf(loaded.read) : null;
+  // Every problem with the pipeline under these settings, as plan will see it once the setup is done: the rule packs
+  // the setup promotes count as promoted. A refused one means plan stops, so the scan is refused here.
+  const problems = pipeline ? previewProblems(ws, pipeline, settings, setup) : [];
+  const refused = problems.find((x) => x.class === 'refused');
   const stages = pipeline
     ? previewPipeline(pipeline, pipeline).stages.map((s) => ({
         id: s.id,
@@ -257,29 +274,10 @@ export function scanPreviewOf(ws: Workspace, by: Principal, now: Date = new Date
         effects: [...s.effects],
       }))
     : null;
-  // Every binding the plan can use for review, exactly as review/plan.ts resolves one (a segment's own selection, else
-  // its stage's): each stage-wide selection and each segment selection, with its runner (the provider's kind), the
-  // model as the provider spells it and the provider's budget. What confirming the scan confirms.
-  const configured = settings.reviewModels;
-  const models = [
-    ...(configured?.stages ?? []).map((x) => ({ ...x, segmentId: null as string | null })),
-    ...(configured?.segments ?? []).map((x) => ({ ...x, segmentId: x.segmentId as string | null })),
-  ].map((x) => {
-    const provider = settings.providers.find((p) => p.id === x.providerId);
-    const model = provider?.models?.find((m) => m.id === x.modelId);
-    return {
-      stage: x.stage,
-      segmentId: x.segmentId,
-      providerId: x.providerId,
-      modelId: x.modelId,
-      runner: provider?.kind ?? null,
-      model: model?.model ?? null,
-      budget: provider?.budget ?? null,
-    };
-  });
+  const models = path?.kind === 'declared' ? declaredModels(pipeline!, settings) : configuredModels(settings);
   const effects = [...new Set(stages ? stages.flatMap((s) => s.effects) : ['local-artifacts'])].sort();
-  return result('scan', 'awaiting-confirmation', {
-    reasonCode: 'sentinel.service.scanWaits',
+  return result('scan', refused ? 'configuration-failure' : 'awaiting-confirmation', {
+    reasonCode: refused ? refused.code : 'sentinel.service.scanWaits',
     facts: {
       setup: setup.map((x) => ({ kind: x.kind, ...x.detail })),
       pipeline: pipeline
@@ -289,16 +287,130 @@ export function scanPreviewOf(ws: Workspace, by: Principal, now: Date = new Date
             digest: loaded.read!.digest,
             trust: loaded.trust,
             // A profile's own pipeline plans as the default for the settings (service/local.ts pipelinePathOf).
-            path: pipelinePathOf(loaded.read),
+            path: path!,
+            problems,
           }
         : null,
       stages,
       effects,
       models,
-      // An agent sees what would run; only the owner's command line can confirm it.
-      ...(isOwner(by) ? { confirmWith: 'scan --confirm' } : { ownerOnly: true }),
+      // An agent sees what would run; only the owner's command line can confirm it (and nothing, when it is refused).
+      ...(refused ? {} : isOwner(by) ? { confirmWith: 'scan --confirm' } : { ownerOnly: true }),
     },
   });
+}
+
+/** A model the scan calls: the stage, the runner and model, and the provider binding with its budget (null: none). */
+interface PreviewModel {
+  readonly stage: string;
+  /** The review the stage plans (a declared agent stage: `general` or `guided`); absent for a settings stage. */
+  readonly review?: string;
+  readonly segmentId: string | null;
+  readonly providerId: string | null;
+  readonly modelId: string | null;
+  readonly runner: string | null;
+  readonly model: string | null;
+  readonly budget: unknown;
+  /** What the pipeline declares when the binding that runs names another runner or model. */
+  readonly declared?: { readonly runner: string; readonly model: string };
+}
+
+/**
+ * Every binding the plan can use for review, exactly as review/plan.ts resolves one (a segment's own selection, else
+ * its stage's): each stage-wide selection and each segment selection, with its runner (the provider's kind), the
+ * model as the provider spells it and the provider's budget. What confirming the scan confirms.
+ */
+function configuredModels(settings: Readonly<SettingsEnvelope>): PreviewModel[] {
+  const configured = settings.reviewModels;
+  return [
+    ...(configured?.stages ?? []).map((x) => ({ ...x, segmentId: null as string | null })),
+    ...(configured?.segments ?? []).map((x) => ({ ...x, segmentId: x.segmentId as string | null })),
+  ].map((x) => boundModel(settings, x.stage, x.segmentId, x.providerId, x.modelId));
+}
+
+function boundModel(
+  settings: Readonly<SettingsEnvelope>,
+  stage: string,
+  segmentId: string | null,
+  providerId: string,
+  modelId: string,
+): PreviewModel {
+  const provider = settings.providers.find((p) => p.id === providerId);
+  const model = provider?.models?.find((m) => m.id === modelId);
+  return {
+    stage,
+    segmentId,
+    providerId,
+    modelId,
+    runner: provider?.kind ?? null,
+    model: model?.model ?? null,
+    budget: provider?.budget ?? null,
+  };
+}
+
+/**
+ * The models a declared pipeline's agent stages call: each stage by its own id, the review it plans (its fan-out), and
+ * the settings' binding for that review (its stage-wide selection and each segment selection), which is what runs. A
+ * stage no binding serves is listed with its declared runner and model and no provider; one whose binding names another
+ * runner or model says what it declared.
+ */
+function declaredModels(pipeline: PipelineDefinition, settings: Readonly<SettingsEnvelope>): PreviewModel[] {
+  let roles: ReturnType<typeof stageModel>['roles'];
+  try {
+    roles = stageModel(pipeline).roles;
+  } catch {
+    return configuredModels(settings);
+  }
+  const out: PreviewModel[] = [];
+  for (const s of pipeline.stages) {
+    const role = roles.get(s.id);
+    if (s.kind !== 'agent' || role?.role !== 'agent' || role.review === null) continue;
+    const review = role.review;
+    const bound = [
+      ...(settings.reviewModels?.stages ?? [])
+        .filter((x) => x.stage === review)
+        .map((x) => ({ ...x, segmentId: null as string | null })),
+      ...(settings.reviewModels?.segments ?? [])
+        .filter((x) => x.stage === review)
+        .map((x) => ({ ...x, segmentId: x.segmentId as string | null })),
+    ];
+    if (!bound.length)
+      out.push({
+        stage: s.id,
+        review,
+        segmentId: null,
+        providerId: null,
+        modelId: null,
+        runner: s.runner,
+        model: s.model,
+        budget: null,
+      });
+    for (const b of bound) {
+      const m = boundModel(settings, s.id, b.segmentId, b.providerId, b.modelId);
+      const differs = m.runner !== s.runner || m.model !== s.model;
+      out.push({ ...m, review, ...(differs ? { declared: { runner: s.runner, model: s.model } } : {}) });
+    }
+  }
+  return out;
+}
+
+/** The pipeline's problems under these settings once the setup is done: the packs it promotes count as locked. */
+function previewProblems(
+  ws: Workspace,
+  pipeline: PipelineDefinition,
+  settings: Readonly<SettingsEnvelope>,
+  setup: readonly SetupStep[],
+): readonly PipelineProblem[] {
+  const env = pipelineEnvironment(ws, null);
+  const locked = new Map(env.locked ?? []);
+  for (const step of setup) {
+    if (step.kind !== 'promote') continue;
+    const dir = builtinPackDir(String(step.detail.pack));
+    if (!dir) continue;
+    for (const r of validatePack(readPackDirectory(realpathSync.native(dir))).manifest.rules)
+      locked.set(r.familyId, r.implementation.adapterId);
+  }
+  return checkPipeline(pipeline, { ...env, settings, locked });
 }
 
 /** The composite a start confirms, read from the run's current revision (no receipt is issued). */

@@ -45,6 +45,8 @@ import { currentPlan } from '../dist/service/canonical.js';
 import { OwnerService } from '../dist/service/owner-service.js';
 import { openStore } from '../dist/store/index.js';
 import { BudgetLedger } from '../dist/review/providers/budget.js';
+import { COPILOT_NATIVE_PROFILE } from '../dist/review/providers/cli-copilot-profile.js';
+import { loadPlan } from '../dist/execution/plans.js';
 
 const CLI = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const AGENT = { principal: 'agent', channel: 'mcp' } as const;
@@ -723,5 +725,191 @@ test(
     assert.deepEqual(listing(), beforeStart, 'no envelope receipt for a start that was not admitted');
     assert.equal(ep.seen.length, callsBeforeStart);
     assert.equal(JSON.parse(run('status', startDenied, '--json').stdout).facts.cursor, eventsBeforeStart);
+  },
+);
+
+/**
+ * The Copilot provider and binding the demo runbook tells the owner to add (original fixture terms; the executable's
+ * pins are the shipped profile's), the paid-inference effects on the owner's start, and the owner's paid admission.
+ */
+function copilotFragment(settings: any) {
+  const P = COPILOT_NATIVE_PROFILE;
+  settings.providers = [
+    {
+      id: 'native-copilot',
+      kind: 'copilot-cli',
+      endpoint: 'https://api.githubcopilot.com',
+      credential: null,
+      disclosure: 'hosted',
+      copilotProfile: {
+        id: P.id,
+        executableDigest: P.executableDigest,
+        runtimeDigest: P.runtimeDigest,
+        profileDigest: 'sha256:' + 'a'.repeat(64),
+      },
+      budget: { maxTokens: 544000, maxCost: null, currency: null },
+      models: [
+        {
+          id: 'luna',
+          model: P.model,
+          limits: {
+            maxRequestBytes: 65536,
+            maxResponseBytes: 16384,
+            timeoutMs: 60000,
+            maxOutputTokens: 512,
+            contextTokens: 272000,
+            maxMessages: 32,
+            templateTokensPerMessage: 8,
+          },
+          pricing: { kind: 'subscription-quota', basis: 'owner-subscription' },
+          terms: {
+            retention: 'unknown',
+            training: 'unknown',
+            source: 'original fixture terms',
+            recordedAt: '2026-10-23',
+          },
+          capability: {
+            schema: 'sentinel-model-capability/draft-1',
+            kind: 'copilot-cli',
+            origin: 'https://api.githubcopilot.com',
+            model: P.model,
+            listed: true,
+            revision: null,
+            probedAt: '2026-10-23T00:00:00.000000000Z',
+          },
+        },
+      ],
+    },
+  ];
+  settings.reviewModels = {
+    stages: [{ stage: 'general', providerId: 'native-copilot', modelId: 'luna' }],
+    segments: [],
+  };
+  settings.grants[0].scope.effects = ['local-artifacts', 'paid-inference', 'source-disclosure', 'network'];
+  settings.grants.push({
+    actions: ['paid.admit'],
+    principals: ['human'],
+    confirm: 'always',
+    scope: { providers: ['native-copilot'] },
+  });
+  return settings;
+}
+
+test(
+  'the review profile needs no container: its scan plans one review unit and no scanner, and reaches the model',
+  needsStore,
+  async (t) => {
+    const dir = scratchDir(t, 'sentinel-review-profile-');
+    const ws = join(dir, 'ws');
+    const bin = join(dir, 'bin');
+    mkdirSync(ws);
+    mkdirSync(bin);
+    writeFileSync(join(ws, 'original.ts'), 'export const original = "inert source";\n');
+    // A Copilot that is not the qualified executable, and a Docker: neither may ever run.
+    const markers = { copilot: join(dir, 'copilot-called'), docker: join(dir, 'docker-called') };
+    for (const [name, marker] of Object.entries(markers))
+      writeFileSync(join(bin, name), `#!/bin/sh\necho bad > ${JSON.stringify(marker)}\nexit 99\n`, { mode: 0o700 });
+    // Below the command line, a container connection is refused and remembered: this scan must never ask for one.
+    const preload = join(dir, 'deny-containers.mjs');
+    writeFileSync(
+      preload,
+      `import{writeFileSync}from'node:fs';import{ContainerBackend}from${JSON.stringify(new URL('../dist/execution/isolation.js', import.meta.url).href)};ContainerBackend.connect=async()=>{writeFileSync(${JSON.stringify(markers.docker)},'attempted');throw Error('no container in this scan');};`,
+    );
+    const env = { HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state'), PATH: `${bin}:/usr/bin:/bin` };
+    mkdirSync(env.HOME);
+    t.after(() => stopService(env));
+    const run = (...args: string[]) => {
+      const r = spawnSync(process.execPath, ['--import', preload, CLI, ...args], {
+        cwd: ws,
+        env,
+        encoding: 'utf8',
+        timeout: 120000,
+      });
+      return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+    };
+    const init = run('init', '--profile', 'review');
+    assert.equal(init.status, 0, init.stderr);
+    assert.match(init.stdout, /profile: review — the walkthrough and a Copilot review/);
+    assert.match(init.stdout, /this profile reviews without a secrets scan/);
+    assert.match(init.stdout, /no container runtime/);
+    const path = join(ws, '.farsight', 'sentinel', 'settings.json');
+    const written = JSON.parse(readFileSync(path, 'utf8'));
+    assert.equal(written.hostedReviewSecretScan, 'when-selected');
+    assert.deepEqual(written.mandatoryRules, []);
+    // Before the provider: the preview names the declared stage, its runner and model, and that nothing binds it.
+    const bare = run('scan');
+    assert.equal(bare.status, 4, bare.stderr);
+    assert.match(bare.stdout, /model for review: copilot-cli gpt-6-luna · not configured/);
+    assert.match(bare.stdout, /review: no adopted provider binds this model stage/);
+    writeFileSync(path, JSON.stringify(copilotFragment(written)));
+
+    const preview = JSON.parse(run('scan', '--json').stdout);
+    assert.equal(preview.outcome, 'awaiting-confirmation', JSON.stringify(preview));
+    assert.equal(preview.facts.pipeline.path.kind, 'declared');
+    assert.deepEqual(
+      preview.facts.stages.map((s: { id: string; kind: string }) => `${s.id}:${s.kind}`),
+      ['capture:builtin', 'parse:builtin', 'inventory:builtin', 'walk:builtin', 'review:agent', 'report:builtin'],
+    );
+    assert.ok(!preview.facts.stages.some((s: { where: string }) => s.where === 'container'), 'no container stage');
+    assert.deepEqual(preview.facts.models, [
+      {
+        stage: 'review',
+        segmentId: null,
+        providerId: 'native-copilot',
+        modelId: 'luna',
+        runner: 'copilot-cli',
+        model: COPILOT_NATIVE_PROFILE.model,
+        budget: { maxTokens: 544000, maxCost: null, currency: null },
+        review: 'general',
+      },
+    ]);
+    assert.deepEqual(preview.facts.pipeline.problems, [], 'the provider binds the declared stage');
+    assert.deepEqual(
+      preview.facts.setup.map((x: { kind: string; pack?: string }) => x.pack ?? x.kind),
+      ['adopt', 'foundation-preview'],
+    );
+
+    // One confirmation: the setup, the capture, the plan and the model binding; then the run.
+    const scanned = JSON.parse(run('scan', '--confirm', '--json').stdout);
+    assert.ok(scanned.facts.runId, JSON.stringify(scanned));
+    const runId = scanned.facts.runId as string;
+    const status = JSON.parse(run('status', '--json').stdout);
+    assert.equal(status.facts.pipeline.path, 'declared');
+    // The review reached model admission past the secret-scan gate (there is no secret scan and the settings say a
+    // hosted review need not wait for one); this Copilot is not the qualified executable, so it is held there.
+    assert.deepEqual(
+      status.facts.held.map((h: Record<string, string>) => [h.stage, h.reasonCode, h.detail]),
+      [['review-general', 'sentinel.provider.capabilityUntested', 'native-copilot luna']],
+    );
+    const store = await openStore(join(ws, '.farsight', 'sentinel', 'store'));
+    try {
+      const current = await currentPlan(store, runId);
+      const admitted = await loadPlan(store, runId, current!.revision);
+      const analysis = admitted.plan.units.filter((u: any) => u.adapterId);
+      assert.deepEqual(
+        admitted.plan.units.filter((u: any) => u.review).map((u: any) => u.review.selection.providerId),
+        ['native-copilot'],
+        'exactly one review unit',
+      );
+      assert.ok(
+        !analysis.some((u: any) => /gitleaks|semgrep|osv|trivy|zizmor/.test(String(u.adapterId))),
+        'no scanner unit',
+      );
+      assert.deepEqual(
+        admitted.plan.pins.rules.map((r: any) => r.adapterId),
+        [],
+        'no rule is selected',
+      );
+    } finally {
+      store.close();
+    }
+    const book = receiptBook(workspaceOf(ws, env));
+    const paid = readdirSync(book.directory)
+      .filter((n) => n.endsWith('.json'))
+      .map((n) => JSON.parse(readFileSync(join(book.directory, n), 'utf8')))
+      .filter((r) => r.action === 'paid.admit');
+    assert.equal(paid.length, 1, "the composite's one model envelope receipt");
+    assert.equal(existsSync(markers.docker), false, 'no container was asked for');
+    assert.equal(existsSync(markers.copilot), false, 'the unqualified Copilot never ran');
   },
 );
