@@ -6,13 +6,19 @@
 // pipeline lands (P-3), then the stage id.
 //
 // A scan is addressed by its run id; its number is a display ordinal only, exact and stable (the order the store
-// created its runs). What never leaves this fold: a plan, unit or attempt id, an artifact handle or a store path.
+// created its runs). What never leaves this fold's own fields: a plan, unit or attempt id, an artifact handle or a
+// store path. An opened check or review also carries retained text verbatim (an output, an exchange), bounded and to
+// the paired owner only; that text is the record as kept and may name the record's own ids.
 // Digests that identify what ran (an implementation, an image, a prompt) are provenance and are carried; the viewer
 // prints them and the run id outside the business register only. When the scan's accepted evidence holds a secret
 // match, every file name, prompt text, model message, retained output and request detail is withheld here, as the
 // report withholds them (`withheld: true`). A retained output that is the source itself is never streamed here.
 // Core's `Counted` shape, through the contract that already declares it, so an installed package resolves its types.
 import type { ReportCount as Counted, ReportCountPart as CountPart } from '../../contracts/report.js';
+// The four kinds a declared pipeline names (README §3.1), the same words its provenance records carry. The viewer's
+// projection is not the retained StageProvenance record itself: that names artifact handles and work refs, which
+// never leave this fold.
+import type { PipelineStageKind } from '../../contracts/pipeline.js';
 
 export const READ_MODEL_SCHEMAS = Object.freeze({
   scans: 'sentinel-viewer-scans/draft-1',
@@ -70,15 +76,18 @@ export interface AttemptRecord {
 }
 
 /**
- * The safe fields of one try's retained invocation record (`sentinel-invocation/draft-1`), read only after the
- * record was authenticated against its attempt, work, owner epoch and pinned adapter. The argv is as recorded; the
- * fold scrubs host paths and tokens from it before it leaves.
+ * The safe fields of one try's retained invocation record, read only after the record was authenticated against its
+ * attempt, work, owner epoch and pinned adapter: a worker's (`sentinel-invocation/draft-1`: isolation, image, argv,
+ * environment names, limits) or Sentinel's own in-process operation's (`sentinel-operation-invocation/draft-1`: the
+ * operation it ran). The argv is as recorded; the fold scrubs host paths and tokens from it before it leaves.
  */
 export interface InvocationRecordView {
   /** The try's ordinal. */
   readonly attempt: number;
   readonly adapter: { readonly id: string; readonly version: string; readonly digest: string };
-  readonly isolation: 'container' | 'child';
+  readonly isolation: 'container' | 'child' | 'in-process';
+  /** The coordinator operation an in-process try ran (`capture`, `parse`, `inventory`, a review); null for a worker. */
+  readonly operation: string | null;
   readonly image: { readonly reference: string; readonly id: string; readonly architecture: string } | null;
   readonly argv: readonly string[];
   readonly environmentNames: readonly string[];
@@ -87,7 +96,7 @@ export interface InvocationRecordView {
     readonly cpus: number;
     readonly pids: number;
     readonly timeoutMs: number;
-  };
+  } | null;
 }
 /** An authenticated invocation, or the catalog code that says why there is none to show. */
 export type InvocationRead = InvocationRecordView | { readonly absent: string };
@@ -252,7 +261,7 @@ export interface ScanRecord {
 
 // ---- the answers (output) ----
 
-export type StageKindWord = 'builtin' | 'tool' | 'script' | 'agent';
+export type StageKindWord = PipelineStageKind;
 export type StageStatus = 'done' | 'running' | 'waiting' | 'failed' | 'held' | 'reused' | 'not-run';
 
 /** A length of time and what it is the length of. */
@@ -283,16 +292,18 @@ export interface Cost {
 export interface InvocationView {
   readonly attempt: number;
   readonly adapter: { readonly id: string; readonly version: string; readonly digest: string };
-  readonly isolation: 'container' | 'child';
+  readonly isolation: 'container' | 'child' | 'in-process';
+  readonly operation: string | null;
   readonly image: { readonly reference: string; readonly id: string; readonly architecture: string } | null;
   readonly argv: readonly string[];
   readonly environmentNames: readonly string[];
+  /** A worker's recorded limits; null for Sentinel's own in-process operation, which runs under the service's. */
   readonly limits: {
     readonly memory: Counted;
     readonly processes: Counted;
     readonly cpus: Measure;
     readonly timeout: Duration;
-  };
+  } | null;
 }
 
 /** README §3.1/§3.2 provenance, coded against the plan until P-1's contract lands: what ran, which version, where. */
@@ -669,7 +680,7 @@ export function stageName(stage: string, adapterId: string | null): string {
   return 'sentinel.viewer.stage.other';
 }
 
-/** README §3.1's four kinds over today's `StageKind` (coded, external-tool, agentic; script once P-1 adds it). */
+/** README §3.1's four kinds over the work contract's `StageKind`, as contracts/pipeline.ts maps them. */
 export function kindOf(unit: UnitRecord, adapter: AdapterRecord | undefined): StageKindWord {
   const k = unit.work?.kind;
   if (k === 'agentic' || unit.review) return 'agent';
@@ -855,13 +866,13 @@ const HOST_PATH =
  * (whose argv names this computer's Node, gate, module and scratch folders) every absolute path or file URL is
  * `<host path>`; in a container, paths are the container's own, but one naming a host folder is scrubbed too.
  */
-export function scrubArgv(argv: readonly unknown[], isolation: 'container' | 'child'): string[] {
+export function scrubArgv(argv: readonly unknown[], isolation: 'container' | 'child' | 'in-process'): string[] {
   return argv.slice(0, READ_MODEL_LIMITS.argvItems).map((a) => {
     if (typeof a !== 'string') return '<other>';
     const token = TOKEN_ARG.exec(a);
     if (token) return `${token[1]}<redacted>`;
     if (HOST_PATH.test(a)) return '<host path>';
-    if (isolation === 'child' && (/^file:/i.test(a) || /^(?:[A-Za-z]:)?[\\/]/.test(a))) return '<host path>';
+    if (isolation !== 'container' && (/^file:/i.test(a) || /^(?:[A-Za-z]:)?[\\/]/.test(a))) return '<host path>';
     return bounded(a, READ_MODEL_LIMITS.argChars);
   });
 }
@@ -871,22 +882,25 @@ function invocationView(v: InvocationRecordView, scope: string): InvocationView 
     attempt: v.attempt,
     adapter: { id: v.adapter.id, version: bounded(v.adapter.version, 64), digest: v.adapter.digest },
     isolation: v.isolation,
+    operation: v.operation === null ? null : bounded(v.operation, 64),
     image: v.image,
     argv: scrubArgv(v.argv, v.isolation),
     environmentNames: v.environmentNames
       .slice(0, READ_MODEL_LIMITS.environmentNames)
       .filter((n) => /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(n)),
-    limits: {
-      memory: count(v.limits.memoryBytes, 'sentinel.viewer.count.bytes', scope, 'invocation record, limits'),
-      processes: count(v.limits.pids, 'sentinel.viewer.count.processes', scope, 'invocation record, limits'),
-      cpus: {
-        value: v.limits.cpus,
-        unit: 'sentinel.viewer.measure.cpus',
-        scope,
-        source: `${SOURCE} · invocation record, limits`,
-      },
-      timeout: { ms: v.limits.timeoutMs, scope, source: `${SOURCE} · invocation record, limits` },
-    },
+    limits: v.limits
+      ? {
+          memory: count(v.limits.memoryBytes, 'sentinel.viewer.count.bytes', scope, 'invocation record, limits'),
+          processes: count(v.limits.pids, 'sentinel.viewer.count.processes', scope, 'invocation record, limits'),
+          cpus: {
+            value: v.limits.cpus,
+            unit: 'sentinel.viewer.measure.cpus',
+            scope,
+            source: `${SOURCE} · invocation record, limits`,
+          },
+          timeout: { ms: v.limits.timeoutMs, scope, source: `${SOURCE} · invocation record, limits` },
+        }
+      : null,
   };
 }
 

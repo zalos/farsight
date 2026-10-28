@@ -327,16 +327,31 @@ export class OwnerUiScans {
     store.assertHeld();
     const str = (x: unknown, max = 512) => typeof x === 'string' && x.length <= max;
     const num = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && x >= 0;
+    const bound =
+      !!v &&
+      v.store === store.storeId &&
+      v.attemptId === attempt.id &&
+      same(v.work, { id: work.id, revision: work.revision }) &&
+      v.coordinatorEpoch === attempt.epoch &&
+      v.adapter?.id === unit.adapterId &&
+      v.adapter?.digest === unit.implementationDigest &&
+      str(v.adapter?.version, 128);
+    const adapter = bound ? { id: v.adapter.id, version: v.adapter.version, digest: v.adapter.digest } : null;
+    // Sentinel's own in-process operation (capture, parse, inventory, a review): the operation it ran, no argv.
+    if (adapter && v.format === 'sentinel-operation-invocation/draft-1' && str(v.operation, 64))
+      return {
+        attempt: chosen.ordinal,
+        adapter,
+        isolation: 'in-process',
+        operation: v.operation,
+        image: null,
+        argv: [],
+        environmentNames: [],
+        limits: null,
+      };
     if (
-      !v ||
+      !adapter ||
       v.format !== 'sentinel-invocation/draft-1' ||
-      v.store !== store.storeId ||
-      v.attemptId !== attempt.id ||
-      !same(v.work, { id: work.id, revision: work.revision }) ||
-      v.coordinatorEpoch !== attempt.epoch ||
-      v.adapter?.id !== unit.adapterId ||
-      v.adapter?.digest !== unit.implementationDigest ||
-      !str(v.adapter?.version, 128) ||
       (v.isolation !== 'container' && v.isolation !== 'child') ||
       !Array.isArray(v.argv) ||
       !Array.isArray(v.environmentNames) ||
@@ -349,8 +364,9 @@ export class OwnerUiScans {
       return { absent: 'sentinel.viewer.invocation.unverified' };
     return {
       attempt: chosen.ordinal,
-      adapter: { id: v.adapter.id, version: v.adapter.version, digest: v.adapter.digest },
+      adapter,
       isolation: v.isolation,
+      operation: null,
       image: v.image ? { reference: v.image.reference, id: v.image.id, architecture: v.image.architecture } : null,
       argv: v.argv.slice(0, READ_MODEL_LIMITS.argvItems),
       environmentNames: v.environmentNames.filter((n: unknown) => typeof n === 'string'),
@@ -534,7 +550,10 @@ export class OwnerUiScans {
       // PIPELINE shows what each stage's first tried check ran, from that try's own invocation record.
       if (want.full && !reused && attempts.length && !spoken.has(u.contract)) {
         spoken.add(u.contract);
-        units.push({ ...base, invocation: await this.#invocation(u, base, want.signal) });
+        units.push({
+          ...base,
+          invocation: await this.#invocation({ id: u.id, revision: u.revision }, base, want.signal),
+        });
       } else units.push(base);
     }
     // The snapshot, for the source commit only: every count of captured files is the report's (one source).

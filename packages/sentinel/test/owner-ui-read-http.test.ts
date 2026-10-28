@@ -103,18 +103,34 @@ test(
     assert.equal(list.headers.get('cache-control'), 'no-store');
     const scans: any = await list.json();
     assert.equal(scans.scans[0].number, 1);
-    const scan: any = await (await read('/api/sentinel/scans/1')).json();
+    assert.equal(scans.scans[0].id, f.runId, 'a scan is addressed by its run id');
+    assert.deepEqual(scans.page, { before: null, older: null });
+    // The list pages backwards by number: below 2 is scan 1, below 1 is nothing.
+    const paged: any = await (await read('/api/sentinel/scans/before/2')).json();
+    assert.deepEqual(
+      paged.scans.map((r: any) => r.id),
+      [f.runId],
+    );
+    assert.equal(((await (await read('/api/sentinel/scans/before/1')).json()) as any).scans.length, 0);
+    const at = `/api/sentinel/scans/${f.runId}`;
+    const scan: any = await (await read(at)).json();
     assert.equal(scan.stages.length, 4);
     const stageId = encodeURIComponent(scan.stages[3].id);
-    const stage = await read(`/api/sentinel/scans/1/stages/${stageId}`);
+    const stage = await read(`${at}/stages/${stageId}`);
     assert.equal(stage.status, 200);
     assert.equal(((await stage.json()) as any).stage.id, scan.stages[3].id);
+    const unit = await read(`${at}/stages/${stageId}/units/1`);
+    assert.equal(unit.status, 200);
+    const opened: any = await unit.json();
+    assert.equal(opened.schema, 'sentinel-viewer-unit/draft-1');
+    assert.equal(opened.invocation.isolation, 'child');
+    assert.equal((await read(`${at}/stages/${stageId}/units/2`)).status, 404);
 
     // The report renderings, whole and checked against their digest.
     for (const [path, type] of [
-      ['/api/sentinel/scans/1/report', /^text\/markdown/],
-      ['/api/sentinel/scans/1/report/html', /^text\/html/],
-      ['/api/sentinel/scans/1/report/json', /^application\/json/],
+      [`${at}/report`, /^text\/markdown/],
+      [`${at}/report/html`, /^text\/html/],
+      [`${at}/report/json`, /^application\/json/],
     ] as const) {
       const r = await read(path);
       assert.equal(r.status, 200, path);
@@ -149,9 +165,11 @@ test(
     // Every write method on every read route is refused, with the paired pass in hand.
     for (const path of [
       '/api/sentinel/scans',
-      '/api/sentinel/scans/1',
-      `/api/sentinel/scans/1/stages/${stageId}`,
-      '/api/sentinel/scans/1/report',
+      '/api/sentinel/scans/before/2',
+      at,
+      `${at}/stages/${stageId}`,
+      `${at}/stages/${stageId}/units/1`,
+      `${at}/report`,
     ])
       for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
         const r = await read(path, { method });
@@ -160,8 +178,9 @@ test(
       }
 
     // Unknown scans and stages say so; an address the model does not name is not read.
-    assert.equal((await read('/api/sentinel/scans/9')).status, 404);
-    assert.equal((await read('/api/sentinel/scans/1/stages/sentinel.stage.absent')).status, 404);
+    assert.equal((await read('/api/sentinel/scans/run-' + '0'.repeat(32))).status, 404);
+    assert.equal((await read(`${at}/stages/sentinel.stage.absent`)).status, 404);
+    assert.equal((await read('/api/sentinel/scans/1')).status, 404, 'a display number is not an address');
     assert.equal((await read('/api/sentinel/runs')).status, 400);
 
     // A new pass replaces the old one; the session's end ends both.

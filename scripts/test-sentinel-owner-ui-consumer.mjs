@@ -169,16 +169,22 @@ try {
       };
     };
     const scans = await get('/api/sentinel/scans');
-    const number = scans.body.scans?.find((s) => s.state === 'completed')?.number;
-    const scan = await get('/api/sentinel/scans/' + number);
-    return { scans, scan };
+    const id = scans.body.scans?.find((s) => s.state === 'completed')?.id;
+    const at = '/api/sentinel/scans/' + encodeURIComponent(id);
+    const scan = await get(at);
+    const last = scan.body.stages?.at(-1)?.id;
+    const unit = await get(at + '/stages/' + encodeURIComponent(last) + '/units/1');
+    return { id, scans, scan, unit };
   });
   assert.ok(model, 'the paired frame handed its parent a read pass');
   assert.equal(model.scans.status, 200);
   assert.equal(model.scan.status, 200);
+  assert.equal(model.unit.status, 200);
   assert.ok(model.scan.body.stages.length >= 4);
   assert.ok(model.scan.body.stages.every((s) => s.status === 'done'));
-  assert.equal(JSON.stringify(model).includes('run-'), false, 'no run id leaves the read model');
+  assert.equal(model.unit.body.schema, 'sentinel-viewer-unit/draft-1');
+  // A scan is addressed by its run id; no other ledger id leaves the read model.
+  assert.equal(JSON.stringify(model).split(model.id).join('<run>').includes('run-'), false);
   if (evidence) {
     mkdirSync(evidence, { recursive: true });
     writeFileSync(join(evidence, 'report.md'), report);
