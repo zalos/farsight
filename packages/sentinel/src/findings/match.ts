@@ -4,6 +4,7 @@
 // declarations, so the pairing needs review. Whenever a key is shared by more than one finding on either side, the
 // pairing is ambiguous and nothing is chosen: the first candidate is never taken, and distinct weaknesses that share
 // a sink or a symbol name stay distinct.
+import { SentinelError } from '../kernel/errors.js';
 
 /** The identity a match reads: a finding id and its versioned exact and probable fingerprints. */
 export interface MatchableFinding {
@@ -21,10 +22,13 @@ export interface MatchResult {
   readonly unmatchedCurrent: readonly string[];
 }
 
-/** Thrown when the two sides carry fingerprints of different versions, which are never compared. */
-export class MatchError extends Error {
+/**
+ * Thrown when the two sides carry fingerprints of different versions, which are never compared:
+ * `sentinel.compare.fingerprintVersion`.
+ */
+export class MatchError extends SentinelError<'sentinel.compare.fingerprintVersion'> {
   constructor(message: string) {
-    super(message);
+    super('sentinel.compare.fingerprintVersion', message);
     this.name = 'MatchError';
   }
 }
@@ -76,8 +80,12 @@ export function matchFindings(
   };
 }
 
-const byIds = (a: { baseline: string; current: string }, b: { baseline: string; current: string }) =>
-  a.current < b.current ? -1 : a.current > b.current ? 1 : 0;
+/** Orders pairs by their current finding's id. */
+function byIds(a: { baseline: string; current: string }, b: { baseline: string; current: string }): number {
+  if (a.current < b.current) return -1;
+  if (a.current > b.current) return 1;
+  return 0;
+}
 
 function groupBy<T>(items: readonly T[], key: (t: T) => string): Map<string, T[]> {
   const m = new Map<string, T[]>();

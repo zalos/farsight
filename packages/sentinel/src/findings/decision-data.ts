@@ -5,6 +5,7 @@ import type { DispositionDecision } from '../contracts/disposition.js';
 import { canonicalDigest } from '../policy/digest.js';
 import { snapshot } from '../policy/immutable.js';
 import { isCalendarTimestamp } from '../validate.js';
+import { SentinelError } from '../kernel/errors.js';
 
 /**
  * A decision input, journal or evaluation that is refused, by code: `sentinel.decision.invalidInput` (malformed or out
@@ -12,18 +13,17 @@ import { isCalendarTimestamp } from '../validate.js';
  * (state changed since it was read or confirmed), `sentinel.decision.notFound`, `sentinel.decision.scopeExceeded` (a
  * bound was reached) or `sentinel.decision.unauthorized` (no genuine authority).
  */
-export class DecisionError extends Error {
-  constructor(
-    readonly code:
-      | 'sentinel.decision.invalidInput'
-      | 'sentinel.decision.corruptHistory'
-      | 'sentinel.decision.staleState'
-      | 'sentinel.decision.notFound'
-      | 'sentinel.decision.scopeExceeded'
-      | 'sentinel.decision.unauthorized',
-    detail: string,
-  ) {
-    super(detail);
+export class DecisionError extends SentinelError<
+  | 'sentinel.decision.invalidInput'
+  | 'sentinel.decision.corruptHistory'
+  | 'sentinel.decision.staleState'
+  | 'sentinel.decision.notFound'
+  | 'sentinel.decision.scopeExceeded'
+  | 'sentinel.decision.unauthorized'
+> {
+  /** `detail` is the sentence the error reads as (its message), not structured detail. */
+  constructor(code: DecisionError['code'], detail: string) {
+    super(code, detail);
     this.name = 'DecisionError';
   }
 }

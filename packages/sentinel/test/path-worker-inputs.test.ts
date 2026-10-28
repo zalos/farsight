@@ -474,3 +474,93 @@ test('genuine fixed child cancellation before start accepts no result or output'
   assert.deepEqual(outcome.outputs, []);
   assert.ok(outcome.exit);
 });
+
+// A protocol message is a JSON object. Any other JSON value at the welcome or start position (null, a number, a
+// string, an array) is malformed input: the worker exits 3, as for a line that is not JSON, and never crashes with 1.
+test('a message that is not a JSON object exits 3 at the welcome and start positions, with no stack trace', async (t) => {
+  const worker = new URL('../dist/analysis/paths/worker.js', import.meta.url).pathname;
+  const dir = scratch(t);
+  const run = (lines: readonly string[]) =>
+    new Promise<{ code: number | null; signal: NodeJS.Signals | null; stderr: string }>((resolve) => {
+      const child = childProcess.spawn(process.execPath, [worker], {
+        env: {
+          SENTINEL_ADAPTER_ID: 'bounded-paths',
+          SENTINEL_ADAPTER_DIGEST: `sha256:${'0'.repeat(64)}`,
+          SENTINEL_INPUT: join(dir, 'in'),
+          SENTINEL_OUTPUT: join(dir, 'out'),
+        },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr.on('data', (b) => (stderr += b));
+      child.stdout.resume();
+      child.once('exit', (code, signal) => resolve({ code, signal, stderr }));
+      child.stdin.on('error', () => {});
+      child.stdin.write(lines.map((l) => l + '\n').join(''));
+    });
+  const welcome = JSON.stringify({ protocol: 'sentinel-worker/draft-1', type: 'welcome' });
+  for (const value of ['null', '0', '"start"', '[]'])
+    for (const lines of [[value], [welcome, value]]) {
+      const r = await run(lines);
+      assert.equal(r.signal, null, lines.join(' · '));
+      assert.equal(r.code, 3, `${lines.join(' · ')}: ${r.stderr}`);
+      assert.doesNotMatch(r.stderr, /TypeError|\n\s+at /, lines.join(' · '));
+    }
+});
+
+// Every field of a start the worker reads is checked by type before any of them is coerced: an object whose
+// toString is not a function, a number or an array in any of them is malformed input, exit 3, never a crash with 1.
+test('a start field of the wrong type exits 3 before anything coerces it, with no stack trace', async (t) => {
+  const worker = new URL('../dist/analysis/paths/worker.js', import.meta.url).pathname;
+  const dir = scratch(t);
+  const run = (lines: readonly string[]) =>
+    new Promise<{ code: number | null; signal: NodeJS.Signals | null; stderr: string }>((resolve) => {
+      const child = childProcess.spawn(process.execPath, [worker], {
+        env: {
+          SENTINEL_ADAPTER_ID: 'bounded-paths',
+          SENTINEL_ADAPTER_DIGEST: `sha256:${'0'.repeat(64)}`,
+          SENTINEL_INPUT: join(dir, 'in'),
+          SENTINEL_OUTPUT: join(dir, 'out'),
+        },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr.on('data', (b) => (stderr += b));
+      child.stdout.resume();
+      child.once('exit', (code, signal) => resolve({ code, signal, stderr }));
+      child.stdin.on('error', () => {});
+      child.stdin.write(lines.map((l) => l + '\n').join(''));
+    });
+  const welcome = JSON.stringify({ protocol: 'sentinel-worker/draft-1', type: 'welcome' });
+  const job = `sha256:${'2'.repeat(64)}`;
+  const start = {
+    protocol: 'sentinel-worker/draft-1',
+    type: 'start',
+    attemptId: 'att-original',
+    work: { id: 'work-original', revision: 1 },
+    coordinatorEpoch: 'epoch-original',
+    seq: 0,
+    inputFingerprint: `sha256:${'1'.repeat(64)}`,
+    inputs: [job],
+    deadlineAt: new Date(Date.now() + 60_000).toISOString(),
+    job,
+  };
+  const variants: [string, Record<string, unknown>][] = [];
+  for (const [label, bad] of [
+    ['an object whose toString is a number', { toString: 42 }],
+    ['a number', 42],
+    ['an array', []],
+  ] as const) {
+    for (const field of ['job', 'deadlineAt', 'attemptId', 'coordinatorEpoch', 'inputFingerprint', 'work', 'inputs'])
+      variants.push([`${field} as ${label}`, { ...start, [field]: bad }]);
+    variants.push([`an input as ${label}`, { ...start, inputs: [job, bad] }]);
+    variants.push([`work.id as ${label}`, { ...start, work: { id: bad, revision: 1 } }]);
+    variants.push([`work.revision as ${label}`, { ...start, work: { id: 'work-original', revision: bad } }]);
+  }
+  for (const [name, value] of variants) {
+    const r = await run([welcome, JSON.stringify(value)]);
+    assert.equal(r.signal, null, name);
+    assert.equal(r.code, 3, `${name}: ${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /TypeError|\n\s+at /, name);
+  }
+});

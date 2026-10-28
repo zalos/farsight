@@ -9,6 +9,7 @@ import { COOKIE_PROPERTIES, ImportBudget, type CookieProperty, type ImportUnknow
 import type { ImportManifest } from './manifest.js';
 import { parseSetCookie, requestCookieNames, type AttributeFact } from './set-cookie.js';
 
+/** A request read from a report: its method, target, origin and Cookie headers, or why it could not be read. */
 export type RequestInfo =
   | {
       readonly ok: true;
@@ -18,6 +19,7 @@ export type RequestInfo =
       readonly cookieHeaders: readonly string[];
     }
   | { readonly ok: false; readonly reason: ImportUnknownCode };
+/** A response read from a report: its status and Set-Cookie lines, or why it (or its cookies) could not be read. */
 export type ResponseInfo =
   | {
       readonly ok: true;
@@ -26,6 +28,7 @@ export type ResponseInfo =
     }
   | { readonly ok: false; readonly reason: ImportUnknownCode };
 
+/** What one Set-Cookie line in a response shows about one cookie property, and whether the report states its scope. */
 export interface CookieObservation {
   readonly property: CookieProperty;
   readonly direction: 'outbound';
@@ -37,8 +40,19 @@ export interface CookieObservation {
 }
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+/** The first `n` UTF-16 code units of `s`. */
 export const bounded = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
+/** Why a response's Set-Cookie lines are not read: a redirect, or a status below 200; otherwise none. */
+function statusReasonOf(status: number): ImportUnknownCode | undefined {
+  if (status >= 300 && status < 400) return 'sentinel.import.redirect';
+  if (status < 200) return 'sentinel.import.statusMalformed';
+  return undefined;
+}
 
+/**
+ * Gathers one import's claims, HTTP exchanges, cookie observations, unknowns and ignored properties under its shared
+ * budget; every addition is counted against the import's limits.
+ */
 export class Collector {
   readonly claims: Json[] = [];
   readonly exchanges: Json[] = [];
@@ -154,12 +168,7 @@ export class Collector {
       return;
     }
     const status = response.status;
-    const statusReason: ImportUnknownCode | undefined =
-      status >= 300 && status < 400
-        ? 'sentinel.import.redirect'
-        : status < 200
-          ? 'sentinel.import.statusMalformed'
-          : undefined;
+    const statusReason = statusReasonOf(status);
     const parsed = (lines as readonly string[]).map((l) => {
       this.budget.work(Math.ceil(l.length / 64) + 1);
       return statusReason ? null : parseSetCookie(l);

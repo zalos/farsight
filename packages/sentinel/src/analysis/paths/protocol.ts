@@ -1,11 +1,12 @@
 // Paths worker data boundary (ADR 45). This pure reader verifies sealed bytes and source binding, not the
 // authority to use them: request admission and the driver must obtain the shared retained-source proof first.
 // It launches nothing, reads no workspace paths, publishes nothing, and assigns no security coverage.
-import { createHash } from 'node:crypto';
 import type { ArtifactId, PathEvidenceEnvelope, PathRequestEnvelope, SnapshotEnvelope } from '../../contracts/index.js';
 import type { AnalysisArtifact } from '@farsight/code-parser';
 import type { ParserIndex, ParserResult } from '../../snapshot/parser.js';
 import { validateEnvelope } from '../../validate.js';
+import { sha256Id } from '../../kernel/digest.js';
+import { DIGEST_PATTERN } from '../../kernel/ids.js';
 import { controlledCallPaths } from './paths.js';
 import { PathExecutionBudget } from './budget.js';
 import { parsePathRequest, PathRequestError, PATHS_PROTOCOL_INPUT_LIMIT } from './request.js';
@@ -15,7 +16,7 @@ export { PATHS_JOB_SCHEMA, PATHS_OUTPUT_SCHEMA, PATHS_OUTPUT_MEDIA } from './def
 const MAX_OBJECT_BYTES = 16 * 1024 * 1024;
 const MAX_JOB_BYTES = 4096;
 const MAX_INPUTS = PATHS_PROTOCOL_INPUT_LIMIT;
-const ID = /^sha256:[0-9a-f]{64}$/;
+const ID = DIGEST_PATTERN;
 
 /** Only immutable object references; the request itself names the exact ancestor, queries, source and bounds. */
 export interface PathsJob {
@@ -25,6 +26,10 @@ export interface PathsJob {
   readonly analysis: { readonly artifact: ArtifactId; readonly result: ArtifactId; readonly index: ArtifactId };
 }
 
+/**
+ * A path worker's output: the job and request it answers, the source ancestor, the evidence, what it read and the
+ * budget it used.
+ */
 export interface PathsOutput {
   readonly schema: typeof PATHS_OUTPUT_SCHEMA;
   readonly job: ArtifactId;
@@ -38,7 +43,7 @@ export interface PathsOutput {
   readonly usage: ReturnType<PathExecutionBudget['usage']>;
 }
 
-const hash = (b: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(b).digest('hex')}`;
+const hash = (b: Uint8Array): ArtifactId => sha256Id(b);
 const fail = (): never => {
   throw new PathRequestError('unbound');
 };

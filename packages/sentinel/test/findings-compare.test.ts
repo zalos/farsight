@@ -4,8 +4,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { normalizeObservation, correlate, matchFindings, compareAssessments } from '../dist/findings/index.js';
+import {
+  normalizeObservation,
+  correlate,
+  matchFindings,
+  compareAssessments,
+  MatchError,
+} from '../dist/findings/index.js';
 import { validateEnvelope } from '../dist/index.js';
+import { isSentinelError } from '../dist/kernel/errors.js';
+import { STRINGS } from '@farsight/core/dist/strings.js';
 
 const sha = (b: string | Buffer) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
@@ -503,4 +511,20 @@ test('withheld citations of identical bytes in two files are two findings; an op
   );
   for (const f of keyed)
     assert.ok(!JSON.stringify(f.fingerprint).includes('first'), 'the fingerprint is a digest, not the key');
+});
+
+test('fingerprints of two versions are refused with MatchError, its catalog code and the message it always had', () => {
+  const finding = (id: string, version: string) => ({ id, fingerprint: { version, exact: 'e', probable: 'p' } });
+  assert.throws(
+    () => matchFindings([finding('a', 'sentinel-issue/1')], [finding('b', 'sentinel-issue/2')]),
+    (e: any) => {
+      assert.ok(e instanceof MatchError);
+      assert.ok(isSentinelError(e, 'sentinel.compare.fingerprintVersion'));
+      assert.equal(e.name, 'MatchError');
+      assert.equal(e.code, 'sentinel.compare.fingerprintVersion');
+      assert.equal(e.message, 'fingerprints of different versions are not compared');
+      assert.ok(STRINGS['sentinel.compare.fingerprintVersion']?.define);
+      return true;
+    },
+  );
 });
