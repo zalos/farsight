@@ -69,6 +69,8 @@ export interface UnitRecord {
   /** Scope ids as the plan names them (`<source>:<relative path>`, or a whole source). */
   readonly scopes: readonly string[];
   readonly inputs: number;
+  /** The first captured files the unit was given, by relative path (a whole-source scope names none of its own). */
+  readonly inputPaths: readonly string[];
   readonly review: { readonly providerId: string; readonly modelId: string } | null;
   readonly work: {
     readonly state: string;
@@ -773,7 +775,7 @@ function stageCard(
       deadlineMs: first.work?.deadlineMs ?? null,
     },
     counts: {
-      steps: count(stage.units.length, 'sentinel.viewer.count.units', SCOPE.stage, 'plan units by stage', {
+      steps: count(stage.units.length, 'sentinel.viewer.count.tasks', SCOPE.stage, 'plan units by stage', {
         bizUnit: 'sentinel.viewer.count.tasks',
         breakdown: statusBreakdown(statuses),
       }),
@@ -1036,14 +1038,19 @@ function stepRow(scan: ScanRecord, unit: UnitRecord, number: number, review: Rev
   const attempts = unit.attempts.slice(-READ_MODEL_LIMITS.attemptsPerStep);
   const ends = unit.attempts.map((a) => a.endedAt);
   const lastEnd = ends.includes(null) ? null : ([...(ends as string[])].sort().at(-1) ?? null);
-  const paths = scan.withheld ? [] : unit.scopes.map(scopePath).filter((p): p is string => !!p);
+  const scoped = unit.scopes.map(scopePath).filter((p): p is string => !!p);
+  const paths = scan.withheld
+    ? []
+    : scoped.length
+      ? scoped
+      : unit.inputPaths.map((p) => bounded(p, READ_MODEL_LIMITS.pathChars));
   const tIn = tokens(unit.attempts, 'inputTokens'),
     tOut = tokens(unit.attempts, 'outputTokens');
   const withheld = scan.withheld;
   return {
     number,
     label: paths[0] ?? null,
-    files: unit.scopes.map(scopePath).filter(Boolean).length,
+    files: scoped.length || unit.inputs,
     status,
     startedAt: unit.attempts[0]?.startedAt ?? null,
     duration:
@@ -1105,7 +1112,11 @@ function stepRow(scan: ScanRecord, unit: UnitRecord, number: number, review: Rev
                     ...(review.verdict ? { verdict: review.verdict } : {}),
                     claims: review.observations.length,
                   }
-                : replyOf(t.reply, withheld),
+                : t.reply === null && t.outcome === 'failed'
+                  ? { key: 'sentinel.viewer.turn.failed' }
+                  : t.reply === null && /^sentinel\.[A-Za-z0-9.]+$/.test(t.outcome)
+                    ? { key: t.outcome } // the reply was refused or the call failed: the recorded reason, in words
+                    : replyOf(t.reply, withheld),
             counts: {
               tokensIn:
                 t.inputTokens === null

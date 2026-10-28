@@ -1509,8 +1509,50 @@ would be (never a status chip, never a verdict); `partyLaneHeadHtml()` — the p
 code reaches it*; `offPlatformListHtml()` — the rows the Map property's Overview lists under *done outside the code*.
 The WALK prints a stop of kind `offPlatform` after the screen's hand-offs (core `tour.ts`).
 
+## Sentinel — `surfaces/sentinel.js`, `lib/sentinel-model.js` (Sentinel v2 lane L-UX, U-2)
+
+The Sentinel tab is a ladder with the Map's shape: a chrome that holds still and one dock on the right. **Row 1**: the
+five stops SCANS · PIPELINE · STAGE · ENTRY POINTS · PATH (`.map-lvls`, the last two greyed *not yet built* — a press
+goes nowhere), the LAYOUT slot (`list · compare` at SCANS with compare greyed, `ladder · table` at PIPELINE,
+`tasks · table` at STAGE) and the tools (**Scan**, Refresh). **Row 2**: the crumb (workspace › scan #n · when · source
+commit and profile outside the business register · the stage tally; at STAGE *stage n of m* and its kind) and the
+verdict chips (required coverage, the report's findings, model observations when a stage is agentic, the policy word).
+
+| stop | draws | the dock |
+|---|---|---|
+| scans (`#/sentinel`) | every retained scan, newest first: number, when, findings, model observations, policy word, stages, agentic stages, cost, duration | the owner panel |
+| pipeline (`#/sentinel/<n>[?layout=table][&pick=<stage>]`) | the stages top to bottom on a rail; a level of two or more stages draws as one row side by side; each card its kind, provenance line (code and hybrid only), status and time, findings or observations, cost, what it read and its primary outputs | the picked stage (else the running one, else the first agent): where it ran, runner, model requested and reported, prompt and skills, turns, tokens (not in business), cost, tries, implementation digest and whether this installation still holds it, everything it read and produced; *Open the stage*, *Rerun this stage* greyed with its reason |
+| stage (`#/sentinel/<n>/<stage>[?layout=table]`) | its tasks on the left (the file each covered; *n files* in business); on the right a model task's instructions (the prompt, folded), each turn by the reply grammar (*asked to read lines*, *answered*, a refusal's reason) with its tokens, and the cited observations; a tool task's tries | the stage |
+
+Every number is a `Counted` from the read model (docs/COUNTS.md § Sentinel read model) printed through
+`lib/counted.js`; a duration and a cost carry their scope as a tip; a cost never prints `$0` for an unobserved price.
+The business register prints no provenance line, digest, commit, profile id, path or token count (the e2e spec walks
+all three stops for identifier-shaped words). `lib/sentinel-model.js` is pure and unit-tested
+(`packages/server/test/sentinel-model.test.ts`): the address grammar, the words of a duration and a cost, the ladder's
+rows, the picked stage, the card's outputs and the Scan button's state.
+
+**Where the data comes from.** Farsight's server imports no Sentinel code (ADR 18). The page discovers the companion
+origin from `GET /api/sentinel/companion` (and the served page's `data-sentinel-owner-origin`), mounts the companion's
+own frame in the dock's *Owner panel* pane (built once and only shown or hidden: moving an iframe reloads it, and the
+frame's page is its pairing), and reads the read model cross-origin — `GET <companion>/api/sentinel/scans`, `/scans/<n>`,
+`/scans/<n>/stages/<stage>` — with the **read pass** the paired frame posts it (`sentinel-owner-read`, bound to the
+frame's nonce and document; renewed with `sentinel-owner-read-request` after a 401). The pass reads and nothing else.
+A scan still running is read again every 2 s, so the ladder fills in as it runs.
+
+**Scan** asks the owner panel to preview a fresh capture (`sentinel-owner-scan`); the owner confirms there, the panel
+waits for the preparation and previews the start for a second confirmation (the facade's composite receipt will make
+that one, P-4). Scan is greyed with its reason as its tip — the session is read-only, no companion, not paired yet, or
+the read model's `scanAction` says the browser may not start this scan (no adopted settings; a configured model stage
+needs the owner command line) — and a press then does nothing. `#/sentinel?do=scan` (the Settings source row's door,
+`sentinelScanDoorHtml()`) presses it once and rewrites the address. The frame's view revision moves only when what it
+may confirm changes (a pinned sync, a read-only session), so a preview open in the owner panel survives moving along
+the ladder. e2e: `sentinel-ladder.pw.spec.ts` (a stand-in companion through `page.route` serving answers recorded from a
+genuine scan).
+
 The optional **Sentinel** surface is `surfaces/sentinel.js`: it discovers only a validated companion origin,
 embeds its static owner-origin frame, and supplies exact frame/document/host/revision context plus theme/register.
-It never receives a browser capability, reload token, descriptor nonce or receipt, and cannot confirm an action.
-Hash/history changes invalidate pending confirmations; host read-only and unavailable initial context also veto.
+It never receives a browser capability, reload token, descriptor nonce or receipt — only the read pass — and cannot
+confirm an action.
+A pinned sync or a read-only session changes the frame's revision and invalidates pending confirmations; host
+read-only and unavailable initial context also veto.
 The companion, not the Farsight application host, talks to the already running Sentinel owner service.

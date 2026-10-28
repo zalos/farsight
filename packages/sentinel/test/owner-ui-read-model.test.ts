@@ -86,6 +86,7 @@ const unit = (key: string, stage: string, over: Partial<UnitRecord> = {}): UnitR
   checks: 0,
   scopes: [],
   inputs: 0,
+  inputPaths: [],
   review: null,
   work: { state: 'published', reason: null, kind: 'coded', deadlineMs: 120000, reusedFrom: null },
   attempts: [attempt()],
@@ -400,6 +401,20 @@ test('states, costs and absences are said, never shown as zero', () => {
   assert.equal(stageName('check', 'unknown-adapter'), 'sentinel.viewer.stage.otherCheck');
   assert.equal(stageName('something', null), 'sentinel.viewer.stage.other');
   assert.equal(replyOf('not json', false)!.key, 'sentinel.viewer.turn.unreadable');
+  const failing = synthetic();
+  const trace = failing.review.units[0]!;
+  const failed = stageAnswer(
+    'example-app',
+    {
+      ...failing,
+      review: {
+        status: 'available',
+        units: [{ ...trace, turns: [{ ...trace.turns[0]!, outcome: 'failed', reply: null }] }],
+      },
+    },
+    'sentinel.stage.review.general',
+  )!;
+  assert.deepEqual(failed.steps[0]!.review!.turns[0]!.reply, { key: 'sentinel.viewer.turn.failed' });
   const list = scansAnswer('example-app', [scanRow(synthetic())], false);
   assert.equal(list.counts.scans.n, 1);
   assert.equal(list.readOnly, true);

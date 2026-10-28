@@ -289,6 +289,7 @@ export class OwnerUiScans {
         checks: u.checks.length,
         scopes: [...u.scopes],
         inputs: u.inputs.length,
+        inputPaths: u.inputs.slice(0, 8).map((i) => i.relativePath),
         review: u.review ? { providerId: u.review.selection.providerId, modelId: u.review.selection.modelId } : null,
         work: work
           ? {
