@@ -1,0 +1,12 @@
+{
+  "schema": "sentinel-stage-pack/draft-1",
+  "kind": "stage",
+  "id": "review",
+  "revision": 1,
+  "files": [
+    {
+      "path": "instructions.md",
+      "digest": "sha256:ea7fabd6c49c10a05fb45cf9621abd549f39a41061f0a2a3b5b35867403e7c6f"
+    }
+  ]
+}

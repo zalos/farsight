@@ -97,9 +97,17 @@ export function nativeOutputSchema(id: string): NativeOutputSchema {
 }
 
 /** The one prompt-mode user message: the inputs, the instructions file and the exact answer shape. */
-export function nativeTask(stageId: string, paths: readonly string[], schema: NativeOutputSchema): string {
+export function nativeTask(
+  stageId: string,
+  paths: readonly string[],
+  schema: NativeOutputSchema,
+  skills: readonly string[] = [],
+): string {
   return [
     `Sentinel stage ${stageId}. Follow .github/copilot-instructions.md.`,
+    ...(skills.length
+      ? [`Read and apply these skills first: ${skills.map((id) => `.github/skills/${id}/SKILL.md`).join(', ')}.`]
+      : []),
     `The files under review, relative to the working directory: ${paths.join(', ')}.`,
     `When you are done, reply with exactly one JSON object and nothing else, matching ${schema.id}:`,
     schema.describe,
