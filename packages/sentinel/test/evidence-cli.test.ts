@@ -17,6 +17,8 @@ import {
 } from '../dist/evidence/owner-cli.js';
 import { countedProblems } from '@farsight/core/dist/counts.js';
 import { validateEnvelope } from '../dist/validate.js';
+import { isSentinelError } from '../dist/kernel/errors.js';
+import { STRINGS } from '@farsight/core/dist/strings.js';
 import { acceptFixture, timing, confirm, report } from './evidence-acceptance-helpers.ts';
 import { needsStore } from './snapshot-helpers.ts';
 const CLI = new URL('../dist/cli.js', import.meta.url).pathname;
@@ -295,6 +297,23 @@ test(
     assert.equal(names(s).filter((n) => n.endsWith('.spent')).length, spent);
   },
 );
+
+test('a rendering past the cap throws OutputLimitError with its catalog code and the message it always had', () => {
+  const base: any = JSON.parse(readFileSync(new URL('./contracts/valid/importview.json', import.meta.url), 'utf8'));
+  const size = Buffer.byteLength(JSON.stringify({ ...base, document: '' }, null, 2));
+  base.document = 'x'.repeat(IMPORT_CLI_LIMITS.outputBytes - size + 1);
+  assert.throws(
+    () => renderImportDocument(base, 'json'),
+    (e: any) => {
+      assert.ok(isSentinelError(e, 'sentinel.evidence.outputTooLarge'));
+      assert.equal(e.name, 'OutputLimitError');
+      assert.equal(e.code, 'sentinel.evidence.outputTooLarge');
+      assert.equal(e.message, 'import output too large');
+      assert.ok(STRINGS['sentinel.evidence.outputTooLarge']?.define);
+      return true;
+    },
+  );
+});
 
 test('render bound is exact for pretty JSON; Markdown preserves data in inert indented code', () => {
   const base: any = JSON.parse(readFileSync(new URL('./contracts/valid/importview.json', import.meta.url), 'utf8'));
