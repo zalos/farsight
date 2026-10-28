@@ -101,7 +101,12 @@ export function checkSelection(plan: Readonly<PlanEnvelope>, s: RerunSelection):
   }
 }
 
-/** The structural identity a parent unit and a rerun unit must share to be the same work under the same terms. */
+/**
+ * The structural identity a parent unit and a rerun unit must share to be the same work under the same terms. A
+ * review unit is the same review of the same segment over the same captured inputs: its spec binds its run, so the
+ * spec digest (its input fingerprint) differs in every run and is not part of its identity; the model binding is a
+ * term of the rerun, so a review rerun under another provider is the same unit, bound anew.
+ */
 export const unitIdentity = (
   u: Pick<
     PlanWork,
@@ -113,18 +118,28 @@ export const unitIdentity = (
     | 'inputSetDigest'
     | 'inputFingerprint'
     | 'scopes'
-  >,
+  > & { readonly review?: Pick<NonNullable<PlanWork['review']>, 'segmentId'> },
 ) =>
-  JSON.stringify([
-    u.stage,
-    u.adapterId,
-    u.implementationDigest,
-    u.sourceId,
-    sorted(u.checks),
-    u.inputSetDigest,
-    u.inputFingerprint,
-    sorted(u.scopes),
-  ]);
+  u.review
+    ? JSON.stringify([
+        'review',
+        u.stage,
+        u.adapterId,
+        u.implementationDigest,
+        u.sourceId,
+        u.review.segmentId,
+        u.inputSetDigest,
+      ])
+    : JSON.stringify([
+        u.stage,
+        u.adapterId,
+        u.implementationDigest,
+        u.sourceId,
+        sorted(u.checks),
+        u.inputSetDigest,
+        u.inputFingerprint,
+        sorted(u.scopes),
+      ]);
 
 /** What `rerun <run> --stage …` names, once stage ids are expanded to the units of the run's admitted revision. */
 export interface StageExpansion {

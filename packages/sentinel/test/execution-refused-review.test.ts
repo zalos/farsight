@@ -8,7 +8,13 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore } from '../dist/store/index.js';
-import { adoptedPolicy, adoptWorkspaceSettings, promoteRulePack, workspaceOf } from '../dist/service/local.js';
+import {
+  adoptedPolicy,
+  adoptWorkspaceSettings,
+  followWorkspaceRun,
+  promoteRulePack,
+  workspaceOf,
+} from '../dist/service/local.js';
 import { executeRun, planWorkspaceCanonical } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
 import { initWorkspace } from '../dist/cli/init.js';
@@ -95,7 +101,7 @@ async function reviewed(t: any) {
       /* closed */
     }
   });
-  return { path, ws, adopted, store };
+  return { path, ws, adopted, store, file, settings };
 }
 
 test('a review unit refused before its attempt is held with the refusal reason', needsStore, async (t) => {
@@ -184,6 +190,107 @@ test(
       );
     } finally {
       removeScratch(work);
+    }
+  },
+);
+
+test(
+  'rerun --stage review-general creates one linked child: the review planned anew, under a newly adopted binding',
+  needsStore,
+  async (t) => {
+    const { path, ws, adopted, store, file, settings } = await reviewed(t);
+    const work = scratchUnder(store);
+    let parentId: string;
+    let parentReview: any;
+    let parentChecks: string[];
+    try {
+      const planned = await planWorkspaceCanonical(store, {
+        workspace: path,
+        trustDir: ws.trustDir,
+        policy: adopted.policy,
+        scratchRoot: work,
+        now: new Date(),
+      });
+      parentId = planned.disclosure.runId;
+      const { plan } = await loadPlan(store, parentId, planned.disclosure.revision);
+      parentReview = plan.units.find((u) => u.review)!;
+      parentChecks = plan.units.filter((u) => !u.review).map((u) => u.id);
+      assert.equal((await executeRun(store, parentId, { scratchRoot: work })).state, 'completed');
+    } finally {
+      removeScratch(work);
+    }
+    store.close();
+    // Another binding for the general review: a second local provider, adopted by the owner.
+    writeFileSync(
+      file,
+      JSON.stringify({
+        ...settings,
+        providers: [PROVIDER, { ...PROVIDER, id: 'other-review' }],
+        reviewModels: { stages: [{ stage: 'general', providerId: 'other-review', modelId: 'review' }], segments: [] },
+      }),
+    );
+    assert.equal(adoptWorkspaceSettings(ws, { confirm: true, now: new Date() }).outcome, 'prepared');
+    const now = new Date();
+    const child = await followWorkspaceRun(ws, {
+      mode: 'rerun',
+      runId: parentId,
+      stages: ['review-general'],
+      confirm: true,
+      now,
+    });
+    assert.equal(child.outcome, 'prepared', JSON.stringify(child));
+    assert.equal(child.facts.parentId, parentId);
+    const preview = child.facts.preview as any;
+    // The review stage selected, the checks it reads rerun with it (a child cannot reuse their publications yet).
+    assert.deepEqual(preview.selected, [parentReview.id]);
+    assert.equal(preview.rerunPrerequisites.length, parentChecks.length);
+    assert.deepEqual(
+      (child.facts.stages as any).selected.map((s: any) => s.stage),
+      ['review-general'],
+    );
+    // One linked child, its review unit bound to the binding adopted now; the parent is untouched.
+    const reopened = await openStore(ws.storePath);
+    t.after(() => {
+      try {
+        reopened.close();
+      } catch {
+        /* closed */
+      }
+    });
+    const admitted = await loadPlan(reopened, child.facts.runId as string);
+    const review = admitted.plan.units.find((u) => u.review)!;
+    assert.equal(review.review!.selection.providerId, 'other-review');
+    assert.equal(parentReview.review.selection.providerId, 'local-review');
+    assert.ok(admitted.selection!.selected.some((m) => m.parentUnit === parentReview.id && m.unit === review.id));
+    assert.equal(reopened.ledger.getRun(parentId)!.state, 'completed');
+    reopened.close();
+    // Asking again joins the same child.
+    const again = await followWorkspaceRun(ws, {
+      mode: 'rerun',
+      runId: parentId,
+      stages: ['review-general'],
+      confirm: true,
+      now,
+    });
+    assert.deepEqual([again.outcome, again.facts.runId], ['kept', child.facts.runId]);
+    // Rerunning the check stage keeps its downstream review: the child plans the review unit too.
+    const checks = await followWorkspaceRun(ws, {
+      mode: 'rerun',
+      runId: parentId,
+      stages: ['preview'],
+      confirm: true,
+      now,
+    });
+    assert.equal(checks.outcome, 'prepared', JSON.stringify(checks));
+    const third = await openStore(ws.storePath);
+    try {
+      const rerun = await loadPlan(third, checks.facts.runId as string);
+      assert.ok(
+        rerun.plan.units.some((u) => u.review),
+        'the review downstream of the checks is planned in the child',
+      );
+    } finally {
+      third.close();
     }
   },
 );
