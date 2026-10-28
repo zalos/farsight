@@ -345,10 +345,10 @@ jobs:
           test "$(id -u)" != 0 || { echo "::error::the service tests must run as a non-root user"; exit 1; }
           test "$(uname -m)" = x86_64 || { echo "::error::the service tests must run on native amd64"; exit 1; }
           umask 022
-          node ../../scripts/sentinel-tests.mjs --suite process -- --test-timeout=300000 \
-            --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=service.tap
-          grep -qx '# skipped 0' service.tap || { echo "::error::a service test was skipped"; exit 1; }
-          grep -qx '# fail 0' service.tap && grep -qx '# cancelled 0' service.tap
+          # the serial files first, one at a time, then the rest; the summary sums every run
+          node ../../scripts/sentinel-tests.mjs --suite process --summary service-summary.txt -- --test-timeout=300000
+          grep -qx '# skipped 0' service-summary.txt || { echo "::error::a service test was skipped"; exit 1; }
+          grep -qx '# fail 0' service-summary.txt && grep -qx '# cancelled 0' service-summary.txt
 
   e2e:
     name: e2e

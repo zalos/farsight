@@ -3,9 +3,10 @@
 # CI job runs exactly these on native amd64 as a non-root user, with zero skips; validate runs every other
 # test/*.test.ts (scripts/sentinel-tests.mjs --suite unit). Measured with `node scripts/sentinel-tests.mjs --launches`.
 #
-# Four files that start Node.js processes stay in the unit suite, because some of their cases skip on CI by design
+# Five files that start Node.js processes stay in the unit suite, because some of their cases skip on CI by design
 # and the service job allows no skip: store-integration and store-runtime (host and user checks that skip on Linux
-# CI), review-operation (FARSIGHT_LIVE opt-in) and service-full-report-authority (SENTINEL_ISOLATION).
+# CI), review-operation (FARSIGHT_LIVE opt-in), service-full-report-authority (SENTINEL_ISOLATION) and build-identity
+# (SENTINEL_BASELINE_PACKAGE opt-in).
 #
 # One path per line, relative to packages/sentinel; a listed file that does not exist fails both suites.
 test/agentic-only-policy.test.ts
@@ -52,6 +53,7 @@ test/framework-report.test.ts
 test/framework-review-corrections.test.ts
 test/framework-startup-tamper.test.ts
 test/isolation-diagnostic-controls.test.ts
+test/kernel-digest.test.ts
 test/next-package.test.ts
 test/owner-decision-report.test.ts
 test/owner-decisions.test.ts

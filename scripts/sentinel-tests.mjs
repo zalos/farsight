@@ -6,9 +6,14 @@
 // packages/sentinel/test/no-skip-suite.txt lists must not skip either: `--suite unit` runs them first as their own
 // group and fails if any of their tests was skipped, then runs the rest, where environment-gated skips are normal.
 // `no-skip` runs that group alone. `all` is every file in one run, which is what `pnpm -r test` does locally.
+// Within each group the files packages/sentinel/test/serial-suite.txt lists run first, one at a time: their cases
+// race the wall clock or a SIGKILL checkpoint.
 //
 //   node scripts/sentinel-tests.mjs [--suite unit|process|no-skip|all] [--concurrency N] [--list] [--launches]
-//                                   [-- <node --test options>]
+//                                   [--summary <file>] [-- <node --test options>]
+//
+// `--summary` writes the summed `# tests`, `# pass`, `# fail`, `# cancelled`, `# skipped` and `# todo` lines of
+// every run, for a CI step to check. A run that writes no TAP summary fails.
 //
 // The suite defaults to SENTINEL_TEST_SUITE, else `all`; concurrency to the machine's available parallelism. Files
 // run from packages/sentinel. A listed file that does not exist, a duplicate, or a line that is not
@@ -28,7 +33,7 @@ const LISTED = /^test\/[a-z0-9][a-z0-9.-]*\.test\.ts$/;
 export const sentinelDir = (root = fileURLToPath(new URL('..', import.meta.url))) => join(root, 'packages', 'sentinel');
 
 /** A list file's paths, as `test/<name>.test.ts`, read and checked. */
-function readList(dir, name) {
+function readList(dir, name, { allowEmpty = false } = {}) {
   const text = readFileSync(join(dir, 'test', name), 'utf8');
   const files = [];
   const problems = [];
@@ -41,7 +46,7 @@ function readList(dir, name) {
     else if (!existsSync(join(dir, line))) problems.push(`${where}: no such file: ${line}`);
     else files.push(line);
   }
-  if (!files.length && !problems.length) problems.push(`${name} lists no files`);
+  if (!files.length && !problems.length && !allowEmpty) problems.push(`${name} lists no files`);
   if (problems.length) throw new Error(problems.join('\n'));
   return files;
 }
@@ -63,6 +68,15 @@ export function noSkipSuite(dir = sentinelDir()) {
   return files;
 }
 
+/**
+ * Files that run one at a time, before the rest of their group: tests whose cases race the wall clock or a SIGKILL
+ * checkpoint and fail when other files load the machine. From `test/serial-suite.txt`; each is in whichever suite and
+ * group it belongs to and keeps that group's skip rule.
+ */
+export function serialSuite(dir = sentinelDir()) {
+  return readList(dir, 'serial-suite.txt', { allowEmpty: true });
+}
+
 /** Every test file of a suite, as `test/<name>.test.ts`, in name order. */
 export function suiteFiles(suite, dir = sentinelDir()) {
   if (!SUITES.includes(suite)) throw new Error(`Unknown suite ${JSON.stringify(suite)}: one of ${SUITES.join(', ')}`);
@@ -79,23 +93,51 @@ export function suiteFiles(suite, dir = sentinelDir()) {
   return [...noSkip, ...every.filter((file) => !listed.includes(file) && !noSkip.includes(file))];
 }
 
-/** How a suite runs: one group, or for `unit` the no-skip group (skips refused) and then the rest. */
+/**
+ * How a suite runs: its groups (for `unit`, the no-skip group with skips refused and then the rest; the process suite
+ * refuses skips too, as its CI job does), each split into the files that run serially, at concurrency 1, and then the
+ * rest at the configured concurrency.
+ */
 export function suiteGroups(suite, dir = sentinelDir()) {
-  if (suite === 'no-skip') return [{ label: 'no-skip files', files: noSkipSuite(dir), noSkips: true }];
-  if (suite !== 'unit') return [{ label: `${suite} suite`, files: suiteFiles(suite, dir), noSkips: false }];
-  const noSkip = noSkipSuite(dir);
-  return [
-    { label: 'unit suite, no-skip files', files: noSkip, noSkips: true },
-    { label: 'unit suite, the rest', files: suiteFiles('unit', dir).slice(noSkip.length), noSkips: false },
-  ];
+  const noSkip = suite === 'unit' ? noSkipSuite(dir) : [];
+  const groups =
+    suite === 'unit'
+      ? [
+          { label: 'unit suite, no-skip files', files: noSkip, noSkips: true },
+          { label: 'unit suite, the rest', files: suiteFiles('unit', dir).slice(noSkip.length), noSkips: false },
+        ]
+      : [
+          {
+            label: suite === 'no-skip' ? 'no-skip files' : `${suite} suite`,
+            files: suiteFiles(suite, dir),
+            noSkips: suite === 'no-skip' || suite === 'process',
+          },
+        ];
+  const serial = serialSuite(dir);
+  return groups.flatMap((group) => [
+    { ...group, label: `${group.label}, serial`, files: group.files.filter((f) => serial.includes(f)), serial: true },
+    { ...group, files: group.files.filter((f) => !serial.includes(f)), serial: false },
+  ]);
 }
 
-/** The skipped and todo counts from a TAP report's summary; a report without them reads as unknown (null). */
+const COUNTS = ['tests', 'suites', 'pass', 'fail', 'cancelled', 'skipped', 'todo'];
+
+/** The summary counts of a TAP report; a report missing any of them reads as unknown (null). */
+export function tapCounts(tap) {
+  const counts = {};
+  for (const name of COUNTS) counts[name] = Number(new RegExp(`^# ${name} (\\d+)$`, 'm').exec(tap)?.[1] ?? NaN);
+  return Object.values(counts).every(Number.isInteger) ? counts : null;
+}
+
+/** The skipped and todo counts from a TAP report's summary, or null without one. */
 export function tapSkips(tap) {
-  const count = (name) => Number(new RegExp(`^# ${name} (\\d+)$`, 'm').exec(tap)?.[1] ?? NaN);
-  const skipped = count('skipped'),
-    todo = count('todo');
-  return Number.isInteger(skipped) && Number.isInteger(todo) ? { skipped, todo } : null;
+  const counts = tapCounts(tap);
+  return counts ? { skipped: counts.skipped, todo: counts.todo } : null;
+}
+
+/** Several runs' summaries summed, in the TAP comment form a `grep -qx '# skipped 0'` check reads. */
+export function summaryText(all) {
+  return COUNTS.map((name) => `# ${name} ${all.reduce((sum, counts) => sum + counts[name], 0)}`).join('\n') + '\n';
 }
 
 /** The node arguments a suite runs with; `preload` is a module URL every test file's process imports first. */
@@ -168,6 +210,7 @@ export function parseArgs(argv, env = process.env) {
     concurrency: undefined,
     list: false,
     launches: false,
+    summary: undefined,
     extra: [],
   };
   for (let i = 0; i < argv.length; i++) {
@@ -179,6 +222,7 @@ export function parseArgs(argv, env = process.env) {
     else if (arg === '--concurrency') options.concurrency = Number(argv[++i]);
     else if (arg === '--list') options.list = true;
     else if (arg === '--launches') options.launches = true;
+    else if (arg === '--summary') options.summary = argv[++i];
     else throw new Error(`Unknown option ${JSON.stringify(arg)}`);
   }
   return options;
@@ -197,22 +241,20 @@ function reportLaunches(log, files, dir, out) {
 }
 
 /** The refusal for a no-skip group whose TAP summary shows a skip (or has no summary), else null. */
-function noSkipRefusal(tap, label) {
-  const counts = tapSkips(existsSync(tap) ? readFileSync(tap, 'utf8') : '');
+function noSkipRefusal(counts, label) {
   if (counts && !counts.skipped && !counts.todo) return null;
   const what = counts ? `${counts.skipped} skipped, ${counts.todo} todo` : 'no TAP summary';
   const prefix = process.env.GITHUB_ACTIONS ? '::error::' : 'sentinel-tests: ';
   return `${prefix}the ${label} must not skip (no-skip-suite.txt): ${what}`;
 }
 
-/** A no-skip group writes TAP beside the spec output; its summary says how many tests were skipped. */
-const groupReporters = (group, tap) =>
-  group.noSkips
-    ? ['--test-reporter=spec', '--test-reporter-destination=stdout'].concat([
-        '--test-reporter=tap',
-        `--test-reporter-destination=${tap}`,
-      ])
-    : [];
+/** Every run writes TAP beside the spec output; its summary says how many tests ran, failed and were skipped. */
+const runReporters = (tap) => [
+  '--test-reporter=spec',
+  '--test-reporter-destination=stdout',
+  '--test-reporter=tap',
+  `--test-reporter-destination=${tap}`,
+];
 
 /**
  * Runs a suite from packages/sentinel (or `dir`): each group in turn, a no-skip group failing on any skipped or todo
@@ -232,25 +274,31 @@ export function runSuite(
   const { NODE_TEST_CONTEXT: _parentRunner, ...inherited } = process.env;
   const env = { ...inherited, SENTINEL_LAUNCH_LOG: join(scratch, 'launches.tsv') };
   let status = 0;
+  const summaries = [];
   try {
     for (const [index, group] of suiteGroups(options.suite, dir).entries()) {
       if (!group.files.length) continue;
-      const tap = join(scratch, `group-${index}.tap`);
-      const extra = [...groupReporters(group, tap), ...(options.extra ?? [])];
-      out(`Sentinel ${group.label}: ${group.files.length} files, --test-concurrency=${concurrency}`);
-      const run = spawnSync(process.execPath, nodeArgs(group.files, { concurrency, extra, preload }), {
+      const tap = join(scratch, `run-${index}.tap`);
+      const width = group.serial ? 1 : concurrency;
+      const extra = [...runReporters(tap), ...(options.extra ?? [])];
+      out(`Sentinel ${group.label}: ${group.files.length} files, --test-concurrency=${width}`);
+      const run = spawnSync(process.execPath, nodeArgs(group.files, { concurrency: width, extra, preload }), {
         cwd: dir,
         stdio,
         env,
       });
       if (run.error) throw run.error;
       if (run.status !== 0) status ||= run.status ?? 1;
-      const refusal = group.noSkips ? noSkipRefusal(tap, group.label) : null;
+      const counts = tapCounts(existsSync(tap) ? readFileSync(tap, 'utf8') : '');
+      if (counts) summaries.push(counts);
+      else status ||= 1; // a run with no summary is not a pass
+      const refusal = group.noSkips ? noSkipRefusal(counts, group.label) : null;
       if (refusal) {
         err(refusal);
         status ||= 1;
       }
     }
+    if (options.summary) writeFileSync(options.summary, summaryText(summaries));
     if (options.launches) reportLaunches(env.SENTINEL_LAUNCH_LOG, files, dir, out);
   } finally {
     rmSync(scratch, { recursive: true, force: true });

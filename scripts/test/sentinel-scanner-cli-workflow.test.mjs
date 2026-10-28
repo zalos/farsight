@@ -129,7 +129,7 @@ test('SDK run controls remain in the native service zero-skip list and installed
   for (const file of ['service-mcp-controls', 'service-planned-pause', 'preparation-service', 'preparation-public'])
     assert.ok(processSuite.includes(`test/${file}.test.ts`), file);
   for (const counter of ['skipped', 'fail', 'cancelled'])
-    assert.ok(service.includes(`grep -qx '# ${counter} 0' service.tap`));
+    assert.ok(service.includes(`grep -qx '# ${counter} 0' service-summary.txt`));
   const manifest = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
   assert.ok(
     manifest.scripts['test:sentinel:package'].includes('&& node scripts/test-sentinel-mcp-controls-consumer.mjs'),
@@ -202,6 +202,11 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
   assert.deepEqual([...unit, ...processSuite].sort(), every, 'every test file is in exactly one suite');
   assert.deepEqual(unit.slice(0, noSkipSuite.length), noSkipSuite, 'the unit suite runs its no-skip group first');
   assert.ok(!noSkipSuite.some((file) => processSuite.includes(file)), 'no file is in both lists');
+  // the files whose clock and SIGKILL races failed on CI at core-count concurrency run one at a time
+  const { serialSuite } = await import('../sentinel-tests.mjs');
+  for (const name of ['preparation-admission', 'preparation-publication-crash'])
+    assert.ok(serialSuite().includes(`test/${name}.test.ts`), name);
+  for (const file of serialSuite()) assert.ok(every.includes(file), file);
   // the twelve in-process files that left sentinel-service's zero-skip list keep the guarantee in validate
   for (const name of [
     'owner-ui-descriptor',
@@ -238,8 +243,10 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
     concurrency: undefined,
     list: false,
     launches: false,
+    summary: undefined,
     extra: [],
   });
+  assert.equal(parseArgs(['--summary', 'x.txt']).summary, 'x.txt');
   assert.equal(parseArgs(['--launches']).launches, true);
   assert.equal(parseArgs([], { SENTINEL_TEST_SUITE: 'unit' }).suite, 'unit');
   assert.equal(parseArgs(['--suite', 'process'], { SENTINEL_TEST_SUITE: 'unit' }).suite, 'process');
@@ -248,6 +255,7 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
     concurrency: 3,
     list: false,
     launches: false,
+    summary: undefined,
     extra: ['--test-timeout=1', '--test-reporter=tap'],
   });
   assert.throws(() => parseArgs(['--suites', 'unit']), /Unknown option/);
@@ -317,10 +325,25 @@ test('the process suite list fails loudly: a missing file, a duplicate, a bad li
 });
 
 test('the unit suite fails when a no-skip file skips, and the rest of it may skip', async () => {
-  const { noSkipSuite: listedNoSkip, runSuite, suiteGroups, tapSkips } = await import('../sentinel-tests.mjs');
-  assert.deepEqual(tapSkips('TAP version 13\n# tests 3\n# skipped 1\n# todo 0\n'), { skipped: 1, todo: 0 });
-  assert.deepEqual(tapSkips('# skipped 0\n# todo 0\n'), { skipped: 0, todo: 0 });
-  assert.equal(tapSkips('# tests 3\n'), null, 'no summary is not a pass');
+  const {
+    noSkipSuite: listedNoSkip,
+    runSuite,
+    suiteGroups,
+    summaryText,
+    tapCounts,
+    tapSkips,
+  } = await import('../sentinel-tests.mjs');
+  const tap = (skipped, fail = 0) =>
+    `TAP version 13\n# tests 3\n# suites 0\n# pass ${3 - skipped - fail}\n# fail ${fail}\n# cancelled 0\n` +
+    `# skipped ${skipped}\n# todo 0\n# duration_ms 5\n`;
+  assert.deepEqual(tapSkips(tap(1)), { skipped: 1, todo: 0 });
+  assert.deepEqual(tapSkips(tap(0)), { skipped: 0, todo: 0 });
+  assert.equal(tapSkips('# tests 3\n# skipped 0\n'), null, 'a partial summary is not a pass');
+  assert.equal(
+    summaryText([tapCounts(tap(0)), tapCounts(tap(1, 1))]),
+    '# tests 6\n# suites 0\n# pass 4\n# fail 1\n# cancelled 0\n# skipped 1\n# todo 0\n',
+    'a summary sums every run, so one grep line covers the serial and the parallel run',
+  );
   const dir = mkdtempSync(join(tmpdir(), 'farsight-sentinel-noskip-'));
   try {
     mkdirSync(join(dir, 'test'));
@@ -329,14 +352,17 @@ test('the unit suite fails when a no-skip file skips, and the rest of it may ski
     write('skips.test.ts', "import { test } from 'node:test';\ntest('skips', { skip: 'by design' }, () => {});\n");
     write('process.test.ts', "import { test } from 'node:test';\ntest('a process file', () => {});\n");
     write('process-suite.txt', 'test/process.test.ts\n');
+    write('serial-suite.txt', '# none yet\n');
     write('no-skip-suite.txt', 'test/process.test.ts\n');
     assert.throws(() => listedNoSkip(dir), /lists process-suite files: test\/process\.test\.ts/);
     write('no-skip-suite.txt', '# guarded\ntest/passes.test.ts\n');
     assert.deepEqual(
-      suiteGroups('unit', dir).map(({ files, noSkips }) => [files, noSkips]),
+      suiteGroups('unit', dir).map(({ files, noSkips, serial }) => [files, noSkips, serial]),
       [
-        [['test/passes.test.ts'], true],
-        [['test/skips.test.ts'], false],
+        [[], true, true],
+        [['test/passes.test.ts'], true, false],
+        [[], false, true],
+        [['test/skips.test.ts'], false, false],
       ],
     );
     const errors = [];
@@ -350,6 +376,31 @@ test('the unit suite fails when a no-skip file skips, and the rest of it may ski
     assert.equal(
       runSuite({ suite: 'no-skip', concurrency: 2 }, { dir, out: () => {}, err: () => {}, stdio: 'ignore' }),
       1,
+    );
+
+    // the serial files run first, one at a time, in whichever group they belong to; the summary sums every run
+    write('no-skip-suite.txt', 'test/passes.test.ts\n');
+    write('serial-suite.txt', 'test/passes.test.ts\ntest/process.test.ts\n');
+    assert.deepEqual(
+      suiteGroups('process', dir).map(({ files, noSkips, serial }) => [files, noSkips, serial]),
+      [
+        [['test/process.test.ts'], true, true],
+        [[], true, false],
+      ],
+      'the process suite runs its serial files first and refuses skips',
+    );
+    const lines = [];
+    const summary = join(dir, 'summary.txt');
+    const quiet = { dir, out: (m) => lines.push(m), err: () => {}, stdio: 'ignore' };
+    assert.equal(runSuite({ suite: 'unit', concurrency: 3, summary }, quiet), 0);
+    assert.deepEqual(lines, [
+      'Sentinel unit suite, no-skip files, serial: 1 files, --test-concurrency=1',
+      'Sentinel unit suite, the rest: 1 files, --test-concurrency=3',
+    ]);
+    assert.equal(
+      readFileSync(summary, 'utf8'),
+      '# tests 2\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 1\n# todo 0\n',
+      'the serial run and the parallel run are summed',
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
