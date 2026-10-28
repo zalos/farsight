@@ -254,6 +254,11 @@ export interface SettingsEnvelope {
   hostedReviewSecretScan?: 'required' | 'when-selected';
   /** Native Claude execution is deferred when absent or false; enabling does not establish runtime qualification. */
   nativeClaudeReviewEnabled?: boolean;
+  /**
+   * Host script stages are off when absent or false. On, an owner-promoted script may run on this computer, a weaker
+   * isolation class the report names. Read only through the feature registry (`stage.host-scripts`).
+   */
+  hostScripts?: boolean;
 }
 
 /** A repository's request to suppress a finding. Recorded and refused: approval is an owner disposition. */

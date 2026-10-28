@@ -33,6 +33,21 @@ export type * from './pathrequest.js';
 
 export type * from './preparation.js';
 export type * from './ownerui.js';
+export type * from './pipeline.js';
+
+import type {
+  AgentMode,
+  AgentRunnerId,
+  BuiltinOperation,
+  CostUnobservedReason,
+  ExecutionSite,
+  FeatureFlagName,
+  PipelineStageKind,
+  StageFanOut,
+  StageOutputType,
+} from './pipeline.js';
+import type { StageKind } from './work.js';
+import type { BuiltinPlanStage, ReviewPlanStage } from './plan.js';
 
 /**
  * Every envelope: its kind, the one schema version this build reads and writes, and the generated type.
@@ -111,7 +126,48 @@ export const WORK_STATES = [
   'disabled-by-policy',
   'satisfied-by-reuse',
 ] as const;
-export const STAGE_KINDS = ['coded', 'agentic', 'external-tool'] as const;
+export const STAGE_KINDS = ['coded', 'agentic', 'external-tool', 'script'] as const;
+/** The unit stage ids every plan carried before declared pipelines; a declared stage id may be any other `StageId`. */
+export const BUILTIN_PLAN_STAGES = ['capture', 'parse', 'inventory', 'check'] as const;
+export const REVIEW_PLAN_STAGES = ['review-guided', 'review-general'] as const;
+export const PIPELINE_STAGE_KINDS = ['builtin', 'tool', 'script', 'agent'] as const;
+/** A declared stage's kind as the work contract records it. */
+export const WORK_STAGE_KIND_OF: Readonly<Record<PipelineStageKind, StageKind>> = Object.freeze({
+  builtin: 'coded',
+  tool: 'external-tool',
+  script: 'script',
+  agent: 'agentic',
+});
+export const BUILTIN_OPERATIONS = [
+  'capture',
+  'parse',
+  'inventory',
+  'walkthrough',
+  'framework-controls',
+  'report',
+] as const;
+export const STAGE_OUTPUT_TYPES = [
+  'source',
+  'parse',
+  'inventory',
+  'findings',
+  'coverage',
+  'observations',
+  'walkthrough-md',
+  'report',
+] as const;
+export const STAGE_FAN_OUTS = ['per-run', 'per-source', 'per-entry', 'per-check'] as const;
+export const AGENT_RUNNERS = ['claude-cli', 'copilot-cli', 'hosted-api'] as const;
+export const AGENT_MODES = ['brokered', 'native'] as const;
+export const EXECUTION_SITES = ['in-process', 'child', 'container', 'host', 'sandboxed-cli'] as const;
+export const COST_UNOBSERVED_REASONS = ['subscription', 'usage-unknown', 'no-rates'] as const;
+/** The gated features, by registry name (policy/features.ts holds their settings keys and defaults). */
+export const FEATURE_FLAG_NAMES = [
+  'stage.host-scripts',
+  'runner.claude-cli',
+  'runner.copilot-cli',
+  'review.hosted-api',
+] as const;
 export const ATTEMPT_STATES = [
   'running',
   'succeeded',
@@ -248,3 +304,26 @@ export const MODEL_PRICING_KINDS = ['rates', 'no-fee'] as const;
 
 /** Largest serialized envelope or worker message accepted, in UTF-8 bytes (PR 01's proposed 4 MiB output ceiling). */
 export const MAX_ENVELOPE_BYTES = 4 * 1024 * 1024;
+
+// Compile-time proof that each pinned list above names exactly its type's members: adding a member to one and not
+// the other fails the build, before the tests pin the list against the generated schema.
+type Exact<List extends readonly string[], T extends string> = [T] extends [List[number]]
+  ? [List[number]] extends [T]
+    ? true
+    : never
+  : never;
+const _exact: [
+  Exact<typeof STAGE_KINDS, StageKind>,
+  Exact<typeof BUILTIN_PLAN_STAGES, BuiltinPlanStage>,
+  Exact<typeof REVIEW_PLAN_STAGES, ReviewPlanStage>,
+  Exact<typeof PIPELINE_STAGE_KINDS, PipelineStageKind>,
+  Exact<typeof BUILTIN_OPERATIONS, BuiltinOperation>,
+  Exact<typeof STAGE_OUTPUT_TYPES, StageOutputType>,
+  Exact<typeof STAGE_FAN_OUTS, StageFanOut>,
+  Exact<typeof AGENT_RUNNERS, AgentRunnerId>,
+  Exact<typeof AGENT_MODES, AgentMode>,
+  Exact<typeof EXECUTION_SITES, ExecutionSite>,
+  Exact<typeof COST_UNOBSERVED_REASONS, CostUnobservedReason>,
+  Exact<typeof FEATURE_FLAG_NAMES, FeatureFlagName>,
+] = [true, true, true, true, true, true, true, true, true, true, true, true];
+void _exact;
