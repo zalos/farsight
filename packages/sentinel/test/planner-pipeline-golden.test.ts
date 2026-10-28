@@ -21,6 +21,7 @@ import {
   stageModel,
 } from '../dist/planner/index.js';
 import { reviewsFor } from '../dist/service/review-adapter.js';
+import { reviewSeedsFor } from '../dist/review/plan.js';
 import { publicRegistry } from '../dist/service/scanner-profile.js';
 import { canonicalJsonBytes } from '../dist/store/objects.js';
 import { needsStore } from './snapshot-helpers.ts';
@@ -108,11 +109,11 @@ function legacyPlans(terms: Terms) {
   const reviewed = terms.review
     ? reviewsFor(deterministic, fx.evidence, policy, terms.registry, packs)
     : { plan: deterministic, artifacts: [] };
-  return { boot, analysis: reviewed.plan, deterministic };
+  return { boot, analysis: reviewed.plan, deterministic, artifacts: reviewed.artifacts };
 }
 
 /** The same terms planned through a declaration (the default pipeline unless one is given). */
-function declaredPlans(terms: Terms, pipeline?: any, seedsFrom?: any) {
+function declaredPlans(terms: Terms, pipeline?: any, seeds?: any[]) {
   const { s, profile, lock, view, checks } = inputsOf(terms);
   // The planner does not read the runner or model (the review seed carries the adopted selection); these name what
   // the test's local review provider is. The contract has no runner word for a local model server yet.
@@ -140,7 +141,7 @@ function declaredPlans(terms: Terms, pipeline?: any, seedsFrom?: any) {
     policy: view,
     limits: s.limits,
     pipeline: declaration,
-    ...(seedsFrom ? { agents: agentSeedsOf(seedsFrom) } : {}),
+    ...(seeds ? { agents: seeds } : {}),
   });
   return { boot, analysis, declaration };
 }
@@ -213,7 +214,13 @@ test('review units declared as agent stages are placed and sealed exactly as wit
   const legacy = legacyPlans(terms);
   const reviewUnits = legacy.analysis.units.filter((u: any) => u.review);
   assert.deepEqual([...new Set(reviewUnits.map((u: any) => u.stage))].sort(), ['review-general', 'review-guided']);
-  const declared = declaredPlans(terms, undefined, legacy.analysis);
+  // The seed builder makes the same seeds and artifacts from the deterministic revision, touching no plan.
+  const { policy, packs } = inputsOf(terms);
+  const built = reviewSeedsFor(legacy.deterministic, fx.evidence, policy, terms.registry, packs);
+  const bySegment = (seeds: any[]) => [...seeds].sort((a, b) => (a.segmentId < b.segmentId ? -1 : 1));
+  assert.deepEqual(bySegment(built.seeds), bySegment(agentSeedsOf(legacy.analysis)));
+  assert.deepEqual(built.artifacts.map((a: any) => a.id).sort(), legacy.artifacts.map((a: any) => a.id).sort());
+  const declared = declaredPlans(terms, undefined, built.seeds);
   assert.ok(bytes(declared.analysis).equals(bytes(legacy.analysis)), 'the reviewed analysis revision');
   assert.equal(declared.analysis.digest, legacy.analysis.digest);
   // Each review unit belongs to the agent stage declaring its fan-out.
@@ -228,7 +235,7 @@ test('review units declared as agent stages are placed and sealed exactly as wit
   );
   // A configured review the pipeline does not declare is refused, never added.
   assert.throws(
-    () => declaredPlans(terms, withoutStage(declared.declaration, 'review-guided'), legacy.analysis),
+    () => declaredPlans(terms, withoutStage(declared.declaration, 'review-guided'), built.seeds),
     (e: any) => e instanceof PlanError && e.code === 'sentinel.plan.agentStageMissing',
   );
 });

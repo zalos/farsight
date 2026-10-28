@@ -11,7 +11,8 @@
 // A run's result is read back from the ledger: its recorded outcome and the coverage its units published. A run
 // that rests on the foundation-preview rule is required coverage incomplete whatever it records, and this build
 // never prints a satisfied result (findings are not judged against the policy until the full report exists).
-import { hasConfiguredReviews, reviewsFor, REVIEW_ADAPTERS } from './review-adapter.js';
+import { hasConfiguredReviews, REVIEW_ADAPTERS } from './review-adapter.js';
+import { reviewSeedsFor } from '../review/plan.js';
 import { createHash } from 'node:crypto';
 import type { ActionEffect } from '../contracts/policy.js';
 import type { RunEnvelope } from '../contracts/run.js';
@@ -28,7 +29,6 @@ import { checkProfileRegistry, withPipeline } from '../execution/profile.js';
 import { defaultPipelineFor } from '../execution/stage-inputs.js';
 import type { PipelineDefinition } from '../contracts/pipeline.js';
 import {
-  agentSeedsOf,
   planPipelineAnalysis,
   planPipelineBootstrap,
   plannerAnalysisFrom,
@@ -355,13 +355,10 @@ async function planWorkspaceCanonicalInner(
     };
     const deterministic = planPipelineAnalysis(terms);
     if (!hasConfiguredReviews(options.policy)) return { plan: deterministic, artifacts: [] };
-    // The review side builds each review unit's sealed model inputs over the deterministic revision; the planner
-    // places them under the pipeline's agent stages and seals the revision once.
-    const reviewed = reviewsFor(deterministic, evidence, options.policy, registry, packs);
-    return {
-      plan: planPipelineAnalysis({ ...terms, agents: agentSeedsOf(reviewed.plan) }),
-      artifacts: reviewed.artifacts,
-    };
+    // The review side builds each review unit's sealed model inputs from the deterministic revision's evidence,
+    // touching no plan; the planner places them under the pipeline's agent stages and seals the revision once.
+    const reviews = reviewSeedsFor(deterministic, evidence, options.policy, registry, packs);
+    return { plan: planPipelineAnalysis({ ...terms, agents: reviews.seeds }), artifacts: reviews.artifacts };
   };
   if (latest?.kind === 'analysis') {
     const active = store.ledger.getRun(runId);
@@ -730,6 +727,8 @@ export interface RerunPreview {
   readonly held?: readonly { readonly unit: string; readonly parentUnit: string | null }[];
   /** Required checks of held units: this rerun cannot complete required coverage while any exists. */
   readonly requiredHeld?: number;
+  /** Units a selected review stage reads, rerun with it because a child cannot reuse their parent publications yet. */
+  readonly rerunPrerequisites?: readonly string[];
 }
 
 type Refusal = { reasonCode: string; facts?: Record<string, unknown> };
@@ -876,8 +875,10 @@ async function currentTerms(terms: RerunTerms) {
   const available = terms.profile
     ? new Set<string>()
     : await publicAvailability(terms.trustDir, current.lock, packs, ids, terms.scratchRoot, terms.wrapRunner);
+  // As for a fresh plan: configured model review makes the review operations part of the profile.
+  if (hasConfiguredReviews(terms.policy)) for (const a of REVIEW_ADAPTERS) available.add(a.id);
   const profile = terms.profile ?? publicProfile(registry, available, packs);
-  return { current, packs, profile };
+  return { current, packs, profile, registry };
 }
 
 /**
@@ -909,7 +910,7 @@ export async function selectedRerun(
       return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal;
     }
   }
-  const { current, packs, profile } = await currentTerms(terms);
+  const { current, packs, profile, registry } = await currentTerms(terms);
   const selectedIds = sortedIds(chosen);
   const runId = rerunIdOf(store, {
     rerun: parentId,
@@ -922,7 +923,7 @@ export async function selectedRerun(
   // The child plans the parent's declaration: the pipeline its profile recorded, or the default for the terms now.
   const lockView = plannerLockFrom(current.lock, packs, current.digest);
   const declared = closure.admitted.profile.pipeline;
-  const plan = planPipelineAnalysis({
+  const planTerms = {
     runId,
     revision: 1,
     previous: null,
@@ -934,7 +935,14 @@ export async function selectedRerun(
     policy: plannerPolicyFrom(terms.policy),
     limits: terms.policy.rules.includes(PREVIEW_RULE) ? ANALYSIS_LIMITS : { maxScopesPerWork: 32 },
     pipeline: declared ?? defaultPipelineFor(lockView.rules, terms.policy),
-  });
+  };
+  // The child's agent stages plan their review units as a fresh plan does, under the review selection adopted now
+  // (another provider or runner is a new binding), and the revision is sealed once.
+  const deterministic = planPipelineAnalysis(planTerms);
+  const reviews = hasConfiguredReviews(terms.policy)
+    ? reviewSeedsFor(deterministic, evidence, terms.policy, registry, packs)
+    : { seeds: [], artifacts: [] };
+  const plan = reviews.seeds.length ? planPipelineAnalysis({ ...planTerms, agents: reviews.seeds }) : deterministic;
   assertSupportedRules(plan);
   if (!terms.profile) checkPlanDatabases(plan, current.lock);
   // Each selected parent unit must be the same work under the terms now; nothing is matched loosely.
@@ -954,10 +962,28 @@ export async function selectedRerun(
   // is refused, even when the parent published that unit under exactly these terms. Consuming such genuine parent
   // publications (and counting held results as coverage) is PR 27's; until then selections are fail-closed here. The
   // shipped planner's check units depend only on the bootstrap, so today this refusal is reached only by such plans.
-  const { run, needed } = selectionClosure(
+  let { run, needed } = selectionClosure(
     plan.units,
     mapped.map((m) => m.unit),
   );
+  // A review unit reads every deterministic unit of its revision. Until a child can reuse the parent's publications
+  // of them (the gate above), rerunning a review stage reruns the units it reads too, as part of the selection, and
+  // the preview names them; a deterministic unit that needs a held one is still refused.
+  const reviewUnits = new Set(plan.units.filter((u) => u.review).map((u) => u.id));
+  let rerunPrerequisites: string[] = [];
+  if (
+    needed.length &&
+    plan.units
+      .filter((u) => run.has(u.id) && u.dependencies.some((d) => needed.includes(d.id)))
+      .every((u) => reviewUnits.has(u.id))
+  ) {
+    rerunPrerequisites = [...needed];
+    ({ run, needed } = selectionClosure(plan.units, [...mapped.map((m) => m.unit), ...rerunPrerequisites]));
+    for (const unit of rerunPrerequisites) {
+      const parentUnit = parentOf.get(unit);
+      if (parentUnit) mapped.push({ parentUnit, unit });
+    }
+  }
   if (needed.length) return { reasonCode: 'sentinel.service.prerequisiteNotReusable', facts: { needed } } as Refusal;
   const downstream = sortedIds([...run].filter((id) => !mapped.some((m) => m.unit === id)));
   const held = plan.units
@@ -996,6 +1022,7 @@ export async function selectedRerun(
     units: sortedIds(run),
     held,
     requiredHeld,
+    ...(rerunPrerequisites.length ? { rerunPrerequisites: sortedIds(rerunPrerequisites) } : {}),
   });
   return {
     preview,
@@ -1003,6 +1030,7 @@ export async function selectedRerun(
     selection,
     current,
     profile: declared ? { ...profile, record: withPipeline(profile.record, declared) } : profile,
+    reviewArtifacts: reviews.artifacts,
   };
 }
 
@@ -1074,6 +1102,7 @@ export async function rerunRun(
     policy: options.policy,
     profile: planned.profile.record,
     selection: planned.selection,
+    reviewArtifacts: planned.reviewArtifacts,
   });
   return { outcome: 'prepared', disclosure: disclose(planned.plan), preview: planned.preview };
 }
