@@ -8,6 +8,7 @@ import { structuralText } from './structural-paths.js';
 import { inspectionText } from './inspection.js';
 import { COUNT_ORDER, countText, defineOf, wordOf, labelKey } from './words.js';
 
+/** Escapes text for HTML element and attribute content and strips nonprinting control characters. */
 export function esc(text: string): string {
   return (
     text
@@ -73,6 +74,11 @@ function evidenceHtml(doc: ReportEnvelope, e: ReportEvidence): string {
   return `<div id="${anchor('evidence', e.id)}"><div class="meta">Evidence <span class="code">${esc(e.id)}</span> at <span class="code">${where}</span></div><pre>${esc(e.excerpt)}</pre></div>`;
 }
 
+/**
+ * Renders a report document as one self-contained offline HTML page: no script and no external load (its content
+ * security policy refuses both), every untrusted string escaped, both registers side by side, and every word defined
+ * from the document's own definitions. Withheld evidence shows its reason in place.
+ */
 export function renderHtml(doc: ReportEnvelope): string {
   const counts = COUNT_ORDER.map((k) => doc.counts[k])
     .filter((c) => !!c)

@@ -15,6 +15,11 @@ import { evaluateRequiredCoverage, type RequiredCoverage } from '../planner/cove
 import { countedProblems } from '@farsight/core/dist/counts.js';
 import { STRINGS } from '@farsight/core/dist/strings.js';
 import { selectedSecretNames } from './selected-privacy.js';
+/**
+ * The deterministic scanner report of a completed run: the canonical required-coverage verdict over the exact admitted
+ * plan, the accepted normalized observations and driver reports, counts with their scope, and the pinned rules, tools
+ * and databases. It is not a security verdict.
+ */
 export interface ScannerReport {
   schema: 'sentinel-scanner-report/draft-1';
   label: 'deterministic';
@@ -33,6 +38,13 @@ export interface ScannerReport {
   pins: unknown;
   limitations: string[];
 }
+/**
+ * Builds the scanner report of a completed run from its accepted publications only. Returns undefined for a run that is
+ * not completed or plans no scanner, framework-controls or bounded-paths unit. Throws when an accepted coverage or
+ * observation record is bound to another run, snapshot, unit or attempt, or a count does not fit its contract. Every
+ * name of a file the secret scan matched, in this run or its selected ancestry, is replaced by a fixed marker
+ * throughout.
+ */
 export async function scannerReportOf(
   store: SentinelStore,
   runId: string,
@@ -218,6 +230,10 @@ function withholdMatchedNames<T>(doc: T, names: readonly string[]): T {
           : v;
   return walk(doc) as T;
 }
+/**
+ * Renders the scanner report as Markdown in the catalog's words: its counts with their re-check commands, any control
+ * inspections and structural paths, and its limitations.
+ */
 export function renderScannerMarkdown(doc: ScannerReport): string {
   const word = (key: string) => STRINGS[key]?.professional ?? key;
   return [
