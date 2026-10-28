@@ -202,7 +202,20 @@ function refusalCode(
   if (typeof cause === 'string' && allowed.includes(cause)) return cause;
   return 'sentinel.decision.unavailable';
 }
-/** Proposal reads follow current shared-policy preflight; busy/denied paths never read the caller's file. */
+/**
+ * The owner CLI's `decision propose|approve|read|list` command over an accepted finding. A proposal's file is read only
+ * after the current policy's preflight, so a busy or denied path never reads it; the actor and confirmation come from
+ * the owner CLI, never from the file. Its outcomes:
+ * - `read` (the decision's projection, or a page of decisions), `proposed` or `applied`, with the decision id;
+ * - `awaiting-confirmation` without `--confirm`, with the verdicts;
+ * - `refused`, with `sentinel.decision.inputRefused` (arguments that do not fit the action),
+ *   `sentinel.decision.ownerBusy` or `sentinel.decision.unavailable` (the store cannot be opened), the policy's own
+ *   reason when it denies; for a failure, `sentinel.decision.publicationUncertain` (the publication may have
+ *   happened), `sentinel.decision.confirmationUncertain` (the receipt's consumption was attempted),
+ *   `sentinel.decision.spentNotPublished`, the failure's own code when it is a receipt or `sentinel.decision.*` code,
+ *   else `sentinel.decision.unavailable`;
+ * - `delivery-failed` with `sentinel.decision.deliveryRefused` when the decision is retained but cannot be delivered.
+ */
 export async function ownerDecisionCommand(ws: Workspace, p: ParsedCommand): Promise<OwnerDecisionOutput> {
   const action = p.args.action,
     target = p.args.target,

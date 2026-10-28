@@ -223,7 +223,12 @@ export interface EvidenceCliOutput {
   readonly result: CommandResult;
   readonly text?: string;
 }
-/** The actual wire bytes, including wrapper/heading/newline, share ONE output cap. No pretty-print expansion. */
+/**
+ * The bytes an evidence command writes: one JSON line, or text in the catalog's words. Wrapper, heading and newline
+ * share one output cap, with no pretty-print expansion; past it the result becomes `delivery-failed` with
+ * `sentinel.evidence.outputTooLarge`, keeping only its phase, acceptance and identities. Throws when even that
+ * acknowledgement does not fit.
+ */
 export function evidenceWire(output: EvidenceCliOutput, json: boolean): { result: CommandResult; text: string } {
   const serialize = (r: CommandResult, body?: string) => {
     if (json) return JSON.stringify(r) + '\n';
@@ -386,7 +391,21 @@ function publicationRefused(command: string, done: ImportOutcome): CommandResult
     acceptance: done.status === 'publicationUnknown' && done.acceptanceRecorded ? 'recorded-unverified' : 'unknown',
   });
 }
-/** Only the trusted owner CLI supplies ws. Same-account application code remains outside this boundary. */
+/**
+ * The owner CLI's `evidence import|read|list|abandon` command. Only the trusted owner CLI supplies `ws`; same-account
+ * application code stays outside this boundary, and request JSON never selects the actor. It guarantees one bounded
+ * result and, for `read` and `import`, the authenticated public view of the accepted import. Its outcomes:
+ * - `read`, `accepted` (with `reused` when the candidate was already accepted) or `abandoned`;
+ * - `awaiting-confirmation` without `--confirm`, with the verdicts and the candidate or operation to confirm;
+ * - `refused`, by `sentinel.evidence.*` code: `inputRefused` (arguments that do not fit the action, or an unreadable
+ *   report), `ownerBusy` or `storageRefused` (the store cannot be opened), `denied` (policy), `confirmationStale` (the
+ *   files changed since the preview), `spentNotPublished`, `acceptedReadbackUnverified` or `publicationUncertain`
+ *   (an import that did not end accepted), `spentNotApplied` or `applicationUncertain` (an abandon that did not
+ *   apply), and `sourceUnavailable` for any other failure, which carries the failure's own code when it is a
+ *   cancellation, deadline, analysis or receipt code;
+ * - `delivery-failed` with `sentinel.evidence.outputTooLarge` or `sentinel.evidence.deliveryRefused`, which never rolls
+ *   back a recorded acceptance.
+ */
 export async function ownerEvidenceCommand(ws: Workspace, p: ParsedCommand): Promise<EvidenceCliOutput> {
   const action = p.args.action,
     target = p.args.target,
