@@ -68,14 +68,191 @@ const SPECIFIERS = [
 const DIST_PATH = /['"`](?:dist\/)?([a-z][\w-]*(?:\/[\w.-]+)+)['"`]/g;
 // the published name the consumers import the installed tarball by
 const PUBLISHED = new Map([['farsight-sentinel', '@farsight/sentinel']]);
-const LITERAL = String.raw`(?:'[^'\n]*'|"[^"\n]*"|\x60[^\x60$\n]*\x60)`;
-// a load whose target is computed, which the walk cannot follow: an import(), require() or require.resolve() of
-// anything but one literal, and a new URL(…, import.meta.url) of anything but one; code generated in a string counts
-const COMPUTED = [
-  new RegExp(String.raw`\bimport\s*\(\s*(?!\)|${LITERAL}\s*[,)])`, 'g'),
-  new RegExp(String.raw`\brequire(?:\.resolve)?\s*\(\s*(?!\)|${LITERAL}\s*[,)])`, 'g'),
-  new RegExp(String.raw`\bnew URL\(\s*(?!${LITERAL}\s*,)[^;\n]*?,\s*import\.meta\.url`, 'g'),
-];
+// one string literal, whole: '…', "…" or a template with no substitution
+const ONE_LITERAL = /^(?:'([^'\n]*)'|"([^"\n]*)"|`([^`$\n]*)`)$/;
+// Where a load starts: import(), require() and require.resolve(), new URL(), and an import or export generated in a
+// template (`import x from ${…}`, `import ${…}`), each followed through its balanced arguments, across lines.
+// Built from parts so that this file's own source holds none of the shapes it looks for.
+const LOAD_START = new RegExp(
+  [
+    String.raw`\bimport\s*\(`,
+    String.raw`\brequire` + String.raw`(?:\.resolve)?\s*\(`,
+    String.raw`\bnew\s+URL` + String.raw`\s*\(`,
+    String.raw`\b(?:import|export)\s*[\w$*{}\s,]+?\s+from\s*\$` + String.raw`\{`,
+    // a bare generated import starts a statement: after the start, a semicolon, a brace or an escaped newline
+    String.raw`(?<=(?:^|[;{}]|\\n)\s*)import\s*\$` + String.raw`\{`,
+  ].join('|'),
+  'g',
+);
+
+/** The text between an opening bracket at `open - 1` and its balanced close, strings skipped; null if unbalanced. */
+function balanced(text, open) {
+  let depth = 1;
+  for (let i = open, quote = null; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === '\\') i++;
+      else if (ch === quote) quote = null;
+    } else if (ch === "'" || ch === '"' || ch === '`') quote = ch;
+    else if ('({['.includes(ch)) depth++;
+    else if (')}]'.includes(ch) && --depth === 0) return text.slice(open, i);
+  }
+  return null;
+}
+
+/**
+ * A file's code with its comments and the text of its strings blanked to spaces, offsets kept: what declares and
+ * references names. A template literal's text is blanked and its `${…}` substitutions kept, since they are code; a
+ * regular expression literal is blanked where the previous token allows one.
+ */
+export function codeView(text) {
+  const out = text.split('');
+  const blank = (from, to) => {
+    for (let i = from; i < to; i++) if (out[i] !== '\n') out[i] = ' ';
+  };
+  // the index just past a template literal starting at `start` (its opening backtick), blanking its text
+  const template = (start) => {
+    let i = start + 1;
+    for (let from = i; i < text.length; i++) {
+      if (text[i] === '\\') i++;
+      else if (text[i] === '`') {
+        blank(from, i);
+        return i + 1;
+      } else if (text[i] === '$' && text[i + 1] === '{') {
+        blank(from, i);
+        i = code(i + 2, '}');
+        from = i + 1;
+      }
+    }
+    return i;
+  };
+  // scans code from `start` to the bracket `close` that ends it (or the end), returning that bracket's index
+  const code = (start, close) => {
+    let depth = 0;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '/' && text[i + 1] === '/') {
+        const end = text.indexOf('\n', i);
+        blank(i, end < 0 ? text.length : end);
+        i = end < 0 ? text.length : end - 1;
+      } else if (ch === '/' && text[i + 1] === '*') {
+        const end = text.indexOf('*/', i + 2);
+        blank(i, end < 0 ? text.length : end + 2);
+        i = end < 0 ? text.length : end + 1;
+      } else if (ch === "'" || ch === '"') {
+        let j = i + 1;
+        while (j < text.length && text[j] !== ch && text[j] !== '\n') j += text[j] === '\\' ? 2 : 1;
+        blank(i + 1, j);
+        i = j;
+      } else if (ch === '`') i = template(i) - 1;
+      else if (
+        ch === '/' &&
+        /(?:^|[(,=:[!&|?{};+\-*%<>~^]|\breturn|\btypeof|\bcase|\bdo|\belse|\bin|\bof)\s*$/.test(
+          text.slice(Math.max(0, i - 12), i),
+        )
+      ) {
+        let j = i + 1;
+        for (let inClass = false; j < text.length && text[j] !== '\n'; j++) {
+          if (text[j] === '\\') j++;
+          else if (text[j] === '[') inClass = true;
+          else if (text[j] === ']') inClass = false;
+          else if (text[j] === '/' && !inClass) break;
+        }
+        blank(i + 1, j);
+        i = j;
+      } else if ('({['.includes(ch)) depth++;
+      else if (')}]'.includes(ch)) {
+        if (depth === 0 && ch === close) return i;
+        depth--;
+      }
+    }
+    return text.length;
+  };
+  code(0, null);
+  return out.join('');
+}
+
+/** An argument list split at its top-level commas. */
+function topLevelArgs(list) {
+  const args = [];
+  let start = 0;
+  for (let i = 0, depth = 0, quote = null; i < list.length; i++) {
+    const ch = list[i];
+    if (quote) {
+      if (ch === '\\') i++;
+      else if (ch === quote) quote = null;
+    } else if (ch === "'" || ch === '"' || ch === '`') quote = ch;
+    else if ('({['.includes(ch)) depth++;
+    else if (')}]'.includes(ch)) depth--;
+    else if (ch === ',' && depth === 0) {
+      args.push(list.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  args.push(list.slice(start).trim());
+  return args.filter((arg, i) => arg || i === 0);
+}
+
+/** `name(inner)` taking the whole expression, or null. */
+function wholeCall(expression, name) {
+  if (!expression.startsWith(`${name}(`) || !expression.endsWith(')')) return null;
+  const inner = balanced(expression, name.length + 1);
+  return inner !== null && inner.length === expression.length - name.length - 2 ? inner : null;
+}
+
+/**
+ * A load's path expression without the wrappers that keep its target: `${…}`, parentheses, JSON.stringify, String,
+ * pathToFileURL, fileURLToPath, `.href` and a `'file://' +` prefix.
+ */
+function unwrapLoad(expression) {
+  let e = expression.trim();
+  for (let previous = null; previous !== e;) {
+    previous = e;
+    if (e.startsWith('${') && e.endsWith('}') && balanced(e, 2)?.length === e.length - 3) e = e.slice(2, -1).trim();
+    for (const name of ['', 'JSON.stringify', 'String', 'pathToFileURL', 'fileURLToPath'])
+      e = wholeCall(e, name)?.trim() ?? e;
+    if (/\.href$/.test(e) && e.endsWith(').href')) e = e.slice(0, -'.href'.length).trim();
+    e = e.replace(/^(['"])file:\/\/\1\s*\+\s*/, '').trim();
+  }
+  return e;
+}
+
+/**
+ * Every load in a file, comment lines aside, with its line: a dynamic import, a require or require.resolve, a new
+ * URL(…, import.meta.url), and an import generated in a template. Their brackets are followed across lines, so a load
+ * split over several is one load. One whose path is a single literal ('…', "…" or a template with no substitution)
+ * carries it as `literal`, and the walk follows it; any other carries its path expression unwrapped (null when its
+ * brackets do not close). So no load is neither followed nor reported.
+ */
+export function loadSites(text) {
+  const sites = [];
+  for (const match of text.matchAll(LOAD_START)) {
+    const lineStart = text.lastIndexOf('\n', match.index) + 1;
+    if (/^\s*(?:\/\/|\*|\/\*)/.test(text.slice(lineStart, match.index))) continue;
+    const line = text.slice(0, match.index).split('\n').length;
+    const generated = match[0].endsWith('{') && match[0].includes('$');
+    const inner = balanced(text, match.index + match[0].length);
+    if (inner === null) {
+      sites.push({ line, index: match.index, expression: null });
+      continue;
+    }
+    const args = generated ? [`\${${inner}}`] : topLevelArgs(inner);
+    const first = args[0] ?? '';
+    // a URL with another base is not a module load; `import()` with nothing in it is prose
+    if (/^new\s+URL/.test(match[0]) ? args[1] !== 'import.meta.url' : !first) continue;
+    const literal = ONE_LITERAL.exec(first);
+    if (literal) sites.push({ line, index: match.index, literal: literal[1] ?? literal[2] ?? literal[3] });
+    else sites.push({ line, index: match.index, expression: unwrapLoad(first) });
+  }
+  return sites;
+}
+
+/** The loads in a file whose path is not one literal: what `loadSites` cannot hand the walk as a specifier. */
+export function computedLoadSites(text) {
+  return loadSites(text)
+    .filter((site) => site.literal === undefined)
+    .map(({ line, expression }) => ({ line, expression }));
+}
 
 /**
  * Where a computed load in one file may point, selected whole because the walk cannot tell which file it is: a
@@ -90,16 +267,6 @@ function computedArea(file, built) {
   const [, dir, top] = inPackage;
   const second = { scripts: 'scripts/', test: 'test/fixtures/' }[top];
   return [`packages/${dir}/src/`, ...(second ? [`packages/${dir}/${second}`] : [])];
-}
-
-/** The lines of a file with a computed load, comment lines aside: `[line number, text]`. */
-function computedLoads(text) {
-  const sites = [];
-  text.split('\n').forEach((line, index) => {
-    if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) return;
-    if (COMPUTED.some((pattern) => line.match(pattern))) sites.push(index + 1);
-  });
-  return sites;
 }
 
 /** A compiled file's source: `packages/<p>/dist/x.js` is `packages/<p>/src/x.ts` (or .tsx, .js, .mjs). */
@@ -181,6 +348,91 @@ export function scannerCliClosure(root = repoRoot) {
     if (!closure.length || missing.length) throw new Error(`${entry} closure unreadable`);
     for (const pkg of closure) built.add(basename(pkg.dir));
   }
+  // A computed load whose target is still one literal, once its wrappers are off: a URL against the module, a
+  // resolved specifier, a dist/ path joined to a known package root (below), or a module the same file writes from
+  // a literal (its text is followed with the file's). Anything else is null: its area is selected.
+  const QUOTED = String.raw`('[^'\n]*'|"[^"\n]*"|\x60[^\x60$\n]*\x60)`;
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // The workspace package a base names at a load. Proven only by one occurrence count over the file's code view
+  // (codeView: comments and string text blanked): every whole-word occurrence of the name is either its one
+  // `const <base> = join(…, <a package root>)` declaration or the first argument of a `join(<base>, …)` or an
+  // occurrence inside an `import(…)` or `new URL(…)` argument; and the load lies after that declaration inside the
+  // block that holds it. Any other occurrence anywhere (a loop binding, a parameter, a destructuring, an assignment, a
+  // property shorthand or access, any other statement) leaves it unknown, and the load keeps its area. A package
+  // root is an installed tarball (`'node_modules/farsight-sentinel'`) or a workspace folder (`'packages',
+  // 'sentinel'`, `'packages/sentinel'`).
+  const packageOf = (text, code, base, index) => {
+    if (!/^[\w$]+$/.test(base)) return null;
+    const word = escape(base);
+    const declared = [...code.matchAll(new RegExp(String.raw`\bconst\s+(${word})\s*=(?![=>])`, 'g'))];
+    if (declared.length !== 1) return null;
+    const at = declared[0].index;
+    const allowed = new Set([at + declared[0][0].indexOf(base, 'const'.length)]);
+    for (const m of code.matchAll(new RegExp(String.raw`\bjoin\(\s*(${word})\s*,`, 'g')))
+      allowed.add(m.index + m[0].indexOf(base, 'join('.length));
+    // occurrences inside an import(…) or new URL(…) argument, read over the same code view, so a load written in a
+    // comment or a string opens no span
+    const spans = [];
+    for (const m of code.matchAll(/\b(?:import\s*\(|new\s+URL\s*\()/g)) {
+      const inner = balanced(code, m.index + m[0].length);
+      if (inner !== null) spans.push([m.index + m[0].length, m.index + m[0].length + inner.length]);
+    }
+    // a binding or an assignment is never one, even inside a load's argument
+    const binds = new RegExp(String.raw`^\s*(?:(?:[-+*/%&|^]|\*\*|<<|>>>?|\?\?|&&|\|\|)?=(?!=)|=>)`);
+    for (const m of code.matchAll(new RegExp(String.raw`(?<![\w$])${word}(?![\w$])`, 'g'))) {
+      if (allowed.has(m.index)) continue;
+      const inLoad = spans.some(([from, to]) => m.index >= from && m.index < to);
+      const rest = code.slice(m.index + base.length, m.index + base.length + 8);
+      if (inLoad && !binds.test(rest) && !/\b(?:const|let|var)\s+$/.test(code.slice(Math.max(0, m.index - 8), m.index)))
+        continue;
+      return null; // any other occurrence: a binding, a shadow or a use this proof does not read
+    }
+    // the load lies after the declaration, inside the block that holds it
+    if (index <= at) return null;
+    const stack = [];
+    for (let i = 0; i < at; i++)
+      if (code[i] === '{') stack.push(i);
+      else if (code[i] === '}') stack.pop();
+    const open = stack.at(-1);
+    if (open !== undefined) {
+      const body = balanced(code, open + 1);
+      if (body === null || index > open + body.length) return null;
+    }
+    // the value as written (the code view blanks its literals): the declaration's own text, from the same offset
+    const written = new RegExp(String.raw`const\s+${escape(base)}\s*=\s*([^;\n]*)`, 'y');
+    written.lastIndex = at;
+    const value = (written.exec(text)?.[1] ?? '').replace(/[,;]\s*$/, '').trim();
+    const tail = new RegExp(String.raw`^join\(.*?,\s*${QUOTED}(?:\s*,\s*${QUOTED})?\s*\)$`).exec(value);
+    if (!tail) return null;
+    const path = [tail[1], tail[2]]
+      .filter(Boolean)
+      .map((part) => part.slice(1, -1))
+      .join('/');
+    const installed = /^node_modules\/((?:@[\w.-]+\/)?[\w.-]+)$/.exec(path)?.[1];
+    if (installed) {
+      const pkg = PUBLISHED.get(installed) ?? installed;
+      return packages.has(pkg) ? dirOf.get(pkg) : null;
+    }
+    const folder = /^packages\/([\w.-]+)$/.exec(path)?.[1];
+    return folder && built.has(folder) ? `packages/${folder}` : null;
+  };
+  const resolveLoad = (source, text, code, expression, index) => {
+    const url = new RegExp(String.raw`^new\s+URL\(\s*${QUOTED}\s*,\s*import\.meta\.url\s*\)$`).exec(expression);
+    const specifier = new RegExp(String.raw`^require\.resolve\(\s*${QUOTED}\s*\)$`).exec(expression);
+    if (url || specifier) return [resolveFrom(source, (url ?? specifier)[1].slice(1, -1))];
+    const joined = new RegExp(String.raw`^join\(\s*([\w$]+(?:\.[\w$]+)*)\s*,\s*${QUOTED}\s*\)$`).exec(expression);
+    if (!joined) return null;
+    const [, base, literal] = joined;
+    const path = literal.slice(1, -1);
+    if (path.startsWith('dist/')) {
+      const pkg = packageOf(text, code, base, index); // a dist/ tail counts only under a base proven to be a package root
+      const target =
+        pkg && sourceOf(root, `${pkg}/dist/${path.slice('dist/'.length).replace(/\.(?:m?js|d\.ts)$/, '')}.js`);
+      return target ? [target] : null;
+    }
+    const writes = String.raw`writeFileSync\(\s*join\(\s*${escape(base)}\s*,\s*${escape(literal)}\s*\)\s*,\s*${QUOTED}\s*[,)]`;
+    return new RegExp(writes).test(text) ? [] : null;
+  };
   const files = new Set(),
     dirs = new Set(),
     unresolved = [],
@@ -199,8 +451,19 @@ export function scannerCliClosure(root = repoRoot) {
     if (!CODE.test(source)) continue;
     const text = readFileSync(join(root, source), 'utf8');
     if (/^(?:scripts|packages\/[^/]+\/(?:test|scripts))\//.test(source)) mentions += `\n${text}`;
-    for (const line of computedLoads(text)) {
+    const code = codeView(text);
+    for (const { line, index, literal, expression } of loadSites(text)) {
+      if (literal !== undefined) {
+        queue.push(resolveFrom(source, literal));
+        continue;
+      }
+      const targets = expression === null ? null : resolveLoad(source, text, code, expression, index);
+      if (targets) {
+        queue.push(...targets);
+        continue;
+      }
       const area = computedArea(source, built);
+      if (unresolved.some(({ site }) => site === `${source}:${line}`)) continue; // two loads on one line
       unresolved.push({ site: `${source}:${line}`, area });
       for (const prefix of area) areas.add(prefix);
     }

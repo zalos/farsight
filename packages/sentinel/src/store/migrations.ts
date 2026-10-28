@@ -1,11 +1,11 @@
 // Numbered, checksummed ledger migrations and the runner that applies them. Every pending step runs in one
 // transaction; an existing ledger is first copied with SQLite's online backup and the copy verified, so a failed
 // upgrade leaves the prior schema and data untouched and a recoverable copy beside it.
-import { createHash } from 'node:crypto';
 import { chmodSync, closeSync, fsyncSync, lstatSync, mkdirSync, openSync, renameSync, rmSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { LedgerError, type LedgerFailpoint, type Migration, type MigrationReport } from './store-types.js';
+import { sha256Id } from '../kernel/digest.js';
 
 /** `PRAGMA application_id` of a Sentinel ledger ('STNL'); any other non-empty SQLite file is refused. */
 export const LEDGER_APPLICATION_ID = 0x53544e4c;
@@ -514,8 +514,8 @@ export const LEDGER_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 6, name: 'evidence-operations', sql: V6 },
 ]);
 
-export const migrationChecksum = (m: Migration): string =>
-  `sha256:${createHash('sha256').update(`${m.version}\n${m.name}\n${m.sql}`, 'utf8').digest('hex')}`;
+/** The checksum a ledger records for one applied migration: the content address of its version, name and SQL. */
+export const migrationChecksum = (m: Migration): string => sha256Id(`${m.version}\n${m.name}\n${m.sql}`);
 
 function checkList(migrations: readonly Migration[]): void {
   migrations.forEach((m, i) => {
@@ -527,12 +527,14 @@ function checkList(migrations: readonly Migration[]): void {
 
 const scalar = (db: DatabaseSync, sql: string): unknown => Object.values(db.prepare(sql).get() ?? {})[0];
 
+/** What a ledger file holds before migration: its schema version, application id and number of user objects. */
 export interface LedgerFileState {
   version: number;
   applicationId: number;
   userObjects: number;
 }
 
+/** Reads a ledger file's schema version, application id and user object count, changing nothing. */
 export function inspectLedgerFile(db: DatabaseSync): LedgerFileState {
   return {
     version: Number(scalar(db, 'PRAGMA user_version')),

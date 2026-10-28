@@ -213,7 +213,6 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'frameworks/spring/syntax.js': ['dynamic:@vscode/tree-sitter-wasm', 'node:path', 'node:url'],
   'policy/admission.js': ['@farsight/core/dist/grants.js'],
   'policy/adoption.js': ['node:fs', 'node:os', 'node:path'],
-  'policy/digest.js': ['node:crypto'],
   'policy/owner-receipts.js': ['node:crypto'],
   'policy/receipts.js': ['node:path'],
   'policy/settings.js': ['@farsight/core/dist/credential-shapes.js'],
@@ -287,7 +286,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'store/admission-fence.js': ['node:async_hooks'],
   'store/read-budget.js': ['node:async_hooks', 'node:perf_hooks', 'node:timers/promises'],
   'store/ledger.js': ['node:fs', 'node:path'],
-  'store/migrations.js': ['node:crypto', 'node:fs', 'node:path'],
+  'store/migrations.js': ['node:fs', 'node:path'],
   'store/objects.js': ['node:crypto', 'node:fs', 'node:fs/promises', 'node:path', 'node:util', 'node:zlib'],
   'store/owner.js': ['node:crypto', 'node:fs'],
   // One fixed spawn: the macOS mount table, read while a store is opened (asserted below).
@@ -298,7 +297,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'snapshot/capture.js': ['node:crypto', 'node:fs', 'node:path'],
   'snapshot/errors.js': ['@farsight/core/dist/strings-sentinel-capture.js'],
   'snapshot/git.js': ['node:crypto', 'node:fs', 'node:path', 'node:zlib'],
-  'snapshot/inventory.js': ['node:crypto', 'node:fs', 'node:path'],
+  'snapshot/inventory.js': ['node:fs', 'node:path'],
   'snapshot/materialize.js': ['node:fs', 'node:path'],
   // The public parser, loaded on first parse only (its TS/JS adapter has a native binding); graph is pure JSON helpers.
   'snapshot/parser.js': [
@@ -311,7 +310,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
     'node:fs',
     'node:path',
   ],
-  'snapshot/policy.js': ['node:crypto', 'node:path'],
+  'snapshot/policy.js': ['node:path'],
   // Findings and reports (ADR 38): pure folds over observations, captured bytes and a pinned context; core's own
   // journey, impact and persona folds and its catalog; no process, no network, no file access.
   'findings/owner-journal.js': ['node:crypto', 'node:fs', 'node:path'],

@@ -8,6 +8,7 @@ import { policyFail } from './errors.js';
 import { STORE, intentDigest, stamp, type ReceiptBinding, type ReceiptBook } from './receipts.js';
 import { createPrivateFileOnce } from './user-state.js';
 
+/** The owner's confirmation of one intent: the channel it arrived on and who confirmed it. */
 export interface OwnerConfirmation {
   /** The channel this confirmation arrived on. Only the owner's local CLI flow confirms. */
   channel: string;

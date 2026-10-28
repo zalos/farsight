@@ -40,10 +40,12 @@ async function layoutFixture(t: any, change: (root: string, manifest: any) => vo
     dist = join(root, 'dist');
   mkdirSync(root, { recursive: true });
   const compiled = join(import.meta.dirname, '../dist');
+  // The compiled import closure of execution/assets.js, every module of it and nothing else.
   for (const rel of [
     'execution/assets.js',
     'execution/builtin-workers.js',
     'execution/errors.js',
+    'kernel/freeze.js',
     'policy/immutable.js',
   ]) {
     mkdirSync(dirname(join(dist, rel)), { recursive: true });

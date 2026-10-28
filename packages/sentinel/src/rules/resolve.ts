@@ -6,7 +6,7 @@
 import type { LockedPack, PackFile, RuleDefinition, RuleLockEnvelope } from '../contracts/index.js';
 import { canonicalDigest } from '../policy/digest.js';
 import { policyFail } from '../policy/errors.js';
-import { deepFreeze } from '../policy/immutable.js';
+import { deepFreeze } from '../kernel/freeze.js';
 import { verifyPinnedLock } from './lock.js';
 import { isValidatedPack, ruleDefinitionDigest, type ValidatedPack } from './pack.js';
 

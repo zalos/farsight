@@ -1,10 +1,11 @@
 // The capture policy and the path rules every source shares. Capture never reads repository ignore files:
 // what is in scope is the owner's policy, so an input cannot disappear because the repository asks it to.
-import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
-import { canonicalJson } from '../store/objects.js';
+import { canonicalJsonBytes } from '../store/objects.js';
 import type { CaptureReasonCode } from './errors.js';
+import { sha256Id } from '../kernel/digest.js';
 
+/** What a capture includes: size and entry bounds, exclusions, dependency caches and the stability attempts. */
 export interface CapturePolicy {
   /** Largest file captured, in bytes (at most the store's 16 MiB object limit). Default 8 MiB. */
   readonly maxFileBytes: number;
@@ -31,6 +32,7 @@ const MAX_FILE_LIMIT = 16 * 1024 * 1024;
 /** The accepted capture budget (PR 01 resource defaults): the most bytes one capture stores. */
 export const MAX_CAPTURE_BYTES = 512 * 1024 * 1024;
 
+/** The capture policy when the owner sets none. */
 export const DEFAULT_CAPTURE_POLICY: CapturePolicy = Object.freeze({
   maxFileBytes: 8 * 1024 * 1024,
   maxTotalBytes: MAX_CAPTURE_BYTES,
@@ -69,8 +71,9 @@ const GENERATED_MARKERS = [
 
 const MAX_ENTRIES_LIMIT = 200_000;
 
+/** The digest of a structured capture value over the object store's canonical bytes; refuses what they refuse. */
 export function digestOf(value: unknown): string {
-  return `sha256:${createHash('sha256').update(canonicalJson(value)).digest('hex')}`;
+  return sha256Id(canonicalJsonBytes(value));
 }
 
 /** Fills defaults and checks bounds; throws a message naming the bad field. */
@@ -113,6 +116,7 @@ export function isRecordablePath(path: string): boolean {
   return path.split('/').every((s) => s !== '' && s !== '.' && s !== '..');
 }
 
+/** A directory-entry name as recorded, and why it was refused, if it was. */
 export interface NameCheck {
   /** The name as recorded: the UTF-8 text, or a marked hexadecimal form when it cannot be recorded as text. */
   readonly name: string;
@@ -140,6 +144,7 @@ export function checkName(raw: Buffer | string, inTree: boolean): NameCheck {
   return { name };
 }
 
+/** Joins a source-relative folder and a name with `/`; the source root is the empty string. */
 export const joinPath = (dir: string, name: string) => (dir === '' ? name : `${dir}/${name}`);
 
 /** Folders deeper than this are not listed: they become an unknown boundary rather than deeper recursion. */
@@ -162,6 +167,7 @@ export function folderExclusion(policy: CapturePolicy, sourceId: string, path: s
   return undefined;
 }
 
+/** True when the owner's policy excludes this exact path, for every source (`*`) or for this one. */
 export function excludedByPolicy(policy: CapturePolicy, sourceId: string, path: string): boolean {
   for (const list of [policy.exclude['*'] ?? [], policy.exclude[sourceId] ?? []]) {
     if (list.includes(path)) return true;

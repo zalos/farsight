@@ -38,6 +38,7 @@ export type CredentialAnswer =
   | { basis: 'keychain-scope'; allowed: boolean; detail: string }
   | { basis: 'unknown'; detail: string };
 
+/** One action to admit: its intent, who asked on which channel, the effective policy and the two lazy checks. */
 export interface AdmissionRequest {
   intent: ActionIntent;
   /** Set by the transport the request arrived on, never by the request body. */
@@ -54,6 +55,7 @@ export interface AdmissionRequest {
   now: Date;
 }
 
+/** An admission decision: the recorded envelope with its three verdicts, and the receipt it spent, if any. */
 export interface AdmissionResult {
   readonly record: AdmissionEnvelope;
   /** The spent receipt when one admitted the action. */
@@ -144,6 +146,22 @@ function grantMiss(g: SentinelGrant, intent: ActionIntent): string | null {
   return null;
 }
 
+/**
+ * Decides one action: the policy verdict first, then, only when it allows, the capability and credential checks.
+ * The record says `admitted` when all three allow and, if the action needs confirmation, the given receipt is spent;
+ * `awaiting-confirmation` when all three allow and it needs a receipt none was given for; `denied` otherwise. It
+ * carries every verdict and its reason.
+ *
+ * Throws a PolicyError:
+ * - `sentinel.policy.settingsInvalid`: the policy is not one effectivePolicy produced;
+ * - while spending a receipt, `sentinel.receipt.unknown` (no valid receipt with this id in the book),
+ *   `sentinel.receipt.expired`, `sentinel.receipt.mismatch` (another action or intent, another state or policy
+ *   revision, or issued in the future), `sentinel.receipt.alreadyUsed` or `sentinel.receipt.storeUnsafe` (the receipt
+ *   folder is not private).
+ *
+ * An intent that is not canonical JSON throws the object store's `sentinel.object.notCanonical`, and whatever
+ * `capability` or `credential` throws passes through unchanged.
+ */
 export function admit(req: AdmissionRequest): AdmissionResult {
   return decideAdmission(req, false);
 }

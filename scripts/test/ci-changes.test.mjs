@@ -39,9 +39,6 @@ const full = {
   service: true,
   scannerCli: true,
 };
-// Root scripts in the scanner workflow load files by computed paths, so a root script lies in the area those loads
-// select and starts that workflow (scannerCliClosure in scripts/ci-changes.mjs)
-const scripts = { scannerCli: true };
 const every = { scope: 'all', packages: [], also: [] };
 const some = (packages, also = []) => ({ scope: 'packages', packages, also });
 const repoRoot = new URL('../../', import.meta.url).pathname;
@@ -67,12 +64,10 @@ test('e2e and unit test changes select their own check; mixed edits take the uni
   assert.deepEqual(selectChecks(['e2e/tests/chrome.pw.spec.ts', 'scripts/e2e.mjs']), {
     ...none,
     e2e: true,
-    ...scripts,
   });
-  assert.deepEqual(selectChecks(['e2e/tests/chrome.pw.spec.ts']), { ...none, e2e: true });
   assert.deepEqual(
     selectChecks(['scripts/synth-graph.mjs']),
-    { ...none, e2e: true, validate: true, service: true, ...scripts },
+    { ...none, e2e: true, validate: true, service: true },
     "the perf suite's synthetic workspace is also imported by the server's unit tests",
   );
   // a script change tests every package, Sentinel's process suite with them
@@ -80,14 +75,12 @@ test('e2e and unit test changes select their own check; mixed edits take the uni
     ...none,
     validate: true,
     service: true,
-    ...scripts,
   });
   assert.deepEqual(selectChecks(['docs/CI.md', 'scripts/release.mjs', 'e2e/fixture/serve.mjs']), {
     ...none,
     validate: true,
     e2e: true,
     service: true,
-    ...scripts,
   });
 });
 
@@ -149,7 +142,7 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
     },
     'the public parser now belongs to Sentinel’s own build closure',
   );
-  assert.deepEqual(selectChecks(['scripts/pack-echo.mjs']), { ...none, echo: true, ...scripts });
+  assert.deepEqual(selectChecks(['scripts/pack-echo.mjs']), { ...none, echo: true });
   for (const path of [
     'scripts/pack.mjs',
     'scripts/pack-preflight.mjs',
@@ -167,7 +160,6 @@ test('the release scripts select their own checks: the acceptance runs in sentin
     validate: true,
     sentinel: true,
     service: true,
-    ...scripts,
   });
   for (const path of [
     'scripts/release-manifest.mjs',
@@ -175,11 +167,11 @@ test('the release scripts select their own checks: the acceptance runs in sentin
     'scripts/release.mjs',
     'scripts/changelog.mjs',
   ]) {
-    assert.deepEqual(selectChecks([path]), { ...none, validate: true, service: true, ...scripts }, path);
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true, service: true }, path);
   }
   assert.deepEqual(
     selectChecks(['scripts/test/helpers/acceptance-standins.mjs']),
-    { ...none, validate: true, service: true, ...scripts },
+    { ...none, validate: true, service: true },
     'a test helper is a script test',
   );
   for (const path of [
@@ -286,7 +278,7 @@ test('Sentinel code and tests select offline report delivery in the browser job;
     'a test file the scanner workflow runs',
   );
   assert.deepEqual(selectChecks(['packages/sentinel/README.md']), { ...none, sentinel: true, scannerCli: true });
-  assert.deepEqual(selectChecks(['scripts/test-sentinel-package.mjs']), { ...none, sentinel: true, ...scripts });
+  assert.deepEqual(selectChecks(['scripts/test-sentinel-package.mjs']), { ...none, sentinel: true });
   assert.deepEqual(
     selectChecks(['scripts/pack-sentinel.mjs']),
     { ...none, validate: true, sentinel: true, service: true, scannerCli: true },

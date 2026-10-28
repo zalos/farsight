@@ -2,6 +2,7 @@
 // snapshot, either by its own entry or by a recorded boundary above it whose contents are unknown, never zero.
 import type { CaptureEntry, SnapshotEnvelope } from '../contracts/index.js';
 
+/** How an independent walk of a source is accounted for by its snapshot; `unaccounted` must be empty. */
 export interface Reconciliation {
   /** Paths with an entry of their own, by disposition. */
   readonly byDisposition: Readonly<Record<string, number>>;
