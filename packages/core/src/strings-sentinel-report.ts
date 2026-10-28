@@ -27,7 +27,7 @@ export const SENTINEL_REPORT_STRINGS: Record<string, StringEntry> = {
   'sentinel.count.plannedChecks': same('{n} planned checks', 'Every check the scan planned, whether it ran, was unsupported or was not needed. Each check is one rule over one part of the code.'),
   'sentinel.count.plannedChecksOne': one('1 planned check', 'sentinel.count.plannedChecks'),
   'sentinel.count.seenByNoStage': same('{n} of {m} captured files seen by no check', 'Captured files that no finished check looked at, out of every captured file. It is printed even when it is zero, so an empty result never hides unread files.'),
-  'sentinel.count.unknownBoundaries': same('{n} folders never listed', 'Folders the scan skipped as a whole, such as excluded or unreadable ones. Their contents are unknown and are never counted as zero files.'),
+  'sentinel.count.unknownBoundaries': same('{n} folders never listed', 'Folders the capture was refused or could not read, so their contents were never listed. Their contents are unknown and are never counted as zero files. A folder the policy excludes is out of scope and is not counted here.'),
   'sentinel.count.unknownBoundariesOne': one('1 folder never listed', 'sentinel.count.unknownBoundaries'),
   'sentinel.count.screens': same('{n} screens', 'Screens of the application a finding is placed on, from the saved application context, each counted once across journeys.'),
   'sentinel.count.screensOne': one('1 screen', 'sentinel.count.screens'),
