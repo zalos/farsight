@@ -23,7 +23,7 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 | job | steps | timeout |
 |---|---|---|
 | **affected checks** | test `scripts/ci-changes.mjs` and select suites from the changed paths | 2 min |
-| **npm-build** (non-required) | Node 24, npm 10 with pnpm absent from PATH: `npm install` → `npm run build` → `node scripts/pack.mjs` → `npm run pack:sentinel` → install both tarballs in a temporary prefix and print both versions | 6 min |
+| **npm-build** (non-required) | Node 24, npm 10 with pnpm absent from PATH: `npm install` → `npm run build` → `node scripts/pack.mjs` → `npm run pack:sentinel` → install both tarballs in a temporary prefix and print both versions | 9 min |
 | **lint** | `pnpm install --frozen-lockfile` → `pnpm format:check` → `pnpm lint`; a PR whose title starts with `style` also compares JS/TS ASTs against its merge base | 3 min |
 | **validate** | `pnpm install --frozen-lockfile` → `pnpm build` (`tsc -p` type-checks each package with the config `typecheck` uses, so there is no separate typecheck step) → the graph contract check → the unit tests of the packages the change reaches (below; every package when the selector says so), Sentinel's unit suite only (`SENTINEL_TEST_SUITE=unit`, its no-skip files with zero skips and the launch rule, `SENTINEL_TEST_LAUNCHES=1`; its process suite is sentinel-service's) → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests when Echo is reached | 9 min |
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm e2e:typecheck` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → the Sentinel browser steps (the paired owner UI journey, the installed owner browser workflow, offline report and retained structural HTML delivery and print, each exactly one case with zero skips) when sentinel-package runs or validate tests Sentinel, else skipped → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`; the table is the `e2e-perf-results` artifact) | 11 min |
@@ -49,7 +49,7 @@ Measured times are the job's own run time, not queueing; the run ids are GitHub 
 |---|---|---:|---:|
 | affected checks | 9 to 24 s (main 40628220866, 40629680573, 40635638060, 40639064981, 40649483163) | 1 | 2 |
 | secrets | 9 to 13 s (main 40628220866–40649483163); its job is left as it was by ruling, budget unchanged | — | 10 |
-| npm-build | New job, first CI measurement pending; provisional budget from local fresh-clone install/build/pack, compared with build steps in 40649483163 | 4 | 6 |
+| npm-build | Local cold npm install/build/both packs: 303 s; first CI measurement pending (comparison: main build steps in 40649483163) | 6 | 9 |
 | lint | 64 to 96 s (main 40628220866–40649483163) | 2 | 3 |
 | validate | 265 to 292 s testing every package after the process split (#225: 40635438642, 40649566118); 632 to 974 s before it (main 40628220866–40649483163) | 6 | 9 |
 | echo-package | 46 to 60 s (main 40628220866–40649483163); it downloads the iii engine, so the target leaves room | 3 | 5 |

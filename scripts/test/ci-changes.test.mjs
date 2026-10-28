@@ -420,7 +420,7 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
     });
     assert.match(
       readFileSync(output, 'utf8'),
-      /\ntestScope=packages\ntestPackages=@farsight\/cli @farsight\/mcp @farsight\/server\n$/,
+      /\ntestScope=packages\ntestPackages=@farsight\/cli @farsight\/mcp @farsight\/server\nnpmBuild=false\n$/,
     );
     assert.match(
       readFileSync(summary, 'utf8'),

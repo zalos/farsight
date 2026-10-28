@@ -5,6 +5,21 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { workspacePackages } from './pack-preflight.mjs';
 
 const FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
+const ROOT = fileURLToPath(new URL('../', import.meta.url));
+
+function manager(args, { root = ROOT, env = process.env, run = spawnSync } = {}) {
+  const result = env.npm_execpath
+    ? run(process.execPath, [env.npm_execpath, ...args], { cwd: root, env, stdio: 'inherit' })
+    : run('npm', args, { cwd: root, env, stdio: 'inherit', shell: process.platform === 'win32' });
+  if (result.error) throw result.error;
+  return result.status ?? 1;
+}
+
+/** Run a root pack script with the manager that started this lifecycle, including from package consumers. */
+export function runRoot(script, options) {
+  if (!/^pack:(?:cli|sentinel|echo|parser)$/.test(script)) throw new Error('Unknown root pack script');
+  return manager(['run', script], options);
+}
 
 /** The selected packages (all by default), dependencies first; refuse a cycle before running any script. */
 export function workspaceOrder(packages, entry) {
@@ -31,27 +46,17 @@ export function workspaceOrder(packages, entry) {
 }
 
 /** Preserve pnpm's existing commands; npm runs each package's script through its own lifecycle environment. */
-export function runWorkspace(
-  task,
-  entry,
-  { root = fileURLToPath(new URL('../', import.meta.url)), env = process.env, run = spawnSync } = {},
-) {
+export function runWorkspace(task, entry, { root = ROOT, env = process.env, run = spawnSync } = {}) {
   if (!['build', 'typecheck', 'test'].includes(task))
     throw new Error('Usage: workspace-run.mjs build|typecheck|test [@farsight/package]');
   const ordered = workspaceOrder(workspacePackages(root), entry);
   if (!ordered.length) throw new Error('No workspace packages');
-  const invoke = (args, cwd) => {
-    const result = env.npm_execpath
-      ? run(process.execPath, [env.npm_execpath, ...args], { cwd, env, stdio: 'inherit' })
-      : run('npm', args, { cwd, env, stdio: 'inherit', shell: process.platform === 'win32' });
-    if (result.error) throw result.error;
-    return result.status ?? 1;
-  };
+  const invoke = (args) => manager(args, { root, env, run });
   if (env.npm_config_user_agent?.startsWith('pnpm/'))
-    return invoke(entry ? ['--filter', `${entry}...`, task] : ['-r', task], root);
+    return invoke(entry ? ['--filter', `${entry}...`, task] : ['-r', task]);
   for (const { name, manifest } of ordered) {
     if (!manifest.scripts?.[task]) continue;
-    const status = invoke(['run', task, '--workspace', name], root);
+    const status = invoke(['run', task, '--workspace', name]);
     if (status !== 0) return status;
   }
   return 0;
@@ -59,7 +64,7 @@ export function runWorkspace(
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    process.exitCode = runWorkspace(...process.argv.slice(2));
+    process.exitCode = process.argv[2] === '--root' ? runRoot(process.argv[3]) : runWorkspace(...process.argv.slice(2));
   } catch (error) {
     console.error(`workspace-run: ${error.message}`);
     process.exitCode = 1;

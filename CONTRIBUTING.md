@@ -55,14 +55,23 @@ Thanks for helping. This page is the short version; the project contract (princi
 
 ```sh
 pnpm format            # write formatter output for areas already removed from the temporary ignore block
+# or: npm run format
 pnpm format:check      # JS/TS; existing areas remain ignored until their style PR
+# or: npm run format:check
 pnpm lint             # fail on new ESLint errors; existing counts are frozen
+# or: npm run lint
 pnpm lint:report      # include structure warnings; pnpm lint --prune-suppressions removes fixed debt
+# or: npm run lint:report
 pnpm build
+# or: npm run build
 pnpm -r typecheck
+# or: npm run typecheck
 pnpm -r test
+# or: npm run test
 pnpm lint:strings      # every user-facing string goes through the catalog with both registers; glyphs via sym()
+# or: npm run lint:strings
 pnpm e2e               # Playwright against a real `farsight serve` on a fixture graph
+# or: npm run e2e
 ```
 
 Per-PR checklist:

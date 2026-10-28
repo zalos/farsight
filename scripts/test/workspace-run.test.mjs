@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { workspaceOrder, runWorkspace } from '../workspace-run.mjs';
+import { workspaceOrder, runWorkspace, runRoot } from '../workspace-run.mjs';
 
 const graph = () =>
   new Map([
@@ -56,6 +56,8 @@ test('pnpm keeps its exact recursive and filtered commands; npm propagates the f
     assert.deepEqual(calls.pop(), [process.execPath, [env.npm_execpath, '-r', 'build']]);
     runWorkspace('build', '@farsight/app', { root, env, run });
     assert.deepEqual(calls.pop(), [process.execPath, [env.npm_execpath, '--filter', '@farsight/app...', 'build']]);
+    runRoot('pack:cli', { root, env, run });
+    assert.deepEqual(calls.pop(), [process.execPath, [env.npm_execpath, 'run', 'pack:cli']]);
     const npm = { npm_execpath: '/manager/npm-cli.js', npm_config_user_agent: 'npm/10.9.4' };
     assert.equal(
       runWorkspace('build', undefined, {

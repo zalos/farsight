@@ -444,9 +444,9 @@ alias farsight="node /path/to/farsight/packages/cli/dist/cli.js"
 }
 ```
 
-⚠️ Point at `packages/cli/dist/cli.js`, **not** `build/farsight-cli/dist/farsight.mjs`. The packed bundle keeps `oxc-parser`, the MCP SDK, and `zod` external — they only resolve after `npm install` lays down the package's own `node_modules`. Inside the workspace, `packages/cli` resolves them through pnpm's symlinks; the raw `build/` output resolves nothing.
+⚠️ Point at `packages/cli/dist/cli.js`, **not** `build/farsight-cli/dist/farsight.mjs`. The packed bundle keeps `oxc-parser`, the MCP SDK, and `zod` external — they only resolve after `npm install` lays down the package's own `node_modules`. Inside the workspace, `packages/cli` resolves them through local workspace links; the raw `build/` output resolves nothing.
 
-Best while actively hacking on Farsight itself: `pnpm build` and every consumer is instantly on the new code. Worst for portability: the absolute path is machine-specific, so keep it out of committed `.mcp.json` files (use `claude mcp add --scope local`, or `.mcp.local.json` if your client supports it).
+Best while actively hacking on Farsight itself: `pnpm build` (or `npm run build`) and every consumer is instantly on the new code. Worst for portability: the absolute path is machine-specific, so keep it out of committed `.mcp.json` files (use `claude mcp add --scope local`, or `.mcp.local.json` if your client supports it).
 
 ### Refreshing after Farsight changes
 
@@ -454,10 +454,10 @@ Best while actively hacking on Farsight itself: `pnpm build` and every consumer 
 |---|---|
 | A (global tarball) | `npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-cli-X.Y.Z.tgz` with the newer release's URL — npm only |
 | B (per-project tarball) | `npm install --save-dev <the newer release's URL>` in each app, then commit `package.json` and the lockfile so teammates get the same release with `npm ci` |
-| C (workspace path) | `pnpm build` in the Farsight checkout — that's it |
+| C (workspace path) | `pnpm build` or `npm run build` in the Farsight checkout — that's it |
 
 Release consumers never need pnpm or a checkout. Only someone working on Farsight itself, testing an unreleased
-build in another app, packs a local tarball from the checkout (`pnpm build && node scripts/pack.mjs`) and installs
+build in another app, packs a local tarball from the checkout (`pnpm build && node scripts/pack.mjs` or `npm run build && node scripts/pack.mjs`) and installs
 `build/farsight-cli-*.tgz` with npm as above; npm then records that local file path, so it suits one machine only.
 
 Two gotchas:
@@ -510,7 +510,7 @@ farsight ingest . --repo farsight && farsight serve
 
 …then ⌘K → "ingestTsJs" to see the parser's own call graph, or start a Claude Code session here (`.mcp.json` is already set up) and ask it to `trace_flow("ingest")`.
 
-Farsight's own e2e suite shows up the same way a product's would: `pnpm build && pnpm e2e` drives the real viewer and MCP server against a fixture graph and writes `e2e/test-results/results.json`, which this repo's `farsight.config.json → tests.e2e` reads — after the next ingest or sync the Tests tab lists the specs as e2e tests with their last run and freshness, and each links to the viewer functions and routes it `@covers`.
+Farsight's own e2e suite shows up the same way a product's would: `pnpm build && pnpm e2e` (or `npm run build && npm run e2e`) drives the real viewer and MCP server against a fixture graph and writes `e2e/test-results/results.json`, which this repo's `farsight.config.json → tests.e2e` reads — after the next ingest or sync the Tests tab lists the specs as e2e tests with their last run and freshness, and each links to the viewer functions and routes it `@covers`.
 
 ## Troubleshooting
 

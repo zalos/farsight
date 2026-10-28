@@ -12,6 +12,10 @@ was shortened; a comment on a command's own line is a note (its time, its exit c
 > and mistakes 1, 2, 3a and 3b again on `4fd4e251` (the `scan` command, #237). This file is re-run and updated as later
 > changes land.
 
+> The npm-only checkout build, both tarballs, invoice ingest and step 4a were also verified on 2026-10-28 with
+> Node 24.21.0 and npm 10.9.4, with pnpm absent from PATH. That check used the static profile without Docker or a
+> model call; the Copilot qualification above is separate.
+
 | step | what you do | time |
 |---|---|---|
 | 1 | prerequisites: Node 24, pnpm 9 or npm 10, Git LFS, Copilot CLI 1.0.105 logged in | 5 to 10 min, once |
