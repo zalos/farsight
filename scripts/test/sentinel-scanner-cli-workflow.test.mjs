@@ -9,6 +9,7 @@ import { suiteFiles } from '../sentinel-tests.mjs';
 const root = new URL('../../', import.meta.url);
 // The sentinel-service job runs Sentinel's process suite, the files packages/sentinel/test/process-suite.txt lists.
 const processSuite = suiteFiles('process');
+const unitSuite = suiteFiles('unit');
 const serviceJob = () => {
   const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
   const service = ci.slice(ci.indexOf('    name: sentinel-service'), ci.indexOf('\n  e2e:'));
@@ -121,6 +122,9 @@ test('SDK run controls remain in the native service zero-skip list and installed
     'preparation-publication-crash',
     'preparation-public',
   ])
+    assert.ok(processSuite.includes(`test/${file}.test.ts`) || unitSuite.includes(`test/${file}.test.ts`), file);
+  // the ones that start the owner service or the CLI stay in the zero-skip native list
+  for (const file of ['service-mcp-controls', 'service-planned-pause', 'preparation-service', 'preparation-public'])
     assert.ok(processSuite.includes(`test/${file}.test.ts`), file);
   for (const counter of ['skipped', 'fail', 'cancelled'])
     assert.ok(service.includes(`grep -qx '# ${counter} 0' service.tap`));
@@ -176,7 +180,8 @@ test('owner UI service and installed browser acceptance stay explicitly selected
   const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
   serviceJob();
   for (const name of ['session', 'host', 'descriptor', 'service', 'model-start', 'lifecycle', 'process'])
-    assert.ok(processSuite.includes(`test/owner-ui-${name}.test.ts`), name);
+    assert.ok(suiteFiles('all').includes(`test/owner-ui-${name}.test.ts`), name);
+  for (const name of ['service', 'lifecycle']) assert.ok(processSuite.includes(`test/owner-ui-${name}.test.ts`), name);
   assert.ok(ci.includes("SENTINEL_OWNER_UI_BROWSER: '1'"));
   assert.ok(ci.includes('packages/sentinel/test/owner-ui-browser.test.ts'));
   assert.ok(ci.includes("grep -q '^# skipped 0$' sentinel-owner-ui.tap"));
@@ -191,7 +196,7 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
   const { nodeArgs, parseArgs, processSuite: listed, sentinelDir } = await import('../sentinel-tests.mjs');
   const unit = suiteFiles('unit');
   const every = suiteFiles('all');
-  assert.ok(processSuite.length >= 30, `${processSuite.length} files in the process suite`);
+  assert.ok(processSuite.length >= 80, `${processSuite.length} files in the process suite`);
   assert.deepEqual([...unit, ...processSuite].sort(), every, 'every test file is in exactly one suite');
   assert.equal(new Set([...unit, ...processSuite]).size, every.length);
   assert.deepEqual(listed(), processSuite);
@@ -208,13 +213,21 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
   assert.match(validate, /SENTINEL_TEST_SUITE: unit\n\s+run: node scripts\/ci-changes\.mjs --run-tests/);
   assert.match(serviceJob(), /if: \$\{\{ !cancelled\(\) && needs\.changes\.outputs\.service != 'false' \}\}/);
 
-  assert.deepEqual(parseArgs([], {}), { suite: 'all', concurrency: undefined, list: false, extra: [] });
+  assert.deepEqual(parseArgs([], {}), {
+    suite: 'all',
+    concurrency: undefined,
+    list: false,
+    launches: false,
+    extra: [],
+  });
+  assert.equal(parseArgs(['--launches']).launches, true);
   assert.equal(parseArgs([], { SENTINEL_TEST_SUITE: 'unit' }).suite, 'unit');
   assert.equal(parseArgs(['--suite', 'process'], { SENTINEL_TEST_SUITE: 'unit' }).suite, 'process');
   assert.deepEqual(parseArgs(['--concurrency', '3', '--', '--test-timeout=1', '--test-reporter=tap']), {
     suite: 'all',
     concurrency: 3,
     list: false,
+    launches: false,
     extra: ['--test-timeout=1', '--test-reporter=tap'],
   });
   assert.throws(() => parseArgs(['--suites', 'unit']), /Unknown option/);
@@ -227,8 +240,36 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
     '--test-timeout=9',
     'test/a.test.ts',
   ]);
+  assert.deepEqual(nodeArgs(['test/a.test.ts'], { concurrency: 2, preload: 'file:///hook.mjs' }).slice(2, 5), [
+    '--import',
+    'file:///hook.mjs',
+    '--test',
+  ]);
   assert.throws(() => nodeArgs([], { concurrency: 0 }), /Bad concurrency/);
   assert.throws(() => nodeArgs([], { concurrency: Number('x') }), /Bad concurrency/);
+});
+
+test('the launch report counts Node.js and package-manager starts per test file, not git or other tools', async () => {
+  const { launchCounts } = await import('../sentinel-tests.mjs');
+  const log = [
+    '/w/packages/sentinel/test/cli-rules.test.ts\tnode',
+    '/w/packages/sentinel/test/cli-rules.test.ts\tnode',
+    '/w/packages/sentinel/test/review-package.test.ts\tpnpm',
+    '/w/packages/sentinel/test/review-package.test.ts\ttar',
+    '/w/packages/sentinel/test/snapshot-capture.test.ts\tgit',
+    '/w/packages/sentinel/test/imports-readers.test.ts\tmkfifo',
+    'C:\\w\\packages\\sentinel\\test\\path-owner.test.ts\tnode',
+    '\tnode',
+    '',
+  ].join('\n');
+  assert.deepEqual(
+    [...launchCounts(log)],
+    [
+      ['test/cli-rules.test.ts', 2],
+      ['test/review-package.test.ts', 2],
+      ['test/path-owner.test.ts', 1],
+    ],
+  );
 });
 
 test('the process suite list fails loudly: a missing file, a duplicate, a bad line or an empty list', async () => {

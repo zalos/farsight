@@ -1,36 +1,93 @@
-# Sentinel's process suite: the test files that spawn the CLI, the detached owner service, its sockets and the owner
-# UI host. The sentinel-service CI job runs exactly these on native amd64 as a non-root user, with zero skips;
-# validate runs every other test/*.test.ts (scripts/sentinel-tests.mjs --suite unit). One path per line, relative to
-# packages/sentinel; a listed file that does not exist fails both suites.
-test/cli-prework.test.ts
-test/service-detached.test.ts
-test/service-reliability.test.ts
-test/service-policy.test.ts
+# Sentinel's process suite: the test files that start a Node.js process or a package manager, from the test or from
+# the code under test (the CLI, the detached owner service, workers, scripts, a packed tarball). The sentinel-service
+# CI job runs exactly these on native amd64 as a non-root user, with zero skips; validate runs every other
+# test/*.test.ts (scripts/sentinel-tests.mjs --suite unit). Measured with `node scripts/sentinel-tests.mjs --launches`.
+#
+# Four files that start Node.js processes stay in the unit suite, because some of their cases skip on CI by design
+# and the service job allows no skip: store-integration and store-runtime (host and user checks that skip on Linux
+# CI), review-operation (FARSIGHT_LIVE opt-in) and service-full-report-authority (SENTINEL_ISOLATION).
+#
+# One path per line, relative to packages/sentinel; a listed file that does not exist fails both suites.
+test/agentic-only-policy.test.ts
+test/builtin-workers.test.ts
+test/capture-finalization.test.ts
+test/cli-copilot-public.test.ts
 test/cli-preview-e2e.test.ts
+test/cli-prework.test.ts
+test/cli-review-capabilities.test.ts
+test/cli-review-e2e.test.ts
 test/cli-rules.test.ts
+test/contracts.test.ts
+test/controls-import-purity.test.ts
+test/decisions.test.ts
+test/drivers-boundary.test.ts
+test/evidence-acceptance.test.ts
+test/evidence-cli-review.test.ts
+test/evidence-cli.test.ts
+test/evidence-crash.test.ts
+test/evidence-operations.test.ts
+test/execution-bootstrap.test.ts
+test/execution-canonical.test.ts
+test/execution-capture-recovery.test.ts
+test/execution-check-drivers.test.ts
+test/execution-container-faults.test.ts
+test/execution-coordinator.test.ts
+test/execution-driver-boundaries.test.ts
+test/execution-framing-budget.test.ts
+test/execution-launch-gate.test.ts
+test/execution-memory-start.test.ts
+test/execution-plans.test.ts
+test/execution-protocol.test.ts
+test/execution-retained-analysis.test.ts
+test/execution-scratch.test.ts
+test/framework-canonical.test.ts
+test/framework-capture-boundary.test.ts
+test/framework-controls-closure.test.ts
+test/framework-controls-driver.test.ts
+test/framework-controls-worker.test.ts
+test/framework-job-binding.test.ts
+test/framework-report.test.ts
+test/framework-review-corrections.test.ts
+test/framework-startup-tamper.test.ts
+test/isolation-diagnostic-controls.test.ts
+test/next-package.test.ts
+test/owner-decision-report.test.ts
+test/owner-decisions.test.ts
+test/owner-ui-lifecycle.test.ts
+test/owner-ui-service.test.ts
+test/package.test.ts
+test/path-admission.test.ts
+test/path-driver.test.ts
+test/path-execution-fences.test.ts
+test/path-owner.test.ts
+test/path-recovery.test.ts
+test/path-report.test.ts
+test/path-worker-inputs.test.ts
+test/preparation-public.test.ts
+test/preparation-publication-crash.test.ts
+test/preparation-recovery.test.ts
+test/preparation-seams.test.ts
+test/preparation-service.test.ts
 test/preview-slice.test.ts
-test/trusted-profile.test.ts
+test/providers.test.ts
+test/publish-once.test.ts
 test/receipts-publish.test.ts
+test/retained-proof-boundaries.test.ts
+test/retained-source.test.ts
+test/review-instructions-retained.test.ts
+test/review-package.test.ts
+test/scratch-lease.test.ts
+test/selected-rerun-report.test.ts
+test/selected-rerun.test.ts
+test/service-detached.test.ts
 test/service-mcp-controls.test.ts
 test/service-planned-pause.test.ts
-test/preparation-seams.test.ts
-test/preparation-admission.test.ts
-test/preparation-receipt-admission.test.ts
-test/preparation-journal.test.ts
-test/preparation-profile.test.ts
-test/preparation-service.test.ts
-test/preparation-recovery.test.ts
-test/preparation-publication-crash.test.ts
-test/preparation-public.test.ts
-test/service-readonly.test.ts
-test/service-readonly-transport.test.ts
 test/service-readonly-lifecycle.test.ts
-test/owner-ui-session.test.ts
-test/owner-ui-host.test.ts
-test/owner-ui-descriptor.test.ts
-test/owner-ui-service.test.ts
-test/owner-ui-model-start.test.ts
-test/owner-ui-lifecycle.test.ts
-test/owner-ui-process.test.ts
+test/service-readonly-transport.test.ts
+test/service-readonly.test.ts
+test/service-reliability.test.ts
 test/service-report-delivery.test.ts
-test/store-read-budget.test.ts
+test/snapshot-capture.test.ts
+test/snapshot-git-boundaries.test.ts
+test/store-objects.test.ts
+test/store-owner.test.ts
