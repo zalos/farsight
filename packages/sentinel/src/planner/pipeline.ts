@@ -26,7 +26,9 @@ import type { PlanInput, PlannedReview } from '../contracts/plan.js';
 import type {
   AgentRunnerId,
   BuiltinOperation,
+  NamedStageOutput,
   PipelineDefinition,
+  ScriptStageDefinition,
   StageDefinition,
   StageFanOut,
   StageOutputDecl,
@@ -107,7 +109,7 @@ export type StageRole =
       readonly pack?: string;
     }
   | { readonly role: 'agent'; readonly review: 'guided' | 'general' | null }
-  | { readonly role: 'script' }
+  | { readonly role: 'script'; readonly runner: 'host' | 'container' }
   | { readonly role: 'none' };
 
 export interface StageModel {
@@ -170,7 +172,11 @@ function roleOf(s: StageDefinition): StageRole {
       return { role: 'agent', review: REVIEW_KIND_OF[fanOut] ?? null };
     }
     case 'script':
-      return { role: 'script' };
+      if (s.runner !== 'host' && s.runner !== 'container')
+        return fail('sentinel.plan.pipelineInvalid', `script stage ${s.id} names no runner`);
+      if (s.interpreter !== 'node' && s.interpreter !== 'sh')
+        return fail('sentinel.plan.pipelineInvalid', `script stage ${s.id} names no interpreter`);
+      return { role: 'script', runner: s.runner };
     default:
       return fail('sentinel.plan.pipelineInvalid', `stage ${String((s as { id?: unknown }).id)} has an unknown kind`);
   }
@@ -335,8 +341,10 @@ export interface AgentUnitSeed {
 export interface DeclaredAnalysis {
   /** The stage selecting a rule, or null when no stage selects it; two stages selecting it are refused. */
   stageOfRule(rule: Pick<PlannerRule, 'familyId' | 'adapterId'>): string | null;
-  /** Check stages whose units a check stage's units depend on. */
+  /** Check and script stages whose units a check or script stage's units depend on. */
   dependsOn(stage: string): readonly string[];
+  /** The script stages, in dependency order: each plans one unit. */
+  scripts(): readonly ScriptStageDefinition[];
   /** The agent stage a review seed belongs to; refused when none or two declare its fan-out. */
   stageOfSeed(seed: Pick<AgentUnitSeed, 'kind'>): string;
 }
@@ -353,16 +361,28 @@ export function declaredAnalysis(model: StageModel): DeclaredAnalysis {
         'sentinel.plan.stageUnavailable',
         `${id}: rule pack ${role.pack} is not resolved to rule families`,
       );
-    if (role.role === 'script')
-      throw new PlanError('sentinel.plan.stageUnavailable', `${id}: a script stage runs only as a host script stage`);
+    if (role.role === 'script') {
+      const stage = model.stages.get(id) as ScriptStageDefinition;
+      if (role.runner === 'container')
+        throw new PlanError('sentinel.plan.stageUnavailable', `${id}: a script in a script-runner container`);
+      if ((stage.fanOut ?? 'per-run') !== 'per-run')
+        throw new PlanError('sentinel.plan.stageUnavailable', `${id}: a script fanned out ${stage.fanOut}`);
+      if (!scriptOutputOf(stage))
+        throw new PlanError('sentinel.plan.pipelineInvalid', `script stage ${id} declares exactly one named output`);
+    }
     if (role.role === 'agent' && role.review === null)
       throw new PlanError('sentinel.plan.stageUnavailable', `${id}: an agent stage fanned out per entry point`);
-    if (role.role !== 'agent' && model.inputs.get(id)!.length)
-      throw new PlanError('sentinel.plan.stageUnavailable', `${id}: only an agent stage reads another stage's output`);
-    if (role.role === 'agent')
+    if (role.role !== 'agent' && role.role !== 'script' && model.inputs.get(id)!.length)
+      throw new PlanError(
+        'sentinel.plan.stageUnavailable',
+        `${id}: only an agent or script stage reads another stage's output`,
+      );
+    // A review unit depends on every deterministic unit (checks and scripts), so a script never runs after an agent
+    // stage and an agent stage never after another.
+    if (role.role === 'agent' || role.role === 'script')
       for (const u of unitUpstream(model, id))
-        if (model.roles.get(u)!.role !== 'check')
-          throw new PlanError('sentinel.plan.stageUnavailable', `${id}: an agent stage after ${u}`);
+        if (model.roles.get(u)!.role === 'agent')
+          throw new PlanError('sentinel.plan.stageUnavailable', `${id}: a stage after the agent stage ${u}`);
   }
   const checkStages = [...model.roles].filter(([, r]) => r.role === 'check') as [
     string,
@@ -382,7 +402,12 @@ export function declaredAnalysis(model: StageModel): DeclaredAnalysis {
       return matching[0]?.[0] ?? null;
     },
     dependsOn(stage: string) {
-      return unitUpstream(model, stage).filter((u) => model.roles.get(u)!.role === 'check');
+      return unitUpstream(model, stage).filter((u) => model.roles.get(u)!.role !== 'agent');
+    },
+    scripts() {
+      return model.order
+        .filter((id) => model.roles.get(id)!.role === 'script')
+        .map((id) => model.stages.get(id) as ScriptStageDefinition);
     },
     stageOfSeed(seed: Pick<AgentUnitSeed, 'kind'>) {
       const matching = [...model.roles].filter(([, r]) => r.role === 'agent' && r.review === seed.kind);
@@ -424,6 +449,7 @@ export function stagesOfUnits(model: StageModel, plan: Pick<PlanRevision, 'units
   for (const u of plan.units) {
     let stage: string | undefined;
     if (u.stage === 'capture' || u.stage === 'parse' || u.stage === 'inventory') stage = model.bootstrap[u.stage];
+    else if (u.contract === SCRIPT_CONTRACT) stage = model.roles.get(u.stage)?.role === 'script' ? u.stage : undefined;
     else if (u.stage === 'review-guided' || u.stage === 'review-general') {
       const kind = u.stage === 'review-guided' ? 'guided' : 'general';
       stage = [...model.roles].find(([, r]) => r.role === 'agent' && r.review === kind)?.[0];
@@ -624,3 +650,54 @@ export const PLAN_SHAPE_KEYS: Readonly<Record<PlanShape, string>> = Object.freez
   bootstrap: 'sentinel.plan.shape.bootstrap',
   nothing: 'sentinel.plan.shape.nothing',
 });
+
+// ---- script stages ----
+
+/** What a script stage's unit is pinned to: its entry's bytes and its output schema's bytes, by digest. */
+export interface ScriptPins {
+  readonly entry: Digest;
+  readonly schema: Digest;
+}
+
+/** The contract a script stage's unit carries; its unit stage is the declared stage id. */
+export const SCRIPT_CONTRACT = 'sentinel.stage.script.host';
+
+/** The one typed output a script stage writes: its single declared named output. */
+export function scriptOutputOf(stage: Pick<ScriptStageDefinition, 'id' | 'produces'>): NamedStageOutput | undefined {
+  const produces = stage.produces ?? [];
+  const named = produces.filter((p): p is NamedStageOutput => typeof p !== 'string');
+  return named.length === 1 && produces.length === 1 ? named[0] : undefined;
+}
+
+/**
+ * The input fingerprint of a script stage's unit: the stage as declared (interpreter, runner, arguments, inputs and
+ * output), its entry and output schema by digest, the runner operation by digest and the units it waits for. A
+ * changed entry or schema byte is a different unit (its id derives from this fingerprint).
+ */
+export function scriptFingerprintOf(
+  stage: ScriptStageDefinition,
+  pins: ScriptPins,
+  runnerDigest: Digest,
+  dependencies: readonly WorkRef[],
+): Digest {
+  return digestOf({
+    stage: stage.id,
+    runner: stage.runner,
+    interpreter: stage.interpreter,
+    entry: { ref: stage.entry, digest: pins.entry },
+    outputSchema: pins.schema,
+    args: [...(stage.args ?? [])],
+    needs: structuredClone(stage.needs ?? []),
+    produces: structuredClone(stage.produces ?? []),
+    implementation: runnerDigest,
+    dependencies: dependencies.map((d) => [d.id, d.revision]),
+  }) as Digest;
+}
+
+/**
+ * What a plan preview must say before it is confirmed, as catalog keys: a revision holding a host script stage runs
+ * unconfined on this computer as the owner.
+ */
+export function planNoticesOf(plan: Pick<PlanRevision, 'units'>): string[] {
+  return plan.units.some((u) => u.contract === SCRIPT_CONTRACT) ? ['sentinel.plan.notice.hostScriptUnconfined'] : [];
+}
