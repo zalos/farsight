@@ -1244,7 +1244,11 @@ export async function reportIn(
     });
   const snapshotId = recorded.envelope.snapshotId;
   const opened = await openSnapshot(store, snapshotId);
-  const unknown = opened.snapshot.entries.filter((e) => e.kind === 'directory-boundary').length;
+  // The full report's semantics (service/full-report.ts): a folder excluded by policy is out of scope, not unknown.
+  // Only the folders capture refused or could not read are counted.
+  const unknown = opened.snapshot.entries.filter(
+    (e) => e.kind === 'directory-boundary' && e.disposition !== 'excluded',
+  ).length;
   const recheck = { cli: `farsight-sentinel report ${options.runId} --json` };
   const doc: PreviewReport = {
     schema: PREVIEW_REPORT_SCHEMA,
