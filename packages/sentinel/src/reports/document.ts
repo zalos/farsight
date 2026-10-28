@@ -385,8 +385,13 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
     used.add('sentinel.report.provenance.heading');
     for (const p of provenance) {
       used.add(`sentinel.report.provenance.where.${p.where}`);
-      if (p.kind === 'agent')
+      if (p.kind === 'agent') {
         used.add(`sentinel.report.provenance.cost.${p.cost.basis === 'rates' ? 'rates' : p.cost.reason}`);
+        if (p.mode === 'native') {
+          if (p.executableDigest) used.add('sentinel.report.provenance.executableDigest');
+          if (p.transcript) used.add('sentinel.report.provenance.transcript');
+        }
+      }
     }
   }
 

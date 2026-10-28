@@ -342,12 +342,17 @@ test('a native Copilot observation and its retained provenance render in every r
   assert.deepEqual(out.document.provenance[2], agent);
   assert.match(out.markdown, /The native review found request text/);
   assert.match(out.html, /cost unobserved · subscription/);
+  assert.match(out.markdown.replace(/\\(.)/g, '$1'), /copilot-cli 1\.0\.105 native/);
+  for (const text of [out.markdown, out.html]) {
+    assert.ok(text.includes(agent.executableDigest));
+    assert.ok(text.includes(agent.transcript));
+  }
   assert.equal(out.sarif.version, '2.1.0');
   assert.equal(out.sarif.runs[0].results.length, 1, 'SARIF retains the scanner finding, not the model claim');
   assert.deepEqual(digests(out), {
-    json: 'sha256:397055b2593d08be527b2a5be15cc1b049a977ff5c1eeb01344b7d704a57290c',
-    markdown: 'sha256:1b18afc46dcbb006e8369f45f38cd7ac2acb9ede087293dd51c97fd51ac5004d',
-    html: 'sha256:2b43cff5db1d79b2dec52957c2b36263e5a2af835044bffe0f81e5a8ada952d0',
+    json: 'sha256:18e04c2a78dc809ded0aad7309c5531824b29e133604af6f0a548987f4220fe3',
+    markdown: 'sha256:230643f8b3001b841498619a9dc79d2f312c8282f7701b420ab84ee466a25e0e',
+    html: 'sha256:44d891b1544b1968a981b23cc6d961ed495916091e54d8a3395990006529dcee',
     sarif: 'sha256:8b769e712b16a71bdbfe9dd21f78054b5b629cdf967fe06d3c20fc9a58f24ca1',
   });
   const withheld = withholdSecretRun(out.document, new Map());
@@ -369,6 +374,15 @@ test('a brokered-only review retains its four report renderings', needsStore, as
     unit: { id: 'w-review', revision: 2 },
   };
   const out = await generateReport((await baseInput('private', { reviews: [review], provenance: PROVENANCE })) as any);
+  assert.deepEqual(
+    out.document.definitions.filter((d: any) => d.key.startsWith('sentinel.report.provenance.')).map((d: any) => d.key),
+    [
+      'sentinel.report.provenance.cost.no-rates',
+      'sentinel.report.provenance.heading',
+      'sentinel.report.provenance.where.host',
+      'sentinel.report.provenance.where.in-process',
+    ],
+  );
   assert.deepEqual(digests(out), {
     json: 'sha256:1dc65570aef0160ccdd1f744446271f77b116d1a68dda19e7d7f81035dac28e8',
     markdown: 'sha256:1694aa7734841157d23943c63750ee02eef93658c242dbaa093de183e911c59e',

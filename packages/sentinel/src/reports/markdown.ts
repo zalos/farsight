@@ -75,7 +75,18 @@ export function provenanceLine(doc: ReportEnvelope, p: Provenance): string {
         p.cost.basis === 'rates'
           ? `${p.cost.amount} ${p.cost.currency} · ${wordOf(doc, 'sentinel.report.provenance.cost.rates', 'business')}`
           : wordOf(doc, `sentinel.report.provenance.cost.${p.cost.reason}`, 'business');
-      return `${head} · ${p.runner} ${p.mode} · model ${p.model.requested}${p.model.reported && p.model.reported !== p.model.requested ? ` (reported ${p.model.reported})` : ''} · ${p.turns} turns · ${tokens} · ${cost}${took}`;
+      const native =
+        p.mode === 'native'
+          ? [
+              p.executableDigest
+                ? `${wordOf(doc, 'sentinel.report.provenance.executableDigest', 'business')} (${wordOf(doc, 'sentinel.report.provenance.executableDigest', 'code')} ${p.executableDigest})`
+                : null,
+              p.transcript
+                ? `${wordOf(doc, 'sentinel.report.provenance.transcript', 'business')} (${wordOf(doc, 'sentinel.report.provenance.transcript', 'code')} ${p.transcript})`
+                : null,
+            ].filter(Boolean)
+          : [];
+      return `${head} · ${p.runner}${p.mode === 'native' && p.runnerVersion ? ` ${p.runnerVersion}` : ''} ${p.mode} · model ${p.model.requested}${p.model.reported && p.model.reported !== p.model.requested ? ` (reported ${p.model.reported})` : ''} · ${p.turns} turns · ${tokens} · ${cost}${native.length ? ` · ${native.join(' · ')}` : ''}${took}`;
     }
   }
 }

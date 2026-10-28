@@ -104,8 +104,21 @@ test(
     assert.match(agent.transcript!, /^sha256:[0-9a-f]{64}$/);
     assert.deepEqual(agent.tokens, { input: 1234, output: 56, certainty: 'confirmed' });
     assert.deepEqual(agent.cost, { basis: 'unobserved', reason: 'subscription' });
+    assert.deepEqual(
+      first.document.definitions.find((d) => d.key === 'sentinel.report.provenance.executableDigest')?.text,
+      { business: 'executable pinned', code: 'executable digest' },
+    );
+    assert.deepEqual(first.document.definitions.find((d) => d.key === 'sentinel.report.provenance.transcript')?.text, {
+      business: 'transcript retained',
+      code: 'transcript handle',
+    });
     assert.match(first.markdown, /The token is compared with ==/);
     assert.match(first.html, /cost unobserved · subscription/);
+    assert.match(first.markdown.replace(/\\(.)/g, '$1'), /copilot-cli 1\.0\.105 native/);
+    for (const text of [first.markdown, first.html]) {
+      assert.ok(text.includes(agent.executableDigest!));
+      assert.ok(text.includes(agent.transcript!));
+    }
     assert.equal(first.sarif.version, '2.1.0');
     assert.equal(first.sarif.runs[0]?.results.length, 0, 'SARIF carries findings, not model claims');
 

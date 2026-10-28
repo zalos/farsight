@@ -36,6 +36,8 @@ export const SENTINEL_REPORT_STRINGS: Record<string, StringEntry> = {
   'sentinel.report.provenance.cost.subscription': same('cost unobserved · subscription', 'The model ran under a subscription that reports no price, so no cost is known. It is never shown as zero.'),
   'sentinel.report.provenance.cost.no-rates': same('cost unobserved · no rates', 'The provider has no rates entered, so no cost is known. It is never shown as zero.'),
   'sentinel.report.provenance.cost.usage-unknown': same('cost unobserved · usage unknown', 'The usage itself was not confirmed, so no cost is known. It is never shown as zero.'),
+  'sentinel.report.provenance.executableDigest': { hud: 'executable digest', professional: 'executable pinned', define: 'The digest of the command-line runner whose exact bytes were qualified for this native model review. The identifier lets a technical reader check which executable ran.' },
+  'sentinel.report.provenance.transcript': { hud: 'transcript handle', professional: 'transcript retained', define: 'The retained native model exchange is identified by this content digest. The handle is evidence of what the runner returned, not a model finding.' },
   'sentinel.count.observations': same('{n} observations', 'What the checks reported before grouping, each claim once. One finding can rest on several observations.'),
   'sentinel.count.observationsOne': one('1 observation', 'sentinel.count.observations'),
   'sentinel.count.gaps': same('{n} gaps in the checks', 'Checks that did not cover everything they were meant to, because they were unsupported, did not run, failed or covered only part of their scope.'),
