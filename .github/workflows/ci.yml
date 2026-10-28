@@ -22,7 +22,7 @@ jobs:
   changes:
     name: affected checks
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 2
     outputs:
       validate: ${{ steps.select.outputs.validate }}
       e2e: ${{ steps.select.outputs.e2e }}
@@ -79,7 +79,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.validate != 'false' || needs.changes.outputs.e2e != 'false' || needs.changes.outputs.echo != 'false' || needs.changes.outputs.sentinel != 'false' || needs.changes.outputs.isolation != 'false') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v7
         with:
@@ -107,7 +107,7 @@ jobs:
     # A failed selector runs the check. Only an explicit false skips it.
     if: ${{ !cancelled() && needs.changes.outputs.validate != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 9
     steps:
       - uses: actions/checkout@v7
         with:
@@ -137,6 +137,7 @@ jobs:
           TEST_SCOPE: ${{ needs.changes.outputs.testScope }}
           TEST_PACKAGES: ${{ needs.changes.outputs.testPackages }}
           SENTINEL_TEST_SUITE: unit
+          SENTINEL_TEST_LAUNCHES: '1' # a unit file that starts a Node.js process unlisted fails (sentinel-tests.mjs)
         run: node scripts/ci-changes.mjs --run-tests
       - run: pnpm test:scripts
       - run: pnpm lint:strings
@@ -147,7 +148,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.echo != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -169,7 +170,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.sentinel != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 9
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -185,21 +186,15 @@ jobs:
           node scripts/test-farsight-package.mjs
       - name: Pack, install and start farsight-cli with no Sentinel package in the workspace
         run: pnpm test:cli:package:absent
-      - name: Pack Sentinel and verify it in a clean npm consumer
+      # Sentinel's eight clean npm-only consumers (scripts/test-sentinel-consumers.mjs), three at a time on private
+      # copies of the tarball, and beside them the release acceptance of both tarballs: each package alone and both,
+      # global and project-local, from URLs, with only node, npm and npx. A development check that publishes nothing:
+      # gates for Sentinel features not built yet are reported as pending (--allow-pending); any failed gate fails.
+      - name: Pack Sentinel; its clean npm consumers and the npm-only acceptance of both tarballs
         run: |
           test -f packages/sentinel/package.json || { echo "::error::packages/sentinel/package.json is missing"; exit 1; }
-          pnpm test:sentinel:package
-      # The release acceptance on these two tarballs: each package alone and both, global and project-local, from
-      # URLs, with only node, npm and npx. A development check that publishes nothing: gates for Sentinel features
-      # not built yet are reported as pending (--allow-pending); any failed gate fails the job.
-      - name: Accept both tarballs in clean npm-only consumers
-        run: |
-          fv="$(node -p "require('./package.json').version")"
-          sv="$(node -p "require('./packages/sentinel/package.json').version")"
-          commit="$(node -e "import('./packages/core/dist/version.js').then((m) => console.log(m.gitIdentity('.').commit))")"
-          node scripts/npm-acceptance.mjs --farsight "build/farsight-cli-$fv.tgz" --expect-farsight "$fv" \
-            --sentinel "build/sentinel/farsight-sentinel-$sv.tgz" --expect-sentinel "$sv" --expect-commit "$commit" \
-            --allow-pending --report "$RUNNER_TEMP/acceptance.json"
+          pnpm pack:sentinel
+          node scripts/test-sentinel-consumers.mjs --jobs 3 --acceptance -- --allow-pending --report "$RUNNER_TEMP/acceptance.json"
 
   # Sentinel's real-container isolation canaries (PR 07). The pinned canary image is installed here, by digest,
   # before the tests; the code under test never pulls and refuses a missing image. SENTINEL_ISOLATION=1 makes a
@@ -209,7 +204,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.isolation != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -294,7 +289,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.recovery != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -327,7 +322,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.service != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -346,7 +341,7 @@ jobs:
           test "$(uname -m)" = x86_64 || { echo "::error::the service tests must run on native amd64"; exit 1; }
           umask 022
           # the serial files first, one at a time, then the rest; the summary sums every run
-          node ../../scripts/sentinel-tests.mjs --suite process --summary service-summary.txt -- --test-timeout=300000
+          node ../../scripts/sentinel-tests.mjs --suite process --launches --summary service-summary.txt -- --test-timeout=300000
           grep -qx '# skipped 0' service-summary.txt || { echo "::error::a service test was skipped"; exit 1; }
           grep -qx '# fail 0' service-summary.txt && grep -qx '# cancelled 0' service-summary.txt
 
@@ -355,7 +350,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.e2e != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 11
     env:
       # the suite's own ports, stated so a reader sees them (these are the defaults)
       FARSIGHT_E2E_PORT: '4510'
@@ -396,7 +391,10 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
+      # The four Sentinel browser steps run when sentinel-package does (the CLI's closure, which the owner UI journey
+      # serves, and Sentinel's) or when validate tests Sentinel (a Sentinel test change); otherwise they are skipped.
       - name: Sentinel paired owner browser journey (no skips)
+        if: ${{ needs.changes.outputs.sentinel != 'false' || needs.changes.outputs.service != 'false' }}
         env:
           SENTINEL_OWNER_UI_BROWSER: '1'
         run: |
@@ -412,12 +410,14 @@ jobs:
           grep -q '^# skipped 0$' sentinel-owner-ui.tap
 
       - name: Installed Sentinel owner browser workflow
+        if: ${{ needs.changes.outputs.sentinel != 'false' || needs.changes.outputs.service != 'false' }}
         run: |
           node scripts/pack.mjs
           node scripts/pack-sentinel.mjs
           node scripts/test-sentinel-owner-ui-consumer.mjs
 
       - name: Sentinel offline HTML delivery and print (no skips)
+        if: ${{ needs.changes.outputs.sentinel != 'false' || needs.changes.outputs.service != 'false' }}
         env:
           SENTINEL_REPORT_BROWSER: '1'
         run: |
@@ -434,6 +434,7 @@ jobs:
           grep -q '^# skipped 0$' sentinel-report-browser.tap
 
       - name: Sentinel retained structural HTML delivery and print (no skips)
+        if: ${{ needs.changes.outputs.sentinel != 'false' || needs.changes.outputs.service != 'false' }}
         env:
           SENTINEL_REPORT_BROWSER: '1'
         run: |
