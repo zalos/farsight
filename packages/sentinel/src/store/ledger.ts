@@ -1567,49 +1567,54 @@ export class Ledger {
       if (Buffer.byteLength(detail) > MAX_ERROR_DETAIL_BYTES)
         throw invalid('private refusal detail must be bounded safe structured context');
     }
-    return this.#mutate('setWorkState', { ref, to, reason: opts.reasonCode ?? null, detail }, opts.idempotency, () => {
-      const row = this.#get(
-        `SELECT w.state, w.run_id, r.state AS run_state FROM work_units w JOIN runs r ON r.id = w.run_id
+    return this.#mutate(
+      'setWorkState',
+      { ref, to, reason: opts.reasonCode ?? null, ...(detail === null ? {} : { detail }) },
+      opts.idempotency,
+      () => {
+        const row = this.#get(
+          `SELECT w.state, w.run_id, r.state AS run_state FROM work_units w JOIN runs r ON r.id = w.run_id
         WHERE w.id = ? AND w.revision = ?`,
-        ref.id,
-        ref.revision,
-      );
-      if (!row) throw new LedgerError('sentinel.store.notFound', 'no such work revision');
-      const from = String(row.state);
-      if (!['pending', 'ready', 'blocked'].includes(from) || from === to) {
-        throw new LedgerError('sentinel.store.wrongState', `work cannot move ${from} → ${to}`);
-      }
-      if (row.run_state === 'completed' || row.run_state === 'canceled')
-        throw new LedgerError('sentinel.store.wrongState', 'the run has ended');
-      this.#run(
-        'UPDATE work_units SET state = ?, state_reason = ? WHERE id = ? AND revision = ?',
-        to,
-        opts.reasonCode ?? null,
-        ref.id,
-        ref.revision,
-      );
-      const sequence = this.#event('work-state', String(row.run_id), ref, {
-        from,
-        to,
-        ...(held ? { reason: opts.reasonCode } : {}),
-      });
-      if (detail !== null) {
-        this.#run(
-          'INSERT INTO work_refusals (work_id,work_revision,code,detail,privacy,sequence) VALUES (?,?,?,?,?,?)',
           ref.id,
           ref.revision,
-          opts.reasonCode!,
-          detail,
-          'source',
-          sequence,
         );
-      }
-      return {
-        work: { id: ref.id, revision: ref.revision },
-        state: to,
-        sequence,
-      };
-    });
+        if (!row) throw new LedgerError('sentinel.store.notFound', 'no such work revision');
+        const from = String(row.state);
+        if (!['pending', 'ready', 'blocked'].includes(from) || from === to) {
+          throw new LedgerError('sentinel.store.wrongState', `work cannot move ${from} → ${to}`);
+        }
+        if (row.run_state === 'completed' || row.run_state === 'canceled')
+          throw new LedgerError('sentinel.store.wrongState', 'the run has ended');
+        this.#run(
+          'UPDATE work_units SET state = ?, state_reason = ? WHERE id = ? AND revision = ?',
+          to,
+          opts.reasonCode ?? null,
+          ref.id,
+          ref.revision,
+        );
+        const sequence = this.#event('work-state', String(row.run_id), ref, {
+          from,
+          to,
+          ...(held ? { reason: opts.reasonCode } : {}),
+        });
+        if (detail !== null) {
+          this.#run(
+            'INSERT INTO work_refusals (work_id,work_revision,code,detail,privacy,sequence) VALUES (?,?,?,?,?,?)',
+            ref.id,
+            ref.revision,
+            opts.reasonCode!,
+            detail,
+            'source',
+            sequence,
+          );
+        }
+        return {
+          work: { id: ref.id, revision: ref.revision },
+          state: to,
+          sequence,
+        };
+      },
+    );
   }
 
   /** The current held work refusal, if its latest state transition recorded private detail. */
