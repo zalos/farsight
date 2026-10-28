@@ -169,12 +169,25 @@ test('init → adopt → plan → run → status → report, twice where it matt
     [detached.status, detached.body.facts.state, detached.body.verdicts.policy.reasonCode],
     [2, 'completed', 'sentinel.service.ownerReceipt'],
   );
+  // The service alone holds the store while it runs: a plan goes through it (the same content is the same run, kept),
+  // and a foreground run in this process waits for it to stop.
+  const throughService = run('plan');
+  assert.deepEqual(
+    [throughService.status, throughService.body.outcome, throughService.body.facts.planId],
+    [0, 'kept', planId],
+  );
   assert.equal(
-    run('plan').body.reasonCode,
+    throughService.body.verdicts.policy.reasonCode,
+    'sentinel.service.ownerReceipt',
+    'planned on the owner receipt',
+  );
+  assert.equal(
+    run('run', planId, '--confirm').body.reasonCode,
     'sentinel.service.ownerServiceRunning',
     'the service alone holds the store while it runs',
   );
   assert.equal(run('status', planId).body.facts.state, 'completed', 'status reads through the service');
+  assert.equal(run('status').body.facts.runId, planId, 'status without a run id reads the newest scan');
   assert.equal(run('wait', planId).status, 2);
   stopService(env);
   assert.equal(run('run', 'plan-' + '0'.repeat(32)).body.reasonCode, 'sentinel.service.planUnknown');

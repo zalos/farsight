@@ -1,5 +1,9 @@
 import { assertNativeClaudeReviewEnabled } from '../review/providers/selection.js';
 import { reviewRuntime } from './review-adapter.js';
+import { bindProvider, type ProviderBinding } from '../review/providers/profile.js';
+import { envelopeIntent } from '../review/providers/broker.js';
+import { canonicalDigest } from '../policy/digest.js';
+import { MAX_RECEIPT_TTL_MS } from '../validate.js';
 import { preparePathTask, acceptPathTask, type PathTaskCandidate } from './path-task.js';
 import { readPathRequestFile } from './path-request-file.js';
 import { selectedSecretPrivacy } from '../reports/selected-privacy.js';
@@ -42,7 +46,14 @@ import {
 } from '../app/pipeline.js';
 import type { PipelineDefinition } from '../contracts/index.js';
 import { readCheckoutFile, writePrivateFileAtomic } from '../policy/user-state.js';
-import { adoptPipeline, loadPipeline, pipelineAdoptionIntent, promotedPacks } from '../app/pipeline-adoption.js';
+import {
+  adoptPipeline,
+  loadPipeline,
+  pipelineAdoptionIntent,
+  promotedPacks,
+  type WorkspacePipeline,
+} from '../app/pipeline-adoption.js';
+import { profilePipeline } from '../app/pipeline-profiles.js';
 import { builtinRulePack, shippedCheckAdapters } from './trusted-profile.js';
 import { FEATURE_FLAGS } from '../policy/features.js';
 import {
@@ -55,7 +66,7 @@ import { scannerReportOf, type ScannerReport } from '../reports/scanner.js';
 import { openSnapshot } from '../snapshot/materialize.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { openStore, type SentinelStore } from '../store/index.js';
-import { requestedByOf, assertMayConfirm } from '../cli/actor.js';
+import { requestedByOf, assertMayConfirm, type RequestedBy } from '../cli/actor.js';
 import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome.js';
 
 import {
@@ -71,6 +82,7 @@ import { RuleLockBook } from './rule-locks.js';
 import { loadPlan } from '../execution/plans.js';
 import { expandStageTokens, unitsToRun } from '../execution/selection.js';
 import type { StageSelection } from '../planner/pipeline.js';
+import { PlanError } from '../planner/errors.js';
 import { ServiceError } from './owner-service.js';
 import { runFailureFacts } from './run-failure.js';
 import type { AdapterRegistry } from '../execution/registry.js';
@@ -94,6 +106,7 @@ import {
   rerunRun,
   planWorkspaceCanonical,
   previewFindingsOf,
+  pipelineSourceOf,
   type CanonicalDisclosure,
   type CurrentPlan,
 } from './canonical.js';
@@ -274,8 +287,32 @@ export function runWriteBinding(
         workspace,
         store: instance.storeId,
         run: instance.runId,
+        // A start is the composite the owner confirms once: the plan's digest, the stages it runs and each model
+        // binding with its budget, named here as well as inside the digest, so a plan or binding that differs from
+        // the one confirmed is a mismatch of the receipt itself.
+        ...(action === 'run.start' ? { composite: compositeOf(plan) } : {}),
       }),
     ),
+  };
+}
+
+/** What one confirmation of a start covers, beyond the plan digest: the stages and each model binding. */
+export function compositeOf(plan: CurrentPlan): {
+  stages: readonly string[];
+  bindings: readonly { providerId: string; modelId: string | null; bindingDigest: string; budget: unknown }[];
+} {
+  return {
+    stages: [...(plan.stages ?? [])],
+    bindings: plan.model
+      ? [
+          {
+            providerId: plan.model.providerId,
+            modelId: plan.model.modelId ?? null,
+            bindingDigest: plan.model.bindingDigest,
+            budget: { ...plan.model.budget },
+          },
+        ]
+      : [],
   };
 }
 
@@ -574,7 +611,7 @@ export function pipelineGate(
   ws: Workspace,
   policy: EffectivePolicy,
   command = 'plan',
-): { refusal: CommandResult } | { facts: Record<string, unknown> } {
+): { refusal: CommandResult } | { facts: Record<string, unknown>; pipeline?: PipelineDefinition; path?: PipelinePath } {
   const loaded = loadPipeline({ workspace: ws.path, trustDir: trustFolder(ws), resolve: packsOf(ws) });
   if (loaded.trust === 'missing') return { facts: {} };
   if (!loaded.read)
@@ -599,7 +636,8 @@ export function pipelineGate(
         facts: { pipeline: view },
       }),
     };
-  return { facts: { pipeline: view } };
+  const path = pipelinePathOf(loaded.read);
+  return { facts: { pipeline: { ...view, path } }, pipeline, ...(path ? { path } : {}) };
 }
 
 // ---- plan ----
@@ -667,41 +705,198 @@ export async function planWorkspace(
     options.now,
   );
   if (!decided.admitted) return decided.result;
-  return withStore(ws, (store) =>
-    withScratch(store, async (lease) => {
-      let planned;
-      try {
-        planned = await planWorkspaceCanonical(store, {
-          workspace: ws.path,
-          trustDir: trustFolder(ws),
-          policy,
-          scratchRoot: lease.path,
-          wrapRunner: lease.wrapRunner,
-          now: options.now,
-          ...(options.parentId ? { parentId: options.parentId } : {}),
-        });
-      } catch (e) {
-        if (
-          e instanceof ServiceError &&
-          (e.code === 'sentinel.service.bootstrapFailed' || e.code === 'sentinel.service.ruleUnsupported')
-        ) {
-          return result('plan', 'configuration-failure', {
-            verdicts: printed(decided.record),
-            reasonCode: e.code,
-            facts: { ...e.facts },
-          });
-        }
-        throw e;
+  return withStore(ws, (store) => planIn(store, ws, policy, gate, printed(decided.record), options));
+}
+
+/**
+ * The capture a plan through the running service performs, bound to this workspace and the store that service holds:
+ * the owner's receipt for it fits that service and nothing else.
+ */
+export function planCaptureBinding(
+  ws: Workspace,
+  storeId: string,
+  policy: EffectivePolicy,
+): { intent: ActionIntent; stateDigest: string; policyRevision: string } {
+  const workspace = workspaceIdentity(ws.path).digest;
+  return {
+    intent: intentOf(
+      'capture.source',
+      sha(Buffer.from(ws.path)),
+      ['local-artifacts'],
+      [`sentinel.workspace:${workspace}`, `sentinel.store:${storeId}`],
+    ),
+    stateDigest: sha(
+      canonicalJsonBytes({ kind: 'sentinel-plan-write/1', policy: policy.revision, workspace, store: storeId }),
+    ),
+    policyRevision: policy.revision,
+  };
+}
+
+/**
+ * The owner's confirmation of a plan through the running service, in the owner's own process: admitted as the owner
+ * here and, only with `confirm`, a receipt for exactly that capture on that service's store is issued, not spent.
+ * Without `confirm` the decision is shown and nothing is issued.
+ */
+export function confirmPlanForService(
+  ws: Workspace,
+  options: { storeId: string; confirm: boolean; now: Date },
+): { receiptId: string } | { result: CommandResult } {
+  const adopted = adoptedPolicy(ws);
+  if ('refusal' in adopted) return { result: adopted.refusal };
+  const { policy } = adopted;
+  const gate = pipelineGate(ws, policy);
+  if ('refusal' in gate) return { result: gate.refusal };
+  const binding = planCaptureBinding(ws, options.storeId, policy);
+  const decision = admit({
+    intent: binding.intent,
+    requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' },
+    policy,
+    stateDigest: binding.stateDigest,
+    now: options.now,
+    capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
+    credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
+  }).record;
+  const facts = { action: 'capture.source', effects: binding.intent.effects, intentDigest: decision.intentDigest };
+  if (decision.outcome === 'denied')
+    return {
+      result: result('plan', 'configuration-failure', {
+        verdicts: printed(decision),
+        facts,
+        reasonCode: decision.verdicts.policy.allowed
+          ? decision.verdicts.capability.allowed
+            ? decision.verdicts.credential.reasonCode
+            : decision.verdicts.capability.reasonCode
+          : decision.verdicts.policy.reasonCode,
+      }),
+    };
+  // Admitted outright (a grant that needs no confirmation) or confirmed now: the owner's receipt carries that decision
+  // to the service, which holds no owner authority of its own.
+  if (decision.outcome === 'awaiting-confirmation' && !options.confirm)
+    return { result: result('plan', 'awaiting-confirmation', { verdicts: printed(decision), facts }) };
+  assertMayConfirm(OWNER);
+  const receipt = issueReceipt(receiptBook(ws), OWNER, binding, { now: options.now, ttlMs: RECEIPT_TTL_MS });
+  return { receiptId: receipt.id };
+}
+
+/**
+ * `plan` against a store this process holds (the running service's), for a connection: with the owner's receipt for
+ * exactly this capture on this store (confirmPlanForService), spent once; otherwise admission with the connection's
+ * own requester, which the human-only capture grant does not pass. Being connected grants nothing.
+ */
+export async function planWorkspaceHeld(
+  store: SentinelStore,
+  ws: Workspace,
+  options: { receiptId?: string; by: RequestedBy; now: Date },
+): Promise<CommandResult & { disclosure?: CanonicalDisclosure }> {
+  const adopted = adoptedPolicy(ws);
+  if ('refusal' in adopted) return adopted.refusal;
+  const { policy } = adopted;
+  const gate = pipelineGate(ws, policy);
+  if ('refusal' in gate) return gate.refusal;
+  const binding = planCaptureBinding(ws, store.storeId, policy);
+  let verdicts: PrintedVerdicts;
+  if (options.receiptId !== undefined) {
+    try {
+      receiptBook(ws).consume(options.receiptId, binding, options.now);
+    } catch (e) {
+      if (!(e instanceof PolicyError)) throw e;
+      return result('plan', 'configuration-failure', { reasonCode: e.code });
+    }
+    verdicts = OWNER_RECEIPT_VERDICTS;
+  } else {
+    const decision = admit({
+      ...binding,
+      requestedBy: options.by,
+      policy,
+      now: options.now,
+      capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
+      credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
+    }).record;
+    if (decision.outcome !== 'admitted')
+      return result(
+        'plan',
+        decision.outcome === 'awaiting-confirmation' ? 'awaiting-confirmation' : 'configuration-failure',
+        {
+          verdicts: printed(decision),
+          facts: { action: 'capture.source', intentDigest: decision.intentDigest },
+          ...(decision.outcome === 'awaiting-confirmation' ? {} : { reasonCode: decision.verdicts.policy.reasonCode }),
+        },
+      );
+    verdicts = printed(decision);
+  }
+  return planIn(store, ws, policy, gate, verdicts, { now: options.now });
+}
+
+/** What a spent owner receipt prints as its verdicts: the owner asked, through their own CLI. */
+const OWNER_RECEIPT_VERDICTS: PrintedVerdicts = Object.freeze({
+  policy: Object.freeze({ allowed: true, asked: true, reasonCode: 'sentinel.service.ownerReceipt' }),
+  capability: Object.freeze({ allowed: true, asked: true, reasonCode: 'sentinel.admission.capabilityAvailable' }),
+  credential: Object.freeze({ allowed: true, asked: true, reasonCode: 'sentinel.admission.credentialLocalOnly' }),
+});
+
+/**
+ * Which path a plan takes for the adopted pipeline. A pipeline file whose bytes are exactly what `init` writes for the
+ * static, scanners or secrets profile (and that names no pack) declares the stages those profiles plan today: it plans
+ * as the default pipeline for the adopted settings, `default-of` that profile (today's units and run identity, and the
+ * review stages the settings configure). Any other adopted file (the agentic profile, an edited file, one written
+ * through pipeline.write) is `declared`: the planner plans it and the run's profile records it, so the run's identity
+ * follows its bytes. A temporary exemption (P-4b plans every adopted file as declared).
+ */
+export type PipelinePath =
+  { readonly kind: 'default-of'; readonly profile: string } | { readonly kind: 'declared'; readonly digest: string };
+export function pipelinePathOf(read: WorkspacePipeline | undefined): PipelinePath | undefined {
+  if (!read) return undefined;
+  if (read.packs.length === 0)
+    for (const profile of DEFAULT_PROFILES)
+      if (read.fileDigest === sha(pipelineBytesOf(profilePipeline(profile)))) return { kind: 'default-of', profile };
+  return { kind: 'declared', digest: read.digest };
+}
+const DEFAULT_PROFILES = ['static', 'scanners', 'secrets'] as const;
+
+/** The planning itself, once admitted, in the store this process holds; the adopted pipeline is what it plans. */
+async function planIn(
+  store: SentinelStore,
+  ws: Workspace,
+  policy: EffectivePolicy,
+  gate: { facts: Record<string, unknown>; pipeline?: PipelineDefinition; path?: PipelinePath },
+  verdicts: PrintedVerdicts,
+  options: { now: Date; parentId?: string | null },
+): Promise<CommandResult & { disclosure?: CanonicalDisclosure }> {
+  return withScratch(store, async (lease) => {
+    let planned;
+    try {
+      planned = await planWorkspaceCanonical(store, {
+        workspace: ws.path,
+        trustDir: trustFolder(ws),
+        policy,
+        scratchRoot: lease.path,
+        wrapRunner: lease.wrapRunner,
+        now: options.now,
+        ...(options.parentId ? { parentId: options.parentId } : {}),
+        ...(gate.path?.kind === 'declared' ? { pipeline: gate.pipeline! } : {}),
+        ...(gate.path?.kind === 'default-of' ? { pipelineSource: gate.path } : {}),
+      });
+    } catch (e) {
+      if (
+        e instanceof ServiceError &&
+        (e.code === 'sentinel.service.bootstrapFailed' || e.code === 'sentinel.service.ruleUnsupported')
+      ) {
+        return result('plan', 'configuration-failure', { verdicts, reasonCode: e.code, facts: { ...e.facts } });
       }
-      return {
-        ...result('plan', planned.outcome, {
-          verdicts: printed(decided.record),
-          facts: { ...planned.disclosure, ...gate.facts },
-        }),
-        disclosure: planned.disclosure,
-      };
-    }),
-  );
+      if (e instanceof PlanError) return result('plan', 'configuration-failure', { verdicts, reasonCode: e.code });
+      throw e;
+    }
+    return {
+      ...result('plan', planned.outcome, {
+        verdicts,
+        facts: {
+          ...planned.disclosure,
+          ...gate.facts,
+        },
+      }),
+      disclosure: planned.disclosure,
+    };
+  });
 }
 
 /**
@@ -850,10 +1045,18 @@ export async function runPlan(
         reasonCode: 'sentinel.service.needsOwnerConfirm',
         facts: { runId: plan.runId, modelReviews: reviews, requiredFlag: '--confirm-models' },
       });
+    // The composite: before the start is decided, the model envelope the run opens is decided too (a denial refuses
+    // here, before any receipt is spent or anything starts); its receipt is issued with the start, never as a stage
+    // dispatches.
+    const paid = reviews.length > 0 && !isFinalRunState(runStateIn(store, plan.runId));
+    const models = paid ? envelopeDecisionsFor(policy, plan, store.storeId, options.now) : null;
+    if (models && 'refusal' in models) return models.refusal;
     const binding = runWriteBinding(ws, 'run.start', plan, { storeId: store.storeId, runId: plan.runId });
     const decided = decide(ws, policy, binding.intent, binding.stateDigest, options.confirm, options.now);
+    // A start that is not admitted leaves nothing behind: no envelope receipt was issued for it.
     if (!decided.admitted) return decided.result;
     const verdicts = printed(decided.record);
+    const envelopes = models ? { receipts: issueEnvelopeReceipts(ws, models.envelopes, options.now) } : null;
     if (!isFinalRunState(runStateIn(store, plan.runId))) {
       // A plan this installation cannot execute (another build's adapters, a rule no shipped adapter implements):
       // refused before anything starts; canonicalResult says why.
@@ -866,9 +1069,14 @@ export async function runPlan(
         });
       return withScratch(store, async (lease) => {
         const admitted = await loadPlan(store, plan.runId, plan.revision),
-          review = admitted.plan.units.some((u) => u.review)
-            ? await reviewRuntime(store, ws, options.confirmModels === true)
-            : undefined;
+          review =
+            admitted.plan.units.some((u) => u.review) && envelopes && 'receipts' in envelopes
+              ? await compositeReviewRuntime(store, ws, {
+                  book: receiptBook(ws),
+                  receipts: new Map(envelopes.receipts.map((r) => [r.stateDigest, r.id])),
+                  requestedBy: OWNER,
+                })
+              : undefined;
         try {
           await executeRun(store, plan.runId, {
             scratchRoot: lease.path,
@@ -915,8 +1123,16 @@ export function confirmForService(
     now: Date;
     /** The store the running service holds, from its verified welcome. Needed to confirm; not to show what would happen. */
     storeId?: string;
+    /**
+     * The owner also confirms every model the start calls (`--confirm-models`, or `scan --confirm`, whose preview named
+     * them): a start of a plan with model stages is then confirmed as one composite, and one receipt is issued for
+     * each model envelope it opens. `false` (the command line without the flag): such a start waits and nothing is
+     * issued. Left out: only the start receipt is issued, which the service refuses for a plan with model stages,
+     * since it carries no envelope receipt.
+     */
+    models?: boolean;
   },
-): { receiptId: string; verdicts: PrintedVerdicts } | { result: CommandResult } {
+): { receiptId: string; verdicts: PrintedVerdicts; envelopeReceipts: readonly string[] } | { result: CommandResult } {
   const record = options.plan;
   if (!record || record.kind !== 'analysis')
     return {
@@ -941,11 +1157,7 @@ export function confirmForService(
   const { intent, stateDigest } =
     options.storeId === undefined
       ? {
-          intent: intentOf(
-            options.action,
-            record.planDigest,
-            options.action === 'run.start' ? [...record.effects] : ['local-artifacts'],
-          ),
+          intent: unboundIntent(options.action, record),
           stateDigest: record.planDigest,
         }
       : runWriteBinding(ws, options.action, record, { storeId: options.storeId, runId: record.runId });
@@ -959,12 +1171,25 @@ export function confirmForService(
     credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
   }).record;
   const verdicts = printed(decision);
+  const paid = options.action === 'run.start' && record.effects.includes('paid-inference');
+  // The models a start calls, in words the preview prints: provider, model, runner and budget.
+  const models = paid && record.model ? modelsOf(policy, record) : null;
   const facts = {
     planId: record.runId,
     action: intent.action,
     effects: intent.effects,
     intentDigest: decision.intentDigest,
+    ...(options.action === 'run.start' ? { stages: [...(record.stages ?? [])] } : {}),
+    ...(models ? { models: models.map((m) => m.view) } : {}),
   };
+  if (paid && (record.modelConflict || (models && !models.every((m) => m.binding))))
+    return {
+      result: result(options.command, 'configuration-failure', {
+        verdicts,
+        facts,
+        reasonCode: 'sentinel.provider.bindingChanged',
+      }),
+    };
   if (decision.outcome === 'denied') {
     const v = decision.verdicts;
     return {
@@ -979,11 +1204,12 @@ export function confirmForService(
       }),
     };
   }
-  if (!options.confirm)
+  const waitsForModels = paid && options.models !== true;
+  if (!options.confirm || (paid && options.models === false))
     return {
       result: result(options.command, 'awaiting-confirmation', {
         verdicts,
-        facts,
+        facts: { ...facts, ...(waitsForModels ? { requiredFlag: '--confirm-models' } : {}) },
         reasonCode: 'sentinel.service.needsOwnerConfirm',
       }),
     };
@@ -998,13 +1224,188 @@ export function confirmForService(
       }),
     };
   }
+  // Each model envelope the start opens, decided like the start before anything is issued (a denial issues nothing);
+  // then the set is issued: the envelope receipts and the start receipt.
+  const decided = options.models ? envelopeDecisionsFor(policy, record, options.storeId, options.now) : null;
+  if (decided && 'refusal' in decided)
+    return { result: { ...decided.refusal, command: options.command, facts: { ...facts } } };
+  const envelopeReceipts = decided ? issueEnvelopeReceipts(ws, decided.envelopes, options.now).map((r) => r.id) : [];
+  const book = receiptBook(ws);
   const receipt = issueReceipt(
-    receiptBook(ws),
+    book,
     OWNER,
     { intent, stateDigest, policyRevision: policy.revision },
     { now: options.now, ttlMs: RECEIPT_TTL_MS },
   );
-  return { receiptId: receipt.id, verdicts };
+  return { receiptId: receipt.id, verdicts, envelopeReceipts: Object.freeze(envelopeReceipts) };
+}
+
+/** The write shown before a service names its store: the same action, effects, provider and budget, no instance. */
+function unboundIntent(action: 'run.start' | 'run.pause' | 'run.cancel', plan: CurrentPlan): ActionIntent {
+  const intent = intentOf(action, plan.planDigest, action === 'run.start' ? [...plan.effects] : ['local-artifacts']);
+  if (action === 'run.start' && plan.model) {
+    intent.scope.provider = plan.model.providerId;
+    intent.budget = { ...plan.model.budget };
+  }
+  return intent;
+}
+
+/** A start's model, resolved again under the adopted policy; `binding` is absent when it no longer resolves exactly. */
+function modelsOf(
+  policy: EffectivePolicy,
+  plan: CurrentPlan,
+): { binding?: ProviderBinding; view: Record<string, unknown> }[] {
+  const m = plan.model!;
+  let binding: ProviderBinding | undefined;
+  try {
+    binding = m.modelId ? bindProvider(policy, m.providerId, m.modelId) : undefined;
+  } catch {
+    binding = undefined;
+  }
+  if (binding && binding.digest !== m.bindingDigest) binding = undefined;
+  return [
+    {
+      ...(binding ? { binding } : {}),
+      view: {
+        providerId: m.providerId,
+        modelId: m.modelId ?? null,
+        runner: binding?.kind ?? null,
+        model: binding?.model ?? null,
+        bindingDigest: m.bindingDigest,
+        budget: { ...m.budget },
+      },
+    },
+  ];
+}
+
+/**
+ * The model envelopes of a composite start, decided by the owner in this process before anything is issued: the run's
+ * one binding resolved again under the adopted policy (it must be the admitted one) and its envelope decided under
+ * admission (a denial issues nothing and says why). `issueEnvelopeReceipts` then issues one receipt for exactly each
+ * decided envelope (`envelopeBinding`), once the start is decided too. The same pair serves a start through the
+ * service (confirmForService) and a foreground start (runPlan).
+ */
+export function envelopeDecisionsFor(
+  policy: EffectivePolicy,
+  plan: CurrentPlan,
+  storeId: string,
+  now: Date,
+): { envelopes: readonly ReturnType<typeof envelopeBinding>[] } | { refusal: CommandResult } {
+  if (!plan.model) return { envelopes: [] };
+  const [model] = modelsOf(policy, plan);
+  if (plan.modelConflict || !model?.binding)
+    return {
+      refusal: result('run', 'configuration-failure', {
+        reasonCode: 'sentinel.provider.bindingChanged',
+        facts: { limitation: 'one-model-binding-per-run' },
+      }),
+    };
+  const envelope = envelopeBinding(model.binding, plan, storeId, policy.revision, plan.model.budget);
+  const preflight = admit({
+    intent: envelope.intent,
+    requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' },
+    policy,
+    stateDigest: envelope.stateDigest,
+    now,
+    capability: () => ({ available: true, detail: 'exact configured model capability' }),
+    credential: () => ({ basis: 'unknown', detail: 'read when the envelope opens' }),
+  }).record;
+  if (!preflight.verdicts.policy.allowed)
+    return {
+      refusal: result('run', 'configuration-failure', {
+        verdicts: printed(preflight),
+        reasonCode: preflight.verdicts.policy.reasonCode,
+        facts: { runId: plan.runId },
+      }),
+    };
+  return { envelopes: Object.freeze([envelope]) };
+}
+
+/** Issues the owner's receipt for each decided envelope; called only once the start is decided as well. */
+export function issueEnvelopeReceipts(
+  ws: Workspace,
+  envelopes: readonly ReturnType<typeof envelopeBinding>[],
+  now: Date,
+): readonly { stateDigest: string; id: string }[] {
+  if (!envelopes.length) return [];
+  assertMayConfirm(OWNER);
+  const book = receiptBook(ws);
+  // Spent when the model stage begins, after the checks before it: the longest a receipt may live.
+  return Object.freeze(
+    envelopes.map((e) =>
+      Object.freeze({
+        stateDigest: e.stateDigest,
+        id: issueReceipt(book, OWNER, e, { now, ttlMs: MAX_RECEIPT_TTL_MS }).id,
+      }),
+    ),
+  );
+}
+
+/**
+ * The model envelopes a confirmed composite start may open: each owner receipt by the envelope state it was issued
+ * for, the book that holds it and the owner the receipts speak for. Built only from receipts issued or checked for
+ * exactly this start.
+ */
+export interface ModelAuthority {
+  readonly book: { check: ReceiptBook['check'] };
+  readonly receipts: ReadonlyMap<string, string>;
+  readonly requestedBy: RequestedBy;
+}
+
+/**
+ * The review runtime of a composite start: the ordinary one (review-adapter.ts), issuing nothing itself, whose
+ * `receiptFor` hands each envelope the one receipt issued for exactly it, checked again by its book first. An
+ * envelope with no receipt opens with none and is refused. Used by the foreground run and by the owner service alike.
+ */
+export async function compositeReviewRuntime(
+  store: SentinelStore,
+  ws: Workspace,
+  authority: ModelAuthority,
+): Promise<import('../review/dispatch.js').ReviewRuntime & { close(): void }> {
+  const base = await reviewRuntime(store, ws, false);
+  return {
+    ...base,
+    requestedBy: authority.requestedBy,
+    receiptFor: (request) => {
+      const id = authority.receipts.get(request.stateDigest);
+      if (id === undefined) return undefined;
+      try {
+        authority.book.check(
+          id,
+          {
+            intent: envelopeIntent(request.binding, request.runId, request.budget),
+            stateDigest: request.stateDigest,
+            policyRevision: request.policy.revision,
+          },
+          new Date(),
+        );
+      } catch {
+        // Not this envelope's receipt (or no longer checkable): the envelope opens with none, and is refused.
+        return undefined;
+      }
+      // U-3 widens OpenEnvelopeRequest's book to the paired browser's; until then an owner-UI book never checks a
+      // paid.admit receipt (its proof refuses the action), so this is only ever the owner CLI's book here.
+      return { book: authority.book as ReceiptBook, id };
+    },
+  };
+}
+
+/**
+ * The receipt binding of one model envelope: what review/dispatch.ts asks the broker to open for this run, plan and
+ * binding (`envelopeIntent` and the same state digest), so a receipt issued for it fits that envelope only.
+ */
+export function envelopeBinding(
+  binding: ProviderBinding,
+  plan: Pick<CurrentPlan, 'runId' | 'planDigest'>,
+  storeId: string,
+  policyRevision: string,
+  budget: import('../contracts/policy.js').Budget,
+): { intent: ActionIntent; stateDigest: string; policyRevision: string } {
+  return {
+    intent: envelopeIntent(binding, plan.runId, budget),
+    stateDigest: canonicalDigest({ store: storeId, run: plan.runId, plan: plan.planDigest, binding: binding.digest }),
+    policyRevision,
+  };
 }
 
 // ---- rule packs: the owner promotes one into a new lock revision ----
@@ -1125,7 +1526,8 @@ export async function runStatus(
   ws: Workspace,
   options: { runId: string; after?: number; limit?: number },
 ): Promise<CommandResult> {
-  return withStore(ws, async (store) => statusIn(store, { ...options, registry: publicRegistry(ws.trustDir) }));
+  // The registry is built only when the answer needs it (a run not ended, that nothing executes).
+  return withStore(ws, async (store) => statusIn(store, { ...options, registry: () => publicRegistry(ws.trustDir) }));
 }
 
 /** The last committed state of a run, read in bounded pages, or null when the store has no such run. */
@@ -1151,7 +1553,8 @@ export async function statusIn(
     limit?: number;
     /** Something executes it now (the service says so); otherwise whether this installation could is part of the answer. */
     executing?: boolean;
-    registry?: AdapterRegistry;
+    /** The trusted registry, or how to build it: asked for only when a run has not ended and nothing executes it. */
+    registry?: AdapterRegistry | (() => AdapterRegistry);
   },
 ): Promise<CommandResult> {
   {
@@ -1184,10 +1587,16 @@ export async function statusIn(
       });
     }
     // Not ended and not executing: a run this installation cannot execute says so here, not only once `run` is tried.
+    const registry = typeof options.registry === 'function' ? undefined : options.registry;
     const blocked =
       !options.executing && !isFinalRunState(state)
-        ? await notExecutableHere(store, options.runId, options.registry)
+        ? await notExecutableHere(
+            store,
+            options.runId,
+            typeof options.registry === 'function' ? options.registry() : registry,
+          )
         : undefined;
+    const { held, pipeline } = await heldUnitsIn(store, options.runId);
     return result('status', 'answered', {
       ...(blocked ? { reasonCode: 'sentinel.service.runNotExecutable' } : {}),
       facts: {
@@ -1198,10 +1607,52 @@ export async function statusIn(
         more: page.more,
         events: page.events.map((e) => ({ sequence: e.sequence, kind: e.kind, at: e.at })),
         ...(blocked ? { notExecutable: blocked } : {}),
+        ...(held.length ? { held } : {}),
+        ...(pipeline ? { pipeline } : {}),
       },
     });
   }
 }
+
+/**
+ * The units of a run's current revision the ledger holds, each with the catalog reason it was held for (a model stage
+ * whose inputs no longer hold, a feature that is off): what `status` says about work that did not run.
+ */
+export async function heldUnitsIn(
+  store: SentinelStore,
+  runId: string,
+): Promise<{
+  held: readonly { unit: string; stage: string; state: string; reasonCode: string }[];
+  pipeline?: RunPipeline;
+}> {
+  const plan = await currentPlan(store, runId);
+  if (!plan) return { held: [] };
+  const admitted = await loadPlan(store, runId, plan.revision);
+  const held: { unit: string; stage: string; state: string; reasonCode: string }[] = [];
+  for (const u of admitted.plan.units) {
+    const work = store.ledger.getWork({ id: u.id, revision: u.revision });
+    if (work && (work.state === 'blocked' || work.state === 'disabled-by-policy') && work.reason)
+      held.push(Object.freeze({ unit: u.id, stage: String(u.stage), state: work.state, reasonCode: work.reason }));
+  }
+  const recorded = admitted.profile.pipeline;
+  const source = pipelineSourceOf(admitted.profile);
+  return {
+    held: Object.freeze(held),
+    // What the run's profile records: the declared pipeline it was planned from, the profile whose defaults it
+    // planned, or neither (a workspace without a pipeline file, or a run planned before either was recorded).
+    pipeline: recorded
+      ? { path: 'declared', id: recorded.id, revision: recorded.revision, digest: canonicalDigest(recorded) }
+      : source
+        ? { path: 'default-of', profile: source.profile }
+        : { path: 'default' },
+  };
+}
+
+/** The pipeline a run was planned from, as its admitted profile records it. */
+export type RunPipeline =
+  | { readonly path: 'declared'; readonly id: string; readonly revision: number; readonly digest: string }
+  | { readonly path: 'default-of'; readonly profile: string }
+  | { readonly path: 'default' };
 
 const FINAL_STATES = new Set(['completed', 'canceled']);
 export const isFinalRunState = (state: string | null) => state !== null && FINAL_STATES.has(state);

@@ -13,6 +13,8 @@ export const COMMANDS = {
   pipeline: null,
   stage: null,
   plan: null,
+  scan: null,
+  scans: null,
   paths: null,
   run: null,
   status: null,
@@ -32,7 +34,7 @@ export const COMMANDS = {
   prepare: null,
   'owner-ui': null,
   compare: null,
-  bundle: 'PR 26',
+  bundle: 'a later release',
 } as const satisfies Record<string, string | null>;
 export type CommandName = keyof typeof COMMANDS;
 
@@ -67,8 +69,14 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
     positional: ['action'],
     min: 1,
   },
-  stage: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action', 'folder'], min: 2 },
+  stage: {
+    flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--run': 'value' },
+    positional: ['action', 'target'],
+    min: 2,
+  },
   plan: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: [], min: 0 },
+  scan: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--detach': 'boolean' }, positional: [], min: 0 },
+  scans: { flags: { ...COMMON, ...STORE, '--limit': 'value' }, positional: [], min: 0 },
   paths: {
     flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--request': 'value' },
     positional: ['ancestorRunId'],
@@ -79,17 +87,22 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
     positional: ['planId'],
     min: 1,
   },
-  status: { flags: { ...COMMON, ...STORE, '--after': 'value', '--limit': 'value' }, positional: ['runId'], min: 1 },
-  wait: { flags: { ...COMMON, ...STORE, '--timeout': 'value' }, positional: ['runId'], min: 1 },
+  status: { flags: { ...COMMON, ...STORE, '--after': 'value', '--limit': 'value' }, positional: ['runId'], min: 0 },
+  wait: { flags: { ...COMMON, ...STORE, '--timeout': 'value' }, positional: ['runId'], min: 0 },
   pause: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   cancel: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   retry: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
-  resume: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
+  resume: {
+    flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--confirm-models': 'boolean' },
+    positional: ['runId'],
+    min: 1,
+  },
   rerun: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--stage': 'value' }, positional: ['runId'], min: 1 },
   report: {
     flags: { ...COMMON, ...STORE, ...FULL_REPORT, '--full': 'boolean', '--instructions': 'boolean' },
     positional: ['runId'],
-    min: 1,
+    // Without a run id: the newest scan's report.
+    min: 0,
   },
   serve: { flags: { ...COMMON, ...STORE, '--idle-ms': 'value' }, positional: [], min: 0 },
   compare: { flags: { ...COMMON, ...STORE, ...FULL_REPORT }, positional: ['runId', 'baselineRunId'], min: 2 },
@@ -229,11 +242,10 @@ export function parseArgs(argv: readonly string[]): ParseResult {
   if (positional.length < spec.min) return fail('sentinel.args.missingArgument', spec.positional[positional.length]!);
   if (command === 'capabilities' && flags['--models'] && !json)
     return fail('sentinel.args.unexpectedArgument', '--models requires --json');
-  if (command === 'run' && flags['--confirm-models'] && flags['--detach'])
-    return fail('sentinel.args.unexpectedArgument', '--confirm-models requires foreground run');
   if (command === 'report' && flags['--instructions']) {
     if (!json || Object.keys(flags).some((f) => !['--json', '--workspace', '--instructions'].includes(f)))
       return fail('sentinel.args.unexpectedArgument', '--instructions requires only --json');
+    if (positional.length === 0) return fail('sentinel.args.missingArgument', 'runId');
   }
   if (command === 'paths' && flags['--request'] === undefined) return fail('sentinel.args.missingValue', '--request');
   const args: Record<string, string> = {};
@@ -247,8 +259,14 @@ export function parseArgs(argv: readonly string[]): ParseResult {
       if (!['--json', '--workspace', ...allowed[args.action!]!].includes(flag))
         return fail('sentinel.args.unknownFlag', flag);
   }
-  if (command === 'stage' && args.action !== 'promote')
-    return fail('sentinel.args.unexpectedArgument', String(args.action));
+  if (command === 'stage') {
+    // `stage promote <folder> [--confirm]` and `stage show <stage> [--run <id>]`: each takes only its own flags.
+    const allowed: Record<string, string[]> = { promote: ['--confirm'], show: ['--run'] };
+    if (!Object.hasOwn(allowed, args.action!)) return fail('sentinel.args.unexpectedArgument', String(args.action));
+    for (const flag of Object.keys(flags))
+      if (!['--json', '--workspace', ...allowed[args.action!]!].includes(flag))
+        return fail('sentinel.args.unknownFlag', flag);
+  }
   if (command === 'decision') {
     const common = ['--json', '--workspace'];
     const allowed: Record<string, string[]> = {

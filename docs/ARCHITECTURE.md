@@ -2184,6 +2184,28 @@ bindings. It changes neither model capability nor source-disclosure/network/paid
 accepted records remain `deterministicCoverage: false`; reports retain zero planned checks and the files seen by no
 check. Guided review still depends on planned checks. Selected external scanners still use pinned containers only.
 
+**Amendment — the composite start (2026-10-28).** *What it said:* a plan with model stages started only in the
+owner's foreground command line (`run PLAN --confirm --confirm-models`); the detached service, MCP and resume could
+not authorize the model workflow and refused with `sentinel.review.foregroundRequired` before a receipt was spent or
+anything started. *What it says now:* the detached owner service may run such a plan when the owner's own command line
+confirmed it as one composite, in one `--confirm` (`scan --confirm`, or `run --detach --confirm --confirm-models` and
+`resume --confirm --confirm-models`). The composite is the start receipt, bound to the admitted plan digest, the stages
+the revision runs and each model binding with its runner, model and budget, plus one `paid.admit` receipt for each
+model envelope the run opens, bound to exactly that store, run, plan digest and binding. The service checks every
+envelope receipt (`book.check`, nothing spent) before it spends the start receipt, refuses a receipt for another
+envelope (`sentinel.receipt.mismatch`) and a plan or binding that differs from the one confirmed; it hands each
+receipt to the run only for its own envelope and never issues an owner receipt itself. A start that reaches the service
+without the composite (an agent or MCP, or one carrying no envelope receipts) still refuses with `foregroundRequired`
+and opens no envelope; the command line asks for `--confirm-models` before it issues anything. A foreground start
+(`run --confirm --confirm-models`, `scan --confirm`) takes the same composite: its envelope is decided before the start
+(a denial refuses before anything starts) and its receipt is issued with the start, never as a stage dispatches. A
+rerun with changed bindings needs its own confirmation, since no receipt outlives its plan. *Why:* the
+owner reads the whole composite in the preview (every stage, where it runs and what it does, every model with its
+budget) before confirming it, so one confirmation over exactly those bindings is the same consent the foreground pair
+gave, and the run no longer depends on the confirming terminal staying open. The owner-panel clause above (the
+paired browser "cannot confirm … model spending") is unchanged until the browser half lands (U-3: its own receipt for
+the start and for each envelope, through the same facade).
+
 ADR48 owner-panel amendment (lane L-UX U-3, 2026-10-28). *What changed:* the paired panel confirms two more things,
 and nothing else. (1) A model start as one composite: its preview is the service's own `start.preview` (the stages the
 revision runs, each model with its runner and budget); its confirmation issues one owner-UI `run.start` receipt and
