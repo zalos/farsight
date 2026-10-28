@@ -148,6 +148,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/recovery.js': ['node:fs', 'node:path'],
   'execution/scratch.js': ['node:fs', 'node:path'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
+  // The host script runner starts its child only inside an attempt (runHostScript), never at import.
+  'execution/script-runner.js': ['ajv', 'node:child_process', 'node:crypto', 'node:fs', 'node:path'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
   // The Nest pack (PR 16) reads captured bytes with the parser's own pinned oxc-parser, loaded on first analysis only.
   'frameworks/nest/errors.js': ['@farsight/core/dist/strings-sentinel-nest.js'],
@@ -197,6 +199,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'review/providers/sandboxed-cli.js': ['node:child_process', 'node:fs', 'node:fs/promises'],
   // Copilot native mode: the scratch tree is written under the runner's owned root; no process of its own.
   'review/providers/cli-copilot-agent.js': ['node:crypto', 'node:fs/promises', 'node:path'],
+  // Claude native mode: the same scratch tree and shared runner; the token crosses descriptor 3 only.
+  'review/providers/cli-native-agent.js': ['node:crypto', 'node:fs/promises', 'node:path'],
   // Stage packs: owner-promoted prompt and skill bytes, copied into the trust folder and re-checked by digest.
   'review/packs.js': ['node:crypto', 'node:fs', 'node:path'],
   'review/runner.js': ['node:crypto'],

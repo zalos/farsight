@@ -475,7 +475,7 @@ test('every contract provider kind is one registry entry, and no review module s
     AGENT_RUNNERS.map((r) => [r.id, [...r.modes]]),
     [
       ['copilot-cli', ['brokered', 'native']],
-      ['claude-cli', ['brokered']],
+      ['claude-cli', ['brokered', 'native']],
       ['hosted-api', ['brokered']],
     ],
   );
