@@ -172,6 +172,8 @@ const envelopes = new WeakMap<
     budget: Budget;
     /** The qualified CLI runtime for a sandboxed-CLI kind, compared with the adopted pin at open. */
     cliRuntime?: object;
+    /** Whether the kind's release gate was open under the policy this envelope was admitted with. */
+    released: boolean;
     receipt?: SpentReceipt;
   }
 >();
@@ -259,7 +261,10 @@ export class ModelBroker {
       : undefined;
     let credential: Secret | null = null;
     let answer: ReturnType<Parameters<typeof admit>[0]['credential']>;
-    if (kind.cli) {
+    // A CLI pin on its vendor login: the broker reads nothing. A CLI pin on an adopted reference (the owner's own
+    // token for the native Claude profile) is read here exactly as an HTTP provider's key is, and held privately.
+    const reference = kind.cli?.credentialSource(binding) === 'reference';
+    if (kind.cli && !reference) {
       answer = { basis: 'keychain-scope', allowed: true, detail: kind.cli.credentialDetail };
     } else if (binding.credential === null) {
       answer = hosted
@@ -317,9 +322,12 @@ export class ModelBroker {
       admission: result.record,
       receiptDigest,
     });
+    const gate = kind.cli?.releaseGate,
+      provider = policy.settings.providers.find((p) => p.id === binding.providerId);
     envelopes.set(env, {
       binding,
       credential,
+      released: !gate || (provider !== undefined && gate.open(policy.settings, provider)),
       budget: { ...b },
       ...(cliRuntime ? { cliRuntime } : {}),
       ...(spent ? { receipt: spent } : {}),
@@ -385,6 +393,8 @@ export class ModelBroker {
     const cli = providerKind(binding.kind).cli;
     if (!cli?.agent || cli.mode(binding) !== 'native')
       return fail('sentinel.provider.invalidProfile', 'the adopted profile has no qualified native mode');
+    // A native run is a stage the selection path never saw: its release gate is checked here, as admitted.
+    if (!held.released && cli.releaseGate) return fail(cli.releaseGate.code, cli.releaseGate.detail);
     if (!Number.isSafeInteger(req.maxTurns) || req.maxTurns < 1 || req.maxTurns > 64)
       fail('sentinel.provider.invalidProfile', 'a native stage allows 1 to 64 turns');
     if (!Number.isSafeInteger(req.tokens) || req.tokens < 1 || req.tokens > binding.limits.contextTokens)
@@ -437,8 +447,11 @@ export class ModelBroker {
         task: req.task,
         maxTurns: req.maxTurns,
         ...(req.skills?.length ? { skills: req.skills } : {}),
+        ...(req.jsonSchema !== undefined ? { jsonSchema: req.jsonSchema } : {}),
+        ...(req.maxUsd !== undefined ? { maxUsd: req.maxUsd } : {}),
       }),
       limits: Object.freeze({ deadlineAt: req.deadlineAt, ...(req.signal ? { signal: req.signal } : {}) }),
+      credential: cli.credentialSource(binding) === 'reference' ? held.credential : null,
       ledger,
       reservationId: res.id,
       receipt: held.receipt,
@@ -470,7 +483,7 @@ export class ModelBroker {
       { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, costNanos: null },
       stamp(this.#now()),
     );
-    if (result.reportedModel !== binding.model)
+    if (!(cli.agent.sameModel ?? ((a: string, b: string) => a === b))(binding.model, result.reportedModel))
       throw new ModelCallError(
         new ProviderError(
           'sentinel.provider.identityMismatch',
@@ -720,6 +733,10 @@ export interface AgentRunRequest {
   /** The stage's absolute deadline. */
   readonly deadlineAt: number;
   readonly signal?: AbortSignal;
+  /** The output's JSON Schema, for a CLI that enforces it on its final answer itself (Claude's `--json-schema`). */
+  readonly jsonSchema?: string;
+  /** The stage's dollar ceiling, for a CLI that enforces one itself (Claude's `--max-budget-usd`). */
+  readonly maxUsd?: string;
 }
 export interface AgentRunReply {
   readonly result: CopilotAgentResult;

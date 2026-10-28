@@ -119,6 +119,7 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   // ---- who may ask ----
   'sentinel.actor.payloadClaim': same('a request may not say who is asking ({detail})', 'Who is asking is decided by how the request reached Sentinel, never by what it says, so a request naming an actor or a channel is refused.'),
   'sentinel.actor.confirmNotOwner': same('only the owner can confirm, on their own command line', 'Only the owner confirms an action, at their own terminal. An agent, the web bridge or a model cannot confirm, including its own request.'),
+  'sentinel.actor.ownerMintClaimed': same('only the command line can make the owner of a command', 'The command line takes the one way to make the owner as it starts. Any other code that asks for it afterwards, in the same process, is refused, so nothing but the owner\'s own command can act as the owner.'),
   'sentinel.actor.ownerChannelNotGrantable': same('the owner channel cannot be granted to a connection', 'The owner\'s command line is the only owner channel; a client of the local service is never given it.'),
 
   // ---- the local socket ----

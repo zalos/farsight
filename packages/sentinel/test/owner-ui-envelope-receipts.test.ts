@@ -39,8 +39,8 @@ const fake = {
 (globalThis as any).__sentinelFakeCli = fake;
 const FAKE_SOURCE = `
 import * as real from './registry.js?real';
-import { issueNativeCall, beginNativeCall, finishNativeCall, issueCopilotAgentCall, beginCopilotAgentCall,
-  finishCopilotAgentCall } from './authority.js';
+import { issueNativeCall, beginNativeCall, finishNativeCall, issueClaudeAgentCall, beginClaudeAgentCall,
+  finishClaudeAgentCall } from './authority.js';
 export * from './registry.js?real';
 const hooks = globalThis.__sentinelFakeCli;
 const base = real.providerKind('claude-cli');
@@ -49,13 +49,18 @@ const cli = Object.freeze({
   checkBinding(settings, model, limits) { if (!hooks.loose) base.cli.checkBinding(settings, model, limits); },
   async qualify() { return hooks.runtime; },
   mode: () => hooks.mode,
+  // the fake reads no keychain: its native run is handed the test's synthetic token below
+  credentialSource: () => 'vendor',
+  releaseGate: undefined,
   issue: (c) => issueNativeCall(c),
   async call(authority) { beginNativeCall(authority); hooks.calls++; return hooks.reply; },
   release: (authority) => finishNativeCall(authority),
   agent: Object.freeze({
-    issue: (c) => issueCopilotAgentCall(c),
-    async call(authority) { beginCopilotAgentCall(authority); hooks.runs++; return hooks.result; },
-    release: (authority) => finishCopilotAgentCall(authority),
+    ...base.cli.agent,
+    // the real Claude agent authority, with a synthetic token in place of the owner's
+    issue: (c) => issueClaudeAgentCall({ ...c, credential: hooks.secret }),
+    async call(authority) { beginClaudeAgentCall(authority); hooks.runs++; return hooks.result; },
+    release: (authority) => finishClaudeAgentCall(authority),
     installation: () => Object.freeze({ source: 'fake', executable: 'fake-cli' }),
   }),
 });
@@ -103,6 +108,8 @@ const PROFILE = {
   PROFILE.id = CLAUDE_NATIVE_PROFILE.id;
   PROFILE.executableDigest = CLAUDE_NATIVE_PROFILE.executableDigest;
 }
+const { Secret } = await import('../dist/review/providers/credentials.js');
+(fake as any).secret = new Secret('fixture-native-token');
 const code = (c: string) => (e: any) => e?.code === c;
 
 /** The adopted native-claude policy; `local` makes the provider loopback-only, so opening needs no receipt. */
@@ -403,7 +410,7 @@ test(
 );
 
 test(
-  "authority.ts: a call or run begins only under a receipt a book's consume returned, whichever book",
+  "authority.ts: a call or a native run (Claude's included) begins only under a receipt a book's consume returned, whichever book",
   needsStore,
   async (t) => {
     const p = await panel(t),
@@ -435,6 +442,18 @@ test(
       () =>
         authority.beginCopilotAgentCall(
           authority.issueCopilotAgentCall({ runtime: {}, request, limits, ledger, reservationId: 'r', receipt } as any),
+        ),
+      () =>
+        authority.beginClaudeAgentCall(
+          authority.issueClaudeAgentCall({
+            runtime: {},
+            request,
+            limits,
+            ledger,
+            reservationId: 'r',
+            receipt,
+            credential: (fake as any).secret,
+          } as any),
         ),
     ];
     for (const begin of starts(spent)) assert.doesNotThrow(begin, 'the owner-UI book spent it');

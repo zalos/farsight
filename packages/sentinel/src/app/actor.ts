@@ -44,7 +44,8 @@ export type ActorErrorCode =
   | 'sentinel.actor.payloadClaim'
   | 'sentinel.actor.confirmNotOwner'
   | 'sentinel.actor.ownerChannelNotGrantable'
-  | 'sentinel.actor.payloadTooDeep';
+  | 'sentinel.actor.payloadTooDeep'
+  | 'sentinel.actor.ownerMintClaimed';
 
 /** Request bodies nest at most this deep; a deeper one is refused, never skipped. */
 export const MAX_BODY_DEPTH = 32;

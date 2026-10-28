@@ -68,10 +68,8 @@ import { controlCapabilities } from './controls.js';
 import { PreparationController } from './preparation-controller.js';
 import { PreparationError } from './preparation-clock.js';
 import { recordRunFailure, runFailureCode } from './run-failure.js';
-import { reviewRuntime } from './review-adapter.js';
-import { envelopeBinding, OWNER as OWNER_REQUESTER } from './local.js';
+import { compositeReviewRuntime, envelopeBinding, OWNER as OWNER_REQUESTER, type ModelAuthority } from './local.js';
 import { bindProvider } from '../review/providers/profile.js';
-import { envelopeIntent } from '../review/providers/broker.js';
 import type { ReceiptBook } from '../policy/index.js';
 import type { ReviewRuntime } from '../review/dispatch.js';
 import { HeldSentinelService } from '../app/service.js';
@@ -100,16 +98,6 @@ export class ServiceError extends Error {
     super(code);
     this.name = 'ServiceError';
   }
-}
-
-/**
- * The model envelopes a confirmed start may open: each owner receipt by the envelope state it was issued for, the
- * book that holds it, and the owner the receipts speak for. Built only from receipts checked at the start.
- */
-interface ModelAuthority {
-  readonly book: { check: ReceiptBook['check'] };
-  readonly receipts: ReadonlyMap<string, string>;
-  readonly requestedBy: RequestedBy;
 }
 
 interface ActiveRun {
@@ -781,34 +769,7 @@ export class OwnerService {
           : await scannerExecution(this.#store, planId, this.#ws.trustDir, scratch, this.#registry, lease.wrapRunner);
         // The model runtime exists only for a start the owner confirmed as a composite: each envelope opens on the
         // receipt issued for exactly it, checked again before it is handed over; no receipt is issued here.
-        if (models) {
-          const base = await reviewRuntime(this.#store, this.#ws, false);
-          review = {
-            ...base,
-            requestedBy: models.requestedBy,
-            receiptFor: (request) => {
-              const id = models.receipts.get(request.stateDigest);
-              if (id === undefined) return undefined;
-              try {
-                models.book.check(
-                  id,
-                  {
-                    intent: envelopeIntent(request.binding, request.runId, request.budget),
-                    stateDigest: request.stateDigest,
-                    policyRevision: request.policy.revision,
-                  },
-                  this.#now(),
-                );
-              } catch {
-                // Not this envelope's receipt (or no longer checkable): the envelope opens with none, and is refused.
-                return undefined;
-              }
-              // U-3 widens OpenEnvelopeRequest's book to the paired browser's; until then an owner-ui book never checks
-              // a paid.admit receipt (its proof refuses the action), so this is only ever the owner CLI's book here.
-              return { book: models.book as ReceiptBook, id };
-            },
-          };
-        }
+        if (models) review = await compositeReviewRuntime(this.#store, this.#ws, models);
         const coordinator = await Coordinator.open({
           ...assets,
           store: this.#store,

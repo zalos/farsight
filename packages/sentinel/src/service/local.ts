@@ -106,6 +106,7 @@ import {
   rerunRun,
   planWorkspaceCanonical,
   previewFindingsOf,
+  pipelineSourceOf,
   type CanonicalDisclosure,
   type CurrentPlan,
 } from './canonical.js';
@@ -873,6 +874,7 @@ async function planIn(
         now: options.now,
         ...(options.parentId ? { parentId: options.parentId } : {}),
         ...(gate.path?.kind === 'declared' ? { pipeline: gate.pipeline! } : {}),
+        ...(gate.path?.kind === 'default-of' ? { pipelineSource: gate.path } : {}),
       });
     } catch (e) {
       if (
@@ -1043,6 +1045,12 @@ export async function runPlan(
         reasonCode: 'sentinel.service.needsOwnerConfirm',
         facts: { runId: plan.runId, modelReviews: reviews, requiredFlag: '--confirm-models' },
       });
+    // The composite: before the start is decided, the model envelope the run opens is decided too (a denial refuses
+    // here, before any receipt is spent or anything starts); its receipt is issued with the start, never as a stage
+    // dispatches.
+    const paid = reviews.length > 0 && !isFinalRunState(runStateIn(store, plan.runId));
+    const envelopes = paid ? envelopeReceiptsFor(ws, policy, plan, store.storeId, options.now) : null;
+    if (envelopes && 'refusal' in envelopes) return envelopes.refusal;
     const binding = runWriteBinding(ws, 'run.start', plan, { storeId: store.storeId, runId: plan.runId });
     const decided = decide(ws, policy, binding.intent, binding.stateDigest, options.confirm, options.now);
     if (!decided.admitted) return decided.result;
@@ -1059,9 +1067,14 @@ export async function runPlan(
         });
       return withScratch(store, async (lease) => {
         const admitted = await loadPlan(store, plan.runId, plan.revision),
-          review = admitted.plan.units.some((u) => u.review)
-            ? await reviewRuntime(store, ws, options.confirmModels === true)
-            : undefined;
+          review =
+            admitted.plan.units.some((u) => u.review) && envelopes && 'receipts' in envelopes
+              ? await compositeReviewRuntime(store, ws, {
+                  book: receiptBook(ws),
+                  receipts: new Map(envelopes.receipts.map((r) => [r.stateDigest, r.id])),
+                  requestedBy: OWNER,
+                })
+              : undefined;
         try {
           await executeRun(store, plan.runId, {
             scratchRoot: lease.path,
@@ -1209,39 +1222,12 @@ export function confirmForService(
       }),
     };
   }
-  // Each model envelope the start opens, decided first (a denial issues nothing), then issued: bound to exactly
-  // this store, run, plan digest and binding, the envelope review/dispatch.ts opens and nothing else.
-  const envelopes = (options.models ? (models ?? []) : []).map((m) =>
-    envelopeBinding(m.binding!, record, options.storeId!, policy.revision, record.model!.budget),
-  );
-  for (const e of envelopes) {
-    const preflight = admit({
-      intent: e.intent,
-      requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' },
-      policy,
-      stateDigest: e.stateDigest,
-      now: options.now,
-      capability: () => ({ available: true, detail: 'exact configured model capability' }),
-      credential: () => ({ basis: 'unknown', detail: 'read when the envelope opens' }),
-    }).record;
-    if (!preflight.verdicts.policy.allowed)
-      return {
-        result: result(options.command, 'configuration-failure', {
-          verdicts: printed(preflight),
-          facts,
-          reasonCode: preflight.verdicts.policy.reasonCode,
-        }),
-      };
-  }
+  // Each model envelope the start opens, decided first (a denial issues nothing), then issued (envelopeReceiptsFor).
+  const envelopes = options.models ? envelopeReceiptsFor(ws, policy, record, options.storeId, options.now) : null;
+  if (envelopes && 'refusal' in envelopes)
+    return { result: { ...envelopes.refusal, command: options.command, facts: { ...facts } } };
+  const envelopeReceipts = envelopes ? envelopes.receipts.map((r) => r.id) : [];
   const book = receiptBook(ws);
-  const envelopeReceipts = envelopes.map(
-    (e) =>
-      issueReceipt(book, OWNER, e, {
-        now: options.now,
-        // Spent when the model stage begins, after the checks before it: the longest a receipt may live.
-        ttlMs: MAX_RECEIPT_TTL_MS,
-      }).id,
-  );
   const receipt = issueReceipt(
     book,
     OWNER,
@@ -1287,6 +1273,101 @@ function modelsOf(
       },
     },
   ];
+}
+
+/**
+ * The model envelope receipts of a composite start, issued by the owner in this process: the run's one binding
+ * resolved again under the adopted policy (it must be the admitted one), its envelope decided first under admission
+ * (a denial issues nothing and says why), then one receipt issued for exactly that envelope (`envelopeBinding`). The
+ * same set serves a start through the service (confirmForService) and a foreground start (runPlan).
+ */
+export function envelopeReceiptsFor(
+  ws: Workspace,
+  policy: EffectivePolicy,
+  plan: CurrentPlan,
+  storeId: string,
+  now: Date,
+): { receipts: readonly { stateDigest: string; id: string }[] } | { refusal: CommandResult } {
+  if (!plan.model) return { receipts: [] };
+  const [model] = modelsOf(policy, plan);
+  if (plan.modelConflict || !model?.binding)
+    return {
+      refusal: result('run', 'configuration-failure', {
+        reasonCode: 'sentinel.provider.bindingChanged',
+        facts: { limitation: 'one-model-binding-per-run' },
+      }),
+    };
+  const envelope = envelopeBinding(model.binding, plan, storeId, policy.revision, plan.model.budget);
+  const preflight = admit({
+    intent: envelope.intent,
+    requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' },
+    policy,
+    stateDigest: envelope.stateDigest,
+    now,
+    capability: () => ({ available: true, detail: 'exact configured model capability' }),
+    credential: () => ({ basis: 'unknown', detail: 'read when the envelope opens' }),
+  }).record;
+  if (!preflight.verdicts.policy.allowed)
+    return {
+      refusal: result('run', 'configuration-failure', {
+        verdicts: printed(preflight),
+        reasonCode: preflight.verdicts.policy.reasonCode,
+        facts: { runId: plan.runId },
+      }),
+    };
+  assertMayConfirm(OWNER);
+  // Spent when the model stage begins, after the checks before it: the longest a receipt may live.
+  const id = issueReceipt(receiptBook(ws), OWNER, envelope, { now, ttlMs: MAX_RECEIPT_TTL_MS }).id;
+  return { receipts: Object.freeze([Object.freeze({ stateDigest: envelope.stateDigest, id })]) };
+}
+
+/**
+ * The model envelopes a confirmed composite start may open: each owner receipt by the envelope state it was issued
+ * for, the book that holds it and the owner the receipts speak for. Built only from receipts issued or checked for
+ * exactly this start.
+ */
+export interface ModelAuthority {
+  readonly book: { check: ReceiptBook['check'] };
+  readonly receipts: ReadonlyMap<string, string>;
+  readonly requestedBy: RequestedBy;
+}
+
+/**
+ * The review runtime of a composite start: the ordinary one (review-adapter.ts), issuing nothing itself, whose
+ * `receiptFor` hands each envelope the one receipt issued for exactly it, checked again by its book first. An
+ * envelope with no receipt opens with none and is refused. Used by the foreground run and by the owner service alike.
+ */
+export async function compositeReviewRuntime(
+  store: SentinelStore,
+  ws: Workspace,
+  authority: ModelAuthority,
+): Promise<import('../review/dispatch.js').ReviewRuntime & { close(): void }> {
+  const base = await reviewRuntime(store, ws, false);
+  return {
+    ...base,
+    requestedBy: authority.requestedBy,
+    receiptFor: (request) => {
+      const id = authority.receipts.get(request.stateDigest);
+      if (id === undefined) return undefined;
+      try {
+        authority.book.check(
+          id,
+          {
+            intent: envelopeIntent(request.binding, request.runId, request.budget),
+            stateDigest: request.stateDigest,
+            policyRevision: request.policy.revision,
+          },
+          new Date(),
+        );
+      } catch {
+        // Not this envelope's receipt (or no longer checkable): the envelope opens with none, and is refused.
+        return undefined;
+      }
+      // U-3 widens OpenEnvelopeRequest's book to the paired browser's; until then an owner-UI book never checks a
+      // paid.admit receipt (its proof refuses the action), so this is only ever the owner CLI's book here.
+      return { book: authority.book as ReceiptBook, id };
+    },
+  };
 }
 
 /**
@@ -1534,18 +1615,23 @@ export async function heldUnitsIn(
       held.push(Object.freeze({ unit: u.id, stage: String(u.stage), state: work.state, reasonCode: work.reason }));
   }
   const recorded = admitted.profile.pipeline;
+  const source = pipelineSourceOf(admitted.profile);
   return {
     held: Object.freeze(held),
-    // What the run's profile records: the declared pipeline it was planned from, or none (the default stages).
+    // What the run's profile records: the declared pipeline it was planned from, the profile whose defaults it
+    // planned, or neither (a workspace without a pipeline file, or a run planned before either was recorded).
     pipeline: recorded
       ? { path: 'declared', id: recorded.id, revision: recorded.revision, digest: canonicalDigest(recorded) }
-      : { path: 'default' },
+      : source
+        ? { path: 'default-of', profile: source.profile }
+        : { path: 'default' },
   };
 }
 
 /** The pipeline a run was planned from, as its admitted profile records it. */
 export type RunPipeline =
   | { readonly path: 'declared'; readonly id: string; readonly revision: number; readonly digest: string }
+  | { readonly path: 'default-of'; readonly profile: string }
   | { readonly path: 'default' };
 
 const FINAL_STATES = new Set(['completed', 'canceled']);

@@ -25,7 +25,7 @@ import type { DockerRunner } from '../execution/isolation.js';
 
 /** A scratch lease's container client wrapper (scratch-lease.ts), so the lease knows when its clients exited. */
 export type WrapRunner = (runner: DockerRunner) => DockerRunner;
-import { checkProfileRegistry, withPipeline } from '../execution/profile.js';
+import { checkProfileRegistry, withPipeline, type ExecutionProfileRecord } from '../execution/profile.js';
 import { defaultPipelineFor, runStages } from '../execution/stage-inputs.js';
 import type { PipelineDefinition } from '../contracts/pipeline.js';
 import {
@@ -261,9 +261,41 @@ interface WorkspacePlanOptions {
   profile?: TrustedProfile;
   /**
    * The adopted pipeline declaration to plan (recorded in the run's profile); absent: the default pipeline for these
-   * terms, which plans today's units and records nothing, so such a run keeps its identity.
+   * terms, which plans today's units, so such a run keeps its identity.
    */
   pipeline?: PipelineDefinition;
+  /**
+   * Planning the default pipeline for an adopted file that is exactly a profile's own (service/local.ts
+   * pipelinePathOf): recorded in the run's profile record beside its other terms, never in the run's identity.
+   */
+  pipelineSource?: PipelineSource;
+}
+
+/**
+ * How a run's plan read the workspace's pipeline file when it planned the default stages for an adopted file that is
+ * exactly what `init` writes for a profile (ruling B): `default-of` that profile. A declared pipeline is recorded as
+ * the profile's `pipeline` instead; a workspace with no pipeline file records neither.
+ */
+export interface PipelineSource {
+  readonly kind: 'default-of';
+  readonly profile: string;
+}
+const PROFILE_NAME = /^[a-z][a-z0-9-]{0,31}$/;
+
+/** The record with the default-path source beside its terms (the execution profile ignores fields it does not read). */
+const withPipelineSource = (record: ExecutionProfileRecord, source: PipelineSource): ExecutionProfileRecord =>
+  structuredClone({
+    ...record,
+    pipelineSource: { kind: source.kind, profile: source.profile },
+  }) as ExecutionProfileRecord;
+
+/** The default-path source a run's profile record names, or undefined (a declared or file-less run, or a malformed one). */
+export function pipelineSourceOf(record: ExecutionProfileRecord): PipelineSource | undefined {
+  const v = (record as { pipelineSource?: unknown }).pipelineSource as
+    { kind?: unknown; profile?: unknown } | undefined;
+  return v && v.kind === 'default-of' && typeof v.profile === 'string' && PROFILE_NAME.test(v.profile)
+    ? Object.freeze({ kind: 'default-of', profile: v.profile })
+    : undefined;
 }
 export async function planWorkspaceCanonical(
   store: SentinelStore,
@@ -356,7 +388,11 @@ async function planWorkspaceCanonicalInner(
   // default pipeline for these terms (recorded nowhere: it is today's plan, so the run keeps today's identity).
   const lockView = plannerLockFrom(current.lock, packs, current.digest);
   const pipeline = options.pipeline ?? defaultPipelineFor(lockView.rules, options.policy);
-  const record = options.pipeline ? withPipeline(profile.record, options.pipeline) : profile.record;
+  const record = options.pipeline
+    ? withPipeline(profile.record, options.pipeline)
+    : options.pipelineSource
+      ? withPipelineSource(profile.record, options.pipelineSource)
+      : profile.record;
   const key = {
     inventory: snapshot.inventoryDigest,
     lock: current.digest,
@@ -952,6 +988,7 @@ export async function selectedRerun(
   // The child plans the parent's declaration: the pipeline its profile recorded, or the default for the terms now.
   const lockView = plannerLockFrom(current.lock, packs, current.digest);
   const declared = closure.admitted.profile.pipeline;
+  const parentSource = pipelineSourceOf(closure.admitted.profile);
   const planTerms = {
     runId,
     revision: 1,
@@ -1058,7 +1095,12 @@ export async function selectedRerun(
     plan,
     selection,
     current,
-    profile: declared ? { ...profile, record: withPipeline(profile.record, declared) } : profile,
+    // The child records what the parent recorded: its declared pipeline, or the profile whose defaults it planned.
+    profile: declared
+      ? { ...profile, record: withPipeline(profile.record, declared) }
+      : parentSource
+        ? { ...profile, record: withPipelineSource(profile.record, parentSource) }
+        : profile,
     reviewArtifacts: reviews.artifacts,
   };
 }
