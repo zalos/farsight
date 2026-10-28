@@ -9,6 +9,7 @@ import {
   changedPaths,
   detectChecks,
   selectChecks,
+  pnpmTestArgs,
   selectTests,
   sentinelIsolationInputs,
   sentinelPackageInputs,
@@ -19,8 +20,8 @@ import { buildClosure } from '../pack-preflight.mjs';
 
 const none = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false, recovery: false };
 const full = { validate: true, e2e: true, echo: true, sentinel: true, isolation: true, recovery: true };
-const every = { base: '', also: [], packages: [] };
-const BASE = 'a'.repeat(40);
+const every = { scope: 'all', packages: [], also: [] };
+const some = (packages, also = []) => ({ scope: 'packages', packages, also });
 const repoRoot = new URL('../../', import.meta.url).pathname;
 
 test('ordinary docs skip runtime checks; packaged docs still check their tarball', () => {
@@ -277,13 +278,12 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
     assert.deepEqual(changedPaths(options), ['docs/notes with spaces\nand newline.md']);
     assert.deepEqual(detectChecks(options).checks, none, 'base-branch changes must not count as PR changes');
 
-    // a PR filters its package tests from its merge base, not from the base branch's newer head
+    // a PR tests the packages its own commits change, not the base branch's newer ones (core, here)
     git(['switch', '-c', 'sentinel', base]);
     write('packages/sentinel/src/x.ts');
     const sentinelHead = commit('feat(sentinel): x');
     const pr = detectChecks({ base: main, head: sentinelHead, event: 'pull_request', cwd: dir });
-    assert.equal(pr.tests.base, base);
-    assert.deepEqual(pr.tests.packages, ['@farsight/sentinel']);
+    assert.deepEqual(pr.tests, some(['@farsight/sentinel']));
 
     git(['switch', 'docs']);
     renameSync(join(dir, 'packages/server/src/index.ts'), join(dir, 'docs/old-code.md'));
@@ -299,11 +299,7 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
       { ...none, validate: true, e2e: true, sentinel: true },
       'push range includes earlier commits and deleted code',
     );
-    assert.deepEqual(pushed.tests, {
-      base,
-      also: ['@farsight/mcp'],
-      packages: ['@farsight/cli', '@farsight/mcp', '@farsight/server'],
-    });
+    assert.deepEqual(pushed.tests, some(['@farsight/cli', '@farsight/mcp', '@farsight/server'], ['@farsight/mcp']));
     assert.deepEqual(detectChecks({ base: head, head, event: 'push', cwd: dir }).checks, none);
 
     const output = join(dir, 'output'),
@@ -321,7 +317,7 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
     });
     assert.equal(
       readFileSync(output, 'utf8'),
-      'validate=false\ne2e=false\necho=false\nsentinel=false\nisolation=false\nrecovery=false\ntestBase=\ntestAlso=\n',
+      'validate=false\ne2e=false\necho=false\nsentinel=false\nisolation=false\nrecovery=false\ntestScope=all\ntestPackages=\n',
     );
     assert.match(readFileSync(summary, 'utf8'), /e2e: skip/);
     assert.match(readFileSync(summary, 'utf8'), /sentinel-package: skip/);
@@ -341,10 +337,13 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
         GITHUB_STEP_SUMMARY: summary,
       },
     });
-    assert.match(readFileSync(output, 'utf8'), new RegExp(`\\ntestBase=${base}\\ntestAlso=@farsight/mcp\\n$`));
+    assert.match(
+      readFileSync(output, 'utf8'),
+      /\ntestScope=packages\ntestPackages=@farsight\/cli @farsight\/mcp @farsight\/server\n$/,
+    );
     assert.match(
       readFileSync(summary, 'utf8'),
-      /validate tests: the packages changed since `[0-9a-f]{12}` and their dependents, plus @farsight\/mcp .*from these paths: @farsight\/cli, @farsight\/mcp, @farsight\/server/,
+      /validate tests: @farsight\/cli, @farsight\/mcp, @farsight\/server \(the changed packages and their dependents, with @farsight\/mcp, whose tests read a reached package's files\)/,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -408,40 +407,35 @@ test('the reference scan reads the three path forms, skips comments and its own 
 });
 
 test("validate tests the packages a change reaches: pnpm's changed-since set plus the readers it cannot see", () => {
-  const sentinelOnly = selectTests(['packages/sentinel/src/execution/supervisor.ts'], BASE);
-  assert.deepEqual(sentinelOnly, { base: BASE, also: [], packages: ['@farsight/sentinel'] });
+  const sentinelOnly = selectTests(['packages/sentinel/src/execution/supervisor.ts']);
+  assert.deepEqual(sentinelOnly, some(['@farsight/sentinel']));
   for (const skipped of ['@farsight/echo', '@farsight/parsers', '@farsight/work'])
     assert.ok(!sentinelOnly.packages.includes(skipped), skipped);
-  assert.deepEqual(selectTests(['packages/sentinel/test/fixtures/workers/hostile-worker.mjs'], BASE).packages, [
+  assert.deepEqual(selectTests(['packages/sentinel/test/fixtures/workers/hostile-worker.mjs']).packages, [
     '@farsight/sentinel',
   ]);
 
-  const viewer = selectTests(['packages/server/public/app/surfaces/sentinel.js', 'docs/MAP-VIEWER.md'], BASE);
-  assert.deepEqual(viewer, {
-    base: BASE,
-    also: ['@farsight/mcp'],
-    packages: ['@farsight/cli', '@farsight/mcp', '@farsight/server'],
-  });
+  const viewer = selectTests(['packages/server/public/app/surfaces/sentinel.js', 'docs/MAP-VIEWER.md']);
+  assert.deepEqual(viewer, some(['@farsight/cli', '@farsight/mcp', '@farsight/server'], ['@farsight/mcp']));
 
-  const core = selectTests(['packages/core/src/counts.ts'], BASE);
+  const core = selectTests(['packages/core/src/counts.ts']);
   assert.equal(core.packages.length, 12, core.packages.join(', '));
   assert.ok(!core.packages.includes('@farsight/graph') && !core.packages.includes('@farsight/code-parser'));
-  assert.deepEqual(selectTests(['packages/parsers/src/tsjs.ts'], BASE).also, ['@farsight/core', '@farsight/sentinel']);
-  assert.deepEqual(selectTests(['packages/cli/src/cli.ts'], BASE).also, ['@farsight/mcp', '@farsight/server']);
+  assert.deepEqual(selectTests(['packages/parsers/src/tsjs.ts']).also, ['@farsight/core', '@farsight/sentinel']);
+  assert.deepEqual(selectTests(['packages/cli/src/cli.ts']).also, ['@farsight/mcp', '@farsight/server']);
   assert.deepEqual(
-    selectTests(['packages/echo/src/cli.ts', 'e2e/tests/chrome.pw.spec.ts', 'packages/sentinel/README.md'], BASE)
-      .packages,
+    selectTests(['packages/echo/src/cli.ts', 'e2e/tests/chrome.pw.spec.ts', 'packages/sentinel/README.md']).packages,
     ['@farsight/echo'],
     'paths validate does not test leave the set alone',
   );
   assert.deepEqual(
-    selectTests(['.claude/skills/git-pr-flow/SKILL.md', '.agents/skills/git-pr-flow/SKILL.md'], BASE),
-    { base: BASE, also: [], packages: [] },
+    selectTests(['.claude/skills/git-pr-flow/SKILL.md', '.agents/skills/git-pr-flow/SKILL.md']),
+    some([]),
     'the skills trees select validate for its script tests only',
   );
 });
 
-test('a change outside the packages, an unusable base or an unreadable workspace tests every package', () => {
+test('a change outside the packages or an unreadable workspace tests every package', () => {
   for (const path of [
     'package.json',
     'pnpm-lock.yaml',
@@ -456,27 +450,135 @@ test('a change outside the packages, an unusable base or an unreadable workspace
     '.github/workflows/ci.yml',
     'packages/no-manifest/src/x.ts',
   ]) {
-    assert.deepEqual(selectTests(['packages/server/src/index.ts', path], BASE), every, path);
+    assert.deepEqual(selectTests(['packages/server/src/index.ts', path]), every, path);
   }
-  for (const base of ['', undefined, '0'.repeat(40), 'HEAD', '--output=x', 'a'.repeat(39)])
-    assert.deepEqual(selectTests(['packages/server/src/index.ts'], base), every, String(base));
   const empty = mkdtempSync(join(tmpdir(), 'farsight-ci-noworkspace-'));
   try {
-    assert.deepEqual(selectTests(['packages/server/src/index.ts'], BASE, { root: empty }), every, 'no manifests');
+    assert.deepEqual(selectTests(['packages/server/src/index.ts'], { root: empty }), every, 'no manifests');
     mkdirSync(join(empty, 'packages/server/test'), { recursive: true });
     writeFileSync(join(empty, 'packages/server/package.json'), JSON.stringify({ name: '@farsight/server' }));
     writeFileSync(join(empty, 'packages/server/test/unreadable.test.ts'), '');
     const inputs = { root: empty, packageInputs: new Set(), isolationInputs: new Set() };
-    assert.deepEqual(selectTests(['packages/server/src/index.ts'], BASE, inputs), {
-      base: BASE,
-      also: [],
-      packages: ['@farsight/server'],
-    });
+    assert.deepEqual(selectTests(['packages/server/src/index.ts'], inputs), some(['@farsight/server']));
     chmodSync(join(empty, 'packages/server/test/unreadable.test.ts'), 0o000);
     if (process.getuid?.() !== 0)
-      assert.deepEqual(selectTests(['packages/server/src/index.ts'], BASE, inputs), every, 'an unreadable test folder');
+      assert.deepEqual(selectTests(['packages/server/src/index.ts'], inputs), every, 'an unreadable test folder');
   } finally {
     rmSync(empty, { recursive: true, force: true });
   }
   assert.deepEqual(detectChecks({}).tests, every, 'an unavailable range tests every package');
+});
+
+test('the pnpm arguments: one filter per selected package, every package for any other scope, nothing for none', () => {
+  assert.deepEqual(pnpmTestArgs('packages', '@farsight/server @farsight/cli'), [
+    '-r',
+    '--filter',
+    '@farsight/server',
+    '--filter',
+    '@farsight/cli',
+    'test',
+  ]);
+  assert.equal(pnpmTestArgs('packages', ''), null, 'only the skills trees changed');
+  assert.equal(pnpmTestArgs('packages', '  '), null);
+  for (const scope of ['all', '', undefined, 'Packages', 'packages '])
+    assert.deepEqual(pnpmTestArgs(scope, '@farsight/server'), ['-r', 'test'], `missing or other scope: ${scope}`);
+  for (const name of [
+    '--filter=...',
+    '@farsight/x;rm',
+    '...@farsight/core',
+    '@farsight/core...',
+    '../core',
+    '@other/x',
+  ])
+    assert.throws(() => pnpmTestArgs('packages', `@farsight/server ${name}`), /Unexpected package name/, name);
+});
+
+// pnpm 9's own changed-since filter diffs with git's rename detection on and sees only a rename's destination; the
+// selector's --no-renames diff sees both sides. The set validate hands to pnpm is the selector's, so a package's file
+// moved out to documentation still tests that package and its dependents.
+test('a file renamed out of a package still tests it: the pnpm arguments validate runs, from a real range', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'farsight-ci-rename-'));
+  const stub = mkdtempSync(join(tmpdir(), 'farsight-ci-pnpm-'));
+  const git = (args) =>
+    execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const commit = (message) => {
+    git(['add', '-A']);
+    git([
+      '-c',
+      'user.name=Test',
+      '-c',
+      'user.email=dev@example.com',
+      '-c',
+      'core.hooksPath=/dev/null',
+      'commit',
+      '-m',
+      message,
+    ]);
+    return git(['rev-parse', 'HEAD']);
+  };
+  const recorded = join(stub, 'args');
+  writeFileSync(join(stub, 'pnpm'), `#!/bin/sh\nprintf '%s\\n' "$@" > '${recorded}'\nexit "\${STUB_EXIT:-0}"\n`);
+  chmodSync(join(stub, 'pnpm'), 0o755);
+  const runTests = (env) =>
+    execFileSync(process.execPath, [new URL('../ci-changes.mjs', import.meta.url).pathname, '--run-tests'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${stub}:${process.env.PATH}`,
+        TEST_SCOPE: undefined,
+        TEST_PACKAGES: undefined,
+        ...env,
+      },
+    });
+  const pnpmArgs = () => readFileSync(recorded, 'utf8').trim().split('\n');
+  try {
+    git(['init', '-b', 'main']);
+    mkdirSync(join(dir, 'packages/core/test/fixtures'), { recursive: true });
+    writeFileSync(
+      join(dir, 'packages/core/test/fixtures/ask-corpus.json'),
+      JSON.stringify({ questions: [1, 2, 3] }, null, 2),
+    );
+    writeFileSync(join(dir, 'README.md'), 'fixture\n');
+    const base = commit('chore: initial');
+    mkdirSync(join(dir, 'docs'));
+    git(['mv', 'packages/core/test/fixtures/ask-corpus.json', 'docs/ask-corpus.md']);
+    const head = commit('docs: move the corpus');
+    assert.deepEqual(
+      git(['-c', 'diff.renames=true', 'diff', '--name-only', base, head]).split('\n'),
+      ['docs/ask-corpus.md'],
+      'what a rename-detecting diff (pnpm 9 changed-since) sees',
+    );
+
+    const core = selectTests(['packages/core/src/counts.ts']).packages;
+    assert.equal(core.length, 12);
+    const range = { BASE_SHA: base, HEAD_SHA: head, GITHUB_EVENT_NAME: 'pull_request' };
+    for (const event of ['pull_request', 'push']) {
+      rmSync(recorded, { force: true });
+      runTests({ ...range, GITHUB_EVENT_NAME: event });
+      assert.deepEqual(pnpmArgs(), ['-r', ...core.flatMap((name) => ['--filter', name]), 'test'], event);
+    }
+
+    // the workflow's handover: the selector's outputs, a missing one, an empty set, and pnpm's exit status
+    rmSync(recorded, { force: true });
+    runTests({ TEST_SCOPE: 'packages', TEST_PACKAGES: '@farsight/sentinel' });
+    assert.deepEqual(pnpmArgs(), ['-r', '--filter', '@farsight/sentinel', 'test']);
+    runTests({ TEST_SCOPE: '', TEST_PACKAGES: '' });
+    assert.deepEqual(pnpmArgs(), ['-r', 'test'], 'a missing selector output tests every package');
+    rmSync(recorded, { force: true });
+    assert.match(runTests({ TEST_SCOPE: 'packages', TEST_PACKAGES: '' }), /No package is reached/);
+    assert.throws(() => readFileSync(recorded), /ENOENT/, 'pnpm is not started for an empty set');
+    assert.throws(
+      () => runTests({ TEST_SCOPE: 'packages', TEST_PACKAGES: '@farsight/core', STUB_EXIT: '3' }),
+      (error) => error.status === 3,
+      "pnpm's failure is the step's",
+    );
+    assert.throws(
+      () => runTests({ TEST_SCOPE: 'packages', TEST_PACKAGES: '--filter=...[HEAD~1]' }),
+      (error) => error.status !== 0,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(stub, { recursive: true, force: true });
+  }
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Coarse CI boundaries, not a per-test dependency graph. Unknown inputs run everything.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -8,8 +8,8 @@ import { buildClosure, workspacePackages } from './pack-preflight.mjs';
 
 const all = () => ({ validate: true, e2e: true, echo: true, sentinel: true, isolation: true, recovery: true });
 
-/** validate's unit tests over every package: no base to filter from. */
-const EVERY = Object.freeze({ base: '', also: Object.freeze([]), packages: Object.freeze([]) });
+/** validate's unit tests over every package. */
+const EVERY = Object.freeze({ scope: 'all', packages: Object.freeze([]), also: Object.freeze([]) });
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -133,8 +133,8 @@ export function selectChecks(paths, { packageInputs, isolationInputs } = {}) {
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
 
 /**
- * The workspace as pnpm's `--filter "...[<base>]"` walks it: package directory → its name and the directories of the
- * packages that depend on it, over every dependency field (pnpm's workspace graph counts devDependencies too).
+ * The workspace's dependency graph: package directory → its name and the directories of the packages that depend on
+ * it, over every dependency field (devDependencies too, as pnpm's own workspace graph counts them).
  */
 export function workspaceGraph(root = repoRoot) {
   const packages = workspacePackages(root);
@@ -218,15 +218,15 @@ export function testReach(root = repoRoot, graph = workspaceGraph(root)) {
 }
 
 /**
- * The package tests validate runs. pnpm's `--filter "...[<base>]"` selects every package with a file changed since
- * `base` and every package that depends on one, from the manifests; `also` adds, alone, the packages whose tests read
- * a selected package's files without depending on it (their own code did not change, so their dependents need
- * nothing). `packages` is that whole set as this selector reads it, for the run summary. A path that selects validate
- * from outside a workspace package (root files, the lockfile, `scripts/`, `schemas/`, `examples/`), an unreadable
- * workspace or an unusable base tests every package: `base` is then empty.
+ * The package tests validate runs: every package with a changed path (both sides of a rename, from the selector's
+ * `--no-renames` diff), every package that depends on one (from the manifests), and the packages whose tests read a
+ * selected package's files without depending on it (`also`; alone, because their own code did not change, so their
+ * dependents need nothing). validate passes the names to pnpm, one `--filter` each; the selector is the only place
+ * the set is worked out. A path that selects validate from outside a workspace package (root files, the lockfile,
+ * `scripts/`, `schemas/`, `examples/`, workflows) or an unreadable workspace tests every package: `scope` is `all`.
+ * An empty set (only the skills trees changed) runs no package's tests; validate's script tests still run.
  */
-export function selectTests(paths, base, { root = repoRoot, graph, reach, packageInputs, isolationInputs } = {}) {
-  if (!/^[a-f0-9]{40,64}$/.test(base ?? '') || /^0+$/.test(base)) return EVERY;
+export function selectTests(paths, { root = repoRoot, graph, reach, packageInputs, isolationInputs } = {}) {
   let inputs, isolation;
   try {
     graph ??= workspaceGraph(root);
@@ -253,11 +253,26 @@ export function selectTests(paths, base, { root = repoRoot, graph, reach, packag
     (consumer) => !selected.has(consumer) && [...reach.get(consumer)].some((provider) => selected.has(provider)),
   );
   const names = (dirs) => dirs.map((dir) => graph.get(dir).name).sort();
-  return { base, also: names(also), packages: names([...selected, ...also]) };
+  return { scope: 'packages', packages: names([...selected, ...also]), also: names(also) };
 }
 
-/** The changed paths and the commit they are compared from (a PR's merge base, a push's previous head). */
-export function changeRange({ base, head, event, cwd = process.cwd() }) {
+const PACKAGE_NAME = /^@farsight\/[a-z0-9-]+$/;
+
+/**
+ * The pnpm arguments validate's test step runs, from the selector's two outputs as the workflow hands them over:
+ * one `--filter <name>` per package when `scope` is exactly `packages`, `null` when that set is empty, and every
+ * package for anything else, a missing or empty output included. A name that is not a workspace package's shape
+ * throws rather than reaching pnpm.
+ */
+export function pnpmTestArgs(scope, packages = '') {
+  if (scope !== 'packages') return ['-r', 'test'];
+  const names = packages.split(/\s+/).filter(Boolean);
+  for (const name of names) if (!PACKAGE_NAME.test(name)) throw new Error(`Unexpected package name: ${name}`);
+  return names.length ? ['-r', ...names.flatMap((name) => ['--filter', name]), 'test'] : null;
+}
+
+/** The changed paths: a PR's from its merge base, a push's across every pushed commit. */
+export function changedPaths({ base, head, event, cwd = process.cwd() }) {
   // Only event-provided commit IDs; never accept a revision option from an input.
   if (![base, head].every((sha) => /^[a-f0-9]{40,64}$/.test(sha ?? '') && !/^0+$/.test(sha))) {
     throw new Error('No usable base/head commit');
@@ -274,38 +289,60 @@ export function changeRange({ base, head, event, cwd = process.cwd() }) {
   const from = event === 'pull_request' ? git(['merge-base', base, head]).trim() : base;
   // No rename detection: consider BOTH the deleted old path and the added new path.
   // NUL delimiters preserve spaces/newlines; no GitHub API file-list limit.
-  const paths = git(['diff', '--name-only', '--no-renames', '-z', from, head, '--']).split('\0').filter(Boolean);
-  return { from, paths };
-}
-
-export function changedPaths(options) {
-  return changeRange(options).paths;
+  return git(['diff', '--name-only', '--no-renames', '-z', from, head, '--']).split('\0').filter(Boolean);
 }
 
 export function detectChecks(options) {
   try {
-    const { from, paths } = changeRange(options);
+    const paths = changedPaths(options);
     const checks = selectChecks(paths);
-    return {
-      checks,
-      tests: checks.validate ? selectTests(paths, from) : EVERY,
-      reason: `${paths.length} changed paths`,
-    };
+    return { checks, tests: checks.validate ? selectTests(paths) : EVERY, reason: `${paths.length} changed paths` };
   } catch {
     return { checks: all(), tests: EVERY, reason: 'Change range unavailable; running every check' };
   }
 }
 
-function testsLine({ base, also, packages }) {
-  if (!base) return '- validate tests: every package';
-  const extra = also.length ? `, plus ${also.join(', ')} (whose tests read a selected package's files)` : '';
-  return (
-    `- validate tests: the packages changed since \`${base.slice(0, 12)}\` and their dependents${extra}; ` +
-    `from these paths: ${packages.join(', ') || 'none'}`
-  );
+function testsLine({ scope, packages, also }) {
+  if (scope !== 'packages') return '- validate tests: every package';
+  if (!packages.length) return '- validate tests: no package (the script tests still run)';
+  const extra = also.length ? `, with ${also.join(', ')}, whose tests read a reached package's files` : '';
+  return `- validate tests: ${packages.join(', ')} (the changed packages and their dependents${extra})`;
+}
+
+/**
+ * `--run-tests`: validate's test step. In CI it reads the selector's outputs from `TEST_SCOPE` and `TEST_PACKAGES`;
+ * run locally with `BASE_SHA`, `HEAD_SHA` and `GITHUB_EVENT_NAME` instead, it selects the same way first.
+ */
+function runTests() {
+  let tests;
+  if (process.env.TEST_SCOPE !== undefined) {
+    tests = { scope: process.env.TEST_SCOPE, packages: (process.env.TEST_PACKAGES ?? '').split(/\s+/).filter(Boolean) };
+  } else {
+    const local = detectChecks({
+      base: process.env.BASE_SHA,
+      head: process.env.HEAD_SHA,
+      event: process.env.GITHUB_EVENT_NAME,
+    });
+    console.log(`${local.reason}\n${testsLine(local.tests).slice(2)}`);
+    if (!local.checks.validate) {
+      console.log('validate is not selected for these changes; no package tests to run.');
+      return 0;
+    }
+    tests = local.tests;
+  }
+  const args = pnpmTestArgs(tests.scope, tests.packages.join(' '));
+  if (!args) {
+    console.log('No package is reached; no package tests to run.');
+    return 0;
+  }
+  console.log(`pnpm ${args.join(' ')}`);
+  const run = spawnSync('pnpm', args, { stdio: 'inherit' });
+  if (run.error) throw run.error;
+  return run.status ?? 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (process.argv[2] === '--run-tests') process.exit(runTests());
   const { checks, tests, reason } = detectChecks({
     base: process.env.BASE_SHA,
     head: process.env.HEAD_SHA,
@@ -314,7 +351,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const output =
     Object.entries(checks)
       .map(([name, run]) => `${name}=${run}`)
-      .join('\n') + `\ntestBase=${tests.base}\ntestAlso=${tests.also.join(' ')}\n`;
+      .join('\n') + `\ntestScope=${tests.scope}\ntestPackages=${tests.packages.join(' ')}\n`;
   console.log(`${reason}\n${output}`);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, output);
   if (process.env.GITHUB_STEP_SUMMARY) {

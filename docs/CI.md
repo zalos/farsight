@@ -95,31 +95,33 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 
 ### Which packages validate tests
 
-`validate` runs the unit tests of the packages the change reaches, not of every package. The selector emits
-`testBase`, the commit the change is compared from (a PR's merge base, a push's previous head), and validate runs
-`pnpm -r --filter "...[<testBase>]" test`: pnpm 9's changed-since filter selects every package with a file changed
-since that commit and every package that depends on one, read from the manifests (all four dependency fields). A
-viewer change tests the server and the CLI; a Sentinel change tests Sentinel alone; a core change tests core and
-the eleven packages built on it.
+`validate` runs the unit tests of the packages the change reaches, not of every package. The selector works the set
+out and emits it as `testScope=packages` and `testPackages` (space-separated names); validate's test step,
+`node scripts/ci-changes.mjs --run-tests`, runs `pnpm -r --filter <name> … test` with one `--filter` per name. The set
+is every package with a changed path, every package that depends on one (read from the manifests, all four
+dependency fields) and the packages whose tests read one of those without depending on it. A viewer change tests
+the server, the CLI and the MCP server; a Sentinel change tests Sentinel alone; a core change tests core and the
+eleven packages built on it.
+
+The selector is the only place the set is worked out, so it is read from the same `--no-renames` diff as the check
+selection: a file moved out of a package counts on both sides and still tests that package. (pnpm's own
+`--filter "...[<commit>]"` diffs with git's rename detection, sees only the destination, and is not used.)
 
 pnpm cannot see a test that reads another package's files without depending on it: core's ask corpus and
 Sentinel's report tests ingest through `packages/parsers/dist`, and the MCP and server tests spawn the CLI. The
 selector reads every package's `test/` folder for such references (`packages/<dir>/dist`, `../../<dir>/dist`,
 `join(here, '..', '..', '<dir>', 'dist')`, for `dist`, `src`, `test`, `public` and `bin`; whole-line comments do not
-count) and emits `testAlso`, the readers of a selected package, which validate adds with one `--filter <name>` each:
-alone, because their own code did not change. A reference that runs only outside validate is listed in
-`OUTSIDE_VALIDATE` in `scripts/ci-changes.mjs` with the gate that keeps it out (the owner UI browser journey reads
-the CLI only under `SENTINEL_OWNER_UI_BROWSER=1`, which the e2e job sets); the selector test fails if the file loses
-that gate. The run summary lists the packages the selector expects; validate's log prints pnpm's own
-`Scope: n of 15 workspace projects`.
+count) and adds the readers of a selected package alone, because their own code did not change. A reference that
+runs only outside validate is listed in `OUTSIDE_VALIDATE` in `scripts/ci-changes.mjs` with the gate that keeps it
+out (the owner UI browser journey reads the CLI only under `SENTINEL_OWNER_UI_BROWSER=1`, which the e2e job sets);
+the selector test fails if the file loses that gate. The run summary names the set, and the test step prints the
+exact pnpm command.
 
-Every package is tested when a path that selects validate lies outside a workspace package (root files, the
-lockfile, `scripts/`, `schemas/`, `examples/`, workflows and the selector itself; the skills trees, which only the
-script tests read, select no package), when a path is under `packages/`
-without a manifest, when the manifests or a test folder cannot be read, and when `testBase` is missing, empty or not
-in the checkout (validate fetches the full history so it is). The required check names do not change. pnpm diffs
-`testBase` against the checkout, so on a PR whose branch is behind its base the set also covers the base branch's
-newer changes: more packages, never fewer.
+Every package is tested (`testScope=all`) when a path that selects validate lies outside a workspace package (root
+files, the lockfile, `scripts/`, `schemas/`, `examples/`, workflows and the selector itself), when a path is under
+`packages/` without a manifest, when the manifests or a test folder cannot be read, and when `testScope` is missing
+or anything but `packages`. The skills trees, which only the script tests read, select no package: the step then
+runs no package's tests and `pnpm test:scripts` still runs. The required check names do not change.
 
 Markdown inside fixtures is test input, not automatically documentation. Graph and core are Echo build dependencies, so its
 whole package is watched, not just a few currently imported helpers. PRs compare merge-base → head, excluding
@@ -208,11 +210,15 @@ Choose checks from the table above for local work too: ordinary Markdown edits d
 e2e. For changes to CI selection, run `pnpm test:scripts` and `actionlint`; the workflow change itself selects all
 checks on GitHub. Keep local validation focused on the affected behavior instead of rerunning unrelated suites.
 
-To run what validate runs for your branch, `pnpm -r --filter "...[$(git merge-base origin/main HEAD)]" test` plus a
-`--filter` for each package the selector would add (`BASE_SHA=$(git merge-base origin/main HEAD) HEAD_SHA=$(git
-rev-parse HEAD) GITHUB_EVENT_NAME=push node scripts/ci-changes.mjs` prints `testAlso`). **Not in a linked
-worktree:** pnpm 9.0.0 finds the repository root by a `.git` directory, and a worktree's `.git` is a file, so the
-filter matches no package and exits 0 having tested nothing. Run it in an ordinary clone; CI's checkout is one.
+To run the unit tests validate would run for your branch's commits, with the same fallbacks (every package for a
+`scripts/`-only change, nothing when validate is not selected):
+
+```sh
+BASE_SHA=$(git merge-base origin/main HEAD) HEAD_SHA=$(git rev-parse HEAD) GITHUB_EVENT_NAME=push \
+  node scripts/ci-changes.mjs --run-tests
+```
+
+It prints the set and the pnpm command before running it, and counts committed changes only.
 
 The offline report browser test is explicitly selected with `SENTINEL_REPORT_BROWSER=1`; `CI=true` alone does not require a browser in the unit-test job. The e2e job runs it after provisioning Chromium whenever application e2e or Sentinel isolation checks are selected, and fails on a missing browser, failure, or skipped case.
 

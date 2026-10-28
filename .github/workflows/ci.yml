@@ -30,10 +30,9 @@ jobs:
       sentinel: ${{ steps.select.outputs.sentinel }}
       isolation: ${{ steps.select.outputs.isolation }}
       recovery: ${{ steps.select.outputs.recovery }}
-      # validate's unit tests: the commit pnpm's changed-since filter compares from (empty: every package) and the
-      # packages whose tests read a reached package's files without depending on it
-      testBase: ${{ steps.select.outputs.testBase }}
-      testAlso: ${{ steps.select.outputs.testAlso }}
+      # validate's unit tests: `packages` and the names to test, or anything else (a missing output too) for all
+      testScope: ${{ steps.select.outputs.testScope }}
+      testPackages: ${{ steps.select.outputs.testPackages }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -111,7 +110,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           lfs: true
-          fetch-depth: 0 # the test filter diffs the checkout against the selector's base commit
 
       - uses: pnpm/action-setup@v6 # version from package.json "packageManager"
 
@@ -126,27 +124,13 @@ jobs:
       - run: pnpm build
       - name: Verify the generated graph contract
         run: node scripts/graph-schema.mjs --check
-      # The packages with a file changed since the base, every package that depends on one (pnpm reads the
-      # manifests), and the selector's testAlso. An empty or unusable base tests every package.
+      # The changed packages, their dependents and the packages whose tests read them, as the selector worked them
+      # out: one `pnpm --filter <name>` each. Any other scope (a missing selector output too) tests every package.
       - name: Test the packages the change reaches
         env:
-          TEST_BASE: ${{ needs.changes.outputs.testBase }}
-          TEST_ALSO: ${{ needs.changes.outputs.testAlso }}
-        run: |
-          set -eo pipefail # no -u: an empty also array under bash 3.2, when this block is run on a Mac
-          if [[ "$TEST_BASE" =~ ^[0-9a-f]{40,64}$ ]] && git cat-file -e "$TEST_BASE^{commit}" 2>/dev/null; then
-            filters=(--filter "...[$TEST_BASE]")
-            read -ra also <<< "$TEST_ALSO"
-            for name in "${also[@]}"; do
-              [[ "$name" =~ ^@farsight/[a-z0-9-]+$ ]] || { echo "::error::unexpected package name: $name"; exit 1; }
-              filters+=(--filter "$name")
-            done
-            echo "Testing the packages changed since $TEST_BASE and their dependents${TEST_ALSO:+, and $TEST_ALSO}"
-            pnpm -r "${filters[@]}" test
-          else
-            echo "Testing every package"
-            pnpm -r test
-          fi
+          TEST_SCOPE: ${{ needs.changes.outputs.testScope }}
+          TEST_PACKAGES: ${{ needs.changes.outputs.testPackages }}
+        run: node scripts/ci-changes.mjs --run-tests
       - run: pnpm test:scripts
       - run: pnpm lint:strings
 
