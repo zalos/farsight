@@ -23,7 +23,11 @@ import type {
   PlanWork,
   SnapshotEnvelope,
   ReportControlInspection,
+  WorkRef,
 } from '../contracts/index.js';
+import type { BuiltinOperation, ExecutionSite, Provenance, StageCost } from '../contracts/pipeline.js';
+import { runStages } from '../execution/stage-inputs.js';
+import { SCRIPT_PROVENANCE_SCHEMA, SCRIPT_RUNNER_ID } from '../execution/script-runner.js';
 import { validateEnvelope } from '../validate.js';
 import type { SentinelStore } from '../store/index.js';
 import { loadPlan } from '../execution/plans.js';
@@ -1215,6 +1219,7 @@ async function reportDocument(req: FullReportRequest): Promise<ReportDocument> {
     );
     comparison = { baselineReportId: reportIdOf(req.baselineRunId), result, baselineFindings };
   }
+  const stages = await runStagesOf(store, current);
   readBudgetCheckpoint(store);
   const build = await buildReport(
     {
@@ -1232,6 +1237,8 @@ async function reportDocument(req: FullReportRequest): Promise<ReportDocument> {
       inventory: current.inventory,
       readContent,
       withheldFiles: current.withheldFiles,
+      ...(stages.reviews ? { reviews: stages.reviews } : {}),
+      provenance: stages.provenance,
       ...(contexts ? { contexts } : {}),
       rules: ruleWords(req.trustDir, current.ruleLock),
       ...(comparison ? { comparison } : {}),
@@ -1269,6 +1276,268 @@ async function reportDocument(req: FullReportRequest): Promise<ReportDocument> {
     ...(comparison ? { comparison: comparison.result } : {}),
     context: pinned ? { binding: pinned.binding, reasons: [...pinned.reasons] } : null,
   };
+}
+
+/** Sentinel's own operations by their registered adapter id, as a provenance record names them. */
+const BUILTIN_ADAPTERS: Readonly<Record<string, BuiltinOperation>> = Object.freeze({
+  'sentinel-capture': 'capture',
+  'sentinel-parse': 'parse',
+  'sentinel-inventory': 'inventory',
+  'framework-controls': 'framework-controls',
+});
+/** What a built-in's version is when only its module digest was retained: the digest identifies it. */
+export const BUILTIN_UNVERSIONED = 'not recorded; identified by its module digest';
+/** At most this many model review units are re-read for one report (each is read back in full, bounded). */
+const MAX_REVIEW_UNITS = 32;
+const MAX_PROVENANCE = 10_000;
+const msOf = (t: string | null | undefined) => {
+  if (!t) return null;
+  const v = Date.parse(t.replace(/(\.\d{3})\d*Z$/, '$1Z'));
+  return Number.isFinite(v) ? v : null;
+};
+
+/** One run's accepted model observations, each with the stage and unit that published it, and every stage's provenance. */
+export interface RunStages {
+  /** Absent when the run planned no model review. */
+  readonly reviews?: readonly {
+    readonly observation: ObservationEnvelope;
+    readonly stage: string;
+    readonly unit: WorkRef;
+  }[];
+  readonly provenance: readonly Provenance[];
+}
+
+/**
+ * The model observations and the provenance of a completed run, from its retained ledger alone.
+ *
+ * A model observation is read only through its accepted review publication (readPublishedInstructions: the exact
+ * admitted unit, attempt, invocation, admission, instructions, requests and record, every citation re-derived from
+ * the unit's assigned captured bytes); anything that does not read back refuses the report. The document fold then
+ * embeds its citations under the report's disclosure profile and the accepted-secret fold, like a finding's.
+ *
+ * Provenance: one record per published unit, the bootstrap work the analysis depends on first (in start order), then
+ * the analysis units in plan order; held work has none. What each record says comes from the attempt and its retained
+ * invocation record: where it ran (the attempt's worker), which implementation (its adapter id, version and digest),
+ * the image a container ran, the rules and databases a scanner was pinned to, and for a model stage the tokens, the
+ * turns and the cost from the attempt's own usage, never a zero for an unknown. A host script's is the record it
+ * published. Nothing is read from the checkout, so a report regenerated after the source is removed says the same.
+ */
+export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promise<RunStages> {
+  const admitted = await loadPlan(store, a.runId, a.planRevision);
+  const plan = admitted.plan;
+  let owner = new Map<string, string>();
+  let bootstrapStage: Partial<Record<string, string | undefined>> = {};
+  try {
+    const stages = runStages(admitted);
+    owner = stages.owner;
+    bootstrapStage = stages.model.bootstrap;
+  } catch {
+    /* a run whose recorded pipeline no longer derives a model names each unit by its own stage */
+  }
+  const stageOf = (u: PlanWork) => owner.get(u.id) ?? u.stage;
+
+  // Model observations, through their accepted publications only.
+  const reviewUnits = plan.units.filter((u) => u.review);
+  if (reviewUnits.length > MAX_REVIEW_UNITS) unbound('more model review units than one report reads');
+  const traces = new Map<string, import('../review/instructions.js').RetainedInstructionTrace>();
+  const published = reviewUnits.filter((u) => store.ledger.getPublication(u));
+  if (published.length) {
+    const { readPublishedInstructions } = await import('../review/instructions.js');
+    const deadlineAt = Date.now() + 20_000;
+    const signal = AbortSignal.timeout(20_000);
+    for (const u of published) {
+      try {
+        traces.set(u.id, await readPublishedInstructions(store, u, { deadlineAt, signal }));
+      } catch {
+        return unbound('an accepted model review does not read back exactly');
+      }
+    }
+  }
+  const reviews = reviewUnits.length
+    ? published.flatMap((u) =>
+        traces.get(u.id)!.observations.map((o) => {
+          if (o.snapshotId !== a.snapshot.id || o.producer.kind !== 'model-review')
+            unbound('a model observation is not a review of this capture');
+          return { observation: o, stage: stageOf(u), unit: { id: u.id, revision: u.revision } };
+        }),
+      )
+    : undefined;
+
+  // Every published unit: the bootstrap work first, then the analysis.
+  const key = (r: WorkRef) => `${r.id}#${r.revision}`;
+  const seen = new Set(plan.units.map(key));
+  const queue: WorkRef[] = plan.units.flatMap((u) => u.dependencies);
+  const bootstrap: WorkRef[] = [];
+  while (queue.length) {
+    const r = queue.shift()!;
+    if (seen.has(key(r))) continue;
+    seen.add(key(r));
+    if (seen.size > MAX_PROVENANCE) unbound('more work than one report describes');
+    const row = store.ledger.getWork(r);
+    if (!row) continue;
+    bootstrap.push({ id: r.id, revision: r.revision });
+    queue.push(...row.envelope.dependencies);
+  }
+  const startOf = (r: WorkRef) => {
+    const pub = store.ledger.getPublication(r);
+    return (pub && store.ledger.getAttempt(pub.attemptId)?.envelope.startedAt) ?? '';
+  };
+  bootstrap.sort((x, y) => (startOf(x) < startOf(y) ? -1 : startOf(x) > startOf(y) ? 1 : key(x) < key(y) ? -1 : 1));
+  const units = [
+    ...bootstrap.map((ref) => ({ ref, unit: undefined as PlanWork | undefined })),
+    ...plan.units.map((u) => ({ ref: { id: u.id, revision: u.revision }, unit: u as PlanWork | undefined })),
+  ];
+  const json = async (id: string) => {
+    try {
+      const v = JSON.parse(new TextDecoder('utf8', { fatal: true }).decode(await store.readArtifact(id as never)));
+      return isRecord(v) ? v : unbound('a retained record is not an object');
+    } catch {
+      return unbound('a retained record is unavailable or is not UTF-8 JSON');
+    }
+  };
+  const provenance: Provenance[] = [];
+  for (const { ref, unit } of units) {
+    const pub = store.ledger.getPublication(ref);
+    if (!pub) continue;
+    const attempt = store.ledger.getAttempt(pub.attemptId);
+    if (
+      !attempt ||
+      attempt.state !== 'succeeded' ||
+      attempt.work.id !== ref.id ||
+      attempt.work.revision !== ref.revision
+    )
+      unbound('a publication without its succeeded attempt');
+    const env = attempt!.envelope;
+    const worker = env.worker;
+    const invocation = env.invocation ? await json(env.invocation) : undefined;
+    const adapterId: string | null =
+      worker.kind === 'coordinator-operation' ? worker.adapterId : (unit?.adapterId ?? invocation?.adapter?.id ?? null);
+    const where: ExecutionSite =
+      worker.kind === 'owned-container' ? 'container' : worker.kind === 'owned-child' ? 'child' : 'in-process';
+    const endedAt = 'endedAt' in env ? env.endedAt : null;
+    const started = msOf(env.startedAt);
+    const ended = msOf(endedAt);
+    const durationMs = started !== null && ended !== null ? Math.max(0, Math.round(ended - started)) : null;
+    const operation = adapterId ? BUILTIN_ADAPTERS[adapterId] : undefined;
+    const stage = unit ? stageOf(unit) : ((operation && bootstrapStage[operation]) ?? operation ?? 'unknown');
+    const base = {
+      stage,
+      unit: { id: ref.id, revision: ref.revision },
+      attempt: attempt!.id,
+      where,
+      startedAt: env.startedAt,
+      endedAt,
+      durationMs,
+      read: [...new Set((unit?.inputs ?? []).map((i) => i.content))].slice(0, 1024),
+      wrote: pub.outputs.map((o) => o.id as ArtifactId).slice(0, 1024),
+      invocation: env.invocation ?? null,
+    };
+    if (unit?.review) {
+      const trace = traces.get(unit.id);
+      if (!trace) return unbound('a published model review was not read back');
+      const record = trace.record;
+      const encoding = trace.requests.find((r) => r.wire)?.wire?.encoding;
+      const runner =
+        encoding === 'sentinel-claude-chat/v1'
+          ? ('claude-cli' as const)
+          : encoding === 'sentinel-copilot-chat/v1'
+            ? ('copilot-cli' as const)
+            : ('hosted-api' as const);
+      const usage = env.usage;
+      const confirmed = record.totals.usage === 'confirmed' && usage.certainty === 'confirmed';
+      const cost: StageCost =
+        usage.certainty === 'confirmed' && usage.monetaryCost !== undefined && usage.currency
+          ? { basis: 'rates', amount: usage.monetaryCost, currency: usage.currency }
+          : {
+              basis: 'unobserved',
+              reason: runner !== 'hosted-api' ? 'subscription' : !confirmed ? 'usage-unknown' : 'no-rates',
+            };
+      provenance.push({
+        ...base,
+        where: runner === 'hosted-api' ? where : 'sandboxed-cli',
+        kind: 'agent',
+        mode: 'brokered',
+        runner,
+        runnerVersion: null,
+        executableDigest: null,
+        model: {
+          requested: record.model?.requestedModel ?? unit.review.selection.modelId,
+          reported: record.model?.returnedModel ?? null,
+          identitySource: record.model?.source ?? 'unknown',
+        },
+        promptDigest: record.promptDigest,
+        skillDigests: trace.instructions.skills.map((sk) => sk.digest).slice(0, 16),
+        wires: record.operations
+          .map((o) => o.request)
+          .filter((id): id is ArtifactId => !!id)
+          .slice(0, 1024),
+        transcript: null,
+        turns: record.totals.steps,
+        tokens: {
+          input: confirmed ? record.totals.inputTokens : null,
+          output: confirmed ? record.totals.outputTokens : null,
+          certainty: confirmed ? 'confirmed' : 'unknown',
+        },
+        cost,
+        deadline: {
+          grantedMs: store.ledger.getWork(ref)?.envelope.resources.deadlineMs ?? 0,
+          usedMs: durationMs,
+        },
+      });
+      continue;
+    }
+    if (adapterId === SCRIPT_RUNNER_ID) {
+      const out = pub.outputs.filter((o) => o.schema === SCRIPT_PROVENANCE_SCHEMA);
+      if (out.length !== 1) unbound('a host script unit without exactly one provenance record');
+      const record = await json(out[0]!.id);
+      if (
+        record.kind !== 'script' ||
+        record.unit?.id !== ref.id ||
+        record.unit?.revision !== ref.revision ||
+        record.attempt !== attempt!.id
+      )
+        unbound("a host script's provenance is bound to another unit or attempt");
+      provenance.push(record as Provenance);
+      continue;
+    }
+    if (operation) {
+      provenance.push({
+        ...base,
+        kind: 'builtin',
+        operation,
+        moduleDigest:
+          worker.kind === 'coordinator-operation'
+            ? worker.adapterDigest
+            : (invocation?.adapter?.digest ?? unit?.implementationDigest),
+        sentinelVersion: BUILTIN_UNVERSIONED,
+      });
+      continue;
+    }
+    const familyOf = new Map(plan.checks.map((c) => [c.id, c]));
+    const checked = new Set(
+      (unit?.checks ?? []).map((id) => familyOf.get(id)).map((c) => c && `${c.familyId}#${c.ruleRevision}`),
+    );
+    provenance.push({
+      ...base,
+      kind: 'tool',
+      adapterId: adapterId ?? 'unknown',
+      adapterVersion: typeof invocation?.adapter?.version === 'string' ? invocation.adapter.version : 'not recorded',
+      image:
+        isRecord(invocation?.image) &&
+        typeof invocation.image.reference === 'string' &&
+        typeof invocation.image.id === 'string'
+          ? { reference: invocation.image.reference, id: invocation.image.id }
+          : null,
+      workerDigest: null,
+      rules: plan.pins.rules
+        .filter((r) => r.adapterId === adapterId && checked.has(`${r.familyId}#${r.revision}`))
+        .map((r) => ({ familyId: r.familyId, revision: r.revision, definitionDigest: r.definitionDigest })),
+      databases: plan.pins.databases
+        .filter((d) => adapterId !== null && d.databaseId.startsWith(`${adapterId}-`))
+        .map((d) => ({ databaseId: d.databaseId, snapshotDigest: d.snapshotDigest })),
+    });
+  }
+  return { ...(reviews ? { reviews } : {}), provenance };
 }
 
 const assessmentIdentity = (a: RunAssessment): ReportAssessmentIdentity =>
