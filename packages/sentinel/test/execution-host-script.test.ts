@@ -9,6 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -449,12 +450,12 @@ test('at the deadline every descendant is killed, one whose parent exited and on
 test('a script tree is its known processes by start time and their descendants, never a reused pid', async () => {
   const { treeOf } = await import('../dist/execution/script-runner.js');
   const table = [
-    { pid: 10, ppid: 1, pgid: 10, started: 'a' },
-    { pid: 11, ppid: 10, pgid: 10, started: 'b' },
-    { pid: 12, ppid: 1, pgid: 12, started: 'c' },
-    { pid: 13, ppid: 12, pgid: 12, started: 'd' },
-    { pid: 14, ppid: 1, pgid: 14, started: 'reused' },
-    { pid: 15, ppid: 14, pgid: 14, started: 'e' },
+    { pid: 10, ppid: 1, pgid: 10, state: 'S', started: 'a' },
+    { pid: 11, ppid: 10, pgid: 10, state: 'S', started: 'b' },
+    { pid: 12, ppid: 1, pgid: 12, state: 'S', started: 'c' },
+    { pid: 13, ppid: 12, pgid: 12, state: 'S', started: 'd' },
+    { pid: 14, ppid: 1, pgid: 14, state: 'S', started: 'reused' },
+    { pid: 15, ppid: 14, pgid: 14, state: 'S', started: 'e' },
   ];
   const pids = (rows: any[]) => rows.map((r) => r.pid).sort((a, b) => a - b);
   // The live interpreter (10) and its child; 12 is known by its start, with its child; 14 reuses a known pid.
@@ -465,6 +466,66 @@ test('a script tree is its known processes by start time and their descendants, 
   assert.deepEqual(pids(treeOf(table, known, 10)), [10, 11, 12, 13]);
   assert.deepEqual(pids(treeOf(table, known)), [12, 13], 'without the live interpreter, only the known identities');
   assert.deepEqual(pids(treeOf([], known, 10)), []);
+});
+
+test('a listed pid that another process took before it was stopped is continued and left alone', async (t) => {
+  const { reapTree, SYSTEM_PROCESSES } = await import('../dist/execution/script-runner.js');
+  // An unrelated process of this computer's user, not the script's.
+  const other = spawn('/bin/sleep', ['30'], { detached: true, stdio: 'ignore' });
+  other.unref();
+  const pid = other.pid!;
+  t.after(() => {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      /* already ended */
+    }
+  });
+  const [real] = await SYSTEM_PROCESSES.rows([pid]);
+  assert.ok(real, 'the unrelated process is listed');
+  // The listing the reap reads says this pid is a script process that started earlier: by the time it is stopped,
+  // the pid belongs to another process (the real one, which started later). The reap re-reads it from the system.
+  const listed = { ...real, started: `${real.started} (earlier)` };
+  const known = new Map([[pid, listed.started]]);
+  const signalled: string[] = [];
+  const reader = {
+    table: async () => [listed],
+    rows: async (pids: readonly number[]) => {
+      const rows = await SYSTEM_PROCESSES.rows(pids);
+      signalled.push(...rows.map((r: any) => r.state));
+      return rows;
+    },
+  };
+  await reapTree(undefined, known, () => false, reader);
+  assert.ok(
+    signalled.some((s) => s.includes('T')),
+    'the reap stopped the pid before reading it again',
+  );
+  const [after] = await SYSTEM_PROCESSES.rows([pid]);
+  assert.ok(after, 'the unrelated process was not killed');
+  assert.equal(after.started, real.started);
+  assert.ok(!after.state.includes('T'), `the unrelated process was continued (state ${after.state})`);
+
+  // The exited interpreter's group id now names that unrelated process's own group: the group is not signalled, and
+  // its leader is not the interpreter first listed, so none of its members is taken for the script's.
+  const rows: string[] = [];
+  await reapTree(pid, new Map([[pid, listed.started]]), () => false, {
+    table: async () => SYSTEM_PROCESSES.rows([pid]),
+    rows: async (pids: readonly number[]) => {
+      rows.push(...pids.map(String));
+      return SYSTEM_PROCESSES.rows(pids);
+    },
+  });
+  assert.deepEqual(rows, [], 'no process of a group another process now leads was stopped or read again');
+  const [still] = await SYSTEM_PROCESSES.rows([pid]);
+  assert.ok(still && !still.state.includes('T'), 'the unrelated group was neither stopped nor killed');
+});
+
+test('a Linux process row is read after the command name, which may hold spaces and parentheses', async () => {
+  const { procRow } = await import('../dist/execution/script-runner.js');
+  const line = '4242 (a (b) c) T 1 4242 4242 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 987654 1234 56\n';
+  assert.deepEqual(procRow(4242, line), { pid: 4242, state: 'T', ppid: 1, pgid: 4242, started: 'ticks:987654' });
+  assert.equal(procRow(1, '1 (init) S 0'), undefined);
 });
 
 test('an interpreter is measured before a script runs: its path, its digest and its version', async () => {
