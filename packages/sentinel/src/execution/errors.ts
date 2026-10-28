@@ -42,6 +42,8 @@ export const EXECUTION_ERROR_CODES = Object.freeze([
   'sentinel.execution.notSelected',
   'sentinel.execution.bootstrapEvidence',
   'sentinel.execution.analysisUnavailable',
+  'sentinel.execution.stageInputMissing',
+  'sentinel.execution.stageInputWithheld',
 ] as const);
 
 export type ExecutionErrorCode = (typeof EXECUTION_ERROR_CODES)[number];
