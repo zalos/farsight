@@ -1,0 +1,14 @@
+{
+  "private": {
+    "json": "sha256:baa07c1f7b59861e99145e345fb62919d4d89f44b390a130e9eae497ea30ef54",
+    "markdown": "sha256:53e73df1935d69d300120fb929f0fc49b09a6c978f2d3034c0015caf416cb554",
+    "html": "sha256:b0d6d6d1a89449465f243fee3d66e0f720db8f6b7ea73a2ac989a84ea5289e66",
+    "sarif": "sha256:8b769e712b16a71bdbfe9dd21f78054b5b629cdf967fe06d3c20fc9a58f24ca1"
+  },
+  "shareable": {
+    "json": "sha256:563398f521fe86cf3cf5025601af63b7af112e07da49d649c24d0abf1f5d65a6",
+    "markdown": "sha256:bfd0a8eb275c00d54a83d60de2c687731efd757d15de5bcbd29a61ca513f4deb",
+    "html": "sha256:9f2692bae36a8069030e8f814fad9bdd22554bb209ca3a394653342dbe4293e0",
+    "sarif": "sha256:ce832ed7e962376745cd034ad437777da8e36d4ca878cecbbe9f563f6ee7c980"
+  }
+}
