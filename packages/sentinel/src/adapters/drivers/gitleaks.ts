@@ -9,13 +9,14 @@ import type {
 } from '../../execution/check-drivers.js';
 import { createAdapterRegistry } from '../../execution/registry.js';
 import { canonicalJsonBytes } from '../../store/objects.js';
-import { deepFreeze } from '../../policy/immutable.js';
+import { deepFreeze } from '../../kernel/freeze.js';
 import { resolveWithheldLocation } from '../../snapshot/locations.js';
 import { GITLEAKS_ADAPTER, GITLEAKS_ENGINE } from '../gitleaks/adapter.js';
 import { buildSecretsJob, type SecretsJob, type SecretsSnapshot } from '../gitleaks/job.js';
 import { normalizeSecretsRun, entryScope } from '../gitleaks/normalize.js';
 import { DriverError, sha256 } from './common.js';
 
+/** The one rule the secrets driver runs: the shipped current-tree rule at its exact definition digest. */
 export const GITLEAKS_SUPPORTED_RULES = Object.freeze([
   Object.freeze({
     familyId: 'sentinel.secrets.current-tree',
@@ -23,6 +24,7 @@ export const GITLEAKS_SUPPORTED_RULES = Object.freeze([
     definitionDigest: 'sha256:53f40d31e80b38893280413db4f103ddd7411a798d893a435af4dcfde37e0d89',
   }),
 ]);
+/** The secrets adapter's registry definition with aggregate coverage: one scan answers for every captured file. */
 export const GITLEAKS_DRIVER_DEFINITION = Object.freeze({ ...GITLEAKS_ADAPTER, coverage: 'aggregate' as const });
 const invalid = (): never => {
   throw new DriverError(

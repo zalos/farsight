@@ -1,8 +1,8 @@
 // Building one zizmor attempt: which captured files are CI inputs zizmor supports, and the line-oriented job the
 // in-container shim reads. A supported file that cannot be sent is recorded with its reason, never dropped.
-import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, openSync, readSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { sha256Id as sha256 } from '../../kernel/digest.js';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { CapturedInput } from '../../execution/supervisor.js';
 import { isSafeRelativePath } from '../../validate.js';
@@ -14,6 +14,7 @@ import {
 } from './adapter.js';
 import { zizmorFail } from './errors.js';
 
+/** A CI configuration file the adapter reads: a workflow, an action definition or a Dependabot configuration. */
 export type CiFileKind = 'workflow' | 'action' | 'dependabot';
 
 /** The kind of a captured file, by zizmor 1.31.1's collection layout. */
@@ -30,18 +31,22 @@ export function ciKindOf(relativePath: string): CiFileKind | undefined {
 const SENDABLE = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 const sendable = (p: string) => SENDABLE.test(p) && p.split('/').every((s) => s !== '.' && s !== '..');
 
+/** A captured file offered to a job: its source-relative path, its artifact id and its sealed copy. */
 export interface CiTarget {
   readonly relativePath: string;
   readonly artifact: ArtifactId;
   readonly path: string;
 }
+/** A file the job sends to the engine, by its index in the container, its captured identity and its kind. */
 export interface ZizmorJobTarget {
   readonly index: number;
   readonly relativePath: string;
   readonly artifact: ArtifactId;
   readonly kind: CiFileKind;
 }
+/** Why a file is not sent: not CI configuration, a path the container cannot carry, or a size or count bound. */
 export type ZizmorUnsentReason = 'not-ci-configuration' | 'path-unsupported' | 'too-large' | 'too-many';
+/** A file the job does not send, with why. */
 export interface ZizmorUnsent {
   readonly relativePath: string;
   readonly artifact: ArtifactId;
@@ -49,6 +54,7 @@ export interface ZizmorUnsent {
   readonly reason: ZizmorUnsentReason;
 }
 
+/** The job a worker runs: the targets, what it leaves out and why, and the engine's bound. */
 export interface ZizmorJob {
   readonly schema: 'sentinel-zizmor-job/draft-1';
   readonly worker: string;
@@ -56,16 +62,19 @@ export interface ZizmorJob {
   readonly unsent: readonly ZizmorUnsent[];
   readonly engineTimeoutSeconds: number;
 }
+/** A built job: the job, the digest of the file the worker reads (null when nothing runs) and the sealed inputs. */
 export interface BuiltZizmorJob {
   readonly job: ZizmorJob;
   readonly jobDigest: ArtifactId | null;
   readonly inputs: readonly CapturedInput[];
 }
 
+/** The most files one attempt sends; the rest are listed as unsent (`too-many`), never dropped. */
 export const MAX_ZIZMOR_TARGETS = 2_000;
+/** The largest file one attempt sends; a larger one is listed as unsent (`too-large`). */
 export const MAX_ZIZMOR_FILE_BYTES = 1_048_576;
+/** The most bytes one attempt sends in all; past it, files are listed as unsent (`too-many`). */
 export const MAX_ZIZMOR_TOTAL_BYTES = 64 * 1_048_576;
-const sha256 = (b: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
 function verifiedSize(t: CiTarget): number {
   let fd: number;

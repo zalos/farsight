@@ -14,8 +14,10 @@
 import type { At, BoundArg, ExpressReason, Value } from './model.js';
 import { identifierName, memberPath, numberValue, stringValue, unwrap, walk, type JsNode } from './syntax.js';
 
+/** A property a middleware's effect is read for. */
 export type Property = 'authentication' | 'authorization';
 
+/** What a layer does to a request for these properties: refuses, passes it on, handles errors only, or is unknown. */
 export type Effect =
   | { readonly kind: 'refusal'; readonly property: Property; readonly at: At[] }
   | { readonly kind: 'pass-through'; readonly at: At[] }
@@ -29,6 +31,11 @@ const REQUEST_VALUES = new Set(['method', 'url', 'originalUrl', 'path', 'baseUrl
 const RESPONSE_ENDS = new Set(['json', 'send', 'end']);
 const STATUS_PROPERTY: Record<number, Property> = { 401: 'authentication', 403: 'authorization' };
 
+/**
+ * The effect of one resolved middleware value. Only Express's own inert parsers and functions whose body the pack
+ * reads completely can pass a request on or refuse it; a third-party, dynamic or unread value is `unknown` with its
+ * reason, never assumed to pass the request through.
+ */
 export function effectOf(v: Value): Effect {
   switch (v.kind) {
     case 'builtin':

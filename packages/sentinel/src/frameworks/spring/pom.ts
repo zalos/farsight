@@ -4,6 +4,7 @@
 // it reports (profiles, modules, imported BOMs, explicit Spring Security versions, version properties), makes the
 // scope unresolved or unsupported, never assumed.
 
+/** One element of a POM read as XML structure, with its children, text and source offsets. */
 export interface XmlElement {
   readonly name: string;
   readonly children: XmlElement[];
@@ -96,12 +97,16 @@ const decode = (s: string) =>
     .replace(/&apos;/g, "'")
     .replace(/&amp;/g, '&');
 
+/** The first child element of `el` with this name; undefined when there is none. */
 export const child = (el: XmlElement | undefined, name: string): XmlElement | undefined =>
   el?.children.find((c) => c.name === name);
+/** Every child element of `el` with this name, in document order. */
 export const childrenNamed = (el: XmlElement | undefined, name: string): XmlElement[] =>
   el?.children.filter((c) => c.name === name) ?? [];
+/** An element's text, trimmed; undefined when there is no element. */
 export const textOf = (el: XmlElement | undefined): string | undefined => (el ? el.text.trim() : undefined);
 
+/** Whether the POM selects the modeled Spring versions on the servlet stack, with the elements it rests on. */
 export type PomVerdict =
   | { readonly ok: true; readonly evidence: readonly XmlElement[] }
   | {

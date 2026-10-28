@@ -10,6 +10,7 @@ import { bindRules, DriverError, fileScope, nothingToRun, ruleFileBytes, ResultF
 import { assertToolPin } from './pattern.js';
 import type { CheckDriver, DriverNormalize, DriverRecord, SupportedRule } from './types.js';
 
+/** The one rule the infrastructure driver runs: the shipped misconfiguration rule at its exact definition digest. */
 export const TRIVY_SUPPORTED_RULES: readonly SupportedRule[] = Object.freeze([
   Object.freeze({
     familyId: 'sentinel.iac.misconfiguration',
@@ -53,6 +54,11 @@ function bundleOf(record: unknown, pin: { databaseId: string; snapshotDigest: st
   return Object.freeze({ ...b });
 }
 
+/**
+ * The infrastructure check driver over the held checks bundle. Refuses, with a DriverError, a context whose tool pin
+ * is not the pinned engine image or whose rule bytes are not the shipped ones. A rule it does not support and a scope
+ * that is not an infrastructure configuration are reported not run with their reason, never covered.
+ */
 export function trivyDriver(): CheckDriver {
   return {
     adapterId: TRIVY_ADAPTER.id,
