@@ -1078,6 +1078,15 @@ export function serveGraph(
       return null;
     }
   };
+  /**
+   * This server under its other loopback spelling, same port (`localhost:P` ⇄ `127.0.0.1:P`), when the request named
+   * one of the two; else null. A companion pairs with one exact origin (ADR 48): the lookup only says where it is.
+   */
+  const otherLoopback = (host: string | undefined) => {
+    const m = host ? /^(localhost|127\.0\.0\.1)(:\d{1,5})$/i.exec(host) : null;
+    if (!m) return null;
+    return (m[1]!.toLowerCase() === 'localhost' ? '127.0.0.1' : 'localhost') + m[2]!;
+  };
 
   /**
    * The graph a request reads: the served one, or — with `?asof=<sync>` — that sync rebuilt from history
@@ -1229,13 +1238,18 @@ export function serveGraph(
     }
     if (url === '/api/sentinel/companion' && req.method === 'GET') {
       const owner = companionFor(req.headers.host);
+      // none under this origin, one under the other loopback spelling of this same server: say which, frame nothing
+      const other = owner ? null : otherLoopback(req.headers.host);
+      const pairedWith = other && companionFor(other) ? companionOrigin('http://' + other) : null;
       res.setHeader('cache-control', 'no-store');
       return send(
         200,
         JSON.stringify(
           owner
             ? { available: true, ownerOrigin: owner.ownerOrigin }
-            : { available: false, reasonCode: 'sentinel.ownerUi.launch' },
+            : pairedWith
+              ? { available: false, reasonCode: 'sentinel.ownerUi.launch', pairedWith }
+              : { available: false, reasonCode: 'sentinel.ownerUi.launch' },
         ),
       );
     }
@@ -2962,6 +2976,7 @@ export function serveGraph(
   });
   // bind loopback only — Model Hub + graph are local-only surfaces (security posture)
   server.listen(port, '127.0.0.1', () => {
-    console.log(`farsight: http://localhost:${port}  (graph: ${graphPath}, workspace: ${ws})`);
+    // the address it binds: a Sentinel companion pairs with this exact origin, and `localhost` is another one
+    console.log(`farsight: http://127.0.0.1:${port}  (graph: ${graphPath}, workspace: ${ws})`);
   });
 }
