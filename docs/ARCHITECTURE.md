@@ -2117,6 +2117,22 @@ where the qualified inspection does not supply them. Full and baseline compariso
 regenerated through the existing canonical renderer for the exact selected runs. Linked whole-run preparation
 keeps its existing owner receipt; per-work browser rerun, settings editing and custom stages remain unavailable.
 
+ADR48 viewer read-model extension (2026-10-28): the owner companion also serves a read-only model of retained scans
+to Farsight's own Sentinel surface, cross-origin, without Farsight's server importing Sentinel (ADR 18). The paired
+owner frame mints a separate **read pass** (`POST /viewer-pass` under its session capability) and hands it to its
+exact parent with a message bound to the frame nonce, document and host instance; the parent never holds the owner
+capability, a reload token, a receipt or a nonce. The pass authorizes only `GET /api/sentinel/scans`,
+`/scans/before/<n>`, `/scans/<run id>`, `/scans/<run id>/stages/<stage>`, `.../units/<k>` and
+`/scans/<run id>/report[/<format>]`, answered by closed `owner-ui.*` read operations under the session's own proof
+and view revision; the CORS grant names only the paired Farsight origin, never credentials; every other method on
+those routes is 405; a new pass replaces the old one and the session's end ends both. A scan is addressed by its run
+id; its number is a display ordinal from the ledger's run-created order. What a try ran is read from its retained
+invocation record, authenticated against its attempt, work, epoch and pinned adapter, with host paths and token
+arguments scrubbed. An opened check or review carries bounded retained text (outputs, exchanges) as owner-private
+data to the paired page only; a secret match in the accepted evidence withholds every name and text, and the source
+itself is never streamed. A browser Scan press only asks the owner frame, which keeps its own preview and separate
+confirmation; the viewer greys Scan with the frame's reason when a browser cannot start one.
+
 ADR48 release qualification gate: optional owner-adopted `nativeClaudeReviewEnabled` defaults false when
 absent. Public native-Claude stage resolution and existing admitted review selections at foreground start
 refuse before run confirmation/receipt effects, credentials or process launch. The direct retained binding

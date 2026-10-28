@@ -172,13 +172,40 @@ function browserMain(layout: typeof processLayout) {
       event.source !== parent ||
       event.origin !== parentOrigin ||
       !event.data ||
-      event.data.type !== 'sentinel-owner-read-request' ||
+      !['sentinel-owner-read-request', 'sentinel-owner-scan'].includes(event.data.type) ||
       event.data.frameNonce !== frameNonce ||
       event.data.documentId !== documentId
     )
       return;
-    void handPass().catch(() => {});
+    if (event.data.type === 'sentinel-owner-read-request') void handPass().catch(() => {});
+    // The parent's Scan button: this panel previews a fresh capture and waits for the owner's confirmation here, then
+    // previews the start for a second confirmation (the facade's one composite receipt replaces the two later).
+    else if (cap && !sessionLost)
+      void run(async () => {
+        scanFlow = true;
+        notice(text('previewPending'));
+        showPreview(await call('/preview'));
+        document.getElementById('preview')?.scrollIntoView({ block: 'nearest' });
+      });
   });
+  let scanFlow = false;
+  /** After a Scan's preparation is confirmed: wait for it to be prepared, then preview its start. */
+  async function continueScan() {
+    for (let i = 0; scanFlow && i < 240; i++) {
+      const response = await call('/status');
+      const phase = response.status?.found ? response.status.phase : null;
+      if (phase === 'prepared') {
+        scanFlow = false;
+        await refresh();
+        showPreview(await call('/control-preview', { action: 'start' }));
+        document.getElementById('preview')?.scrollIntoView({ block: 'nearest' });
+        return;
+      }
+      if (['interrupted', 'failed', 'canceled'].includes(phase)) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    scanFlow = false;
+  }
   function button(parent: HTMLElement, name: string, action: () => Promise<void>, effect = false) {
     const b = element('button', name, parent) as HTMLButtonElement;
     if (effect) b.dataset.effect = 'true';
@@ -656,6 +683,7 @@ function browserMain(layout: typeof processLayout) {
         chip.className = 'pill';
         chip.textContent = String(stage.stage);
       }
+    const preparing = !!answer.preview.mode;
     const confirm = button(
       e,
       answer.preview.mode ? 'confirmPrepare' : 'confirmControl',
@@ -666,10 +694,12 @@ function browserMain(layout: typeof processLayout) {
         confirm.remove();
         notice(text('actionPending'));
         const answer = await call('/confirm', { id: current.id, revision: current.revision });
-        if (!['submitted', 'requested', 'kept'].includes(answer.outcome))
-          notice(text(answer.reasonCode || 'failed'), true);
+        const accepted = ['submitted', 'requested', 'kept'].includes(answer.outcome);
+        if (!accepted) notice(text(answer.reasonCode || 'failed'), true);
         else notice(text('actionAccepted'));
         await refresh();
+        if (scanFlow && accepted && preparing) await continueScan();
+        else scanFlow = false;
       },
       true,
     );
