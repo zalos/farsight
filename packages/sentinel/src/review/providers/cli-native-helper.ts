@@ -7,7 +7,7 @@ import { dirname, basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseNativeClaudeToken, type NativeClaudeToken } from './cli-native-auth.js';
 import { fail, ProviderError, NativeCredentialError, parseNativeAuthDiagnostic } from './errors.js';
-import { claimNativeLogin, assertNativeLoginActive, type NativeCallAuthority } from './broker.js';
+import { claimNativeLogin, assertNativeLoginActive, type NativeCallAuthority } from './authority.js';
 import type { NativeTiming } from './cli-native-profile.js';
 
 export const NATIVE_HELPER_SOURCE = 'sha256:6192b46a93c6352f7f7795543b51b6f75c2f75ee89e91fbcce523a9cf3a3d0cf';

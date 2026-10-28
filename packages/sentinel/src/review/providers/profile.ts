@@ -21,8 +21,7 @@ import { snapshot } from '../../policy/immutable.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
 import { toNanos } from './decimal.js';
 import { fail } from './errors.js';
-import { COPILOT_NATIVE_PROFILE } from './cli-copilot-profile.js';
-import { CLAUDE_NATIVE_PROFILE } from './cli-native-profile.js';
+import { PROVIDER_KIND_ENTRIES, providerKind } from './registry.js';
 
 export type ProviderKind = ProviderSettings['kind'];
 
@@ -143,57 +142,13 @@ export function bindProvider(policy: EffectivePolicy, providerId: string, modelI
   const limits = checkLimits(profile.limits);
   checkOrigin(settings.endpoint, settings.disclosure);
 
-  const native = settings.kind === 'claude-cli' || settings.kind === 'copilot-cli';
-  if (settings.kind === 'claude-cli') {
-    const p = settings.nativeProfile;
-    if (
-      !p ||
-      p.id !== CLAUDE_NATIVE_PROFILE.id ||
-      p.executableDigest !== CLAUDE_NATIVE_PROFILE.executableDigest ||
-      !/^sha256:[a-f0-9]{64}$/.test(p.helperDigest) ||
-      !/^sha256:[a-f0-9]{64}$/.test(p.profileDigest) ||
-      settings.endpoint !== 'https://api.anthropic.com' ||
-      settings.disclosure !== 'hosted' ||
-      settings.credential !== null ||
-      profile.model !== 'claude-haiku-4-5-20251001' ||
-      limits.contextTokens !== 200000 ||
-      limits.maxRequestBytes > 65536 ||
-      limits.maxOutputTokens > 4096 ||
-      limits.maxMessages > 32 ||
-      settings.budget.maxTokens === null ||
-      settings.budget.maxCost !== null ||
-      settings.budget.currency !== null
-    ) {
-      fail('sentinel.provider.invalidProfile', 'the adopted native CLI profile is missing or outside its fixed bounds');
-    }
-  } else if (settings.nativeProfile !== undefined)
-    fail('sentinel.provider.invalidProfile', 'native profile belongs only to the fixed CLI kind');
-  if (settings.kind === 'copilot-cli') {
-    const p = settings.copilotProfile;
-    if (
-      !p ||
-      p.id !== COPILOT_NATIVE_PROFILE.id ||
-      p.executableDigest !== COPILOT_NATIVE_PROFILE.executableDigest ||
-      p.runtimeDigest !== COPILOT_NATIVE_PROFILE.runtimeDigest ||
-      !/^sha256:[a-f0-9]{64}$/.test(p.profileDigest) ||
-      settings.nativeProfile !== undefined ||
-      settings.endpoint !== 'https://api.githubcopilot.com' ||
-      settings.disclosure !== 'hosted' ||
-      settings.credential !== null ||
-      profile.model !== COPILOT_NATIVE_PROFILE.model ||
-      limits.contextTokens !== COPILOT_NATIVE_PROFILE.contextReservation ||
-      limits.maxRequestBytes > 65536 ||
-      limits.maxResponseBytes > 16384 ||
-      limits.timeoutMs > 60000 ||
-      limits.maxOutputTokens > 512 ||
-      limits.maxMessages > 32 ||
-      settings.budget.maxTokens === null ||
-      settings.budget.maxCost !== null ||
-      settings.budget.currency !== null
-    )
-      fail('sentinel.provider.invalidProfile', 'the fixed Copilot profile is missing or outside its bounds');
-  } else if (settings.copilotProfile !== undefined)
-    fail('sentinel.provider.invalidProfile', 'Copilot code identity belongs only to its fixed kind');
+  const kind = providerKind(settings.kind);
+  const native = kind.accounting === 'subscription-quota';
+  // A CLI's code pin belongs to its own kind only; then that CLI's fixed bounds.
+  for (const other of PROVIDER_KIND_ENTRIES)
+    if (other.cli && other.kind !== settings.kind && settings[other.cli.profileField] !== undefined)
+      fail('sentinel.provider.invalidProfile', 'a native CLI code pin belongs only to its own fixed kind');
+  kind.cli?.checkBinding(settings, profile, limits);
   const pricing = profile.pricing;
   if (pricing === null || pricing === undefined)
     return fail('sentinel.provider.unpriced', 'the model gives no rate schedule and no local no-fee basis');
