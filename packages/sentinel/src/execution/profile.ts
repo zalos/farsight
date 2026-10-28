@@ -5,9 +5,14 @@
 // capability facts, the permits, the bootstrap operations, the resources each stage is granted, and the parse
 // operation's selection and limits (they decide its output). Admission (plans.ts) stores it beside the plan and
 // checks it against the plan's pins; the coordinator checks it again against the live registry before anything runs.
+// A run planned from a declared pipeline records the declaration here too (withPipeline): it is part of the terms the
+// run was made under, and every unit of every revision admitted with the record must belong to one of its stages.
+// A run planned without one reads as its implied default pipeline (stage-inputs.ts pipelineOf).
 import type { Digest, Id } from '../contracts/common.js';
 import type { BuiltinPlanStage, PlanAdapterPin, PlanEnvelope } from '../contracts/plan.js';
 import type { ResourcePolicy } from '../contracts/work.js';
+import type { PipelineDefinition } from '../contracts/pipeline.js';
+import { requireBootstrap, stageModel, stagesOfUnits } from '../planner/pipeline.js';
 import type { PlannerProfile } from '../planner/types.js';
 import type { ParserLimits, ParserSelection } from '../snapshot/parser.js';
 import { canonicalJsonBytes } from '../store/objects.js';
@@ -26,6 +31,18 @@ export interface ExecutionProfileRecord {
   operations: PlanEnvelope['pins']['operations'];
   resources: Record<BuiltinPlanStage, ResourcePolicy>;
   parse: { selection: ParserSelection; limits: Required<ParserLimits> };
+  /** The declared pipeline the run is planned from; absent for a run planned from its implied default. */
+  pipeline?: PipelineDefinition;
+}
+
+/** The record with the declared pipeline the run is planned from (validated: it must derive a stage model). */
+export function withPipeline(record: ExecutionProfileRecord, pipeline: PipelineDefinition): ExecutionProfileRecord {
+  try {
+    stageModel(pipeline);
+  } catch (error) {
+    return refuse(`the pipeline cannot be planned: ${(error as Error).message}`);
+  }
+  return structuredClone({ ...record, pipeline });
 }
 
 const refuse = (reason: string): never => {
@@ -83,6 +100,16 @@ export function checkProfileForPlan(record: ExecutionProfileRecord, plan: PlanEn
   }
   for (const stage of ['capture', 'parse', 'inventory', 'check'] as const)
     if (!record.resources?.[stage]) refuse(`the profile grants no resources to the ${stage} stage`);
+  if (record.pipeline !== undefined) {
+    // The plan was made from this declaration: its bootstrap stages exist and each unit belongs to one stage.
+    try {
+      const model = stageModel(record.pipeline);
+      requireBootstrap(model);
+      stagesOfUnits(model, plan);
+    } catch (error) {
+      refuse(`the plan was not made from the pipeline the profile records: ${(error as Error).message}`);
+    }
+  }
 }
 
 /** Every adapter the profile names is registered now with the same digest: nothing changed since admission. */

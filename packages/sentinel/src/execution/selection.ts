@@ -11,6 +11,9 @@
 import type { Id, WorkRef } from '../contracts/common.js';
 import type { PlanEnvelope, PlanWork } from '../contracts/plan.js';
 import { ExecutionError } from './errors.js';
+import { selectStages, type StageSelection } from '../planner/pipeline.js';
+import type { AdmittedPlan } from './plans.js';
+import { runStages } from './stage-inputs.js';
 
 export const SELECTION_SCHEMA = 'sentinel-rerun-selection/draft-1';
 /** The hold a unit outside the selection carries in the ledger. */
@@ -122,3 +125,39 @@ export const unitIdentity = (
     u.inputFingerprint,
     sorted(u.scopes),
   ]);
+
+/** What `rerun <run> --stage …` names, once stage ids are expanded to the units of the run's admitted revision. */
+export interface StageExpansion {
+  /** The unit ids to rerun: the named units, and every unit of the named stages. Sorted, distinct. */
+  units: Id[];
+  /** The stage-level preview of the named stages (null when only unit ids were named). */
+  stages: StageSelection | null;
+  /** Named stages with no unit in this revision (a scanner with nothing in scope): nothing of theirs reruns. */
+  empty: string[];
+  /** Tokens naming neither a stage of the run's pipeline nor a unit of the revision. */
+  unknown: string[];
+}
+
+/**
+ * Expands the tokens `rerun <run> --stage` was given over a run's admitted revision: a declared stage id becomes that
+ * stage's units (the stage model of the recorded or implied pipeline, stage-inputs.ts), with the stages downstream
+ * of it previewed; a unit id stays as it is, so every existing selection keeps working. Pure over the admitted plan.
+ */
+export function expandStageTokens(
+  admitted: Pick<AdmittedPlan, 'plan' | 'policy' | 'profile'>,
+  tokens: readonly string[],
+): StageExpansion {
+  const unitIds = new Set(admitted.plan.units.map((u) => u.id));
+  const { model } = runStages(admitted);
+  const stageIds = [...new Set(tokens.filter((t) => model.stages.has(t)))];
+  const units = new Set(tokens.filter((t) => unitIds.has(t)));
+  const unknown = [...new Set(tokens.filter((t) => !unitIds.has(t) && !model.stages.has(t)))].sort();
+  const stages = stageIds.length ? selectStages(model, admitted.plan, stageIds) : null;
+  for (const id of stages?.units ?? []) units.add(id);
+  return {
+    units: [...units].sort(),
+    stages,
+    empty: (stages?.selected ?? []).filter((s) => s.units.length === 0).map((s) => s.stage),
+    unknown,
+  };
+}

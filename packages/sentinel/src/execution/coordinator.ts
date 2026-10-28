@@ -71,6 +71,7 @@ import {
   type ValidatedPlan,
 } from './plan.js';
 import { loadPlan } from './plans.js';
+import { stageInputsForUnit } from './stage-inputs.js';
 import { publishPrepared, runOperation } from './bootstrap.js';
 import { COVERAGE_SCHEMA, coverageRecords, scopeIndex, type ScopeIndex } from './coverage.js';
 import { evaluateRequiredCoverage, type RequiredCoverage } from '../planner/coverage.js';
@@ -1144,7 +1145,26 @@ export class Coordinator {
       return;
     }
     // Refused before any worker acted (an unknown adapter, a mismatched input, a pending create): not retried here.
-    if (!this.#cancelRequested && !this.#pauseRequested) this.#failedUnstarted.set(key(ref), code);
+    if (!this.#cancelRequested && !this.#pauseRequested) {
+      this.#failedUnstarted.set(key(ref), code);
+      this.#holdRefusedModelUnit(ref, code);
+    }
+  }
+
+  /**
+   * A model unit refused before its attempt (its admitted inputs no longer hold, a secret is known, an input is
+   * withheld or missing) is held in the ledger with that reason, so status and the report can say why it did not
+   * run; the refusal is never only in this process's memory. Other units keep their unstarted handling.
+   */
+  #holdRefusedModelUnit(ref: WorkRef, code: string): void {
+    try {
+      if (!this.#plan.unitOf(ref).unit.review || !CATALOG.test(code)) return;
+      const row = this.#store.ledger.getWork(ref);
+      if (row && ['pending', 'ready'].includes(row.state))
+        this.#store.ledger.setWorkState(ref, 'blocked', { reasonCode: code.slice(0, 128) });
+    } catch {
+      /* the run ended or the store is gone: the in-memory refusal above still ends this unit here */
+    }
   }
 
   /**
@@ -1166,6 +1186,9 @@ export class Coordinator {
     const review = executable.unit.review
       ? await prepareAdmittedReview(this.#store, this.#plan, ref, this.#review)
       : undefined;
+    // A declared stage that reads other stages' outputs is bound to their exact published artifacts, folded for
+    // secrets first; the binding is sealed in the invocation record accepted with the attempt's start.
+    const stageInputs = review ? await stageInputsForUnit(this.#store, this.#plan.admitted, ref) : undefined;
     const record = {
       format: 'sentinel-operation-invocation/draft-1',
       store: this.#store.storeId,
@@ -1184,6 +1207,7 @@ export class Coordinator {
       sourceId: executable.unit.sourceId,
       ...(adapter.operation === 'parse' ? { parse: profile.parse } : {}),
       ...(review ? { review: review.review } : {}),
+      ...(stageInputs ? { stageInputs } : {}),
     };
     const invocation = this.#store.objects.identifyCanonicalJson(record).id as ArtifactId;
     const records = await this.#stageRecords(`invocation.${id}`, [
