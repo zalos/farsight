@@ -39,6 +39,7 @@ import * as fsp from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import * as zlib from 'node:zlib';
+import { canonicalJson as kernelCanonicalJson, type CanonicalRefuse } from '../kernel/digest.js';
 
 const gzipAsync = promisify(zlib.gzip);
 const gunzipAsync = promisify(zlib.gunzip);
@@ -232,40 +233,20 @@ export function objectRelPath(rawDigest: string, codec: ObjectCodec): string {
   return `objects/sha256/${rawDigest.slice(0, 2)}/${rawDigest}.${codec}`;
 }
 
+/** Raises a canonical-form refusal as the store's coded error, with the refusal's own sentence. */
+const refuseNotCanonical: CanonicalRefuse = (refusal) => fail('sentinel.object.notCanonical', refusal.message);
+
 /**
- * Deterministic JSON for structured artifacts: object keys sorted by UTF-16 code unit, no whitespace,
- * `JSON.stringify` scalars. Refuses what JSON cannot round-trip (undefined, non-finite numbers, bigint,
- * functions, symbols, non-plain objects, cycles). Source bytes never pass through here.
+ * Deterministic JSON for structured artifacts: the kernel's canonicalJson (object keys sorted by UTF-16 code unit,
+ * no whitespace, `JSON.stringify` scalars). Refuses what JSON cannot round-trip (undefined, non-finite numbers,
+ * bigint, functions, symbols, non-plain objects, symbol keys, cycles, nesting past 256 levels) with an
+ * ObjectStoreError `sentinel.object.notCanonical`. Source bytes never pass through here.
  */
 export function canonicalJson(value: unknown): string {
-  const seen = new Set<object>();
-  const walk = (v: unknown, depth: number): string => {
-    if (depth > 256) fail('sentinel.object.notCanonical', 'structure is nested deeper than 256 levels');
-    if (v === null || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v);
-    if (typeof v === 'number') {
-      if (!Number.isFinite(v)) fail('sentinel.object.notCanonical', 'non-finite number');
-      return JSON.stringify(Object.is(v, -0) ? 0 : v);
-    }
-    if (typeof v !== 'object') return fail('sentinel.object.notCanonical', `${typeof v} has no JSON form`);
-    if (seen.has(v)) fail('sentinel.object.notCanonical', 'cyclic structure');
-    seen.add(v);
-    let out: string;
-    if (Array.isArray(v)) {
-      out = `[${Array.from(v, (item) => walk(item, depth + 1)).join(',')}]`;
-    } else {
-      const proto = Object.getPrototypeOf(v);
-      if (proto !== Object.prototype && proto !== null)
-        fail('sentinel.object.notCanonical', 'only plain objects have a canonical form');
-      if (Object.getOwnPropertySymbols(v).length) fail('sentinel.object.notCanonical', 'symbol keys have no JSON form');
-      const keys = Object.keys(v).sort();
-      out = `{${keys.map((k) => `${JSON.stringify(k)}:${walk((v as Record<string, unknown>)[k], depth + 1)}`).join(',')}}`;
-    }
-    seen.delete(v);
-    return out;
-  };
-  return walk(value, 0);
+  return kernelCanonicalJson(value, refuseNotCanonical);
 }
 
+/** {@link canonicalJson} as UTF-8 bytes; refuses exactly what it refuses. */
 export function canonicalJsonBytes(value: unknown): Buffer {
   return Buffer.from(canonicalJson(value), 'utf8');
 }
