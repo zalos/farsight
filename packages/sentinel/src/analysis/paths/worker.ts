@@ -1,16 +1,23 @@
 // Sentinel's fixed supervised structural-query child. Reads only start.job and named sealed IDs. No target imports,
 // checkout, network, deep engine or security coverage. Supervisor owns hard process cancellation/deadline/output;
 // cooperative checks share the remaining original unit deadline through reading, all queries and output writing.
-import { createHash } from 'node:crypto';
 import { constants as FS, openSync, fstatSync, readFileSync, closeSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { inspectPathInputs, PATHS_OUTPUT_MEDIA } from './protocol.js';
 import { PATHS_ADAPTER_ID, PATHS_PROTOCOL_INPUT_LIMIT } from './request.js';
 import { PathExecutionBudget, PathBudgetError } from './budget.js';
 import type { ArtifactId } from '../../contracts/common.js';
+import { sha256Hex } from '../../kernel/digest.js';
 
 const P = 'sentinel-worker/draft-1',
   ID = /^sha256:([0-9a-f]{64})$/;
+/**
+ * The bounded-paths child process: reads its start message, then only the sealed ids it was given, answers every query
+ * under one shared budget and the unit's remaining deadline, writes one output named by its digest and reports it.
+ * A malformed or oversized message ends it with status 3; a refusal (a budget exceeded, or a read the job did not
+ * seal) is reported as a diagnostic with `sentinel.paths.budgetExceeded` or `sentinel.paths.unbound`, then it exits
+ * with status 3.
+ */
 export async function runBoundedPathsWorker(): Promise<void> {
   const input = process.env.SENTINEL_INPUT!,
     output = process.env.SENTINEL_OUTPUT!;
@@ -118,7 +125,7 @@ export async function runBoundedPathsWorker(): Promise<void> {
     const bytes = Buffer.from(JSON.stringify(doc));
     budget.output(bytes.length);
     budget.boundary();
-    const hash = createHash('sha256').update(bytes).digest('hex');
+    const hash = sha256Hex(bytes);
     writeFileSync(`${output}/${hash}`, bytes, { flag: 'wx', mode: 0o600 });
     budget.boundary();
     send({

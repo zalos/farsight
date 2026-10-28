@@ -11,6 +11,7 @@ import type { ServiceClient } from '../transport/ipc.js';
 import { validateEnvelope } from '../validate.js';
 import { OUTCOME_EXIT_CODES } from '../cli/outcome.js';
 import { RUN_STATES } from '../contracts/index.js';
+import { ID_PATTERN } from '../kernel/ids.js';
 import { CONTROL_OPERATIONS, controlOutcome } from './controls.js';
 import {
   PREPARATION_OPERATIONS,
@@ -115,6 +116,11 @@ function legacyProjection(op: string, value: any): unknown {
         : null,
   };
 }
+/**
+ * The MCP server over stdio for this workspace: a read-and-control channel to the running owner service, never the
+ * owner. Each tool forwards one operation the service's negotiated capabilities offer and returns its projection;
+ * without a running service a tool answers `sentinel.service.operationUnavailable`.
+ */
 export async function runMcp(ws: Workspace): Promise<number> {
   let client: ServiceClient | undefined;
   const connection = async () => {
@@ -197,7 +203,7 @@ export async function runMcp(ws: Workspace): Promise<number> {
           Object.keys(args).length !== 1 ||
           !Object.hasOwn(args, required) ||
           typeof args[required] !== 'string' ||
-          !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(args[required] as string)
+          !ID_PATTERN.test(args[required] as string)
         )
           throw fail('sentinel.service.requestInvalid');
       }

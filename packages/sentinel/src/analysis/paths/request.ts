@@ -6,22 +6,33 @@ export { MAX_PATH_REQUEST_BYTES, MAX_PATH_REQUEST_QUERIES } from '../../contract
 import { validateEnvelope } from '../../validate.js';
 import { deepFreeze } from '../../policy/immutable.js';
 import { digestOf } from '../../store/ledger-json.js';
+import { SentinelError } from '../../kernel/errors.js';
 
+/** The schema of a path request. */
 export const PATH_REQUEST_SCHEMA = 'sentinel-path-request/draft-1' as const;
 // The fixed worker protocol allows 1024 sealed IDs, including job, request and four retained roles.
+/** The most sealed ids one path worker invocation may read. */
 export const PATHS_PROTOCOL_INPUT_LIMIT = 1024;
+/** The sealed ids every invocation needs before any captured file: the job, the request and the four retained roles. */
 export const PATHS_RESERVED_INPUTS = 6;
+/** The bounded-paths adapter's id. */
 export const PATHS_ADAPTER_ID = 'bounded-paths';
 
-export class PathRequestError extends Error {
-  readonly code: 'sentinel.paths.unbound' | 'sentinel.paths.invalidInput';
+/** The code of a refused path request: `unbound` evidence, or an `invalid` or `too-large` input. */
+const requestCode = (reason: 'invalid' | 'too-large' | 'unbound') =>
+  reason === 'unbound' ? ('sentinel.paths.unbound' as const) : ('sentinel.paths.invalidInput' as const);
+/**
+ * A path request or input refused: `sentinel.paths.unbound` when it does not bind, `sentinel.paths.invalidInput` when
+ * it is invalid or too large, with which in `reason`.
+ */
+export class PathRequestError extends SentinelError<'sentinel.paths.unbound' | 'sentinel.paths.invalidInput'> {
   constructor(readonly reason: 'invalid' | 'too-large' | 'unbound') {
-    super(reason === 'unbound' ? 'sentinel.paths.unbound' : 'sentinel.paths.invalidInput');
+    super(requestCode(reason), requestCode(reason));
     this.name = 'PathRequestError';
-    this.code = reason === 'unbound' ? 'sentinel.paths.unbound' : 'sentinel.paths.invalidInput';
   }
 }
 
+/** A validated, frozen path request and its canonical digest. */
 export interface CanonicalPathRequest {
   readonly id: ArtifactId;
   readonly value: Readonly<PathRequestEnvelope>;
