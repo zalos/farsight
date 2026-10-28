@@ -35,13 +35,8 @@ import {
   type ToolRequest,
   type ToolResult,
 } from './evidence.js';
-import { reviewFail, type ReplyRejectionCode, type ReviewFrontierCode } from './errors.js';
-import type {
-  ReviewInstructionsEnvelope,
-  ReviewRequestEnvelope,
-  ReviewProviderSelection,
-  NativeReviewWire,
-} from '../contracts/instructions.js';
+import { reviewFail, type ReviewFrontierCode } from './errors.js';
+import type { ReviewRequestEnvelope, ReviewProviderSelection, NativeReviewWire } from '../contracts/instructions.js';
 import {
   instructionManifest,
   renderedInstructions,
@@ -52,7 +47,7 @@ import {
 import { canonicalJsonBytes } from '../store/objects.js';
 import { sha256Digest } from '../policy/digest.js';
 import { promptDigest, type PromptArtifact } from './prompts.js';
-import { validateReply, type FinalAssessment, type Verdict } from './validator.js';
+import { validateReply } from './validator.js';
 
 // ---- the model seam ----
 

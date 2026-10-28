@@ -46,7 +46,10 @@ export function annotationsOf(decl: TSNode): Ann[] {
       }
       walkTS(args, (n) => {
         if (n.type === 'element_value_pair') return false; // named args are pairs, not positional strings
-        if (n.type === 'string_literal') { strings.push(n.text.slice(1, -1)); return false; }
+        if (n.type === 'string_literal') {
+          strings.push(n.text.slice(1, -1));
+          return false;
+        }
       });
     }
     out.push({ name, node: child, strings, pairs });
@@ -59,7 +62,11 @@ export const getAnn = (anns: Ann[], name: string) => anns.find((a) => a.name ===
 
 /** `@GetMapping` etc. → HTTP method. `@RequestMapping` resolves via its `method =` pair. */
 export const MAPPING_ANNS: Record<string, string> = {
-  GetMapping: 'GET', PostMapping: 'POST', PutMapping: 'PUT', DeleteMapping: 'DELETE', PatchMapping: 'PATCH',
+  GetMapping: 'GET',
+  PostMapping: 'POST',
+  PutMapping: 'PUT',
+  DeleteMapping: 'DELETE',
+  PatchMapping: 'PATCH',
 };
 
 /** Route mapping carried by a method's annotations, or null. Path excludes the class-level base. */
@@ -80,35 +87,71 @@ export const SECURITY_ANNS = new Set(['PreAuthorize', 'PostAuthorize', 'Secured'
 
 /** Class stereotype annotation → tag. */
 export const STEREOTYPE_TAGS: Record<string, string> = {
-  RestController: 'controller', Controller: 'controller', Service: 'service',
-  Component: 'component', Repository: 'repository', Configuration: 'configuration',
+  RestController: 'controller',
+  Controller: 'controller',
+  Service: 'service',
+  Component: 'component',
+  Repository: 'repository',
+  Configuration: 'configuration',
 };
 
 /** Jakarta Bean Validation constraint annotations — fields carrying these make a DTO a rule node. */
 export const VALIDATION_ANNS = new Set([
-  'NotNull', 'NotBlank', 'NotEmpty', 'Size', 'Min', 'Max', 'Positive', 'PositiveOrZero',
-  'Negative', 'NegativeOrZero', 'Email', 'Pattern', 'Digits', 'DecimalMin', 'DecimalMax',
-  'Future', 'FutureOrPresent', 'Past', 'PastOrPresent', 'AssertTrue', 'AssertFalse',
+  'NotNull',
+  'NotBlank',
+  'NotEmpty',
+  'Size',
+  'Min',
+  'Max',
+  'Positive',
+  'PositiveOrZero',
+  'Negative',
+  'NegativeOrZero',
+  'Email',
+  'Pattern',
+  'Digits',
+  'DecimalMin',
+  'DecimalMax',
+  'Future',
+  'FutureOrPresent',
+  'Past',
+  'PastOrPresent',
+  'AssertTrue',
+  'AssertFalse',
 ]);
 
 /** Spring Data repository: `interface X extends JpaRepository<Entity, ID>` → entity simple name. */
 export function repositoryEntity(extendsText: string): string | null {
-  return extendsText.match(/\w*(?:Jpa|Crud|PagingAndSorting|ListCrud|ListPagingAndSorting|Mongo|Reactive\w*)Repository\s*<\s*(\w+)/)?.[1] ?? null;
+  return (
+    extendsText.match(
+      /\w*(?:Jpa|Crud|PagingAndSorting|ListCrud|ListPagingAndSorting|Mongo|Reactive\w*)Repository\s*<\s*(\w+)/,
+    )?.[1] ?? null
+  );
 }
 
 /** Classify a repository method declared on the interface: does it read or write the entity table? */
 export function declaredRepoOp(name: string, anns: Ann[]): { op: string; write: boolean } {
   if (hasAnn(anns, 'Modifying')) return { op: name, write: true };
-  if (/^(save|delete|remove|update|mark|insert|upsert|set|increment|decrement)/.test(name)) return { op: name, write: true };
+  if (/^(save|delete|remove|update|mark|insert|upsert|set|increment|decrement)/.test(name))
+    return { op: name, write: true };
   return { op: name, write: false };
 }
 
 /** CRUD methods inherited from JpaRepository — call sites resolve straight to reads/writes edges. */
 export const INHERITED_REPO_OPS: Record<string, { write: boolean }> = {
-  save: { write: true }, saveAll: { write: true }, saveAndFlush: { write: true },
-  delete: { write: true }, deleteById: { write: true }, deleteAll: { write: true }, deleteAllById: { write: true },
-  findById: { write: false }, findAll: { write: false }, findAllById: { write: false },
-  count: { write: false }, existsById: { write: false }, getReferenceById: { write: false },
+  save: { write: true },
+  saveAll: { write: true },
+  saveAndFlush: { write: true },
+  delete: { write: true },
+  deleteById: { write: true },
+  deleteAll: { write: true },
+  deleteAllById: { write: true },
+  findById: { write: false },
+  findAll: { write: false },
+  findAllById: { write: false },
+  count: { write: false },
+  existsById: { write: false },
+  getReferenceById: { write: false },
 };
 
 /** Messaging template field types whose `send`-style calls publish to a queue/topic. */
@@ -120,7 +163,9 @@ export const TEMPLATE_PUBLISH: Record<string, Set<string>> = {
 
 /** Listener annotations → the topics/queues a method consumes (positional or `topics = …`/`queues = …`). */
 export function listenerTopics(anns: Ann[]): string[] {
-  const listener = anns.find((a) => a.name === 'KafkaListener' || a.name === 'RabbitListener' || a.name === 'JmsListener');
+  const listener = anns.find(
+    (a) => a.name === 'KafkaListener' || a.name === 'RabbitListener' || a.name === 'JmsListener',
+  );
   if (!listener) return [];
   return [...listener.strings, ...pairStrings(listener, 'topics', 'queues', 'destination')];
 }

@@ -21,12 +21,31 @@ import { readFileSync, existsSync, appendFileSync, writeFileSync } from 'node:fs
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
-  WorkProvider, Capabilities, Session, Schema, PullPage, Cursor, Scope, SourceConfig,
-  WorkItem, WorkAction, Intent, ApplyResult, ProviderVerdict, Change,
+  WorkProvider,
+  Capabilities,
+  Session,
+  Schema,
+  PullPage,
+  Cursor,
+  Scope,
+  SourceConfig,
+  WorkItem,
+  WorkAction,
+  Intent,
+  ApplyResult,
+  ProviderVerdict,
+  Change,
 } from '@farsight/work';
 
-interface PagesManifest { full: { file: string }[]; incremental: Record<string, string[]> }
-interface PageFile { items: WorkItem[]; cursor: string | null; deleted?: string[] }
+interface PagesManifest {
+  full: { file: string }[];
+  incremental: Record<string, string[]>;
+}
+interface PageFile {
+  items: WorkItem[];
+  cursor: string | null;
+  deleted?: string[];
+}
 interface PermissionsFile {
   credential?: { read: boolean; write: boolean; detail?: string };
   default?: 'allow' | 'deny';
@@ -35,7 +54,11 @@ interface PermissionsFile {
   /** preview() refuses these (the tracker's dry run says no) */
   dryRunRefuses?: Record<string, Partial<Record<WorkAction, string>>>;
 }
-interface AppliedLine { at: string; intent: Intent; revision: string }
+interface AppliedLine {
+  at: string;
+  intent: Intent;
+  revision: string;
+}
 
 export const FIXTURE_CAPABILITIES: Capabilities = {
   comments: { read: true, write: true, format: 'markdown' },
@@ -111,7 +134,10 @@ function chainOffset(dir: string, cursor: string): number | null {
 function applied(dir: string): AppliedLine[] {
   const p = join(dir, 'applied.jsonl');
   if (!existsSync(p)) return [];
-  return readFileSync(p, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as AppliedLine);
+  return readFileSync(p, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as AppliedLine);
 }
 
 /** One applied write, as the fixture tracker performs it. */
@@ -120,15 +146,27 @@ function perform(item: WorkItem, line: AppliedLine, people: Map<string, { id: st
   const p = intent.payload;
   const who = people.get(intent.requestedBy.id) ?? { id: intent.requestedBy.id, name: intent.requestedBy.id };
   const next: WorkItem = structuredClone(item);
-  const change = (field: string, from?: string, to?: string): Change => ({ at, by: who, field, ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}) });
+  const change = (field: string, from?: string, to?: string): Change => ({
+    at,
+    by: who,
+    field,
+    ...(from !== undefined ? { from } : {}),
+    ...(to !== undefined ? { to } : {}),
+  });
   switch (intent.action) {
     case 'comment':
-      next.comments.push({ id: `applied-${next.comments.length + 1}`, author: who, created: at, body: { format: 'markdown', raw: p.body ?? '', text: p.body ?? '' } });
+      next.comments.push({
+        id: `applied-${next.comments.length + 1}`,
+        author: who,
+        created: at,
+        body: { format: 'markdown', raw: p.body ?? '', text: p.body ?? '' },
+      });
       break;
     case 'assign': {
-      const to = p.assignee ? people.get(p.assignee) ?? { id: p.assignee, name: p.assignee } : undefined;
+      const to = p.assignee ? (people.get(p.assignee) ?? { id: p.assignee, name: p.assignee }) : undefined;
       next.history.push(change('assignee', item.assignee?.name, to?.name));
-      if (to) next.assignee = to; else delete next.assignee;
+      if (to) next.assignee = to;
+      else delete next.assignee;
       break;
     }
     case 'transition': {
@@ -194,7 +232,7 @@ export function createFixtureProvider(opts: FixtureOptions = {}): WorkProvider {
     const lines = applied(dir);
     if (!lines.length) return items;
     const cur = current(dir);
-    return items.map((it) => (lines.some((l) => l.intent.item === it.id) ? cur.get(it.id) ?? it : it));
+    return items.map((it) => (lines.some((l) => l.intent.item === it.id) ? (cur.get(it.id) ?? it) : it));
   };
 
   const permissions = (dir: string): PermissionsFile => {
@@ -212,9 +250,13 @@ export function createFixtureProvider(opts: FixtureOptions = {}): WorkProvider {
       if (!existsSync(join(dir, 'pages.json'))) throw new Error(`fixture source ${cfg.id}: no pages.json in ${dir}`);
       const cred = permissions(dir).credential ?? { read: true, write: true };
       return {
-        sourceId: cfg.id, provider: 'fixture', endpoint: dir, dir,
+        sourceId: cfg.id,
+        provider: 'fixture',
+        endpoint: dir,
+        dir,
         user: { id: 'fixture-user', name: 'Fixture user' },
-        credentialScope: cred, apiVersion: 'fixture-1',
+        credentialScope: cred,
+        apiVersion: 'fixture-1',
       };
     },
 
@@ -237,7 +279,12 @@ export function createFixtureProvider(opts: FixtureOptions = {}): WorkProvider {
         for (let i = 0; i < files.length; i++) {
           const pg = page(dir, files[i]!.file);
           serve(dir, i + 1);
-          yield gone({ items: withOverlay(dir, pg.items), cursor: pg.cursor, isLast: i === files.length - 1, ...(pg.deleted ? { deleted: pg.deleted } : {}) });
+          yield gone({
+            items: withOverlay(dir, pg.items),
+            cursor: pg.cursor,
+            isLast: i === files.length - 1,
+            ...(pg.deleted ? { deleted: pg.deleted } : {}),
+          });
         }
         return;
       }
@@ -250,7 +297,12 @@ export function createFixtureProvider(opts: FixtureOptions = {}): WorkProvider {
       for (let i = 0; i < files.length; i++) {
         const pg = page(dir, files[i]!);
         if (offset !== null) serve(dir, offset + i + 1);
-        yield gone({ items: withOverlay(dir, pg.items), cursor: pg.cursor ?? cursor, isLast: i === files.length - 1, ...(pg.deleted ? { deleted: pg.deleted } : {}) });
+        yield gone({
+          items: withOverlay(dir, pg.items),
+          cursor: pg.cursor ?? cursor,
+          isLast: i === files.length - 1,
+          ...(pg.deleted ? { deleted: pg.deleted } : {}),
+        });
       }
     },
 
@@ -275,7 +327,11 @@ export function createFixtureProvider(opts: FixtureOptions = {}): WorkProvider {
       const cur = current(dir).get(intent.item);
       if (!cur) return { ok: false, error: `no item ${intent.item} on the fixture tracker` };
       if (intent.baseRevision !== undefined && intent.baseRevision !== cur.revision) {
-        return { ok: false, conflict: true, error: `revision ${intent.baseRevision} is stale; the tracker has ${cur.revision}` };
+        return {
+          ok: false,
+          conflict: true,
+          error: `revision ${intent.baseRevision} is stale; the tracker has ${cur.revision}`,
+        };
       }
       const refuse = permissions(dir).dryRunRefuses?.[cur.key]?.[intent.action];
       return refuse ? { ok: false, error: refuse } : { ok: true, revision: cur.revision };
@@ -284,9 +340,14 @@ export function createFixtureProvider(opts: FixtureOptions = {}): WorkProvider {
     async apply(s: Session, intent: Intent): Promise<ApplyResult> {
       const dir = dirOf(s);
       const cur = current(dir).get(intent.item);
-      if (!cur && intent.action !== 'create') return { ok: false, error: `no item ${intent.item} on the fixture tracker` };
+      if (!cur && intent.action !== 'create')
+        return { ok: false, error: `no item ${intent.item} on the fixture tracker` };
       if (cur && intent.baseRevision !== undefined && intent.baseRevision !== cur.revision) {
-        return { ok: false, conflict: true, error: `revision ${intent.baseRevision} is stale; the tracker has ${cur.revision}` };
+        return {
+          ok: false,
+          conflict: true,
+          error: `revision ${intent.baseRevision} is stale; the tracker has ${cur.revision}`,
+        };
       }
       const n = applied(dir).filter((l) => l.intent.item === intent.item).length + 1;
       const base = (cur?.revision ?? '0').split('+')[0];

@@ -28,6 +28,7 @@ export const validDigest = (v: unknown): v is Digest => typeof v === 'string' &&
 export const validId = (v: unknown): v is string =>
   typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(v);
 export const validNode = (v: unknown): v is NodeId =>
+  // eslint-disable-next-line no-control-regex -- Node identifiers must exclude control characters and line separators.
   typeof v === 'string' && v.length > 0 && v.length <= 1024 && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(v);
 export const timestamp = (v: unknown): v is string => typeof v === 'string' && isCalendarTimestamp(v);
 export function fields(

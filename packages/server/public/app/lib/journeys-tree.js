@@ -69,18 +69,27 @@ async function fold(designs) {
   }
   const ord = ordinals();
   const metas = (S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.journeys) || null;
-  const tree = treeFrom(list, metas, { nodeOf: (id) => (S.BYID && S.BYID[id]) || null, ordinal: (id) => (ord.has(id) ? ord.get(id) : null) });
+  const tree = treeFrom(list, metas, {
+    nodeOf: (id) => (S.BYID && S.BYID[id]) || null,
+    ordinal: (id) => (ord.has(id) ? ord.get(id) : null),
+  });
   return { tree, live: false, designs: list };
 }
 
 /** Forget every tree — a sync replaced the graph. */
-export function clearJourneyTrees() { CACHE.clear(); }
+export function clearJourneyTrees() {
+  CACHE.clear();
+}
 
 // ── the words every surface prints for the tree ─────────────────
 /** A persona's words: the catalog's, in the register on screen, for the trailing bucket (`key`); else its name. */
-export function jrnPersonaName(p) { return p && p.key ? t(p.key) : (p && p.name) || t('portfolio.noPersona'); }
+export function jrnPersonaName(p) {
+  return p && p.key ? t(p.key) : (p && p.name) || t('portfolio.noPersona');
+}
 /** A group's words: *Other journeys* in the register on screen for the trailing bucket; else its name. */
-export function jrnGroupName(g) { return g && g.key ? t(g.key) : (g && g.name) || t('journeys.noGroup'); }
+export function jrnGroupName(g) {
+  return g && g.key ? t(g.key) : (g && g.name) || t('journeys.noGroup');
+}
 /**
  * A persona's or a group's two counts with their tips: `n journeys · n of m journeys built`.
  * Every number is a `Counted` from the tree, printed as it came (the tree names its `bizUnit`).
@@ -88,8 +97,10 @@ export function jrnGroupName(g) { return g && g.key ? t(g.key) : (g && g.name) |
  */
 export function jrnOrgCountsHtml(counts) {
   if (!counts) return '';
-  return [counts.journeys, counts.built].filter(Boolean)
-    .map((c) => countedHtml(c, '/api/journeys', { cls: 'jrn-org-n' })).join('<span class="jrn-org-sep"> · </span>');
+  return [counts.journeys, counts.built]
+    .filter(Boolean)
+    .map((c) => countedHtml(c, '/api/journeys', { cls: 'jrn-org-n' }))
+    .join('<span class="jrn-org-sep"> · </span>');
 }
 
 /**
@@ -100,8 +111,23 @@ export function jrnOrgCountsHtml(counts) {
  */
 export function screenThumbHtml(scr, cls) {
   const name = scr ? scr.name || scr.designId || '' : '';
-  const ph = '<span class="ph">' + sym('design') + (name ? '<span class="w">' + esc(name) + '</span>' : '')
-    + '<span class="a">' + esc(t(scr && scr.hasImage ? 'design.noImage' : 'journey.absent.notIndexed')) + '</span></span>';
+  const ph =
+    '<span class="ph">' +
+    sym('design') +
+    (name ? '<span class="w">' + esc(name) + '</span>' : '') +
+    '<span class="a">' +
+    esc(t(scr && scr.hasImage ? 'design.noImage' : 'journey.absent.notIndexed')) +
+    '</span></span>';
   if (!scr || !scr.hasImage || !scr.nodeId) return '<div class="' + cls + ' story-thumb none">' + ph + '</div>';
-  return '<div class="' + cls + ' story-thumb"><img src="/api/design/image?node=' + encodeURIComponent(scr.nodeId) + '" alt="' + esc(name) + '" loading="lazy" onerror="this.parentElement.classList.add(\'none\')"/>' + ph + '</div>';
+  return (
+    '<div class="' +
+    cls +
+    ' story-thumb"><img src="/api/design/image?node=' +
+    encodeURIComponent(scr.nodeId) +
+    '" alt="' +
+    esc(name) +
+    '" loading="lazy" onerror="this.parentElement.classList.add(\'none\')"/>' +
+    ph +
+    '</div>'
+  );
 }

@@ -138,7 +138,7 @@ function ddl(sql: string): string {
   // SQLite's own ALTER TABLE RENAME quotes fixed table identifiers. Do not normalize quoted values elsewhere.
   for (let i = 0; i < out.length; i++)
     if ((i === 2 && out[0] === 'CREATE' && out[1] === 'TABLE') || out[i - 1] === 'REFERENCES') {
-      if (['\"envelopes\"', '\"reservations\"'].includes(out[i]!)) out[i] = out[i]!.slice(1, -1);
+      if (['"envelopes"', '"reservations"'].includes(out[i]!)) out[i] = out[i]!.slice(1, -1);
     }
   if (out.at(-1) === ';') out.pop();
   return JSON.stringify(out);

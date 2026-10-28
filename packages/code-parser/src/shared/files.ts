@@ -33,20 +33,35 @@ export function collectFiles(
   const out: string[] = [];
   const visit = (dir: string, parents: { dir: string; rules: Ignore }[] = []) => {
     let entries: string[];
-    try { entries = readdirSync(dir); } catch (error) {
-      if (!scope) throw new Error('Unable to read directory');
+    try {
+      entries = readdirSync(dir);
+    } catch (error) {
+      if (!scope) throw new Error('Unable to read directory', { cause: error });
       if (scope.stopped || error instanceof ReportedReadError) return;
-      scope.report({ code: 'read-error', severity: 'error', path: scope.path(dir), message: 'Directory could not be read.' });
+      scope.report({
+        code: 'read-error',
+        severity: 'error',
+        path: scope.path(dir),
+        message: 'Directory could not be read.',
+      });
       return;
     }
     let rules = parents;
     if (options.gitignore !== false && entries.includes('.gitignore')) {
       try {
-        rules = [...parents, { dir, rules: ignore({ ignorecase: false }).add(readFileSync(join(dir, '.gitignore'), 'utf8')) }];
+        rules = [
+          ...parents,
+          { dir, rules: ignore({ ignorecase: false }).add(readFileSync(join(dir, '.gitignore'), 'utf8')) },
+        ];
       } catch (error) {
-        if (!scope) throw new Error(`Unable to read ${relative(root, dir) || '.'}/.gitignore`);
+        if (!scope) throw new Error(`Unable to read ${relative(root, dir) || '.'}/.gitignore`, { cause: error });
         if (!(error instanceof ReportedReadError) && !scope.stopped) {
-          scope.report({ code: 'read-error', severity: 'error', path: scope.path(join(dir, '.gitignore')), message: 'Git ignore rules could not be read.' });
+          scope.report({
+            code: 'read-error',
+            severity: 'error',
+            path: scope.path(join(dir, '.gitignore')),
+            message: 'Git ignore rules could not be read.',
+          });
         }
         // An unreadable rule file cannot safely select this subtree.
         return;
@@ -57,10 +72,16 @@ export function collectFiles(
       const rel = relative(root, abs).replaceAll('\\', '/');
       if (excludes.some((re) => re.test(rel))) continue;
       let st;
-      try { st = statSync(abs); } catch (error) {
+      try {
+        st = statSync(abs);
+      } catch (error) {
         if (!scope) continue;
         if (scope.stopped) return;
-        scope.files.set(rel, { path: rel, status: 'skipped', reason: error instanceof ReportedReadError ? error.reason : 'unreadable' });
+        scope.files.set(rel, {
+          path: rel,
+          status: 'skipped',
+          reason: error instanceof ReportedReadError ? error.reason : 'unreadable',
+        });
         if (error instanceof ReportedReadError) continue;
         scope.report({ code: 'read-error', severity: 'error', path: rel, message: 'Input could not be inspected.' });
         continue;
@@ -76,14 +97,30 @@ export function collectFiles(
         if (!SKIP_DIRS.has(entry) && !entry.startsWith('.')) visit(abs, rules);
       } else if (st.isFile() && exts.some((e) => entry.endsWith(e))) {
         if (scope?.selectionReady && !scope.selected.has(abs)) continue;
-        if (skip?.(entry) || (includes && !includes.some(re => re.test(rel)))) {
-          if (scope && !scope.selectionReady) scope.files.set(rel, { path: rel, status: 'skipped', reason: skip?.(entry) ? 'declaration-file' : 'include' });
+        if (skip?.(entry) || (includes && !includes.some((re) => re.test(rel)))) {
+          if (scope && !scope.selectionReady)
+            scope.files.set(rel, {
+              path: rel,
+              status: 'skipped',
+              reason: skip?.(entry) ? 'declaration-file' : 'include',
+            });
           continue;
         }
         out.push(abs);
-      } else if (scope?.discoveringSources && !scope.selectionReady && (!includes || includes.some(re => re.test(rel))) && !scope.discoveryExtensions.some(ext => entry.endsWith(ext)) && /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|java|py|go|rs|cs|rb|php|kt|swift|c|cpp)$/.test(entry)) {
+      } else if (
+        scope?.discoveringSources &&
+        !scope.selectionReady &&
+        (!includes || includes.some((re) => re.test(rel))) &&
+        !scope.discoveryExtensions.some((ext) => entry.endsWith(ext)) &&
+        /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|java|py|go|rs|cs|rb|php|kt|swift|c|cpp)$/.test(entry)
+      ) {
         scope.files.set(rel, { path: rel, status: 'skipped', reason: 'unsupported' });
-        scope.report({ code: 'unsupported', severity: 'warning', path: rel, message: 'No registered adapter supports this source file.' });
+        scope.report({
+          code: 'unsupported',
+          severity: 'warning',
+          path: rel,
+          message: 'No registered adapter supports this source file.',
+        });
       }
     }
   };
@@ -99,7 +136,11 @@ export function freshnessMeta(root: string, files: string[]): { files: number; s
   const hash = createHash('sha1');
   for (const f of files) {
     let mtime = 0;
-    try { mtime = statSync(f).mtimeMs; } catch { /* hash the path anyway */ }
+    try {
+      mtime = statSync(f).mtimeMs;
+    } catch {
+      /* hash the path anyway */
+    }
     hash.update(`${relative(root, f)}:${mtime}\n`);
   }
   return { files: files.length, sourceHash: hash.digest('hex').slice(0, 12) };
@@ -119,7 +160,11 @@ export function contentDigest(root: string, files: string[]): string {
   const hash = createHash('sha1');
   for (const f of [...files].sort()) {
     let body: string;
-    try { body = createHash('sha1').update(readFileSync(f)).digest('hex'); } catch { body = 'unreadable'; }
+    try {
+      body = createHash('sha1').update(readFileSync(f)).digest('hex');
+    } catch {
+      body = 'unreadable';
+    }
     hash.update(`${relative(root, f)}\n${body}\n`);
   }
   return hash.digest('hex').slice(0, 12);

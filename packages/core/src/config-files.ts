@@ -21,7 +21,13 @@ export function configCounts(meta: ConfigMeta): { files: Counted; conflicts: Cou
         { key: 'count.part.configScoped', n: meta.files.length - root },
       ],
     }),
-    conflicts: counted(meta.conflicts.length, 'count.unit.configConflicts', 'count.scope.source', `${SOURCE}.conflicts`, { bizUnit: 'count.unit.configConflicts' }),
+    conflicts: counted(
+      meta.conflicts.length,
+      'count.unit.configConflicts',
+      'count.scope.source',
+      `${SOURCE}.conflicts`,
+      { bizUnit: 'count.unit.configConflicts' },
+    ),
   };
 }
 
@@ -45,7 +51,9 @@ export function configOverviewLines(metas: Record<string, ConfigMeta> | undefine
   for (const [repo, meta] of Object.entries(metas ?? {}).sort((a, b) => a[0].localeCompare(b[0]))) {
     const scoped = meta.files.some((f) => !f.root);
     if (!scoped && !meta.conflicts.length && !meta.notes.length) continue;
-    out.push(`config: ${repo} — ${configSummary(meta, { scope: false })}${meta.notes.length ? ` · ${meta.notes.length} note(s)` : ''} — config_files lists them`);
+    out.push(
+      `config: ${repo} — ${configSummary(meta, { scope: false })}${meta.notes.length ? ` · ${meta.notes.length} note(s)` : ''} — config_files lists them`,
+    );
   }
   return out;
 }
@@ -55,11 +63,15 @@ export function configOverviewLines(metas: Record<string, ConfigMeta> | undefine
  * to, the fields it gives, what was ignored), then the conflicts and the notes.
  */
 export function configFilesText(metas: Record<string, ConfigMeta> | undefined, repo?: string): string[] {
-  const entries = Object.entries(metas ?? {}).filter(([r]) => !repo || r === repo).sort((a, b) => a[0].localeCompare(b[0]));
+  const entries = Object.entries(metas ?? {})
+    .filter(([r]) => !repo || r === repo)
+    .sort((a, b) => a[0].localeCompare(b[0]));
   if (!entries.length) {
-    return [repo
-      ? `No config files recorded for ${repo}: it has no farsight.config.json, or the graph was written before config files were recorded — re-ingest to record them.`
-      : 'No config files recorded: no source has a farsight.config.json, or the graph was written before config files were recorded — re-ingest to record them.'];
+    return [
+      repo
+        ? `No config files recorded for ${repo}: it has no farsight.config.json, or the graph was written before config files were recorded — re-ingest to record them.`
+        : 'No config files recorded: no source has a farsight.config.json, or the graph was written before config files were recorded — re-ingest to record them.',
+    ];
   }
   const out: string[] = [];
   for (const [r, meta] of entries) {
@@ -67,7 +79,9 @@ export function configFilesText(metas: Record<string, ConfigMeta> | undefined, r
     out.push(`## ${r} — ${configSummary(meta)}`);
     for (const f of meta.files) {
       const where = f.root ? 'root — the whole source' : `scoped to ${f.dir}/`;
-      out.push(`${f.path} — ${where} · ${f.fields.length ? f.fields.join(', ') : 'no fields'}${f.ignored.length ? ` · ignored: ${f.ignored.join(', ')}` : ''}`);
+      out.push(
+        `${f.path} — ${where} · ${f.fields.length ? f.fields.join(', ') : 'no fields'}${f.ignored.length ? ` · ignored: ${f.ignored.join(', ')}` : ''}`,
+      );
     }
     if (meta.conflicts.length) {
       out.push('conflicts:');

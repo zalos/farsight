@@ -5,8 +5,16 @@
 // decides a permission: the engine (engine.ts) owns the cache and the cursor,
 // the gate (gate.ts) owns policy. `can()` reports the tracker's own answer only.
 import type {
-  WorkItem, WorkType, StateCategory, WorkAction, Intent, ApplyResult, ProviderVerdict,
-  LinkKind, Principal, BodyFormat,
+  WorkItem,
+  WorkType,
+  StateCategory,
+  WorkAction,
+  Intent,
+  ApplyResult,
+  ProviderVerdict,
+  LinkKind,
+  Principal,
+  BodyFormat,
 } from './contract.js';
 
 /** A resolved secret value. Held in memory only — never logged, thrown or written. */
@@ -49,9 +57,14 @@ export interface Scope {
 export type SourceMode = 'read-only' | 'edit';
 
 export type AuthKind =
-  | 'api-token' | 'scoped-token' | 'oauth-3lo'                          // Jira
-  | 'entra-device-code' | 'entra-auth-code' | 'az-cli' | 'pat'          // Azure DevOps
-  | 'none';                                                             // fixture
+  | 'api-token'
+  | 'scoped-token'
+  | 'oauth-3lo' // Jira
+  | 'entra-device-code'
+  | 'entra-auth-code'
+  | 'az-cli'
+  | 'pat' // Azure DevOps
+  | 'none'; // fixture
 
 export interface AuthConfig {
   kind: AuthKind;

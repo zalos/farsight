@@ -30,16 +30,34 @@ const comp = (name: string, path: string, line: number): GraphNode =>
   ({ id: `${R}::${path}::${name}`, kind: 'component', name, tags: [], loc: { repo: R, path, line } }) as GraphNode;
 const page = (name: string, line: number, operations: string[]): GraphNode =>
   ({
-    id: `${R}::page::${name}`, kind: 'page', name, tags: [], loc: { repo: R, path: 'ui/router.tsx', line },
+    id: `${R}::page::${name}`,
+    kind: 'page',
+    name,
+    tags: [],
+    loc: { repo: R, path: 'ui/router.tsx', line },
     design: { id: `SCR-${line}`, status: 'both', origin: 'manifest', operations },
   }) as GraphNode;
 const route = (name: string, line: number, operationId: string): GraphNode =>
   ({
-    id: `${R}::route::${name}`, kind: 'route', name, tags: [], loc: { repo: R, path: 'server/routes.ts', line },
-    contract: { status: 'both', apiId: API, summary: `${operationId} summary`, spec: { operationId } } as OperationContract,
+    id: `${R}::route::${name}`,
+    kind: 'route',
+    name,
+    tags: [],
+    loc: { repo: R, path: 'server/routes.ts', line },
+    contract: {
+      status: 'both',
+      apiId: API,
+      summary: `${operationId} summary`,
+      spec: { operationId },
+    } as OperationContract,
   }) as GraphNode;
-const e = (kind: GraphEdge['kind'], from: string, to: string, line: number): GraphEdge =>
-  ({ id: `${kind}|${from}|${to}|${line}`, kind, from, to, meta: { line } });
+const e = (kind: GraphEdge['kind'], from: string, to: string, line: number): GraphEdge => ({
+  id: `${kind}|${from}|${to}|${line}`,
+  kind,
+  from,
+  to,
+  meta: { line },
+});
 
 /**
  * Two screens, one of which does the same thing again. `/things` lists; `/things/new`
@@ -57,7 +75,8 @@ function twoScreens(): { nodes: GraphNode[]; edges: GraphEdge[] } {
     page('/things/new', 9, ['listThings', 'createThing', 'deleteThing']),
     comp('ThingList', 'ui/ThingList.tsx', 3),
     comp('NewThing', 'ui/NewThing.tsx', 3),
-    fn('listThings', C, 4), fn('createThing', C, 10),
+    fn('listThings', C, 4),
+    fn('createThing', C, 10),
     route('GET /things', 5, 'listThings'),
     route('POST /things', 9, 'createThing'),
     route('DELETE /things/:id', 14, 'deleteThing'),
@@ -89,7 +108,10 @@ test('an operation two screens call is one operation, and the second time is cou
   const moments = sum.segments.flatMap((sg) => sg.moments);
   // the occurrences are all still there — the band draws them, with ↺ on the repeat
   assert.equal(moments.length, 3, 'three action occurrences across the two screens');
-  assert.deepEqual(moments.map((mo) => mo.repeat), [false, true, false]);
+  assert.deepEqual(
+    moments.map((mo) => mo.repeat),
+    [false, true, false],
+  );
   // ...and the journey-level number counts the operation once
   assert.equal(sum.counts.called, 2, 'two operations: list and create — not three occurrences of them');
   assert.equal(sum.counts.again, 1, 'the list call is made a second time on the second screen');
@@ -100,7 +122,10 @@ test('an operation two screens call is one operation, and the second time is cou
 test('an operation two screens declare is one operation declared, not called', () => {
   const sum = fold();
   // both screens' manifests list deleteThing and no action makes it
-  assert.deepEqual(sum.segments.map((sg) => sg.declaredOnly.map((d) => d.op)), [['deleteThing'], ['deleteThing']]);
+  assert.deepEqual(
+    sum.segments.map((sg) => sg.declaredOnly.map((d) => d.op)),
+    [['deleteThing'], ['deleteThing']],
+  );
   assert.equal(sum.counts.declaredNotCalled, 1, 'two screens naming one operation name one operation');
   // and it is never counted on both sides of the split
   assert.equal(sum.counts.called, 2);
@@ -108,8 +133,12 @@ test('an operation two screens declare is one operation declared, not called', (
 
 test('the two halves of the operations split stay disjoint', () => {
   const sum = fold();
-  const ops = new Set(sum.segments.flatMap((sg) => sg.moments)
-    .filter((mo) => mo.callStep != null).map((mo) => mo.label));
+  const ops = new Set(
+    sum.segments
+      .flatMap((sg) => sg.moments)
+      .filter((mo) => mo.callStep != null)
+      .map((mo) => mo.label),
+  );
   assert.equal(ops.has('deleteThing summary'), false, 'a declared operation is not an action of this journey');
 });
 
@@ -118,14 +147,38 @@ test('every word that carries a number says what it counts', () => {
   // defines and the counting words — the ones a reader has to defend in a meeting
   // — were the ones left blank.
   const counting = [
-    'journey.countActions', 'journey.countAgain', 'journey.countGates', 'journey.countChecks',
-    'journey.countBuilt', 'journey.countDeclaredOnly', 'journey.countScreens', 'journey.countSteps',
-    'journey.countDecisions', 'journey.countSystems', 'journey.countSetup', 'journey.countAfterwards',
-    'journey.countChoices', 'journey.countCut', 'journey.countCalls', 'journey.countRecords',
-    'journey.countMessages', 'journey.plannedCount', 'journey.decisionsFolded', 'journey.untranslated',
-    'journey.identity', 'journey.status.built', 'journey.status.partly', 'journey.status.designedNotBuilt',
-    'journey.flowE2e.declared', 'journey.flowE2e.reached', 'journey.flowE2e.observed', 'journey.flowE2e.none',
-    'portfolio.opsCalled', 'portfolio.col.api', 'journey.scopeAll', 'journey.scopeHere',
+    'journey.countActions',
+    'journey.countAgain',
+    'journey.countGates',
+    'journey.countChecks',
+    'journey.countBuilt',
+    'journey.countDeclaredOnly',
+    'journey.countScreens',
+    'journey.countSteps',
+    'journey.countDecisions',
+    'journey.countSystems',
+    'journey.countSetup',
+    'journey.countAfterwards',
+    'journey.countChoices',
+    'journey.countCut',
+    'journey.countCalls',
+    'journey.countRecords',
+    'journey.countMessages',
+    'journey.plannedCount',
+    'journey.decisionsFolded',
+    'journey.untranslated',
+    'journey.identity',
+    'journey.status.built',
+    'journey.status.partly',
+    'journey.status.designedNotBuilt',
+    'journey.flowE2e.declared',
+    'journey.flowE2e.reached',
+    'journey.flowE2e.observed',
+    'journey.flowE2e.none',
+    'portfolio.opsCalled',
+    'portfolio.col.api',
+    'journey.scopeAll',
+    'journey.scopeHere',
   ];
   for (const k of counting) {
     const entry = STRINGS[k];
@@ -138,10 +191,23 @@ test('a count that can be one has a singular', () => {
   // `1 calls` and `1 decisions` were both on screen: a plural beside a 1 invites
   // doubt about every other number on the line. `jrnCountWord` looks for
   // `<key>One`, so the pair has to exist in the catalog for the viewer to find it.
-  for (const k of ['journey.countCalls', 'journey.countRecords', 'journey.countMessages',
-    'journey.countSteps', 'journey.countGates', 'journey.countDecisions', 'journey.countChecks',
-    'journey.countScreens', 'journey.countSystems', 'journey.countActions', 'journey.countAgain',
-    'journey.countRepeats', 'journey.countChoices', 'journey.decisionsFolded', 'journey.biz.countSteps']) {
+  for (const k of [
+    'journey.countCalls',
+    'journey.countRecords',
+    'journey.countMessages',
+    'journey.countSteps',
+    'journey.countGates',
+    'journey.countDecisions',
+    'journey.countChecks',
+    'journey.countScreens',
+    'journey.countSystems',
+    'journey.countActions',
+    'journey.countAgain',
+    'journey.countRepeats',
+    'journey.countChoices',
+    'journey.decisionsFolded',
+    'journey.biz.countSteps',
+  ]) {
     const one = STRINGS[`${k}One`];
     assert.ok(one, `${k} has no singular — it will print "1 ${STRINGS[k]!.professional.replace('{n} ', '')}"`);
     assert.equal(one!.professional.includes('{n}'), false, `${k}One is a plural with a placeholder`);
@@ -180,7 +246,11 @@ test('the step unit does not claim a count the product makes', () => {
   // register prints it on every cell of the system band as *n things happen here*.
   // The word is what business never prints; the parts are counted there too.
   const d = STRINGS['journey.unit.step']!.define!;
-  assert.match(d, /things happen here/, 'the define must name the business register\'s own words for this count (in words, never its key)');
+  assert.match(
+    d,
+    /things happen here/,
+    "the define must name the business register's own words for this count (in words, never its key)",
+  );
   assert.equal(/Counted in hybrid and code, never in business/.test(d), false);
 });
 

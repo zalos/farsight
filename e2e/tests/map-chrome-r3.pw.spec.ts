@@ -16,45 +16,73 @@ async function mapOn(page: Page) {
   await gotoReady(page, '#/portfolio');
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
 }
-const go = (page: Page, hash: string) => page.evaluate((h) => { location.hash = h; }, hash);
+const go = (page: Page, hash: string) =>
+  page.evaluate((h) => {
+    location.hash = h;
+  }, hash);
 const box = async (page: Page, sel: string) => {
   const b = await page.locator(sel).first().boundingBox();
   return b ? [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)] : null;
 };
 
-for (const [W, H] of [[1440, 900], [1280, 800]]) {
+for (const [W, H] of [
+  [1440, 900],
+  [1280, 800],
+]) {
   test.describe(`round-3 chrome at ${W}`, () => {
-    test.beforeEach(async ({ page }) => { await page.setViewportSize({ width: W, height: H }); });
+    test.beforeEach(async ({ page }) => {
+      await page.setViewportSize({ width: W, height: H });
+    });
 
     /**
      * @covers packages/server/public/app/surfaces/map-lanes.js::fitLaneText
      * @covers packages/server/public/app/surfaces/map-lanes.js::lanesHtml
      * @covers packages/server/public/app/lib/map-lanes-model.js::laneLayout
      */
-    test('lanes keep their words: no name breaks inside a word, no pill ellipsizes, one journey counts over the journey', async ({ page }) => {
+    test('lanes keep their words: no name breaks inside a word, no pill ellipsizes, one journey counts over the journey', async ({
+      page,
+    }) => {
       await mapOn(page);
       await go(page, '#/map?storyline=invoice&layout=lanes');
       await expect(page.locator('.map-lanes .ln-stage')).toHaveCount(5);
       await expect(page.locator('.map-lanes .ln-foot .rd')).toHaveCount(0);
       const broken = await page.evaluate(() => {
         const c = document.createElement('canvas').getContext('2d')!;
-        return [...document.querySelectorAll<HTMLElement>('.map-lanes .ln-stage .nm')].filter((el) => {
-          const cs = getComputedStyle(el); c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
-          const ls = parseFloat(cs.letterSpacing) || 0;
-          return el.textContent!.split(/\s+/).some((w) => c.measureText(w.toUpperCase()).width + ls * w.length > el.clientWidth + 1);
-        }).map((el) => el.textContent);
+        return [...document.querySelectorAll<HTMLElement>('.map-lanes .ln-stage .nm')]
+          .filter((el) => {
+            const cs = getComputedStyle(el);
+            c.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+            const ls = parseFloat(cs.letterSpacing) || 0;
+            return el
+              .textContent!.split(/\s+/)
+              .some((w) => c.measureText(w.toUpperCase()).width + ls * w.length > el.clientWidth + 1);
+          })
+          .map((el) => el.textContent);
       });
       expect(broken).toEqual([]);
       // a pill's record, move and writer never ellipsize, and the pill holds them all
-      const cut = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('.map-lanes .ln-pill')]
-        .filter((p) => p.scrollHeight > p.clientHeight + 1 || [...p.querySelectorAll<HTMLElement>('.rec,.w,.by')].some((x) => x.scrollWidth > x.clientWidth + 1))
-        .map((p) => p.textContent));
+      const cut = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>('.map-lanes .ln-pill')]
+          .filter(
+            (p) =>
+              p.scrollHeight > p.clientHeight + 1 ||
+              [...p.querySelectorAll<HTMLElement>('.rec,.w,.by')].some((x) => x.scrollWidth > x.clientWidth + 1),
+          )
+          .map((p) => p.textContent),
+      );
       expect(cut).toEqual([]);
       // a lane's head shows its count and the scope it counts over, never clipped by the lane
-      const heads = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('.map-lanes .ln-headbox')].filter((h) => h.scrollHeight > h.clientHeight + 1).length);
+      const heads = await page.evaluate(
+        () =>
+          [...document.querySelectorAll<HTMLElement>('.map-lanes .ln-headbox')].filter(
+            (h) => h.scrollHeight > h.clientHeight + 1,
+          ).length,
+      );
       expect(heads).toBe(0);
       await expect(page.locator('.map-lanes .ln-lane.store .ln-head .sc').first()).toHaveText(/in this storyline/);
       // one journey's lanes: its counts are over the journey, never a storyline
@@ -62,7 +90,9 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
       await expect(page.locator('.map-jlanes-host .ln-stage').first()).toBeVisible();
       const scopes = await page.locator('.map-jlanes-host .ln-head .sc').allTextContents();
       expect(scopes.join(' ')).not.toMatch(/storyline/);
-      await expect(page.locator('.map-jlanes-host .ln-lane.store .ln-head .d').first()).toContainText('written by this journey');
+      await expect(page.locator('.map-jlanes-host .ln-lane.store .ln-head .d').first()).toContainText(
+        'written by this journey',
+      );
     });
 
     /**
@@ -73,7 +103,11 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
       await mapOn(page);
       await go(page, STREET);
       await expect(page.locator('.map-scr').first()).toBeVisible();
-      const before = { walk: await box(page, '.map-crumbs .map-tb-walk'), tools: await box(page, '.map-row1 .map-tools'), crumb: await box(page, '.map-crumbs') };
+      const before = {
+        walk: await box(page, '.map-crumbs .map-tb-walk'),
+        tools: await box(page, '.map-row1 .map-tools'),
+        crumb: await box(page, '.map-crumbs'),
+      };
       await go(page, STREET + '?affected=' + encodeURIComponent(TABLE) + '&ahops=3');
       await expect(page.locator('.map-affbar')).toBeVisible();
       await expect(page.locator('.map-affbar [data-act="aff-list"]')).toBeEnabled();
@@ -85,7 +119,12 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
         const c = document.querySelector('.map-chrome')!;
         const bar = c.querySelector('.map-affbar')!.getBoundingClientRect();
         const crumbs = c.querySelector('.map-crumbs')!.getBoundingClientRect();
-        return { under: bar.top >= crumbs.bottom - 1, wide: [...c.querySelectorAll<HTMLElement>('.map-row1,.map-crumbs,.map-affbar')].some((e) => e.getBoundingClientRect().right > innerWidth + 1 || e.scrollWidth > e.clientWidth + 1) };
+        return {
+          under: bar.top >= crumbs.bottom - 1,
+          wide: [...c.querySelectorAll<HTMLElement>('.map-row1,.map-crumbs,.map-affbar')].some(
+            (e) => e.getBoundingClientRect().right > innerWidth + 1 || e.scrollWidth > e.clientWidth + 1,
+          ),
+        };
       });
       expect(r).toEqual({ under: true, wide: false });
       // at an action too (the reference app's graph put WALK 600 px past the window there with the bar on)
@@ -102,7 +141,10 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
      * @covers packages/server/public/app/surfaces/map-affected.js::affectedListHtml
      * @covers packages/server/public/app/lib/map-affected-model.js::affectedTests
      */
-    test('LIST THESE writes the tests out in the dock, each at its spec file and line with its own last run, and copies them', async ({ page, context }) => {
+    test('LIST THESE writes the tests out in the dock, each at its spec file and line with its own last run, and copies them', async ({
+      page,
+      context,
+    }) => {
       await context.grantPermissions(['clipboard-read', 'clipboard-write']);
       await mapOn(page);
       await go(page, STREET + '?affected=' + encodeURIComponent(TABLE) + '&ahops=3');
@@ -142,8 +184,13 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
       await openJourneyAt(page, 'screens');
       const strip = page.locator('.map-jhead .jh-lc .lc-statuses').first();
       await expect(strip).toBeVisible();
-      const clipped = () => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('.map-jhead .jh-lc .lc-statuses')]
-        .filter((s) => s.scrollWidth > s.clientWidth + 1).length);
+      const clipped = () =>
+        page.evaluate(
+          () =>
+            [...document.querySelectorAll<HTMLElement>('.map-jhead .jh-lc .lc-statuses')].filter(
+              (s) => s.scrollWidth > s.clientWidth + 1,
+            ).length,
+        );
       expect(await clipped()).toBe(0);
       // squeezed: the line folds, says how many, and its tip lists them
       // (the head's strip is one compact line since lane S: 620 still holds it whole, so squeeze further)
@@ -163,7 +210,10 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
       await expect(page.locator('#fs-tip')).toBeVisible();
       await lanes.click();
       const seen: boolean[] = [];
-      for (let i = 0; i < 6; i++) { await page.waitForTimeout(400); seen.push(await page.locator('#fs-tip').isVisible()); }
+      for (let i = 0; i < 6; i++) {
+        await page.waitForTimeout(400);
+        seen.push(await page.locator('#fs-tip').isVisible());
+      }
       expect(seen).toEqual([false, false, false, false, false, false]);
       // the walk's *next ›*: its tip used to cover the stop's title after every click
       await gotoReady(page, STREET + '?layout=table');
@@ -174,17 +224,23 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
       await page.waitForTimeout(900);
       await next.click();
       const after: boolean[] = [];
-      for (let i = 0; i < 6; i++) { await page.waitForTimeout(400); after.push(await page.locator('#fs-tip').isVisible()); }
+      for (let i = 0; i < 6; i++) {
+        await page.waitForTimeout(400);
+        after.push(await page.locator('#fs-tip').isVisible());
+      }
       expect(after).toEqual([false, false, false, false, false, false]);
     });
 
     /** @covers packages/server/public/app/surfaces/map.js::chromeHtml */
-    test('the level\'s last stop says LINES: on the Map only the register says CODE', async ({ page }) => {
+    test("the level's last stop says LINES: on the Map only the register says CODE", async ({ page }) => {
       await mapOn(page);
       await go(page, STREET);
       await expect(page.locator('.map-lvls [data-l="code"]')).toHaveText(/^lines$/i);
-      const code = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('button')]
-        .filter((b) => b.getClientRects().length && /^code$/i.test(b.textContent!.trim())).map((b) => (b.closest('.lens-switch') ? 'lens' : b.className)));
+      const code = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>('button')]
+          .filter((b) => b.getClientRects().length && /^code$/i.test(b.textContent!.trim()))
+          .map((b) => (b.closest('.lens-switch') ? 'lens' : b.className)),
+      );
       expect(code).toEqual(['lens']);
     });
 
@@ -196,7 +252,10 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
       // the card opens before its code arrives and grows when it does: placed for the short card, it ran off the bottom
       // of a window it no longer fit (measured on the fixture: 32 → 597 px open, 32 → 799 px with its code)
       await page.setViewportSize({ width: W, height: 790 });
-      await page.route('**/api/source*', async (r) => { await new Promise((x) => setTimeout(x, 700)); await r.continue(); });
+      await page.route('**/api/source*', async (r) => {
+        await new Promise((x) => setTimeout(x, 700));
+        await r.continue();
+      });
       await gotoReady(page, STREET + '?layout=table&lens=hybrid');
       const row = page.locator('.map-table .jrn-gl-row[data-gate-card="' + GATE + '"]').first();
       await row.locator('.jrn-gl-w').click();
@@ -209,14 +268,20 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
         body.scrollTop = body.scrollHeight;
         const secs = tip.querySelectorAll('.gc-sec');
         const last = secs[secs.length - 1].getBoundingClientRect();
-        return { bottom: tip.getBoundingClientRect().bottom <= innerHeight + 1, top: tip.getBoundingClientRect().top >= -1, testsInView: last.top < innerHeight && last.bottom > 0 };
+        return {
+          bottom: tip.getBoundingClientRect().bottom <= innerHeight + 1,
+          top: tip.getBoundingClientRect().top >= -1,
+          testsInView: last.top < innerHeight && last.bottom > 0,
+        };
       });
       expect(r).toEqual({ bottom: true, top: true, testsInView: true });
       await expect(c.locator('h4', { hasText: /the tests that reach it/i })).toBeInViewport();
     });
 
     /** @covers packages/server/public/app/lib/lifecycle-strip.js::lifecycleTableInto */
-    test('the lifecycle table in a right-hand dock stacks each status: the word, its constant, what moves it', async ({ page }) => {
+    test('the lifecycle table in a right-hand dock stacks each status: the word, its constant, what moves it', async ({
+      page,
+    }) => {
       await openJourneyAt(page, 'screens');
       await page.locator('.map-jhead .lc-toggle').first().click();
       const tbl = page.locator('.map-dock .lc-table');
@@ -225,7 +290,10 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
         const t = document.querySelector('.map-dock .lc-table')!;
         const tr = t.querySelector('tbody tr')!;
         const [a, b, c] = [...tr.children].map((x) => x.getBoundingClientRect());
-        return { stacked: a.bottom <= b.top + 1 && b.bottom <= c.top + 1, fits: t.scrollWidth <= t.parentElement!.clientWidth + 1 };
+        return {
+          stacked: a.bottom <= b.top + 1 && b.bottom <= c.top + 1,
+          fits: t.scrollWidth <= t.parentElement!.clientWidth + 1,
+        };
       });
       expect(r).toEqual({ stacked: true, fits: true });
     });

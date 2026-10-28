@@ -38,7 +38,12 @@ import type { TestsMatrixIdentity } from './tests.js';
 /** The kinds the Map draws beside a call — its records, messages and third parties. */
 const DATA_KINDS = new Set<GraphNode['kind']>(['table', 'queue', 'external']);
 
-export interface AffectedJourney { flowId: string; name: string; hop: number; by: string }
+export interface AffectedJourney {
+  flowId: string;
+  name: string;
+  hop: number;
+  by: string;
+}
 export interface AffectedScreen {
   flowId: string;
   /** the journey summary's segment index of the screen (a lead segment with no screen folds into the next) */
@@ -50,7 +55,12 @@ export interface AffectedScreen {
   /** the node that met it: the seed, or the listed node met at `hop` */
   by: string;
 }
-export interface AffectedNode { nodeId: string; name: string; kind: GraphNode['kind']; hop: number }
+export interface AffectedNode {
+  nodeId: string;
+  name: string;
+  kind: GraphNode['kind'];
+  hop: number;
+}
 
 export interface AffectedReach {
   seed: string;
@@ -71,7 +81,10 @@ interface FlowWalk {
   name: string;
   nodes: Set<string>;
   screens: {
-    segment: number; screenId: string; name: string; nodes: Set<string>;
+    segment: number;
+    screenId: string;
+    name: string;
+    nodes: Set<string>;
     /** writer id → the fewest calls under one of this screen's actions it runs at, and that action's label (lane moves) */
     writers?: Map<string, { hops: number; action: string }>;
     /** writer id → the constant that switches off this screen's call to it, and the action holding that call */
@@ -120,7 +133,10 @@ export function flowWalks(index: GraphIndex): FlowWalk[] {
           own.add(m.nodeId);
           for (const c of m.choice?.candidates ?? []) own.add(c.nodeId);
         }
-        if (!seg.screen) { lead = own; continue; }
+        if (!seg.screen) {
+          lead = own;
+          continue;
+        }
         lead = new Set<string>();
         own.add(seg.screen.id);
         const writers = new Map<string, { hops: number; action: string }>();
@@ -130,9 +146,17 @@ export function flowWalks(index: GraphIndex): FlowWalk[] {
             const had = writers.get(m.by);
             if (!had || had.hops > (m.hops ?? 0)) writers.set(m.by, { hops: m.hops ?? 0, action: mo.label });
           }
-          for (const m of mo.preconditions?.switchedOff ?? []) if (!off.has(m.by)) off.set(m.by, { flag: m.flag, value: m.value, at: m.at, action: mo.label });
+          for (const m of mo.preconditions?.switchedOff ?? [])
+            if (!off.has(m.by)) off.set(m.by, { flag: m.flag, value: m.value, at: m.at, action: mo.label });
         }
-        screens.push({ segment: seg.index, screenId: seg.screen.id, name: seg.screen.name, nodes: own, ...(writers.size ? { writers } : {}), ...(off.size ? { off } : {}) });
+        screens.push({
+          segment: seg.index,
+          screenId: seg.screen.id,
+          name: seg.screen.name,
+          nodes: own,
+          ...(writers.size ? { writers } : {}),
+          ...(off.size ? { off } : {}),
+        });
         for (const id of own) nodes.add(id);
       }
       out.push({ id: flow.id, name: flow.name, nodes, screens });
@@ -147,7 +171,13 @@ export function flowWalks(index: GraphIndex): FlowWalk[] {
 
 /** The part key a member first met at `hop` is counted under. */
 export function reachPartKey(hop: number): string {
-  return hop <= 0 ? 'count.part.reachSelf' : hop === 1 ? 'count.part.reachDirect' : hop === 2 ? 'count.part.reachThrough' : 'count.part.reachFar';
+  return hop <= 0
+    ? 'count.part.reachSelf'
+    : hop === 1
+      ? 'count.part.reachDirect'
+      : hop === 2
+        ? 'count.part.reachThrough'
+        : 'count.part.reachFar';
 }
 const PART_ORDER = ['count.part.reachSelf', 'count.part.reachDirect', 'count.part.reachThrough', 'count.part.reachFar'];
 
@@ -206,7 +236,8 @@ export function affectedReach(index: GraphIndex, report: ImpactReport): Affected
   const budget = report.hops.length ? report.hops[report.hops.length - 1]!.hop : 0;
   const reaching = impactTestsReaching(report, budget);
   const firstAt = new Map<string, number>();
-  for (const h of report.hops) for (const n of h.nodes) for (const t of n.tests ?? []) if (!firstAt.has(t.id)) firstAt.set(t.id, h.hop);
+  for (const h of report.hops)
+    for (const n of h.nodes) for (const t of n.tests ?? []) if (!firstAt.has(t.id)) firstAt.set(t.id, h.hop);
 
   const src = 'core affected.ts affectedReach';
   // screens counted once each, by the page they show: a page four journeys share is one screen (round 2 — it read as
@@ -221,14 +252,37 @@ export function affectedReach(index: GraphIndex, report: ImpactReport): Affected
     calls,
     data,
     counted: {
-      journeys: counted(journeys.length, 'count.unit.affectedJourneys', 'count.scope.affected', `${src} → journeys whose walk meets the seed or a listed node`,
-        { bizUnit: 'count.unit.affectedJourneys', breakdown: byDistance(journeys.map((x) => x.hop)) }),
-      screens: counted(screenHop.size, 'count.unit.affectedScreens', 'count.scope.affected', `${src} → distinct pages of those journeys whose own part of a walk meets them`,
-        { bizUnit: 'count.unit.affectedScreens', breakdown: byDistance([...screenHop.values()]) }),
-      calls: counted(calls.length, 'count.unit.affectedCalls', 'count.scope.affected', `${src} → route nodes in the hop sets, and the seed when it is one`,
-        { breakdown: byDistance(calls.map((x) => x.hop)) }),
-      tests: counted(reaching.total, 'count.unit.affectedTests', 'count.scope.affected', `${src} → impactTestsReaching(report, ${budget})`,
-        { bizUnit: 'count.unit.affectedTests', breakdown: byDistance(reaching.tests.map((t) => firstAt.get(t.id) ?? budget)) }),
+      journeys: counted(
+        journeys.length,
+        'count.unit.affectedJourneys',
+        'count.scope.affected',
+        `${src} → journeys whose walk meets the seed or a listed node`,
+        { bizUnit: 'count.unit.affectedJourneys', breakdown: byDistance(journeys.map((x) => x.hop)) },
+      ),
+      screens: counted(
+        screenHop.size,
+        'count.unit.affectedScreens',
+        'count.scope.affected',
+        `${src} → distinct pages of those journeys whose own part of a walk meets them`,
+        { bizUnit: 'count.unit.affectedScreens', breakdown: byDistance([...screenHop.values()]) },
+      ),
+      calls: counted(
+        calls.length,
+        'count.unit.affectedCalls',
+        'count.scope.affected',
+        `${src} → route nodes in the hop sets, and the seed when it is one`,
+        { breakdown: byDistance(calls.map((x) => x.hop)) },
+      ),
+      tests: counted(
+        reaching.total,
+        'count.unit.affectedTests',
+        'count.scope.affected',
+        `${src} → impactTestsReaching(report, ${budget})`,
+        {
+          bizUnit: 'count.unit.affectedTests',
+          breakdown: byDistance(reaching.tests.map((t) => firstAt.get(t.id) ?? budget)),
+        },
+      ),
     },
   };
 }
@@ -256,7 +310,12 @@ export interface RangeFile extends FileHunks {
   /** the graph source the file belongs to, when it is not `input.repo` (a source nested in the same repository) */
   repo?: string;
 }
-export interface RangeCommit { sha: string; subject: string; at: string; author?: string }
+export interface RangeCommit {
+  sha: string;
+  subject: string;
+  at: string;
+  author?: string;
+}
 /** What was asked about: two commits, or a pull request of a code host. */
 export type AffectedRangeSpec =
   | { kind: 'commits'; from: string; to: string }
@@ -291,7 +350,15 @@ export const AFFECTED_RUN_STATUS = ['passed', 'failed', 'skipped', 'flaky', 'unk
 export const AFFECTED_EVIDENCE = ['declared', 'reached', 'observed'] as const;
 export const AFFECTED_VERDICT_CLASS = ['none', 'declared', 'reached', 'observed', 'stale'] as const;
 export const AFFECTED_TEST_LEVELS = ['unit', 'integration', 'e2e'] as const;
-export const AFFECTED_TEST_RUNNERS = ['vitest', 'jest', 'node:test', 'playwright', 'cypress', 'junit', 'other'] as const;
+export const AFFECTED_TEST_RUNNERS = [
+  'vitest',
+  'jest',
+  'node:test',
+  'playwright',
+  'cypress',
+  'junit',
+  'other',
+] as const;
 
 /** Past this many changed parts the reports stop being asked and `bound` is a floor (a sweeping rename is not a review). */
 export const AFFECTED_MAX_SEEDS = 400;
@@ -301,12 +368,12 @@ export interface AffectedTestRow {
   title: string;
   file: string;
   line: number | null;
-  level: typeof AFFECTED_TEST_LEVELS[number];
-  runner: typeof AFFECTED_TEST_RUNNERS[number];
+  level: (typeof AFFECTED_TEST_LEVELS)[number];
+  runner: (typeof AFFECTED_TEST_RUNNERS)[number];
   project: string;
-  evidence_class: typeof AFFECTED_EVIDENCE[number];
+  evidence_class: (typeof AFFECTED_EVIDENCE)[number];
   /** the case's own last run; null when no run names it */
-  status: typeof AFFECTED_RUN_STATUS[number];
+  status: (typeof AFFECTED_RUN_STATUS)[number];
   at: string | null;
   /** 0 = it reaches a changed part itself (or its own file changed) · n = it reaches what uses one, n hops out */
   hop: number;
@@ -318,36 +385,78 @@ export interface AffectedV1 {
   schema: 'farsight-affected v1';
   identity: TestsMatrixIdentity;
   range: {
-    kind: typeof AFFECTED_RANGE_KINDS[number];
+    kind: (typeof AFFECTED_RANGE_KINDS)[number];
     repo: string;
     from: string | null;
     to: string | null;
-    pr: { number: number; title: string | null; url: string | null; base: string | null; head: string | null; host: string | null } | null;
+    pr: {
+      number: number;
+      title: string | null;
+      url: string | null;
+      base: string | null;
+      head: string | null;
+      host: string | null;
+    } | null;
   };
   commits: { sha: string; subject: string; at: string; author: string | null }[];
-  files: { path: string; source: string; status: string | null; parts: number; granularity: typeof AFFECTED_GRANULARITY[number] }[];
+  files: {
+    path: string;
+    source: string;
+    status: string | null;
+    parts: number;
+    granularity: (typeof AFFECTED_GRANULARITY)[number];
+  }[];
   /** hop 0: the parts the hunks landed in */
   changed: { id: string; name: string; kind: string; file: string; line: number | null }[];
   journeys: {
-    id: string; name: string; hop: number; by: string;
+    id: string;
+    name: string;
+    hop: number;
+    by: string;
     storylines: { id: string; name: string; step: number; of: number; branch_of: string | null; when: string | null }[];
     screens: { id: string; name: string; segment: number; hop: number }[];
   }[];
   /** the gates and rules on the changed path: on an action that runs changed code, or changed themselves */
-  gates: { id: string; name: string; kind: typeof AFFECTED_GATE_KINDS[number]; tier: string | null; changed: boolean; journeys: string[] }[];
+  gates: {
+    id: string;
+    name: string;
+    kind: (typeof AFFECTED_GATE_KINDS)[number];
+    tier: string | null;
+    changed: boolean;
+    journeys: string[];
+  }[];
   /** records written on the changed path, the writer, and the status moves its lifecycle records for that writer */
-  writes: { id: string; name: string; store: string | null; writer: string; writer_name: string; moves: { from: string | null; to: string }[]; journeys: string[] }[];
+  writes: {
+    id: string;
+    name: string;
+    store: string | null;
+    writer: string;
+    writer_name: string;
+    moves: { from: string | null; to: string }[];
+    journeys: string[];
+  }[];
   /** contract operations on the changed path, or changed themselves */
-  contracts: { id: string; name: string; method: string | null; path: string | null; contract: typeof AFFECTED_CONTRACT_STATUS[number]; changed: boolean }[];
+  contracts: {
+    id: string;
+    name: string;
+    method: string | null;
+    path: string | null;
+    contract: (typeof AFFECTED_CONTRACT_STATUS)[number];
+    changed: boolean;
+  }[];
   /** every case that reaches a changed part or what uses it, each once — nearest first */
   tests: AffectedTestRow[];
   /** whole-run coverage reports that reach the change: evidence, but no case to run */
   run_level: number;
   verdict: {
-    class: typeof AFFECTED_VERDICT_CLASS[number];
+    class: (typeof AFFECTED_VERDICT_CLASS)[number];
     /** the catalog key of the evidence word (`testVerdict().word.key`) */
     word: string;
-    passed: number; failed: number; skipped: number; flaky: number; no_run: number;
+    passed: number;
+    failed: number;
+    skipped: number;
+    flaky: number;
+    no_run: number;
     last_run: string | null;
     /** commits on the head after the last run; null when the history or a run is not known */
     commits_since: number | null;
@@ -355,8 +464,15 @@ export interface AffectedV1 {
   /** what a CI job can run: active cases with a file, by runner (the `farsight-impact-tests v1` shape) */
   select: Record<string, { file: string; title: string; project: string }[]>;
   counted: {
-    commits: Counted; files: Counted; changed: Counted; journeys: Counted; screens: Counted;
-    gates: Counted; writes: Counted; contracts: Counted; tests: Counted;
+    commits: Counted;
+    files: Counted;
+    changed: Counted;
+    journeys: Counted;
+    screens: Counted;
+    gates: Counted;
+    writes: Counted;
+    contracts: Counted;
+    tests: Counted;
   };
   /** `floor` whenever a hunk could only be credited by file, a file matched nothing, a report was cut, or seeds were capped */
   bound: 'exact' | 'floor';
@@ -367,10 +483,12 @@ export interface AffectedV1 {
 function hopsOf(seeds: Iterable<string>, reports: ImpactReport[]): Map<string, number> {
   const hopOf = new Map<string, number>();
   for (const s of seeds) hopOf.set(s, 0);
-  for (const r of reports) for (const h of r.hops) for (const n of h.nodes) {
-    const have = hopOf.get(n.nodeId);
-    if (have == null || h.hop < have) hopOf.set(n.nodeId, h.hop);
-  }
+  for (const r of reports)
+    for (const h of r.hops)
+      for (const n of h.nodes) {
+        const have = hopOf.get(n.nodeId);
+        if (have == null || h.hop < have) hopOf.set(n.nodeId, h.hop);
+      }
   return hopOf;
 }
 
@@ -424,17 +542,30 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
     const source = f.repo ?? input.repo;
     const repoNodes = codeOf.get(source) ?? [];
     const testNodes = testsOf.get(source) ?? [];
-    const touched = f.status === 'D' ? { nodes: [] as GraphNode[], fileOnly: false } : nodesTouched(repoNodes, { path, ranges: f.ranges });
+    const touched =
+      f.status === 'D'
+        ? { nodes: [] as GraphNode[], fileOnly: false }
+        : nodesTouched(repoNodes, { path, ranges: f.ranges });
     // a changed spec file: its cases are selected as they are, at hop 0
-    const specs = testNodes.filter((t) => t.loc && !t.test?.runLevel && (t.loc.path === path || t.loc.path.endsWith('/' + path) || path.endsWith('/' + t.loc.path)));
+    const specs = testNodes.filter(
+      (t) =>
+        t.loc &&
+        !t.test?.runLevel &&
+        (t.loc.path === path || t.loc.path.endsWith('/' + path) || path.endsWith('/' + t.loc.path)),
+    );
     for (const t of specs) changedTests.set(t.id, t);
     for (const n of touched.nodes) changed.set(n.id, n);
     const granularity = touched.nodes.length ? (touched.fileOnly ? 'file' : 'lines') : 'none';
     if (granularity === 'file') floor = true;
     files.push({ path, source, status: f.status ?? null, parts: touched.nodes.length, granularity });
   }
-  const unmatched = files.filter((f) => f.granularity === 'none' && !f.path.match(/\.(md|json|ya?ml|lock|txt|svg|png)$/i) && f.status !== 'D').length;
-  if (unmatched) { floor = true; notes.push(`${unmatched} changed file(s) define nothing this graph indexed`); }
+  const unmatched = files.filter(
+    (f) => f.granularity === 'none' && !f.path.match(/\.(md|json|ya?ml|lock|txt|svg|png)$/i) && f.status !== 'D',
+  ).length;
+  if (unmatched) {
+    floor = true;
+    notes.push(`${unmatched} changed file(s) define nothing this graph indexed`);
+  }
 
   let seeds = [...changed.values()].sort((a, b) => a.id.localeCompare(b.id));
   if (seeds.length > AFFECTED_MAX_SEEDS) {
@@ -460,9 +591,16 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
       if (m) screens.push({ id: s.screenId, name: s.name, segment: s.segment, hop: m.hop });
     }
     const treeOf = typeof input.tree === 'function' ? input.tree(f.id.split('::')[0]!) : input.tree;
-    const storylines = treeOf ? storylinePlacements(treeOf, f.id).map((p) => ({
-      id: p.id, name: p.name, step: p.step, of: p.of, branch_of: p.branch?.of ?? null, when: p.branch?.when ?? null,
-    })) : [];
+    const storylines = treeOf
+      ? storylinePlacements(treeOf, f.id).map((p) => ({
+          id: p.id,
+          name: p.name,
+          step: p.step,
+          of: p.of,
+          branch_of: p.branch?.of ?? null,
+          when: p.branch?.when ?? null,
+        }))
+      : [];
     flows.push({ id: f.id, name: f.name, hop: j.hop, by: j.by, storylines, screens });
   }
   flows.sort((a, b) => a.hop - b.hop || a.name.localeCompare(b.name));
@@ -476,7 +614,14 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
   const addGate = (id: string, flowId: string | null): void => {
     const n = index.byId.get(id);
     if (!n || (n.kind !== 'guard' && n.kind !== 'rule')) return;
-    const g = gates.get(id) ?? { id, name: n.name, kind: n.kind, tier: tierOf(n), changed: seedIds.has(id), journeys: [] };
+    const g = gates.get(id) ?? {
+      id,
+      name: n.name,
+      kind: n.kind,
+      tier: tierOf(n),
+      changed: seedIds.has(id),
+      journeys: [],
+    };
     if (flowId && !g.journeys.includes(flowId)) g.journeys.push(flowId);
     gates.set(id, g);
   };
@@ -484,22 +629,40 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
     const n = index.byId.get(id);
     if (!n || n.kind !== 'route' || contracts.has(id)) return;
     const m = METHOD_PATH.exec(n.name);
-    contracts.set(id, { id, name: n.name, method: m?.[1] ?? null, path: m?.[2] ?? null, contract: n.contract?.status ?? null, changed: seedIds.has(id) });
+    contracts.set(id, {
+      id,
+      name: n.name,
+      method: m?.[1] ?? null,
+      path: m?.[2] ?? null,
+      contract: n.contract?.status ?? null,
+      changed: seedIds.has(id),
+    });
   };
-  for (const n of seeds) { addGate(n.id, null); addContract(n.id); }
+  for (const n of seeds) {
+    addGate(n.id, null);
+    addContract(n.id);
+  }
   for (const f of flows) {
     if (f.hop !== 0) continue;
     let j, sum;
     try {
       j = journey(index, f.id);
       sum = journeySummary(index, j, screensFor(index, f.id));
-    } catch { continue; }
+    } catch {
+      continue;
+    }
     const byOrder = new Map(j.steps.map((s, i) => [s.order, i]));
     for (const seg of sum.segments) {
       for (const m of seg.moments) {
         const idx: number[] = [];
-        for (let o = m.from; o <= m.to; o++) { const i = byOrder.get(o); if (i != null) idx.push(i); }
-        const runsChanged = idx.some((i) => { const s = j.steps[i]!; return seedIds.has(s.nodeId) || s.gates.some((g) => seedIds.has(g.id)); });
+        for (let o = m.from; o <= m.to; o++) {
+          const i = byOrder.get(o);
+          if (i != null) idx.push(i);
+        }
+        const runsChanged = idx.some((i) => {
+          const s = j.steps[i]!;
+          return seedIds.has(s.nodeId) || s.gates.some((g) => seedIds.has(g.id));
+        });
         if (!runsChanged) continue;
         for (const i of idx) {
           const s = j.steps[i]!;
@@ -513,8 +676,14 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
             if (!writer) continue;
             const key = node.id + '|' + writer.id;
             const row = writes.get(key) ?? {
-              id: node.id, name: node.name, store: node.store?.name ?? null, writer: writer.id, writer_name: writer.name,
-              moves: (node.lifecycle?.transitions ?? []).filter((x) => x.by === writer.id).map((x) => ({ from: x.from ?? null, to: x.to })),
+              id: node.id,
+              name: node.name,
+              store: node.store?.name ?? null,
+              writer: writer.id,
+              writer_name: writer.name,
+              moves: (node.lifecycle?.transitions ?? [])
+                .filter((x) => x.by === writer.id)
+                .map((x) => ({ from: x.from ?? null, to: x.to })),
               journeys: [],
             };
             if (!row.journeys.includes(f.id)) row.journeys.push(f.id);
@@ -533,28 +702,74 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
   };
   for (const n of seeds) for (const t of testsCovering(index, n.id)) take(toCoverageRef(index, t, n), 0);
   for (const t of changedTests.values()) {
-    take(toCoverageRef(index, {
-      id: t.id, name: t.name, level: t.test!.level, runner: t.test!.runner, evidence: 'declared', runLevel: false,
-      ...(t.test!.inactive ? { inactive: true } : {}), ...(t.loc ? { loc: t.loc } : {}), ...(t.test!.run ? { run: t.test!.run } : {}),
-      ...(t.test!.run?.project ? { project: t.test!.run.project } : t.test!.project ? { project: t.test!.project } : {}),
-    }, t), 0);
+    take(
+      toCoverageRef(
+        index,
+        {
+          id: t.id,
+          name: t.name,
+          level: t.test!.level,
+          runner: t.test!.runner,
+          evidence: 'declared',
+          runLevel: false,
+          ...(t.test!.inactive ? { inactive: true } : {}),
+          ...(t.loc ? { loc: t.loc } : {}),
+          ...(t.test!.run ? { run: t.test!.run } : {}),
+          ...(t.test!.run?.project
+            ? { project: t.test!.run.project }
+            : t.test!.project
+              ? { project: t.test!.project }
+              : {}),
+        },
+        t,
+      ),
+      0,
+    );
   }
-  for (const r of reports) for (const h of r.hops) for (const n of h.nodes) for (const t of n.tests ?? []) take(t, h.hop);
+  for (const r of reports)
+    for (const h of r.hops) for (const n of h.nodes) for (const t of n.tests ?? []) take(t, h.hop);
   const all = [...refAt.values()];
   const caseRows = all.filter((x) => !x.ref.runLevel);
   const runLevel = all.length - caseRows.length;
-  const evidenceOf = (e: CoverageTestRef['evidence']): AffectedTestRow['evidence_class'] => (e === 'static' ? 'reached' : e);
-  const tests: AffectedTestRow[] = caseRows.map(({ ref, hop }) => ({
-    id: ref.id, title: ref.name, file: ref.loc?.path ?? '', line: ref.loc?.line ?? null,
-    level: ref.level, runner: ref.runner, project: ref.project ?? '',
-    evidence_class: evidenceOf(ref.evidence),
-    status: (ref.status ?? null) as AffectedTestRow['status'], at: ref.at ?? null, hop, inactive: !!ref.inactive,
-  })).sort((a, b) => a.hop - b.hop || a.level.localeCompare(b.level) || a.file.localeCompare(b.file) || (a.line ?? 0) - (b.line ?? 0) || a.title.localeCompare(b.title));
+  const evidenceOf = (e: CoverageTestRef['evidence']): AffectedTestRow['evidence_class'] =>
+    e === 'static' ? 'reached' : e;
+  const tests: AffectedTestRow[] = caseRows
+    .map(({ ref, hop }) => ({
+      id: ref.id,
+      title: ref.name,
+      file: ref.loc?.path ?? '',
+      line: ref.loc?.line ?? null,
+      level: ref.level,
+      runner: ref.runner,
+      project: ref.project ?? '',
+      evidence_class: evidenceOf(ref.evidence),
+      status: (ref.status ?? null) as AffectedTestRow['status'],
+      at: ref.at ?? null,
+      hop,
+      inactive: !!ref.inactive,
+    }))
+    .sort(
+      (a, b) =>
+        a.hop - b.hop ||
+        a.level.localeCompare(b.level) ||
+        a.file.localeCompare(b.file) ||
+        (a.line ?? 0) - (b.line ?? 0) ||
+        a.title.localeCompare(b.title),
+    );
 
   // ── the verdict: testVerdict() over the cases, the one verdict every surface prints ──
-  const facts = evidenceFacts(all.map((x) => x.ref), 'count.scope.affected', `${src}().tests`);
+  const facts = evidenceFacts(
+    all.map((x) => x.ref),
+    'count.scope.affected',
+    `${src}().tests`,
+  );
   const part = (k: string) => facts.verdict.runs.breakdown?.find((p) => p.key === `count.part.${k}`)?.n ?? 0;
-  const lastRun = caseRows.map((x) => x.ref.at).filter((x): x is string => !!x).sort().pop() ?? null;
+  const lastRun =
+    caseRows
+      .map((x) => x.ref.at)
+      .filter((x): x is string => !!x)
+      .sort()
+      .pop() ?? null;
   const commitsSince = lastRun && input.history ? input.history.filter((c) => c.at > lastRun).length : null;
 
   const select: AffectedV1['select'] = {};
@@ -568,21 +783,45 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
   }
 
   const screenHop = new Map<string, number>();
-  for (const f of flows) for (const s of f.screens) screenHop.set(s.id, Math.min(s.hop, screenHop.get(s.id) ?? Infinity));
-  const gateList = [...gates.values()].sort((a, b) => Number(b.changed) - Number(a.changed) || a.name.localeCompare(b.name));
-  const writeList = [...writes.values()].sort((a, b) => a.name.localeCompare(b.name) || a.writer_name.localeCompare(b.writer_name));
-  const contractList = [...contracts.values()].sort((a, b) => Number(b.changed) - Number(a.changed) || a.name.localeCompare(b.name));
-  const changedRows = seeds.map((n) => ({ id: n.id, name: n.name, kind: n.kind, file: n.loc?.path ?? '', line: n.loc?.line ?? null }));
+  for (const f of flows)
+    for (const s of f.screens) screenHop.set(s.id, Math.min(s.hop, screenHop.get(s.id) ?? Infinity));
+  const gateList = [...gates.values()].sort(
+    (a, b) => Number(b.changed) - Number(a.changed) || a.name.localeCompare(b.name),
+  );
+  const writeList = [...writes.values()].sort(
+    (a, b) => a.name.localeCompare(b.name) || a.writer_name.localeCompare(b.writer_name),
+  );
+  const contractList = [...contracts.values()].sort(
+    (a, b) => Number(b.changed) - Number(a.changed) || a.name.localeCompare(b.name),
+  );
+  const changedRows = seeds.map((n) => ({
+    id: n.id,
+    name: n.name,
+    kind: n.kind,
+    file: n.loc?.path ?? '',
+    line: n.loc?.line ?? null,
+  }));
   const byStatus = (s: string) => files.filter((f) => (f.status ?? 'M') === s).length;
   const r = input.range;
   return {
     schema: 'farsight-affected v1',
     identity: input.identity,
     range: {
-      kind: r.kind, repo: input.repo,
-      from: r.kind === 'commits' ? r.from : r.base ?? null,
-      to: r.kind === 'commits' ? r.to : r.head ?? null,
-      pr: r.kind === 'pr' ? { number: r.number, title: r.title ?? null, url: r.url ?? null, base: r.base ?? null, head: r.head ?? null, host: r.host ?? null } : null,
+      kind: r.kind,
+      repo: input.repo,
+      from: r.kind === 'commits' ? r.from : (r.base ?? null),
+      to: r.kind === 'commits' ? r.to : (r.head ?? null),
+      pr:
+        r.kind === 'pr'
+          ? {
+              number: r.number,
+              title: r.title ?? null,
+              url: r.url ?? null,
+              base: r.base ?? null,
+              head: r.head ?? null,
+              host: r.host ?? null,
+            }
+          : null,
     },
     commits: input.commits.map((c) => ({ sha: c.sha, subject: c.subject, at: c.at, author: c.author ?? null })),
     files,
@@ -594,35 +833,111 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
     tests,
     run_level: runLevel,
     verdict: {
-      class: facts.verdict.word.cls, word: facts.verdict.word.key,
-      passed: part('passed'), failed: part('failed'), skipped: part('skipped'), flaky: part('flaky'), no_run: part('noRun'),
-      last_run: lastRun, commits_since: commitsSince,
+      class: facts.verdict.word.cls,
+      word: facts.verdict.word.key,
+      passed: part('passed'),
+      failed: part('failed'),
+      skipped: part('skipped'),
+      flaky: part('flaky'),
+      no_run: part('noRun'),
+      last_run: lastRun,
+      commits_since: commitsSince,
     },
     select,
     counted: {
-      commits: counted(input.commits.length, 'count.unit.affectedCommits', 'count.scope.affected', `${src} → the commits in the range`),
-      files: counted(files.length, 'count.unit.affectedFiles', 'count.scope.affected', `${src} → files changed base → head`, {
-        breakdown: [{ key: 'count.part.fileAdded', n: byStatus('A') }, { key: 'count.part.fileModified', n: files.length - byStatus('A') - byStatus('D') }, { key: 'count.part.fileDeleted', n: byStatus('D') }],
-      }),
-      changed: counted(changedRows.length, 'count.unit.affectedChanged', 'count.scope.affected', `${src} → nodesTouched over the files' hunks`, {
-        breakdown: [{ key: 'count.part.commitLines', n: files.filter((f) => f.granularity === 'lines').reduce((a, f) => a + f.parts, 0) }, { key: 'count.part.commitFile', n: files.filter((f) => f.granularity === 'file').reduce((a, f) => a + f.parts, 0) }],
-      }),
-      journeys: counted(flows.length, 'count.unit.affectedJourneys', 'count.scope.affected', `${src} → journeys whose walk meets a changed part or a listed node`,
-        { bizUnit: 'count.unit.affectedJourneys', breakdown: byDistance(flows.map((x) => x.hop)) }),
-      screens: counted(screenHop.size, 'count.unit.affectedScreens', 'count.scope.affected', `${src} → distinct pages whose own part of a walk meets one`,
-        { bizUnit: 'count.unit.affectedScreens', breakdown: byDistance([...screenHop.values()]) }),
-      gates: counted(gateList.length, 'count.unit.affectedGates', 'count.scope.affected', `${src} → gates and rules on an action that runs changed code, or changed`, {
-        bizUnit: 'count.unit.affectedGates',
-        breakdown: [{ key: 'count.part.gateChanged', n: gateList.filter((g) => g.changed).length }, { key: 'count.part.gateOnPath', n: gateList.filter((g) => !g.changed).length }],
-      }),
-      writes: counted(writeList.length, 'count.unit.affectedWrites', 'count.scope.affected', `${src} → (record, writer) pairs written on the changed path`, { bizUnit: 'count.unit.affectedWrites' }),
-      contracts: counted(contractList.length, 'count.unit.affectedContracts', 'count.scope.affected', `${src} → route nodes on the changed path, or changed`, {
-        breakdown: [{ key: 'count.part.gateChanged', n: contractList.filter((c) => c.changed).length }, { key: 'count.part.gateOnPath', n: contractList.filter((c) => !c.changed).length }],
-      }),
-      tests: counted(tests.length, 'count.unit.affectedCases', 'count.scope.affected', `${src} → distinct cases reaching a changed part (hop 0) or what uses it`, {
-        bizUnit: 'count.unit.affectedCases',
-        breakdown: facts.verdict.runs.breakdown,
-      }),
+      commits: counted(
+        input.commits.length,
+        'count.unit.affectedCommits',
+        'count.scope.affected',
+        `${src} → the commits in the range`,
+      ),
+      files: counted(
+        files.length,
+        'count.unit.affectedFiles',
+        'count.scope.affected',
+        `${src} → files changed base → head`,
+        {
+          breakdown: [
+            { key: 'count.part.fileAdded', n: byStatus('A') },
+            { key: 'count.part.fileModified', n: files.length - byStatus('A') - byStatus('D') },
+            { key: 'count.part.fileDeleted', n: byStatus('D') },
+          ],
+        },
+      ),
+      changed: counted(
+        changedRows.length,
+        'count.unit.affectedChanged',
+        'count.scope.affected',
+        `${src} → nodesTouched over the files' hunks`,
+        {
+          breakdown: [
+            {
+              key: 'count.part.commitLines',
+              n: files.filter((f) => f.granularity === 'lines').reduce((a, f) => a + f.parts, 0),
+            },
+            {
+              key: 'count.part.commitFile',
+              n: files.filter((f) => f.granularity === 'file').reduce((a, f) => a + f.parts, 0),
+            },
+          ],
+        },
+      ),
+      journeys: counted(
+        flows.length,
+        'count.unit.affectedJourneys',
+        'count.scope.affected',
+        `${src} → journeys whose walk meets a changed part or a listed node`,
+        { bizUnit: 'count.unit.affectedJourneys', breakdown: byDistance(flows.map((x) => x.hop)) },
+      ),
+      screens: counted(
+        screenHop.size,
+        'count.unit.affectedScreens',
+        'count.scope.affected',
+        `${src} → distinct pages whose own part of a walk meets one`,
+        { bizUnit: 'count.unit.affectedScreens', breakdown: byDistance([...screenHop.values()]) },
+      ),
+      gates: counted(
+        gateList.length,
+        'count.unit.affectedGates',
+        'count.scope.affected',
+        `${src} → gates and rules on an action that runs changed code, or changed`,
+        {
+          bizUnit: 'count.unit.affectedGates',
+          breakdown: [
+            { key: 'count.part.gateChanged', n: gateList.filter((g) => g.changed).length },
+            { key: 'count.part.gateOnPath', n: gateList.filter((g) => !g.changed).length },
+          ],
+        },
+      ),
+      writes: counted(
+        writeList.length,
+        'count.unit.affectedWrites',
+        'count.scope.affected',
+        `${src} → (record, writer) pairs written on the changed path`,
+        { bizUnit: 'count.unit.affectedWrites' },
+      ),
+      contracts: counted(
+        contractList.length,
+        'count.unit.affectedContracts',
+        'count.scope.affected',
+        `${src} → route nodes on the changed path, or changed`,
+        {
+          breakdown: [
+            { key: 'count.part.gateChanged', n: contractList.filter((c) => c.changed).length },
+            { key: 'count.part.gateOnPath', n: contractList.filter((c) => !c.changed).length },
+          ],
+        },
+      ),
+      tests: counted(
+        tests.length,
+        'count.unit.affectedCases',
+        'count.scope.affected',
+        `${src} → distinct cases reaching a changed part (hop 0) or what uses it`,
+        {
+          bizUnit: 'count.unit.affectedCases',
+          breakdown: facts.verdict.runs.breakdown,
+        },
+      ),
     },
     bound: floor ? 'floor' : 'exact',
     notes,

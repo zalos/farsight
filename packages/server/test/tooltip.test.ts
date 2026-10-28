@@ -22,13 +22,28 @@ g.document = { body: { className: 'lens-hybrid surface-portfolio' } };
 const { STRINGS } = await import(join(here, '..', '..', 'core', 'dist', 'strings.js'));
 const { S } = await import(join(appDir, 'store.js'));
 const tip = await import(join(appDir, 'lib', 'tooltip.js'));
-const { placeTip, numberTip, tableTip, linksTip, defTip, simpleTipHtml, tipAttrs, tipSource, sourceText, TIP_HOVER_MS } = tip;
+const {
+  placeTip,
+  numberTip,
+  tableTip,
+  linksTip,
+  defTip,
+  simpleTipHtml,
+  tipAttrs,
+  tipSource,
+  sourceText,
+  TIP_HOVER_MS,
+} = tip;
 
 S.STRINGS = STRINGS;
 S.GRAPH = { meta: { sync: 64 }, nodes: [], edges: [] };
 
-function lens(l: string) { g.document.body.className = 'lens-' + l + ' surface-portfolio'; }
-function register(r: string) { S.register = r; }
+function lens(l: string) {
+  g.document.body.className = 'lens-' + l + ' surface-portfolio';
+}
+function register(r: string) {
+  S.register = r;
+}
 
 test('the hover delay is one constant, and a deliberate one', () => {
   // the brief's default is 2 s; tune it in one place — this only holds that a
@@ -60,22 +75,39 @@ test('kept inside the viewport, with the arrow still on the trigger', () => {
   const cx = edge.left + edge.width / 2;
   assert.equal(p.arrow, Math.round(cx - p.left), 'the arrow points at the trigger centre');
   // a phone: the tip is narrower than the viewport by both margins
-  const narrow = placeTip({ left: 10, right: 60, top: 400, bottom: 420, width: 50, height: 20 }, { width: 440, height: 100 }, { width: 390, height: 800 });
+  const narrow = placeTip(
+    { left: 10, right: 60, top: 400, bottom: 420, width: 50, height: 20 },
+    { width: 440, height: 100 },
+    { width: 390, height: 800 },
+  );
   assert.equal(narrow.left, 8);
   assert.ok(narrow.arrow >= 12, 'the arrow never leaves the tip body');
 });
 
 test('a tip taller than both sides takes the roomier one and scrolls', () => {
-  const p = placeTip({ left: 100, right: 200, top: 300, bottom: 320, width: 100, height: 20 }, { width: 300, height: 900 }, { width: 1440, height: 900 });
+  const p = placeTip(
+    { left: 100, right: 200, top: 300, bottom: 320, width: 100, height: 20 },
+    { width: 300, height: 900 },
+    { width: 1440, height: 900 },
+  );
   assert.equal(p.side, 'bottom');
   assert.equal(p.maxHeight, 900 - 320 - 8 - 8);
 });
 
 test('numberTip says what it counts, over what, and from where — and links the book', () => {
-  lens('hybrid'); register('professional');
-  const html = numberTip({ count: 11, of: 'journey.countScreens', scope: 'journey.scopeAll', source: tipSource('/api/journey') });
+  lens('hybrid');
+  register('professional');
+  const html = numberTip({
+    count: 11,
+    of: 'journey.countScreens',
+    scope: 'journey.scopeAll',
+    source: tipSource('/api/journey'),
+  });
   assert.match(html, /11 screens/);
-  assert.ok(html.includes(STRINGS['journey.countScreens'].define.slice(0, 40).replace(/’/g, '’')), 'the define is what it counts');
+  assert.ok(
+    html.includes(STRINGS['journey.countScreens'].define.slice(0, 40).replace(/’/g, '’')),
+    'the define is what it counts',
+  );
   assert.ok(html.includes(STRINGS['journey.scopeAll'].professional), 'the scope, in words');
   assert.match(html, /\/api\/journey · sync 64/);
   assert.match(html, /href="#\/grammar\?key=journey\.countScreens"/);
@@ -134,11 +166,14 @@ test('links: internal routes and VS Code links pass, anything else is dropped', 
   assert.match(html, /vscode:\/\/file\/x\.ts:3/);
   assert.ok(!html.includes('javascript:'));
   lens('business');
-  assert.ok(!linksTip([{ label: 'open', href: 'vscode://file/x.ts:3', code: true }]).includes('vscode'), 'a code link is not in the business lens');
+  assert.ok(
+    !linksTip([{ label: 'open', href: 'vscode://file/x.ts:3', code: true }]).includes('vscode'),
+    'a code link is not in the business lens',
+  );
   lens('hybrid');
 });
 
-test('a simple tip is the entry\'s words and its define; a placeholder word is left out', () => {
+test("a simple tip is the entry's words and its define; a placeholder word is left out", () => {
   const html = simpleTipHtml('chrome.sync');
   assert.ok(html.includes('SYNC'));
   assert.ok(html.includes(STRINGS['chrome.sync'].define.slice(0, 30)));
@@ -162,7 +197,8 @@ test('every tip.* word is in the catalog in both registers', () => {
   for (const k of keys) {
     assert.ok(STRINGS[k].hud && STRINGS[k].professional, k);
   }
-  for (const k of ['tip.counts', 'tip.scope', 'tip.source', 'tip.grammar', 'tip.marker']) assert.ok(STRINGS[k].define, k + ' is defined');
+  for (const k of ['tip.counts', 'tip.scope', 'tip.source', 'tip.grammar', 'tip.marker'])
+    assert.ok(STRINGS[k].define, k + ' is defined');
 });
 
 test('a heading built at runtime never prints an unfilled placeholder — every catalog key, as a definition tip', () => {

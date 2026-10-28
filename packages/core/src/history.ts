@@ -27,14 +27,7 @@ import { t, type Register } from './strings.js';
 
 /** `--name-status` / `--numstat` classification of one path in one commit. */
 export type FileStatus =
-  | 'added'
-  | 'modified'
-  | 'deleted'
-  | 'renamed'
-  | 'copied'
-  | 'typechange'
-  | 'unmerged'
-  | 'unknown';
+  'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'typechange' | 'unmerged' | 'unknown';
 
 /**
  * One commit of one repository, as Farsight can know it: repository facts only
@@ -426,20 +419,25 @@ export function spineOf(snapshots: readonly SpineSnapshot[], commits: readonly C
     // not change when a history is read — only its *meaning* does, which is what
     // `commitState` carries
     const raw = snap.commit ?? snap.commitUnverified;
-    const prevRaw = prev ? prev.commit ?? prev.commitUnverified : undefined;
+    const prevRaw = prev ? (prev.commit ?? prev.commitUnverified) : undefined;
     const isReindex = !!raw && !!prevRaw && raw === prevRaw;
     if (isReindex) reindexed += 1;
     const contained = !!snap.commit && map.has(snap.commit);
     const commitState: SpineCommitState =
       // a sha exists and there is no history to check it against: unaskable
-      !historyRead && (snap.commit || snap.commitUnverified) ? 'history-unread'
-      : contained ? 'recorded'
-      : snap.commit
-        // read, and this sha is not in it: the repository's doing, unless the sync
-        // is older than anything the read reached, in which case it is the window's
-        ? (floorAt !== undefined && snap.at < floorAt ? 'below-floor' : 'not-in-history')
-      : snap.inSync === false ? 'not-in-sync'
-      : 'none';
+      !historyRead && (snap.commit || snap.commitUnverified)
+        ? 'history-unread'
+        : contained
+          ? 'recorded'
+          : snap.commit
+            ? // read, and this sha is not in it: the repository's doing, unless the sync
+              // is older than anything the read reached, in which case it is the window's
+              floorAt !== undefined && snap.at < floorAt
+              ? 'below-floor'
+              : 'not-in-history'
+            : snap.inSync === false
+              ? 'not-in-sync'
+              : 'none';
     // `null` only where a sha exists and cannot be checked. A row with no commit at
     // all answers `false` in every state, read or not: there is nothing to place, and
     // the value must not change just because a history was read elsewhere.
@@ -450,7 +448,8 @@ export function spineOf(snapshots: readonly SpineSnapshot[], commits: readonly C
       // the oldest sync records exactly one commit; everything before it is `before`
       swept = map.get(snap.commit!) ? [map.get(snap.commit!)!] : [];
     } else swept = commitsInRange(commits, prev.commit, snap.commit);
-    const treeChanged = isReindex && !!snap.sourceDigest && !!prev?.sourceDigest && snap.sourceDigest !== prev.sourceDigest;
+    const treeChanged =
+      isReindex && !!snap.sourceDigest && !!prev?.sourceDigest && snap.sourceDigest !== prev.sourceDigest;
     rows.push({
       sync: snap.sync,
       at: snap.at,
@@ -628,8 +627,10 @@ export const INCOMPLETE_SENTENCE: Record<IncompleteReason, string> = {
   'no-history': 'no history has been read for this repository',
   'base-missing': 'the base sync recorded no commit for this repository',
   'head-missing': 'the head sync recorded no commit for this repository',
-  'base-unknown': "the base sync's commit is not in this repository's history — rewritten, pruned, or a history not read this far back",
-  'head-unknown': "the head sync's commit is not in this repository's history — rewritten, pruned, or a history not read this far back",
+  'base-unknown':
+    "the base sync's commit is not in this repository's history — rewritten, pruned, or a history not read this far back",
+  'head-unknown':
+    "the head sync's commit is not in this repository's history — rewritten, pruned, or a history not read this far back",
 };
 
 /** What a spine row has to say for itself, as a word a consumer can switch on. */
@@ -652,12 +653,14 @@ export type SpineNoteKind =
   | 'subject';
 
 const SPINE_NOTE: Record<Exclude<SpineNoteKind, 'subject'>, string> = {
-  'history-unread': "no history read for this repository — run `farsight history` for it; until then whether this sync's commit is in this history cannot be asked",
+  'history-unread':
+    "no history read for this repository — run `farsight history` for it; until then whether this sync's commit is in this history cannot be asked",
   reindexed: 're-indexed on a newer build — no new commits',
   'tree-changed': 'same commit — the working tree differs from HEAD, so uncommitted edits were read',
   'not-in-sync': 'this sync did not include this repository',
   'no-commit': 'this sync recorded no commit for this repository',
-  'commit-below-floor': 'commit older than the oldest commit read — read further back (`--since`, a higher `--max`) before calling it missing; a shallow clone cannot go further',
+  'commit-below-floor':
+    'commit older than the oldest commit read — read further back (`--since`, a higher `--max`) before calling it missing; a shallow clone cannot go further',
   'commit-unknown': "commit not in this repository's history — rewritten, pruned, or a history not read this far back",
 };
 
@@ -776,19 +779,33 @@ export function attributeDiffOver<C extends AttributableChange, D extends { chan
     files.push(...rows.files);
 
     if (!rows.commits.length) {
-      notes.push({ level: 'note', repo, text: `${repo}: no history read for this repository — nothing is claimed, not even an empty list (\`farsight history --repo ${repo}\`)` });
+      notes.push({
+        level: 'note',
+        repo,
+        text: `${repo}: no history read for this repository — nothing is claimed, not even an empty list (\`farsight history --repo ${repo}\`)`,
+      });
       continue;
     }
     const checkout = opts.checkout?.(repo) ?? { kind: 'missing' as const };
     if (checkout.kind === 'prefix') {
       if (checkout.prefix) prefix[repo] = checkout.prefix;
     } else if (checkout.kind === 'unreadable') {
-      notes.push({ level: 'warn', repo, text: `${repo}: cannot read where ${checkout.root} sits inside its repository (${checkout.reason}) — paths are joined without a prefix, so a source below its repository root attributes nothing` });
+      notes.push({
+        level: 'warn',
+        repo,
+        text: `${repo}: cannot read where ${checkout.root} sits inside its repository (${checkout.reason}) — paths are joined without a prefix, so a source below its repository root attributes nothing`,
+      });
     } else {
-      notes.push({ level: 'warn', repo, text: `${repo}: no checkout recorded${checkout.root ? ` (${checkout.root} is not there)` : ''} — paths are joined without a repository prefix, so a source below its repository root attributes nothing` });
+      notes.push({
+        level: 'warn',
+        repo,
+        text: `${repo}: no checkout recorded${checkout.root ? ` (${checkout.root} is not there)` : ''} — paths are joined without a repository prefix, so a source below its repository root attributes nothing`,
+      });
     }
 
-    const where = prefix[repo] ? `the source sits under ${prefix[repo]} in its repository` : 'the source is at its repository root';
+    const where = prefix[repo]
+      ? `the source sits under ${prefix[repo]} in its repository`
+      : 'the source is at its repository root';
     notes.push({
       level: 'note',
       repo,
@@ -799,7 +816,8 @@ export function attributeDiffOver<C extends AttributableChange, D extends { chan
           : ' · every one of them was ingested by some sync') +
         ` · ${where}`,
     });
-    for (const why of range.incomplete) notes.push({ level: 'warn', repo, text: `${repo}: ${INCOMPLETE_SENTENCE[why]}` });
+    for (const why of range.incomplete)
+      notes.push({ level: 'warn', repo, text: `${repo}: ${INCOMPLETE_SENTENCE[why]}` });
   }
 
   return {
@@ -871,9 +889,15 @@ export function spineSentences(spine: CommitSpine): SpineSentences {
   // the one history sentence (round 2026-10-10, finding 2.1): both halves, the same words Settings and the
   // front door print — read into history · ingested by a sync · not yet
   if (spine.commits && spine.unindexed) {
-    out.unindexed = { level: 'warn', text: `${historySentence(historyFact([spine]))} — the ${num(spine.unindexed)} not yet ingested are not indexed: Farsight can name the files they touched, not what they did to the graph` };
+    out.unindexed = {
+      level: 'warn',
+      text: `${historySentence(historyFact([spine]))} — the ${num(spine.unindexed)} not yet ingested are not indexed: Farsight can name the files they touched, not what they did to the graph`,
+    };
   } else if (spine.commits) {
-    out.unindexed = { level: 'note', text: `${historySentence(historyFact([spine]))} — every commit in this history was ingested by some sync` };
+    out.unindexed = {
+      level: 'note',
+      text: `${historySentence(historyFact([spine]))} — every commit in this history was ingested by some sync`,
+    };
   }
   // a sync that never walked this source has not failed to stamp a commit — the
   // third row state (H5), said here so the count is never read as one situation
@@ -882,7 +906,10 @@ export function spineSentences(spine: CommitSpine): SpineSentences {
     : '';
   const treeRows = spine.rows.filter((r) => r.treeChanged).length;
   if (rows) {
-    out.syncs = { level: 'note', text: `${num(rows)} sync${rows === 1 ? '' : 's'} · ${num(spine.distinct)} distinct commit${spine.distinct === 1 ? '' : 's'} recorded for this repository${missing} · ${num(spine.reindexed)} re-indexed on a newer build — no new commits${treeRows ? ` (${treeRows} of them read a working tree that differs from HEAD)` : ''}` };
+    out.syncs = {
+      level: 'note',
+      text: `${num(rows)} sync${rows === 1 ? '' : 's'} · ${num(spine.distinct)} distinct commit${spine.distinct === 1 ? '' : 's'} recorded for this repository${missing} · ${num(spine.reindexed)} re-indexed on a newer build — no new commits${treeRows ? ` (${treeRows} of them read a working tree that differs from HEAD)` : ''}`,
+    };
   }
   // strictly `true`: an unaskable row anchors nothing
   const anchored = spine.rows.some((r) => r.commitKnown === true);
@@ -891,11 +918,21 @@ export function spineSentences(spine: CommitSpine): SpineSentences {
     // than sharing one sentence: a source no snapshot ever walked has not failed
     // to stamp anything, and telling it to re-sync to "record it from now on" is
     // advice for the other case
-    out.noneRecorded = spine.notInSync === rows
-      ? { level: 'warn', text: `not one of the ${num(rows)} syncs included this repository — each snapshot records the sources it walked and none of them named this one, so these commits have no sync to be placed against. Add it as a source and re-sync; until then every commit here is not indexed by construction` }
-      : { level: 'warn', text: `not one of the ${num(rows)} syncs recorded a commit for this repository — a snapshot stamps the workspace root's commit and a per-source commit only when the ingest that wrote it stamped one, and an existing row cannot be backfilled: the commit that sync saw is not recoverable. Re-sync to record it from now on; until then this spine can name syncs but not what they swept up` };
+    out.noneRecorded =
+      spine.notInSync === rows
+        ? {
+            level: 'warn',
+            text: `not one of the ${num(rows)} syncs included this repository — each snapshot records the sources it walked and none of them named this one, so these commits have no sync to be placed against. Add it as a source and re-sync; until then every commit here is not indexed by construction`,
+          }
+        : {
+            level: 'warn',
+            text: `not one of the ${num(rows)} syncs recorded a commit for this repository — a snapshot stamps the workspace root's commit and a per-source commit only when the ingest that wrote it stamped one, and an existing row cannot be backfilled: the commit that sync saw is not recoverable. Re-sync to record it from now on; until then this spine can name syncs but not what they swept up`,
+          };
   } else if (rows && !anchored && spine.commits) {
-    out.unanchored = { level: 'warn', text: "no sync on this spine names a commit this repository's history contains — rewritten, pruned, or a history never read this far back — so the rows below can be named but not placed" };
+    out.unanchored = {
+      level: 'warn',
+      text: "no sync on this spine names a commit this repository's history contains — rewritten, pruned, or a history never read this far back — so the rows below can be named but not placed",
+    };
   }
   // with no syncs, or no sync commit this history knows, there is no "outside a
   // sync's reach" to compute: the anchor would be a sha nothing here can place
@@ -913,13 +950,19 @@ export function spineSentences(spine: CommitSpine): SpineSentences {
     };
   }
   if (!rows) {
-    out.noSnapshots = { level: 'note', text: 'no snapshots yet in this database — run `farsight ingest`, then this spine has syncs to hang commits on' };
+    out.noSnapshots = {
+      level: 'note',
+      text: 'no snapshots yet in this database — run `farsight ingest`, then this spine has syncs to hang commits on',
+    };
   } else {
     // provenance, said once rather than per row: a workspace-sha row is this
     // repository's commit only because this repository's history contains that sha
     const borrowed = spine.rows.filter((r) => r.commitFrom === 'workspace').length;
     if (borrowed) {
-      out.borrowed = { level: 'note', text: `${num(borrowed)} of these rows take the workspace root's sha, which this repository's own history contains — the rest recorded a commit for this source directly` };
+      out.borrowed = {
+        level: 'note',
+        text: `${num(borrowed)} of these rows take the workspace root's sha, which this repository's own history contains — the rest recorded a commit for this source directly`,
+      };
     }
   }
   return out;
@@ -958,13 +1001,33 @@ export function historyFact(
   const recheck = { cli: 'farsight history --repo <name>', mcp: 'graph_overview' };
   return {
     read: counted(read, 'history.fact.read', 'count.scope.workspace', SRC, {
-      bizUnit: 'history.fact.read', recheck,
-      breakdown: [{ key: 'history.fact.ingested', n: ingested }, { key: 'history.fact.notYet', n: notYet }],
+      bizUnit: 'history.fact.read',
+      recheck,
+      breakdown: [
+        { key: 'history.fact.ingested', n: ingested },
+        { key: 'history.fact.notYet', n: notYet },
+      ],
     }),
-    ingested: counted(ingested, 'history.fact.ingested', 'count.scope.workspace', SRC, { bizUnit: 'history.fact.ingested', of: read, recheck }),
-    notYet: counted(notYet, 'history.fact.notYet', 'count.scope.workspace', SRC, { bizUnit: 'history.fact.notYet', of: read, recheck }),
+    ingested: counted(ingested, 'history.fact.ingested', 'count.scope.workspace', SRC, {
+      bizUnit: 'history.fact.ingested',
+      of: read,
+      recheck,
+    }),
+    notYet: counted(notYet, 'history.fact.notYet', 'count.scope.workspace', SRC, {
+      bizUnit: 'history.fact.notYet',
+      of: read,
+      recheck,
+    }),
     historyRead: read > 0,
-    ...(spines.some((x) => typeof x.agents === 'number') ? { agents: agentsCounted(spines.reduce((s, x) => s + (x.agents ?? 0), 0), read, opts.byAgent) } : {}),
+    ...(spines.some((x) => typeof x.agents === 'number')
+      ? {
+          agents: agentsCounted(
+            spines.reduce((s, x) => s + (x.agents ?? 0), 0),
+            read,
+            opts.byAgent,
+          ),
+        }
+      : {}),
   };
 }
 
@@ -974,13 +1037,24 @@ export function historyFact(
  * `farsight history --agents`.
  */
 export function agentsCounted(n: number, of: number, byAgent?: Record<string, number>): Counted {
-  const names = Object.entries(byAgent ?? {}).filter(([, k]) => k > 0).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  const names = Object.entries(byAgent ?? {})
+    .filter(([, k]) => k > 0)
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
   const named = names.reduce((s, [, k]) => s + k, 0);
-  return counted(n, 'history.fact.agents', 'count.scope.workspace', 'core history.ts agentsCounted ← commit.agent (Co-Authored-By trailers)', {
-    of, bizUnit: 'history.fact.agents',
-    recheck: { cli: 'farsight history --agents', mcp: 'graph_overview' },
-    ...(names.length && named === n ? { breakdown: names.map(([name, k]) => ({ key: 'history.fact.agentNamed', n: k, label: name })) } : {}),
-  });
+  return counted(
+    n,
+    'history.fact.agents',
+    'count.scope.workspace',
+    'core history.ts agentsCounted ← commit.agent (Co-Authored-By trailers)',
+    {
+      of,
+      bizUnit: 'history.fact.agents',
+      recheck: { cli: 'farsight history --agents', mcp: 'graph_overview' },
+      ...(names.length && named === n
+        ? { breakdown: names.map(([name, k]) => ({ key: 'history.fact.agentNamed', n: k, label: name })) }
+        : {}),
+    },
+  );
 }
 
 /** The sentence: *282 commits read into history · 40 ingested by a sync · 242 not yet* — one wording everywhere. */

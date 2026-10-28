@@ -17,7 +17,7 @@ import {
 } from '../dist/adapters/drivers/index.js';
 import { loadChecksBundle } from '../dist/adapters/trivy/index.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
-import { checks, execute, PACKS, prepareContext, sha, shippedRules, unit, verdicts } from './driver-helpers.ts';
+import { checks, execute, PACKS, prepareContext, shippedRules, unit, verdicts } from './driver-helpers.ts';
 import { capturedTree, TRIVY_LAYOUT, ZIZMOR_LAYOUT } from './iac-helpers.ts';
 import { capturedTree as advisoryTree, syntheticSnapshot } from './osv-helpers.ts';
 

@@ -216,7 +216,9 @@ test('nested original read-budget/cancel/owner refusals cannot install or evict 
   await assert.rejects(
     withStoreReadBudget(f.store, { durationMs: 1 }, () => {
       const end = performance.now() + 5;
-      while (performance.now() < end) {}
+      while (performance.now() < end) {
+        // Intentionally spend this synchronous read budget before opening the report.
+      }
       return f.call('report.open', { runId: f.runId, format: 'json' });
     }),
     code('sentinel.execution.deadlineExceeded'),

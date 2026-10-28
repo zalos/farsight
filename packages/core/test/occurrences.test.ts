@@ -15,11 +15,18 @@ test('relationship storage unions sites, retains them across save/load and re-id
       const value = { loc: { repo: 'r', path: 'src/a.ts', line: 1, col }, span: { start: col - 1, end: col + 2 } };
       return { id: occurrenceId(edge, value), ...value };
     };
-    store.addFragment({ repo: 'r', nodes: ['a', 'b', 'c'].map(name => ({ id: `r::${name}`, name, kind: 'function', tags: [] })),
-      edges: [{ ...edge, occurrences: [site(1)] }, { ...edge, id: 'two', occurrences: [site(6)] }] });
+    store.addFragment({
+      repo: 'r',
+      nodes: ['a', 'b', 'c'].map((name) => ({ id: `r::${name}`, name, kind: 'function', tags: [] })),
+      edges: [
+        { ...edge, occurrences: [site(1)] },
+        { ...edge, id: 'two', occurrences: [site(6)] },
+      ],
+    });
     assert.equal(store.allEdges().length, 1);
     assert.equal(store.allEdges()[0]!.occurrences?.length, 2);
-    const file = join(dir, 'saved.json'); store.save(file);
+    const file = join(dir, 'saved.json');
+    store.save(file);
     const loaded = GraphStore.load(file);
     assert.deepEqual(loaded.allEdges(), store.allEdges());
     const previous = loaded.allEdges()[0]!;
@@ -27,5 +34,7 @@ test('relationship storage unions sites, retains them across save/load and re-id
     const changed = loaded.allEdges()[0]!;
     assert.equal(changed.occurrences?.length, 2);
     for (const occurrence of changed.occurrences!) assert.equal(occurrence.id, occurrenceId(changed, occurrence));
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

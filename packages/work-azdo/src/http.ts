@@ -117,7 +117,10 @@ export function createAzdoHttp(opts: AzdoHttpOptions): AzdoHttp {
       if (hold > 0) await sleep(hold);
       let res: Response;
       try {
-        const headers: Record<string, string> = { Accept: 'application/json', Authorization: await opts.authorization() };
+        const headers: Record<string, string> = {
+          Accept: 'application/json',
+          Authorization: await opts.authorization(),
+        };
         if (req.body !== undefined) headers['Content-Type'] = req.contentType ?? 'application/json';
         res = await fetcher(url, {
           method: req.method ?? 'GET',
@@ -128,7 +131,10 @@ export function createAzdoHttp(opts: AzdoHttpOptions): AzdoHttp {
       } catch (err) {
         const name = (err as Error)?.name;
         if (name === 'TimeoutError' || name === 'AbortError') throw new AzdoHttpError(0, 'timeout');
-        if (idempotent && attempt + 1 < attempts) { await sleep(Math.round(500 * 2 ** attempt * (0.5 + random()))); continue; }
+        if (idempotent && attempt + 1 < attempts) {
+          await sleep(Math.round(500 * 2 ** attempt * (0.5 + random())));
+          continue;
+        }
         throw new AzdoHttpError(0, 'unreachable');
       }
       // a 429 was refused before it was processed, so even a write may be re-sent; a 503 may not have been
@@ -143,7 +149,13 @@ export function createAzdoHttp(opts: AzdoHttpOptions): AzdoHttp {
         if (ra && /^\d+(\.\d+)?$/.test(ra.trim())) holdUntil = now() + Math.min(60_000, Number(ra) * 1000);
         const text = await res.text();
         let body: any = undefined;
-        if (text) { try { body = JSON.parse(text); } catch { body = undefined; } }
+        if (text) {
+          try {
+            body = JSON.parse(text);
+          } catch {
+            body = undefined;
+          }
+        }
         const costH = res.headers.get('x-ratelimit-cost');
         return { status: res.status, body, cost: costH ? Number(costH) : undefined };
       }
@@ -153,7 +165,9 @@ export function createAzdoHttp(opts: AzdoHttpOptions): AzdoHttp {
         const j = JSON.parse(await res.text());
         if (typeof j?.typeKey === 'string') typeKey = j.typeKey;
         if (typeof j?.message === 'string') serverMessage = j.message.slice(0, 300);
-      } catch { /* not JSON: nothing kept */ }
+      } catch {
+        /* not JSON: nothing kept */
+      }
       let reason = REASONS[res.status] ?? `HTTP ${res.status}`;
       if (typeKey === 'TestPatchOperationFailedException') reason = REASONS[412]!;
       else if (typeKey === 'RuleValidationException') reason = 'rule violation — the work item type refused the change';

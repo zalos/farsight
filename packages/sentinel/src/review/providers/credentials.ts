@@ -60,6 +60,7 @@ export async function resolveCredential(source: CredentialSource, ref: KeychainR
     typeof value !== 'string' ||
     value.length === 0 ||
     value.length > MAX_SECRET ||
+    // eslint-disable-next-line no-control-regex -- Credential values must not carry control characters into provider headers.
     /[\u0000-\u001f\u007f]/.test(value)
   ) {
     fail('sentinel.provider.credentialUnavailable', 'the stored value is empty, too long or holds control characters');

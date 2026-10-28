@@ -104,6 +104,8 @@ const ownedPids = new Set(),
   serviceRecords = new Map(),
   children = new Map();
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+let bodyFailed = false;
+let bodyError;
 try {
   const dir = realpathSync.native(c.scratch),
     ws = join(dir, 'workspace');
@@ -467,6 +469,9 @@ try {
         ownContainers,
       }),
   );
+} catch (error) {
+  bodyFailed = true;
+  bodyError = error;
 } finally {
   // Only processes whose handles/descriptors were recorded inside this consumer's own private workspace.
   for (const pid of ownedPids) {
@@ -484,11 +489,15 @@ try {
   for (const child of children.values())
     if (child.exitCode === null && child.signalCode === null)
       await Promise.race([new Promise((r) => child.once('exit', r)), delay(5000)]);
-  if ([...children.values()].some((child) => child.exitCode === null && child.signalCode === null))
-    throw Error('owned consumer process cleanup unconfirmed; scratch retained');
-  try {
-    c.cleanup();
-  } finally {
-    rmSync(artifactScope, { recursive: true, force: true });
+  if ([...children.values()].some((child) => child.exitCode === null && child.signalCode === null)) {
+    bodyFailed = true;
+    bodyError = Error('owned consumer process cleanup unconfirmed; scratch retained');
+  } else {
+    try {
+      c.cleanup();
+    } finally {
+      rmSync(artifactScope, { recursive: true, force: true });
+    }
   }
 }
+if (bodyFailed) throw bodyError;

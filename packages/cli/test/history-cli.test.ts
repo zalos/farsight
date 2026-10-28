@@ -63,7 +63,17 @@ function db(path: string) {
 function counts(path: string): Record<string, number> {
   const d = db(path);
   const out: Record<string, number> = {};
-  for (const t of ['node', 'edge', 'snapshot', 'snapshot_source', 'blind_spot', 'commit', 'commit_file', 'commit_sync', 'release']) {
+  for (const t of [
+    'node',
+    'edge',
+    'snapshot',
+    'snapshot_source',
+    'blind_spot',
+    'commit',
+    'commit_file',
+    'commit_sync',
+    'release',
+  ]) {
     try {
       out[t] = (d.prepare(`SELECT COUNT(*) AS n FROM "${t}"`).get() as { n: number }).n;
     } catch {
@@ -114,7 +124,13 @@ before(() => {
   assert.equal(run(['ingest', app, '--repo', 'app', '--out', 'graph.json']).status, 0);
 });
 
-after(() => { try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ } });
+after(() => {
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
+});
 
 describe('farsight history — the spine', () => {
   test('every sync carries what it swept up, and the commits nobody ingested are counted first', () => {
@@ -150,15 +166,28 @@ describe('farsight history — the spine', () => {
     assert.equal(d.reindexed, 1);
     assert.equal(d.before, 1);
     assert.equal(d.after, 0);
-    assert.equal(d.withoutCommit, 0, 'every sync stamped this source\'s own commit');
+    assert.equal(d.withoutCommit, 0, "every sync stamped this source's own commit");
     assert.deepEqual(d.releases, [], 'nothing is declared, so nothing is a release');
 
-    const spine = d.spine as { sync: number; commit?: string; commitFrom?: string; commitKnown: boolean; reindexed: boolean; swept: number | null; unindexed: number | null; commits: string[] }[];
-    assert.deepEqual(spine.map((s) => s.sync), [3, 2, 1], 'newest sync first');
+    const spine = d.spine as {
+      sync: number;
+      commit?: string;
+      commitFrom?: string;
+      commitKnown: boolean;
+      reindexed: boolean;
+      swept: number | null;
+      unindexed: number | null;
+      commits: string[];
+    }[];
+    assert.deepEqual(
+      spine.map((s) => s.sync),
+      [3, 2, 1],
+      'newest sync first',
+    );
     // ingest recorded this source's own sha, so the spine reads it rather than the
     // workspace root's column — `commitFrom` is which of the two a row used
     assert.ok(spine.every((x) => x.commitFrom === 'source'));
-    const [three, two, one] = spine as [typeof spine[0], typeof spine[0], typeof spine[0]];
+    const [three, two, one] = spine as [(typeof spine)[0], (typeof spine)[0], (typeof spine)[0]];
     // the re-index sweeps nothing — 0 here is a measured zero, not a missing number
     assert.equal(three.reindexed, true);
     assert.deepEqual(three.commits, []);
@@ -177,7 +206,8 @@ describe('farsight history — the spine', () => {
   test('a rename is stored as one file under two paths, so "the same file under a new path" is sayable', () => {
     run(['history', '--repo', 'app']);
     const d = db(join(work, '.farsight/farsight.db'));
-    const rows = d.prepare('SELECT path, status, old_path, similarity FROM commit_file WHERE repo = ? AND sha = ? ORDER BY path')
+    const rows = d
+      .prepare('SELECT path, status, old_path, similarity FROM commit_file WHERE repo = ? AND sha = ? ORDER BY path')
       .all('app', sha.c3) as { path: string; status: string; old_path: string | null; similarity: number | null }[];
     d.close();
     assert.equal(rows.length, 1);
@@ -211,7 +241,10 @@ describe('farsight history — the spine', () => {
 
   test('with no --repo it does every source the graph and the workspace know', () => {
     const doc = historyJson([]);
-    assert.deepEqual(doc.repos.map((r) => r.repo), ['app']);
+    assert.deepEqual(
+      doc.repos.map((r) => r.repo),
+      ['app'],
+    );
   });
 
   test('--max bounds the walk and says the ancestry below it is partial', () => {
@@ -240,7 +273,7 @@ describe('farsight history — the spine', () => {
     assert.match(r.err, /--max expects how many commits to walk/);
   });
 
-  test('a source no sync recorded a commit for reads absent — never the workspace root\'s sha', () => {
+  test("a source no sync recorded a commit for reads absent — never the workspace root's sha", () => {
     // the shape every row written before the writers stamped a per-source sha is in: the
     // snapshot column names the workspace root's commits, this source's own column is null.
     // The spine must say *no commit recorded* rather than fold a sha from another repository.
@@ -255,8 +288,15 @@ describe('farsight history — the spine', () => {
     const r = run(['history', ...args]);
     assert.equal(r.status, 0, r.err);
     assert.match(r.out, /not one of the 3 syncs included this repository/);
-    assert.doesNotMatch(r.out, /an existing row cannot be backfilled/, 'nothing failed to be stamped, so nothing needs backfilling');
-    assert.match(r.out, /0 distinct commits recorded for this repository · 3 recorded no commit for this repository \(3 did not include it at all\)/);
+    assert.doesNotMatch(
+      r.out,
+      /an existing row cannot be backfilled/,
+      'nothing failed to be stamped, so nothing needs backfilling',
+    );
+    assert.match(
+      r.out,
+      /0 distinct commits recorded for this repository · 3 recorded no commit for this repository \(3 did not include it at all\)/,
+    );
     assert.match(r.out, /this sync did not include this repository/);
     // and no before/after split is derived from an anchor nothing here can place
     assert.doesNotMatch(r.out, /outside every sync's reach/);
@@ -266,13 +306,22 @@ describe('farsight history — the spine', () => {
     assert.equal(d.withoutCommit, 3);
     assert.equal(d.distinct, 0);
     assert.equal(d.notInSync, 3, 'all three absences are "the sync did not walk this source"');
-    const spine = d.spine as { commit?: string; commitFrom?: string; commitKnown: boolean; swept: number | null; inSync?: boolean }[];
+    const spine = d.spine as {
+      commit?: string;
+      commitFrom?: string;
+      commitKnown: boolean;
+      swept: number | null;
+      inSync?: boolean;
+    }[];
     // the bug this pins: these rows used to carry `app`'s shas
     assert.ok(spine.every((x) => x.commit === undefined && x.commitFrom === undefined));
     assert.ok(spine.every((x) => !x.commitKnown));
     assert.ok(spine.every((x) => x.swept === null));
     // H5's third row state: the store can tell "not in this sync" from "in it, no commit"
-    assert.ok(spine.every((x) => x.inSync === false), 'every sync walked `app`, none walked `other`');
+    assert.ok(
+      spine.every((x) => x.inSync === false),
+      'every sync walked `app`, none walked `other`',
+    );
   });
 
   test('a repo nothing knows about is an error that names the fix', () => {
@@ -324,15 +373,32 @@ describe('farsight history — --releases proposes, never declares', () => {
 
   test('a release declared in .farsight/settings.json is reported as declared', () => {
     const settings = join(work, '.farsight/settings.json');
-    writeFileSync(settings, JSON.stringify({
-      theme: 'dark', defaultLens: 'hybrid', sources: [], collections: [],
-      releases: [{ name: '1.0.0', commit: sha.c2, repo: 'app' }, { name: 'other', commit: sha.c5, repo: 'elsewhere' }],
-    }, null, 2));
+    writeFileSync(
+      settings,
+      JSON.stringify(
+        {
+          theme: 'dark',
+          defaultLens: 'hybrid',
+          sources: [],
+          collections: [],
+          releases: [
+            { name: '1.0.0', commit: sha.c2, repo: 'app' },
+            { name: 'other', commit: sha.c5, repo: 'elsewhere' },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
     const r = run(['history', '--repo', 'app', '--releases']);
     assert.equal(r.status, 0, r.err);
     assert.match(r.out, /1 release declared in \.farsight\/settings\.json: 1\.0\.0/);
     const d = historyJson(['--repo', 'app', '--releases']).repos[0]!;
-    assert.deepEqual((d.releases as { name: string }[]).map((x) => x.name), ['1.0.0'], 'another repo\'s declaration is not this one\'s');
+    assert.deepEqual(
+      (d.releases as { name: string }[]).map((x) => x.name),
+      ['1.0.0'],
+      "another repo's declaration is not this one's",
+    );
     rmSync(settings);
   });
 });
@@ -345,7 +411,10 @@ describe('farsight history — which absence it is', () => {
     assert.equal(r.status, 0, 'no history is not a failure');
     assert.match(r.out, /not a git repository — the code is here, its history is not/);
     assert.match(r.out, /git said: fatal: not a git repository/);
-    assert.equal(historyJson([plain, '--repo', 'plain', '--db', join(work, 'plain.db')]).repos[0]!.git.reason, 'not-a-repo');
+    assert.equal(
+      historyJson([plain, '--repo', 'plain', '--db', join(work, 'plain.db')]).repos[0]!.git.reason,
+      'not-a-repo',
+    );
   });
 
   test('an initialized repository with no commits says that, not "no commits touched this"', () => {
@@ -365,7 +434,10 @@ describe('farsight history — which absence it is', () => {
     assert.equal(r0.status, 0, r0.stderr);
     const r = run(['history', shallow, '--repo', 'shallow', '--db', join(work, 'shallow.db')]);
     assert.equal(r.status, 0, r.err);
-    assert.match(r.out, /shallow clone — the oldest commit read is a graft boundary, so "first seen in" is a floor: at or before/);
+    assert.match(
+      r.out,
+      /shallow clone — the oldest commit read is a graft boundary, so "first seen in" is a floor: at or before/,
+    );
     const d = historyJson([shallow, '--repo', 'shallow', '--db', join(work, 'shallow.db')]).repos[0]!;
     assert.equal(d.shallow, true);
     assert.equal(d.git.read, 1, 'a depth-1 clone has one commit to walk — a boundary, not a history');
@@ -401,11 +473,22 @@ describe('farsight history — which absence it is', () => {
 
     const r = run(['history', rw, '--repo', 'rewritten', '--db', rwDb, '--graph', join(work, 'rw.json')]);
     assert.equal(r.status, 0, r.err);
-    assert.match(r.out, /commit not in this repository's history — rewritten, pruned, or a history not read this far back/);
+    assert.match(
+      r.out,
+      /commit not in this repository's history — rewritten, pruned, or a history not read this far back/,
+    );
     // the row is kept, and the columns that would have to invent a number say so
     assert.match(r.out, /—\s+—\s+commit not in this repository's history/);
     const d = historyJson([rw, '--repo', 'rewritten', '--db', rwDb, '--graph', join(work, 'rw.json')]).repos[0]!;
-    const row = (d.spine as { sync: number; commit: string; commitKnown: boolean; swept: number | null; unindexed: number | null }[])[0]!;
+    const row = (
+      d.spine as {
+        sync: number;
+        commit: string;
+        commitKnown: boolean;
+        swept: number | null;
+        unindexed: number | null;
+      }[]
+    )[0]!;
     assert.equal(row.commit, doomed);
     assert.equal(row.commitKnown, false);
     assert.equal(row.swept, null, 'an unknown commit swept an unknown number of commits, not zero');
@@ -414,7 +497,7 @@ describe('farsight history — which absence it is', () => {
 });
 
 describe('what a sync records per source', () => {
-  test('a sync stamps every git source\'s own HEAD, so each spine is its own repository\'s', async () => {
+  test("a sync stamps every git source's own HEAD, so each spine is its own repository's", async () => {
     // `POST /api/sync` (the workspace server's path, `syncSources`) used to record only the
     // workspace root's sha, which is why the dogfood store has 22 `app-a` rows and 24
     // `app-b` rows with a null per-source commit. It now stamps each source's own head.
@@ -438,7 +521,9 @@ describe('what a sync records per source', () => {
 
     const { syncSources } = await import('@farsight/server');
     const settings = {
-      theme: 'dark', defaultLens: 'hybrid', collections: [],
+      theme: 'dark',
+      defaultLens: 'hybrid',
+      collections: [],
       sources: [
         { id: 'api', name: 'api', type: 'local', path: api, enabled: true },
         { id: 'web', name: 'web', type: 'local', path: web, enabled: true },
@@ -449,20 +534,42 @@ describe('what a sync records per source', () => {
 
     const path = join(ws, '.farsight/farsight.db');
     const d = db(path);
-    const rows = d.prepare('SELECT name, commit_sha FROM snapshot_source ORDER BY name')
-      .all() as { name: string; commit_sha: string | null }[];
-    const workspace = (d.prepare('SELECT commit_sha FROM snapshot WHERE sync = 1').get() as { commit_sha: string | null }).commit_sha;
+    const rows = d.prepare('SELECT name, commit_sha FROM snapshot_source ORDER BY name').all() as {
+      name: string;
+      commit_sha: string | null;
+    }[];
+    const workspace = (
+      d.prepare('SELECT commit_sha FROM snapshot WHERE sync = 1').get() as { commit_sha: string | null }
+    ).commit_sha;
     d.close();
-    assert.deepEqual(rows.map((r) => [r.name, r.commit_sha]), [['api', apiHead], ['web', webHead]]);
+    assert.deepEqual(
+      rows.map((r) => [r.name, r.commit_sha]),
+      [
+        ['api', apiHead],
+        ['web', webHead],
+      ],
+    );
     // the workspace directory is not a repository here, so the column that used to be the
     // only one recorded is empty — and the spine is complete all the same
     assert.equal(workspace, null);
 
-    for (const [repo, head] of [['api', apiHead], ['web', webHead]] as const) {
+    for (const [repo, head] of [
+      ['api', apiHead],
+      ['web', webHead],
+    ] as const) {
       const doc = historyJson(['--repo', repo], ws).repos[0]!;
       assert.equal(doc.withoutCommit, 0, `${repo}: the sync recorded a commit for it`);
-      const spine = doc.spine as { sync: number; commit: string; commitFrom: string; commitKnown: boolean; commits: string[] }[];
-      assert.deepEqual(spine.map((x) => [x.sync, x.commit, x.commitFrom, x.commitKnown]), [[1, head, 'source', true]]);
+      const spine = doc.spine as {
+        sync: number;
+        commit: string;
+        commitFrom: string;
+        commitKnown: boolean;
+        commits: string[];
+      }[];
+      assert.deepEqual(
+        spine.map((x) => [x.sync, x.commit, x.commitFrom, x.commitKnown]),
+        [[1, head, 'source', true]],
+      );
       assert.deepEqual(spine[0]!.commits, [head], 'the oldest sync records exactly its own commit');
     }
     // neither repository's spine names the other's commit
@@ -490,27 +597,40 @@ describe('farsight diff --attribute', () => {
     // the trap: the source is `apps/web`, git's paths are `apps/web/...`
     mkdirSync(join(mono, 'apps/web/src'), { recursive: true });
     writeFileSync(join(mono, 'apps/web/package.json'), '{"name":"web","version":"0.0.0"}\n');
-    writeFileSync(join(mono, 'apps/web/src/routes.ts'),
-      "import express from 'express';\nconst app = express();\napp.get('/alpha', (req, res) => res.json({ ok: true }));\n");
+    writeFileSync(
+      join(mono, 'apps/web/src/routes.ts'),
+      "import express from 'express';\nconst app = express();\napp.get('/alpha', (req, res) => res.json({ ok: true }));\n",
+    );
     at.first = commit(mono, 'first: the alpha route', '2026-02-01T00:00:00Z');
 
     const web = join(mono, 'apps/web');
     assert.equal(run(['ingest', web, '--repo', 'web', '--out', 'graph.json'], ws).status, 0); // sync 1
 
-    writeFileSync(join(mono, 'apps/web/src/routes.ts'),
-      "import express from 'express';\nconst app = express();\napp.get('/alpha', (req, res) => res.json({ ok: true }));\napp.get('/beta', (req, res) => res.json({ ok: true }));\n");
+    writeFileSync(
+      join(mono, 'apps/web/src/routes.ts'),
+      "import express from 'express';\nconst app = express();\napp.get('/alpha', (req, res) => res.json({ ok: true }));\napp.get('/beta', (req, res) => res.json({ ok: true }));\n",
+    );
     at.second = commit(mono, 'second: the beta route', '2026-02-02T00:00:00Z');
     assert.equal(run(['ingest', web, '--repo', 'web', '--out', 'graph.json'], ws).status, 0); // sync 2
   });
 
-  after(() => { try { rmSync(ws, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ } });
+  after(() => {
+    try {
+      rmSync(ws, { recursive: true, force: true });
+    } catch {
+      /* a temp dir that outlives the run is not a failure */
+    }
+  });
 
   test('a repository whose history nobody has read is left unclaimed — not handed an empty list', () => {
     const r = run(['diff', '--from', 'sync:1', '--to', 'sync:2', '--attribute'], ws);
     assert.equal(r.status, 0, r.err);
     const doc = JSON.parse(r.out) as { changes: Record<string, unknown>[] };
     assert.ok(doc.changes.length >= 1, 'the second commit added a route');
-    assert.ok(doc.changes.every((c) => !('attribution' in c)), 'no history read, so nothing is claimed');
+    assert.ok(
+      doc.changes.every((c) => !('attribution' in c)),
+      'no history read, so nothing is claimed',
+    );
     assert.match(r.err, /no history read for this repository/);
     assert.match(r.err, /farsight history --repo web/);
   });
@@ -526,7 +646,13 @@ describe('farsight diff --attribute', () => {
     assert.match(r.err, /not proof that any of those commits changed/);
     assert.match(r.err, /the source sits under apps\/web\/ in its repository/);
 
-    const doc = JSON.parse(r.out) as { changes: { id: string; loc?: { path: string }; attribution?: { commits: string[]; level: string; unindexed: number } }[] };
+    const doc = JSON.parse(r.out) as {
+      changes: {
+        id: string;
+        loc?: { path: string };
+        attribution?: { commits: string[]; level: string; unindexed: number };
+      }[];
+    };
     const added = doc.changes.find((c) => c.loc?.path === 'src/routes.ts')!;
     assert.ok(added, 'the route the second commit added carries a file');
     // §8: without the `apps/web/` prefix this list would be empty, which would read
@@ -535,7 +661,10 @@ describe('farsight diff --attribute', () => {
   });
 
   test('the flag is what adds the field: without it the document is the contract as it was', () => {
-    const attributed = JSON.parse(run(['diff', '--from', 'sync:1', '--to', 'sync:2', '--attribute'], ws).out) as Record<string, unknown>;
+    const attributed = JSON.parse(run(['diff', '--from', 'sync:1', '--to', 'sync:2', '--attribute'], ws).out) as Record<
+      string,
+      unknown
+    >;
     const r = run(['diff', '--from', 'sync:1', '--to', 'sync:2'], ws);
     assert.equal(r.status, 0, r.err);
     assert.doesNotMatch(r.out, /attribution/);

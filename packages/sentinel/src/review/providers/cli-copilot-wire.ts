@@ -83,6 +83,7 @@ export class NativeCopilotDecoder {
     }
     // Preserve rendered bytes as text; only one conventional final LF is removed. Never repair/strip terminal escapes.
     if (content!.endsWith('\n')) content = content!.slice(0, -1);
+    // eslint-disable-next-line no-control-regex -- Visible Copilot messages reject control bytes while allowing tabs and line breaks.
     if (!content!.trim() || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(content!))
       this.#bad('visible-message');
     let metrics: Record<string, any> | undefined;

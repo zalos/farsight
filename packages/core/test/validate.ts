@@ -12,9 +12,23 @@
 type Schema = Record<string, unknown>;
 
 const KNOWN = new Set([
-  '$schema', '$id', '$defs', '$ref', 'title', 'description',
-  'type', 'const', 'enum', 'required', 'properties', 'additionalProperties', 'items', 'minimum', 'pattern',
-  'anyOf', 'patternProperties',
+  '$schema',
+  '$id',
+  '$defs',
+  '$ref',
+  'title',
+  'description',
+  'type',
+  'const',
+  'enum',
+  'required',
+  'properties',
+  'additionalProperties',
+  'items',
+  'minimum',
+  'pattern',
+  'anyOf',
+  'patternProperties',
 ]);
 
 export function validate(value: unknown, schema: Schema, root?: Schema, path = '$'): string[] {
@@ -34,7 +48,8 @@ export function validate(value: unknown, schema: Schema, root?: Schema, path = '
 
   if (Array.isArray(schema.anyOf)) {
     const tries = (schema.anyOf as Schema[]).map((s) => validate(value, s, root, path));
-    if (!tries.some((e) => e.length === 0)) errors.push(`${path}: matches none of anyOf (${tries.map((e) => e[0]).join(' | ')})`);
+    if (!tries.some((e) => e.length === 0))
+      errors.push(`${path}: matches none of anyOf (${tries.map((e) => e[0]).join(' | ')})`);
   }
 
   if ('const' in schema && value !== schema.const) {
@@ -47,18 +62,28 @@ export function validate(value: unknown, schema: Schema, root?: Schema, path = '
   // `type` may be a string or a list of them ("integer or null" — the matrix
   // contract distinguishes "no answer" from zero, so nullable columns are real)
   const isType = (t: string): boolean =>
-    t === 'object' ? typeof value === 'object' && value !== null && !Array.isArray(value)
-    : t === 'array' ? Array.isArray(value)
-    : t === 'string' ? typeof value === 'string'
-    : t === 'boolean' ? typeof value === 'boolean'
-    : t === 'integer' ? typeof value === 'number' && Number.isInteger(value)
-    : t === 'number' ? typeof value === 'number'
-    : t === 'null' ? value === null
-    : false;
+    t === 'object'
+      ? typeof value === 'object' && value !== null && !Array.isArray(value)
+      : t === 'array'
+        ? Array.isArray(value)
+        : t === 'string'
+          ? typeof value === 'string'
+          : t === 'boolean'
+            ? typeof value === 'boolean'
+            : t === 'integer'
+              ? typeof value === 'number' && Number.isInteger(value)
+              : t === 'number'
+                ? typeof value === 'number'
+                : t === 'null'
+                  ? value === null
+                  : false;
   if (typeof schema.type === 'string' || Array.isArray(schema.type)) {
     const types = (Array.isArray(schema.type) ? schema.type : [schema.type]) as string[];
     if (!types.some(isType)) {
-      return [...errors, `${path}: expected ${types.join(' | ')}, got ${value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value}`];
+      return [
+        ...errors,
+        `${path}: expected ${types.join(' | ')}, got ${value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value}`,
+      ];
     }
   }
 
@@ -84,7 +109,8 @@ export function validate(value: unknown, schema: Schema, root?: Schema, path = '
       else if (byPattern.length) continue;
       else if (extra === false) errors.push(`${path}: unexpected property "${k}"`);
       // an open map with a value schema: every key the caller invented still has to fit
-      else if (typeof extra === 'object' && extra !== null) errors.push(...validate(v, extra as Schema, root, `${path}.${k}`));
+      else if (typeof extra === 'object' && extra !== null)
+        errors.push(...validate(v, extra as Schema, root, `${path}.${k}`));
     }
   }
 

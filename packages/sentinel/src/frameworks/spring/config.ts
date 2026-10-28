@@ -156,7 +156,6 @@ export const SPRING_REASON_CODES = Object.freeze([
 ] as const);
 export type SpringReason = (typeof SPRING_REASON_CODES)[number];
 
-const STEREOTYPES = new Set(['Component', 'Service', 'Repository', 'Controller', 'RestController', 'Configuration']);
 /** DSL calls on HttpSecurity that neither select requests nor authorize them. */
 const NEUTRAL_CALLS = new Set([
   'csrf',
@@ -191,8 +190,6 @@ const classesOf = (file: JavaFile): JavaNode[] => {
   });
   return out;
 };
-const methodsOf = (cls: JavaNode): JavaNode[] =>
-  named(cls.childForFieldName('body')).filter((n) => n.type === 'method_declaration');
 const returnType = (m: JavaNode) => m.childForFieldName('type')?.text ?? '';
 /** A type's simple name: the last segment of a qualified name, without type arguments or array brackets. */
 export const simpleType = (text: string) =>

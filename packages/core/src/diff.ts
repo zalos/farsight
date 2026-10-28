@@ -17,19 +17,31 @@ import { buildIndex, journey } from './query.js';
 // ── contract shapes (frozen — see the contract doc before touching) ────────
 
 export type ChangeKind =
-  | 'route_added' | 'route_removed'
-  | 'guard_added' | 'guard_removed'
+  | 'route_added'
+  | 'route_removed'
+  | 'guard_added'
+  | 'guard_removed'
   | 'journey_changed'
-  | 'record_added' | 'record_removed' | 'record_columns_changed'
-  | 'message_added' | 'message_removed'
-  | 'rule_added' | 'rule_removed'
+  | 'record_added'
+  | 'record_removed'
+  | 'record_columns_changed'
+  | 'message_added'
+  | 'message_removed'
+  | 'rule_added'
+  | 'rule_removed'
   | 'edge_confidence_changed'
   | 'node_renamed'
   // additive 2026-09 (tests in the graph) — see the version note in the contract doc
-  | 'test_added' | 'test_removed'
-  | 'coverage_lost' | 'uncovered_change'
+  | 'test_added'
+  | 'test_removed'
+  | 'coverage_lost'
+  | 'uncovered_change'
   // additive 2026-10-10 (compare two syncs on a storyline) — fire only in a storyline diff, never in diffGraphs
-  | 'storyline_built' | 'storyline_gate' | 'storyline_writer' | 'storyline_contract' | 'storyline_verdict';
+  | 'storyline_built'
+  | 'storyline_gate'
+  | 'storyline_writer'
+  | 'storyline_contract'
+  | 'storyline_verdict';
 
 /**
  * Optional (v1 addition, 2026-10-10): the storyline delta a `storyline_*` change carries — which of the five kinds,
@@ -49,7 +61,13 @@ export interface DiffDelta {
   from?: string;
   to?: string;
   called?: boolean;
-  door: { kind: 'gate' | 'move' | 'cases' | 'contract' | 'screen'; node?: string; flow?: string; screen?: number; api?: string };
+  door: {
+    kind: 'gate' | 'move' | 'cases' | 'contract' | 'screen';
+    node?: string;
+    flow?: string;
+    screen?: number;
+    api?: string;
+  };
 }
 
 /** Optional (v1 addition, 2026-10-10): the storyline a storyline diff is over, its two ends, and its counts. */
@@ -65,20 +83,23 @@ export interface DiffStoryline {
 }
 
 export interface DiffChange {
-  id: string;                                  // "c1" — stable within a diff, referenced by permalinks
+  id: string; // "c1" — stable within a diff, referenced by permalinks
   kind: ChangeKind;
   severity: 'breaking' | 'notable' | 'info';
   confidence: ConfidenceTier | 'resolved';
   technique?: ResolutionTechnique;
-  subject: { id: string; name: string; kind: NodeKind };   // stable id + display name
+  subject: { id: string; name: string; kind: NodeKind }; // stable id + display name
   journey?: { id: string; name: string };
   loc?: Loc;
-  permalink: string;                           // /compare/39...41#c1
+  permalink: string; // /compare/39...41#c1
   /**
    * Optional (v1 addition, 2026-09): on a `journey_changed` whose entry is a route, the
    * contract status on each side when they differ — `spec-only → both` is "planned → built".
    */
-  contractStatus?: { from: 'both' | 'spec-only' | 'code-only' | 'declared' | 'none'; to: 'both' | 'spec-only' | 'code-only' | 'declared' | 'none' };
+  contractStatus?: {
+    from: 'both' | 'spec-only' | 'code-only' | 'declared' | 'none';
+    to: 'both' | 'spec-only' | 'code-only' | 'declared' | 'none';
+  };
   /**
    * Optional (v1 addition, 2026-09-23): the commits in the compared range that touched
    * **the file this change's subject lives in** — file-level provenance, never proof
@@ -98,8 +119,9 @@ export interface DiffChange {
 
 export interface GraphDiff {
   schema: 'farsight-diff v1';
-  base: string; head: string;                  // "sync:39 · 76f7674"
-  truncated: boolean;                          // counts stay complete even when changes are cut
+  base: string;
+  head: string; // "sync:39 · 76f7674"
+  truncated: boolean; // counts stay complete even when changes are cut
   counts: Record<ChangeKind, number>;
   changes: DiffChange[];
   gate?: {
@@ -113,17 +135,29 @@ export interface GraphDiff {
 }
 
 export const CHANGE_KINDS: ChangeKind[] = [
-  'route_added', 'route_removed',
-  'guard_added', 'guard_removed',
+  'route_added',
+  'route_removed',
+  'guard_added',
+  'guard_removed',
   'journey_changed',
-  'record_added', 'record_removed', 'record_columns_changed',
-  'message_added', 'message_removed',
-  'rule_added', 'rule_removed',
+  'record_added',
+  'record_removed',
+  'record_columns_changed',
+  'message_added',
+  'message_removed',
+  'rule_added',
+  'rule_removed',
   'edge_confidence_changed',
   'node_renamed',
-  'test_added', 'test_removed',
-  'coverage_lost', 'uncovered_change',
-  'storyline_built', 'storyline_gate', 'storyline_writer', 'storyline_contract', 'storyline_verdict',
+  'test_added',
+  'test_removed',
+  'coverage_lost',
+  'uncovered_change',
+  'storyline_built',
+  'storyline_gate',
+  'storyline_writer',
+  'storyline_contract',
+  'storyline_verdict',
 ];
 
 /** Severity is a fact of the contract (documented in farsight-diff-v1.md), not a judgment call per diff. */
@@ -164,10 +198,18 @@ export interface DiffOptions {
 
 /** Kinds whose add/remove maps to a first-class ChangeKind (everything else is code, not surface). */
 const SURFACE_ADD: Partial<Record<NodeKind, ChangeKind>> = {
-  route: 'route_added', table: 'record_added', queue: 'message_added', rule: 'rule_added', test: 'test_added',
+  route: 'route_added',
+  table: 'record_added',
+  queue: 'message_added',
+  rule: 'rule_added',
+  test: 'test_added',
 };
 const SURFACE_REMOVE: Partial<Record<NodeKind, ChangeKind>> = {
-  route: 'route_removed', table: 'record_removed', queue: 'message_removed', rule: 'rule_removed', test: 'test_removed',
+  route: 'route_removed',
+  table: 'record_removed',
+  queue: 'message_removed',
+  rule: 'rule_removed',
+  test: 'test_removed',
 };
 /** Kinds whose loss of every test is worth reporting: the surfaces a person can name. */
 const COVERAGE_SURFACES = new Set<NodeKind>(['route', 'flow', 'page']);
@@ -190,7 +232,8 @@ export function rowChangesOf(base: GraphStore, head: GraphStore): { nodes: RowCh
     for (const [key, json] of a) {
       const after = b.get(key);
       if (after === undefined) changes.push({ key, change: 'removed', before: JSON.parse(json) });
-      else if (after !== json) changes.push({ key, change: 'changed', before: JSON.parse(json), after: JSON.parse(after) });
+      else if (after !== json)
+        changes.push({ key, change: 'changed', before: JSON.parse(json), after: JSON.parse(after) });
     }
     for (const [key, json] of b) {
       if (!a.has(key)) changes.push({ key, change: 'added', after: JSON.parse(json) });
@@ -218,7 +261,10 @@ interface Candidate {
 /** Journey identity of an entry: the ordered hop sequence (via:nodeId). Structural, not textual. */
 function journeySignature(index: ReturnType<typeof buildIndex>, entryId: string): string {
   // planned steps are contract intent, not hops: a spec edit must not read as an execution-path change
-  return journey(index, entryId).steps.filter((s) => s.via !== 'planned').map((s) => `${s.via}:${s.nodeId}`).join('→');
+  return journey(index, entryId)
+    .steps.filter((s) => s.via !== 'planned')
+    .map((s) => `${s.via}:${s.nodeId}`)
+    .join('→');
 }
 
 type ContractStatusLabel = NonNullable<DiffChange['contractStatus']>['from'];
@@ -264,10 +310,22 @@ export function diffGraphs(base: GraphStore, head: GraphStore, opts: DiffOptions
       const before = rc.before as GraphNode;
       const after = rc.after as GraphNode;
       if (after.kind === 'table' && before.signature !== after.signature) {
-        candidates.push({ kind: 'record_columns_changed', subject: subjectOf(after), loc: after.loc, confidence: 'resolved', detail: after.id });
+        candidates.push({
+          kind: 'record_columns_changed',
+          subject: subjectOf(after),
+          loc: after.loc,
+          confidence: 'resolved',
+          detail: after.id,
+        });
       }
       if (before.name !== after.name) {
-        candidates.push({ kind: 'node_renamed', subject: subjectOf(after), loc: after.loc, confidence: 'resolved', detail: `${before.name}→${after.name}` });
+        candidates.push({
+          kind: 'node_renamed',
+          subject: subjectOf(after),
+          loc: after.loc,
+          confidence: 'resolved',
+          detail: `${before.name}→${after.name}`,
+        });
       }
     }
   }
@@ -278,10 +336,22 @@ export function diffGraphs(base: GraphStore, head: GraphStore, opts: DiffOptions
   for (const gone of removedNodes) {
     if (!RENAMEABLE.has(gone.kind) || !gone.loc) continue;
     const twin = addedNodes.find(
-      (n) => n.kind === gone.kind && n.loc && n.loc.repo === gone.loc!.repo && n.loc.path === gone.loc!.path && n.loc.line === gone.loc!.line && n.name !== gone.name,
+      (n) =>
+        n.kind === gone.kind &&
+        n.loc &&
+        n.loc.repo === gone.loc!.repo &&
+        n.loc.path === gone.loc!.path &&
+        n.loc.line === gone.loc!.line &&
+        n.name !== gone.name,
     );
     if (twin) {
-      candidates.push({ kind: 'node_renamed', subject: subjectOf(twin), loc: twin.loc, confidence: 'resolved', detail: `${gone.name}→${twin.name}` });
+      candidates.push({
+        kind: 'node_renamed',
+        subject: subjectOf(twin),
+        loc: twin.loc,
+        confidence: 'resolved',
+        detail: `${gone.name}→${twin.name}`,
+      });
     }
   }
 
@@ -325,7 +395,8 @@ export function diffGraphs(base: GraphStore, head: GraphStore, opts: DiffOptions
 
   // ── tests: what lost its last test, and what changed with nothing verifying it ──
   // (additive kinds; see docs/contracts/farsight-diff-v1.md "Version note 2026-09")
-  const coversOf = (idx: typeof headIndex, id: string) => (idx.in.get(id) ?? []).filter((e) => e.kind === 'covers').length;
+  const coversOf = (idx: typeof headIndex, id: string) =>
+    (idx.in.get(id) ?? []).filter((e) => e.kind === 'covers').length;
   const headHasTests = [...headIndex.byId.values()].some((n) => n.kind === 'test');
   const lostCoverage = new Set<string>();
   for (const rc of rows.edges) {
@@ -339,7 +410,9 @@ export function diffGraphs(base: GraphStore, head: GraphStore, opts: DiffOptions
     if (coversOf(headIndex, edge.to) > 0 || coversOf(baseIndex, edge.to) === 0) continue;
     lostCoverage.add(edge.to);
     candidates.push({
-      kind: 'coverage_lost', subject: subjectOf(target), loc: target.loc,
+      kind: 'coverage_lost',
+      subject: subjectOf(target),
+      loc: target.loc,
       confidence: edge.resolution?.confidence ?? 'resolved',
       ...(edge.resolution ? { technique: edge.resolution.technique } : {}),
       detail: edge.to,
@@ -352,12 +425,17 @@ export function diffGraphs(base: GraphStore, head: GraphStore, opts: DiffOptions
       const after = rc.after as GraphNode;
       if (!COVERABLE_KINDS.has(after.kind)) continue;
       // a real body change, not a re-tag or a moved line
-      const moved = before.signature !== after.signature || before.snippet !== after.snippet
-        || JSON.stringify(before.branches ?? []) !== JSON.stringify(after.branches ?? []);
+      const moved =
+        before.signature !== after.signature ||
+        before.snippet !== after.snippet ||
+        JSON.stringify(before.branches ?? []) !== JSON.stringify(after.branches ?? []);
       if (!moved || coversOf(headIndex, after.id) > 0) continue;
       candidates.push({
-        kind: 'uncovered_change', subject: subjectOf(after), loc: after.loc,
-        confidence: 'resolved', detail: after.id,
+        kind: 'uncovered_change',
+        subject: subjectOf(after),
+        loc: after.loc,
+        confidence: 'resolved',
+        detail: after.id,
       });
     }
   }
@@ -385,10 +463,11 @@ export function diffGraphs(base: GraphStore, head: GraphStore, opts: DiffOptions
 
   // ── deterministic order → stable ids ──
   const kindIndex = new Map(CHANGE_KINDS.map((k, i) => [k, i]));
-  candidates.sort((a, b) =>
-    kindIndex.get(a.kind)! - kindIndex.get(b.kind)! ||
-    a.subject.id.localeCompare(b.subject.id) ||
-    a.detail.localeCompare(b.detail),
+  candidates.sort(
+    (a, b) =>
+      kindIndex.get(a.kind)! - kindIndex.get(b.kind)! ||
+      a.subject.id.localeCompare(b.subject.id) ||
+      a.detail.localeCompare(b.detail),
   );
 
   const counts = Object.fromEntries(CHANGE_KINDS.map((k) => [k, 0])) as Record<ChangeKind, number>;
@@ -449,8 +528,10 @@ export function parsePolicy(text: string, name?: string): PolicyFile {
   const commit = () => {
     if (!current) return;
     const { rule, when, then } = current;
-    if (!rule || !when || !then) throw new Error(`compliance policy: rule needs rule/when/then (got ${JSON.stringify(current)})`);
-    if (!['fail', 'warn', 'allow'].includes(then)) throw new Error(`compliance policy: then must be fail|warn|allow (got "${then}")`);
+    if (!rule || !when || !then)
+      throw new Error(`compliance policy: rule needs rule/when/then (got ${JSON.stringify(current)})`);
+    if (!['fail', 'warn', 'allow'].includes(then))
+      throw new Error(`compliance policy: then must be fail|warn|allow (got "${then}")`);
     policy.rules.push({ rule, when, then });
     current = null;
   };
@@ -476,14 +557,17 @@ export function parsePolicy(text: string, name?: string): PolicyFile {
         commit();
         inRules = true;
       } else {
-        throw new Error(`compliance policy: unsupported line (see the format subset in docs/contracts/farsight-diff-v1.md): ${raw.trim()}`);
+        throw new Error(
+          `compliance policy: unsupported line (see the format subset in docs/contracts/farsight-diff-v1.md): ${raw.trim()}`,
+        );
       }
     } else {
       throw new Error(`compliance policy: cannot parse line: ${raw.trim()}`);
     }
   }
   commit();
-  if (policy.version !== 1) throw new Error(`compliance policy: unsupported version ${policy.version} (this build understands 1)`);
+  if (policy.version !== 1)
+    throw new Error(`compliance policy: unsupported version ${policy.version} (this build understands 1)`);
   return policy;
 }
 
@@ -517,8 +601,10 @@ const SENTENCES: Record<ChangeKind, (c: DiffChange) => string> = {
   guard_removed: (c) => `permission gate removed from ${c.subject.name} (${c.subject.kind})`,
   journey_changed: (c) => {
     const cs = c.contractStatus;
-    if (cs && (cs.from === 'spec-only' || cs.from === 'declared') && cs.to === 'both') return `journey built: ${c.journey?.name ?? c.subject.name} — planned → built, the declared operation now runs code`;
-    if (cs && cs.from === 'both' && (cs.to === 'spec-only' || cs.to === 'declared')) return `journey unbuilt: ${c.journey?.name ?? c.subject.name} — built → planned, the implementation is gone and only the contract remains`;
+    if (cs && (cs.from === 'spec-only' || cs.from === 'declared') && cs.to === 'both')
+      return `journey built: ${c.journey?.name ?? c.subject.name} — planned → built, the declared operation now runs code`;
+    if (cs && cs.from === 'both' && (cs.to === 'spec-only' || cs.to === 'declared'))
+      return `journey unbuilt: ${c.journey?.name ?? c.subject.name} — built → planned, the implementation is gone and only the contract remains`;
     return `journey changed: ${c.journey?.name ?? c.subject.name} — the execution path is not what it was`;
   },
   record_added: (c) => `record added: ${c.subject.name}`,
@@ -612,7 +698,9 @@ export function toMarkdown(diff: GraphDiff): string {
   if (diff.gate) {
     lines.push(`## gate — ${diff.gate.result.toUpperCase()} (${diff.gate.policy})`);
     for (const r of diff.gate.rules) {
-      lines.push(`- ${r.result === 'fail' ? '✗' : r.result === 'warn' ? '⚠' : '✓'} ${r.rule}: ${r.result}${r.changes.length ? ` (${r.changes.join(', ')})` : ''}`);
+      lines.push(
+        `- ${r.result === 'fail' ? '✗' : r.result === 'warn' ? '⚠' : '✓'} ${r.rule}: ${r.result}${r.changes.length ? ` (${r.changes.join(', ')})` : ''}`,
+      );
     }
   }
   return lines.join('\n') + '\n';

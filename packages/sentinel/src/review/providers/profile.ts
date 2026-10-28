@@ -78,6 +78,7 @@ export const LIMIT_CEILINGS: Readonly<ModelLimits> = Object.freeze({
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z)?$/;
 const text = (v: unknown, max = 500) =>
+  // eslint-disable-next-line no-control-regex -- Provider profile text must exclude control characters.
   typeof v === 'string' && v.length > 0 && v.length <= max && !/[\u0000-\u001f\u007f]/.test(v);
 const LOOPBACK = new Set(['127.0.0.1', '[::1]']);
 

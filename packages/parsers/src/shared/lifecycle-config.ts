@@ -17,7 +17,8 @@ import { recordConflict, type WorkspaceConfig } from './config-files.js';
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 
 /** Is `path` (repo-relative) inside folder `dir` (`'.'` holds every path)? */
-const under = (path: string | undefined, dir: string) => dir === '.' || (!!path && path.replace(/\\/g, '/').startsWith(`${dir}/`));
+const under = (path: string | undefined, dir: string) =>
+  dir === '.' || (!!path && path.replace(/\\/g, '/').startsWith(`${dir}/`));
 
 /**
  * Put each config file's `lifecycle` block on the table nodes it names, in place. Returns how many records
@@ -41,27 +42,47 @@ export function applyLifecycleConfig(nodes: GraphNode[], ws: WorkspaceConfig): n
     }
     for (const [key, raw] of Object.entries(block as Record<string, LifecycleConfigEntry>)) {
       const where = `${f.path} → lifecycle.${key}`;
-      if (!raw || typeof raw !== 'object') { notes.push(`${where} is not an object; it was not applied.`); continue; }
+      if (!raw || typeof raw !== 'object') {
+        notes.push(`${where} is not an object; it was not applied.`);
+        continue;
+      }
       const found = match(key);
-      if (!found.length) { notes.push(`${where} names no record the code has; it was not applied.`); continue; }
+      if (!found.length) {
+        notes.push(`${where} names no record the code has; it was not applied.`);
+        continue;
+      }
       const withLife = found.filter((n) => n.lifecycle);
-      if (!withLife.length) { notes.push(`${where}: the code declares no statuses for ${key}, so there is nothing to name.`); continue; }
+      if (!withLife.length) {
+        notes.push(`${where}: the code declares no statuses for ${key}, so there is nothing to name.`);
+        continue;
+      }
       const scoped = withLife.filter((n) => f.root || under(n.lifecycle!.provenance[0]?.path, f.dir));
-      if (!scoped.length) { notes.push(`${where}: ${key}'s statuses are declared outside ${f.dir}, so this file does not name them.`); continue; }
+      if (!scoped.length) {
+        notes.push(`${where}: ${key}'s statuses are declared outside ${f.dir}, so this file does not name them.`);
+        continue;
+      }
       for (const node of scoped) {
         const life = node.lifecycle!;
         const names: LifecycleNames = life.names ?? { views: {}, overlays: [], from: [] };
         let gave = false;
         const views = raw.views && typeof raw.views === 'object' ? raw.views : {};
         for (const [persona, words] of Object.entries(views)) {
-          if (!words || typeof words !== 'object') { notes.push(`${where}.views.${persona} is not an object of words; it was not applied.`); continue; }
+          if (!words || typeof words !== 'object') {
+            notes.push(`${where}.views.${persona} is not an object of words; it was not applied.`);
+            continue;
+          }
           for (const [word, statuses] of Object.entries(words)) {
             const w = str(word);
             const list = Array.isArray(statuses) ? statuses : typeof statuses === 'string' ? [statuses] : [];
-            if (!w || !list.length) { notes.push(`${where}.views.${persona} gives ${JSON.stringify(word)} no status; it was not applied.`); continue; }
+            if (!w || !list.length) {
+              notes.push(`${where}.views.${persona} gives ${JSON.stringify(word)} no status; it was not applied.`);
+              continue;
+            }
             for (const st of list) {
               if (typeof st !== 'string' || !life.statuses.includes(st)) {
-                notes.push(`${where}.views.${persona}: ${JSON.stringify(st)} is not a status the code declares for ${node.name} (${life.statuses.join(', ')}); the word ${JSON.stringify(w)} was not given to it.`);
+                notes.push(
+                  `${where}.views.${persona}: ${JSON.stringify(st)} is not a status the code declares for ${node.name} (${life.statuses.join(', ')}); the word ${JSON.stringify(w)} was not given to it.`,
+                );
                 continue;
               }
               const k = `${node.id}\u0000${persona}\u0000${st}`;
@@ -69,7 +90,13 @@ export function applyLifecycleConfig(nodes: GraphNode[], ws: WorkspaceConfig): n
               const first = setBy.get(k);
               if (had !== undefined && had !== w && first) {
                 // a later file is nearer and its word stands; within one file the first word stays
-                recordConflict(ws, 'lifecycle', `${node.name} · ${persona} · ${st}`, [first, f.path], first === f.path ? first : f.path);
+                recordConflict(
+                  ws,
+                  'lifecycle',
+                  `${node.name} · ${persona} · ${st}`,
+                  [first, f.path],
+                  first === f.path ? first : f.path,
+                );
                 if (first === f.path) continue;
               }
               (names.views[persona] ??= {})[st] = w;
@@ -82,13 +109,22 @@ export function applyLifecycleConfig(nodes: GraphNode[], ws: WorkspaceConfig): n
           const name = str(o?.name);
           const table = str(o?.table);
           const when = str(o?.when);
-          if (!name || !table || !when) { notes.push(`${where}.overlays: an overlay needs a name, a table and when it holds; one was not applied.`); continue; }
+          if (!name || !table || !when) {
+            notes.push(`${where}.overlays: an overlay needs a name, a table and when it holds; one was not applied.`);
+            continue;
+          }
           const repo = node.id.split('::')[0];
           const t = tables.find((n) => (n.id === table || n.name === table) && n.id.split('::')[0] === repo);
-          if (!t) { notes.push(`${where}.overlays: ${JSON.stringify(name)} names the table ${JSON.stringify(table)}, which the code does not have; it was not applied.`); continue; }
+          if (!t) {
+            notes.push(
+              `${where}.overlays: ${JSON.stringify(name)} names the table ${JSON.stringify(table)}, which the code does not have; it was not applied.`,
+            );
+            continue;
+          }
           const at = names.overlays.findIndex((x) => x.name === name);
           const ov = { name, when, table, tableId: t.id };
-          if (at >= 0) names.overlays[at] = ov; else names.overlays.push(ov);
+          if (at >= 0) names.overlays[at] = ov;
+          else names.overlays.push(ov);
           gave = true;
         }
         if (!gave) continue;

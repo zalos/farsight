@@ -21,12 +21,12 @@ const STEP_KEYS: Record<string, string> = {
   'journeys.storyline.stepOf': 'the storyline position',
   'map.storyline.step': 'the storyline position',
   'affected.storyline.step': 'the storyline position, in the affected set',
-  'readiness.col.step': 'the storyline position, the brief\'s first column',
+  'readiness.col.step': "the storyline position, the brief's first column",
   'tests.orphan.whySteps': 'quotes the design manifest field `steps[]` a @covers claim names',
   'tests.blind.claim': 'names a step id of the design manifest field `steps[]`',
 };
 
-test('the catalog says step only for a journey\'s place in a storyline (and the manifest\'s own field)', () => {
+test("the catalog says step only for a journey's place in a storyline (and the manifest's own field)", () => {
   const hits: string[] = [];
   for (const [key, e] of Object.entries(STRINGS)) {
     for (const field of ['hud', 'professional', 'define'] as const) {
@@ -34,7 +34,7 @@ test('the catalog says step only for a journey\'s place in a storyline (and the 
       if (v && /\bsteps?\b/i.test(v) && !(key in STEP_KEYS)) hits.push(`${key}.${field}: ${v.slice(0, 80)}`);
     }
   }
-  assert.deepEqual(hits, [], 'step is the storyline\'s word — a walk position is a stop, a walk count is visits');
+  assert.deepEqual(hits, [], "step is the storyline's word — a walk position is a stop, a walk count is visits");
   for (const key of Object.keys(STEP_KEYS)) assert.ok(STRINGS[key], `${key} is still in the catalog`);
 });
 
@@ -43,7 +43,11 @@ test('each position has its own word, in both registers', () => {
   const hud = (k: string) => STRINGS[k]!.hud;
   for (const reg of [pro, hud]) {
     assert.match(reg('journeys.storyline.stepOf'), /^step \{n\} of \{m\}$/);
-    assert.match(reg('journeys.storyline.bizStepOf'), /^journey \{n\} of \{m\}$/, 'the business register says journey n of m');
+    assert.match(
+      reg('journeys.storyline.bizStepOf'),
+      /^journey \{n\} of \{m\}$/,
+      'the business register says journey n of m',
+    );
     // a stop: a Sheet column, the drill's rail, the storyboard, the drawer
     assert.match(reg('journey.sheetCorner'), /\bstop\b/);
     assert.match(reg('journey.biz.sheetCorner'), /\bstop\b/);

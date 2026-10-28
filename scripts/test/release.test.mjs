@@ -85,6 +85,7 @@ test('a release bumps, writes the changelog, commits and tags — and does not p
     assert.equal(JSON.parse(readFileSync(join(r.dir, 'package.json'), 'utf8')).version, '0.2.0');
     assert.match(
       readFileSync(join(r.dir, 'package.json'), 'utf8'),
+      // eslint-disable-next-line no-regex-spaces -- Pin the release writer's exact two-space JSON indentation.
       /^\{\n  "name": "x",\n  "version": "0.2.0",\n  "private": true\n\}\n$/,
       'formatting kept',
     );
@@ -230,6 +231,7 @@ test("farsight-sentinel is released at its own explicit version, never Farsight'
     assert.equal(JSON.parse(readFileSync(join(r.dir, 'package.json'), 'utf8')).version, '0.2.0');
     assert.match(
       readFileSync(join(r.dir, 'packages/sentinel/package.json'), 'utf8'),
+      // eslint-disable-next-line no-regex-spaces -- Pin the release writer's exact two-space JSON indentation.
       /^\{\n  "name": "@farsight\/sentinel",\n  "version": "0\.1\.0",\n  "private": true\n\}\n$/,
       'only the version changed; private is kept',
     );

@@ -8,7 +8,9 @@ import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { laneLayout, laneGeometry, firstSentence } = await import(join(here, '..', 'public', 'app', 'lib', 'map-model.js'));
+const { laneLayout, laneGeometry, firstSentence } = await import(
+  join(here, '..', 'public', 'app', 'lib', 'map-model.js')
+);
 const fx = JSON.parse(readFileSync(join(here, 'fixtures', 'map-lanes.json'), 'utf8'));
 
 type AnyRec = Record<string, any>;
@@ -19,27 +21,47 @@ function model(id: string, config: AnyRec = {}) {
 /** A Counted's breakdown adds up to it. */
 function sums(c: AnyRec) {
   if (!c.breakdown) return;
-  assert.equal(c.breakdown.reduce((n: number, p: AnyRec) => n + p.n, 0), c.n, JSON.stringify(c));
+  assert.equal(
+    c.breakdown.reduce((n: number, p: AnyRec) => n + p.n, 0),
+    c.n,
+    JSON.stringify(c),
+  );
 }
 
-test('invoice-app: two persona lanes in the tree\'s order and one store lane, from what the code writes', () => {
+test("invoice-app: two persona lanes in the tree's order and one store lane, from what the code writes", () => {
   const m = model('invoice');
-  assert.deepEqual(m.lanes.map((l: AnyRec) => [l.id, l.kind, l.name]), [
-    ['billing', 'persona', 'Billing'], ['ops', 'persona', 'Operations'], ['store:Invoice DB', 'store', 'Invoice DB'],
-  ]);
+  assert.deepEqual(
+    m.lanes.map((l: AnyRec) => [l.id, l.kind, l.name]),
+    [
+      ['billing', 'persona', 'Billing'],
+      ['ops', 'persona', 'Operations'],
+      ['store:Invoice DB', 'store', 'Invoice DB'],
+    ],
+  );
   assert.equal(m.lanes[0].description, 'The people who draft invoices and send them to customers.');
   assert.equal(m.ready, true);
   for (const l of m.lanes) sums(l.count);
 });
 
-test('invoice-app: the screens in step order as columns, a screen met again drawn once; the branch on its persona\'s lane after its step', () => {
+test("invoice-app: the screens in step order as columns, a screen met again drawn once; the branch on its persona's lane after its step", () => {
   const m = model('invoice');
   const main = m.stages.filter((s: AnyRec) => !s.branch);
-  assert.deepEqual(main.map((s: AnyRec) => [s.col, s.lane, s.name, s.state, s.step]), [
-    [0, 'billing', 'New invoice', 'built', 1], [1, 'billing', 'Invoice list', 'built', 2], [2, 'billing', 'Discard draft', 'planned', 2],
-  ]);
+  assert.deepEqual(
+    main.map((s: AnyRec) => [s.col, s.lane, s.name, s.state, s.step]),
+    [
+      [0, 'billing', 'New invoice', 'built', 1],
+      [1, 'billing', 'Invoice list', 'built', 2],
+      [2, 'billing', 'Discard draft', 'planned', 2],
+    ],
+  );
   const br = m.stages.filter((s: AnyRec) => s.branch);
-  assert.deepEqual(br.map((s: AnyRec) => [s.col, s.lane, s.name]), [[1, 'ops', 'Invoice list'], [2, 'ops', 'Discard draft']]);
+  assert.deepEqual(
+    br.map((s: AnyRec) => [s.col, s.lane, s.name]),
+    [
+      [1, 'ops', 'Invoice list'],
+      [2, 'ops', 'Discard draft'],
+    ],
+  );
   assert.equal(br[0].branch.when, 'Operations reviews the draft before it is sent');
   // the stage carries the street's test fold for its screen, and where opening it lands
   assert.equal(main[0].tests.n, 4);
@@ -51,12 +73,16 @@ test('invoice-app: the screens in step order as columns, a screen met again draw
   assert.equal(m.counts.screens.n, 3);
 });
 
-test('invoice-app: the record lane reads in the lifecycle\'s order — created (draft), then status → open — and names the code that moves it', () => {
+test("invoice-app: the record lane reads in the lifecycle's order — created (draft), then status → open — and names the code that moves it", () => {
   const m = model('invoice');
   const inv = m.pills.filter((p: AnyRec) => p.record.name === 'invoices');
-  assert.deepEqual(inv.map((p: AnyRec) => [p.kind, p.status, p.writers.join(','), p.col]), [
-    ['created', 'draft', 'createInvoice', 0], ['move', 'open', 'finalizeInvoice', 1],
-  ]);
+  assert.deepEqual(
+    inv.map((p: AnyRec) => [p.kind, p.status, p.writers.join(','), p.col]),
+    [
+      ['created', 'draft', 'createInvoice', 0],
+      ['move', 'open', 'finalizeInvoice', 1],
+    ],
+  );
   // approve is a move the lifecycle declares and this storyline never runs: no pill
   assert.ok(!m.pills.some((p: AnyRec) => p.status === 'approved'));
   // a record without declared statuses is a written pill
@@ -64,13 +90,20 @@ test('invoice-app: the record lane reads in the lifecycle\'s order — created (
   // one solid arrow per pill, from the first screen that makes the move
   const moves = m.arrows.filter((a: AnyRec) => a.kind === 'moves');
   assert.equal(moves.length, m.pills.length);
-  assert.deepEqual(moves.slice(0, 2).map((a: AnyRec) => a.from), ['s:INV-02', 's:INV-01']);
+  assert.deepEqual(
+    moves.slice(0, 2).map((a: AnyRec) => a.from),
+    ['s:INV-02', 's:INV-01'],
+  );
   assert.equal(m.arrows.filter((a: AnyRec) => a.kind === 'branch').length, 1);
-  assert.equal(m.arrows.filter((a: AnyRec) => a.kind === 'seen').length, 0, 'no walk says which status a screen sees: nothing derived');
+  assert.equal(
+    m.arrows.filter((a: AnyRec) => a.kind === 'seen').length,
+    0,
+    'no walk says which status a screen sees: nothing derived',
+  );
   assert.equal(m.lifecycles[0].name, 'invoices');
 });
 
-test('invoice-app: each move carries what its action needs (lane G\'s preconditions) and whether the code checks the status it leaves', () => {
+test("invoice-app: each move carries what its action needs (lane G's preconditions) and whether the code checks the status it leaves", () => {
   const m = model('invoice');
   assert.equal(m.needs, true);
   const created = m.pills.find((p: AnyRec) => p.status === 'draft');
@@ -87,7 +120,7 @@ test('invoice-app: each move carries what its action needs (lane G\'s preconditi
   assert.ok(!m.pills.find((p: AnyRec) => p.kind === 'written').needs);
 });
 
-test('invoice-app: the footer counts are the tree\'s journeys, the distinct screens, how many are built and the branches', () => {
+test("invoice-app: the footer counts are the tree's journeys, the distinct screens, how many are built and the branches", () => {
   const m = model('invoice');
   assert.equal(m.counts.journeys.n, 3);
   assert.equal(m.counts.screens.n, 3);
@@ -114,7 +147,10 @@ test('config lanes name and order what the graph found; hand-offs draw only wher
       { from: 'billing-cycle#2', to: 'ledger', kind: 'moves', status: 'open', when: 'sends it' },
     ],
   });
-  assert.deepEqual(m.lanes.map((l: AnyRec) => l.id), ['ops-lane', 'billing', 'ledger']);
+  assert.deepEqual(
+    m.lanes.map((l: AnyRec) => l.id),
+    ['ops-lane', 'billing', 'ledger'],
+  );
   assert.equal(m.lanes[0].surface, 'review console');
   assert.equal(m.lanes[0].name, 'Ops');
   const seen = m.arrows.filter((a: AnyRec) => a.kind === 'seen');
@@ -122,7 +158,15 @@ test('config lanes name and order what the graph found; hand-offs draw only wher
   assert.equal(seen[0].label, 'the list shows it as open');
   assert.ok(m.arrows.some((a: AnyRec) => a.kind === 'moves' && a.declared && a.label === 'sends it'));
   const keys = m.notes.map((n: AnyRec) => (n.why ? n.why.key : n.key));
-  for (const k of ['lanes.note.persona', 'lanes.note.store', 'lanes.why.noRead', 'lanes.why.noMove', 'lanes.why.noStatus', 'lanes.why.noScreen']) assert.ok(keys.includes(k), k + ' in ' + keys.join(','));
+  for (const k of [
+    'lanes.note.persona',
+    'lanes.note.store',
+    'lanes.why.noRead',
+    'lanes.why.noMove',
+    'lanes.why.noStatus',
+    'lanes.why.noScreen',
+  ])
+    assert.ok(keys.includes(k), k + ' in ' + keys.join(','));
 });
 
 test('nx-workspace: a storyline across two apps draws a lane per persona in step order', () => {
@@ -130,8 +174,14 @@ test('nx-workspace: a storyline across two apps draws a lane per persona in step
   const persona = m.lanes.filter((l: AnyRec) => l.kind === 'persona').map((l: AnyRec) => l.id);
   assert.deepEqual(persona, ['billing', 'ops']);
   assert.equal(m.stages.length, m.counts.screens.n);
-  assert.deepEqual(m.stages.map((s: AnyRec) => s.col), m.stages.map((_: unknown, i: number) => i));
-  assert.deepEqual(m.stages.map((s: AnyRec) => s.lane), ['billing', 'billing', 'ops', 'ops']);
+  assert.deepEqual(
+    m.stages.map((s: AnyRec) => s.col),
+    m.stages.map((_: unknown, i: number) => i),
+  );
+  assert.deepEqual(
+    m.stages.map((s: AnyRec) => s.lane),
+    ['billing', 'billing', 'ops', 'ops'],
+  );
   // a stage under the chrome and the head is about 2.2 wide to 1 tall at 1440×900 (since lane S the cards are wider and
   // shorter, so a square-ish 1.6 would wrap four stages into two rows to fit larger)
   const G = laneGeometry(m, { aspect: 2.2 });
@@ -151,39 +201,94 @@ test('before a journey is read its screens come from the design, and the footer 
 /** A synthetic storyline of `n` journeys over two personas, each writing the next status of one record. */
 function synthetic(n: number) {
   const statuses = Array.from({ length: n }, (_, i) => 'S' + i);
-  const journeys = Array.from({ length: n }, (_, i) => ({ nodeId: 'app::flow::j' + i, id: 'j' + i, name: 'Journey ' + i, personaIds: [i < n / 2 ? 'a' : 'b'], screens: ['X' + i, 'Y' + i] }));
-  const lifecycle = { field: 'status', statuses, transitions: statuses.map((s, i) => ({ to: s, by: 'app::svc::w' + i, via: 'assignment' })), provenance: [] };
-  const answers = new Map(journeys.map((j, i) => [j.nodeId, {
-    summary: {
-      segments: ['X' + i, 'Y' + i].map((sid, k) => ({
-        index: k,
-        screen: { id: 'app::page::' + sid, name: 'Screen ' + sid, designId: sid, designStatus: 'both', loc: { path: 'r.ts', line: 1 } },
-        markers: k === 1 ? [
-          { stepOrder: 1, kind: 'step', nodeId: 'app::svc::w' + i, name: 'w' + i },
-          { stepOrder: 2, kind: 'record', nodeId: 'app::table::things', name: 'things', op: 'writes', under: 1, store: { name: 'DB', kind: 'sql' } },
-        ] : [{ stepOrder: 1, kind: 'record', nodeId: 'app::table::things', name: 'things', op: 'reads', store: { name: 'DB', kind: 'sql' } }],
-        decisions: [],
-      })),
-      coverage: { segments: [] },
-    },
-    lifecycles: [{ nodeId: 'app::table::things', name: 'things', lifecycle, writers: {} }],
-  }]));
-  const tree = { personas: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] };
+  const journeys = Array.from({ length: n }, (_, i) => ({
+    nodeId: 'app::flow::j' + i,
+    id: 'j' + i,
+    name: 'Journey ' + i,
+    personaIds: [i < n / 2 ? 'a' : 'b'],
+    screens: ['X' + i, 'Y' + i],
+  }));
+  const lifecycle = {
+    field: 'status',
+    statuses,
+    transitions: statuses.map((s, i) => ({ to: s, by: 'app::svc::w' + i, via: 'assignment' })),
+    provenance: [],
+  };
+  const answers = new Map(
+    journeys.map((j, i) => [
+      j.nodeId,
+      {
+        summary: {
+          segments: ['X' + i, 'Y' + i].map((sid, k) => ({
+            index: k,
+            screen: {
+              id: 'app::page::' + sid,
+              name: 'Screen ' + sid,
+              designId: sid,
+              designStatus: 'both',
+              loc: { path: 'r.ts', line: 1 },
+            },
+            markers:
+              k === 1
+                ? [
+                    { stepOrder: 1, kind: 'step', nodeId: 'app::svc::w' + i, name: 'w' + i },
+                    {
+                      stepOrder: 2,
+                      kind: 'record',
+                      nodeId: 'app::table::things',
+                      name: 'things',
+                      op: 'writes',
+                      under: 1,
+                      store: { name: 'DB', kind: 'sql' },
+                    },
+                  ]
+                : [
+                    {
+                      stepOrder: 1,
+                      kind: 'record',
+                      nodeId: 'app::table::things',
+                      name: 'things',
+                      op: 'reads',
+                      store: { name: 'DB', kind: 'sql' },
+                    },
+                  ],
+            decisions: [],
+          })),
+          coverage: { segments: [] },
+        },
+        lifecycles: [{ nodeId: 'app::table::things', name: 'things', lifecycle, writers: {} }],
+      },
+    ]),
+  );
+  const tree = {
+    personas: [
+      { id: 'a', name: 'A' },
+      { id: 'b', name: 'B' },
+    ],
+  };
   return laneLayout({ id: 's', name: 'S', journeys, branches: [] }, [], tree, answers, {});
 }
 
-test('eighteen journeys: 36 columns, two persona lanes and one store lane, the record in lifecycle order, wrapped to the stage\'s shape with nothing overlapping', () => {
+test("eighteen journeys: 36 columns, two persona lanes and one store lane, the record in lifecycle order, wrapped to the stage's shape with nothing overlapping", () => {
   const m = synthetic(18);
   assert.equal(m.columns, 36);
-  assert.deepEqual(m.lanes.map((l: AnyRec) => l.kind), ['persona', 'persona', 'store']);
+  assert.deepEqual(
+    m.lanes.map((l: AnyRec) => l.kind),
+    ['persona', 'persona', 'store'],
+  );
   const pills = m.pills.filter((p: AnyRec) => p.record.name === 'things');
-  assert.deepEqual(pills.map((p: AnyRec) => p.status), Array.from({ length: 18 }, (_, i) => 'S' + i));
-  for (let i = 1; i < pills.length; i++) assert.ok(pills[i].col > pills[i - 1].col, 'left to right in the lifecycle\'s order');
+  assert.deepEqual(
+    pills.map((p: AnyRec) => p.status),
+    Array.from({ length: 18 }, (_, i) => 'S' + i),
+  );
+  for (let i = 1; i < pills.length; i++)
+    assert.ok(pills[i].col > pills[i - 1].col, "left to right in the lifecycle's order");
   const G = laneGeometry(m, { aspect: 1440 / 720, extraH: 90 });
   assert.ok(G.k > 1, 'a long storyline wraps');
   // the wrap is the one that fits largest on the stage; a very wide stage keeps one segment
   const fit = (g: AnyRec) => Math.min(1440 / g.size.w, 720 / g.size.h);
-  for (const k of [1, 2, 3, 4, 6]) assert.ok(fit(G) >= fit(laneGeometry(m, { aspect: 1440 / 720, extraH: 90, k })) - 1e-9, 'k=' + k);
+  for (const k of [1, 2, 3, 4, 6])
+    assert.ok(fit(G) >= fit(laneGeometry(m, { aspect: 1440 / 720, extraH: 90, k })) - 1e-9, 'k=' + k);
   assert.equal(laneGeometry(m, { aspect: 100, extraH: 90 }).k, 1);
   // no two rects of one lane and segment overlap, and every rect is inside the board
   const rects = [...G.rects.values()] as AnyRec[];
@@ -198,8 +303,11 @@ test('eighteen journeys: 36 columns, two persona lanes and one store lane, the r
   }
 });
 
-test('the stage card\'s sub-line is the first sentence of the screen\'s words', () => {
-  assert.equal(firstSentence('Draft a new invoice for a customer: pick the customer, add line items, save.'), 'Draft a new invoice for a customer');
+test("the stage card's sub-line is the first sentence of the screen's words", () => {
+  assert.equal(
+    firstSentence('Draft a new invoice for a customer: pick the customer, add line items, save.'),
+    'Draft a new invoice for a customer',
+  );
   assert.equal(firstSentence('Every invoice, newest first.'), 'Every invoice, newest first');
   assert.equal(firstSentence(''), '');
 });
@@ -214,47 +322,99 @@ test('one journey drawn as lanes counts over the journey, never a storyline (rou
   assert.equal(model('invoice').single, false);
 });
 
-test('a persona per screen (lane persona, 2026-10-13): a screen its row, a route or its sign-in guard places goes in that persona\'s lane', () => {
+test("a persona per screen (lane persona, 2026-10-13): a screen its row, a route or its sign-in guard places goes in that persona's lane", () => {
   const f = fx.invoice;
   // the tree as the server now sends it: billing-cycle's discard screen is the operator's (its screen row)
   const story = JSON.parse(JSON.stringify(f.storyline));
   for (const j of story.journeys) {
-    if (j.id === 'billing-cycle') j.screenPersonas = [
-      { screen: 'x', designId: 'INV-02', persona: 'billing', personaName: 'Billing', personaFrom: 'routes', declared: true, evidence: [] },
-      { screen: 'y', designId: 'INV-01', persona: 'billing', personaName: 'Billing', personaFrom: 'journey', declared: true, evidence: [] },
-      { screen: 'z', designId: 'INV-03', persona: 'ops', personaName: 'Operations', personaFrom: 'screen', declared: true, evidence: [] },
-    ];
+    if (j.id === 'billing-cycle')
+      j.screenPersonas = [
+        {
+          screen: 'x',
+          designId: 'INV-02',
+          persona: 'billing',
+          personaName: 'Billing',
+          personaFrom: 'routes',
+          declared: true,
+          evidence: [],
+        },
+        {
+          screen: 'y',
+          designId: 'INV-01',
+          persona: 'billing',
+          personaName: 'Billing',
+          personaFrom: 'journey',
+          declared: true,
+          evidence: [],
+        },
+        {
+          screen: 'z',
+          designId: 'INV-03',
+          persona: 'ops',
+          personaName: 'Operations',
+          personaFrom: 'screen',
+          declared: true,
+          evidence: [],
+        },
+      ];
   }
   const m = laneLayout(story, fx.designs, fx.tree, new Map(Object.entries(f.journeys)), {});
   const main = m.stages.filter((s: AnyRec) => !s.branch);
-  assert.deepEqual(main.map((s: AnyRec) => [s.name, s.lane, s.personaFrom]), [
-    // New invoice is the first step's screen (new-invoice carries no list here), drawn once
-    ['New invoice', 'billing', 'journey'], ['Invoice list', 'billing', 'journey'], ['Discard draft', 'ops', 'screen'],
-  ]);
+  assert.deepEqual(
+    main.map((s: AnyRec) => [s.name, s.lane, s.personaFrom]),
+    [
+      // New invoice is the first step's screen (new-invoice carries no list here), drawn once
+      ['New invoice', 'billing', 'journey'],
+      ['Invoice list', 'billing', 'journey'],
+      ['Discard draft', 'ops', 'screen'],
+    ],
+  );
   // once the journey answer is read, the screen's own persona (core withScreenPersonas) is what places it
   const answers = JSON.parse(JSON.stringify(f.journeys));
   for (const a of Object.values(answers) as AnyRec[]) {
     const ans = a.summary ? a : a.data;
-    for (const sg of ans.summary.segments) if (sg.screen && sg.screen.designId === 'INV-01') Object.assign(sg.screen, { persona: 'ops', personaName: 'Operations', personaFrom: 'guard' });
+    for (const sg of ans.summary.segments)
+      if (sg.screen && sg.screen.designId === 'INV-01')
+        Object.assign(sg.screen, { persona: 'ops', personaName: 'Operations', personaFrom: 'guard' });
   }
   const m2 = laneLayout(f.storyline, fx.designs, fx.tree, new Map(Object.entries(answers)), {});
-  assert.deepEqual(m2.stages.filter((s: AnyRec) => s.name === 'Invoice list').map((s: AnyRec) => [s.lane, s.personaFrom]), [['ops', 'guard'], ['ops', 'guard']]);
+  assert.deepEqual(
+    m2.stages.filter((s: AnyRec) => s.name === 'Invoice list').map((s: AnyRec) => [s.lane, s.personaFrom]),
+    [
+      ['ops', 'guard'],
+      ['ops', 'guard'],
+    ],
+  );
   // a screen only its journey places stays in the journey's lane — the branch's rule included
   const plain = model('invoice');
   assert.ok(plain.stages.every((s: AnyRec) => s.personaFrom === 'journey'));
-  assert.deepEqual(plain.stages.filter((s: AnyRec) => s.branch).map((s: AnyRec) => s.lane), ['ops', 'ops']);
+  assert.deepEqual(
+    plain.stages.filter((s: AnyRec) => s.branch).map((s: AnyRec) => s.lane),
+    ['ops', 'ops'],
+  );
 });
 
 // Work done outside the code and the parties that do it (the 2026-10-13 outsider round, F8; lib/parties-model.js): a
 // declared step with `by` on a screen draws a dotted card in the party's own lane at that screen's column — never a
 // screen of the storyline, never a stop of its main path, counted apart.
-test('invoice-app: a step a party does outside the code is a card in the party\'s lane, counted apart from the screens', () => {
+test("invoice-app: a step a party does outside the code is a card in the party's lane, counted apart from the screens", () => {
   const f = JSON.parse(JSON.stringify(fx.invoice));
-  const step = { id: 'INV-01.1', name: 'The customer pays the sent invoice by bank transfer', by: 'partner', who: 'Customer bank', screen: 'invoice-app::page::/invoices',
-    party: { id: 'invoice-app::external::Customer bank', name: 'Customer bank', role: 'Moves the customer\'s payment' } };
-  const person = { id: 'INV-02.9', name: 'Phone the customer to confirm the amount', by: 'person', screen: 'invoice-app::page::/invoices/new' };
+  const step = {
+    id: 'INV-01.1',
+    name: 'The customer pays the sent invoice by bank transfer',
+    by: 'partner',
+    who: 'Customer bank',
+    screen: 'invoice-app::page::/invoices',
+    party: { id: 'invoice-app::external::Customer bank', name: 'Customer bank', role: "Moves the customer's payment" },
+  };
+  const person = {
+    id: 'INV-02.9',
+    name: 'Phone the customer to confirm the amount',
+    by: 'person',
+    screen: 'invoice-app::page::/invoices/new',
+  };
   for (const a of Object.values(f.journeys) as AnyRec[]) {
-    const segs = ((a.data || a).summary.segments) as AnyRec[];
+    const segs = (a.data || a).summary.segments as AnyRec[];
     for (const sg of segs) {
       if (sg.screen && sg.screen.name === 'Invoice list') sg.offPlatform = [step];
       if (sg.screen && sg.screen.name === 'New invoice') sg.offPlatform = [person];
@@ -262,22 +422,40 @@ test('invoice-app: a step a party does outside the code is a card in the party\'
   }
   const before = model('invoice');
   const m = laneLayout(f.storyline, fx.designs, fx.tree, new Map(Object.entries(f.journeys)), {});
-  assert.deepEqual(m.lanes.map((l: AnyRec) => [l.id, l.kind]), [
-    ['billing', 'persona'], ['ops', 'persona'], ['party:Customer bank', 'party'], ['store:Invoice DB', 'store'],
-  ]);
+  assert.deepEqual(
+    m.lanes.map((l: AnyRec) => [l.id, l.kind]),
+    [
+      ['billing', 'persona'],
+      ['ops', 'persona'],
+      ['party:Customer bank', 'party'],
+      ['store:Invoice DB', 'store'],
+    ],
+  );
   const offs = m.stages.filter((s: AnyRec) => s.off);
   const list = m.stages.find((s: AnyRec) => !s.off && !s.branch && s.name === 'Invoice list');
-  assert.deepEqual(offs.map((s: AnyRec) => [s.lane, s.col, s.state]).sort(), [['billing', 0, 'off'], ['party:Customer bank', list.col, 'off']]);
+  assert.deepEqual(offs.map((s: AnyRec) => [s.lane, s.col, s.state]).sort(), [
+    ['billing', 0, 'off'],
+    ['party:Customer bank', list.col, 'off'],
+  ]);
   // the person's card sits under its screen in the same lane, a row down
   const mine = offs.find((s: AnyRec) => s.lane === 'billing');
   assert.equal(mine.row, 1);
   // the screens, the steps and the arrows are what they were
   assert.equal(m.counts.screens.n, before.counts.screens.n);
-  assert.deepEqual(m.arrows.filter((a: AnyRec) => a.kind === 'then').length, before.arrows.filter((a: AnyRec) => a.kind === 'then').length);
-  assert.equal(m.lanes.find((l: AnyRec) => l.kind === 'persona' && l.id === 'billing').count.n, before.lanes[0].count.n);
+  assert.deepEqual(
+    m.arrows.filter((a: AnyRec) => a.kind === 'then').length,
+    before.arrows.filter((a: AnyRec) => a.kind === 'then').length,
+  );
+  assert.equal(
+    m.lanes.find((l: AnyRec) => l.kind === 'persona' && l.id === 'billing').count.n,
+    before.lanes[0].count.n,
+  );
   // counted apart, by who does it, and the party lane counts its own
   assert.equal(m.counts.offPlatform.n, 2);
-  assert.deepEqual(m.counts.offPlatform.breakdown.map((p: AnyRec) => p.n), [1, 1, 0]);
+  assert.deepEqual(
+    m.counts.offPlatform.breakdown.map((p: AnyRec) => p.n),
+    [1, 1, 0],
+  );
   sums(m.counts.offPlatform);
   assert.equal(m.lanes.find((l: AnyRec) => l.kind === 'party').count.n, 1);
   // and the geometry gives the party lane its row of cards

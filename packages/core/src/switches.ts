@@ -10,7 +10,12 @@ import { counted, type Counted } from './counts.js';
 import { t, type Register } from './strings.js';
 import { movesByWriter } from './gates.js';
 
-export interface SwitchCall { from: string; to: string; line?: number; inactive: boolean }
+export interface SwitchCall {
+  from: string;
+  to: string;
+  line?: number;
+  inactive: boolean;
+}
 export interface Switch {
   flag: string;
   value: boolean;
@@ -22,7 +27,10 @@ export interface Switch {
   calls: SwitchCall[];
   counted: Counted;
 }
-export interface SwitchesAnswer { switches: Switch[]; counted: Counted }
+export interface SwitchesAnswer {
+  switches: Switch[];
+  counted: Counted;
+}
 
 const SRC = 'core/switches.ts switchesOf · edges[].meta.whenFlag';
 const CACHE = new WeakMap<GraphIndex, Switch[]>();
@@ -39,19 +47,38 @@ function fold(index: GraphIndex): Switch[] {
       const k = `${repo}|${e.meta.whenFlag}|${at}`;
       let s = by.get(k);
       if (!s) {
-        s = { flag: e.meta.whenFlag, value: e.meta.whenValue === true, at, repo, off: false, calls: [], counted: undefined as unknown as Counted };
+        s = {
+          flag: e.meta.whenFlag,
+          value: e.meta.whenValue === true,
+          at,
+          repo,
+          off: false,
+          calls: [],
+          counted: undefined as unknown as Counted,
+        };
         by.set(k, s);
       }
       const inactive = e.meta.inactive === true;
       if (inactive) s.off = true;
-      if (!s.calls.some((c) => c.from === e.from && c.to === e.to)) s.calls.push({ from: e.from, to: e.to, ...(typeof e.meta.line === 'number' ? { line: e.meta.line } : {}), inactive });
+      if (!s.calls.some((c) => c.from === e.from && c.to === e.to))
+        s.calls.push({
+          from: e.from,
+          to: e.to,
+          ...(typeof e.meta.line === 'number' ? { line: e.meta.line } : {}),
+          inactive,
+        });
     }
   }
-  const out = [...by.values()].sort((a, b) => a.repo.localeCompare(b.repo) || a.at.localeCompare(b.at) || a.flag.localeCompare(b.flag));
+  const out = [...by.values()].sort(
+    (a, b) => a.repo.localeCompare(b.repo) || a.at.localeCompare(b.at) || a.flag.localeCompare(b.flag),
+  );
   for (const s of out) {
     const off = s.calls.filter((c) => c.inactive).length;
     s.counted = counted(s.calls.length, 'switch.calls', 'count.scope.node', `${SRC} → calls under ${s.flag}`, {
-      breakdown: [{ key: 'count.part.switchCallsOff', n: off }, { key: 'count.part.switchCallsOn', n: s.calls.length - off }],
+      breakdown: [
+        { key: 'count.part.switchCallsOff', n: off },
+        { key: 'count.part.switchCallsOn', n: s.calls.length - off },
+      ],
     });
   }
   CACHE.set(index, out);
@@ -66,13 +93,19 @@ export function switchesOf(index: GraphIndex, repo?: string): SwitchesAnswer {
     switches,
     counted: counted(switches.length, 'count.unit.switches', 'count.scope.source', SRC, {
       bizUnit: 'count.unit.switches',
-      breakdown: [{ key: 'count.part.switchesOff', n: off }, { key: 'count.part.switchesOn', n: switches.length - off }],
+      breakdown: [
+        { key: 'count.part.switchesOff', n: off },
+        { key: 'count.part.switchesOn', n: switches.length - off },
+      ],
     }),
   };
 }
 
 /** The switches that stop a call to code that moves this record's status: `{flag, writer, caller}` per call. */
-export function switchesForRecord(index: GraphIndex, node: GraphNode): { sw: Switch; call: SwitchCall; writer: string }[] {
+export function switchesForRecord(
+  index: GraphIndex,
+  node: GraphNode,
+): { sw: Switch; call: SwitchCall; writer: string }[] {
   if (!node.lifecycle) return [];
   const writers = new Set(node.lifecycle.transitions.map((x) => x.by));
   const byWriter = movesByWriter(index);
@@ -99,14 +132,31 @@ const nm = (id: string) => id.split('::').pop() ?? id;
 
 /** One line per switch, for MCP and the CLI. */
 export function switchLines(list: Switch[], reg: Register = 'professional'): string[] {
-  return list.map((s) => `  ${t('switch.line', reg)
-    .replace('{flag}', s.flag).replace('{value}', String(s.value))
-    .replace('{state}', t(s.off ? 'switch.offWord' : 'switch.on', reg)).replace('{at}', s.at)
-    .replace('{calls}', s.calls.map((c) => `${nm(c.from)} → ${nm(c.to)}${c.inactive ? ` (${t('switch.word', reg)})` : ''}`).join(', '))}`);
+  return list.map(
+    (s) =>
+      `  ${t('switch.line', reg)
+        .replace('{flag}', s.flag)
+        .replace('{value}', String(s.value))
+        .replace('{state}', t(s.off ? 'switch.offWord' : 'switch.on', reg))
+        .replace('{at}', s.at)
+        .replace(
+          '{calls}',
+          s.calls
+            .map((c) => `${nm(c.from)} → ${nm(c.to)}${c.inactive ? ` (${t('switch.word', reg)})` : ''}`)
+            .join(', '),
+        )}`,
+  );
 }
 
 /** The record's switched-off moves as lines, for `describe_node`. */
 export function recordSwitchLines(index: GraphIndex, node: GraphNode, reg: Register = 'professional'): string[] {
-  return switchesForRecord(index, node).map(({ sw, call, writer }) => `  ${t('switch.recordLine', reg)
-    .replace('{flag}', sw.flag).replace('{value}', String(sw.value)).replace('{writer}', nm(writer)).replace('{caller}', nm(call.from)).replace('{at}', sw.at)}`);
+  return switchesForRecord(index, node).map(
+    ({ sw, call, writer }) =>
+      `  ${t('switch.recordLine', reg)
+        .replace('{flag}', sw.flag)
+        .replace('{value}', String(sw.value))
+        .replace('{writer}', nm(writer))
+        .replace('{caller}', nm(call.from))
+        .replace('{at}', sw.at)}`,
+  );
 }

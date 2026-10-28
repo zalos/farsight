@@ -207,8 +207,6 @@ const pathOfEvidence = (e: any) => {
   const r = resolveWithheldLocation(lastSnapshot, e);
   return r.ok ? r.entry.relativePath : undefined;
 };
-const pathOfScope = (scopeId: string) =>
-  lastSnapshot.entries[Number(ENTRY_SCOPE.exec(scopeId)?.[2] ?? -1)]?.relativePath;
 
 function synthetic(
   options: {

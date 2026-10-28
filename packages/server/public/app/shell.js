@@ -3,9 +3,32 @@
 // chrome-owned panels moved from viewer.js (lens/theme/scope/chips, search
 // palette + focus, settings page, Model Hub overlay). Entry module.
 
-import { S, expose, esc, jsArg, loadAll, hydrateScope, indexGuards, collSourceNames, scopedRepos, inScope, bizLabel, bizName, humanize, effectiveGroup, currentLens, cssId, repoOf } from './store.js';
-import { startSearchIndex, continueSearchIndex, searchIndex, storylineTravelItems, scoreStoryline } from './lib/search-model.js';
-import { t, def, initRegister, onRegisterChange, toggleRegister } from './strings.js';
+import {
+  S,
+  expose,
+  esc,
+  jsArg,
+  loadAll,
+  hydrateScope,
+  indexGuards,
+  collSourceNames,
+  scopedRepos,
+  inScope,
+  bizLabel,
+  bizName,
+  humanize,
+  effectiveGroup,
+  currentLens,
+  repoOf,
+} from './store.js';
+import {
+  startSearchIndex,
+  continueSearchIndex,
+  searchIndex,
+  storylineTravelItems,
+  scoreStoryline,
+} from './lib/search-model.js';
+import { t, def, initRegister, onRegisterChange } from './strings.js';
 import { sym, grammarHtml } from './sym.js';
 import { render, select, scopeLabel, closeCtx, refreshStats, cardOf, revealCard } from './lib/graph-render.js';
 import { mountJourneys, journeysRefresh } from './surfaces/journeys.js';
@@ -18,7 +41,7 @@ import { mountChanges, changesRefresh } from './surfaces/changes.js';
 import { mountStewardship } from './surfaces/stewardship.js';
 import { mountApis, apisRefresh } from './surfaces/apis.js';
 import { mountTests, testsRefresh } from './surfaces/tests.js';
-import {mountSentinel,unmountSentinel,sentinelUpdate} from './surfaces/sentinel.js';
+import { mountSentinel, unmountSentinel, sentinelUpdate } from './surfaces/sentinel.js';
 import { mountWork, workRefresh } from './surfaces/work.js';
 import { mountMap, mapRefresh, mapUpdate, unmountMap, mapOpen, mapTravel } from './surfaces/map.js';
 import { renderConfigFiles } from './surfaces/settings-config.js';
@@ -37,7 +60,9 @@ import { readOnlyWhy, applyReadOnly } from './lib/read-only.js';
 // the Map is the one place a journey is read (lanes round 2026-10-10, proposal 1): no longer an experiment behind a flag
 const NAV = ['portfolio', 'journeys', 'map', 'codemap', 'apis', 'tests', 'changes', 'work', 'sentinel'];
 /** The tabs the bar draws. @group Shell */
-export function navTabs() { return NAV; }
+export function navTabs() {
+  return NAV;
+}
 /**
  * The surfaces, each with how it is mounted, unmounted, and — the contract the
  * filters run on — how it is **refreshed in place**.
@@ -65,7 +90,7 @@ const SURFACES = {
   tests: { mount: mountTests, refresh: testsRefresh },
   changes: { mount: mountChanges, refresh: changesRefresh },
   work: { mount: mountWork, refresh: workRefresh },
-  sentinel: {mount:mountSentinel,unmount:unmountSentinel,update:sentinelUpdate,refresh:sentinelUpdate},
+  sentinel: { mount: mountSentinel, unmount: unmountSentinel, update: sentinelUpdate, refresh: sentinelUpdate },
   // `update(route)`: the route moved inside the surface (another journey, a screen
   // opened, the back button) — the board keeps its place instead of re-mounting
   map: { mount: mountMap, unmount: unmountMap, refresh: mapRefresh, update: mapUpdate },
@@ -102,7 +127,10 @@ export function refreshSurface(reason) {
   if (!surface) return;
   const el = document.getElementById('surface');
   if (surface.refresh) surface.refresh(reason, S.route);
-  else if (el && S.route) { el.innerHTML = ''; surface.mount(S.route, el); }
+  else if (el && S.route) {
+    el.innerHTML = '';
+    surface.mount(S.route, el);
+  }
   // the status bar's shown/hidden count is drawn on every surface but computed
   // from the map's display list; the Code map's own refresh recomputes it on the
   // way through render(), so only the others ask for it here
@@ -158,10 +186,16 @@ export function parseRoute() {
   h = h.slice(2);
   let query = '';
   const qi = h.indexOf('?');
-  if (qi >= 0) { query = h.slice(qi + 1); h = h.slice(0, qi); }
+  if (qi >= 0) {
+    query = h.slice(qi + 1);
+    h = h.slice(0, qi);
+  }
   let sync = null;
   const sm = h.match(/@sync:(\d+)$/);
-  if (sm) { sync = +sm[1]; h = h.slice(0, sm.index); }
+  if (sm) {
+    sync = +sm[1];
+    h = h.slice(0, sm.index);
+  }
   const segs = h.split('/').filter(Boolean);
   const q = new URLSearchParams(query);
   const param = segs.slice(1).join('/') || null;
@@ -240,7 +274,8 @@ export function applyRoute() {
   // rewritten in place — one replace, no history entry, so Back still leaves the way the reader came
   if (isOverlayAddress(location.hash)) history.replaceState(null, '', overlayToMap(location.hash));
   let r = parseRoute();
-  if (r && r.surface && (!SURFACES[r.surface] || r.surface === 'nowhere')) r = Object.assign({}, r, { asked: r.surface, surface: 'nowhere' });
+  if (r && r.surface && (!SURFACES[r.surface] || r.surface === 'nowhere'))
+    r = Object.assign({}, r, { asked: r.surface, surface: 'nowhere' });
   if (!r || !SURFACES[r.surface]) {
     const dflt = defaultSurface();
     history.replaceState(null, '', '#/' + dflt);
@@ -253,7 +288,11 @@ export function applyRoute() {
   // the dock a Map link names (the code stop's, or the table's beside a part) is where the code opens
   if (r.surface === 'map' && /^(inline|bottom|right)$/.test(r.dock || '')) S.jrnDock = r.dock;
   // the same surface, a new place inside it: a surface that can follow its own route keeps its state
-  if (currentSurface === r.surface && SURFACES[r.surface].update && document.getElementById('surface').childElementCount) {
+  if (
+    currentSurface === r.surface &&
+    SURFACES[r.surface].update &&
+    document.getElementById('surface').childElementCount
+  ) {
     SURFACES[r.surface].update(r);
     // a link that named another register redraws the words of the surface it stayed on (a mount draws them itself)
     if (lensMoved && SURFACES[r.surface].refresh) SURFACES[r.surface].refresh('lens', r);
@@ -271,7 +310,10 @@ export function applyRoute() {
   // *exit focus* chip and a status bar cut to 122 of 1678, on a page the focus
   // does nothing to (pass swarm 2026-09-25). Off the map, it is dropped.
   if (r.surface !== 'codemap' && S.focusSet) dropFocus();
-  document.body.className = document.body.className.replace(/\bsurface-[\w-]+\b/g, '').replace(/\s+/g, ' ').trim();
+  document.body.className = document.body.className
+    .replace(/\bsurface-[\w-]+\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   document.body.classList.add('surface-' + r.surface);
   const surfEl = document.getElementById('surface');
   // the Settings page is a node the document keeps: a re-mount of the same address hands it back before clearing
@@ -358,14 +400,30 @@ function syncChipHtml() {
   // the details — workspace, sync, when, which build — are the chip's tip
   // (`syncChipTip`), not a title attribute: a table the reader can open with a
   // click or a keypress, and whose code rows the business lens leaves out
-  if (!meta.generatedAt) return '<span class="syncchip" data-tip="chrome.sync" tabindex="0">' + sym('stale') + ' <b>' + esc(t('status.stale')) + '</b> · ' + esc(t('chrome.syncNever')) + '</span>';
+  if (!meta.generatedAt)
+    return (
+      '<span class="syncchip" data-tip="chrome.sync" tabindex="0">' +
+      sym('stale') +
+      ' <b>' +
+      esc(t('status.stale')) +
+      '</b> · ' +
+      esc(t('chrome.syncNever')) +
+      '</span>'
+    );
   const ms = Date.now() - Date.parse(meta.generatedAt);
   // every identity says what it is: a bare hash in the chip was read as the
   // Farsight build as often as the source commit (the clarity pass §3.3.5)
-  const ident = esc(t('chrome.identity')
-    .replace('{commit}', meta.commit ? String(meta.commit).slice(0, 7) : t('journey.absent.notIndexed'))
-    .replace('{build}', (S.VERSION && S.VERSION.farsight && S.VERSION.farsight.commit) || (meta.farsight && meta.farsight.commit) || t('journey.absent.notIndexed'))
-    .replace('{n}', meta.sync != null ? String(meta.sync) : t('journey.absent.notIndexed')));
+  const ident = esc(
+    t('chrome.identity')
+      .replace('{commit}', meta.commit ? String(meta.commit).slice(0, 7) : t('journey.absent.notIndexed'))
+      .replace(
+        '{build}',
+        (S.VERSION && S.VERSION.farsight && S.VERSION.farsight.commit) ||
+          (meta.farsight && meta.farsight.commit) ||
+          t('journey.absent.notIndexed'),
+      )
+      .replace('{n}', meta.sync != null ? String(meta.sync) : t('journey.absent.notIndexed')),
+  );
   // which graph: workspace name in the chip, graph path + time in the tip — a server
   // started in another workspace is caught at a glance, not after a debugging round
   const ws = meta.workspace ? '<b class="ws">' + esc(meta.workspace) + '</b> · ' : '';
@@ -373,8 +431,36 @@ function syncChipHtml() {
   const tip = ' data-tip-id="syncChip" tabindex="0"';
   // the words ride in a .ct span so a narrow window ellipsises the chip instead of
   // cutting the workspace name mid-letter; the whole line stays in the tip
-  if (ms >= 7 * 864e5) return '<span class="syncchip stale"' + tip + '>' + sym('stale') + '<span class="ct"> <b>' + esc(t('status.stale')) + '</b> · ' + ws + esc(t('chrome.synced')) + ' ' + esc(ago(ms)) + '</span></span>';
-  return '<span class="syncchip' + (restart ? ' restart' : '') + '"' + tip + '>' + sym(restart ? 'warning' : 'live') + '<span class="ct"> ' + ws + ident + ' · ' + esc(ago(ms)) + restart + '</span></span>';
+  if (ms >= 7 * 864e5)
+    return (
+      '<span class="syncchip stale"' +
+      tip +
+      '>' +
+      sym('stale') +
+      '<span class="ct"> <b>' +
+      esc(t('status.stale')) +
+      '</b> · ' +
+      ws +
+      esc(t('chrome.synced')) +
+      ' ' +
+      esc(ago(ms)) +
+      '</span></span>'
+    );
+  return (
+    '<span class="syncchip' +
+    (restart ? ' restart' : '') +
+    '"' +
+    tip +
+    '>' +
+    sym(restart ? 'warning' : 'live') +
+    '<span class="ct"> ' +
+    ws +
+    ident +
+    ' · ' +
+    esc(ago(ms)) +
+    restart +
+    '</span></span>'
+  );
 }
 /**
  * Whether the chip says RESTART — read from `/api/version`'s `install`, where
@@ -398,8 +484,18 @@ export function restartNeeded(v) {
 function syncChipTip() {
   const meta = (S.GRAPH && S.GRAPH.meta) || {};
   const v = S.VERSION || {};
-  const bl = (b) => (b ? b.version + ' · ' + t('chrome.built') + ' ' + String(b.built).replace('T', ' ').slice(0, 16) + (b.commit ? ' · ' + b.commit : '') : '');
-  const when = meta.generatedAt ? ago(Date.now() - Date.parse(meta.generatedAt)) + ' · ' + String(meta.generatedAt).replace('T', ' ').slice(0, 19) : '';
+  const bl = (b) =>
+    b
+      ? b.version +
+        ' · ' +
+        t('chrome.built') +
+        ' ' +
+        String(b.built).replace('T', ' ').slice(0, 16) +
+        (b.commit ? ' · ' + b.commit : '')
+      : '';
+  const when = meta.generatedAt
+    ? ago(Date.now() - Date.parse(meta.generatedAt)) + ' · ' + String(meta.generatedAt).replace('T', ' ').slice(0, 19)
+    : '';
   const cur = v.currency;
   const rows = [
     meta.workspace ? ['chrome.workspace', meta.workspace] : null,
@@ -408,15 +504,30 @@ function syncChipTip() {
     meta.commit ? { cells: ['tip.syncChip.commit', String(meta.commit).slice(0, 12)], code: true } : null,
     v.farsight ? { cells: ['chrome.build', bl(v.farsight)], code: true } : null,
     // the build on disk beside the one running: the pair RESTART is decided on
-    v.install && v.install.installed ? { cells: ['chrome.buildInstalled', bl(Object.assign({ version: v.farsight ? v.farsight.version : '' }, v.install.installed))], code: true } : null,
+    v.install && v.install.installed
+      ? {
+          cells: [
+            'chrome.buildInstalled',
+            bl(Object.assign({ version: v.farsight ? v.farsight.version : '' }, v.install.installed)),
+          ],
+          code: true,
+        }
+      : null,
     meta.farsight ? { cells: ['chrome.graphIngestedBy', bl(meta.farsight)], code: true } : null,
     meta.graphPath ? { cells: ['chrome.graphFile', meta.graphPath], code: true } : null,
     restartNeeded(v) ? ['chrome.restartNeeded', def('chrome.restartNeeded')] : null,
     ...(cur && !cur.ok ? (cur.findings || []).map((f) => ({ cells: ['tip.syncChip.attention', f], code: true })) : []),
   ].filter(Boolean);
-  return tableTip({ caption: 'tip.syncChip.head', rows })
-    + '<p class="tip-p">' + esc(def('chrome.sync')) + '</p>'
-    + linksTip([{ label: 'nav.changes', href: '#/changes' }, { label: 'tip.grammar', href: grammarHref('chrome.sync') }]);
+  return (
+    tableTip({ caption: 'tip.syncChip.head', rows }) +
+    '<p class="tip-p">' +
+    esc(def('chrome.sync')) +
+    '</p>' +
+    linksTip([
+      { label: 'nav.changes', href: '#/changes' },
+      { label: 'tip.grammar', href: grammarHref('chrome.sync') },
+    ])
+  );
 }
 registerTip('syncChip', syncChipTip);
 /**
@@ -432,9 +543,21 @@ export function renderChrome() {
   // switched — and a reader who clicks by position landed on another page (pass
   // swarm 2026-09-25, three reviewers). Where each register *lands* still
   // differs (defaultSurface); where each tab *sits* does not.
-  if (nav) nav.innerHTML = navTabs().map((s) => '<button class="navtab' + (cur === s ? ' on' : '') + '"'
-    + tipAttrs({ key: 'nav.' + s, noFocus: true })
-    + ' onclick="location.hash=\'#/' + s + '\'">' + esc(t('nav.' + s)) + '</button>').join('');
+  if (nav)
+    nav.innerHTML = navTabs()
+      .map(
+        (s) =>
+          '<button class="navtab' +
+          (cur === s ? ' on' : '') +
+          '"' +
+          tipAttrs({ key: 'nav.' + s, noFocus: true }) +
+          ' onclick="location.hash=\'#/' +
+          s +
+          '\'">' +
+          esc(t('nav.' + s)) +
+          '</button>',
+      )
+      .join('');
   const sc = document.getElementById('syncchipwrap');
   if (sc) sc.innerHTML = syncChipHtml();
   // READ-ONLY is a fact the server holds (`serve --read-only`, every `--as-of`), read off /api/version —
@@ -443,12 +566,16 @@ export function renderChrome() {
   const why = readOnlyWhy();
   if (ro) {
     ro.hidden = !why;
-    ro.textContent = t('sys.readonly'); ro.removeAttribute('title');
+    ro.textContent = t('sys.readonly');
+    ro.removeAttribute('title');
     if (why) setTip(ro, { text: t(why === 'as-of' ? 'sys.readonly.asOf' : 'sys.readonly.flag') });
   }
   applyReadOnly();
   const reg = document.getElementById('regtoggle');
-  if (reg) { reg.textContent = t(S.register === 'hud' ? 'chrome.registerToPro' : 'chrome.registerToHud'); setTip(reg, { key: 'surf.chrome.register' }); }
+  if (reg) {
+    reg.textContent = t(S.register === 'hud' ? 'chrome.registerToPro' : 'chrome.registerToHud');
+    setTip(reg, { key: 'surf.chrome.register' });
+  }
   // the gear opens Settings (it read as a theme toggle): its tip says what is behind it
   // a gear and the word: the glyph alone read as a theme toggle to seven of eight reviewers (swarm 2026-10-05)
   const gear = document.getElementById('gearbtn');
@@ -525,7 +652,10 @@ export function fitTopbar() {
   // foldable control has folded; its ellipsis and its tooltip are the backstop
   // for a workspace whose name is longer than any window.
   const chip = document.getElementById('syncchipwrap');
-  if (chip) { chip.style.flexShrink = '0'; chip.style.minWidth = ''; }
+  if (chip) {
+    chip.style.flexShrink = '0';
+    chip.style.minWidth = '';
+  }
   const search = bar.querySelector('.searchbox');
   if (search) search.classList.remove('squeeze');
   const fits = () => bar.scrollWidth <= bar.clientWidth + 1;
@@ -543,7 +673,8 @@ export function fitTopbar() {
     const label = host.getAttribute && host.getAttribute('aria-label');
     if (label && host.textContent.trim().length < 3) {
       const l = document.createElement('span');
-      l.className = 'fs-morelbl'; l.textContent = label;
+      l.className = 'fs-morelbl';
+      l.textContent = label;
       host.appendChild(l);
     }
     folded++;
@@ -571,13 +702,17 @@ export function fitTopbar() {
   if (chip) chip.style.flexShrink = '';
   if (!fits() && chip) chip.style.minWidth = '0';
   if (!fits()) fold('nav');
-  if (!folded) { wrap.style.display = 'none'; return; }
+  if (!folded) {
+    wrap.style.display = 'none';
+    return;
+  }
   // Settings is always in the ⋯ menu: folded, the gear is its own row; still in the bar, the menu ends with a
   // row of its own that opens the same page, because ⋯ is where seven of eight reviewers looked for it first
   const gearEl = document.getElementById('gearbtn');
   if (gearEl && gearEl.parentElement !== menu) {
     const row = document.createElement('button');
-    row.type = 'button'; row.className = 'more-settings';
+    row.type = 'button';
+    row.className = 'more-settings';
     row.innerHTML = sym('gear') + '<span>' + esc(t('surf.chrome.settings')) + '</span>';
     row.onclick = () => openSettings();
     menu.appendChild(row);
@@ -587,12 +722,26 @@ export function fitTopbar() {
   btn.setAttribute('aria-label', t('chrome.more') + ' — ' + t('tip.more.of').replace('{n}', folded));
   btn.removeAttribute('title');
   // the count's tip names what it counts — the controls folded away, by name
-  const nameOf = (n) => (n.id === 'nav' ? t('tip.more.nav')
-    : n.classList.contains('share-wrap') ? nameOf(n.querySelector('button') || n)
-      : (n.getAttribute('aria-label') || n.textContent || '').trim());
-  const names = [...menu.children].filter((n) => !n.classList.contains('more-settings')).map(nameOf).filter(Boolean);
-  setTip(btn, { number: { count: folded, of: 'tip.more.of', scope: 'tip.more.scope', source: 'tip.more.source',
-    breakdown: { rows: names.map((x) => [x]) }, grammarKey: 'chrome.more' } });
+  const nameOf = (n) =>
+    n.id === 'nav'
+      ? t('tip.more.nav')
+      : n.classList.contains('share-wrap')
+        ? nameOf(n.querySelector('button') || n)
+        : (n.getAttribute('aria-label') || n.textContent || '').trim();
+  const names = [...menu.children]
+    .filter((n) => !n.classList.contains('more-settings'))
+    .map(nameOf)
+    .filter(Boolean);
+  setTip(btn, {
+    number: {
+      count: folded,
+      of: 'tip.more.of',
+      scope: 'tip.more.scope',
+      source: 'tip.more.source',
+      breakdown: { rows: names.map((x) => [x]) },
+      grammarKey: 'chrome.more',
+    },
+  });
 }
 /** Open / close the overflow menu.
  * @group Shell */
@@ -685,7 +834,8 @@ export function previewTheme(theme) {
   applyTheme(theme);
   const note = document.getElementById('set-theme-note');
   const saved = S.SETTINGS && (S.SETTINGS.theme || 'system');
-  if (note) note.textContent = theme !== saved ? t(readOnlyWhy() ? 'sys.readonly.themeHint' : 'surf.theme.preview') : '';
+  if (note)
+    note.textContent = theme !== saved ? t(readOnlyWhy() ? 'sys.readonly.themeHint' : 'surf.theme.preview') : '';
 }
 /**
  * Rebuild the scope button label + grouped multi-select menu. Collections act
@@ -701,30 +851,77 @@ export function buildScope() {
     btn.innerHTML = '◈ <span class="sc-lbl">' + esc(scopeLabel()) + '</span><span class="sc-caret">▾</span>';
     // how many sources the scope lets through, and which: the number every surface counts over
     const names = (S.SETTINGS.sources || []).map((x) => x.name).filter((x) => S.scope === 'all' || S.scope.includes(x));
-    setTip(btn, { number: { count: names.length, of: 'count.unit.sources', scope: 'count.scope.workspace', source: { api: '/api/settings' },
-      breakdown: { rows: names.map((x) => [x, 1]) }, grammarKey: 'scope.all' } });
+    setTip(btn, {
+      number: {
+        count: names.length,
+        of: 'count.unit.sources',
+        scope: 'count.scope.workspace',
+        source: { api: '/api/settings' },
+        breakdown: { rows: names.map((x) => [x, 1]) },
+        grammarKey: 'scope.all',
+      },
+    });
   }
   const menu = document.getElementById('scopemenu');
   if (!menu) return;
-  const colls = S.SETTINGS.collections || [], srcs = S.SETTINGS.sources || [];
+  const colls = S.SETTINGS.collections || [],
+    srcs = S.SETTINGS.sources || [];
   // *all* is every source: its boxes read checked, so "All sources" never sits
   // highlighted above an unchecked list that looks like nothing is selected
   const isOn = (n) => S.scope === 'all' || S.scope.includes(n);
-  const inColl = new Set(); colls.forEach((c) => collSourceNames(c).forEach((n) => inColl.add(n)));
-  const row = (name) => '<label class="sc-row"><input type="checkbox" ' + (isOn(name) ? 'checked' : '') + ' onchange="toggleScopeSrc(' + jsArg(name) + ')"/><span>' + esc(name) + '</span></label>';
-  let html = '<button class="sc-all' + (S.scope === 'all' ? ' on' : '') + '" onclick="setScopeAll()">◈ ' + esc(t('scope.all')) + '</button>';
+  const inColl = new Set();
+  colls.forEach((c) => collSourceNames(c).forEach((n) => inColl.add(n)));
+  const row = (name) =>
+    '<label class="sc-row"><input type="checkbox" ' +
+    (isOn(name) ? 'checked' : '') +
+    ' onchange="toggleScopeSrc(' +
+    jsArg(name) +
+    ')"/><span>' +
+    esc(name) +
+    '</span></label>';
+  let html =
+    '<button class="sc-all' +
+    (S.scope === 'all' ? ' on' : '') +
+    '" onclick="setScopeAll()">◈ ' +
+    esc(t('scope.all')) +
+    '</button>';
   colls.forEach((c, i) => {
     const names = collSourceNames(c);
     const all = !!names.length && names.every(isOn);
-    html += '<div class="sc-group"><label class="sc-row sc-ghead"><input type="checkbox" data-coll-i="' + i + '" ' + (all ? 'checked' : '') + ' onchange="toggleScopeColl(' + i + ')"/><span>▤ ' + esc(c.name) + '</span><span class="sc-n">' + names.length + '</span></label>'
-      + names.map(row).join('') + '</div>';
+    html +=
+      '<div class="sc-group"><label class="sc-row sc-ghead"><input type="checkbox" data-coll-i="' +
+      i +
+      '" ' +
+      (all ? 'checked' : '') +
+      ' onchange="toggleScopeColl(' +
+      i +
+      ')"/><span>▤ ' +
+      esc(c.name) +
+      '</span><span class="sc-n">' +
+      names.length +
+      '</span></label>' +
+      names.map(row).join('') +
+      '</div>';
   });
   const rest = srcs.map((s) => s.name).filter((n) => !inColl.has(n));
-  if (rest.length) html += '<div class="sc-group"><div class="sc-plain hud-label">' + esc(t(colls.length ? 'scope.ungrouped' : 'scope.sources')) + '</div>' + rest.map(row).join('') + '</div>';
+  if (rest.length)
+    html +=
+      '<div class="sc-group"><div class="sc-plain hud-label">' +
+      esc(t(colls.length ? 'scope.ungrouped' : 'scope.sources')) +
+      '</div>' +
+      rest.map(row).join('') +
+      '</div>';
   // on the code map: its own filters — projects, tag values, depends on (surfaces/codemap-projects.js)
   html += cmapScopeHtml();
   const ro = !!readOnlyWhy();
-  html += '<div class="sc-foot"><button class="sc-save' + (ro ? ' ro-off" aria-disabled="true' : '') + '" data-write onclick="saveScopeGroup()" title="' + esc(t(ro ? 'sys.readonly.control' : 'scope.newGroupTitle')) + '">' + esc(t('scope.newGroup')) + '</button></div>';
+  html +=
+    '<div class="sc-foot"><button class="sc-save' +
+    (ro ? ' ro-off" aria-disabled="true' : '') +
+    '" data-write onclick="saveScopeGroup()" title="' +
+    esc(t(ro ? 'sys.readonly.control' : 'scope.newGroupTitle')) +
+    '">' +
+    esc(t('scope.newGroup')) +
+    '</button></div>';
   menu.innerHTML = html;
   colls.forEach((c, i) => {
     const names = collSourceNames(c);
@@ -754,7 +951,10 @@ export function closeScopeMenu() {
   if (b) b.setAttribute('aria-expanded', 'false');
 }
 /** @group Lens, theme & filters */
-export function scopeMenuOpen() { const m = document.getElementById('scopemenu'); return !!m && m.classList.contains('open'); }
+export function scopeMenuOpen() {
+  const m = document.getElementById('scopemenu');
+  return !!m && m.classList.contains('open');
+}
 /**
  * Esc with the scope menu open closes the menu — and nothing else. The one
  * keydown listener in keymap.js unwinds the open journey on Esc; this runs on
@@ -781,14 +981,18 @@ function scopeMenuKey(e) {
  * @group Lens, theme & filters
  */
 export function applyScope(v) {
-  S.scope = v; localStorage.setItem('fs-scope-v2', JSON.stringify(v));
-  buildScope(); buildChips();
+  S.scope = v;
+  localStorage.setItem('fs-scope-v2', JSON.stringify(v));
+  buildScope();
+  buildChips();
   refreshSurface('scope');
 }
 /**
  * @group Lens, theme & filters
  */
-export function setScopeAll() { applyScope('all'); }
+export function setScopeAll() {
+  applyScope('all');
+}
 /**
  * @group Lens, theme & filters
  */
@@ -803,12 +1007,16 @@ export function toggleScopeSrc(name) {
  * @group Lens, theme & filters
  */
 export function toggleScopeColl(i) {
-  const c = (S.SETTINGS.collections || [])[i]; if (!c) return;
+  const c = (S.SETTINGS.collections || [])[i];
+  if (!c) return;
   const names = collSourceNames(c);
   let cur = S.scope === 'all' ? (S.SETTINGS.sources || []).map((s) => s.name) : S.scope.slice();
   const all = !!names.length && names.every((n) => cur.includes(n));
   if (all) cur = cur.filter((n) => !names.includes(n));
-  else names.forEach((n) => { if (!cur.includes(n)) cur.push(n); });
+  else
+    names.forEach((n) => {
+      if (!cur.includes(n)) cur.push(n);
+    });
   applyScope(cur.length ? cur : 'all');
 }
 /**
@@ -824,7 +1032,8 @@ export async function saveScopeGroup() {
   const ids = (S.SETTINGS.sources || []).filter((s) => S.scope.includes(s.name)).map((s) => s.id);
   S.SETTINGS.collections.push({ name, sourceIds: ids });
   await fetch('/api/settings', { method: 'PUT', body: JSON.stringify(S.SETTINGS) });
-  buildScope(); renderSettings();
+  buildScope();
+  renderSettings();
 }
 /**
  * @group Lens, theme & filters
@@ -834,10 +1043,13 @@ export function buildChips() {
   // cases and the coverage reports among them, for the tip's split
   const scopeKey = JSON.stringify(S.scope);
   if (CHIPS.graph !== S.GRAPH || CHIPS.scope !== scopeKey) {
-    const counts = {}, tests = {}, reports = {};
+    const counts = {},
+      tests = {},
+      reports = {};
     for (const n of S.GRAPH.nodes) {
       if (!inScope(n)) continue;
-      const isTest = n.kind === 'test', isReport = isTest && n.test && n.test.runLevel;
+      const isTest = n.kind === 'test',
+        isReport = isTest && n.test && n.test.runLevel;
       for (const tag of n.tags || []) {
         counts[tag] = (counts[tag] || 0) + 1;
         if (isTest) tests[tag] = (tests[tag] || 0) + 1;
@@ -850,7 +1062,10 @@ export function buildChips() {
   // a tag is the code's own label; the business lens keeps only the ones that are
   // words (`deprecated`), never `runner:vitest` or `test:unit`
   const biz = currentLens() === 'business';
-  const top = Object.entries(counts).filter(([tag]) => !biz || /^[a-z]+$/i.test(tag)).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const top = Object.entries(counts)
+    .filter(([tag]) => !biz || /^[a-z]+$/i.test(tag))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
   // a tag on tests counts the coverage reports beside the cases (each is a test node); the Tests page
   // counts cases only, so the tip splits the two and the numbers can be reconciled (docs/COUNTS.md, Chrome)
   const split = (tag, c) => {
@@ -858,11 +1073,29 @@ export function buildChips() {
     const reports = CHIPS.reports[tag] || 0;
     // only a split that adds up to the chip's number: a tag also carried by parts that are not tests is not split
     if (!reports || tests !== c) return null;
-    return [[t('count.unit.cases').replace('{n}', '').trim(), tests - reports], [t('count.unit.runReports').replace('{n}', '').trim(), reports]];
+    return [
+      [t('count.unit.cases').replace('{n}', '').trim(), tests - reports],
+      [t('count.unit.runReports').replace('{n}', '').trim(), reports],
+    ];
   };
-  document.getElementById('chips').innerHTML = top.map(([tag, c]) =>
-    '<button class="chip' + (S.activeTag === tag ? ' on' : '') + '" data-tag="' + esc(tag) + '" onclick="toggleTag(' + jsArg(tag) + ')">' + esc(biz ? humanize(tag) : tag)
-    + ' · <span class="cnt"' + plainTip(c, 'surf.tagCount', 'count.scope.workspace', '/graph', split(tag, c), null, { tag }) + '>' + c + '</span></button>').join('');
+  document.getElementById('chips').innerHTML = top
+    .map(
+      ([tag, c]) =>
+        '<button class="chip' +
+        (S.activeTag === tag ? ' on' : '') +
+        '" data-tag="' +
+        esc(tag) +
+        '" onclick="toggleTag(' +
+        jsArg(tag) +
+        ')">' +
+        esc(biz ? humanize(tag) : tag) +
+        ' · <span class="cnt"' +
+        plainTip(c, 'surf.tagCount', 'count.scope.workspace', '/graph', split(tag, c), null, { tag }) +
+        '>' +
+        c +
+        '</span></button>',
+    )
+    .join('');
 }
 const CHIPS = { graph: null, scope: '', counts: {}, tests: {}, reports: {} };
 /**
@@ -887,7 +1120,9 @@ export function toggleTag(tag) {
  * @group Search & navigation
  */
 export function searchNodes(q) {
-  const raw = String(q || '').trim().toLowerCase();
+  const raw = String(q || '')
+    .trim()
+    .toLowerCase();
   const terms = raw.split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
   // the palette asks again on every arrow key: the same query on the same graph, scope and lens is the same answer
@@ -897,42 +1132,69 @@ export function searchNodes(q) {
   searchIndexOf();
   // one Set per scope, so a query that only grew its last word re-ranks the last answer's matches
   const scopeKey = JSON.stringify(S.scope);
-  if (SEARCH.scopeKey !== scopeKey) { SEARCH.scopeKey = scopeKey; SEARCH.repos = scopedRepos(); }
+  if (SEARCH.scopeKey !== scopeKey) {
+    SEARCH.scopeKey = scopeKey;
+    SEARCH.repos = scopedRepos();
+  }
   const nodeHits = searchIndex(SEARCH.index, raw, SEARCH.repos).hits;
   // the projects, folded once per graph, scope and lens (their words follow the lens)
   const projKey = JSON.stringify(S.scope) + '|' + currentLens();
   if (SEARCH.projGraph !== S.GRAPH || SEARCH.projKey !== projKey) {
-    SEARCH.projects = projectTravelItems().map((p) => ({ p, name: p.name.toLowerCase(), words: p.words.toLowerCase(),
-      tags: [...(p.tags || []), ...p.tagWords].map((x) => String(x).toLowerCase()) }));
+    SEARCH.projects = projectTravelItems().map((p) => ({
+      p,
+      name: p.name.toLowerCase(),
+      words: p.words.toLowerCase(),
+      tags: [...(p.tags || []), ...p.tagWords].map((x) => String(x).toLowerCase()),
+    }));
     Object.assign(SEARCH, { projGraph: S.GRAPH, projKey });
   }
-  const projectHits = SEARCH.projects.map(({ p, name, words, tags }) => {
-    // a workspace project (surfaces/codemap-projects.js) is matched on its name, its words and its tags;
-    // on a tie an application outranks a library, which outranks a test project
-    let score = 0;
-    if (name === raw || words === raw) score += 100;
-    for (const term of terms) {
-      if (name === term || words === term) score += 10;
-      else if (name.includes(term) || words.includes(term)) score += 5;
-      else if (tags.some((x) => x.includes(term))) score += 4;
-    }
-    if (score > 0) score += p.type === 'application' ? 2 : p.type === 'library' ? 1 : 0;
-    return { n: p, score };
-  }).filter((r) => r.score > 0);
+  const projectHits = SEARCH.projects
+    .map(({ p, name, words, tags }) => {
+      // a workspace project (surfaces/codemap-projects.js) is matched on its name, its words and its tags;
+      // on a tie an application outranks a library, which outranks a test project
+      let score = 0;
+      if (name === raw || words === raw) score += 100;
+      for (const term of terms) {
+        if (name === term || words === term) score += 10;
+        else if (name.includes(term) || words.includes(term)) score += 5;
+        else if (tags.some((x) => x.includes(term))) score += 4;
+      }
+      if (score > 0) score += p.type === 'application' ? 2 : p.type === 'library' ? 1 : 0;
+      return { n: p, score };
+    })
+    .filter((r) => r.score > 0);
   // the storylines the graph declares (a chain of journeys, not a node), folded once per graph and scope
   const storyKey = scopeKey;
   if (SEARCH.storyGraph !== S.GRAPH || SEARCH.storyKey !== storyKey) {
     SEARCH.stories = storylineTravelItems(S.GRAPH.meta && S.GRAPH.meta.journeys, SEARCH.repos);
     Object.assign(SEARCH, { storyGraph: S.GRAPH, storyKey });
   }
-  const storyHits = SEARCH.stories.map((p) => ({ n: p, score: scoreStoryline(p, raw, terms) })).filter((r) => r.score > 0);
+  const storyHits = SEARCH.stories
+    .map((p) => ({ n: p, score: scoreStoryline(p, raw, terms) }))
+    .filter((r) => r.score > 0);
   // storylines, then nodes, then projects, each in its own order: a stable sort keeps that order on a tie
-  const results = storyHits.concat(nodeHits, projectHits).sort((a, b) => b.score - a.score).slice(0, 12).map((r) => r.n);
+  const results = storyHits
+    .concat(nodeHits, projectHits)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12)
+    .map((r) => r.n);
   SEARCH.answer = { graph: S.GRAPH, key, results };
   return results;
 }
 /** Fast travel's folded index (one per graph) and its last answer. */
-const SEARCH = { graph: null, index: null, scopeKey: null, repos: null, answer: null, projGraph: null, projKey: '', projects: [], storyGraph: null, storyKey: '', stories: [] };
+const SEARCH = {
+  graph: null,
+  index: null,
+  scopeKey: null,
+  repos: null,
+  answer: null,
+  projGraph: null,
+  projKey: '',
+  projects: [],
+  storyGraph: null,
+  storyKey: '',
+  stories: [],
+};
 /** The index of the graph in hand, started when the graph changed (lib/search-model.js). */
 function searchIndexOf() {
   if (SEARCH.graph !== S.GRAPH || !SEARCH.index) {
@@ -999,11 +1261,22 @@ export function arriveAt(id) {
 export function focusOn(id, depth) {
   depth = depth || 2;
   const adj = {};
-  S.GRAPH.edges.forEach((e) => { (adj[e.from] = adj[e.from] || []).push(e.to); (adj[e.to] = adj[e.to] || []).push(e.from); });
-  const set = new Set([id]); let frontier = [id];
+  S.GRAPH.edges.forEach((e) => {
+    (adj[e.from] = adj[e.from] || []).push(e.to);
+    (adj[e.to] = adj[e.to] || []).push(e.from);
+  });
+  const set = new Set([id]);
+  let frontier = [id];
   for (let d = 0; d < depth && frontier.length; d++) {
     const next = [];
-    frontier.forEach((x) => (adj[x] || []).forEach((y) => { if (!set.has(y)) { set.add(y); next.push(y); } }));
+    frontier.forEach((x) =>
+      (adj[x] || []).forEach((y) => {
+        if (!set.has(y)) {
+          set.add(y);
+          next.push(y);
+        }
+      }),
+    );
     frontier = next;
   }
   S.focusSet = set;
@@ -1013,7 +1286,7 @@ export function focusOn(id, depth) {
   document.getElementById('focuschip').style.display = '';
   // the business register names a thing by what it does, never by its identifier
   const name = n ? (currentLens() === 'business' ? bizLabel(n) : n.name) : '';
-  document.getElementById('searchlabel').textContent = n ? (t('chrome.focusPrefix') + ' ' + name) : t('chrome.search');
+  document.getElementById('searchlabel').textContent = n ? t('chrome.focusPrefix') + ' ' + name : t('chrome.search');
   select(id);
 }
 /**
@@ -1023,7 +1296,8 @@ export function clearFocus() {
   S.focusSet = null;
   document.getElementById('focuschip').style.display = 'none';
   document.getElementById('searchlabel').textContent = t('chrome.search');
-  render(); if (S.selected) select(S.selected);
+  render();
+  if (S.selected) select(S.selected);
 }
 /**
  * @group Search & navigation
@@ -1031,7 +1305,10 @@ export function clearFocus() {
 export function openPalette() {
   document.getElementById('veil').classList.add('open');
   document.getElementById('palette').classList.add('open');
-  const inp = document.getElementById('pinput'); inp.value = ''; renderPalette([]); inp.focus();
+  const inp = document.getElementById('pinput');
+  inp.value = '';
+  renderPalette([]);
+  inp.focus();
 }
 /**
  * @group Search & navigation
@@ -1057,31 +1334,97 @@ export function renderPalette(results) {
   // id, and nothing re-resolves a pick by the name it shows (a dozen `Post`s)
   S.palResults = results;
   const owners = ownerLines(results, names);
-  document.getElementById('presults').innerHTML = results.map((n, i) => {
-    // a storyline row names its kind and where it lands: the Map drawing only it, or its card on the Journeys page
-    if (n.kind === 'storyline') {
-      const dest = t(n.hash.startsWith('#/map') ? 'nav.map' : 'nav.journeys');
-      return '<div class="presult presult-story' + (i === S.palIndex ? ' hot' : '') + '" data-id="' + esc(n.id) + '" onclick="pick(this.dataset.id)">'
-        + (biz ? '<span class="pk pdest">' + esc(dest) + '</span><span class="pname">' + esc(n.name) + '</span><span class="meta"></span></div>'
-          : '<span class="pk k-storyline">' + esc(t('search.kind.storyline')) + '</span><span class="pname">' + esc(n.name)
-            + '<span class="pid">' + esc(n.storyline) + '</span></span><span class="meta">' + esc(n.repo) + '</span><span class="pdest pto">' + esc(dest) + '</span></div>');
-    }
-    // a project row names its kind and where it lands in words: the code map, grouped by project
-    if (n.kind === 'project') {
-      return '<div class="presult presult-project' + (i === S.palIndex ? ' hot' : '') + '" data-id="' + esc(n.id) + '" onclick="pick(this.dataset.id)">'
-        + (biz ? '<span class="pk pdest">' + esc(t('codemap.pick.dest')) + '</span><span class="pname">' + esc(n.words) + '</span><span class="meta"></span></div>'
-          : '<span class="pk k-project">' + esc(t('codemap.pick.kind')) + '</span><span class="pname">' + esc(n.name)
-            + (n.sub ? '<span class="powner">' + esc(n.sub) + '</span>' : '') + '</span><span class="meta"></span><span class="pdest pto">' + esc(t('codemap.pick.dest')) + '</span></div>');
-    }
-    const to = t('nav.' + travelTarget(n).surface);
-    return '<div class="presult' + (i === S.palIndex ? ' hot' : '') + '" data-id="' + esc(n.id) + '" onclick="pick(this.dataset.id)">'
-      + (biz ? '<span class="pk pdest">' + esc(to) + '</span><span class="pname">' + esc(names[i]) + (dup(i) ? '<span class="parea">' + esc(areaOf(n)) + '</span>' : '') + '</span><span class="meta"></span></div>'
-        : '<span class="pk k-' + esc(n.kind) + '">' + esc(n.kind) + '</span><span class="pname">' + esc(names[i])
-          + (String(n.name).toLowerCase() !== names[i].toLowerCase() ? '<span class="pid">' + esc(n.name) + '</span>' : '')
-          + (owners[i] ? '<span class="powner">' + esc(owners[i]) + '</span>' : '') + '</span>'
-          + '<span class="meta">' + (n.loc ? esc(n.loc.path) : '') + '</span><span class="pdest pto">' + esc(to) + '</span></div>');
-  }).join('')
-    || '<div class="presult" style="color:var(--dim)">' + esc(t('palette.hint').replace('{n}', String(S.GRAPH.nodes.length))) + '</div>';
+  document.getElementById('presults').innerHTML =
+    results
+      .map((n, i) => {
+        // a storyline row names its kind and where it lands: the Map drawing only it, or its card on the Journeys page
+        if (n.kind === 'storyline') {
+          const dest = t(n.hash.startsWith('#/map') ? 'nav.map' : 'nav.journeys');
+          return (
+            '<div class="presult presult-story' +
+            (i === S.palIndex ? ' hot' : '') +
+            '" data-id="' +
+            esc(n.id) +
+            '" onclick="pick(this.dataset.id)">' +
+            (biz
+              ? '<span class="pk pdest">' +
+                esc(dest) +
+                '</span><span class="pname">' +
+                esc(n.name) +
+                '</span><span class="meta"></span></div>'
+              : '<span class="pk k-storyline">' +
+                esc(t('search.kind.storyline')) +
+                '</span><span class="pname">' +
+                esc(n.name) +
+                '<span class="pid">' +
+                esc(n.storyline) +
+                '</span></span><span class="meta">' +
+                esc(n.repo) +
+                '</span><span class="pdest pto">' +
+                esc(dest) +
+                '</span></div>')
+          );
+        }
+        // a project row names its kind and where it lands in words: the code map, grouped by project
+        if (n.kind === 'project') {
+          return (
+            '<div class="presult presult-project' +
+            (i === S.palIndex ? ' hot' : '') +
+            '" data-id="' +
+            esc(n.id) +
+            '" onclick="pick(this.dataset.id)">' +
+            (biz
+              ? '<span class="pk pdest">' +
+                esc(t('codemap.pick.dest')) +
+                '</span><span class="pname">' +
+                esc(n.words) +
+                '</span><span class="meta"></span></div>'
+              : '<span class="pk k-project">' +
+                esc(t('codemap.pick.kind')) +
+                '</span><span class="pname">' +
+                esc(n.name) +
+                (n.sub ? '<span class="powner">' + esc(n.sub) + '</span>' : '') +
+                '</span><span class="meta"></span><span class="pdest pto">' +
+                esc(t('codemap.pick.dest')) +
+                '</span></div>')
+          );
+        }
+        const to = t('nav.' + travelTarget(n).surface);
+        return (
+          '<div class="presult' +
+          (i === S.palIndex ? ' hot' : '') +
+          '" data-id="' +
+          esc(n.id) +
+          '" onclick="pick(this.dataset.id)">' +
+          (biz
+            ? '<span class="pk pdest">' +
+              esc(to) +
+              '</span><span class="pname">' +
+              esc(names[i]) +
+              (dup(i) ? '<span class="parea">' + esc(areaOf(n)) + '</span>' : '') +
+              '</span><span class="meta"></span></div>'
+            : '<span class="pk k-' +
+              esc(n.kind) +
+              '">' +
+              esc(n.kind) +
+              '</span><span class="pname">' +
+              esc(names[i]) +
+              (String(n.name).toLowerCase() !== names[i].toLowerCase()
+                ? '<span class="pid">' + esc(n.name) + '</span>'
+                : '') +
+              (owners[i] ? '<span class="powner">' + esc(owners[i]) + '</span>' : '') +
+              '</span>' +
+              '<span class="meta">' +
+              (n.loc ? esc(n.loc.path) : '') +
+              '</span><span class="pdest pto">' +
+              esc(to) +
+              '</span></div>')
+        );
+      })
+      .join('') ||
+    '<div class="presult" style="color:var(--dim)">' +
+      esc(t('palette.hint').replace('{n}', String(S.GRAPH.nodes.length))) +
+      '</div>';
 }
 /**
  * The part of the product a result sits in, in words: the folder its file is
@@ -1089,7 +1432,9 @@ export function renderPalette(results) {
  * @group Search & navigation
  */
 function areaOf(n) {
-  const dirs = String((n.loc && n.loc.path) || '').split('/').slice(0, -1)
+  const dirs = String((n.loc && n.loc.path) || '')
+    .split('/')
+    .slice(0, -1)
     .filter((d) => d && !/^(src|lib|libs|app|apps|api|v\d+|components?|server|client)$/i.test(d) && !/^[[({:]/.test(d));
   return dirs.length ? humanize(dirs[dirs.length - 1]) : humanize(n.kind || '');
 }
@@ -1105,11 +1450,21 @@ export function ownerLines(results, names) {
   // same words on screen, or the same identifier behind different words: either is a name to tell apart
   const groups = new Map();
   const add = (k, i) => groups.set(k, (groups.get(k) || []).concat(i));
-  results.forEach((n, i) => { add('w:' + String(names[i]).toLowerCase(), i); add('n:' + String(n.name).toLowerCase(), i); });
+  results.forEach((n, i) => {
+    add('w:' + String(names[i]).toLowerCase(), i);
+    add('n:' + String(n.name).toLowerCase(), i);
+  });
   for (const idx of groups.values()) {
     if (idx.length < 2) continue;
-    const segs = idx.map((i) => String((results[i].loc && results[i].loc.path) || results[i].id.split('::').slice(1, -1).join('/')).split('/').filter(Boolean));
-    const cls = idx.map((i) => { const tail = String(results[i].id).split('::').pop(); return tail.includes('.') ? tail.slice(0, tail.lastIndexOf('.')) : ''; });
+    const segs = idx.map((i) =>
+      String((results[i].loc && results[i].loc.path) || results[i].id.split('::').slice(1, -1).join('/'))
+        .split('/')
+        .filter(Boolean),
+    );
+    const cls = idx.map((i) => {
+      const tail = String(results[i].id).split('::').pop();
+      return tail.includes('.') ? tail.slice(0, tail.lastIndexOf('.')) : '';
+    });
     const longest = Math.max(1, ...segs.map((p) => p.length));
     let k = 1;
     while (k < longest && new Set(segs.map((p) => p.slice(-k).join('/'))).size < idx.length) k++;
@@ -1188,7 +1543,8 @@ export function travelTarget(n) {
     const guarded = S.BYID[cardOf(n.id)];
     if (guarded && guarded.id !== n.id) {
       const via = travelTarget(guarded);
-      if (via.surface === 'codemap') return { surface: 'codemap', hash: '#/codemap?node=' + encodeURIComponent(n.id), id: n.id };
+      if (via.surface === 'codemap')
+        return { surface: 'codemap', hash: '#/codemap?node=' + encodeURIComponent(n.id), id: n.id };
       return via;
     }
   }
@@ -1198,10 +1554,12 @@ export function travelTarget(n) {
   if (n.kind === 'api') return { surface: 'apis', hash: '#/apis/' + id, id: n.id };
   if (n.kind === 'test') return { surface: 'tests', hash: '#/tests/' + id, id: n.id };
   // a work item is its pane on the WORK surface, in every register
-  if (n.kind === 'work' || String(n.id).startsWith('work::')) return { surface: 'work', hash: '#/work/' + id, id: n.id };
+  if (n.kind === 'work' || String(n.id).startsWith('work::'))
+    return { surface: 'work', hash: '#/work/' + id, id: n.id };
   // a route or a page, in the business register, as the journey it is part of (or the walk from it): the Map arrives
   // on the screen that shows it, else walks from it (surfaces/map.js resolves an address that names no journey)
-  if ((n.kind === 'route' || n.kind === 'page') && currentLens() === 'business') return { surface: 'map', hash: '#/map/' + id, id: n.id };
+  if ((n.kind === 'route' || n.kind === 'page') && currentLens() === 'business')
+    return { surface: 'map', hash: '#/map/' + id, id: n.id };
   return { surface: 'codemap', hash: '#/codemap?node=' + id, id: n.id };
 }
 /**
@@ -1211,21 +1569,35 @@ export function travelTarget(n) {
  */
 export function paletteNav(e) {
   const results = searchNodes(document.getElementById('pinput').value);
-  if (e.key === 'ArrowDown') { e.preventDefault(); S.palIndex = Math.min(S.palIndex + 1, results.length - 1); renderPalette(results); }
-  if (e.key === 'ArrowUp') { e.preventDefault(); S.palIndex = Math.max(S.palIndex - 1, 0); renderPalette(results); }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    S.palIndex = Math.min(S.palIndex + 1, results.length - 1);
+    renderPalette(results);
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    S.palIndex = Math.max(S.palIndex - 1, 0);
+    renderPalette(results);
+  }
   // Enter takes the row on screen — the list the reader saw, not a second search
   const shown = S.palResults && S.palResults.length ? S.palResults : results;
-  if (e.key === 'Enter' && shown[S.palIndex]) { pick(shown[S.palIndex].id); }
+  if (e.key === 'Enter' && shown[S.palIndex]) {
+    pick(shown[S.palIndex].id);
+  }
 }
 
 // ── the read-only session ───────────────────────────────────────
 // readOnlyWhy() and applyReadOnly() live in lib/read-only.js, shared by every surface that draws a write control
 /** True (and the click is spent) when a write control is pressed in a read-only session. */
-function refusedReadOnly() { return !!readOnlyWhy(); }
+function refusedReadOnly() {
+  return !!readOnlyWhy();
+}
 
 // ── settings page ───────────────────────────────────────────────
 /** @group Settings page */
-export function settingsOpen() { return currentSurface === 'settings'; }
+export function settingsOpen() {
+  return currentSurface === 'settings';
+}
 /**
  * Settings is the address `#/settings`: opening it goes there, remembering where the reader came from.
  * @group Settings page
@@ -1262,8 +1634,18 @@ function unmountSettings() {
  */
 function mountNowhere(route, el) {
   const asked = '#/' + String((route && route.raw ? route.raw.replace(/^#\//, '') : route && route.asked) || '');
-  el.innerHTML = '<div class="set-wrap"><p class="nowhere" role="status"' + tipAttrs({ key: 'shell.nowhere', noFocus: true }) + '>' + sym('absent')
-    + ' <span>' + esc(t('shell.nowhere')) + '</span> <code>' + esc(asked) + '</code> · <a class="nowhere-door" href="#/journeys">' + esc(t('shell.nowhereDoor')) + ' ›</a></p></div>';
+  el.innerHTML =
+    '<div class="set-wrap"><p class="nowhere" role="status"' +
+    tipAttrs({ key: 'shell.nowhere', noFocus: true }) +
+    '>' +
+    sym('absent') +
+    ' <span>' +
+    esc(t('shell.nowhere')) +
+    '</span> <code>' +
+    esc(asked) +
+    '</code> · <a class="nowhere-door" href="#/journeys">' +
+    esc(t('shell.nowhereDoor')) +
+    ' ›</a></p></div>';
 }
 /**
  * @group Settings page
@@ -1271,20 +1653,63 @@ function mountNowhere(route, el) {
  */
 export function renderSettings() {
   if (!S.SETTINGS) return;
-  document.getElementById('srcrows').innerHTML = (S.SETTINGS.sources || []).map((s, i) =>
-    '<tr><td><input type="checkbox" data-write ' + (s.enabled ? 'checked' : '') + ' onchange="S.SETTINGS.sources[' + i + '].enabled=this.checked" aria-label="enabled"/></td>'
-    + '<td>' + esc(s.name) + '</td><td>' + s.type + '</td><td class="mono">' + esc(s.path) + '</td>'
-    + '<td><input class="mono" data-write style="width:100%;min-width:120px" value="' + esc((s.exclude || []).join(', ')) + '" placeholder="—" aria-label="exclude globs" onchange="S.SETTINGS.sources[' + i + '].exclude=this.value.split(\',\').map(x=>x.trim()).filter(Boolean)"/></td>'
-    + '<td class="st ' + ((s.status || '').startsWith('ok') ? 'ok' : (s.status || '').startsWith('error') ? 'err' : '') + '">' + esc(s.status || '—') + '</td>'
-    + '<td><button class="x" data-write onclick="if(!readOnlyWhy()){S.SETTINGS.sources.splice(' + i + ',1);renderSettings()}" aria-label="remove">✕</button></td></tr>').join('')
-    || '<tr><td colspan="7" style="color:var(--dim)">' + esc(t('set.noSources')) + '</td></tr>';
-  document.getElementById('collrows').innerHTML = (S.SETTINGS.collections || []).map((c, i) =>
-    '<div class="coll"><b>' + esc(c.name) + '</b><span class="mono">' + c.sourceIds.map((id) => { const s = S.SETTINGS.sources.find((s) => s.id === id); return s ? s.name : id; }).join(' · ') + '</span>'
-    + '<button class="x" data-write style="margin-left:auto" onclick="if(!readOnlyWhy()){S.SETTINGS.collections.splice(' + i + ',1);renderSettings()}" aria-label="remove">✕</button></div>').join('')
-    || '<div class="set-note">' + esc(t('set.noCollections')) + '</div>';
+  document.getElementById('srcrows').innerHTML =
+    (S.SETTINGS.sources || [])
+      .map(
+        (s, i) =>
+          '<tr><td><input type="checkbox" data-write ' +
+          (s.enabled ? 'checked' : '') +
+          ' onchange="S.SETTINGS.sources[' +
+          i +
+          '].enabled=this.checked" aria-label="enabled"/></td>' +
+          '<td>' +
+          esc(s.name) +
+          '</td><td>' +
+          s.type +
+          '</td><td class="mono">' +
+          esc(s.path) +
+          '</td>' +
+          '<td><input class="mono" data-write style="width:100%;min-width:120px" value="' +
+          esc((s.exclude || []).join(', ')) +
+          '" placeholder="—" aria-label="exclude globs" onchange="S.SETTINGS.sources[' +
+          i +
+          "].exclude=this.value.split(',').map(x=>x.trim()).filter(Boolean)\"/></td>" +
+          '<td class="st ' +
+          ((s.status || '').startsWith('ok') ? 'ok' : (s.status || '').startsWith('error') ? 'err' : '') +
+          '">' +
+          esc(s.status || '—') +
+          '</td>' +
+          '<td><button class="x" data-write onclick="if(!readOnlyWhy()){S.SETTINGS.sources.splice(' +
+          i +
+          ',1);renderSettings()}" aria-label="remove">✕</button></td></tr>',
+      )
+      .join('') || '<tr><td colspan="7" style="color:var(--dim)">' + esc(t('set.noSources')) + '</td></tr>';
+  document.getElementById('collrows').innerHTML =
+    (S.SETTINGS.collections || [])
+      .map(
+        (c, i) =>
+          '<div class="coll"><b>' +
+          esc(c.name) +
+          '</b><span class="mono">' +
+          c.sourceIds
+            .map((id) => {
+              const s = S.SETTINGS.sources.find((s) => s.id === id);
+              return s ? s.name : id;
+            })
+            .join(' · ') +
+          '</span>' +
+          '<button class="x" data-write style="margin-left:auto" onclick="if(!readOnlyWhy()){S.SETTINGS.collections.splice(' +
+          i +
+          ',1);renderSettings()}" aria-label="remove">✕</button></div>',
+      )
+      .join('') || '<div class="set-note">' + esc(t('set.noCollections')) + '</div>';
   document.getElementById('set-theme').value = S.themePreview || S.SETTINGS.theme || 'system';
   const tn = document.getElementById('set-theme-note');
-  if (tn) tn.textContent = S.themePreview && S.themePreview !== (S.SETTINGS.theme || 'system') ? t(readOnlyWhy() ? 'sys.readonly.themeHint' : 'surf.theme.preview') : '';
+  if (tn)
+    tn.textContent =
+      S.themePreview && S.themePreview !== (S.SETTINGS.theme || 'system')
+        ? t(readOnlyWhy() ? 'sys.readonly.themeHint' : 'surf.theme.preview')
+        : '';
   document.getElementById('set-lens').value = S.SETTINGS.defaultLens || 'hybrid';
   const surf = document.getElementById('set-surface');
   if (surf) {
@@ -1292,20 +1717,30 @@ export function renderSettings() {
     // with nothing chosen, say where the register actually lands rather than
     // showing a value the reader never picked
     const eff = document.getElementById('set-surface-eff');
-    if (eff) eff.textContent = S.SETTINGS.defaultSurface ? '' : t('set.surfaceByRegister').replace('{s}', t('nav.' + defaultSurface()));
+    if (eff)
+      eff.textContent = S.SETTINGS.defaultSurface
+        ? ''
+        : t('set.surfaceByRegister').replace('{s}', t('nav.' + defaultSurface()));
   }
   // experiments: workspace flags, off unless the settings file says so
   // (the Map and the action drill were experiments until the journey page retired into the Map: neither is a flag now)
-  const fl = document.getElementById('set-flags-label'); if (fl) fl.textContent = t('set.flags');
+  const fl = document.getElementById('set-flags-label');
+  if (fl) fl.textContent = t('set.flags');
   const fh = document.getElementById('set-flag-shots');
   if (fh) fh.checked = !!(S.SETTINGS.flags && S.SETTINGS.flags.designShots);
-  const fhn = document.getElementById('set-flag-shots-name'); if (fhn) fhn.textContent = t('set.flagShots');
-  const fhs = document.getElementById('set-flag-shots-sub'); if (fhs) fhs.textContent = t('set.flagShotsSub');
+  const fhn = document.getElementById('set-flag-shots-name');
+  if (fhn) fhn.textContent = t('set.flagShots');
+  const fhs = document.getElementById('set-flag-shots-sub');
+  if (fhs) fhs.textContent = t('set.flagShotsSub');
   // consequence subtext on every action button (looking vs doing, F12)
-  const sc = document.getElementById('sync-consequence'); if (sc) sc.textContent = t('set.syncConsequence');
-  const vc = document.getElementById('save-consequence'); if (vc) vc.textContent = t('set.saveConsequence');
-  const ls = document.getElementById('set-landing-sub'); if (ls) ls.textContent = t('set.landingSub');
-  const ll = document.getElementById('set-landing-label'); if (ll) ll.textContent = t('set.landing');
+  const sc = document.getElementById('sync-consequence');
+  if (sc) sc.textContent = t('set.syncConsequence');
+  const vc = document.getElementById('save-consequence');
+  if (vc) vc.textContent = t('set.saveConsequence');
+  const ls = document.getElementById('set-landing-sub');
+  if (ls) ls.textContent = t('set.landingSub');
+  const ll = document.getElementById('set-landing-label');
+  if (ll) ll.textContent = t('set.landing');
   // the config files each source holds, read only (GET /api/config)
   renderConfigFiles();
   // the owner's lessons for agents (round 2026-10-10, proposal 9)
@@ -1320,10 +1755,23 @@ export function addSource() {
   const name = document.getElementById('src-name').value.trim();
   const type = document.getElementById('src-type').value;
   const path = document.getElementById('src-path').value.trim();
-  const exclude = document.getElementById('src-exclude').value.split(',').map((x) => x.trim()).filter(Boolean);
+  const exclude = document
+    .getElementById('src-exclude')
+    .value.split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
   if (!name || !path) return;
-  S.SETTINGS.sources.push({ id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, type, path, exclude, enabled: true });
-  document.getElementById('src-name').value = ''; document.getElementById('src-path').value = ''; document.getElementById('src-exclude').value = '';
+  S.SETTINGS.sources.push({
+    id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    name,
+    type,
+    path,
+    exclude,
+    enabled: true,
+  });
+  document.getElementById('src-name').value = '';
+  document.getElementById('src-path').value = '';
+  document.getElementById('src-exclude').value = '';
   renderSettings();
 }
 /**
@@ -1345,9 +1793,14 @@ export async function saveSettings() {
   S.SETTINGS.theme = document.getElementById('set-theme').value;
   S.SETTINGS.defaultLens = document.getElementById('set-lens').value;
   const surf = document.getElementById('set-surface');
-  if (surf) { if (surf.value) S.SETTINGS.defaultSurface = surf.value; else delete S.SETTINGS.defaultSurface; }
+  if (surf) {
+    if (surf.value) S.SETTINGS.defaultSurface = surf.value;
+    else delete S.SETTINGS.defaultSurface;
+  }
   const fh = document.getElementById('set-flag-shots');
-  if (fh) { S.SETTINGS.flags = Object.assign({}, S.SETTINGS.flags, { designShots: fh.checked }); }
+  if (fh) {
+    S.SETTINGS.flags = Object.assign({}, S.SETTINGS.flags, { designShots: fh.checked });
+  }
   applyTheme(S.SETTINGS.theme);
   S.themePreview = null;
   const tn = document.getElementById('set-theme-note');
@@ -1362,24 +1815,34 @@ export async function saveSettings() {
 /** @group Settings page */
 export async function syncNow() {
   if (refusedReadOnly()) return;
-  const btn = document.getElementById('syncbtn'), note = document.getElementById('syncnote');
-  btn.disabled = true; note.textContent = t('set.syncing');
+  const btn = document.getElementById('syncbtn'),
+    note = document.getElementById('syncnote');
+  btn.disabled = true;
+  note.textContent = t('set.syncing');
   await saveSettings();
   try {
     const r = await fetch('/api/sync', { method: 'POST' });
     const out = await r.json();
-    if (out.error) { note.textContent = t('set.syncFailedPrefix') + ' ' + out.error; }
-    else {
+    if (out.error) {
+      note.textContent = t('set.syncFailedPrefix') + ' ' + out.error;
+    } else {
       S.SETTINGS = await fetch('/api/settings').then((r) => r.json());
-      S.GRAPH = await fetch('/graph').then((r) => r.json()); S.ROOTS = S.GRAPH.roots || {};
-      indexGuards(); buildScope(); buildChips(); renderSettings(); renderChrome();
+      S.GRAPH = await fetch('/graph').then((r) => r.json());
+      S.ROOTS = S.GRAPH.roots || {};
+      indexGuards();
+      buildScope();
+      buildChips();
+      renderSettings();
+      renderChrome();
       // a sync replaces the graph under whatever is on screen: the same contract
       // the filters run on, with the reason that says every fact is new
       refreshSurface('sync');
       warmSearch();
       note.textContent = t('set.syncedStats').replace('{n}', out.stats.nodes).replace('{e}', out.stats.edges);
     }
-  } catch (err) { note.textContent = t('set.syncFailedPrefix') + ' ' + err.message; }
+  } catch (err) {
+    note.textContent = t('set.syncFailedPrefix') + ' ' + err.message;
+  }
   btn.disabled = false;
 }
 
@@ -1388,7 +1851,9 @@ export async function syncNow() {
 // /api/modelhub/state. Everything from that endpoint is untrusted display
 // data (user-writable event stream) — every dynamic value goes through esc().
 /** @group Model Hub */
-export function modelHubOpen() { return document.getElementById('modelhub').classList.contains('open'); }
+export function modelHubOpen() {
+  return document.getElementById('modelhub').classList.contains('open');
+}
 /**
  * @group Model Hub
  * @business Opens the Model Hub — a live board of the machine's local AI models, tools, and agents.
@@ -1405,7 +1870,10 @@ export function openModelHub() {
  */
 export function closeModelHub() {
   document.getElementById('modelhub').classList.remove('open');
-  if (S.mhTimer) { clearInterval(S.mhTimer); S.mhTimer = null; }
+  if (S.mhTimer) {
+    clearInterval(S.mhTimer);
+    S.mhTimer = null;
+  }
 }
 /**
  * @group Model Hub
@@ -1424,10 +1892,17 @@ export async function pollModelHub() {
  * @group Model Hub
  */
 export function mhNode(id, kind, active, sub) {
-  return '<div class="mh-node mh-' + esc(kind) + (active ? ' live' : '') + '">'
-    + '<div class="mh-node-name">' + esc(id) + '</div>'
-    + (sub ? '<div class="mh-node-sub">' + esc(sub) + '</div>' : '')
-    + '</div>';
+  return (
+    '<div class="mh-node mh-' +
+    esc(kind) +
+    (active ? ' live' : '') +
+    '">' +
+    '<div class="mh-node-name">' +
+    esc(id) +
+    '</div>' +
+    (sub ? '<div class="mh-node-sub">' + esc(sub) + '</div>' : '') +
+    '</div>'
+  );
 }
 /**
  * @group Model Hub
@@ -1436,9 +1911,14 @@ export function mhNode(id, kind, active, sub) {
 export function renderModelHub(st) {
   const root = document.getElementById('mh-body');
   const fresh = document.getElementById('mh-fresh');
-  if (!st) { root.innerHTML = '<div class="mh-empty">' + esc(t('mh.unavailable')) + '</div>'; if (fresh) fresh.textContent = ''; return; }
+  if (!st) {
+    root.innerHTML = '<div class="mh-empty">' + esc(t('mh.unavailable')) + '</div>';
+    if (fresh) fresh.textContent = '';
+    return;
+  }
   const reg = st.registry || { categories: [], tools: [], chains: [] };
-  const toolAct = st.tools || {}, modelAct = st.models || {};
+  const toolAct = st.tools || {},
+    modelAct = st.models || {};
   const isModelActive = (id) => !!(modelAct[id] && modelAct[id].active);
   const isToolActive = (id) => !!(toolAct[id] && toolAct[id].active);
   let html = '';
@@ -1448,62 +1928,115 @@ export function renderModelHub(st) {
   const loaded = oll.loaded || [];
   html += '<div class="mh-sec"><div class="hud-label">Ollama runtime</div>';
   if (!(oll.installed || []).length) html += '<div class="mh-note">' + esc(t('mh.ollamaEmpty')) + '</div>';
-  else html += '<div class="mh-ollama">' + oll.installed.map((n) => {
-    const on = loaded.indexOf(n) >= 0;
-    return '<span class="mh-oll' + (on ? ' loaded' : '') + '">' + esc(n) + (on ? ' · loaded' : '') + '</span>';
-  }).join('') + '</div>';
+  else
+    html +=
+      '<div class="mh-ollama">' +
+      oll.installed
+        .map((n) => {
+          const on = loaded.indexOf(n) >= 0;
+          return '<span class="mh-oll' + (on ? ' loaded' : '') + '">' + esc(n) + (on ? ' · loaded' : '') + '</span>';
+        })
+        .join('') +
+      '</div>';
   html += '</div>';
 
   // capability categories → model nodes
   html += '<div class="mh-sec"><div class="hud-label">Capabilities</div>';
   if (!(reg.categories || []).length) html += '<div class="mh-note">' + esc(t('mh.noCategories')) + '</div>';
-  else html += '<div class="mh-cats">' + reg.categories.map((cat) =>
-    '<div class="mh-card"><div class="mh-card-h">' + esc(cat.name || cat.id) + '</div>'
-    + '<div class="mh-nodes">' + (cat.models || []).map((m) => mhNode(m.id, 'model', isModelActive(m.id), m.runtime || m.license || '')).join('') + '</div></div>'
-  ).join('') + '</div>';
+  else
+    html +=
+      '<div class="mh-cats">' +
+      reg.categories
+        .map(
+          (cat) =>
+            '<div class="mh-card"><div class="mh-card-h">' +
+            esc(cat.name || cat.id) +
+            '</div>' +
+            '<div class="mh-nodes">' +
+            (cat.models || [])
+              .map((m) => mhNode(m.id, 'model', isModelActive(m.id), m.runtime || m.license || ''))
+              .join('') +
+            '</div></div>',
+        )
+        .join('') +
+      '</div>';
   html += '</div>';
 
   // tools
   html += '<div class="mh-sec"><div class="hud-label">Tools</div><div class="mh-nodes">';
-  html += (reg.tools || []).map((tl) => mhNode(tl.id, 'tool', isToolActive(tl.id), (tl.uses || []).join(', '))).join('') || '<div class="mh-note">' + esc(t('mh.noTools')) + '</div>';
+  html +=
+    (reg.tools || []).map((tl) => mhNode(tl.id, 'tool', isToolActive(tl.id), (tl.uses || []).join(', '))).join('') ||
+    '<div class="mh-note">' + esc(t('mh.noTools')) + '</div>';
   html += '</div></div>';
 
   // chains: step → step, edge animates while any step is active
   html += '<div class="mh-sec"><div class="hud-label">Chains</div>';
   if (!(reg.chains || []).length) html += '<div class="mh-note">' + esc(t('mh.noChains')) + '</div>';
-  else html += reg.chains.map((ch) => {
-    const steps = ch.steps || [];
-    const live = steps.some(isToolActive);
-    const inner = steps.map((s) => '<span class="mh-step' + (isToolActive(s) ? ' live' : '') + '">' + esc(s) + '</span>')
-      .join('<span class="mh-arrow' + (live ? ' live' : '') + '">→</span>');
-    return '<div class="mh-chain' + (live ? ' live' : '') + '"><div class="mh-chain-steps">' + inner + '</div>'
-      + (ch.desc ? '<div class="mh-note">' + esc(ch.desc) + '</div>' : '') + '</div>';
-  }).join('');
+  else
+    html += reg.chains
+      .map((ch) => {
+        const steps = ch.steps || [];
+        const live = steps.some(isToolActive);
+        const inner = steps
+          .map((s) => '<span class="mh-step' + (isToolActive(s) ? ' live' : '') + '">' + esc(s) + '</span>')
+          .join('<span class="mh-arrow' + (live ? ' live' : '') + '">→</span>');
+        return (
+          '<div class="mh-chain' +
+          (live ? ' live' : '') +
+          '"><div class="mh-chain-steps">' +
+          inner +
+          '</div>' +
+          (ch.desc ? '<div class="mh-note">' + esc(ch.desc) + '</div>' : '') +
+          '</div>'
+        );
+      })
+      .join('');
   html += '</div>';
 
   // Claude agent lane
   html += '<div class="mh-sec"><div class="hud-label">Claude agents</div><div class="mh-lane">';
   const sess = st.sessions || [];
   if (!sess.length) html += '<div class="mh-note">' + esc(t('mh.noAgents')) + '</div>';
-  else html += sess.map((s) => {
-    const id = String(s.session || '');
-    const shortId = id.length > 14 ? id.slice(0, 8) + '…' + id.slice(-4) : id;
-    return '<div class="mh-agent' + (s.active ? ' live' : '') + '"><span class="mh-dot"></span>'
-      + '<span class="mh-agent-id">' + esc(shortId) + '</span>'
-      + '<span class="mh-agent-tool">' + esc(s.lastTool || '—') + '</span>'
-      + '<span class="mh-agent-st">' + (s.active ? 'active' : 'idle') + '</span></div>';
-  }).join('');
+  else
+    html += sess
+      .map((s) => {
+        const id = String(s.session || '');
+        const shortId = id.length > 14 ? id.slice(0, 8) + '…' + id.slice(-4) : id;
+        return (
+          '<div class="mh-agent' +
+          (s.active ? ' live' : '') +
+          '"><span class="mh-dot"></span>' +
+          '<span class="mh-agent-id">' +
+          esc(shortId) +
+          '</span>' +
+          '<span class="mh-agent-tool">' +
+          esc(s.lastTool || '—') +
+          '</span>' +
+          '<span class="mh-agent-st">' +
+          (s.active ? 'active' : 'idle') +
+          '</span></div>'
+        );
+      })
+      .join('');
   html += '</div></div>';
 
   root.innerHTML = html;
-  if (fresh) fresh.textContent = st.generatedAt ? ('updated ' + new Date(st.generatedAt).toLocaleTimeString()) : '';
+  if (fresh) fresh.textContent = st.generatedAt ? 'updated ' + new Date(st.generatedAt).toLocaleTimeString() : '';
 }
 
 // ── boot ────────────────────────────────────────────────────────
-document.addEventListener('click', () => { closeCtx(); closeScopeMenu(); closeShare(); closeMore(); });
+document.addEventListener('click', () => {
+  closeCtx();
+  closeScopeMenu();
+  closeShare();
+  closeMore();
+});
 document.addEventListener('scroll', () => closeCtx(), true);
 document.addEventListener('input', (e) => {
-  if (e.target.id === 'pinput') { S.palIndex = 0; renderPalette(searchNodes(e.target.value)); }
+  if (e.target.id === 'pinput') {
+    S.palIndex = 0;
+    renderPalette(searchNodes(e.target.value));
+  }
 });
 
 /**
@@ -1516,20 +2049,35 @@ async function boot() {
   await loadAll();
   initRegister();
   hydrateScope();
-  applyTheme(S.SETTINGS.theme); setLens(S.SETTINGS.defaultLens || 'hybrid', true);
+  applyTheme(S.SETTINGS.theme);
+  setLens(S.SETTINGS.defaultLens || 'hybrid', true);
   // with no theme saved, the window follows the reader's system as it changes
   if (window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
       if (S.themeFollowsSystem) applyTheme(S.themePreview || S.SETTINGS.theme);
     });
   }
-  indexGuards(); buildScope(); buildChips(); renderSettings();
+  indexGuards();
+  buildScope();
+  buildChips();
+  renderSettings();
   // the running build, fail-soft: an older server without /api/version just leaves the tooltip shorter
-  const versionRead = fetch('/api/version').then((r) => (r.ok ? r.json() : null)).then((v) => { if (v) { S.VERSION = v; renderChrome(); } }).catch(() => {});
+  const versionRead = fetch('/api/version')
+    .then((r) => (r.ok ? r.json() : null))
+    .then((v) => {
+      if (v) {
+        S.VERSION = v;
+        renderChrome();
+      }
+    })
+    .catch(() => {});
   // the word register is the third thing that changes what is on screen without
   // changing the route — it goes through the one contract, so the list of which
   // surfaces bother to redraw lives on each surface instead of here
-  onRegisterChange(() => { renderChrome(); refreshSurface('register'); });
+  onRegisterChange(() => {
+    renderChrome();
+    refreshSurface('register');
+  });
   window.addEventListener('hashchange', applyRoute);
   window.addEventListener('resize', fitTopbar);
   initTips();
@@ -1545,9 +2093,41 @@ async function boot() {
 boot();
 
 expose({
-  setLens, applyTheme, previewTheme, buildScope, toggleScopeMenu, closeScopeMenu, applyScope, setScopeAll, arriveAt, dropFocus,
-  toggleScopeSrc, toggleScopeColl, saveScopeGroup, buildChips, toggleTag,
-  searchNodes, focusOn, clearFocus, openPalette, closePalette, renderPalette, pick, travelTarget,
-  openSettings, closeSettings, renderSettings, readOnlyWhy, addSource, addCollection, saveSettings, syncNow,
-  openModelHub, closeModelHub, pollModelHub, toggleMore, closeMore, moreMenuClick,
+  setLens,
+  applyTheme,
+  previewTheme,
+  buildScope,
+  toggleScopeMenu,
+  closeScopeMenu,
+  applyScope,
+  setScopeAll,
+  arriveAt,
+  dropFocus,
+  toggleScopeSrc,
+  toggleScopeColl,
+  saveScopeGroup,
+  buildChips,
+  toggleTag,
+  searchNodes,
+  focusOn,
+  clearFocus,
+  openPalette,
+  closePalette,
+  renderPalette,
+  pick,
+  travelTarget,
+  openSettings,
+  closeSettings,
+  renderSettings,
+  readOnlyWhy,
+  addSource,
+  addCollection,
+  saveSettings,
+  syncNow,
+  openModelHub,
+  closeModelHub,
+  pollModelHub,
+  toggleMore,
+  closeMore,
+  moreMenuClick,
 });

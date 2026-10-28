@@ -8,14 +8,12 @@ import {
 } from '@farsight/core/dist/sentinel-companion.js';
 import { STRINGS } from '@farsight/core/dist/strings.js';
 import { connectService } from '../service/owner-service.js';
-import type { ServiceClient } from '../transport/ipc.js';
 import type { Workspace } from '../service/local.js';
 import {
   preparationCapabilities,
   configurationPreview,
   preparationOutcome,
 } from '../service/preparation-projection.js';
-import { controlOutcome } from '../service/controls.js';
 import {
   preparationClientFilename,
   readPreparationClientKey,

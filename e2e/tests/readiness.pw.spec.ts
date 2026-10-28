@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { test, expect, gotoReady } from './support';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const MANIFEST = JSON.parse(readFileSync(join(here, '..', '..', 'examples', 'invoice-app', 'docs', 'design', 'screens.json'), 'utf8'));
+const MANIFEST = JSON.parse(
+  readFileSync(join(here, '..', '..', 'examples', 'invoice-app', 'docs', 'design', 'screens.json'), 'utf8'),
+);
 const STORY = (MANIFEST.storylines || [])[0];
 const entries = STORY.journeys as (string | { id: string; branchOf: string })[];
 const STEPS = entries.filter((x) => typeof x === 'string').length;
@@ -17,22 +19,34 @@ const BRANCHES = entries.length - STEPS;
  * @covers packages/server/public/app/surfaces/readiness.js::mountReadiness
  * @covers packages/core/src/readiness.ts::readiness
  */
-test('the brief has one row per step and branch, in the light theme, and gives the theme back on leaving', async ({ page }) => {
+test('the brief has one row per step and branch, in the light theme, and gives the theme back on leaving', async ({
+  page,
+}) => {
   await gotoReady(page, '#/portfolio');
-  await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
-  await page.evaluate((id) => { location.hash = '#/readiness/' + id; }, STORY.id);
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = 'dark';
+  });
+  await page.evaluate((id) => {
+    location.hash = '#/readiness/' + id;
+  }, STORY.id);
   const rows = page.locator('.rd-steps tbody tr');
   await expect(rows).toHaveCount(STEPS + BRANCHES);
   await expect(page.locator('.rd-steps tbody tr.rd-branch')).toHaveCount(BRANCHES);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   // every row says ship or hold, and a hold says why
-  for (const d of await page.locator('.rd-steps tbody tr').evaluateAll((els) => els.map((e) => ({ d: e.getAttribute('data-decision'), why: e.querySelector('.rd-why')?.textContent || '' })))) {
+  for (const d of await page
+    .locator('.rd-steps tbody tr')
+    .evaluateAll((els) =>
+      els.map((e) => ({ d: e.getAttribute('data-decision'), why: e.querySelector('.rd-why')?.textContent || '' })),
+    )) {
     expect(['ship', 'hold']).toContain(d.d);
     if (d.d === 'hold') expect(d.why.length).toBeGreaterThan(0);
   }
   await expect(page.locator('.rd-rules tbody tr').first()).toBeVisible();
   await expect(page.locator('.rd-prov')).toContainText('sync');
-  await page.evaluate(() => { location.hash = '#/portfolio'; });
+  await page.evaluate(() => {
+    location.hash = '#/portfolio';
+  });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
 
@@ -72,7 +86,7 @@ test('Save writes a light PDF on one A4 page, and a CSV with one line per row', 
 });
 
 /** @covers packages/server/public/app/lib/readiness-door.js::readinessDoorHtml */
-test('the front door\'s storyline card opens the brief', async ({ page }) => {
+test("the front door's storyline card opens the brief", async ({ page }) => {
   await gotoReady(page, '#/journeys');
   const door = page.locator(`.jrn-story[data-storyline="${STORY.id}"] .rd-door`);
   await expect(door).toBeVisible();

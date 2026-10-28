@@ -15,19 +15,44 @@
 import { readFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { parseSync } from 'oxc-parser';
-import type { GraphFragment, GraphNode, GraphEdge, TestRef, TestRun, TestsMeta, TestsConfigBlock, TestReportConfig } from '@farsight/core';
+import type {
+  GraphFragment,
+  GraphNode,
+  GraphEdge,
+  TestRef,
+  TestRun,
+  TestsMeta,
+  TestsConfigBlock,
+  TestReportConfig,
+} from '@farsight/core';
 import { stringList, foldRuns } from '@farsight/core';
 import { loadWorkspaceConfig, type WorkspaceConfig } from '../shared/config-files.js';
 import { walk, isNode, lineIndex, type AstNode } from '../walk.js';
 import { collectFiles } from '../shared/files.js';
 import { createAliasResolver } from '../aliases.js';
 import type { IngestOptions } from '../types.js';
-import { extractCases, isTestFile, DEFAULT_TEST_GLOBS, type TestGlobs } from './cases.js';
+import { extractCases, isTestFile, type TestGlobs } from './cases.js';
 import { CoverTargets, fileSignals, staticResolution, type StaticSignal } from './covers.js';
-import { findReports, readReport, freshnessOf, changedByOf, eachTitleMatches, type ReadReport, type ObservedCase } from './reports.js';
+import {
+  findReports,
+  readReport,
+  freshnessOf,
+  changedByOf,
+  eachTitleMatches,
+  type ReadReport,
+  type ObservedCase,
+} from './reports.js';
 import { gitHeadAt } from '../shared/git.js';
 
-export { isTestFile, DEFAULT_TEST_GLOBS, extractCases, runnerOf, levelOf, classifyCall, fileHeaderDoc } from './cases.js';
+export {
+  isTestFile,
+  DEFAULT_TEST_GLOBS,
+  extractCases,
+  runnerOf,
+  levelOf,
+  classifyCall,
+  fileHeaderDoc,
+} from './cases.js';
 export type { TestCase, ExtractedFile, TestGlobs } from './cases.js';
 export { CoverTargets, routeKey, fileSignals } from './covers.js';
 export { findReports, readReport, freshnessOf, changedByOf, eachTitleToRegExp, eachTitleMatches } from './reports.js';
@@ -46,13 +71,20 @@ type ReportEntry = TestsMeta['reports'][number];
  * two runs over the same repo produce the same list.
  */
 const GAP_ORDER: TestsGap['kind'][] = [
-  'missing-artefact', 'unreadable', 'empty', 'unresolved-claim', 'unjoined-each', 'no-digest', 'digest-changed', 'no-config',
+  'missing-artefact',
+  'unreadable',
+  'empty',
+  'unresolved-claim',
+  'unjoined-each',
+  'no-digest',
+  'digest-changed',
+  'no-config',
 ];
 
 export function orderGaps(gaps: TestsGap[]): TestsGap[] {
   return gaps
     .map((gap, i) => ({ gap, i }))
-    .sort((a, b) => (GAP_ORDER.indexOf(a.gap.kind) - GAP_ORDER.indexOf(b.gap.kind)) || (a.i - b.i))
+    .sort((a, b) => GAP_ORDER.indexOf(a.gap.kind) - GAP_ORDER.indexOf(b.gap.kind) || a.i - b.i)
     .map(({ gap }) => gap);
 }
 
@@ -72,9 +104,15 @@ export function foldGaps(gaps: TestsGap[]): string[] {
   const out: string[] = [];
   for (const group of groups.values()) {
     const first = group[0]!;
-    if (group.length === 1) { out.push(first.text); continue; }
+    if (group.length === 1) {
+      out.push(first.text);
+      continue;
+    }
     const named = group.map((g) => g.paths[0] ?? g.glob).filter((s): s is string => !!s);
-    const shown = named.slice(0, 3).map((s) => `\`${s}\``).join(', ');
+    const shown = named
+      .slice(0, 3)
+      .map((s) => `\`${s}\``)
+      .join(', ');
     out.push(`${first.text} ×${group.length}${shown ? ` — ${shown}${named.length > 3 ? ', …' : ''}` : ''}`);
   }
   return out;
@@ -110,7 +148,10 @@ export function reportLinkOf(block: TestReportConfig, resultsPath: string): stri
 
 /** The claim globs for a repo: the defaults plus whatever its config adds. */
 export function testGlobsOf(config: TestsConfigBlock | undefined): TestGlobs {
-  return { ...(config?.include ? { include: config.include } : {}), ...(config?.exclude ? { exclude: config.exclude } : {}) };
+  return {
+    ...(config?.include ? { include: config.include } : {}),
+    ...(config?.exclude ? { exclude: config.exclude } : {}),
+  };
 }
 
 function parse(abs: string, source: string): AstNode | null {
@@ -124,7 +165,13 @@ function parse(abs: string, source: string): AstNode | null {
 }
 
 /** Top-level function name → the goto/request literals inside it, so a test that calls a helper inherits its endpoints (one level). */
-function helperSignals(program: AstNode, source: string, abs: string, repoRoot: string, resolveAlias: (a: string, s: string) => string | null): Map<string, StaticSignal[]> {
+function helperSignals(
+  program: AstNode,
+  source: string,
+  abs: string,
+  repoRoot: string,
+  resolveAlias: (a: string, s: string) => string | null,
+): Map<string, StaticSignal[]> {
   const line = lineIndex(source);
   const spans: { name: string; start: number; end: number }[] = [];
   walk(program, (n, parents) => {
@@ -158,10 +205,16 @@ function helperSignals(program: AstNode, source: string, abs: string, repoRoot: 
 /** Stable, readable id for a test case: repo::test::<file>::<full title>, deduped. */
 function testId(repo: string, file: string, fullTitle: string, seen: Set<string>): string {
   const base = `${repo}::test::${file}::${fullTitle}`;
-  if (!seen.has(base)) { seen.add(base); return base; }
+  if (!seen.has(base)) {
+    seen.add(base);
+    return base;
+  }
   for (let i = 2; ; i++) {
     const candidate = `${base}#${i}`;
-    if (!seen.has(candidate)) { seen.add(candidate); return candidate; }
+    if (!seen.has(candidate)) {
+      seen.add(candidate);
+      return candidate;
+    }
   }
 }
 
@@ -169,7 +222,12 @@ function testId(repo: string, file: string, fullTitle: string, seen: Set<string>
  * Discover + read the repo's tests into the fragment (in place). Never throws;
  * unreadable reports and unmatched claims are reported, not fatal.
  */
-export function applyTests(fragment: GraphFragment, repoRoot: string, options: IngestOptions = {}, workspace?: WorkspaceConfig): { errors: string[]; meta: TestsMeta } {
+export function applyTests(
+  fragment: GraphFragment,
+  repoRoot: string,
+  options: IngestOptions = {},
+  workspace?: WorkspaceConfig,
+): { errors: string[]; meta: TestsMeta } {
   const repo = fragment.repo;
   const config = (workspace ?? loadWorkspaceConfig(repoRoot, options)).merged.tests;
   const globs = testGlobsOf(config);
@@ -180,7 +238,14 @@ export function applyTests(fragment: GraphFragment, repoRoot: string, options: I
 
   let edgeSeq = 0;
   const addEdge = (from: string, to: string, meta: GraphEdge['meta'], resolution: GraphEdge['resolution']) => {
-    fragment.edges.push({ id: `test-e${edgeSeq++}`, kind: 'covers', from, to, ...(meta ? { meta } : {}), ...(resolution ? { resolution } : {}) });
+    fragment.edges.push({
+      id: `test-e${edgeSeq++}`,
+      kind: 'covers',
+      from,
+      to,
+      ...(meta ? { meta } : {}),
+      ...(resolution ? { resolution } : {}),
+    });
   };
 
   // ── 1. claim the test files ────────────────────────────────────
@@ -189,7 +254,11 @@ export function applyTests(fragment: GraphFragment, repoRoot: string, options: I
   for (const abs of all) {
     const file = relative(repoRoot, abs);
     let source: string;
-    try { source = readFileSync(abs, 'utf8'); } catch { continue; }
+    try {
+      source = readFileSync(abs, 'utf8');
+    } catch {
+      continue;
+    }
     if (isTestFile(file, source, globs)) claimed.push({ abs, file, source });
   }
 
@@ -203,7 +272,10 @@ export function applyTests(fragment: GraphFragment, repoRoot: string, options: I
 
   for (const { abs, file, source } of claimed) {
     const program = parse(abs, source);
-    if (!program) { errors.push(`tests ${file}: could not be parsed`); continue; }
+    if (!program) {
+      errors.push(`tests ${file}: could not be parsed`);
+      continue;
+    }
     const extracted = extractCases(program, source, file);
     const signals = fileSignals(program, source, abs, repoRoot, resolveAlias);
 
@@ -215,8 +287,12 @@ export function applyTests(fragment: GraphFragment, repoRoot: string, options: I
       if (claimed.some((c) => c.abs === helperAbs)) continue; // another test file, not a helper
       let map = helperCache.get(helperAbs);
       if (!map) {
-        let helperSource = '';
-        try { helperSource = readFileSync(helperAbs, 'utf8'); } catch { continue; }
+        let helperSource: string;
+        try {
+          helperSource = readFileSync(helperAbs, 'utf8');
+        } catch {
+          continue;
+        }
         const helperProgram = parse(helperAbs, helperSource);
         map = helperProgram ? helperSignals(helperProgram, helperSource, helperAbs, repoRoot, resolveAlias) : new Map();
         helperCache.set(helperAbs, map);
@@ -241,13 +317,18 @@ export function applyTests(fragment: GraphFragment, repoRoot: string, options: I
         ...(c.inactive ? { inactive: true } : {}),
       };
       const node: GraphNode = {
-        id, kind: 'test', name: c.title, lang: /\.tsx?$/.test(file) || /\.mts$/.test(file) ? 'ts' : 'js',
+        id,
+        kind: 'test',
+        name: c.title,
+        lang: /\.tsx?$/.test(file) || /\.mts$/.test(file) ? 'ts' : 'js',
         loc: { repo, path: file, line: c.line, endLine: c.endLine },
         ...(docsText ? { docs: docsText } : {}),
         ...(c.suite.length ? { signature: c.suite.join(' › ') } : {}),
         group: file,
         tags: [
-          'test', `test:${extracted.level}`, `runner:${extracted.runner}`,
+          'test',
+          `test:${extracted.level}`,
+          `runner:${extracted.runner}`,
           ...c.mods.filter((m) => m === 'skip' || m === 'only' || m === 'todo' || m === 'each').map((m) => `test:${m}`),
           ...(c.heuristicTitle ? ['test:title-heuristic'] : []),
         ],
@@ -273,13 +354,23 @@ export function applyTests(fragment: GraphFragment, repoRoot: string, options: I
         if (linked.has(key)) continue;
         linked.add(key);
         counts.declared++;
-        addEdge(id, hit.nodeId, { evidence: 'declared', declared: value, ...(hit.step ? { step: hit.step } : {}) },
-          { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `@covers ${value}${hit.step ? ` — step ${hit.step} of this screen` : ''}` });
+        addEdge(
+          id,
+          hit.nodeId,
+          { evidence: 'declared', declared: value, ...(hit.step ? { step: hit.step } : {}) },
+          {
+            status: 'resolved',
+            technique: 'annotation-scan',
+            confidence: 'HIGH',
+            note: `@covers ${value}${hit.step ? ` — step ${hit.step} of this screen` : ''}`,
+          },
+        );
       }
       if (unresolved.length) {
         test.unresolved = unresolved;
         const text = `\`${file}\` declares ${unresolved.map((u) => `\`${u}\``).join(', ')}, which nothing in the graph matches`;
-        if (!gaps.some((g) => g.text === text)) gaps.push({ kind: 'unresolved-claim', level: extracted.level, paths: [file], text });
+        if (!gaps.some((g) => g.text === text))
+          gaps.push({ kind: 'unresolved-claim', level: extracted.level, paths: [file], text });
       }
 
       // ── static ──
@@ -305,16 +396,32 @@ export function applyTests(fragment: GraphFragment, repoRoot: string, options: I
         if (!target || linked.has(target) || target === id) continue;
         const kindOf = targets.node(target)?.kind;
         // a test importing a type-only or unrelated module is noise; keep to things a journey walks
-        if (sig.kind === 'symbol' && !(kindOf === 'function' || kindOf === 'component' || kindOf === 'guard' || kindOf === 'rule' || kindOf === 'route')) continue;
+        if (
+          sig.kind === 'symbol' &&
+          !(
+            kindOf === 'function' ||
+            kindOf === 'component' ||
+            kindOf === 'guard' ||
+            kindOf === 'rule' ||
+            kindOf === 'route'
+          )
+        )
+          continue;
         linked.add(target);
         counts.static++;
         // a `.skip`/`.todo` case still says what it would reach, but the edge says it ran nowhere
-        addEdge(id, target, {
-          evidence: 'static', signal: sig.kind,
-          ...(sig.viaHelper ? { helper: sig.viaHelper } : {}),
-          ...(sig.line ? { line: sig.line } : {}),
-          ...(c.inactive ? { inactive: true } : {}),
-        }, staticResolution(sig, exact));
+        addEdge(
+          id,
+          target,
+          {
+            evidence: 'static',
+            signal: sig.kind,
+            ...(sig.viaHelper ? { helper: sig.viaHelper } : {}),
+            ...(sig.line ? { line: sig.line } : {}),
+            ...(c.inactive ? { inactive: true } : {}),
+          },
+          staticResolution(sig, exact),
+        );
       }
     }
   }
@@ -327,12 +434,22 @@ export function applyTests(fragment: GraphFragment, repoRoot: string, options: I
   errors.push(...imported.errors);
   const reportsMeta = imported.reports;
   if (!config) {
-    gaps.push({ kind: 'no-config', paths: [], text: 'No `tests` block in farsight.config.json; declared and static evidence only (docs/proposals/tests-surface.md §3.2)' });
+    gaps.push({
+      kind: 'no-config',
+      paths: [],
+      text: 'No `tests` block in farsight.config.json; declared and static evidence only (docs/proposals/tests-surface.md §3.2)',
+    });
   }
 
   const ordered = orderGaps(gaps);
   const meta: TestsMeta = {
-    files: claimed.length, cases, edges: counts, runs, reports: reportsMeta, gaps: ordered, blindSpots: foldGaps(ordered),
+    files: claimed.length,
+    cases,
+    edges: counts,
+    runs,
+    reports: reportsMeta,
+    gaps: ordered,
+    blindSpots: foldGaps(ordered),
     // what a report must stamp for its runs to read `unchanged` — recorded so a later
     // `tests import --stamp` can be refused when it names a different checkout
     ...(fragment.meta?.sourceDigest ? { sourceDigest: fragment.meta.sourceDigest } : {}),
@@ -355,7 +472,15 @@ export function importReports(
   config: TestsConfigBlock,
   addEdge?: (from: string, to: string, meta: GraphEdge['meta'], resolution: GraphEdge['resolution']) => void,
   options: { replace?: boolean } = {},
-): { reports: TestsMeta['reports']; edges: number; runs: number; gaps: TestsGap[]; blindSpots: string[]; errors: string[]; head?: { sha: string; at?: string } } {
+): {
+  reports: TestsMeta['reports'];
+  edges: number;
+  runs: number;
+  gaps: TestsGap[];
+  blindSpots: string[];
+  errors: string[];
+  head?: { sha: string; at?: string };
+} {
   const reports: ReportEntry[] = [];
   const gaps: TestsGap[] = [];
   const errors: string[] = [];
@@ -364,11 +489,18 @@ export function importReports(
 
   // what this import is about to read, resolved once: the same file list decides
   // which prior evidence is replaced (03 §3.6) and which globs found nothing
-  const planned: { level: TestRef['level']; kind: 'results' | 'coverage'; block: TestReportConfig; glob: string; files: string[] }[] = [];
+  const planned: {
+    level: TestRef['level'];
+    kind: 'results' | 'coverage';
+    block: TestReportConfig;
+    glob: string;
+    files: string[];
+  }[] = [];
   for (const level of LEVELS) {
     for (const block of levelBlocks(config, level)) {
       for (const kind of ['results', 'coverage'] as const) {
-        for (const glob of stringList(block[kind])) planned.push({ level, kind, block, glob, files: findReports(repoRoot, glob) });
+        for (const glob of stringList(block[kind]))
+          planned.push({ level, kind, block, glob, files: findReports(repoRoot, glob) });
       }
     }
   }
@@ -378,9 +510,18 @@ export function importReports(
   clearPriorImport(fragment, repoRoot, planned, options.replace);
 
   let seq = fragment.edges.length;
-  const add = addEdge ?? ((from, to, meta, resolution) => {
-    fragment.edges.push({ id: `test-import-e${seq++}`, kind: 'covers', from, to, ...(meta ? { meta } : {}), ...(resolution ? { resolution } : {}) });
-  });
+  const add =
+    addEdge ??
+    ((from, to, meta, resolution) => {
+      fragment.edges.push({
+        id: `test-import-e${seq++}`,
+        kind: 'covers',
+        from,
+        to,
+        ...(meta ? { meta } : {}),
+        ...(resolution ? { resolution } : {}),
+      });
+    });
 
   const byFullName = new Map<string, GraphNode[]>();
   // `.each` cases: the node's name is the title template the reporter expanded per row
@@ -413,7 +554,11 @@ export function importReports(
       // the artefact is named: which glob, under which repo, for which level and kind (01 §3.2)
       reports.push({ kind, runner, level, glob, matched: 0, reason: 'no-match', freshness: 'unknown' });
       gaps.push({
-        kind: 'missing-artefact', level, reportKind: kind, glob, paths: [],
+        kind: 'missing-artefact',
+        level,
+        reportKind: kind,
+        glob,
+        paths: [],
         text: `\`${glob}\` matched 0 files under ${fragment.repo} — no ${level} ${kind} report; declared and static evidence only`,
       });
       continue;
@@ -424,12 +569,39 @@ export function importReports(
       if (!report) {
         // an empty `{}` / `[]` is a run that recorded nothing (a package with no source under test) — a blind spot, not a broken file
         let empty = false;
-        try { empty = /^\s*(\{\s*\}|\[\s*\])\s*$/.test(readFileSync(abs, 'utf8')); } catch { /* unreadable: the generic message below */ }
-        reports.push({ path, kind, runner, level, glob, matched: files.length, reason: empty ? 'empty' : 'unreadable', freshness: 'unknown' });
+        try {
+          empty = /^\s*(\{\s*\}|\[\s*\])\s*$/.test(readFileSync(abs, 'utf8'));
+        } catch {
+          /* unreadable: the generic message below */
+        }
+        reports.push({
+          path,
+          kind,
+          runner,
+          level,
+          glob,
+          matched: files.length,
+          reason: empty ? 'empty' : 'unreadable',
+          freshness: 'unknown',
+        });
         if (empty && kind !== 'coverage') {
-          gaps.push({ kind: 'empty', level, reportKind: kind, glob, paths: [path], text: `\`${path}\` is an empty report — the run recorded nothing there, so it adds no observed evidence` });
+          gaps.push({
+            kind: 'empty',
+            level,
+            reportKind: kind,
+            glob,
+            paths: [path],
+            text: `\`${path}\` is an empty report — the run recorded nothing there, so it adds no observed evidence`,
+          });
         } else if (!empty) {
-          gaps.push({ kind: 'unreadable', level, reportKind: kind, glob, paths: [path], text: `\`${path}\` is not a report format this build reads, so nothing in it became evidence` });
+          gaps.push({
+            kind: 'unreadable',
+            level,
+            reportKind: kind,
+            glob,
+            paths: [path],
+            text: `\`${path}\` is not a report format this build reads, so nothing in it became evidence`,
+          });
           errors.push(`tests ${path}: not a report format this build reads`);
         }
         continue;
@@ -437,7 +609,15 @@ export function importReports(
       const freshness = freshnessOf(report, source);
       const changedBy = freshness === 'changed' ? changedByOf(report, headOnce()) : undefined;
       const entry: ReportEntry = {
-        path: report.path, kind: report.kind, runner, level, mtime: report.mtime, runId: report.runId, freshness, glob, matched: files.length,
+        path: report.path,
+        kind: report.kind,
+        runner,
+        level,
+        mtime: report.mtime,
+        runId: report.runId,
+        freshness,
+        glob,
+        matched: files.length,
         reason: freshness === 'unknown' ? 'no-digest' : freshness === 'changed' ? 'digest-changed' : 'ok',
         ...(changedBy ? { changedBy } : {}),
         ...(report.sourceCommit ? { commit: report.sourceCommit } : {}),
@@ -445,15 +625,24 @@ export function importReports(
       reports.push(entry);
       if (freshness === 'unknown') {
         gaps.push({
-          kind: 'no-digest', level, reportKind: report.kind, glob, paths: [report.path],
+          kind: 'no-digest',
+          level,
+          reportKind: report.kind,
+          glob,
+          paths: [report.path],
           text: `\`${report.path}\` records no source digest, so "unchanged since the run" cannot be proven — the file's own mtime is not evidence`,
         });
       } else if (freshness === 'changed') {
         gaps.push({
-          kind: 'digest-changed', level, reportKind: report.kind, glob, paths: [report.path],
-          text: changedBy === 'working-tree'
-            ? `\`${report.path}\` was produced on the commit this code is on, and the files differ — the working tree differs from HEAD, not a new commit — so it is evidence of the past, not of now`
-            : `\`${report.path}\` was produced against a different checkout — the code changed since the run, so it is evidence of the past, not of now`,
+          kind: 'digest-changed',
+          level,
+          reportKind: report.kind,
+          glob,
+          paths: [report.path],
+          text:
+            changedBy === 'working-tree'
+              ? `\`${report.path}\` was produced on the commit this code is on, and the files differ — the working tree differs from HEAD, not a new commit — so it is evidence of the past, not of now`
+              : `\`${report.path}\` was produced against a different checkout — the code changed since the run, so it is evidence of the past, not of now`,
         });
       }
       if (report.kind === 'results') {
@@ -468,7 +657,17 @@ export function importReports(
         gaps.push(...joinedReport.gaps);
         for (const node of joinedReport.eachTouched) eachJoinedAnywhere.add(node);
       } else {
-        entry.edges = observeCoverage(report, fragment, fragment.repo, nodesByPath, level, block, freshness, add, changedBy);
+        entry.edges = observeCoverage(
+          report,
+          fragment,
+          fragment.repo,
+          nodesByPath,
+          level,
+          block,
+          freshness,
+          add,
+          changedBy,
+        );
         edgeCount += entry.edges;
       }
     }
@@ -481,7 +680,10 @@ export function importReports(
     if (!levelsWithResults.has(level) || eachJoinedAnywhere.has(node) || node.test!.runs?.length) continue;
     const at = `${node.test!.file}:${node.loc?.line ?? 0}`;
     gaps.push({
-      kind: 'unjoined-each', level, reportKind: 'results', paths: [at],
+      kind: 'unjoined-each',
+      level,
+      reportKind: 'results',
+      paths: [at],
       text: `\`${at}\` is a parametrised case (\`${node.name}\`) no row in the ${level} results report matched — its rows joined nothing`,
     });
   }
@@ -489,8 +691,18 @@ export function importReports(
   const ordered = orderGaps(gaps);
   // the code side of every freshness sentence (core freshness.ts): HEAD as this read saw it — asked only
   // when a report recorded a digest, because only then is there a comparison to name
-  const headNow = reports.some((r) => r.freshness === 'changed' || r.freshness === 'unchanged') ? headOnce() : undefined;
-  return { reports, edges: edgeCount, runs, gaps: ordered, blindSpots: foldGaps(ordered), errors, ...(headNow ? { head: headNow } : {}) };
+  const headNow = reports.some((r) => r.freshness === 'changed' || r.freshness === 'unchanged')
+    ? headOnce()
+    : undefined;
+  return {
+    reports,
+    edges: edgeCount,
+    runs,
+    gaps: ordered,
+    blindSpots: foldGaps(ordered),
+    errors,
+    ...(headNow ? { head: headNow } : {}),
+  };
 }
 
 /** `repo::test::run:<level>:<project>` — the synthetic node a coverage report's edges hang off. */
@@ -546,10 +758,22 @@ function clearPriorImport(
   for (const node of fragment.nodes) {
     const ref = node.test;
     if (node.kind !== 'test' || node.loc?.repo !== fragment.repo || !ref?.runs?.length) continue;
-    const kept = ref.runs.filter((r) => !(r.report && reportPaths.has(r.report) && (replace || projectsByReport.get(r.report)?.has(r.project ?? 'default'))));
+    const kept = ref.runs.filter(
+      (r) =>
+        !(
+          r.report &&
+          reportPaths.has(r.report) &&
+          (replace || projectsByReport.get(r.report)?.has(r.project ?? 'default'))
+        ),
+    );
     if (kept.length === ref.runs.length) continue;
-    if (kept.length) { ref.runs = kept; ref.run = foldRuns(kept); }
-    else { delete ref.runs; delete ref.run; }
+    if (kept.length) {
+      ref.runs = kept;
+      ref.run = foldRuns(kept);
+    } else {
+      delete ref.runs;
+      delete ref.run;
+    }
   }
 }
 
@@ -573,7 +797,14 @@ function attachRuns(
   block: TestReportConfig,
   level: TestRef['level'],
   changedBy?: TestRun['changedBy'],
-): { joined: number; unjoined: number; eachJoined: number; eachUnjoined: number; eachTouched: Set<GraphNode>; gaps: TestsGap[] } {
+): {
+  joined: number;
+  unjoined: number;
+  eachJoined: number;
+  eachUnjoined: number;
+  eachTouched: Set<GraphNode>;
+  gaps: TestsGap[];
+} {
   let joined = 0;
   // rows that reached nothing — counted here because only this loop knows which
   // rows an exact match or a template claimed (03 §2.9; the Tests tab prints it)
@@ -582,20 +813,24 @@ function attachRuns(
   let skippedJoined = 0;
   const gaps: TestsGap[] = [];
   const sameFile = (node: GraphNode, c: ObservedCase): boolean =>
-    !c.file || node.test!.file === c.file || node.test!.file.endsWith(`/${c.file}`) || c.file.endsWith(`/${node.test!.file}`);
+    !c.file ||
+    node.test!.file === c.file ||
+    node.test!.file.endsWith(`/${c.file}`) ||
+    c.file.endsWith(`/${node.test!.file}`);
   // Literal leaf titles with an exact reporter location can survive a runtime
   // describe title. Keep all candidates so a suffix-only file name never picks
   // one of two matching source files or duplicate declarations.
   const byLocation = new Map<string, GraphNode[]>();
-  for (const nodes of byFullName.values()) for (const node of nodes) {
-    if (!node.loc || node.tags.includes('test:title-heuristic')) continue;
-    const key = `${node.loc.line}\0${node.name}`;
-    const located = byLocation.get(key) ?? [];
-    located.push(node);
-    byLocation.set(key, located);
-  }
+  for (const nodes of byFullName.values())
+    for (const node of nodes) {
+      if (!node.loc || node.tags.includes('test:title-heuristic')) continue;
+      const key = `${node.loc.line}\0${node.name}`;
+      const located = byLocation.get(key) ?? [];
+      located.push(node);
+      byLocation.set(key, located);
+    }
   const match = (c: ObservedCase): GraphNode[] => {
-    const hits = (byFullName.get(c.fullName) ?? byFullName.get([...c.suite, c.title].join(' ')) ?? []);
+    const hits = byFullName.get(c.fullName) ?? byFullName.get([...c.suite, c.title].join(' ')) ?? [];
     // a JUnit row carries no file: it may only join when exactly one node has that
     // full name — attaching it to every hit would invent evidence (03 §3.1)
     if (!c.file) return hits.length === 1 ? hits : [];
@@ -615,7 +850,9 @@ function attachRuns(
       if (located.length === 1) return located[0];
       if (located.length > 1) return undefined;
     }
-    const hits = candidates.filter((n) => sameFile(n, c) && n.test!.suite.join(' ') === c.suite.join(' ') && eachTitleMatches(n.name, c.title));
+    const hits = candidates.filter(
+      (n) => sameFile(n, c) && n.test!.suite.join(' ') === c.suite.join(' ') && eachTitleMatches(n.name, c.title),
+    );
     // without a file the pattern is all there is, so only a single candidate may take the row
     if (!c.file) return hits.length === 1 ? hits[0] : undefined;
     return hits.length === 1 ? hits[0] : undefined;
@@ -648,15 +885,19 @@ function attachRuns(
     if (exact.length) {
       if (c.status === 'skipped') skippedJoined++;
       for (const node of exact) {
-        put(node, {
-          ...base,
-          status: c.status,
-          ...(c.durationMs != null ? { durationMs: c.durationMs } : {}),
-          ...(c.retries != null ? { retries: c.retries } : {}),
-          project: c.project ?? 'default',
-          ...(c.status === 'skipped' && c.reason ? { reason: c.reason } : {}),
-          join: 'exact',
-        }, c.project);
+        put(
+          node,
+          {
+            ...base,
+            status: c.status,
+            ...(c.durationMs != null ? { durationMs: c.durationMs } : {}),
+            ...(c.retries != null ? { retries: c.retries } : {}),
+            project: c.project ?? 'default',
+            ...(c.status === 'skipped' && c.reason ? { reason: c.reason } : {}),
+            join: 'exact',
+          },
+          c.project,
+        );
       }
       continue;
     }
@@ -669,7 +910,10 @@ function attachRuns(
     }
     if (c.status === 'skipped') skippedJoined++;
     let projects = byTemplate.get(node);
-    if (!projects) { projects = new Map(); byTemplate.set(node, projects); }
+    if (!projects) {
+      projects = new Map();
+      byTemplate.set(node, projects);
+    }
     const key = c.project ?? 'default';
     if (!projects.has(key)) projects.set(key, []);
     projects.get(key)!.push(c);
@@ -680,29 +924,41 @@ function attachRuns(
       const status = [...rows].sort((a, b) => STATUS_RANK.indexOf(a.status) - STATUS_RANK.indexOf(b.status))[0]!.status;
       const durations = rows.map((r) => r.durationMs).filter((d): d is number => d != null);
       const retries = rows.map((r) => r.retries).filter((n): n is number => n != null);
-      put(node, {
-        ...base,
-        status,
-        ...(durations.length ? { durationMs: durations.reduce((a, b) => a + b, 0) } : {}),
-        ...(retries.length ? { retries: Math.max(...retries) } : {}),
-        project,
-        ...(status === 'skipped' && rows.find((r) => r.reason)?.reason ? { reason: rows.find((r) => r.reason)!.reason! } : {}),
-        join: 'each-template',
-        rows: rows.length,
-      }, rows[0]!.project);
+      put(
+        node,
+        {
+          ...base,
+          status,
+          ...(durations.length ? { durationMs: durations.reduce((a, b) => a + b, 0) } : {}),
+          ...(retries.length ? { retries: Math.max(...retries) } : {}),
+          project,
+          ...(status === 'skipped' && rows.find((r) => r.reason)?.reason
+            ? { reason: rows.find((r) => r.reason)!.reason! }
+            : {}),
+          join: 'each-template',
+          rows: rows.length,
+        },
+        rows[0]!.project,
+      );
     }
   }
 
   if (noFileUnjoined) {
     // JUnit and friends: the row named a case, not a file — nearest gap kind is `unreadable`
     gaps.push({
-      kind: 'unreadable', level, reportKind: 'results', paths: [report.path],
+      kind: 'unreadable',
+      level,
+      reportKind: 'results',
+      paths: [report.path],
       text: `\`${report.path}\`: ${noFileUnjoined} row(s) without a file could not be joined — a row that names no file joins only when exactly one test has that full name`,
     });
   }
   if (report.reportedSkipped != null && report.reportedSkipped !== skippedJoined) {
     gaps.push({
-      kind: 'unreadable', level, reportKind: 'results', paths: [report.path],
+      kind: 'unreadable',
+      level,
+      reportKind: 'results',
+      paths: [report.path],
       text: `\`${report.path}\` counts ${report.reportedSkipped} skipped case(s) in its header but ${skippedJoined} joined — the difference reached no test node`,
     });
   }
@@ -741,25 +997,35 @@ function observeCoverage(
   const at = report.at ?? report.mtime;
   const existing = fragment.nodes.findIndex((n) => n.id === runId);
   const runNode: GraphNode = {
-    id: runId, kind: 'test', name: `${level} run · ${project} · ${at.slice(0, 10)}`,
+    id: runId,
+    kind: 'test',
+    name: `${level} run · ${project} · ${at.slice(0, 10)}`,
     docs: `Every function this ${level} run reached, from ${report.path}. Coverage is attributed to the run, not to individual tests — the report carries no per-test attribution.`,
     group: report.path,
     tags: ['test', `test:${level}`, `runner:${block.runner ?? 'other'}`, 'test:run-level'],
     test: {
-      level, runner: (block.runner ?? 'other') as TestRef['runner'], suite: [`${level} run`, project], file: report.path, runLevel: true,
+      level,
+      runner: (block.runner ?? 'other') as TestRef['runner'],
+      suite: [`${level} run`, project],
+      file: report.path,
+      runLevel: true,
       // every file the report contained, hit or not: what the run actually measured
       ...(report.files?.length ? { files: report.files } : {}),
       run: {
-        id: report.runId, at, status: 'unknown',
+        id: report.runId,
+        at,
+        status: 'unknown',
         ...(report.sourceDigest ? { sourceDigest: report.sourceDigest } : {}),
         ...(report.sourceCommit ? { commit: report.sourceCommit } : {}),
-        freshness, stale: freshness === 'changed',
+        freshness,
+        stale: freshness === 'changed',
         ...(changedBy ? { changedBy } : {}),
         report: reportLinkOf(block, report.path) ?? report.path,
       },
     },
   };
-  if (existing >= 0) fragment.nodes[existing] = runNode; else fragment.nodes.push(runNode);
+  if (existing >= 0) fragment.nodes[existing] = runNode;
+  else fragment.nodes.push(runNode);
 
   let added = 0;
   const linked = new Set<string>();
@@ -770,20 +1036,38 @@ function observeCoverage(
     // confidence: freshness alone never raises it (03 §3.7)
     let match: 'name+line' | 'name' | 'line±1' = 'name+line';
     let node = candidates.find((n) => n.name === hit.name && n.loc!.line === hit.line);
-    if (!node) { node = candidates.find((n) => n.name === hit.name); if (node) match = 'name'; }
-    if (!node) { node = candidates.find((n) => Math.abs(n.loc!.line - hit.line) <= 1); if (node) match = 'line±1'; }
+    if (!node) {
+      node = candidates.find((n) => n.name === hit.name);
+      if (node) match = 'name';
+    }
+    if (!node) {
+      node = candidates.find((n) => Math.abs(n.loc!.line - hit.line) <= 1);
+      if (node) match = 'line±1';
+    }
     if (!node || node.kind === 'test' || linked.has(node.id)) continue;
     linked.add(node.id);
     added++;
-    const confidence = match === 'line±1' ? 'LOW' : match === 'name' ? 'MEDIUM' : freshness === 'unchanged' ? 'HIGH' : 'MEDIUM';
-    const note = match === 'line±1'
-      ? 'matched by line ±1 — the name differs'
-      : match === 'name'
-        ? 'matched by name — the declaration line moved since the run'
-        : freshness === 'unchanged' ? 'reached by the run; source unchanged since' : 'reached by the run; whether the source changed since is unknown';
-    addEdge(runId, node.id, { evidence: 'observed', runId: report.runId, lines: hit.lines, match }, {
-      status: 'resolved', technique: 'coverage-report', confidence, note,
-    });
+    const confidence =
+      match === 'line±1' ? 'LOW' : match === 'name' ? 'MEDIUM' : freshness === 'unchanged' ? 'HIGH' : 'MEDIUM';
+    const note =
+      match === 'line±1'
+        ? 'matched by line ±1 — the name differs'
+        : match === 'name'
+          ? 'matched by name — the declaration line moved since the run'
+          : freshness === 'unchanged'
+            ? 'reached by the run; source unchanged since'
+            : 'reached by the run; whether the source changed since is unknown';
+    addEdge(
+      runId,
+      node.id,
+      { evidence: 'observed', runId: report.runId, lines: hit.lines, match },
+      {
+        status: 'resolved',
+        technique: 'coverage-report',
+        confidence,
+        note,
+      },
+    );
   }
   return added;
 }

@@ -4,7 +4,8 @@ import { detectWorkKeys } from '../dist/index.js';
 import type { DetectOptions } from '../dist/index.js';
 
 const ADO: DetectOptions = { adoOrgs: ['https://dev.azure.com/example-org'] };
-const brief = (text: string, opts?: DetectOptions) => detectWorkKeys(text, opts).map((k) => `${k.provider === 'jira' ? 'J' : 'A'}:${k.key}:${k.via}`);
+const brief = (text: string, opts?: DetectOptions) =>
+  detectWorkKeys(text, opts).map((k) => `${k.provider === 'jira' ? 'J' : 'A'}:${k.key}:${k.via}`);
 
 const CASES: [string, string, DetectOptions | undefined, string[]][] = [
   ['bare key in a subject', 'ACME-123 submit seam', undefined, ['J:ACME-123:key']],
@@ -21,8 +22,18 @@ const CASES: [string, string, DetectOptions | undefined, string[]][] = [
   ['ADO AB#', 'AB#4711 portal sign-up', undefined, ['A:4711:hash']],
   ['bare #n without an ADO source is a GitHub issue', 'closes #12', undefined, []],
   ['bare #n with an ADO source', 'closes #12', ADO, ['A:12:hash']],
-  ['ADO dev.azure.com URL', 'https://dev.azure.com/example-org/ExampleProject/_workitems/edit/4711', undefined, ['A:4711:url']],
-  ['ADO visualstudio.com URL', 'https://example-org.visualstudio.com/ExampleProject/_workitems/edit/88', undefined, ['A:88:url']],
+  [
+    'ADO dev.azure.com URL',
+    'https://dev.azure.com/example-org/ExampleProject/_workitems/edit/4711',
+    undefined,
+    ['A:4711:url'],
+  ],
+  [
+    'ADO visualstudio.com URL',
+    'https://example-org.visualstudio.com/ExampleProject/_workitems/edit/88',
+    undefined,
+    ['A:88:url'],
+  ],
   ['branch: feature prefix', 'feature/ORG-12345-some-story', { branch: true }, ['J:ORG-12345:branch']],
   ['branch: lowercase prefix with a hyphen', 'bugfix-ORG-77-login', { branch: true }, ['J:ORG-77:branch']],
   ['branch: key first', 'ORG-12345/fix-login', { branch: true }, ['J:ORG-12345:branch']],
@@ -46,7 +57,9 @@ for (const [name, text, opts, want] of CASES) {
 }
 
 test('keys: a URL and a bare mention of the same key make one entry, the URL’s', () => {
-  const k = detectWorkKeys('INV-3 https://invoice-app.atlassian.net/browse/INV-3', { jiraHosts: ['invoice-app.atlassian.net'] });
+  const k = detectWorkKeys('INV-3 https://invoice-app.atlassian.net/browse/INV-3', {
+    jiraHosts: ['invoice-app.atlassian.net'],
+  });
   assert.equal(k.length, 1);
   assert.equal(k[0]!.via, 'url');
   assert.equal(k[0]!.configured, true);

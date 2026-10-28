@@ -12,7 +12,7 @@ import { PARSER_VERSION } from '../version.js';
  */
 import { readFileSync, checkpoint, fileStatus, fileReadError, parseError, currentRead } from '../repository.js';
 import { relative as platformRelative, resolve as resolvePath } from 'node:path';
-import type { GraphFragment, GraphNode, GraphEdge, NodeKind } from '@farsight/graph';
+import type { GraphFragment, GraphNode, GraphEdge } from '@farsight/graph';
 import type { LanguageAdapter, IngestOptions } from '../types.js';
 import { collectFiles, freshnessMeta } from '../shared/files.js';
 import { parseDoc, docCommentAbove, docLinkFields, type ParsedDoc } from '../shared/docs.js';
@@ -21,8 +21,20 @@ import { autoTags, joinPaths, normalizePath, snippetRange } from '../shared/tags
 import { grammarParser, walkTS, childrenOfType, findFirst, type TSNode } from '../treesitter/harness.js';
 import { extractJavaBranches } from './branches.js';
 import {
-  annotationsOf, hasAnn, getAnn, annString, routeMapping, listenerTopics, repositoryEntity, declaredRepoOp,
-  SECURITY_ANNS, STEREOTYPE_TAGS, VALIDATION_ANNS, INHERITED_REPO_OPS, TEMPLATE_PUBLISH, type Ann,
+  annotationsOf,
+  hasAnn,
+  getAnn,
+  annString,
+  routeMapping,
+  listenerTopics,
+  repositoryEntity,
+  declaredRepoOp,
+  SECURITY_ANNS,
+  STEREOTYPE_TAGS,
+  VALIDATION_ANNS,
+  INHERITED_REPO_OPS,
+  TEMPLATE_PUBLISH,
+  type Ann,
 } from './spring.js';
 
 const relative = (from: string, to: string): string => platformRelative(from, to).replaceAll('\\', '/');
@@ -79,21 +91,49 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
     if (!nodes.has(n.id)) nodes.set(n.id, n);
     return nodes.get(n.id)!;
   };
-  const addEdge = (kind: GraphEdge['kind'], from: string, to: string, edgeMeta?: GraphEdge['meta'], resolution?: GraphEdge['resolution']) => {
-    edges.push({ id: `e${edgeSeq++}`, kind, from, to, ...(edgeMeta ? { meta: edgeMeta } : {}), ...(resolution ? { resolution } : {}) });
+  const addEdge = (
+    kind: GraphEdge['kind'],
+    from: string,
+    to: string,
+    edgeMeta?: GraphEdge['meta'],
+    resolution?: GraphEdge['resolution'],
+  ) => {
+    edges.push({
+      id: `e${edgeSeq++}`,
+      kind,
+      from,
+      to,
+      ...(edgeMeta ? { meta: edgeMeta } : {}),
+      ...(resolution ? { resolution } : {}),
+    });
   };
   /** A Spring annotation is the whole reason the edge exists (B5.1). */
-  const byAnnotation = (note: string): GraphEdge['resolution'] =>
-    ({ status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note });
+  const byAnnotation = (note: string): GraphEdge['resolution'] => ({
+    status: 'resolved',
+    technique: 'annotation-scan',
+    confidence: 'HIGH',
+    note,
+  });
   /** A Spring Data repository method names its table through the entity it is typed on. */
-  const byRepo = (note: string): GraphEdge['resolution'] =>
-    ({ status: 'resolved', technique: 'db-builder', confidence: 'HIGH', note });
+  const byRepo = (note: string): GraphEdge['resolution'] => ({
+    status: 'resolved',
+    technique: 'db-builder',
+    confidence: 'HIGH',
+    note,
+  });
 
   const types: JavaType[] = [];
   const typesByName = new Map<string, JavaType>(); // simple name -> first declaration wins
   const pendingCalls: PendingCall[] = [];
   const pendingValidates: { targetId: string; typeName: string }[] = [];
-  const pendingRepoEdges: { fnId: string; entityName: string; op: string; write: boolean; code: string; line: number }[] = [];
+  const pendingRepoEdges: {
+    fnId: string;
+    entityName: string;
+    op: string;
+    write: boolean;
+    code: string;
+    line: number;
+  }[] = [];
 
   // ── pass 1: per-file extraction ────────────────────────────────
   try {
@@ -101,7 +141,13 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       await yieldToEventLoop();
       const file = relative(repoRoot, abs);
       let source: string;
-      try { checkpoint(); source = readFileSync(abs, 'utf8'); } catch (error) { if (fileReadError(abs, 'java', error)) break; continue; }
+      try {
+        checkpoint();
+        source = readFileSync(abs, 'utf8');
+      } catch (error) {
+        if (fileReadError(abs, 'java', error)) break;
+        continue;
+      }
       const root = parse(source);
       if (!root || root.hasError) {
         parseError(abs, 'java', 'Tree-sitter reported invalid Java syntax.');
@@ -115,7 +161,9 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
         // keep walking inside for nested types (extractType skips method bodies itself)
       });
     }
-  } finally { parse.dispose(); }
+  } finally {
+    parse.dispose();
+  }
 
   // ── pass 2: resolve calls / validates / repo edges across files ─
   const seenEdge = new Set<string>();
@@ -123,19 +171,33 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
 
   for (const call of pendingCalls) {
     const fieldType = call.receiver === null ? undefined : call.ownType.fields.get(call.receiver);
-    const targetType = call.receiver === null
-      ? call.ownType
-      : typesByName.get(fieldType ?? call.receiver); // field type, else static class name
+    const targetType = call.receiver === null ? call.ownType : typesByName.get(fieldType ?? call.receiver); // field type, else static class name
     if (!targetType) continue;
     // how the receiver was resolved, which is what the calls edge records (B5.1):
     // no receiver at all is this type's own method; a declared field type is the
     // bean the container injects; anything else is a bare simple name matched
     // against the types this ingest saw, with no import list consulted.
-    const byReceiver: GraphEdge['resolution'] = call.receiver === null
-      ? { status: 'resolved', technique: 'same-file', confidence: 'HIGH', note: `${call.method} is declared by ${call.ownType.name} itself` }
-      : fieldType
-        ? { status: 'heuristic', technique: 'DI-binding', confidence: 'MEDIUM', note: `the field ${call.receiver} is declared ${fieldType}` }
-        : { status: 'heuristic', technique: 'name-match', confidence: 'LOW', note: `${call.receiver} matched a type of that simple name; imports are not read` };
+    const byReceiver: GraphEdge['resolution'] =
+      call.receiver === null
+        ? {
+            status: 'resolved',
+            technique: 'same-file',
+            confidence: 'HIGH',
+            note: `${call.method} is declared by ${call.ownType.name} itself`,
+          }
+        : fieldType
+          ? {
+              status: 'heuristic',
+              technique: 'DI-binding',
+              confidence: 'MEDIUM',
+              note: `the field ${call.receiver} is declared ${fieldType}`,
+            }
+          : {
+              status: 'heuristic',
+              technique: 'name-match',
+              confidence: 'LOW',
+              note: `${call.receiver} matched a type of that simple name; imports are not read`,
+            };
 
     // repository call: declared finder → its function node; inherited CRUD → direct reads/writes on the table
     if (targetType.entityName && !targetType.declaredRepoMethods?.has(call.method)) {
@@ -146,8 +208,13 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       const kind = inherited.write ? 'writes' : 'reads';
       occurrences.record({ kind, from: call.fromId, to: tableId }, repo, call.ownType.file, call.line, call.site);
       if (dedup(`${kind}|${call.fromId}|${tableId}|${call.method}`)) {
-        addEdge(kind, call.fromId, tableId, { op: call.method, code: call.code, line: call.line },
-          byRepo(`${call.method} on a Spring Data repository of ${targetType.entityName}`));
+        addEdge(
+          kind,
+          call.fromId,
+          tableId,
+          { op: call.method, code: call.code, line: call.line },
+          byRepo(`${call.method} on a Spring Data repository of ${targetType.entityName}`),
+        );
       }
       continue;
     }
@@ -155,12 +222,25 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
     const targetId = targetType.methodIds.get(call.method);
     if (!targetId || targetId === call.fromId) continue;
     const targetKind = nodes.get(targetId)?.kind;
-    occurrences.record(targetKind === 'guard' ? { kind: 'guards', from: targetId, to: call.fromId } : { kind: 'calls', from: call.fromId, to: targetId },
-      repo, call.ownType.file, call.line, call.site);
+    occurrences.record(
+      targetKind === 'guard'
+        ? { kind: 'guards', from: targetId, to: call.fromId }
+        : { kind: 'calls', from: call.fromId, to: targetId },
+      repo,
+      call.ownType.file,
+      call.line,
+      call.site,
+    );
     // guards guard their caller — the edge points back at it (same convention as ts-js)
     if (targetKind === 'guard') {
       if (dedup(`guards|${targetId}|${call.fromId}`)) {
-        addEdge('guards', targetId, call.fromId, undefined, byAnnotation(`${nodes.get(targetId)?.name ?? call.method} is a declared guard`));
+        addEdge(
+          'guards',
+          targetId,
+          call.fromId,
+          undefined,
+          byAnnotation(`${nodes.get(targetId)?.name ?? call.method} is a declared guard`),
+        );
       }
     } else if (dedup(`calls|${call.fromId}|${targetId}`)) {
       addEdge('calls', call.fromId, targetId, { line: call.line }, byReceiver);
@@ -170,7 +250,13 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
   for (const v of pendingValidates) {
     const ruleId = typesByName.get(v.typeName)?.ruleId;
     if (ruleId && dedup(`validates|${ruleId}|${v.targetId}`)) {
-      addEdge('validates', ruleId, v.targetId, undefined, byAnnotation(`@Valid ${v.typeName} on the handler's parameters`));
+      addEdge(
+        'validates',
+        ruleId,
+        v.targetId,
+        undefined,
+        byAnnotation(`@Valid ${v.typeName} on the handler's parameters`),
+      );
     }
   }
 
@@ -179,8 +265,13 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
     if (!tableId) continue;
     const kind = r.write ? 'writes' : 'reads';
     if (dedup(`${kind}|${r.fnId}|${tableId}|${r.op}`)) {
-      addEdge(kind, r.fnId, tableId, { op: r.op, code: r.code, line: r.line },
-        byRepo(`a repository method on ${r.entityName}`));
+      addEdge(
+        kind,
+        r.fnId,
+        tableId,
+        { op: r.op, code: r.code, line: r.line },
+        byRepo(`a repository method on ${r.entityName}`),
+      );
     }
   }
 
@@ -194,7 +285,13 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
     if (entity?.tableId) return entity.tableId;
     // entity not parsed (other module / library): fall back to a bare table named after it
     const id = `${repo}::table::${entityName.toLowerCase()}`;
-    addNode({ id, kind: 'table', name: entityName.toLowerCase(), lang: 'java', tags: autoTags('', entityName, 'table') });
+    addNode({
+      id,
+      kind: 'table',
+      name: entityName.toLowerCase(),
+      lang: 'java',
+      tags: autoTags('', entityName, 'table'),
+    });
     return id;
   }
 
@@ -206,7 +303,14 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
     const anns = annotationsOf(decl);
     const doc = parseDoc(docCommentAbove(source, decl.startIndex, JAVADOC_BETWEEN));
     const loc = { repo, path: file, line: decl.startPosition.row + 1, endLine: decl.endPosition.row + 1 };
-    const jt: JavaType = { file, name, kind, nodeId: `${repo}::${file}::${name}`, fields: new Map(), methodIds: new Map() };
+    const jt: JavaType = {
+      file,
+      name,
+      kind,
+      nodeId: `${repo}::${file}::${name}`,
+      fields: new Map(),
+      methodIds: new Map(),
+    };
     types.push(jt);
     if (!typesByName.has(name)) typesByName.set(name, jt);
 
@@ -236,8 +340,13 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       jt.tableId = `${repo}::table::${tableName}`;
       const cols = fieldDecls.map((f) => annString(getAnn(f.anns, 'Column'), 'name') ?? f.name);
       addNode({
-        id: jt.tableId, kind: 'table', name: tableName, lang: 'java', loc,
-        docs: doc.docs, tags: [...autoTags(file, tableName, 'table'), ...doc.tags],
+        id: jt.tableId,
+        kind: 'table',
+        name: tableName,
+        lang: 'java',
+        loc,
+        docs: doc.docs,
+        tags: [...autoTags(file, tableName, 'table'), ...doc.tags],
         ...(cols.length ? { signature: `columns: ${cols.join(', ')}` } : {}),
         ...(doc.business ? { facets: { business: { description: doc.business } } } : {}),
       });
@@ -251,10 +360,21 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       jt.ruleId = jt.nodeId;
       const constraints = fieldDecls
         .filter((f) => f.anns.some((a) => VALIDATION_ANNS.has(a.name)))
-        .map((f) => `${f.name}: ${f.anns.filter((a) => VALIDATION_ANNS.has(a.name)).map(annLabel).join(', ')}`);
+        .map(
+          (f) =>
+            `${f.name}: ${f.anns
+              .filter((a) => VALIDATION_ANNS.has(a.name))
+              .map(annLabel)
+              .join(', ')}`,
+        );
       addNode({
-        id: jt.ruleId, kind: 'rule', name, lang: 'java', loc,
-        docs: doc.docs, signature: capLabel(constraints.join('; ')).slice(0, 200),
+        id: jt.ruleId,
+        kind: 'rule',
+        name,
+        lang: 'java',
+        loc,
+        docs: doc.docs,
+        signature: capLabel(constraints.join('; ')).slice(0, 200),
         tags: [...autoTags(file, name, 'rule'), ...doc.tags],
         ...(doc.business ? { facets: { business: { description: doc.business } } } : {}),
       });
@@ -262,16 +382,25 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
     }
 
     // ── role: Spring Data repository interface ──
-    const extendsText = (findFirst(decl, 'extends_interfaces') ?? findFirst(decl, 'superclass'))?.text
-      ?? childrenOfType(decl, 'super_interfaces')[0]?.text ?? '';
+    const extendsText =
+      (findFirst(decl, 'extends_interfaces') ?? findFirst(decl, 'superclass'))?.text ??
+      childrenOfType(decl, 'super_interfaces')[0]?.text ??
+      '';
     const entityName = kind === 'interface' ? repositoryEntity(extendsText) : null;
 
     const stereotypes = anns.map((a) => STEREOTYPE_TAGS[a.name]).filter((t): t is string => !!t);
     addNode({
-      id: jt.nodeId, kind: 'class', name, lang: 'java', loc,
-      docs: doc.docs, group: doc.group,
+      id: jt.nodeId,
+      kind: 'class',
+      name,
+      lang: 'java',
+      loc,
+      docs: doc.docs,
+      group: doc.group,
       tags: [
-        ...autoTags(file, name, 'class'), ...doc.tags, ...stereotypes,
+        ...autoTags(file, name, 'class'),
+        ...doc.tags,
+        ...stereotypes,
         ...(kind !== 'class' ? [kind] : []),
         ...(entityName ? ['repository'] : []),
       ],
@@ -302,21 +431,39 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       jt.declaredRepoMethods!.add(mName);
       jt.methodIds.set(mName, fnId);
       addNode({
-        id: fnId, kind: 'function', name: `${jt.name}.${mName}`, lang: 'java',
+        id: fnId,
+        kind: 'function',
+        name: `${jt.name}.${mName}`,
+        lang: 'java',
         loc: { repo, path: jt.file, line: m.startPosition.row + 1, endLine: m.endPosition.row + 1 },
-        docs: doc.docs, group: doc.group ?? classDoc.group ?? jt.name,
+        docs: doc.docs,
+        group: doc.group ?? classDoc.group ?? jt.name,
         signature: capLabel(m.text.split('{')[0]!).slice(0, 200),
         tags: [...autoTags(jt.file, `${jt.name}.${mName}`, 'function'), ...doc.tags],
         ...(doc.business ? { facets: { business: { description: doc.business } } } : {}),
       });
       // the edge carries the query: @Query JPQL when present, otherwise the derived-name signature
       const query = annString(getAnn(anns, 'Query'), 'value') ?? mName;
-      pendingRepoEdges.push({ fnId, entityName: jt.entityName!, op, write, code: capLabel(query).slice(0, 200), line: m.startPosition.row + 1 });
+      pendingRepoEdges.push({
+        fnId,
+        entityName: jt.entityName!,
+        op,
+        write,
+        code: capLabel(query).slice(0, 200),
+        line: m.startPosition.row + 1,
+      });
     }
   }
 
   /** Methods of ordinary classes (and entities): function/route/guard nodes + body extraction. */
-  function extractMethods(decl: TSNode, body: TSNode | null, jt: JavaType, source: string, classDoc: ParsedDoc, classAnns: Ann[]) {
+  function extractMethods(
+    decl: TSNode,
+    body: TSNode | null,
+    jt: JavaType,
+    source: string,
+    classDoc: ParsedDoc,
+    classAnns: Ann[],
+  ) {
     if (!body) return;
     const classBase = annString(getAnn(classAnns, 'RequestMapping'), 'value', 'path') ?? '';
     const classGuards = classAnns.filter((a) => SECURITY_ANNS.has(a.name));
@@ -336,14 +483,18 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       const branches = isGuard ? [] : extractJavaBranches(mBody, source);
 
       addNode({
-        id: fnId, kind: isGuard ? 'guard' : 'function',
-        name: isGuard && doc.guard ? `${fullName}: ${doc.guard}` : fullName, lang: 'java',
+        id: fnId,
+        kind: isGuard ? 'guard' : 'function',
+        name: isGuard && doc.guard ? `${fullName}: ${doc.guard}` : fullName,
+        lang: 'java',
         loc: { repo, path: jt.file, line: m.startPosition.row + 1, endLine: m.endPosition.row + 1 },
-        docs: doc.docs, snippet: snippetRange(source, m.startIndex, m.endIndex),
+        docs: doc.docs,
+        snippet: snippetRange(source, m.startIndex, m.endIndex),
         ...(branches.length ? { branches } : {}),
         group: doc.group ?? classDoc.group ?? jt.name,
         tags: [
-          ...autoTags(jt.file, fullName, isGuard ? 'guard' : 'function'), ...doc.tags,
+          ...autoTags(jt.file, fullName, isGuard ? 'guard' : 'function'),
+          ...doc.tags,
           ...(isGuard && !doc.tags.includes('auth') ? ['auth'] : []),
           ...(doc.entrypoint ? ['entrypoint', ...doc.entrypoint] : []),
           ...(scheduled && !doc.entrypoint ? ['entrypoint', 'cron'] : []),
@@ -362,7 +513,10 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
         const path = normalizePath(joinPaths(classBase, mapping.path));
         routeId = `${repo}::route::${mapping.method} ${path}`;
         addNode({
-          id: routeId, kind: 'route', name: `${mapping.method} ${path}`, lang: 'java',
+          id: routeId,
+          kind: 'route',
+          name: `${mapping.method} ${path}`,
+          lang: 'java',
           loc: { repo, path: jt.file, line: m.startPosition.row + 1 },
           tags: autoTags(jt.file, path, 'route'),
         });
@@ -374,8 +528,12 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
         const label = g.strings[0] ?? g.pairs.get('value') ?? '';
         const guardId = `${repo}::guard::${g.name}(${label})`;
         addNode({
-          id: guardId, kind: 'guard', name: label ? `${g.name}: ${label}` : g.name, lang: 'java',
-          tags: ['auth'], loc: { repo, path: jt.file, line: g.node.startPosition.row + 1 },
+          id: guardId,
+          kind: 'guard',
+          name: label ? `${g.name}: ${label}` : g.name,
+          lang: 'java',
+          tags: ['auth'],
+          loc: { repo, path: jt.file, line: g.node.startPosition.row + 1 },
         });
         addEdge('guards', guardId, routeId ?? fnId, undefined, byAnnotation(`@${g.name} on ${mName}`));
       }
@@ -400,7 +558,7 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
   }
 
   /** Calls, template publishes and repository ops inside one method body. */
-  function extractBody(mBody: TSNode, fnId: string, jt: JavaType, source: string) {
+  function extractBody(mBody: TSNode, fnId: string, jt: JavaType, _source: string) {
     walkTS(mBody, (b) => {
       if (TYPE_DECLS.has(b.type)) return false; // local/anonymous classes own their bodies
       if (b.type !== 'method_invocation') return;
@@ -413,14 +571,29 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
         if (parent.type !== 'if_statement') continue;
         const condition = parent.childForFieldName('condition');
         const alternative = parent.childForFieldName('alternative');
-        if (condition) conditions.unshift(alternative && b.startIndex >= alternative.startIndex ? `!${condition.text}` : condition.text);
+        if (condition)
+          conditions.unshift(
+            alternative && b.startIndex >= alternative.startIndex ? `!${condition.text}` : condition.text,
+          );
       }
-      const site: SyntaxSite = { start: b.startIndex, end: b.endIndex, col: b.startPosition.column + 1, ...(conditions.length ? { conditions } : {}) };
+      const site: SyntaxSite = {
+        start: b.startIndex,
+        end: b.endIndex,
+        col: b.startPosition.column + 1,
+        ...(conditions.length ? { conditions } : {}),
+      };
       // query code for the edge: the whole enclosing statement, so builder chains show up complete
       const code = () => {
         let stmt: TSNode = b;
         for (let p = b.parent; p && p !== mBody; p = p.parent) {
-          if (p.type === 'expression_statement' || p.type === 'local_variable_declaration' || p.type === 'return_statement') { stmt = p; break; }
+          if (
+            p.type === 'expression_statement' ||
+            p.type === 'local_variable_declaration' ||
+            p.type === 'return_statement'
+          ) {
+            stmt = p;
+            break;
+          }
         }
         return capLabel(stmt.text).slice(0, 200);
       };

@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { publishedSecrets, nativeSecrets } from './sol-report-helpers.ts';
-import { GENERIC_VALUE, absent } from './secrets-helpers.ts';
 import { assessRun, fullReport, contextIntentFor } from '../dist/service/full-report.js';
 import { ReceiptBook } from '../dist/policy/receipts.js';
 import { issueReceipt } from '../dist/policy/owner-receipts.js';

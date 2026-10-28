@@ -9,21 +9,37 @@
  * @group Shell
  */
 export const S = {
-  GRAPH: null, ROOTS: {}, SETTINGS: null,
-  STRINGS: null,            // /api/strings catalog (null until loaded / on failure)
+  GRAPH: null,
+  ROOTS: {},
+  SETTINGS: null,
+  STRINGS: null, // /api/strings catalog (null until loaded / on failure)
   register: 'professional', // 'hud' | 'professional' — persisted fs-register
-  route: null,              // parsed hash route {surface,param,sync,scope,view,repo}
-  selected: null, activeTag: null, positions: {}, focusSet: null, palIndex: 0,
+  route: null, // parsed hash route {surface,param,sync,scope,view,repo}
+  selected: null,
+  activeTag: null,
+  positions: {},
+  focusSet: null,
+  palIndex: 0,
   // a fast-travel pick bound for the code map: focusOn() once the map has mounted (shell.js pick)
   pendingFocus: null,
-  expandedGroups: new Set(), scope: 'all',
+  expandedGroups: new Set(),
+  scope: 'all',
   // the code map's projects and packages (surfaces/codemap-projects.js): group, filters, chips, the open view
   cmap: null,
-  guardsByTarget: {}, validatesByTarget: {}, EDGES_OF: new Map(), displayCache: null, displayById: null, BYID: {}, RENDER_PARENTS: {},
-  JOURNEY: null, journeyActive: 0,
-  JRN_TREE: null, jrnForksOpen: false, mhTimer: null,
-  jrnDock: null,            // 'inline' | 'bottom' | 'right' — where the code pane opens (persisted fs-jrn-dock)
-  jrnBiz: null,             // 'words' | 'gates' | 'decisions' — what the business lane draws (persisted fs-jrn-biz)
+  guardsByTarget: {},
+  validatesByTarget: {},
+  EDGES_OF: new Map(),
+  displayCache: null,
+  displayById: null,
+  BYID: {},
+  RENDER_PARENTS: {},
+  JOURNEY: null,
+  journeyActive: 0,
+  JRN_TREE: null,
+  jrnForksOpen: false,
+  mhTimer: null,
+  jrnDock: null, // 'inline' | 'bottom' | 'right' — where the code pane opens (persisted fs-jrn-dock)
+  jrnBiz: null, // 'words' | 'gates' | 'decisions' — what the business lane draws (persisted fs-jrn-biz)
 };
 
 /**
@@ -31,7 +47,9 @@ export const S = {
  * (onclick="…") keep working across the ES-module split.
  * @group Shell
  */
-export function expose(fns) { Object.assign(window, fns); }
+export function expose(fns) {
+  Object.assign(window, fns);
+}
 expose({ S });
 
 /**
@@ -44,15 +62,21 @@ export async function loadAll() {
   const [g, s, str] = await Promise.all([
     fetch('/graph').then((r) => r.json()),
     fetch('/api/settings').then((r) => r.json()),
-    fetch('/api/strings').then((r) => r.json()).catch(() => null),
+    fetch('/api/strings')
+      .then((r) => r.json())
+      .catch(() => null),
   ]);
-  S.GRAPH = g; S.ROOTS = g.roots || {}; S.SETTINGS = s;
+  S.GRAPH = g;
+  S.ROOTS = g.roots || {};
+  S.SETTINGS = s;
   S.STRINGS = str && str.strings ? str.strings : null;
 }
 
 // ── model helpers ───────────────────────────────────────────────
 /** @group Shell */
-export function repoOf(n) { return n.repo || (n.loc && n.loc.repo) || n.id.split('::')[0]; }
+export function repoOf(n) {
+  return n.repo || (n.loc && n.loc.repo) || n.id.split('::')[0];
+}
 /**
  * One pass over the graph's nodes and one over its edges, so the map and the
  * inspector look things up instead of scanning every edge per card: nodes by id,
@@ -62,9 +86,17 @@ export function repoOf(n) { return n.repo || (n.loc && n.loc.repo) || n.id.split
  * @group Shell
  */
 export function indexGuards() {
-  S.guardsByTarget = {}; S.validatesByTarget = {}; S.EDGES_OF = new Map(); S.BYID = {}; S.RENDER_PARENTS = {};
+  S.guardsByTarget = {};
+  S.validatesByTarget = {};
+  S.EDGES_OF = new Map();
+  S.BYID = {};
+  S.RENDER_PARENTS = {};
   S.GRAPH.nodes.forEach((n) => (S.BYID[n.id] = n));
-  const touch = (id, e) => { const l = S.EDGES_OF.get(id); if (l) l.push(e); else S.EDGES_OF.set(id, [e]); };
+  const touch = (id, e) => {
+    const l = S.EDGES_OF.get(id);
+    if (l) l.push(e);
+    else S.EDGES_OF.set(id, [e]);
+  };
   S.GRAPH.edges.forEach((e) => {
     if (e.kind === 'guards') {
       const g = S.BYID[e.from];
@@ -81,13 +113,15 @@ export function indexGuards() {
  * @group Shell */
 export function embeddedRootOf(n) {
   if (n.kind !== 'component') return null;
-  let cur = n, root = null;
+  let cur = n,
+    root = null;
   for (let i = 0; i < 10; i++) {
     const parents = S.RENDER_PARENTS[cur.id];
     if (!parents || parents.length !== 1) break;
     const p = S.BYID[parents[0]];
     if (!p || p.kind !== 'component') break;
-    root = p; cur = p;
+    root = p;
+    cur = p;
   }
   return root;
 }
@@ -98,10 +132,23 @@ export function effectiveGroup(n) {
   // name (humanize) was most of that fold on a large graph. A reload brings new node objects, so a new answer.
   if (EFFECTIVE_GROUP.has(n)) return EFFECTIVE_GROUP.get(n);
   let out = null;
-  if (n.group) out = { key: repoOf(n) + '::' + n.group, name: groupName(n), codename: n.group, laneKind: n.kind === 'component' ? 'component' : 'function' };
+  if (n.group)
+    out = {
+      key: repoOf(n) + '::' + n.group,
+      name: groupName(n),
+      codename: n.group,
+      laneKind: n.kind === 'component' ? 'component' : 'function',
+    };
   else {
     const root = embeddedRootOf(n);
-    if (root) out = { key: 'emb::' + root.id, name: bizLabel(root) + ' · embedded', codename: 'inside <' + root.name + '>', laneKind: 'component', anchor: root };
+    if (root)
+      out = {
+        key: 'emb::' + root.id,
+        name: bizLabel(root) + ' · embedded',
+        codename: 'inside <' + root.name + '>',
+        laneKind: 'component',
+        anchor: root,
+      };
   }
   EFFECTIVE_GROUP.set(n, out);
   return out;
@@ -113,7 +160,14 @@ export function groupName(n) {
   return humanize(base);
 }
 /** @group Shell */
-export function collSourceNames(c) { return c.sourceIds.map((id) => { const s = (S.SETTINGS.sources || []).find((s) => s.id === id); return s && s.name; }).filter(Boolean); }
+export function collSourceNames(c) {
+  return c.sourceIds
+    .map((id) => {
+      const s = (S.SETTINGS.sources || []).find((s) => s.id === id);
+      return s && s.name;
+    })
+    .filter(Boolean);
+}
 /** @group Shell */
 export function scopedRepos() {
   if (S.scope === 'all' || !S.scope.length) return null;
@@ -127,27 +181,51 @@ export function scopedRepos() {
 export function hydrateScope() {
   try {
     const raw = localStorage.getItem('fs-scope-v2');
-    if (raw) { const v = JSON.parse(raw); if (v === 'all' || Array.isArray(v)) { S.scope = v; return; } }
+    if (raw) {
+      const v = JSON.parse(raw);
+      if (v === 'all' || Array.isArray(v)) {
+        S.scope = v;
+        return;
+      }
+    }
   } catch (err) {}
   const old = localStorage.getItem('fs-scope');
   if (!old || old === 'all') return;
   if (old.startsWith('src:')) S.scope = [old.slice(4)];
   else if (old.startsWith('coll:')) {
     const c = (S.SETTINGS.collections || []).find((c) => c.name === old.slice(5));
-    if (c) { const names = collSourceNames(c); if (names.length) S.scope = names; }
+    if (c) {
+      const names = collSourceNames(c);
+      if (names.length) S.scope = names;
+    }
   }
 }
 /** @group Shell */
-export function inScope(n) { const r = scopedRepos(); return !r || r.has(repoOf(n)); }
-/** @group Shell */
-export function humanize(name) {
-  return name.replace(/^(GET|POST|PATCH|PUT|DELETE) /, (m) => ({ GET: 'View ', POST: 'Submit ', PATCH: 'Update ', PUT: 'Replace ', DELETE: 'Remove ' }[m.trim()] || m))
-    .replace(/\/:param/g, '').replace(/^\//, '').replace(/\//g, ' ')
-    .replace(/\.[tj]sx?$/, '').replace(/.*\bsrc /, '')
-    .replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+export function inScope(n) {
+  const r = scopedRepos();
+  return !r || r.has(repoOf(n));
 }
 /** @group Shell */
-export function bizLabel(n) { return (n.facets && n.facets.business && n.facets.business.label) || n.bizLabel || humanize(n.name || ''); }
+export function humanize(name) {
+  return name
+    .replace(
+      /^(GET|POST|PATCH|PUT|DELETE) /,
+      (m) => ({ GET: 'View ', POST: 'Submit ', PATCH: 'Update ', PUT: 'Replace ', DELETE: 'Remove ' })[m.trim()] || m,
+    )
+    .replace(/\/:param/g, '')
+    .replace(/^\//, '')
+    .replace(/\//g, ' ')
+    .replace(/\.[tj]sx?$/, '')
+    .replace(/.*\bsrc /, '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[-_]/g, ' ')
+    .toLowerCase()
+    .replace(/^./, (c) => c.toUpperCase());
+}
+/** @group Shell */
+export function bizLabel(n) {
+  return (n.facets && n.facets.business && n.facets.business.label) || n.bizLabel || humanize(n.name || '');
+}
 
 /**
  * A sentence somebody wrote, cut to the part a business reader can use: its
@@ -158,7 +236,12 @@ export function bizLabel(n) { return (n.facets && n.facets.business && n.facets.
  */
 export function plainClause(s) {
   let out = String(s || '').split(/\s[—–]\s|(?<=[.!?])\s/)[0];
-  out = out.replace(/`[^`]*`/g, ' ').replace(/\s*\([^)]*\)/g, '').replace(/\s+([,.;:])/g, '$1').replace(/\s{2,}/g, ' ').trim();
+  out = out
+    .replace(/`[^`]*`/g, ' ')
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/\s+([,.;:])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
   return out.replace(/[.;:,]+$/, '').trim();
 }
 
@@ -204,25 +287,53 @@ function httpWordsOf(text) {
     return e ? (S.register === 'hud' ? e.hud : e.professional) : code;
   };
   return String(text || '')
-    .replace(/\b(answers?|returns?|responds?\s+with|refuses\s+with|fails\s+with|with)\s+(?:an?\s+)?([45]\d\d)\b/gi, (m, v, code) => v + ' ' + say(code))
-    .replace(/(?<![\d.,])(?<!\bof\s)(?:\b(?:an?|the)\s+)?\b([45]\d\d)\b(?=\s*(?:$|[,.;:)!?]|\s(?:without|while|when|if|unless|for|on|otherwise|else|and|or|from)\b|\s[—–-]\s))/g, (m, code) => say(code));
+    .replace(
+      /\b(answers?|returns?|responds?\s+with|refuses\s+with|fails\s+with|with)\s+(?:an?\s+)?([45]\d\d)\b/gi,
+      (m, v, code) => v + ' ' + say(code),
+    )
+    .replace(
+      /(?<![\d.,])(?<!\bof\s)(?:\b(?:an?|the)\s+)?\b([45]\d\d)\b(?=\s*(?:$|[,.;:)!?]|\s(?:without|while|when|if|unless|for|on|otherwise|else|and|or|from)\b|\s[—–-]\s))/g,
+      (m, code) => say(code),
+    );
 }
 function unCodeAll(text) {
-  const words = (s) => String(s).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().trim();
-  const file = (p) => words((String(p).split('/').filter(Boolean).pop() || '').replace(/\.[\w.]+$/, '').replace(/\.(spec|test|stories)$/, ''));
-  return httpWordsOf(text)
-    // a document's id in brackets — (SCR-08.5), (PBI #352) — is the docs' handle, not words;
-    // an ADR number is the citation key a reader quotes the decision by, so a bracket that
-    // cites only ADRs stays in every register (swarm 2026-10-05, the business analyst)
-    .replace(/\s*\((?:[^()]*\b(?:[A-Z]{2,6}[- ]?#?\d[\w.]*|ADR|PBI)\b[^()]*)\)/g, (m) => (/\bADR[\s-]?\d/.test(m) && !/\b(?!ADR)[A-Z]{2,6}[- ]?#?\d|\bPBI\b/.test(m) ? m : ''))
-    .replace(/`([^`]*)`/g, (m, x) => (/[/.]/.test(x) ? file(x) : words(x)))
-    .replace(/\b(?:GET|POST|PUT|PATCH|DELETE)\s+(\/[\w/:{}.[\]-]*)/g, (m, p) => words(p.split('/').filter((s) => s && !/^(api|v\d+)$/i.test(s) && !/^[:{[]/.test(s)).join(' ')))
-    .replace(/(?:[\w.-]+\/)+[\w.-]+/g, (m) => file(m))
-    .replace(/\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|json|ya?ml|md)\b/g, (m) => file(m))
-    .replace(/\b[a-f0-9]{7,40}\b/g, (m) => (/[a-f]/.test(m) && /\d/.test(m) ? '' : m))
-    .replace(/\b[a-z]+[A-Z][A-Za-z0-9]*\b/g, (m) => words(m))
-    .replace(/\b[A-Za-z0-9]+_[A-Za-z0-9_]+\b/g, (m) => words(m))
-    .replace(/\s+([,.;:)])/g, '$1').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
+  const words = (s) =>
+    String(s)
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/[_-]+/g, ' ')
+      .toLowerCase()
+      .trim();
+  const file = (p) =>
+    words(
+      (String(p).split('/').filter(Boolean).pop() || '').replace(/\.[\w.]+$/, '').replace(/\.(spec|test|stories)$/, ''),
+    );
+  return (
+    httpWordsOf(text)
+      // a document's id in brackets — (SCR-08.5), (PBI #352) — is the docs' handle, not words;
+      // an ADR number is the citation key a reader quotes the decision by, so a bracket that
+      // cites only ADRs stays in every register (swarm 2026-10-05, the business analyst)
+      .replace(/\s*\((?:[^()]*\b(?:[A-Z]{2,6}[- ]?#?\d[\w.]*|ADR|PBI)\b[^()]*)\)/g, (m) =>
+        /\bADR[\s-]?\d/.test(m) && !/\b(?!ADR)[A-Z]{2,6}[- ]?#?\d|\bPBI\b/.test(m) ? m : '',
+      )
+      .replace(/`([^`]*)`/g, (m, x) => (/[/.]/.test(x) ? file(x) : words(x)))
+      .replace(/\b(?:GET|POST|PUT|PATCH|DELETE)\s+(\/[\w/:{}.[\]-]*)/g, (m, p) =>
+        words(
+          p
+            .split('/')
+            .filter((s) => s && !/^(api|v\d+)$/i.test(s) && !/^[:{[]/.test(s))
+            .join(' '),
+        ),
+      )
+      .replace(/(?:[\w.-]+\/)+[\w.-]+/g, (m) => file(m))
+      .replace(/\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|json|ya?ml|md)\b/g, (m) => file(m))
+      .replace(/\b[a-f0-9]{7,40}\b/g, (m) => (/[a-f]/.test(m) && /\d/.test(m) ? '' : m))
+      .replace(/\b[a-z]+[A-Z][A-Za-z0-9]*\b/g, (m) => words(m))
+      .replace(/\b[A-Za-z0-9]+_[A-Za-z0-9_]+\b/g, (m) => words(m))
+      .replace(/\s+([,.;:)])/g, '$1')
+      .replace(/\(\s*\)/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  );
 }
 
 /**
@@ -256,7 +367,9 @@ export function bizName(n) {
   }
   // a test's title and a journey's name are words somebody wrote — said in words where they name code
   if (n.kind === 'test' || n.kind === 'flow') return /\/|[a-z][A-Z]|_|\.[a-z]{2,4}\b/.test(name) ? unCode(name) : name;
-  const words = humanize(name.replace(/\.(spec|test|stories)(?=\.|$)/, '').replace(/\.json$/, '')).replace(/\s*:\w+/g, '').trim();
+  const words = humanize(name.replace(/\.(spec|test|stories)(?=\.|$)/, '').replace(/\.json$/, ''))
+    .replace(/\s*:\w+/g, '')
+    .trim();
   return words || humanize(n.kind || '');
 }
 
@@ -269,15 +382,24 @@ export function currentLens() {
 }
 
 /** @group Shell */
-export function cssId(s) { return s.replace(/[^a-zA-Z0-9_-]/g, '_'); }
+export function cssId(s) {
+  return s.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
 /** @group Shell */
 /**
  * A value as a JS string argument inside an HTML event-handler attribute: `onclick="f(' + jsArg(x) + ')"`.
  * `esc()` alone is not enough there — the HTML parser decodes `&#39;` back to `'` before the handler runs.
  * @group Shell
  */
-export function jsArg(s) { return esc(JSON.stringify(String(s))); }
-export function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+export function jsArg(s) {
+  return esc(JSON.stringify(String(s)));
+}
+export function esc(s) {
+  return String(s).replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+  );
+}
 
 /**
  * The little bit of markdown a spec's own prose actually uses: `code`, **bold**
@@ -292,10 +414,12 @@ export function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&a
 export function mdInline(text) {
   return esc(String(text || ''))
     .split(/\n\s*\n/)
-    .map((para) => para
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-      .replace(/\n/g, ' '))
+    .map((para) =>
+      para
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+        .replace(/\n/g, ' '),
+    )
     .filter(Boolean)
     .map((para) => '<p class="api-desc">' + para + '</p>')
     .join('');

@@ -26,13 +26,42 @@ import { tipAttrs, registerTip } from '../lib/tooltip.js';
 import { designThumbHtml } from '../lib/graph-render.js';
 import { storylineOf, placesOf, screenPersonaOthers } from '../lib/journeys-model.js';
 import { jrnPersonaName, jrnGroupName } from '../lib/journeys-tree.js';
-import { sheetModel, screenActions, screenOfAction, actionOfMarker, beatOrder, segmentActionOf } from '../lib/journey-model.js';
+import {
+  sheetModel,
+  screenActions,
+  screenOfAction,
+  actionOfMarker,
+  beatOrder,
+  segmentActionOf,
+} from '../lib/journey-model.js';
 import { storylineLineHtml } from '../lib/detail-doors.js';
 import { registerExport } from '../lib/export.js';
 import {
-  jrnBuildTree, jrnSheetIndex, jrnSheetHtml, jrnResetFolds, jrnSelect, jrnLadderCellHtml, jrnDock, jrnSetDock,
-  jrnLifecycleHtml, jrnMoLabel, jrnMarkerAt, jrnNav, jrnApplyDock, jrnCollectForks, jrnForksPanelHtml, jrnToggleForks,
-  jrnForksBtnHtml, jrnImpactRings, jrnCutChip, jrnHeaderHtml, jrnToggleCuts, cutsOpen, forksOpen, expandedOpen, closeExpanded, jrnScrollTo,
+  jrnBuildTree,
+  jrnSheetIndex,
+  jrnSheetHtml,
+  jrnResetFolds,
+  jrnSelect,
+  jrnLadderCellHtml,
+  jrnDock,
+  jrnSetDock,
+  jrnMoLabel,
+  jrnMarkerAt,
+  jrnNav,
+  jrnApplyDock,
+  jrnCollectForks,
+  jrnForksPanelHtml,
+  jrnToggleForks,
+  jrnForksBtnHtml,
+  jrnImpactRings,
+  jrnCutChip,
+  jrnHeaderHtml,
+  jrnToggleCuts,
+  cutsOpen,
+  forksOpen,
+  expandedOpen,
+  closeExpanded,
+  jrnScrollTo,
 } from '../lib/journey-draw.js';
 import { partOrder, screenRowAt } from '../lib/route-url.js';
 import { jrnDrillIndex, jrnDrillStageHtml, jrnDrillMount, jrnDrillRailHtml, jrnInspHostHtml } from './journey-drill.js';
@@ -62,7 +91,8 @@ export const MAP_LAYOUTS = [
 /** Add (or replace, by id and stop) one layout choice. @group Map */
 export function registerMapLayout(choice) {
   const i = MAP_LAYOUTS.findIndex((x) => x.id === choice.id && x.when === choice.when);
-  if (i >= 0) MAP_LAYOUTS[i] = choice; else MAP_LAYOUTS.push(choice);
+  if (i >= 0) MAP_LAYOUTS[i] = choice;
+  else MAP_LAYOUTS.push(choice);
 }
 const LAYOUT = {};
 
@@ -76,19 +106,27 @@ const VIEWS = ['screens', 'lanes', 'table', 'beats', 'ladder', 'drill'];
 const VIEW_DEFAULT = { business: 'screens', hybrid: 'table', code: 'beats' };
 /** The view a journey opens at in this register: what the reader last picked here, else the register's default. @group Map */
 export function registerView(lens = currentLens()) {
-  let v = null;
-  try { v = localStorage.getItem('fs-map-view.' + lens); } catch (e) { v = null; }
-  return VIEWS.includes(v) ? v : (VIEW_DEFAULT[lens] || 'screens');
+  let v;
+  try {
+    v = localStorage.getItem('fs-map-view.' + lens);
+  } catch (e) {
+    v = null;
+  }
+  return VIEWS.includes(v) ? v : VIEW_DEFAULT[lens] || 'screens';
 }
 /** Remember the view the reader picked, for their register. */
 function rememberView(v) {
   if (!VIEWS.includes(v)) return;
-  try { localStorage.setItem('fs-map-view.' + currentLens(), v); } catch (e) { /* private mode: the default stays */ }
+  try {
+    localStorage.setItem('fs-map-view.' + currentLens(), v);
+  } catch (e) {
+    /* private mode: the default stays */
+  }
 }
 /** The layout on screen at a stop: the one picked, else the stop's first choice. @group Map */
 export function layoutAt(when) {
   const list = MAP_LAYOUTS.filter((x) => x.when === when);
-  return list.some((x) => x.id === LAYOUT[when]) ? LAYOUT[when] : (list[0] ? list[0].id : null);
+  return list.some((x) => x.id === LAYOUT[when]) ? LAYOUT[when] : list[0] ? list[0].id : null;
 }
 
 const ST = { api: null, act: null, table: null, full: new Map(), gen: 0 };
@@ -99,7 +137,9 @@ const ST = { api: null, act: null, table: null, full: new Map(), gen: 0 };
  * `headHtml(flow)` (the street head's chip row), `nameWords`.
  * @group Map
  */
-export function bindStops(api) { ST.api = api; }
+export function bindStops(api) {
+  ST.api = api;
+}
 
 /** The stop on screen: `nb` · `st` · `pr` · `act` · `code`. @group Map */
 export function stopNow() {
@@ -117,16 +157,53 @@ export function layoutToolHtml() {
   // the control keeps its slot at every stop (the chrome holds still): a stop drawn one way says so, quietly
   if (list.length < 2) {
     const only = list[0];
-    return '<span class="map-layout one" role="group" aria-label="' + esc(t('map.layout')) + '">'
-      + '<span class="hud-label"' + tipAttrs({ key: 'map.layout', noFocus: true }) + '>' + esc(t('map.layout')) + '</span><span class="map-segs">'
-      + '<span class="map-seg on" aria-disabled="true"' + tipAttrs({ key: only ? only.word : 'map.layout.one', noFocus: true }) + '>' + esc(t(only ? only.word : 'map.layout.one')) + '</span></span></span>';
+    return (
+      '<span class="map-layout one" role="group" aria-label="' +
+      esc(t('map.layout')) +
+      '">' +
+      '<span class="hud-label"' +
+      tipAttrs({ key: 'map.layout', noFocus: true }) +
+      '>' +
+      esc(t('map.layout')) +
+      '</span><span class="map-segs">' +
+      '<span class="map-seg on" aria-disabled="true"' +
+      tipAttrs({ key: only ? only.word : 'map.layout.one', noFocus: true }) +
+      '>' +
+      esc(t(only ? only.word : 'map.layout.one')) +
+      '</span></span></span>'
+    );
   }
   const on = layoutAt(when);
-  return '<span class="map-layout" role="group" aria-label="' + esc(t('map.layout')) + '">'
-    + '<span class="hud-label"' + tipAttrs({ key: 'map.layout', noFocus: true }) + '>' + esc(t('map.layout')) + '</span><span class="map-segs">'
-    + list.map((x) => '<button type="button" class="map-seg' + (x.id === on ? ' on' : '') + '" data-act="layout" data-layout="' + esc(x.id) + '" data-when="' + esc(when) + '"'
-      + ' aria-pressed="' + (x.id === on ? 'true' : 'false') + '"' + tipAttrs({ key: x.word, noFocus: true }) + '>' + esc(t(x.word)) + '</button>').join('')
-    + '</span></span>';
+  return (
+    '<span class="map-layout" role="group" aria-label="' +
+    esc(t('map.layout')) +
+    '">' +
+    '<span class="hud-label"' +
+    tipAttrs({ key: 'map.layout', noFocus: true }) +
+    '>' +
+    esc(t('map.layout')) +
+    '</span><span class="map-segs">' +
+    list
+      .map(
+        (x) =>
+          '<button type="button" class="map-seg' +
+          (x.id === on ? ' on' : '') +
+          '" data-act="layout" data-layout="' +
+          esc(x.id) +
+          '" data-when="' +
+          esc(when) +
+          '"' +
+          ' aria-pressed="' +
+          (x.id === on ? 'true' : 'false') +
+          '"' +
+          tipAttrs({ key: x.word, noFocus: true }) +
+          '>' +
+          esc(t(x.word)) +
+          '</button>',
+      )
+      .join('') +
+    '</span></span>'
+  );
 }
 /** Redraw the LAYOUT control in its slot when the stop changed; true when it did (the toolbar folds again). @group Map */
 export function drawLayoutTool() {
@@ -164,8 +241,15 @@ export function setLayout(when, id, o = {}) {
   LAYOUT[when] = id;
   if (o.remember && (when === 'st' || when === 'act')) rememberView(id);
   if (c.onPick) c.onPick(id);
-  else if (when === 'st') { syncTable(); if (ST.api.syncJourneyLanes) ST.api.syncJourneyLanes(); ST.api.writeHash(); }
-  else if (when === 'act' && ST.act) { drawAct(); selectBeat(ST.act.beat || 0); ST.api.writeHash(); }
+  else if (when === 'st') {
+    syncTable();
+    if (ST.api.syncJourneyLanes) ST.api.syncJourneyLanes();
+    ST.api.writeHash();
+  } else if (when === 'act' && ST.act) {
+    drawAct();
+    selectBeat(ST.act.beat || 0);
+    ST.api.writeHash();
+  }
   drawLayoutTool();
 }
 /** Open the drill: the journey on screen (the table's screen, else the first) at its first action, the rail over it. */
@@ -194,23 +278,37 @@ export function cycleLayout() {
 }
 
 // ── the journey with its walk ────────────────────────────────────────────────
-function syncKey() { return String((S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || ''); }
+function syncKey() {
+  return String((S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || '');
+}
 /** The journey answer with its walk (the board reads it without: `steps=0`), once per journey per sync. */
 function fetchFull(flow) {
   const key = flow + '@' + syncKey();
   if (!ST.full.has(key)) {
-    ST.full.set(key, fetch('/api/journey?entry=' + encodeURIComponent(flow)).then((r) => (r.ok ? r.json() : null)).catch(() => null));
+    ST.full.set(
+      key,
+      fetch('/api/journey?entry=' + encodeURIComponent(flow))
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    );
   }
   return ST.full.get(key);
 }
 /** Forget the walks (a new sync). @group Map */
-export function forgetWalks() { ST.full.clear(); }
+export function forgetWalks() {
+  ST.full.clear();
+}
 /** A part was selected on the stop (a click, j / k, a door): the address follows it. */
 function onSelect() {
-  if (ST.api && (ST.table || ST.act)) { ST.api.writeHash(); if (ST.table) ST.api.refresh(); }
+  if (ST.api && (ST.table || ST.act)) {
+    ST.api.writeHash();
+    if (ST.table) ST.api.refresh();
+  }
 }
 /** The drawing asked for the stop to be drawn again (a business tab of the checks lane moved). */
-function onRedraw() { redrawStops(); }
+function onRedraw() {
+  redrawStops();
+}
 /** Make this answer the journey the shared drawing code reads, and give it this host. */
 function useJourney(data, host) {
   if (S.JOURNEY !== data) {
@@ -226,7 +324,9 @@ function useJourney(data, host) {
 
 // ── the action stop ─────────────────────────────────────────────────────────
 /** Whether an action is open on the Map (its stop, or the code over it). @group Map */
-export function actionOpen() { return !!ST.act; }
+export function actionOpen() {
+  return !!ST.act;
+}
 /** The open action, for the address and the crumb: `{ flow, ci, si, beat, code }` or null. @group Map */
 export function actionState() {
   if (!ST.act) return null;
@@ -248,7 +348,10 @@ export async function openAction(flow, ci, o = {}) {
   const j = await api.ensureJourney(flow);
   if (gen !== ST.gen || !M.stage || !j || !j.model) return;
   const host = M.stage.querySelector('.map-act-host');
-  if (!ST.act) { host.hidden = false; host.innerHTML = '<div class="map-act-wait">' + esc(t('map.act.loading')) + '</div>'; }
+  if (!ST.act) {
+    host.hidden = false;
+    host.innerHTML = '<div class="map-act-wait">' + esc(t('map.act.loading')) + '</div>';
+  }
   const data = await fetchFull(flow);
   if (gen !== ST.gen || !M.stage || !data || !data.summary || !(data.summary.segments || []).length) {
     if (gen === ST.gen && !ST.act) host.hidden = true;
@@ -263,8 +366,19 @@ export async function openAction(flow, ci, o = {}) {
   const cols = S.JRN_DRILL.cols;
   if (!cols.length) return;
   S.jrnAction = Math.max(0, Math.min(cols.length - 1, ci));
-  if (o.dock && o.dock !== jrnDock()) { jrnSetDock(o.dock); if (ST.api.dockMoved) ST.api.dockMoved(); }
-  ST.act = { flow, ci: S.jrnAction, si: screenOfAction(cols, j.model.screens, S.jrnAction), beat: 0, code: !!o.code, host, model: j.model };
+  if (o.dock && o.dock !== jrnDock()) {
+    jrnSetDock(o.dock);
+    if (ST.api.dockMoved) ST.api.dockMoved();
+  }
+  ST.act = {
+    flow,
+    ci: S.jrnAction,
+    si: screenOfAction(cols, j.model.screens, S.jrnAction),
+    beat: 0,
+    code: !!o.code,
+    host,
+    model: j.model,
+  };
   M.act = ST.act;
   host.hidden = false;
   M.stage.classList.add('in-act');
@@ -292,7 +406,10 @@ export async function openScreenAction(flow, si, o = {}) {
   if (!j || !j.model || !j.data) return false;
   const acts = screenActions(sheetModel(j.data.summary).cols, j.model.screens, si);
   const k = o.action != null ? Math.max(0, Math.min(acts.length - 1, o.action)) : 0;
-  if (!acts.length) { ST.api.toast(t('map.act.none')); return false; }
+  if (!acts.length) {
+    ST.api.toast(t('map.act.none'));
+    return false;
+  }
   await openAction(flow, acts[k].index, o);
   return true;
 }
@@ -308,7 +425,10 @@ export function closeAction(o = {}) {
   ST.act = null;
   const M = ST.api.MAP;
   M.act = null;
-  if (S.jrnDrillRO) { S.jrnDrillRO.disconnect(); S.jrnDrillRO = null; }
+  if (S.jrnDrillRO) {
+    S.jrnDrillRO.disconnect();
+    S.jrnDrillRO = null;
+  }
   host.hidden = true;
   host.innerHTML = '';
   inspHost(false);
@@ -337,7 +457,9 @@ function selectBeat(bi) {
   const b = dr.beats[at];
   const order = beatOrder(b);
   if (b.kind !== 'screen' && order != null) jrnSelect(order, true);
-  ST.act.host.querySelectorAll('.jrn-dbh[data-beat]').forEach((el) => el.classList.toggle('on', +el.dataset.beat === at));
+  ST.act.host
+    .querySelectorAll('.jrn-dbh[data-beat]')
+    .forEach((el) => el.classList.toggle('on', +el.dataset.beat === at));
   const box = ST.act.host.querySelector(b.kind === 'answer' ? '#jrn-ans' : '#jrn-bx-' + order);
   if (box && box.scrollIntoView) box.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
@@ -352,7 +474,8 @@ export function walkBeat(d) {
 function openCodeTab() {
   // the code is a part's: a screen kept open from an earlier action has none here, so the next beat that is a part opens
   const dr = S.JRN_DRILL;
-  const sel = S.journeyActive != null && S.journeyActive >= 0 && dr && dr.colOf && dr.colOf[S.journeyActive] === ST.act.beat;
+  const sel =
+    S.journeyActive != null && S.journeyActive >= 0 && dr && dr.colOf && dr.colOf[S.journeyActive] === ST.act.beat;
   if (!sel && dr && dr.beats) {
     const from = ST.act.beat || 0;
     const at = dr.beats.findIndex((b, i) => i >= from && b.kind !== 'screen');
@@ -366,7 +489,10 @@ export function openCode() {
   if (!ST.act) return;
   ST.act.code = true;
   ST.act.host.querySelector('.map-act').classList.add('code');
-  if (dockPlace() !== 'inline') { inspHost(true); openPanel('code'); }
+  if (dockPlace() !== 'inline') {
+    inspHost(true);
+    openPanel('code');
+  }
   hintLine();
   openCodeTab();
   ST.api.writeHash();
@@ -393,7 +519,8 @@ export function closeCode() {
 export function setActDock(d) {
   jrnSetDock(d);
   // the Map's dock redraws its switch and, seeing the place moved, calls stopsDockMoved() — the one way it moves
-  if (ST.api && ST.api.dockMoved) ST.api.dockMoved(); else stopsDockMoved();
+  if (ST.api && ST.api.dockMoved) ST.api.dockMoved();
+  else stopsDockMoved();
   if (ST.act) ST.api.writeHash();
 }
 
@@ -406,8 +533,12 @@ export function stopZoom(dir) {
   const M = ST.api && ST.api.MAP;
   if (!M) return false;
   if (ST.act) {
-    if (dir > 0) { if (!ST.act.code) openCode(); return true; }
-    if (ST.act.code) closeCode(); else closeAction();
+    if (dir > 0) {
+      if (!ST.act.code) openCode();
+      return true;
+    }
+    if (ST.act.code) closeCode();
+    else closeAction();
     return true;
   }
   if (M.prop) {
@@ -415,22 +546,35 @@ export function stopZoom(dir) {
     else ST.api.closeProperty();
     return true;
   }
-  if (ST.table && dir > 0) { ST.api.openProperty(ST.table.flow, 0); return true; }
+  if (ST.table && dir > 0) {
+    ST.api.openProperty(ST.table.flow, 0);
+    return true;
+  }
   return false;
 }
 /** The keys at an action: ← → the beats, [ ] the actions of the journey, d the dock, t its tests. True when used. @group Map */
 export function actionKey(e) {
   if (!ST.act) return false;
   const k = e.key;
-  if (k === 'ArrowLeft' || k === 'ArrowRight') { walkBeat(k === 'ArrowRight' ? 1 : -1); return true; }
+  if (k === 'ArrowLeft' || k === 'ArrowRight') {
+    walkBeat(k === 'ArrowRight' ? 1 : -1);
+    return true;
+  }
   if (k === '[' || k === ']') {
     const n = S.JRN_DRILL ? S.JRN_DRILL.cols.length : 0;
     const next = (S.jrnAction || 0) + (k === ']' ? 1 : -1);
     if (next >= 0 && next < n) openAction(ST.act.flow, next, { code: ST.act.code });
     return true;
   }
-  if (k === 'd' || k === 'D') { const order = ['inline', 'bottom', 'right']; setActDock(order[(order.indexOf(jrnDock()) + 1) % order.length]); return true; }
-  if (k === 't' && ST.act.code && typeof window.jrnDrillInspTab === 'function') { window.jrnDrillInspTab('tests'); return true; }
+  if (k === 'd' || k === 'D') {
+    const order = ['inline', 'bottom', 'right'];
+    setActDock(order[(order.indexOf(jrnDock()) + 1) % order.length]);
+    return true;
+  }
+  if (k === 't' && ST.act.code && typeof window.jrnDrillInspTab === 'function') {
+    window.jrnDrillInspTab('tests');
+    return true;
+  }
   return false;
 }
 
@@ -439,9 +583,18 @@ export function actionKey(e) {
  * or below; emptied and closed when it is docked in place, so the page never holds two `#jrn-insp`.
  */
 function inspHost(inDock) {
-  const el = dockPanel('code', { key: 'map.dock.code', close: () => { if (ST.act && ST.act.code) closeCode(); } });
+  const el = dockPanel('code', {
+    key: 'map.dock.code',
+    close: () => {
+      if (ST.act && ST.act.code) closeCode();
+    },
+  });
   if (!el) return null;
-  if (!inDock) { closePanel('code', { quiet: true }); el.innerHTML = ''; return null; }
+  if (!inDock) {
+    closePanel('code', { quiet: true });
+    el.innerHTML = '';
+    return null;
+  }
   if (!el.querySelector('#jrn-insp')) el.innerHTML = jrnInspHostHtml();
   return el;
 }
@@ -450,42 +603,114 @@ function inspHost(inDock) {
  * @group Map
  */
 export function stopsDockMoved() {
-  if (ST.act) { const bi = ST.act.beat; drawAct(); selectBeat(bi); if (ST.act.code) openCodeTab(); }
-  if (ST.table) { placePartPane(); jrnApplyDock(); }
+  if (ST.act) {
+    const bi = ST.act.beat;
+    drawAct();
+    selectBeat(bi);
+    if (ST.act.code) openCodeTab();
+  }
+  if (ST.table) {
+    placePartPane();
+    jrnApplyDock();
+  }
 }
 /** The dock's three places, the journey's own words (`journey.dock.*`) — at the action's top while it is docked in place. */
 function dockSwitchHtml() {
   const v = jrnDock();
-  const b = (k, key) => '<button type="button" class="map-seg' + (v === k ? ' on' : '') + '" data-dock="' + k + '" aria-pressed="' + (v === k ? 'true' : 'false') + '"'
-    + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
-  return '<span class="map-segs" role="group" aria-label="' + esc(t('map.dock')) + '">' + b('inline', 'journey.dock.inline') + b('bottom', 'journey.dock.bottom') + b('right', 'journey.dock.right') + '</span>';
+  const b = (k, key) =>
+    '<button type="button" class="map-seg' +
+    (v === k ? ' on' : '') +
+    '" data-dock="' +
+    k +
+    '" aria-pressed="' +
+    (v === k ? 'true' : 'false') +
+    '"' +
+    tipAttrs({ key, noFocus: true }) +
+    '>' +
+    esc(t(key)) +
+    '</button>';
+  return (
+    '<span class="map-segs" role="group" aria-label="' +
+    esc(t('map.dock')) +
+    '">' +
+    b('inline', 'journey.dock.inline') +
+    b('bottom', 'journey.dock.bottom') +
+    b('right', 'journey.dock.right') +
+    '</span>'
+  );
 }
 /**
  * The journey's screens as one line of numbered names (cleanup pass 2026-10-11, lane S: three 48-px pictures took 60 px
  * of the beats' height), the one the action is on lit with *action n of m*; each screen's picture is in its tip.
  */
 function stripHtml() {
-  const a = ST.act, model = a.model, cols = S.JRN_DRILL ? S.JRN_DRILL.cols : [];
+  const a = ST.act,
+    model = a.model,
+    cols = S.JRN_DRILL ? S.JRN_DRILL.cols : [];
   const acts = screenActions(cols, model.screens, a.si);
   const k = acts.findIndex((c) => c.index === S.jrnAction);
-  return '<div class="map-act-strip" role="group" aria-label="' + esc(t('map.act.strip')) + '">'
-    + '<span class="hud-label"' + tipAttrs({ key: 'map.act.strip', noFocus: true }) + '>' + esc(t('map.act.strip')) + '</span>'
-    + model.screens.map((s, i) => {
-      const on = i === a.si;
-      const sub = on && k >= 0 ? t('map.crumb.action').replace('{n}', k + 1).replace('{m}', acts.length)
-        : s.state === 'planned' ? t('map.screen.planned') : '';
-      return '<button type="button" class="map-act-scr' + (on ? ' on' : '') + (s.state === 'planned' ? ' planned' : '') + '" data-si="' + i + '"'
-        + ' aria-current="' + (on ? 'step' : 'false') + '"' + tipAttrs({ id: 'mapActScreen', args: { si: i }, noFocus: true }) + '>'
-        + '<span class="t"><span class="o">' + s.ordinal + '</span><span class="n">' + esc(s.name) + '</span>' + (sub ? '<span class="s">' + esc(sub) + '</span>' : '') + '</span></button>';
-    }).join('') + '</div>';
+  return (
+    '<div class="map-act-strip" role="group" aria-label="' +
+    esc(t('map.act.strip')) +
+    '">' +
+    '<span class="hud-label"' +
+    tipAttrs({ key: 'map.act.strip', noFocus: true }) +
+    '>' +
+    esc(t('map.act.strip')) +
+    '</span>' +
+    model.screens
+      .map((s, i) => {
+        const on = i === a.si;
+        const sub =
+          on && k >= 0
+            ? t('map.crumb.action')
+                .replace('{n}', k + 1)
+                .replace('{m}', acts.length)
+            : s.state === 'planned'
+              ? t('map.screen.planned')
+              : '';
+        return (
+          '<button type="button" class="map-act-scr' +
+          (on ? ' on' : '') +
+          (s.state === 'planned' ? ' planned' : '') +
+          '" data-si="' +
+          i +
+          '"' +
+          ' aria-current="' +
+          (on ? 'step' : 'false') +
+          '"' +
+          tipAttrs({ id: 'mapActScreen', args: { si: i }, noFocus: true }) +
+          '>' +
+          '<span class="t"><span class="o">' +
+          s.ordinal +
+          '</span><span class="n">' +
+          esc(s.name) +
+          '</span>' +
+          (sub ? '<span class="s">' + esc(sub) + '</span>' : '') +
+          '</span></button>'
+        );
+      })
+      .join('') +
+    '</div>'
+  );
 }
 // a strip screen's tip: its picture (the design's, or the placeholder) over its name and where it stands
 registerTip('mapActScreen', (el, args) => {
   const s = ST.act && ST.act.model && ST.act.model.screens[args && args.si];
   if (!s) return '';
-  const thumb = s.node && s.node.design && currentLens() !== 'code' ? designThumbHtml(s.node, 'sheet') : '<span class="ph">' + sym('screen') + '</span>';
-  return '<div class="map-act-tip">' + thumb + '<div class="nm">' + esc(s.ordinal + ' · ' + s.name) + '</div>'
-    + (s.state === 'planned' ? '<div class="st">' + esc(t('map.screen.planned')) + '</div>' : '') + '</div>';
+  const thumb =
+    s.node && s.node.design && currentLens() !== 'code'
+      ? designThumbHtml(s.node, 'sheet')
+      : '<span class="ph">' + sym('screen') + '</span>';
+  return (
+    '<div class="map-act-tip">' +
+    thumb +
+    '<div class="nm">' +
+    esc(s.ordinal + ' · ' + s.name) +
+    '</div>' +
+    (s.state === 'planned' ? '<div class="st">' + esc(t('map.screen.planned')) + '</div>' : '') +
+    '</div>'
+  );
 });
 /** Draw the action stop: the strip, the drill (or its ladder), the dock and the hint. */
 function drawAct() {
@@ -497,19 +722,37 @@ function drawAct() {
   inspHost(!inPlace);
   // the caption under the beats counts what the panel above it shows: the screen's actions under the strip (the
   // breadcrumb's count), the journey's stops under the drill's rail (swarm round 3, one unit per panel)
-  S.jrnActionOnScreen = layout === 'drill' ? null : (i) => {
-    const acts = screenActions(S.JRN_DRILL.cols, a.model.screens, a.si);
-    const k = acts.findIndex((c) => c.index === i);
-    return k >= 0 ? { k: k + 1, m: acts.length } : null;
-  };
+  S.jrnActionOnScreen =
+    layout === 'drill'
+      ? null
+      : (i) => {
+          const acts = screenActions(S.JRN_DRILL.cols, a.model.screens, a.si);
+          const k = acts.findIndex((c) => c.index === i);
+          return k >= 0 ? { k: k + 1, m: acts.length } : null;
+        };
   // the drill: the journey's action rail across the top in place of the street's strip (the owner's older drill view)
   const top = layout === 'drill' ? jrnDrillRailHtml(S.JOURNEY.summary, S.JRN_DRILL.cols, S.jrnAction) : stripHtml();
-  a.host.innerHTML = '<div class="map-act' + (a.code ? ' code' : '') + '" data-dock="' + esc(jrnDock()) + '" data-layout="' + esc(layout) + '" data-map-wheel="own">'
-    + '<div class="map-act-top' + (layout === 'drill' ? ' rail' : '') + '">' + top
+  a.host.innerHTML =
+    '<div class="map-act' +
+    (a.code ? ' code' : '') +
+    '" data-dock="' +
+    esc(jrnDock()) +
+    '" data-layout="' +
+    esc(layout) +
+    '" data-map-wheel="own">' +
+    '<div class="map-act-top' +
+    (layout === 'drill' ? ' rail' : '') +
+    '">' +
+    top +
     // docked in place there is no dock to hold the switch: it rides at the stop's top, as it did before the dock
-    + (inPlace ? '<span class="map-act-dock">' + dockSwitchHtml() + '</span>' : '') + '</div>'
-    + jrnDrillStageHtml({ insp: inPlace })
-    + '<div class="map-act-foot"><span class="map-hintline"' + tipAttrs({ key: a.code ? 'map.code.hint' : 'map.act.hint', noFocus: true }) + '>' + esc(t(a.code ? 'map.code.hint' : 'map.act.hint')) + '</span></div></div>';
+    (inPlace ? '<span class="map-act-dock">' + dockSwitchHtml() + '</span>' : '') +
+    '</div>' +
+    jrnDrillStageHtml({ insp: inPlace }) +
+    '<div class="map-act-foot"><span class="map-hintline"' +
+    tipAttrs({ key: a.code ? 'map.code.hint' : 'map.act.hint', noFocus: true }) +
+    '>' +
+    esc(t(a.code ? 'map.code.hint' : 'map.act.hint')) +
+    '</span></div></div>';
   jrnDrillMount();
   if (layout === 'drill') {
     const on = a.host.querySelector('.jrn-stop.on');
@@ -518,7 +761,10 @@ function drawAct() {
   if (a.code && !inPlace) openPanel('code');
   if (layout === 'ladder') {
     const col = S.JRN_DRILL.cols[S.jrnAction];
-    const sg = Object.assign({}, col.sg, { markers: col.sg.markers.filter((m) => m.moment === col.mo.index), moments: [col.mo] });
+    const sg = Object.assign({}, col.sg, {
+      markers: col.sg.markers.filter((m) => m.moment === col.mo.index),
+      moments: [col.mo],
+    });
     const lanes = a.host.querySelector('#jrn-dlanes');
     jrnResetFolds();
     lanes.innerHTML = '<div class="map-ladder">' + jrnLadderCellHtml(S.JOURNEY.summary, sg) + '</div>';
@@ -532,7 +778,10 @@ function onActClick(e) {
   if (!ST.act) return;
   // the rail: a stop opens that action; a screen over it, the screen's first action
   const stop = e.target.closest('.map-rail .jrn-stop[data-col]');
-  if (stop) { openAction(ST.act.flow, +stop.dataset.col, { code: ST.act.code }); return; }
+  if (stop) {
+    openAction(ST.act.flow, +stop.dataset.col, { code: ST.act.code });
+    return;
+  }
   const seg = e.target.closest('.map-rail .jrn-rscr[data-seg]');
   if (seg) {
     const col = (S.JRN_DRILL ? S.JRN_DRILL.cols : []).find((c) => c.sg.index === +seg.dataset.seg);
@@ -540,9 +789,18 @@ function onActClick(e) {
     return;
   }
   const dk = e.target.closest('.map-act-dock [data-dock]');
-  if (dk) { setActDock(dk.dataset.dock); return; }
+  if (dk) {
+    setActDock(dk.dataset.dock);
+    return;
+  }
   const scr = e.target.closest('.map-act-scr');
-  if (scr) { const flow = ST.act.flow, si = +scr.dataset.si; closeAction({ quiet: true }); ST.api.openProperty(flow, si); return; }
+  if (scr) {
+    const flow = ST.act.flow,
+      si = +scr.dataset.si;
+    closeAction({ quiet: true });
+    ST.api.openProperty(flow, si);
+    return;
+  }
   // a box, a fold or the still-open screen moved the selection (or the action): the place follows
   setTimeout(() => {
     if (!ST.act) return;
@@ -591,10 +849,19 @@ export function crumbHtml(o) {
   const rootWord = story ? story.name : at ? at.storyline.name : t('map.crumb.root');
   if (lvl === 'nb' || !o.d) return '<b>' + esc(rootWord) + '</b>';
   const stepKey = currentLens() === 'business' ? 'journeys.storyline.bizStepOf' : 'journeys.storyline.stepOf';
-  const step = o.d.step ? t(stepKey).replace('{n}', o.d.step).replace('{m}', o.d.steps)
-    : at ? t(stepKey).replace('{n}', at.step).replace('{m}', at.of) : '';
+  const step = o.d.step
+    ? t(stepKey).replace('{n}', o.d.step).replace('{m}', o.d.steps)
+    : at
+      ? t(stepKey).replace('{n}', at.step).replace('{m}', at.of)
+      : '';
   const top = lvl === 'st';
-  let html = esc(rootWord) + sep + (top ? '<b>' : '') + esc(o.nameWords(o.d.name)) + (top ? '</b>' : '') + (step ? ' ' + pos(step) : '');
+  let html =
+    esc(rootWord) +
+    sep +
+    (top ? '<b>' : '') +
+    esc(o.nameWords(o.d.name)) +
+    (top ? '</b>' : '') +
+    (step ? ' ' + pos(step) : '');
   const model = o.model;
   // the table at a screen (`screen=`) names it too, as the property and the action do
   const ts = !ST.act && lvl === 'st' && model ? tableScreen() : null;
@@ -602,7 +869,9 @@ export function crumbHtml(o) {
   const si = ST.act ? ST.act.si : tsi != null ? tsi : o.propIndex;
   if ((lvl === 'pr' || ST.act || tsi != null) && model && model.screens[si]) {
     const s = model.screens[si];
-    const sPos = t('map.crumb.screen').replace('{n}', si + 1).replace('{m}', model.screens.length);
+    const sPos = t('map.crumb.screen')
+      .replace('{n}', si + 1)
+      .replace('{m}', model.screens.length);
     const bold = !ST.act;
     html += sep + (bold ? '<b>' : '') + esc(s.name) + (bold ? '</b>' : '') + ' ' + pos(sPos);
   }
@@ -610,14 +879,27 @@ export function crumbHtml(o) {
     const acts = screenActions(S.JRN_DRILL.cols, model.screens, ST.act.si);
     const k = acts.findIndex((c) => c.index === S.jrnAction);
     const col = S.JRN_DRILL.cols[S.jrnAction];
-    html += sep + (k >= 0 ? pos(t('map.crumb.action').replace('{n}', k + 1).replace('{m}', acts.length)) + ' · ' : '') + '<b>' + esc(col ? jrnMoLabel(col.mo) : '') + '</b>';
+    html +=
+      sep +
+      (k >= 0
+        ? pos(
+            t('map.crumb.action')
+              .replace('{n}', k + 1)
+              .replace('{m}', acts.length),
+          ) + ' · '
+        : '') +
+      '<b>' +
+      esc(col ? jrnMoLabel(col.mo) : '') +
+      '</b>';
   }
   return html;
 }
 
 // ── the table layout at the journey stop ─────────────────────────────────────
 /** Whether the Sheet is drawn in place of the street. @group Map */
-export function tableOpen() { return !!ST.table; }
+export function tableOpen() {
+  return !!ST.table;
+}
 /**
  * Draw or take away the table layout after the board moved: on at the journey stop with *table* picked, for the
  * journey the street is on; off anywhere else.
@@ -627,7 +909,10 @@ export function syncTable() {
   const M = ST.api && ST.api.MAP;
   if (!M || !M.cv || !M.stage) return;
   const want = layoutAt('st') === 'table' && M.cv.level() === 'st' && !M.prop && !ST.act && M.focus ? M.focus : null;
-  if (!want) { closeTable(); return; }
+  if (!want) {
+    closeTable();
+    return;
+  }
   if (ST.table && ST.table.flow === want) return;
   drawTable(want);
 }
@@ -652,8 +937,12 @@ function closeTable() {
 async function drawTable(flow) {
   const M = ST.api.MAP;
   const host = M.stage.querySelector('.map-table-host');
-  ST.table = { flow, host, part: ST.tablePart && ST.tablePart.flow === flow ? ST.tablePart : null,
-    screen: ST.tableScreen && ST.tableScreen.flow === flow ? ST.tableScreen.screen : null };
+  ST.table = {
+    flow,
+    host,
+    part: ST.tablePart && ST.tablePart.flow === flow ? ST.tablePart : null,
+    screen: ST.tableScreen && ST.tableScreen.flow === flow ? ST.tableScreen.screen : null,
+  };
   ST.tablePart = null;
   ST.tableScreen = null;
   host.hidden = false;
@@ -664,7 +953,10 @@ async function drawTable(flow) {
   const gen = ST.gen;
   const [j, data] = await Promise.all([ST.api.ensureJourney(flow), fetchFull(flow)]);
   if (!ST.table || ST.table.flow !== flow || gen !== ST.gen) return;
-  if (!data || !data.summary || !j) { closeTable(); return; }
+  if (!data || !data.summary || !j) {
+    closeTable();
+    return;
+  }
   drawTableNow(j, data, { first: true });
 }
 function drawTableNow(j, data, o = {}) {
@@ -680,31 +972,66 @@ function drawTableNow(j, data, o = {}) {
   // only the table has stays with it on one slim row: the forks the walk met (the code register) and the places the
   // walk stopped short, each opening its drawer. The table, a part's code (`j` / `k` walk the parts, `d` moves the
   // dock — beside it in the Map's dock, or in place) and the two drawers share one body.
-  ST.table.count = '<span class="jrn-count map-table-count">' + jrnHeaderHtml(data, data.summary, (data.summary && data.summary.counts) || {}, currentLens()) + '</span>';
-  host.innerHTML = '<div class="map-table" data-map-wheel="own"><div class="jrn-body map-table-body" id="jrn-body"><div class="map-table-scroll">'
-    + '<div class="map-table-tools" data-flow="' + esc(flow) + '">' + jrnForksBtnHtml(data, forks)
-    + (data.truncated ? '<span class="jrn-trunc"' + tipAttrs({ key: 'journey.truncated', noFocus: true }) + '>' + sym('warning') + esc(t('journey.truncated').replace('{cap}', String((data.steps || []).length))) + '</span>' : '')
-    + '<button type="button" class="jrn-cuts" id="jrn-cuts" style="display:none" aria-expanded="false" onclick="jrnToggleCuts()"></button></div>'
-    + '<div class="map-table-wrap">' + jrnSheetHtml(data.summary) + '</div></div>'
-    + '<div class="jrn-dock" id="jrn-dock" style="display:none" role="region" aria-label="' + esc(t('map.dock')) + '"></div>'
-    + '<div class="jrn-forks" id="jrn-forks" role="dialog" aria-label="' + esc(t('journey.forks.title')) + '" inert>' + jrnForksPanelHtml(forks) + '</div>'
-    + '<div class="jrn-cutlist" id="jrn-cutlist" role="dialog" inert></div></div>'
-    + '<div class="map-act-foot"><span class="map-hintline"' + tipAttrs({ key: 'map.table.hint', noFocus: true }) + '>' + esc(t('map.table.hint')) + '</span></div></div>';
+  ST.table.count =
+    '<span class="jrn-count map-table-count">' +
+    jrnHeaderHtml(data, data.summary, (data.summary && data.summary.counts) || {}, currentLens()) +
+    '</span>';
+  host.innerHTML =
+    '<div class="map-table" data-map-wheel="own"><div class="jrn-body map-table-body" id="jrn-body"><div class="map-table-scroll">' +
+    '<div class="map-table-tools" data-flow="' +
+    esc(flow) +
+    '">' +
+    jrnForksBtnHtml(data, forks) +
+    (data.truncated
+      ? '<span class="jrn-trunc"' +
+        tipAttrs({ key: 'journey.truncated', noFocus: true }) +
+        '>' +
+        sym('warning') +
+        esc(t('journey.truncated').replace('{cap}', String((data.steps || []).length))) +
+        '</span>'
+      : '') +
+    '<button type="button" class="jrn-cuts" id="jrn-cuts" style="display:none" aria-expanded="false" onclick="jrnToggleCuts()"></button></div>' +
+    '<div class="map-table-wrap">' +
+    jrnSheetHtml(data.summary) +
+    '</div></div>' +
+    '<div class="jrn-dock" id="jrn-dock" style="display:none" role="region" aria-label="' +
+    esc(t('map.dock')) +
+    '"></div>' +
+    '<div class="jrn-forks" id="jrn-forks" role="dialog" aria-label="' +
+    esc(t('journey.forks.title')) +
+    '" inert>' +
+    jrnForksPanelHtml(forks) +
+    '</div>' +
+    '<div class="jrn-cutlist" id="jrn-cutlist" role="dialog" inert></div></div>' +
+    '<div class="map-act-foot"><span class="map-hintline"' +
+    tipAttrs({ key: 'map.table.hint', noFocus: true }) +
+    '>' +
+    esc(t('map.table.hint')) +
+    '</span></div></div>';
   jrnCutChip(data, (data.summary && data.summary.counts) || {});
   jrnToggleForks(false);
   jrnApplyDock();
   placePartPane();
-  if (!ST.table.wired) { ST.table.wired = true; host.addEventListener('click', onTableClick, true); }
+  if (!ST.table.wired) {
+    ST.table.wired = true;
+    host.addEventListener('click', onTableClick, true);
+  }
   // the part a link names (`part=`), else the one selected before a redraw, opens with its code in the dock
   const want = ST.table.part;
   ST.table.part = null;
   ST.table.data = data;
   const order = want ? partOrder(data.summary.segments, want.screen, want.node) : keep;
   if (order != null && order >= 0 && S.JRN_MARK[order]) jrnSelect(order);
-  else { jrnImpactRings(); showTableScreen(); }
+  else {
+    jrnImpactRings();
+    showTableScreen();
+  }
   // the address and the crumb follow the table now that it has drawn the first time (a write before the walk landed
   // knew no part); a redraw for the register writes nothing — a link that moved the register may name another stop
-  if (o.first) { ST.api.writeHash(); ST.api.refresh(); }
+  if (o.first) {
+    ST.api.writeHash();
+    ST.api.refresh();
+  }
 }
 /**
  * The table's count line for the journey head (surfaces/map.js), once the table has drawn for `flow`; else null and
@@ -727,11 +1054,25 @@ function placePartPane() {
     closePanel('part', { quiet: true });
     return;
   }
-  const panel = dockPanel('part', { key: 'map.dock.part', close: () => { if (expandedOpen()) { closeExpanded(); onSelect(); } } });
+  const panel = dockPanel('part', {
+    key: 'map.dock.part',
+    close: () => {
+      if (expandedOpen()) {
+        closeExpanded();
+        onSelect();
+      }
+    },
+  });
   if (!panel) return;
-  if (pane.parentNode !== panel) { panel.innerHTML = ''; panel.appendChild(pane); }
+  if (pane.parentNode !== panel) {
+    panel.innerHTML = '';
+    panel.appendChild(pane);
+  }
   if (!ST.partMO && typeof MutationObserver === 'function') ST.partMO = new MutationObserver(syncPartPanel);
-  if (ST.partMO) { ST.partMO.disconnect(); ST.partMO.observe(pane, { attributes: true, attributeFilter: ['class'] }); }
+  if (ST.partMO) {
+    ST.partMO.disconnect();
+    ST.partMO.observe(pane, { attributes: true, attributeFilter: ['class'] });
+  }
   syncPartPanel();
 }
 /** The part panel is open while the pane holds a part (not its one-line hint). */
@@ -747,11 +1088,18 @@ function showTableScreen() {
   if (!n || !S.JRN_SHEET) return;
   const cols = S.JRN_SHEET.cols.filter((c) => c.sg.index === n - 1).map((c) => c.index);
   const host = ST.table.host;
-  host.querySelectorAll('.jrn-sbh[data-col]').forEach((el) => el.classList.toggle('at', cols.includes(+el.dataset.col)));
+  host
+    .querySelectorAll('.jrn-sbh[data-col]')
+    .forEach((el) => el.classList.toggle('at', cols.includes(+el.dataset.col)));
   const first = cols.length ? host.querySelector('.jrn-sbh[data-col="' + cols[0] + '"]') : null;
   const scroll = host.querySelector('.map-table-scroll');
   const lane = host.querySelector('.jrn-slane');
-  if (first && scroll) scroll.scrollLeft += first.getBoundingClientRect().left - scroll.getBoundingClientRect().left - (lane ? lane.getBoundingClientRect().width : 0) - 8;
+  if (first && scroll)
+    scroll.scrollLeft +=
+      first.getBoundingClientRect().left -
+      scroll.getBoundingClientRect().left -
+      (lane ? lane.getBoundingClientRect().width : 0) -
+      8;
 }
 /**
  * Open the table at one screen (`screen=n`, a 1-based segment — an old link's `step=`): its columns come to the left
@@ -760,7 +1108,11 @@ function showTableScreen() {
  */
 export function tableAtScreen(flow, screen) {
   ST.tableScreen = screen ? { flow, screen } : null;
-  if (ST.table && ST.table.flow === flow && ST.tableScreen) { ST.table.screen = screen; ST.tableScreen = null; showTableScreen(); }
+  if (ST.table && ST.table.flow === flow && ST.tableScreen) {
+    ST.table.screen = screen;
+    ST.tableScreen = null;
+    showTableScreen();
+  }
 }
 /** The screen the table is at (1-based segment), or null. @group Map */
 export function tableScreen() {
@@ -797,29 +1149,52 @@ export function tableParams() {
 export function tableKey(e) {
   if (!ST.table || !S.JOURNEY || S.JRN_DRILL) return false;
   const k = e.key;
-  if (k === 'j' || k === 'k') { jrnNav(k === 'j' ? 1 : -1); return true; }
-  if (k === 'd' || k === 'D') { const order = ['inline', 'bottom', 'right']; setActDock(order[(order.indexOf(jrnDock()) + 1) % order.length]); onSelect(); return true; }
+  if (k === 'j' || k === 'k') {
+    jrnNav(k === 'j' ? 1 : -1);
+    return true;
+  }
+  if (k === 'd' || k === 'D') {
+    const order = ['inline', 'bottom', 'right'];
+    setActDock(order[(order.indexOf(jrnDock()) + 1) % order.length]);
+    onSelect();
+    return true;
+  }
   return false;
 }
 /** Esc at the table closes what is on top of it first — the cut list, the forks, a part's code. True when it did. @group Map */
 export function tableEscape() {
   if (!ST.table) return false;
-  if (cutsOpen()) { jrnToggleCuts(false); return true; }
-  if (forksOpen()) { jrnToggleForks(false); return true; }
-  if (expandedOpen()) { closeExpanded(); onSelect(); return true; }
+  if (cutsOpen()) {
+    jrnToggleCuts(false);
+    return true;
+  }
+  if (forksOpen()) {
+    jrnToggleForks(false);
+    return true;
+  }
+  if (expandedOpen()) {
+    closeExpanded();
+    onSelect();
+    return true;
+  }
   return false;
 }
 /** On the table a column — its head, or a part in one of its cells — opens that action's beats. */
 function onTableClick(e) {
   if (!ST.table) return;
-  if (e.target.closest('a[href], .jrn-smore, .jrn-foldbtn, .map-table-head, [data-export], .jrn-dock, .jrn-forks, .jrn-cutlist, .jrn-sexp')) return;
+  if (
+    e.target.closest(
+      'a[href], .jrn-smore, .jrn-foldbtn, .map-table-head, [data-export], .jrn-dock, .jrn-forks, .jrn-cutlist, .jrn-sexp',
+    )
+  )
+    return;
   const head = e.target.closest('.jrn-sbh[data-col]');
   const cell = e.target.closest('.jrn-scell[data-col]');
   const part = e.target.closest('[data-order]');
   if (!head && !(cell && part)) return;
   e.preventDefault();
   e.stopPropagation();
-  const ci = +((head || cell).dataset.col);
+  const ci = +(head || cell).dataset.col;
   openAction(ST.table.flow, ci, part && cell ? { order: +part.dataset.order } : {});
 }
 
@@ -832,7 +1207,10 @@ function onTableClick(e) {
 export function mapShowPart(order) {
   const M = ST.api && ST.api.MAP;
   if (!M || !M.stage || !S.JOURNEY || !(order >= 0)) return false;
-  if ((ST.table || ST.act) && S.JRN_HOST && S.JRN_HOST.isConnected) { jrnScrollTo(order); return true; }
+  if ((ST.table || ST.act) && S.JRN_HOST && S.JRN_HOST.isConnected) {
+    jrnScrollTo(order);
+    return true;
+  }
   const flow = M.prop ? M.prop.flow : M.focus;
   const id = S.JOURNEY.entry && S.JOURNEY.entry.id;
   if (!flow || flow !== id) return false;
@@ -841,7 +1219,12 @@ export function mapShowPart(order) {
 }
 /** Redraw the stop on screen in the lens or register now on (words only). @group Map */
 export function redrawStops() {
-  if (ST.act) { const bi = ST.act.beat; drawAct(); selectBeat(bi); if (ST.act.code) openCodeTab(); }
+  if (ST.act) {
+    const bi = ST.act.beat;
+    drawAct();
+    selectBeat(bi);
+    if (ST.act.code) openCodeTab();
+  }
   if (ST.table && S.JOURNEY) {
     const j = ST.api.MAP.journeys.get(ST.table.flow);
     if (j) drawTableNow(j, S.JOURNEY);
@@ -862,7 +1245,15 @@ export function closeStops() {
 export function storyNavLineHtml(tree, flow) {
   const story = storylineLineHtml(tree, flow);
   // the words in their own span, so a tight head clips the words and never the ‹ › doors beside them
-  return story ? '<span class="story">' + storyNavHtml(tree, flow, 'prev') + '<span class="story-t">' + story + '</span>' + storyNavHtml(tree, flow, 'next') + '</span>' : '';
+  return story
+    ? '<span class="story">' +
+        storyNavHtml(tree, flow, 'prev') +
+        '<span class="story-t">' +
+        story +
+        '</span>' +
+        storyNavHtml(tree, flow, 'next') +
+        '</span>'
+    : '';
 }
 
 /**
@@ -878,14 +1269,38 @@ export function forLineHtml(tree, flow) {
   const others = [...new Set(places.slice(1).map((x) => x.persona))].filter((x) => x !== p.persona);
   // its screens span two people (their own rows, a persona's routes, the sign-in check their code meets): *with B*
   const withWho = screenPersonaOthers(tree, flow, p.persona.id);
-  const withTip = withWho.map((x) => x.name + ' · ' + x.screens + ' / ' + x.of + ' · ' + t('journeys.personaFrom.' + x.from)).join(' — ');
-  return '<span class="for g-org"><span' + tipAttrs({ key: 'journeys.persona.for', noFocus: true }) + '>' + esc(t('journeys.persona.for')) + '</span> '
-    + '<a href="' + esc('#/journeys?persona=' + encodeURIComponent(p.persona.id)) + '">' + esc(jrnPersonaName(p.persona)) + '</a>'
-    + ' · <span>' + esc(jrnGroupName(p.group)) + '</span>'
-    + (withWho.length
-      ? ' <span class="for-with"' + tipAttrs({ text: t('journeys.persona.with').replace('{names}', '') + ' ' + withTip, noFocus: true }) + '>' + esc(t('journeys.persona.with').replace('{names}', withWho.map((x) => x.name).join(' · '))) + '</span>'
-      : others.length ? ' <span' + tipAttrs({ key: 'journeys.persona.alsoUnder', noFocus: true }) + '>' + esc(t('journeys.persona.alsoUnder').replace('{names}', others.map(jrnPersonaName).join(' · '))) + '</span>' : '')
-    + '</span>';
+  const withTip = withWho
+    .map((x) => x.name + ' · ' + x.screens + ' / ' + x.of + ' · ' + t('journeys.personaFrom.' + x.from))
+    .join(' — ');
+  return (
+    '<span class="for g-org"><span' +
+    tipAttrs({ key: 'journeys.persona.for', noFocus: true }) +
+    '>' +
+    esc(t('journeys.persona.for')) +
+    '</span> ' +
+    '<a href="' +
+    esc('#/journeys?persona=' + encodeURIComponent(p.persona.id)) +
+    '">' +
+    esc(jrnPersonaName(p.persona)) +
+    '</a>' +
+    ' · <span>' +
+    esc(jrnGroupName(p.group)) +
+    '</span>' +
+    (withWho.length
+      ? ' <span class="for-with"' +
+        tipAttrs({ text: t('journeys.persona.with').replace('{names}', '') + ' ' + withTip, noFocus: true }) +
+        '>' +
+        esc(t('journeys.persona.with').replace('{names}', withWho.map((x) => x.name).join(' · '))) +
+        '</span>'
+      : others.length
+        ? ' <span' +
+          tipAttrs({ key: 'journeys.persona.alsoUnder', noFocus: true }) +
+          '>' +
+          esc(t('journeys.persona.alsoUnder').replace('{names}', others.map(jrnPersonaName).join(' · '))) +
+          '</span>'
+        : '') +
+    '</span>'
+  );
 }
 /** ‹ or › beside the storyline: the journey before or after this one in it, on the Map. '' at an end or in none. */
 function storyNavHtml(tree, flow, dir) {
@@ -894,8 +1309,19 @@ function storyNavHtml(tree, flow, dir) {
   const key = dir === 'prev' ? 'journeys.storyline.prev' : 'journeys.storyline.next';
   const glyph = dir === 'prev' ? '‹' : '›';
   if (!j) return '';
-  return '<a class="map-story-nav ' + dir + '" href="' + esc('#/map/' + encodeURIComponent(j.nodeId)) + '" aria-label="' + esc(t(key) + ' · ' + (j.name || j.id)) + '"'
-    + tipAttrs({ text: t(key) + ' · ' + (j.name || j.id), noFocus: true }) + '>' + glyph + '</a>';
+  return (
+    '<a class="map-story-nav ' +
+    dir +
+    '" href="' +
+    esc('#/map/' + encodeURIComponent(j.nodeId)) +
+    '" aria-label="' +
+    esc(t(key) + ' · ' + (j.name || j.id)) +
+    '"' +
+    tipAttrs({ text: t(key) + ' · ' + (j.name || j.id), noFocus: true }) +
+    '>' +
+    glyph +
+    '</a>'
+  );
 }
 
 /**
@@ -907,9 +1333,18 @@ function storyNavHtml(tree, flow, dir) {
 export async function stopPicture() {
   const M = ST.api && ST.api.MAP;
   if (!M) return null;
-  const subject = (id) => String(id || '').split('::').pop();
-  if (ST.act) return { el: ST.act.host.querySelector('.map-act'), title: t('map.level.act'), subject: subject(ST.act.flow) };
-  if (ST.table) return { el: ST.table.host.querySelector('.map-table'), title: t('map.layout.table'), subject: subject(ST.table.flow) };
+  const subject = (id) =>
+    String(id || '')
+      .split('::')
+      .pop();
+  if (ST.act)
+    return { el: ST.act.host.querySelector('.map-act'), title: t('map.level.act'), subject: subject(ST.act.flow) };
+  if (ST.table)
+    return {
+      el: ST.table.host.querySelector('.map-table'),
+      title: t('map.layout.table'),
+      subject: subject(ST.table.flow),
+    };
   const el = M.focus && M.world && M.world.querySelector('.map-district[data-flow="' + CSS.escape(M.focus) + '"]');
   return el ? { el, title: t('map.level.st'), subject: subject(M.focus) } : null;
 }

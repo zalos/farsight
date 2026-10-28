@@ -1,7 +1,7 @@
 // Public held-service operations with genuine owner-issued one-use receipts. No fabricated admission/publication.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, rmSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { OwnerService } from '../dist/service/owner-service.js';
 import { ReceiptBook } from '../dist/policy/receipts.js';

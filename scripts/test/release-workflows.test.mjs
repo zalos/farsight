@@ -100,6 +100,7 @@ test('verify-release always requires every gate, and publish calls it with nothi
   const run = steps(verify)[find(steps(verify), /^Install and use the published release/)].text;
   assert.match(run, /node scripts\/verify-release\.mjs --tag "\$TAG"/);
   assert.doesNotMatch(run, /--diagnostic|--allow-pending/);
+  // eslint-disable-next-line no-regex-spaces -- Match the workflow's exact two-space job indentation.
   const call = /\n  verify:\n([\s\S]*?)(?:\n\S|\n  \S|$)/.exec(read('publish.yml'))?.[1] ?? '';
   assert.match(call, /uses: \.\/\.github\/workflows\/verify-release\.yml/);
   assert.deepEqual(

@@ -23,7 +23,7 @@ function isApiKind(kind: ProviderSettings['kind']): boolean {
     case 'copilot-cli':
       return false;
     default: {
-      const unhandled: never = kind;
+      const _unhandled: never = kind;
       return fail('sentinel.provider.invalidProfile', 'unsupported provider kind');
     }
   }

@@ -626,7 +626,7 @@ export function diagnosticRunner(real: DockerRunner) {
         if (performance.now() - started >= TRACE_LIMITS.elapsedMs) return;
         const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         streams[`${direction}Bytes`] += b.length;
-        let state = frameState[direction];
+        const state = frameState[direction];
         if (state.seen >= TRACE_LIMITS.frameBytes) return;
         const keep = b.subarray(0, TRACE_LIMITS.frameBytes - state.seen);
         state.seen += keep.length;

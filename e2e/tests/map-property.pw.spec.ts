@@ -18,17 +18,20 @@ const PAGE = {
 const TABS = ['overview', 'gates', 'apis', 'ux', 'tests', 'route', 'work', 'changes'];
 
 /** Identifier-shaped tokens — the same bar `journey-numbers.pw.spec.ts` holds the journey's business views to. */
-const IDENTIFIER = new RegExp([
-  String.raw`\b[a-z]+[A-Z][A-Za-z0-9]*\b`,
-  String.raw`\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b`,
-  String.raw`\b[a-z0-9]+_[a-z0-9_]+\b`,
-  String.raw`\b[A-Z0-9]+_[A-Z0-9_]+\b`,
-  String.raw`(?:^|[\s(])\/[\w.:{}\-]+`,
-  String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
-  String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
-  String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
-  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+`,
-].join('|'), 'g');
+const IDENTIFIER = new RegExp(
+  [
+    String.raw`\b[a-z]+[A-Z][A-Za-z0-9]*\b`,
+    String.raw`\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b`,
+    String.raw`\b[a-z0-9]+_[a-z0-9_]+\b`,
+    String.raw`\b[A-Z0-9]+_[A-Z0-9_]+\b`,
+    String.raw`(?:^|[\s(])\/[\w.:{}\-]+`,
+    String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
+    String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
+    String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
+    String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+`,
+  ].join('|'),
+  'g',
+);
 
 /**
  * Open one screen's property through the map. The fixture sets no flags, so the
@@ -39,9 +42,16 @@ async function openProperty(page: Page, node: string, lens = 'hybrid') {
   await gotoReady(page, '#/portfolio?lens=' + lens);
   await page.evaluate(() => {
     const S = (window as any).S;
-    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    S.SETTINGS = Object.assign({}, S.SETTINGS, {
+      flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+    });
   });
-  await page.evaluate(([flow, n]) => { location.hash = '#/map/' + encodeURIComponent(flow) + '?node=' + encodeURIComponent(n); }, [FLOW, node]);
+  await page.evaluate(
+    ([flow, n]) => {
+      location.hash = '#/map/' + encodeURIComponent(flow) + '?node=' + encodeURIComponent(n);
+    },
+    [FLOW, node],
+  );
   await expect(page.locator('.mp')).toBeVisible();
   await expect(page.locator('.mp')).toHaveAttribute('data-screen', node);
 }
@@ -53,10 +63,16 @@ async function openTab(page: Page, tab: string) {
 
 /** The number on each tab, or '' where the tab prints none. */
 async function tabCounts(page: Page) {
-  return page.evaluate((tabs) => Object.fromEntries(tabs.map((tab) => {
-    const n = document.querySelector('#mp-tab-' + tab + ' .mp-tabn');
-    return [tab, n ? (n.textContent || '').trim() : ''];
-  })), TABS);
+  return page.evaluate(
+    (tabs) =>
+      Object.fromEntries(
+        tabs.map((tab) => {
+          const n = document.querySelector('#mp-tab-' + tab + ' .mp-tabn');
+          return [tab, n ? (n.textContent || '').trim() : ''];
+        }),
+      ),
+    TABS,
+  );
 }
 
 /** Every text node a reader can see in the property, as written (not as CSS upper-cases it). */
@@ -75,10 +91,15 @@ async function visibleWords(page: Page): Promise<string> {
 }
 
 /** A tall screenshot (1:3), the shape a real app's design export takes; served in place of the list's 16:10 design. */
-const TALL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="2400" viewBox="0 0 800 2400"><rect width="800" height="2400" fill="#F6F8FB"/>'
-  + '<rect width="800" height="120" fill="#2B6CDF"/><rect y="2280" width="800" height="120" fill="#E0457B"/></svg>';
-const LONG_WORDS = 'The operator reviews the record and decides what happens next. '
-  + Array.from({ length: 30 }, (_, i) => `Clause ${i + 1} adds a detail about who may act on this screen and what it shows them.`).join(' ');
+const TALL_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="2400" viewBox="0 0 800 2400"><rect width="800" height="2400" fill="#F6F8FB"/>' +
+  '<rect width="800" height="120" fill="#2B6CDF"/><rect y="2280" width="800" height="120" fill="#E0457B"/></svg>';
+const LONG_WORDS =
+  'The operator reviews the record and decides what happens next. ' +
+  Array.from(
+    { length: 30 },
+    (_, i) => `Clause ${i + 1} adds a detail about who may act on this screen and what it shows them.`,
+  ).join(' ');
 
 /**
  * A real application's screen, synthesised over the fixture's own answers (the
@@ -87,17 +108,42 @@ const LONG_WORDS = 'The operator reviews the record and decides what happens nex
  * screen. Counts move with the rows, so every number stays the answer's own.
  */
 async function realShaped(page: Page) {
-  await page.route(/\/api\/design\/image\?node=invoice-app%3A%3Apage%3A%3A%2Finvoices$/, (r) => r.fulfill({ contentType: 'image/svg+xml', body: TALL_SVG }));
+  await page.route(/\/api\/design\/image\?node=invoice-app%3A%3Apage%3A%3A%2Finvoices$/, (r) =>
+    r.fulfill({ contentType: 'image/svg+xml', body: TALL_SVG }),
+  );
   // A disposed response means the page moved on (the map keeps fetching in the
   // background); the stub then steps aside instead of failing the test at teardown.
   await page.route(/\/graph$/, async (r) => {
     let g: any;
-    try { g = await (await r.fetch()).json(); } catch { return; }
-    const parts = ['invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage', 'invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer', 'invoice-app::src/ui/fields.tsx::LineItemRow', PAGE.list];
-    for (const n of g.nodes) if (parts.includes(n.id)) n.stories = [1, 2, 3, 4].map((k) => ({ id: `${n.id}--s${k}`, name: `State ${k}`, title: 'Parts', file: 'x.stories.tsx', line: k }));
+    try {
+      g = await (await r.fetch()).json();
+    } catch {
+      return;
+    }
+    const parts = [
+      'invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage',
+      'invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer',
+      'invoice-app::src/ui/fields.tsx::LineItemRow',
+      PAGE.list,
+    ];
+    for (const n of g.nodes)
+      if (parts.includes(n.id))
+        n.stories = [1, 2, 3, 4].map((k) => ({
+          id: `${n.id}--s${k}`,
+          name: `State ${k}`,
+          title: 'Parts',
+          file: 'x.stories.tsx',
+          line: k,
+        }));
     for (let i = 1; i <= 5; i++) {
       const id = `invoice-app::flow::other-${i}`;
-      g.nodes.push({ id, kind: 'flow', name: `Another journey ${i} through the same screen`, repo: 'invoice-app', tags: [] });
+      g.nodes.push({
+        id,
+        kind: 'flow',
+        name: `Another journey ${i} through the same screen`,
+        repo: 'invoice-app',
+        tags: [],
+      });
       g.edges.push({ id: `renders|${id}|${PAGE.list}`, kind: 'renders', from: id, to: PAGE.list });
     }
     await r.fulfill({ contentType: 'application/json', body: JSON.stringify(g) });
@@ -105,18 +151,47 @@ async function realShaped(page: Page) {
   await page.route(/\/api\/journey\?/, async (r) => {
     if (!r.request().url().includes('billing-cycle')) return r.continue();
     let d: any;
-    try { d = await (await r.fetch()).json(); } catch { return; }
+    try {
+      d = await (await r.fetch()).json();
+    } catch {
+      return;
+    }
     {
       const sg = d.summary.segments[1];
       sg.screen.business = LONG_WORDS;
       for (const sc of d.screens) if (sc.id === PAGE.list) sc.bizDescription = LONG_WORDS;
       const g0 = sg.gates;
-      sg.gates = Array.from({ length: 25 }, (_, i) => ({ ...g0[i % g0.length], id: `${g0[i % g0.length].id}#${i}`, name: `requireScope: area ${i}`, kind: 'guard', stepOrder: i }));
-      sg.counted.gates = { ...sg.counted.gates, n: 25, breakdown: [{ key: 'count.part.guards', n: 25 }, { key: 'count.part.rules', n: 0 }] };
+      sg.gates = Array.from({ length: 25 }, (_, i) => ({
+        ...g0[i % g0.length],
+        id: `${g0[i % g0.length].id}#${i}`,
+        name: `requireScope: area ${i}`,
+        kind: 'guard',
+        stepOrder: i,
+      }));
+      sg.counted.gates = {
+        ...sg.counted.gates,
+        n: 25,
+        breakdown: [
+          { key: 'count.part.guards', n: 25 },
+          { key: 'count.part.rules', n: 0 },
+        ],
+      };
       const cov = d.summary.coverage.segments[1];
       const t0 = cov.tests.find((x: { runLevel?: boolean }) => !x.runLevel);
-      cov.tests = Array.from({ length: 273 }, (_, i) => ({ ...t0, id: `${t0.id} #${i}`, name: `case ${i + 1} of the screen` }));
-      cov.counted.tests = { ...cov.counted.tests, n: 273, breakdown: [{ key: 'journey.testsUnit', n: 0 }, { key: 'journey.testsIntegration', n: 0 }, { key: 'journey.testsE2e', n: 273 }] };
+      cov.tests = Array.from({ length: 273 }, (_, i) => ({
+        ...t0,
+        id: `${t0.id} #${i}`,
+        name: `case ${i + 1} of the screen`,
+      }));
+      cov.counted.tests = {
+        ...cov.counted.tests,
+        n: 273,
+        breakdown: [
+          { key: 'journey.testsUnit', n: 0 },
+          { key: 'journey.testsIntegration', n: 0 },
+          { key: 'journey.testsE2e', n: 273 },
+        ],
+      };
     }
     await r.fulfill({ contentType: 'application/json', body: JSON.stringify(d) }).catch(() => {});
   });
@@ -126,14 +201,18 @@ async function realShaped(page: Page) {
 async function wholePicture(page: Page) {
   const img = page.locator('.mp-frame.img img');
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
-  await expect.poll(() => page.evaluate(() => {
-    const i = document.querySelector('.mp-frame.img img') as HTMLImageElement;
-    const f = document.querySelector('.mp-frame.img')!.getBoundingClientRect();
-    const r = i.getBoundingClientRect();
-    const inside = r.top >= f.top - 1 && r.bottom <= f.bottom + 1 && r.left >= f.left - 1 && r.right <= f.right + 1;
-    const aspect = Math.abs(r.width / r.height - i.naturalWidth / i.naturalHeight) < 0.02;
-    return inside && aspect;
-  })).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const i = document.querySelector('.mp-frame.img img') as HTMLImageElement;
+        const f = document.querySelector('.mp-frame.img')!.getBoundingClientRect();
+        const r = i.getBoundingClientRect();
+        const inside = r.top >= f.top - 1 && r.bottom <= f.bottom + 1 && r.left >= f.left - 1 && r.right <= f.right + 1;
+        const aspect = Math.abs(r.width / r.height - i.naturalWidth / i.naturalHeight) < 0.02;
+        return inside && aspect;
+      }),
+    )
+    .toBe(true);
 }
 
 test.describe('map property', () => {
@@ -142,23 +221,38 @@ test.describe('map property', () => {
    * @covers packages/server/public/app/lib/map-property-model.js::propertyModel
    * @covers GET /api/journey
    */
-  test('Invoice list: the design image is the hero, eight tabs carry the typed counts, APIs lists its calls by service', async ({ page }) => {
+  test('Invoice list: the design image is the hero, eight tabs carry the typed counts, APIs lists its calls by service', async ({
+    page,
+  }) => {
     await openProperty(page, PAGE.list);
     const img = page.locator('.mp-frame.img img');
     await expect(img).toBeVisible();
     await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
     await expect(page.locator('.mp-tab')).toHaveCount(8);
     // gates 7 (3 guards + 2 rules + 2 preconditions read from the code), APIs 5 distinct operations, tests 5 cases; nothing types the rest
-    expect(await tabCounts(page)).toEqual({ overview: '', gates: '7', apis: '5', ux: '', tests: '5', route: '', work: '', changes: '' });
+    expect(await tabCounts(page)).toEqual({
+      overview: '',
+      gates: '7',
+      apis: '5',
+      ux: '',
+      tests: '5',
+      route: '',
+      work: '',
+      changes: '',
+    });
     // a tab's number is a tip trigger that says what it counts
     await page.locator('#mp-tab-gates .mp-tabn [data-tip-id]').hover();
     await expect(page.locator('#fs-tip')).toContainText(/gates/i);
 
     // the hero sizes from its own box, never from the rail: the same on every tab, and below its chip row
-    const box = () => page.evaluate(() => {
-      const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
-      return { chipsBottom: r('.mp-hero-chips').bottom, shot: [r('.mp-shot').top, r('.mp-shot').width, r('.mp-shot').height].map(Math.round) };
-    });
+    const box = () =>
+      page.evaluate(() => {
+        const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
+        return {
+          chipsBottom: r('.mp-hero-chips').bottom,
+          shot: [r('.mp-shot').top, r('.mp-shot').width, r('.mp-shot').height].map(Math.round),
+        };
+      });
     const onOverview = await box();
     expect(onOverview.shot[0]).toBeGreaterThanOrEqual(onOverview.chipsBottom);
 
@@ -192,7 +286,9 @@ test.describe('map property', () => {
     await openTab(page, 'tests');
     await expect(page.locator('.mp-body .ev')).toHaveText(/passed, by its own declaration/i);
     // the case's own word (core `caseWord`), never a label of the tab's own
-    const verified = page.locator('.mp-body .mp-row[data-map-card="test"]').filter({ has: page.locator('.mp-ev', { hasText: /passed, by its own declaration/i }) });
+    const verified = page
+      .locator('.mp-body .mp-row[data-map-card="test"]')
+      .filter({ has: page.locator('.mp-ev', { hasText: /passed, by its own declaration/i }) });
     await expect(verified).toHaveCount(1);
     await expect(verified).toContainText('a draft is saved for the picked customer');
     await openTab(page, 'ux');
@@ -200,7 +296,9 @@ test.describe('map property', () => {
   });
 
   /** @covers packages/server/public/app/surfaces/map-property.js::mountMapProperty */
-  test('Discard draft: the placeholder names the screen, its route and why there is no picture; APIs says not built', async ({ page }) => {
+  test('Discard draft: the placeholder names the screen, its route and why there is no picture; APIs says not built', async ({
+    page,
+  }) => {
     await openProperty(page, PAGE.discard);
     const ph = page.locator('.mp-frame.ph [data-hero="placeholder"]');
     await expect(ph).toBeVisible();
@@ -253,7 +351,9 @@ test.describe('map property', () => {
    * @covers packages/server/public/app/surfaces/map-property.js::capRows
    * @covers packages/server/public/app/surfaces/map-property.js::clampHtml
    */
-  test('a real-sized screen: the tall picture whole, the description clamped, long lists capped with show all n', async ({ page }) => {
+  test('a real-sized screen: the tall picture whole, the description clamped, long lists capped with show all n', async ({
+    page,
+  }) => {
     await realShaped(page);
     await openProperty(page, PAGE.list);
     await wholePicture(page);
@@ -263,7 +363,9 @@ test.describe('map property', () => {
     const what = page.locator('.mp-body .mp-biz .mp-clamp');
     await expect(what.locator('.short')).toBeVisible();
     await expect(what.locator('.full')).toBeHidden();
-    await expect(what.locator('.short')).toHaveText('The operator reviews the record and decides what happens next. Clause 1 adds a detail about who may act on this screen and what it shows them.');
+    await expect(what.locator('.short')).toHaveText(
+      'The operator reviews the record and decides what happens next. Clause 1 adds a detail about who may act on this screen and what it shows them.',
+    );
     await what.locator('.mp-more').click();
     await expect(page.locator('.mp-body .mp-biz .mp-clamp .full')).toBeVisible();
     await expect(page.locator('.mp-body .mp-biz .mp-clamp .full')).toContainText('Clause 30');
@@ -303,7 +405,7 @@ test.describe('map property', () => {
   });
 
   /** @covers packages/server/public/app/surfaces/map-property.js::mountMapProperty */
-  test('the fixture\'s 16:10 pictures are shown whole too', async ({ page }) => {
+  test("the fixture's 16:10 pictures are shown whole too", async ({ page }) => {
     for (const node of [PAGE.newInvoice, PAGE.list]) {
       await openProperty(page, node);
       await wholePicture(page);
@@ -316,7 +418,9 @@ test.describe('map property — data stores', () => {
    * @covers packages/server/public/app/surfaces/map-property.js::storeGroupHtml
    * @covers packages/server/public/app/lib/map-property-model.js::dataByStore
    */
-  test('APIs: Data this screen reaches, grouped by store, the ERP with its mode, unnamed data last; the tab count unchanged', async ({ page }) => {
+  test('APIs: Data this screen reaches, grouped by store, the ERP with its mode, unnamed data last; the tab count unchanged', async ({
+    page,
+  }) => {
     await stubStores(page);
     await openProperty(page, PAGE.list);
     expect((await tabCounts(page)).apis).toBe('5');
@@ -328,7 +432,9 @@ test.describe('map property — data stores', () => {
     const erp = body.locator('.mp-store', { has: page.locator('.mp-grp[data-store="Example ERP"]') });
     await expect(erp.locator('.mp-row')).toHaveCount(1);
     await expect(erp.locator('.mp-mode')).toHaveText('writes');
-    await expect(body.locator('.mp-store', { has: page.locator('.mp-grp[data-store="Invoice DB"]') }).locator('.mp-row')).toHaveCount(3);
+    await expect(
+      body.locator('.mp-store', { has: page.locator('.mp-grp[data-store="Invoice DB"]') }).locator('.mp-row'),
+    ).toHaveCount(3);
   });
 
   /** @covers packages/server/public/app/surfaces/map-property.js::storeGroupHtml */

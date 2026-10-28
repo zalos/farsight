@@ -15,8 +15,13 @@ export class OccurrenceCollector {
     return `${edge.kind}|${edge.from}|${edge.to}|${edge.meta?.whenRef ?? ''}`;
   }
 
-  record(edge: Pick<GraphEdge, 'kind' | 'from' | 'to' | 'meta'>, repo: string, path: string,
-    line: number | undefined, site?: SyntaxSite): void {
+  record(
+    edge: Pick<GraphEdge, 'kind' | 'from' | 'to' | 'meta'>,
+    repo: string,
+    path: string,
+    line: number | undefined,
+    site?: SyntaxSite,
+  ): void {
     if (!this.enabled || !site || !line || line < 1) return;
     const value: Omit<EdgeOccurrence, 'id'> = {
       loc: { repo, path: path.replaceAll('\\', '/'), line, col: site.col },
@@ -34,9 +39,10 @@ export class OccurrenceCollector {
     for (const edge of edges) {
       const facts = this.facts.get(this.key(edge));
       if (!facts) continue;
-      edge.occurrences = mergeOccurrences(edge.occurrences, facts.map(site => ({ ...site,
-        ...(edge.resolution ? { resolution: { ...edge.resolution } } : {}),
-      })));
+      edge.occurrences = mergeOccurrences(
+        edge.occurrences,
+        facts.map((site) => ({ ...site, ...(edge.resolution ? { resolution: { ...edge.resolution } } : {}) })),
+      );
     }
   }
 }

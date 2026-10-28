@@ -9,12 +9,15 @@
 import type { GraphNode } from './graph.js';
 
 /** Reads the process environment: `process.env`, `import.meta.env`, `Deno.env`, or a settings record named `env` keyed in SHOUT_CASE. */
-const READS_ENV = /\bprocess\.env\b|\bimport\.meta\.env\b|\bDeno\.env\b|\benv\s*(?:\[\s*['"`][A-Z][A-Z0-9_]*['"`]\s*\]|\.[A-Z][A-Z0-9_]*\b)|\benv\s*:\s*Record\s*<\s*string/;
+const READS_ENV =
+  /\bprocess\.env\b|\bimport\.meta\.env\b|\bDeno\.env\b|\benv\s*(?:\[\s*['"`][A-Z][A-Z0-9_]*['"`]\s*\]|\.[A-Z][A-Z0-9_]*\b)|\benv\s*:\s*Record\s*<\s*string/;
 /** A parameter that carries a request: the request itself, its context, a session, its cookies or headers, a principal, an event. */
-const TAKES_REQUEST = /\b(?:req|request|ctx|context|session|cookies?|cookieHeader|headers|principal|event)\b|\bRequest\b|\bNextRequest\b/;
+const TAKES_REQUEST =
+  /\b(?:req|request|ctx|context|session|cookies?|cookieHeader|headers|principal|event)\b|\bRequest\b|\bNextRequest\b/;
 
 /** The parameters of a use-case: its input or command, or the container, repositories or services it is handed. */
-const USE_CASE_PARAMS = /\b(?:input|command|cmd|deps|repos)\b|:\s*(?:Container|Deps|Dependencies|Repositories|Services|AppContext)\b/;
+const USE_CASE_PARAMS =
+  /\b(?:input|command|cmd|deps|repos)\b|:\s*(?:Container|Deps|Dependencies|Repositories|Services|AppContext)\b/;
 
 /** The text between a function's first `(` and the `)` that closes it — its parameters, or `''`. */
 export function paramsText(code: string): string {
@@ -24,7 +27,10 @@ export function paramsText(code: string): string {
   for (let i = open; i < code.length; i++) {
     const ch = code[i];
     if (ch === '(') depth++;
-    else if (ch === ')') { depth--; if (depth === 0) return code.slice(open + 1, i); }
+    else if (ch === ')') {
+      depth--;
+      if (depth === 0) return code.slice(open + 1, i);
+    }
   }
   return code.slice(open + 1);
 }
@@ -58,6 +64,12 @@ export function isConfigCheck(node: GraphNode | undefined): boolean {
   if (node.tags?.includes('declared')) return false;
   // a use-case marked as a gate (it moves a record's status) is an action, never a settings check
   if (node.tags?.includes('action-gate')) return false;
-  if (node.loc?.endLine && node.loc.endLine - node.loc.line + 1 > CONFIG_CHECK_MAX_LINES && node.snippet && USE_CASE_PARAMS.test(paramsText(node.snippet))) return false;
+  if (
+    node.loc?.endLine &&
+    node.loc.endLine - node.loc.line + 1 > CONFIG_CHECK_MAX_LINES &&
+    node.snippet &&
+    USE_CASE_PARAMS.test(paramsText(node.snippet))
+  )
+    return false;
   return !!node.snippet && configCheckOf(node.snippet);
 }

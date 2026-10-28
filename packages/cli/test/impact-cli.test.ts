@@ -52,46 +52,69 @@ before(() => {
   repo = join(work, 'invoice-app');
   graph = join(work, 'graph.json');
   cpSync(join(repoRoot, 'examples/invoice-app'), repo, { recursive: true });
-  const ingest = spawnSync(process.execPath, [cli, 'ingest', repo, '--repo', 'invoice-app', '--out', graph], { cwd: work, encoding: 'utf8' });
+  const ingest = spawnSync(process.execPath, [cli, 'ingest', repo, '--repo', 'invoice-app', '--out', graph], {
+    cwd: work,
+    encoding: 'utf8',
+  });
   assert.equal(ingest.status, 0, ingest.stderr);
   const data = JSON.parse(readFileSync(graph, 'utf8')) as { nodes: GraphNode[]; edges: GraphEdge[] };
   index = buildIndex(data.nodes, data.edges);
 });
 
-after(() => { try { rmSync(work, { recursive: true, force: true }); } catch { /* a temp dir that outlives the run is not a failure */ } });
+after(() => {
+  try {
+    rmSync(work, { recursive: true, force: true });
+  } catch {
+    /* a temp dir that outlives the run is not a failure */
+  }
+});
 
 describe('farsight impact — the text form', () => {
-  test('every hop count printed is the fold\'s, and no line adds them up', () => {
+  test("every hop count printed is the fold's, and no line adds them up", () => {
     const report = impactOf(index, TABLE, { hops: 3 });
     const r = run(['impact', TABLE, '--hops', '3']);
     assert.equal(r.status, 0, r.err);
 
     // the headline says each distance once, in the fold's own numbers
     const [hop1, hop2, hop3] = report.hops.map((h) => h.found);
-    assert.match(r.out, new RegExp(`${hop1} use it directly · ${hop2} more reach it through those · ${hop3} more at 3 hops`));
+    assert.match(
+      r.out,
+      new RegExp(`${hop1} use it directly · ${hop2} more reach it through those · ${hop3} more at 3 hops`),
+    );
 
     // and every hop's own header carries the same number
     for (const h of report.hops) {
-      assert.match(r.out, new RegExp(`hop ${h.hop} — [^(]+\\(${h.found}: `), `hop ${h.hop} header should say ${h.found}`);
-      for (const n of h.nodes.slice(0, 3)) assert.ok(r.out.includes(n.name.slice(0, 40)), `${n.name} is missing from the printed hop ${h.hop}`);
+      assert.match(
+        r.out,
+        new RegExp(`hop ${h.hop} — [^(]+\\(${h.found}: `),
+        `hop ${h.hop} header should say ${h.found}`,
+      );
+      for (const n of h.nodes.slice(0, 3))
+        assert.ok(r.out.includes(n.name.slice(0, 40)), `${n.name} is missing from the printed hop ${h.hop}`);
     }
 
     // the sum is the number this design exists to stop printing: it must appear nowhere
     const total = hop1! + hop2! + hop3!;
     // (a source line number — `routes.ts:27` — is not a count; the graph's preconditions moved the hop sizes onto one)
-    assert.ok(!new RegExp(`(?<![:\\d])\\b${total}\\b`).test(r.out), `the printer must never sum the hops (${total} appeared)`);
+    assert.ok(
+      !new RegExp(`(?<![:\\d])\\b${total}\\b`).test(r.out),
+      `the printer must never sum the hops (${total} appeared)`,
+    );
     assert.ok(!/\btotal\b/i.test(r.out), 'no line may call anything a total');
   });
 
-  test('a floor says so and says why; the reason is the fold\'s own sentence', () => {
+  test("a floor says so and says why; the reason is the fold's own sentence", () => {
     const report = impactOf(index, TABLE, { hops: 2 });
     assert.equal(report.bound, 'floor');
     const r = run(['impact', TABLE, '--hops', '2']);
     assert.match(r.out, /≥ a floor: /);
-    assert.ok(r.out.includes(report.uncertainty!.note), 'the printed reason must be the fold\'s note, not a second wording');
+    assert.ok(
+      r.out.includes(report.uncertainty!.note),
+      "the printed reason must be the fold's note, not a second wording",
+    );
   });
 
-  test('the edge\'s own verb, its call site and how it was resolved — never a verb of consequence', () => {
+  test("the edge's own verb, its call site and how it was resolved — never a verb of consequence", () => {
     const report = impactOf(index, TABLE, { hops: 1 });
     const r = run(['impact', TABLE, '--hops', '1']);
     const first = report.hops[0]!.nodes[0]!;
@@ -136,7 +159,11 @@ describe('farsight impact — the text form', () => {
     const r = run(['impact', SEED, '--hops', '3']);
     assert.equal(r.status, 0, r.err);
     for (const c of shared) {
-      assert.notEqual(c.direct, c.behind, 'the fixture\'s shared stop must have different first-ring and closure counts');
+      assert.notEqual(
+        c.direct,
+        c.behind,
+        "the fixture's shared stop must have different first-ring and closure counts",
+      );
       assert.match(r.out, new RegExp(`shared\\s+${c.name!} — used by ${c.direct}, not opened \\(${c.behind} node`));
       // the one number that must never carry the other's words
       assert.ok(!r.out.includes(`used by ${c.behind}`), '`used by` is the first ring, never the closure');
@@ -193,12 +220,21 @@ describe('farsight impact --changed', () => {
   });
 
   test('a line range takes only what starts inside it', () => {
-    const inFile = [...index.byId.values()].filter((n) => n.loc?.path === 'src/server/invoiceService.ts').sort((a, b) => a.loc!.line - b.loc!.line);
+    const inFile = [...index.byId.values()]
+      .filter((n) => n.loc?.path === 'src/server/invoiceService.ts')
+      .sort((a, b) => a.loc!.line - b.loc!.line);
     const first = inFile[0]!;
-    const r = run(['impact', '--changed', `src/server/invoiceService.ts:${first.loc!.line}-${first.loc!.line}`, '--hops', '1']);
+    const r = run([
+      'impact',
+      '--changed',
+      `src/server/invoiceService.ts:${first.loc!.line}-${first.loc!.line}`,
+      '--hops',
+      '1',
+    ]);
     assert.equal(r.status, 0, r.err);
     assert.ok(r.out.includes(`${first.name} — ${first.id}`));
-    for (const other of inFile.slice(1)) assert.ok(!r.out.includes(`${other.name} — ${other.id}`), `${other.name} starts outside the range`);
+    for (const other of inFile.slice(1))
+      assert.ok(!r.out.includes(`${other.name} — ${other.id}`), `${other.name} starts outside the range`);
   });
 
   test('a path the graph holds nothing for is said out loud, not silently dropped', () => {
@@ -215,7 +251,10 @@ describe('farsight impact --format json', () => {
     const doc = JSON.parse(r.out);
     const report = impactOf(index, TABLE, { hops: 2 });
     assert.deepEqual(Object.keys(doc).sort(), Object.keys(report).sort());
-    assert.deepEqual(doc.hops.map((h: { hop: number; found: number }) => [h.hop, h.found]), report.hops.map((h) => [h.hop, h.found]));
+    assert.deepEqual(
+      doc.hops.map((h: { hop: number; found: number }) => [h.hop, h.found]),
+      report.hops.map((h) => [h.hop, h.found]),
+    );
     assert.equal('total' in doc, false);
     assert.equal(doc.bound, report.bound);
   });
@@ -247,7 +286,10 @@ describe('farsight impact --format json', () => {
       assert.equal(doc.fallback, 'run-all');
       assert.match(doc.fallback_reason, /run the whole suite: /);
       for (const u of doc.unselectable) {
-        assert.ok(['no covers edge', 'declared only', 'inactive', 'run-level only'].includes(u.reason), `${u.reason} is not one of the closed words`);
+        assert.ok(
+          ['no covers edge', 'declared only', 'inactive', 'run-level only'].includes(u.reason),
+          `${u.reason} is not one of the closed words`,
+        );
       }
     } else {
       assert.equal(doc.fallback, null);
@@ -256,7 +298,17 @@ describe('farsight impact --format json', () => {
   });
 
   test('several changed files fold into one envelope with one hop list', () => {
-    const r = run(['impact', '--changed', 'src/server/invoiceService.ts', 'src/server/routes.ts', '--hops', '1', '--tests', '--format', 'json']);
+    const r = run([
+      'impact',
+      '--changed',
+      'src/server/invoiceService.ts',
+      'src/server/routes.ts',
+      '--hops',
+      '1',
+      '--tests',
+      '--format',
+      'json',
+    ]);
     assert.equal(r.status, 0, r.err);
     const doc = JSON.parse(r.out);
     assert.deepEqual(validate(doc, SCHEMA()), []);

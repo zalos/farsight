@@ -13,7 +13,7 @@
  * Pure functions over parsed objects: YAML/JSON reading lives in
  * `@farsight/parsers` (core stays dependency-free).
  */
-import type { GraphNode, GraphEdge, GraphFragment, OperationContract, ContractParam, DriftKind, Loc } from './graph.js';
+import type { GraphNode, GraphFragment, OperationContract, ContractParam, DriftKind, Loc } from './graph.js';
 import type { GraphIndex } from './query.js';
 import { buildIndex, businessSummary } from './query.js';
 import { t } from './strings.js';
@@ -51,7 +51,10 @@ const METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'tr
 
 /** `/invoices/{id}`, `/invoices/:id`, `/invoices/${id}` → `/invoices/:param` (same rule as parsers/shared/tags.ts). */
 export function normalizeRoutePath(p: string): string {
-  return p.replace(/\$\{[^}]*\}/g, ':param').replace(/:[A-Za-z_]+/g, ':param').replace(/\{[^}/]+\}/g, ':param');
+  return p
+    .replace(/\$\{[^}]*\}/g, ':param')
+    .replace(/:[A-Za-z_]+/g, ':param')
+    .replace(/\{[^}/]+\}/g, ':param');
 }
 
 export function isOpenApiDoc(x: unknown): x is OpenApiDoc {
@@ -81,7 +84,10 @@ export function schemaName(x: unknown): string | undefined {
   if (typeof o.$ref === 'string') return o.$ref.split('/').pop();
   if (typeof o.title === 'string') return o.title;
   if (typeof o.type === 'string') {
-    if (o.type === 'array') { const item = schemaName(o.items); return item ? `${item}[]` : 'array'; }
+    if (o.type === 'array') {
+      const item = schemaName(o.items);
+      return item ? `${item}[]` : 'array';
+    }
     return o.type;
   }
   return undefined;
@@ -131,7 +137,11 @@ export function specOperations(doc: OpenApiDoc, source: SpecSource): SpecOperati
       for (const p of rawParams) {
         const where = String(p.in ?? '');
         if (isV2 && where === 'body') {
-          requestBody = { schema: schemaName(p.schema), required: p.required === true, fields: schemaFields(doc, p.schema) };
+          requestBody = {
+            schema: schemaName(p.schema),
+            required: p.required === true,
+            fields: schemaFields(doc, p.schema),
+          };
           continue;
         }
         if (!['path', 'query', 'header', 'cookie'].includes(where)) continue;
@@ -167,16 +177,26 @@ export function specOperations(doc: OpenApiDoc, source: SpecSource): SpecOperati
           const media = Object.values(content)[0];
           schema = media?.schema ? schemaName(media.schema) : undefined;
         }
-        responses.push({ status, ...(typeof r.description === 'string' ? { description: r.description } : {}), ...(schema ? { schema } : {}) });
+        responses.push({
+          status,
+          ...(typeof r.description === 'string' ? { description: r.description } : {}),
+          ...(schema ? { schema } : {}),
+        });
       }
-      const security = flattenSecurity(Array.isArray(op.security) ? (op.security as Record<string, string[]>[]) : docSecurity);
+      const security = flattenSecurity(
+        Array.isArray(op.security) ? (op.security as Record<string, string[]>[]) : docSecurity,
+      );
       const tags = Array.isArray(op.tags) ? op.tags.map(String) : undefined;
       const line = source.lineOf?.(path, m);
       // x-* extensions verbatim — the consumer's own vocabulary (x-phase, x-internal…) travels with the contract
       const extensions: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(op)) if (k.startsWith('x-') && v !== undefined) extensions[k] = v;
       const contract: SpecOperation['contract'] = {
-        spec: { path: source.path, ...(line != null ? { line } : {}), ...(typeof op.operationId === 'string' ? { operationId: op.operationId } : {}) },
+        spec: {
+          path: source.path,
+          ...(line != null ? { line } : {}),
+          ...(typeof op.operationId === 'string' ? { operationId: op.operationId } : {}),
+        },
         ...(typeof op.summary === 'string' ? { summary: op.summary.trim() } : {}),
         ...(typeof op.description === 'string' ? { description: op.description.trim() } : {}),
         ...(op.deprecated === true ? { deprecated: true } : {}),
@@ -187,7 +207,13 @@ export function specOperations(doc: OpenApiDoc, source: SpecSource): SpecOperati
         ...(security.length ? { security } : {}),
         ...(Object.keys(extensions).length ? { extensions } : {}),
       };
-      out.push({ method, path, normPath: normalizeRoutePath(path), routeId: `${source.repo}::route::${method} ${path}`, contract });
+      out.push({
+        method,
+        path,
+        normPath: normalizeRoutePath(path),
+        routeId: `${source.repo}::route::${method} ${path}`,
+        contract,
+      });
     }
   }
   return out;
@@ -229,7 +255,11 @@ export function specBasePaths(doc: OpenApiDoc): string[] {
   for (const s of doc.servers ?? []) {
     if (typeof s?.url !== 'string') continue;
     let p = s.url.replace(/\{[^}]*\}/g, 'x');
-    try { p = new URL(p, 'http://placeholder').pathname; } catch { /* relative url: keep */ }
+    try {
+      p = new URL(p, 'http://placeholder').pathname;
+    } catch {
+      /* relative url: keep */
+    }
     p = p.replace(/\/$/, '');
     if (p && p !== '/') out.add(p);
   }
@@ -253,7 +283,9 @@ export function apiNodeOf(doc: OpenApiDoc, source: SpecSource): GraphNode {
   const version = doc.info?.version;
   const format = doc.swagger === '2.0' ? 'swagger 2.0' : `openapi ${doc.openapi ?? '3'}`;
   const servers = (doc.servers ?? []).map((s) => s.url).filter((u): u is string => typeof u === 'string');
-  const sig = [format, version ? `version ${version}` : '', servers.length ? `servers: ${servers.join(', ')}` : ''].filter(Boolean).join(' · ');
+  const sig = [format, version ? `version ${version}` : '', servers.length ? `servers: ${servers.join(', ')}` : '']
+    .filter(Boolean)
+    .join(' · ');
   const isUrl = /^https?:\/\//.test(source.path);
   return {
     id: apiNodeId(source.repo, source.path),
@@ -270,7 +302,10 @@ export function apiNodeOf(doc: OpenApiDoc, source: SpecSource): GraphNode {
 
 // ── reconcile: spec ↔ code, one function for ingest and for ad-hoc diffs ──
 
-export interface DriftEntry { kind: DriftKind; message: string }
+export interface DriftEntry {
+  kind: DriftKind;
+  message: string;
+}
 
 export type ApiDriftCategory = 'missing' | 'undocumented' | 'notes';
 
@@ -293,7 +328,15 @@ export interface ReconcileResult {
   codeOnly: { routeId: string; name: string; loc?: Loc; contract: OperationContract }[];
   /** repos the spec was matched against (the ones `codeOnly` is computed for) */
   repos: string[];
-  counts: { declared: number; implemented: number; matched: number; specOnly: number; codeOnly: number; mismatched: number; drift: number };
+  counts: {
+    declared: number;
+    implemented: number;
+    matched: number;
+    specOnly: number;
+    codeOnly: number;
+    mismatched: number;
+    drift: number;
+  };
   /**
    * Observations that are not drift and never fail `--strict`: a matched operation whose handler is
    * a class method (`OrdersController.approveOrder`, a NestJS or Spring controller) named differently
@@ -342,7 +385,8 @@ function guardsOf(index: GraphIndex, routeId: string): GraphNode[] {
     for (const edge of index.out.get(id) ?? []) {
       if (edge.kind === 'calls' && edge.meta?.inactive !== true && (id === routeId || edge.meta?.via === 'delegate')) {
         const handler = index.byId.get(edge.to);
-        if (handler?.kind === 'function' && handler.loc?.repo === index.byId.get(routeId)?.loc?.repo) pending.push(handler.id);
+        if (handler?.kind === 'function' && handler.loc?.repo === index.byId.get(routeId)?.loc?.repo)
+          pending.push(handler.id);
       }
     }
   }
@@ -368,7 +412,11 @@ function multipartReaderReached(op: SpecOperation, routeId: string, index: Graph
       seen.add(edge.to);
       const target = index.byId.get(edge.to);
       if (!target || target.loc?.repo !== index.byId.get(routeId)?.loc?.repo) continue;
-      if ((target.kind === 'function' || target.kind === 'rule') && readers.some((name) => target.id === name || target.name === name)) return true;
+      if (
+        (target.kind === 'function' || target.kind === 'rule') &&
+        readers.some((name) => target.id === name || target.name === name)
+      )
+        return true;
       pending.push(target.id);
     }
   }
@@ -376,52 +424,94 @@ function multipartReaderReached(op: SpecOperation, routeId: string, index: Graph
 }
 
 /** Drift between one declared operation and its implemented route. */
-function operationDrift(op: SpecOperation, route: GraphNode, index: GraphIndex, specUsesSecurity: boolean, opts: ReconcileOptions): DriftEntry[] {
+function operationDrift(
+  op: SpecOperation,
+  route: GraphNode,
+  index: GraphIndex,
+  specUsesSecurity: boolean,
+  opts: ReconcileOptions,
+): DriftEntry[] {
   const drift: DriftEntry[] = [];
   const guards = guardsOf(index, route.id);
   const security = op.contract.security ?? [];
   const declaredGuards = Array.isArray(op.contract.extensions?.['x-guards'])
-    ? op.contract.extensions['x-guards'].filter((name): name is string => typeof name === 'string') : [];
+    ? op.contract.extensions['x-guards'].filter((name): name is string => typeof name === 'string')
+    : [];
   const matchesGuard = (name: string, guard: GraphNode): boolean => {
     if (guard.id === name || guard.name === name || guard.name.endsWith(`: ${name}`)) return true;
     const hay = `${guard.loc?.path ?? ''} ${guard.name}`.toLowerCase();
-    return (opts.guardNames?.[name] ?? []).some((matcher) => !/^[A-Z]+ \//.test(matcher) && hay.includes(matcher.toLowerCase()));
+    return (opts.guardNames?.[name] ?? []).some(
+      (matcher) => !/^[A-Z]+ \//.test(matcher) && hay.includes(matcher.toLowerCase()),
+    );
   };
   // a gate declared in farsight.config.json is a statement, not a detection: when it is the
   // only gate on an implemented route, say so — the handler enforces nothing the parser can see
   const declaredOnly = guards.filter((g) => g.tags.includes('declared'));
   if (route.loc && guards.length && declaredOnly.length === guards.length) {
-    drift.push({ kind: 'security-declared-only', message: `gate declared in farsight.config.json (${declaredOnly.map((g) => g.name).join(', ')}); no guard detected in the code` });
+    drift.push({
+      kind: 'security-declared-only',
+      message: `gate declared in farsight.config.json (${declaredOnly.map((g) => g.name).join(', ')}); no guard detected in the code`,
+    });
   }
   const enforced = guards.filter((g) => !g.tags.includes('declared'));
   const missingGuards = declaredGuards.filter((name) => !enforced.some((guard) => matchesGuard(name, guard)));
-  if (missingGuards.length) drift.push({ kind: 'security-missing-in-code', message: t('api.policy.guardsMissing', 'professional').replace('{names}', missingGuards.join(', ')) });
+  if (missingGuards.length)
+    drift.push({
+      kind: 'security-missing-in-code',
+      message: t('api.policy.guardsMissing', 'professional').replace('{names}', missingGuards.join(', ')),
+    });
   const uncovered = enforced.filter((guard) => !declaredGuards.some((name) => matchesGuard(name, guard)));
   if (security.length && !guards.length) {
-    drift.push({ kind: 'security-missing-in-code', message: `spec requires ${security.join(', ')}; no guard is enforced on the route` });
+    drift.push({
+      kind: 'security-missing-in-code',
+      message: `spec requires ${security.join(', ')}; no guard is enforced on the route`,
+    });
   } else if (!security.length && uncovered.length && (specUsesSecurity || declaredGuards.length > 0)) {
     // only gates the parser detected count here: a config-declared gate exists precisely because the spec cannot state it
-    drift.push({ kind: 'security-missing-in-spec', message: t('api.policy.guardsUndeclared', 'professional').replace('{names}', uncovered.map((g) => g.name).join(', ')) });
+    drift.push({
+      kind: 'security-missing-in-spec',
+      message: t('api.policy.guardsUndeclared', 'professional').replace(
+        '{names}',
+        uncovered.map((g) => g.name).join(', '),
+      ),
+    });
   } else if (security.length && guards.length) {
     // scope-level check: every scope the spec names should be mentioned by some guard
     const scopes = security.flatMap((s) => s.split(': ')[1]?.split(' ') ?? []);
     const guardText = guards.map((g) => g.name).join(' ');
     const missing = scopes.filter((s) => !guardText.includes(s));
     if (scopes.length && missing.length) {
-      drift.push({ kind: 'security-mismatch', message: `spec requires ${missing.join(', ')}; code enforces ${guards.map((g) => g.name).join(', ')}` });
+      drift.push({
+        kind: 'security-mismatch',
+        message: `spec requires ${missing.join(', ')}; code enforces ${guards.map((g) => g.name).join(', ')}`,
+      });
     }
   }
   if (op.contract.deprecated && !route.tags.includes('deprecated')) {
-    drift.push({ kind: 'deprecated-in-spec-only', message: 'spec marks this operation deprecated; the code carries no deprecated tag' });
+    drift.push({
+      kind: 'deprecated-in-spec-only',
+      message: 'spec marks this operation deprecated; the code carries no deprecated tag',
+    });
   }
   const validators = validatorsOf(index, route.id);
   // methods that carry no request body: a zod parse there validates the query or the path
   // params, so it is never evidence of an undeclared body
   const bodiless = ['GET', 'HEAD', 'DELETE'].includes(op.method);
   if (validators.length && !op.contract.requestBody && !bodiless) {
-    drift.push({ kind: 'body-undeclared', message: `code validates the request body with ${validators.map((v) => v.name).join(', ')}; the spec declares no request body` });
-  } else if (op.contract.requestBody?.required && !validators.length && !bodiless && !multipartReaderReached(op, route.id, index, opts.validators ?? [])) {
-    drift.push({ kind: 'body-unvalidated', message: `spec requires a ${op.contract.requestBody.schema ?? 'request'} body; no validation rule is attached to the route` });
+    drift.push({
+      kind: 'body-undeclared',
+      message: `code validates the request body with ${validators.map((v) => v.name).join(', ')}; the spec declares no request body`,
+    });
+  } else if (
+    op.contract.requestBody?.required &&
+    !validators.length &&
+    !bodiless &&
+    !multipartReaderReached(op, route.id, index, opts.validators ?? [])
+  ) {
+    drift.push({
+      kind: 'body-unvalidated',
+      message: `spec requires a ${op.contract.requestBody.schema ?? 'request'} body; no validation rule is attached to the route`,
+    });
   }
   return drift;
 }
@@ -445,7 +535,12 @@ function controllerMethodOf(index: GraphIndex, routeId: string): string | undefi
  * (`{id}` · `:id` → `:param`), exact first, then with each server base path
  * added or removed (reported as `basePath`); never fuzzier than that.
  */
-export function reconcile(doc: OpenApiDoc, index: GraphIndex, source: SpecSource, opts: ReconcileOptions = {}): ReconcileResult {
+export function reconcile(
+  doc: OpenApiDoc,
+  index: GraphIndex,
+  source: SpecSource,
+  opts: ReconcileOptions = {},
+): ReconcileResult {
   const ops = specOperations(doc, source);
   const basePaths = specBasePaths(doc);
   const apiId = opts.apiId ?? apiNodeId(source.repo, source.path);
@@ -479,9 +574,15 @@ export function reconcile(doc: OpenApiDoc, index: GraphIndex, source: SpecSource
     if (!hit) {
       for (const base of basePaths) {
         const withBase = byKey.get(`${op.method} ${normalizeRoutePath(base + op.path)}`);
-        const stripped = op.path.startsWith(base + '/') ? byKey.get(`${op.method} ${normalizeRoutePath(op.path.slice(base.length))}`) : undefined;
+        const stripped = op.path.startsWith(base + '/')
+          ? byKey.get(`${op.method} ${normalizeRoutePath(op.path.slice(base.length))}`)
+          : undefined;
         const cand = withBase ?? stripped;
-        if (cand?.length) { hit = cand.find((n) => !claimed.has(n.id)) ?? cand[0]; matchedBy = 'basePath'; break; }
+        if (cand?.length) {
+          hit = cand.find((n) => !claimed.has(n.id)) ?? cand[0];
+          matchedBy = 'basePath';
+          break;
+        }
       }
     }
     if (hit) {
@@ -490,19 +591,43 @@ export function reconcile(doc: OpenApiDoc, index: GraphIndex, source: SpecSource
       const drift = operationDrift(op, hit, index, specUsesSecurity, opts);
       if (drift.length) mismatched++;
       driftTotal += drift.length;
-      const contract: OperationContract = { status: 'both', apiId, ...op.contract, ...(basePaths.length ? { servers: basePaths } : {}), ...(drift.length ? { drift } : {}) };
+      const contract: OperationContract = {
+        status: 'both',
+        apiId,
+        ...op.contract,
+        ...(basePaths.length ? { servers: basePaths } : {}),
+        ...(drift.length ? { drift } : {}),
+      };
       matched.push({ routeId: hit.id, op: `${op.method} ${op.path}`, matchedBy, contract, loc: hit.loc });
       // the controller method behind the route (`Class.method`) against the spec's operationId — a note, not drift
       const operationId = op.contract.spec?.operationId;
       const method = operationId ? controllerMethodOf(index, hit.id) : undefined;
       if (operationId && method && method.split('.').pop() !== operationId) {
-        notes.push({ routeId: hit.id, op: `${op.method} ${op.path}`, kind: 'operationId-name', message: `the handler is ${method}; the spec names the operation ${operationId}` });
+        notes.push({
+          routeId: hit.id,
+          op: `${op.method} ${op.path}`,
+          kind: 'operationId-name',
+          message: `the handler is ${method}; the spec names the operation ${operationId}`,
+        });
       }
     } else {
-      const drift: DriftEntry[] = [{ kind: 'spec-only', message: 'declared in the spec; no implementation found in the indexed code' }];
+      const drift: DriftEntry[] = [
+        { kind: 'spec-only', message: 'declared in the spec; no implementation found in the indexed code' },
+      ];
       driftTotal++;
-      const contract: OperationContract = { status: 'spec-only', apiId, ...op.contract, ...(basePaths.length ? { servers: basePaths } : {}), drift };
-      specOnly.push({ routeId: op.routeId, op: `${op.method} ${op.path}`, ...(op.contract.summary ? { summary: op.contract.summary } : {}), contract });
+      const contract: OperationContract = {
+        status: 'spec-only',
+        apiId,
+        ...op.contract,
+        ...(basePaths.length ? { servers: basePaths } : {}),
+        drift,
+      };
+      specOnly.push({
+        routeId: op.routeId,
+        op: `${op.method} ${op.path}`,
+        ...(op.contract.summary ? { summary: op.contract.summary } : {}),
+        contract,
+      });
     }
   }
 
@@ -513,38 +638,84 @@ export function reconcile(doc: OpenApiDoc, index: GraphIndex, source: SpecSource
     if (claimed.has(r.node.id) || !repos.includes(r.repo)) continue;
     const drift: DriftEntry[] = [{ kind: 'code-only', message: 'implemented in the code; not declared in the spec' }];
     driftTotal++;
-    codeOnly.push({ routeId: r.node.id, name: r.node.name, loc: r.node.loc, contract: { status: 'code-only', apiId, drift } });
+    codeOnly.push({
+      routeId: r.node.id,
+      name: r.node.name,
+      loc: r.node.loc,
+      contract: { status: 'code-only', apiId, drift },
+    });
   }
 
-  const phaseOrder = opts.phaseOrder ?? [...new Set(ops.flatMap((op) => {
-    const phase = op.contract.extensions?.['x-phase'];
-    return typeof phase === 'string' ? [phase] : [];
-  }))];
+  const phaseOrder = opts.phaseOrder ?? [
+    ...new Set(
+      ops.flatMap((op) => {
+        const phase = op.contract.extensions?.['x-phase'];
+        return typeof phase === 'string' ? [phase] : [];
+      }),
+    ),
+  ];
   const current = opts.phase ? phaseOrder.indexOf(opts.phase) : -1;
-  const planned = specOnly.filter((op) => {
-    const phase = op.contract.extensions?.['x-phase'];
-    return current >= 0 && typeof phase === 'string' && phaseOrder.indexOf(phase) > current;
-  }).map((op) => op.routeId);
-  const internalKeys = new Set((opts.internalRoutes ?? []).map((name) => {
-    const mp = name.match(/^([A-Z]+) (\/.*)$/);
-    return mp ? `${mp[1]} ${normalizeRoutePath(mp[2]!)}` : '';
-  }));
-  const internal = codeOnly.filter((op) => {
-    const mp = op.name.match(/^([A-Z]+) (\/.*)$/);
-    return !!mp && internalKeys.has(`${mp[1]} ${normalizeRoutePath(mp[2]!)}`);
-  }).map((op) => op.routeId);
+  const planned = specOnly
+    .filter((op) => {
+      const phase = op.contract.extensions?.['x-phase'];
+      return current >= 0 && typeof phase === 'string' && phaseOrder.indexOf(phase) > current;
+    })
+    .map((op) => op.routeId);
+  const internalKeys = new Set(
+    (opts.internalRoutes ?? []).map((name) => {
+      const mp = name.match(/^([A-Z]+) (\/.*)$/);
+      return mp ? `${mp[1]} ${normalizeRoutePath(mp[2]!)}` : '';
+    }),
+  );
+  const internal = codeOnly
+    .filter((op) => {
+      const mp = op.name.match(/^([A-Z]+) (\/.*)$/);
+      return !!mp && internalKeys.has(`${mp[1]} ${normalizeRoutePath(mp[2]!)}`);
+    })
+    .map((op) => op.routeId);
   const missing = specOnly.length - planned.length;
   const undocumented = codeOnly.length - internal.length;
   const policyNotes = driftTotal - specOnly.length - codeOnly.length;
   return {
-    policy: { ...(opts.phase ? { phase: opts.phase } : {}), phaseOrder, planned, internal,
+    policy: {
+      ...(opts.phase ? { phase: opts.phase } : {}),
+      phaseOrder,
+      planned,
+      internal,
       metrics: {
-        planned: counted(planned.length, 'apis.count.operations', 'surf.scope.api', 'reconcile: specOnly with a demonstrably later x-phase'),
-        internal: counted(internal.length, 'apis.count.operations', 'surf.scope.api', 'reconcile: codeOnly matching internalRoutes'),
+        planned: counted(
+          planned.length,
+          'apis.count.operations',
+          'surf.scope.api',
+          'reconcile: specOnly with a demonstrably later x-phase',
+        ),
+        internal: counted(
+          internal.length,
+          'apis.count.operations',
+          'surf.scope.api',
+          'reconcile: codeOnly matching internalRoutes',
+        ),
       },
-      counts: { missing, undocumented, notes: policyNotes, planned: planned.length, internal: internal.length, drift: missing + undocumented + policyNotes } },
-    api: { id: apiId, name: source.name ?? doc.info?.title ?? source.path, ...(doc.info?.version ? { version: String(doc.info.version) } : {}), path: source.path, basePaths },
-    matched, specOnly, codeOnly, repos,
+      counts: {
+        missing,
+        undocumented,
+        notes: policyNotes,
+        planned: planned.length,
+        internal: internal.length,
+        drift: missing + undocumented + policyNotes,
+      },
+    },
+    api: {
+      id: apiId,
+      name: source.name ?? doc.info?.title ?? source.path,
+      ...(doc.info?.version ? { version: String(doc.info.version) } : {}),
+      path: source.path,
+      basePaths,
+    },
+    matched,
+    specOnly,
+    codeOnly,
+    repos,
     ...(notes.length ? { notes } : {}),
     counts: {
       declared: ops.length,
@@ -564,20 +735,38 @@ export function reconcile(doc: OpenApiDoc, index: GraphIndex, source: SpecSource
  * (declared, not implemented: no `loc`), code-only routes are stamped, and
  * the `api` node with its `contains` edges is added. Mutates in place.
  */
-export function applySpecToFragment(fragment: GraphFragment, doc: OpenApiDoc, source: SpecSource, opts: ReconcileOptions = {}): ReconcileResult {
+export function applySpecToFragment(
+  fragment: GraphFragment,
+  doc: OpenApiDoc,
+  source: SpecSource,
+  opts: ReconcileOptions = {},
+): ReconcileResult {
   const index = buildIndex(fragment.nodes, fragment.edges);
   const result = reconcile(doc, index, source, { ...opts, repo: fragment.repo });
   const api = apiNodeOf(doc, source);
   const byId = new Map(fragment.nodes.map((n) => [n.id, n]));
-  if (!byId.has(api.id)) { fragment.nodes.push(api); byId.set(api.id, api); }
+  if (!byId.has(api.id)) {
+    fragment.nodes.push(api);
+    byId.set(api.id, api);
+  }
   let seq = fragment.edges.length;
   const contains = (to: string) => {
-    fragment.edges.push({ id: `e${seq++}`, kind: 'contains', from: api.id, to, resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' } });
+    fragment.edges.push({
+      id: `e${seq++}`,
+      kind: 'contains',
+      from: api.id,
+      to,
+      resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' },
+    });
   };
   for (const m of result.matched) {
     const node = byId.get(m.routeId)!;
     node.contract = m.contract;
-    if (m.contract.tags) for (const tg of m.contract.tags) { const t = `api:${tg.toLowerCase()}`; if (!node.tags.includes(t)) node.tags.push(t); }
+    if (m.contract.tags)
+      for (const tg of m.contract.tags) {
+        const t = `api:${tg.toLowerCase()}`;
+        if (!node.tags.includes(t)) node.tags.push(t);
+      }
     if (m.contract.deprecated && !node.tags.includes('deprecated')) node.tags.push('deprecated');
     for (const t of extensionTags(m.contract.extensions)) if (!node.tags.includes(t)) node.tags.push(t);
     contains(node.id);
@@ -585,8 +774,16 @@ export function applySpecToFragment(fragment: GraphFragment, doc: OpenApiDoc, so
   for (const s of result.specOnly) {
     if (byId.has(s.routeId)) continue;
     const node: GraphNode = {
-      id: s.routeId, kind: 'route', name: s.op, lang: 'openapi',
-      tags: ['spec-only', ...(s.contract.tags ?? []).map((tg) => `api:${tg.toLowerCase()}`), ...(s.contract.deprecated ? ['deprecated'] : []), ...extensionTags(s.contract.extensions)],
+      id: s.routeId,
+      kind: 'route',
+      name: s.op,
+      lang: 'openapi',
+      tags: [
+        'spec-only',
+        ...(s.contract.tags ?? []).map((tg) => `api:${tg.toLowerCase()}`),
+        ...(s.contract.deprecated ? ['deprecated'] : []),
+        ...extensionTags(s.contract.extensions),
+      ],
       ...(s.contract.description ? { docs: s.contract.description } : {}),
       contract: s.contract,
     };
@@ -631,17 +828,32 @@ export function fieldsFromSource(text: string | undefined): string[] | undefined
     let seg = '';
     for (; i < text.length; i++) {
       const ch = text[i]!;
-      if (ch === '{' || ch === '(' || ch === '[') { depth++; if (depth === 1) { seg = ''; continue; } }
-      if (ch === '}' || ch === ')' || ch === ']') { depth--; if (depth === 0) break; }
+      if (ch === '{' || ch === '(' || ch === '[') {
+        depth++;
+        if (depth === 1) {
+          seg = '';
+          continue;
+        }
+      }
+      if (ch === '}' || ch === ')' || ch === ']') {
+        depth--;
+        if (depth === 0) break;
+      }
       if (depth === 1) {
-        if (ch === ',') { seg = ''; continue; }
+        if (ch === ',') {
+          seg = '';
+          continue;
+        }
         seg += ch;
         const m = seg.match(/^\s*([A-Za-z_$][\w$]*)\s*:$/);
-        if (m) { out.push(m[1]!); seg = ''; }
+        if (m) {
+          out.push(m[1]!);
+          seg = '';
+        }
       }
     }
   } else {
-    for (const m of text.matchAll(/(?:private|public|protected)\s+[\w<>\[\], ]+\s+(\w+)\s*[;=]/g)) out.push(m[1]!);
+    for (const m of text.matchAll(/(?:private|public|protected)\s+[\w<>[\], ]+\s+(\w+)\s*[;=]/g)) out.push(m[1]!);
   }
   return out.length ? [...new Set(out)].slice(0, 40) : undefined;
 }
@@ -676,11 +888,13 @@ export function graphToSpec(index: GraphIndex, opts: GenerateOptions): OpenApiDo
     const { method, path } = routeMethodPath(route)!;
     // express `:id` → `{id}`; anonymous `:param` (App Router) → `{param}`, `{param2}` …
     let anon = 0;
-    const oasPath = path.replace(/\$\{[^}]*\}/g, () => `{param${++anon > 1 ? anon : ''}}`).replace(/:([A-Za-z_]+)/g, (_m, name: string) => {
-      if (name !== 'param') return `{${name}}`;
-      anon++;
-      return `{param${anon > 1 ? anon : ''}}`;
-    });
+    const oasPath = path
+      .replace(/\$\{[^}]*\}/g, () => `{param${++anon > 1 ? anon : ''}}`)
+      .replace(/:([A-Za-z_]+)/g, (_m, name: string) => {
+        if (name !== 'param') return `{${name}}`;
+        anon++;
+        return `{param${anon > 1 ? anon : ''}}`;
+      });
     const inferred: string[] = [];
     const op: Record<string, unknown> = {};
     const c = route.contract;
@@ -691,10 +905,16 @@ export function graphToSpec(index: GraphIndex, opts: GenerateOptions): OpenApiDo
     // summary of the function it hands it to
     let summary = businessSummary(route);
     if (!summary) {
-      const callee = (index.out.get(route.id) ?? []).filter((e) => e.kind === 'calls').map((e) => index.byId.get(e.to)).find((n) => n && n.kind === 'function');
+      const callee = (index.out.get(route.id) ?? [])
+        .filter((e) => e.kind === 'calls')
+        .map((e) => index.byId.get(e.to))
+        .find((n) => n && n.kind === 'function');
       if (callee) summary = businessSummary(callee);
       if (!summary && callee) {
-        const delegate = (index.out.get(callee.id) ?? []).filter((e) => e.kind === 'calls' && e.meta?.via === 'delegate').map((e) => index.byId.get(e.to)).find((n) => n && n.kind === 'function');
+        const delegate = (index.out.get(callee.id) ?? [])
+          .filter((e) => e.kind === 'calls' && e.meta?.via === 'delegate')
+          .map((e) => index.byId.get(e.to))
+          .find((n) => n && n.kind === 'function');
         if (delegate) summary = businessSummary(delegate);
       }
     }
@@ -710,11 +930,23 @@ export function graphToSpec(index: GraphIndex, opts: GenerateOptions): OpenApiDo
     const params: Record<string, unknown>[] = [];
     for (const m of oasPath.matchAll(/\{([^}]+)\}/g)) {
       const declared = c?.params?.find((p) => p.in === 'path' && p.name === m[1]);
-      params.push({ name: m[1], in: 'path', required: true, schema: { type: declared?.type ?? 'string' }, ...(declared?.description ? { description: declared.description } : {}) });
+      params.push({
+        name: m[1],
+        in: 'path',
+        required: true,
+        schema: { type: declared?.type ?? 'string' },
+        ...(declared?.description ? { description: declared.description } : {}),
+      });
     }
     for (const p of c?.params ?? []) {
       if (p.in === 'path') continue;
-      params.push({ name: p.name, in: p.in, ...(p.required ? { required: true } : {}), schema: { type: p.type ?? 'string' }, ...(p.description ? { description: p.description } : {}) });
+      params.push({
+        name: p.name,
+        in: p.in,
+        ...(p.required ? { required: true } : {}),
+        schema: { type: p.type ?? 'string' },
+        ...(p.description ? { description: p.description } : {}),
+      });
     }
     if (params.length) op.parameters = params;
 
@@ -724,15 +956,31 @@ export function graphToSpec(index: GraphIndex, opts: GenerateOptions): OpenApiDo
       const fields = fieldsFromSource(v.snippet ?? v.signature);
       schemas[v.name] = {
         type: 'object',
-        ...(fields ? { properties: Object.fromEntries(fields.map((f) => [f, {}])) } : { description: 'shape not extracted — see the source' }),
+        ...(fields
+          ? { properties: Object.fromEntries(fields.map((f) => [f, {}])) }
+          : { description: 'shape not extracted — see the source' }),
         ...(v.loc ? { 'x-farsight-source': `${v.loc.path}:${v.loc.line}` } : {}),
         'x-farsight-node': v.id,
       };
-      op.requestBody = { required: true, content: { 'application/json': { schema: { $ref: `#/components/schemas/${v.name}` } } } };
+      op.requestBody = {
+        required: true,
+        content: { 'application/json': { schema: { $ref: `#/components/schemas/${v.name}` } } },
+      };
     } else if (c?.requestBody) {
-      op.requestBody = { ...(c.requestBody.required ? { required: true } : {}), content: { [c.requestBody.contentType ?? 'application/json']: { schema: c.requestBody.schema ? schemaRef(c.requestBody.schema) : {} } } };
+      op.requestBody = {
+        ...(c.requestBody.required ? { required: true } : {}),
+        content: {
+          [c.requestBody.contentType ?? 'application/json']: {
+            schema: c.requestBody.schema ? schemaRef(c.requestBody.schema) : {},
+          },
+        },
+      };
       const bodyName = c.requestBody.schema?.replace(/\[\]$/, '');
-      if (bodyName && schemaRef(bodyName).$ref && !schemas[bodyName]) schemas[bodyName] = { type: 'object', ...(c.requestBody.fields ? { properties: Object.fromEntries(c.requestBody.fields.map((f) => [f, {}])) } : {}) };
+      if (bodyName && schemaRef(bodyName).$ref && !schemas[bodyName])
+        schemas[bodyName] = {
+          type: 'object',
+          ...(c.requestBody.fields ? { properties: Object.fromEntries(c.requestBody.fields.map((f) => [f, {}])) } : {}),
+        };
     }
 
     const guards = guardsOf(index, route.id);
@@ -741,20 +989,45 @@ export function graphToSpec(index: GraphIndex, opts: GenerateOptions): OpenApiDo
       for (const g of guards) {
         const [scheme, scope] = g.name.includes(': ') ? g.name.split(': ', 2) : [g.name, undefined];
         const name = scheme!.replace(/[^\w.-]/g, '_');
-        securitySchemes[name] = { type: 'http', scheme: 'bearer', description: `inferred from guard ${scheme}`, 'x-farsight-inferred': ['type', 'scheme'], ...(g.loc ? { 'x-farsight-source': `${g.loc.path}:${g.loc.line}` } : {}) };
+        securitySchemes[name] = {
+          type: 'http',
+          scheme: 'bearer',
+          description: `inferred from guard ${scheme}`,
+          'x-farsight-inferred': ['type', 'scheme'],
+          ...(g.loc ? { 'x-farsight-source': `${g.loc.path}:${g.loc.line}` } : {}),
+        };
         req[name] = [...(req[name] ?? []), ...(scope ? [scope] : [])];
       }
       op.security = [req];
     } else if (c?.security?.length) {
-      op.security = c.security.map((s) => { const [scheme, scopes] = s.split(': '); return { [scheme!]: scopes ? scopes.split(' ') : [] }; });
-      for (const s of c.security) { const scheme = s.split(': ')[0]!; if (!securitySchemes[scheme]) securitySchemes[scheme] = { type: 'http', scheme: 'bearer', 'x-farsight-inferred': ['type', 'scheme'] }; }
+      op.security = c.security.map((s) => {
+        const [scheme, scopes] = s.split(': ');
+        return { [scheme!]: scopes ? scopes.split(' ') : [] };
+      });
+      for (const s of c.security) {
+        const scheme = s.split(': ')[0]!;
+        if (!securitySchemes[scheme])
+          securitySchemes[scheme] = { type: 'http', scheme: 'bearer', 'x-farsight-inferred': ['type', 'scheme'] };
+      }
     }
 
     if (c?.responses?.length) {
-      op.responses = Object.fromEntries(c.responses.map((r) => [r.status, { description: r.description ?? '', ...(r.schema ? { content: { 'application/json': { schema: schemaRef(r.schema) } } } : {}) }]));
+      op.responses = Object.fromEntries(
+        c.responses.map((r) => [
+          r.status,
+          {
+            description: r.description ?? '',
+            ...(r.schema ? { content: { 'application/json': { schema: schemaRef(r.schema) } } } : {}),
+          },
+        ]),
+      );
       for (const r of c.responses) {
         const name = r.schema?.replace(/\[\]$/, '');
-        if (name && schemaRef(name).$ref && !schemas[name]) schemas[name] = { type: 'object', description: 'declared in the existing spec; fields not carried into the graph' };
+        if (name && schemaRef(name).$ref && !schemas[name])
+          schemas[name] = {
+            type: 'object',
+            description: 'declared in the existing spec; fields not carried into the graph',
+          };
       }
     } else {
       const status = route.snippet?.match(/\.status\((\d{3})\)/)?.[1] ?? (method === 'POST' ? '201' : '200');
@@ -784,7 +1057,10 @@ export function graphToSpec(index: GraphIndex, opts: GenerateOptions): OpenApiDo
     },
     ...(tagSet.size ? { tags: [...tagSet].sort().map((name) => ({ name })) } : {}),
     paths,
-    components: { ...(Object.keys(schemas).length ? { schemas } : {}), ...(Object.keys(securitySchemes).length ? { securitySchemes } : {}) },
+    components: {
+      ...(Object.keys(schemas).length ? { schemas } : {}),
+      ...(Object.keys(securitySchemes).length ? { securitySchemes } : {}),
+    },
   };
   return doc;
 }
@@ -797,10 +1073,26 @@ function schemaRef(name: string): Record<string, unknown> {
 }
 
 function operationIdOf(method: string, oasPath: string): string {
-  const segs = oasPath.split('/').filter(Boolean).map((s) => (s.startsWith('{') ? 'By' + cap(s.slice(1, -1)) : cap(s.replace(/[^\w]+/g, ' ').trim().split(' ').map(cap).join(''))));
+  const segs = oasPath
+    .split('/')
+    .filter(Boolean)
+    .map((s) =>
+      s.startsWith('{')
+        ? 'By' + cap(s.slice(1, -1))
+        : cap(
+            s
+              .replace(/[^\w]+/g, ' ')
+              .trim()
+              .split(' ')
+              .map(cap)
+              .join(''),
+          ),
+    );
   return method.toLowerCase() + segs.join('');
 }
-function cap(s: string): string { return s ? s[0]!.toUpperCase() + s.slice(1) : s; }
+function cap(s: string): string {
+  return s ? s[0]!.toUpperCase() + s.slice(1) : s;
+}
 
 // ── the APIs surface: what the viewer, CLI and MCP list ───────────────────
 
@@ -827,7 +1119,8 @@ export function consumersOf(index: GraphIndex, routeId: string): Consumer[] {
     if (!caller) continue;
     const callerRepo = caller.loc?.repo ?? caller.id.split('::')[0];
     out.push({
-      callerId: caller.id, caller,
+      callerId: caller.id,
+      caller,
       ...(typeof e.meta?.line === 'number' ? { line: e.meta.line } : {}),
       crossRepo: callerRepo !== repo,
       ...(e.resolution ? { confidence: e.resolution.confidence } : {}),
@@ -850,7 +1143,10 @@ function screensUpstream(index: GraphIndex, fromId: string, cap = 6): GraphNode[
         seen.add(e.from);
         const n = index.byId.get(e.from);
         if (!n) continue;
-        if (n.kind === 'page' || n.kind === 'component') { screens.push(n); if (screens.length >= cap) break; }
+        if (n.kind === 'page' || n.kind === 'component') {
+          screens.push(n);
+          if (screens.length >= cap) break;
+        }
         next.push(e.from);
       }
     }
@@ -895,7 +1191,16 @@ export interface ApiSurface {
    * implemented = with a source location · notImplemented = declared, no code ·
    * undocumented = code, not in the spec.
    */
-  counts: { operations: number; implemented: number; declared: number; notImplemented: number; undocumented: number; consumers: number; drift: number; gated: number };
+  counts: {
+    operations: number;
+    implemented: number;
+    declared: number;
+    notImplemented: number;
+    undocumented: number;
+    consumers: number;
+    drift: number;
+    gated: number;
+  };
 }
 
 function operationRow(index: GraphIndex, n: GraphNode): OperationRow | null {
@@ -905,12 +1210,16 @@ function operationRow(index: GraphIndex, n: GraphNode): OperationRow | null {
   const gates = guardsOf(index, n.id).map((g) => g.name);
   const consumers = (index.in.get(n.id) ?? []).filter((e) => e.kind === 'http').length;
   return {
-    routeId: n.id, name: n.name, method: mp.method, path: mp.path,
+    routeId: n.id,
+    name: n.name,
+    method: mp.method,
+    path: mp.path,
     status: c?.status ?? (n.loc ? 'implemented' : 'declared'),
     ...(businessSummary(n) ? { summary: businessSummary(n) } : {}),
     ...(c?.deprecated || n.tags.includes('deprecated') ? { deprecated: true } : {}),
     tags: c?.tags ?? [],
-    gates, consumers,
+    gates,
+    consumers,
     drift: c?.drift ?? [],
     ...(n.loc ? { loc: n.loc } : {}),
     ...(c?.spec?.line != null ? { specLine: c.spec.line } : {}),
@@ -920,7 +1229,8 @@ function operationRow(index: GraphIndex, n: GraphNode): OperationRow | null {
 function surfaceCounts(ops: OperationRow[]): ApiSurface['counts'] {
   return {
     operations: ops.length,
-    implemented: ops.filter((o) => o.status === 'both' || o.status === 'code-only' || o.status === 'implemented').length,
+    implemented: ops.filter((o) => o.status === 'both' || o.status === 'code-only' || o.status === 'implemented')
+      .length,
     declared: ops.filter((o) => o.status === 'both' || o.status === 'spec-only' || o.status === 'declared').length,
     notImplemented: ops.filter((o) => o.status === 'spec-only' || o.status === 'declared').length,
     undocumented: ops.filter((o) => o.status === 'code-only').length,
@@ -947,11 +1257,17 @@ export function apiSurface(index: GraphIndex, scope?: Set<string> | null): ApiSu
       .filter((e) => e.kind === 'contains')
       .map((e) => index.byId.get(e.to))
       .filter((r): r is GraphNode => !!r && r.kind === 'route')
-      .map((r) => { claimed.add(r.id); return operationRow(index, r); })
+      .map((r) => {
+        claimed.add(r.id);
+        return operationRow(index, r);
+      })
       .filter((r): r is OperationRow => !!r)
       .sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method));
     out.push({
-      id: n.id, name: n.name, repo, kind: 'spec',
+      id: n.id,
+      name: n.name,
+      repo,
+      kind: 'spec',
       specPath: n.id.slice(`${repo}::api::`.length),
       ...(n.signature?.match(/version (\S+)/)?.[1] ? { version: n.signature.match(/version (\S+)/)![1] } : {}),
       ...(n.docs ? { description: n.docs } : {}),
@@ -970,7 +1286,14 @@ export function apiSurface(index: GraphIndex, scope?: Set<string> | null): ApiSu
   }
   for (const [repo, ops] of byRepo) {
     ops.sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method));
-    out.push({ id: `${repo}::api::implemented`, name: `${repo} — no spec on file`, repo, kind: 'implied', operations: ops, counts: surfaceCounts(ops) });
+    out.push({
+      id: `${repo}::api::implemented`,
+      name: `${repo} — no spec on file`,
+      repo,
+      kind: 'implied',
+      operations: ops,
+      counts: surfaceCounts(ops),
+    });
   }
   return out.sort((a, b) => a.repo.localeCompare(b.repo) || a.name.localeCompare(b.name));
 }
@@ -980,7 +1303,10 @@ export function driftMarkdown(r: ReconcileResult): string {
   const lines = [
     `# API drift — ${r.api.name}${r.api.version ? ` v${r.api.version}` : ''} (${r.api.path})`,
     `declared ${r.counts.declared} · implemented ${r.counts.implemented} · matched ${r.counts.matched} · not implemented ${r.policy.counts.missing} · ${t('api.policy.planned', 'professional')} ${r.policy.counts.planned} · undocumented ${r.policy.counts.undocumented} · ${t('api.policy.internal', 'professional')} ${r.policy.counts.internal} · mismatched ${r.counts.mismatched}`,
-    t('api.policy.raw', 'professional').replace('{missing}', String(r.counts.specOnly)).replace('{undocumented}', String(r.counts.codeOnly)).replace('{drift}', String(r.counts.drift)),
+    t('api.policy.raw', 'professional')
+      .replace('{missing}', String(r.counts.specOnly))
+      .replace('{undocumented}', String(r.counts.codeOnly))
+      .replace('{drift}', String(r.counts.drift)),
     r.repos.length ? `repos: ${r.repos.join(', ')}` : 'repos: (no route in the graph matched this spec)',
     '',
   ];
@@ -997,14 +1323,19 @@ export function driftMarkdown(r: ReconcileResult): string {
   }
   if (r.codeOnly.length) {
     lines.push('## implemented, not declared');
-    for (const c of r.codeOnly) lines.push(`- ${c.name}${r.policy.internal.includes(c.routeId) ? ` (${t('api.policy.internalDeclaration', 'professional')})` : ''}${c.loc ? ` — ${c.loc.path}:${c.loc.line}` : ''}`);
+    for (const c of r.codeOnly)
+      lines.push(
+        `- ${c.name}${r.policy.internal.includes(c.routeId) ? ` (${t('api.policy.internalDeclaration', 'professional')})` : ''}${c.loc ? ` — ${c.loc.path}:${c.loc.line}` : ''}`,
+      );
     lines.push('');
   }
   const mism = r.matched.filter((m) => m.contract.drift?.length);
   if (mism.length) {
     lines.push('## matched with differences');
     for (const m of mism) {
-      lines.push(`- ${m.op}${m.matchedBy === 'basePath' ? ' (matched via server base path)' : ''}${m.loc ? ` — ${m.loc.path}:${m.loc.line}` : ''}`);
+      lines.push(
+        `- ${m.op}${m.matchedBy === 'basePath' ? ' (matched via server base path)' : ''}${m.loc ? ` — ${m.loc.path}:${m.loc.line}` : ''}`,
+      );
       for (const d of m.contract.drift!) lines.push(`    ${d.kind}: ${d.message}`);
     }
     lines.push('');
@@ -1020,14 +1351,28 @@ export function driftMarkdown(r: ReconcileResult): string {
 /** Same for a node's stored contract, one line per fact — the MCP describe_node block. */
 export function contractLines(c: OperationContract): string[] {
   const lines: string[] = [];
-  lines.push(`  contract: ${c.status}${c.spec ? ` · ${c.spec.path}${c.spec.line != null ? `:${c.spec.line}` : ''}` : ''}${c.spec?.operationId ? ` · operationId ${c.spec.operationId}` : ''}`);
+  lines.push(
+    `  contract: ${c.status}${c.spec ? ` · ${c.spec.path}${c.spec.line != null ? `:${c.spec.line}` : ''}` : ''}${c.spec?.operationId ? ` · operationId ${c.spec.operationId}` : ''}`,
+  );
   if (c.summary) lines.push(`    summary: ${c.summary}`);
   if (c.deprecated) lines.push('    deprecated: true');
-  if (c.params?.length) lines.push(`    params: ${c.params.map((p) => `${p.name} (${p.in}${p.required ? ', required' : ''}${p.type ? `, ${p.type}` : ''})`).join(', ')}`);
-  if (c.requestBody) lines.push(`    request body: ${c.requestBody.schema ?? c.requestBody.contentType ?? 'declared'}${c.requestBody.required ? ' (required)' : ''}${c.requestBody.fields?.length ? ` { ${c.requestBody.fields.join(', ')} }` : ''}`);
-  if (c.responses?.length) lines.push(`    responses: ${c.responses.map((r) => `${r.status}${r.schema ? ` ${r.schema}` : ''}`).join(', ')}`);
+  if (c.params?.length)
+    lines.push(
+      `    params: ${c.params.map((p) => `${p.name} (${p.in}${p.required ? ', required' : ''}${p.type ? `, ${p.type}` : ''})`).join(', ')}`,
+    );
+  if (c.requestBody)
+    lines.push(
+      `    request body: ${c.requestBody.schema ?? c.requestBody.contentType ?? 'declared'}${c.requestBody.required ? ' (required)' : ''}${c.requestBody.fields?.length ? ` { ${c.requestBody.fields.join(', ')} }` : ''}`,
+    );
+  if (c.responses?.length)
+    lines.push(`    responses: ${c.responses.map((r) => `${r.status}${r.schema ? ` ${r.schema}` : ''}`).join(', ')}`);
   if (c.security?.length) lines.push(`    security: ${c.security.join(', ')}`);
-  if (c.extensions && Object.keys(c.extensions).length) lines.push(`    extensions: ${Object.entries(c.extensions).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join(', ')}`);
+  if (c.extensions && Object.keys(c.extensions).length)
+    lines.push(
+      `    extensions: ${Object.entries(c.extensions)
+        .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+        .join(', ')}`,
+    );
   for (const d of c.drift ?? []) lines.push(`    ⚠ drift ${d.kind}: ${d.message}`);
   return lines;
 }

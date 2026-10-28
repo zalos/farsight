@@ -41,7 +41,8 @@ test('refuseRequest: loopback Host names pass, any other name is refused', () =>
 
 test('refuseRequest: a state change from another site or origin is refused', () => {
   const host = 'localhost:4477';
-  const ok = (headers: Record<string, string>, method = 'POST') => refuseRequest({ method, headers: { host, ...headers } });
+  const ok = (headers: Record<string, string>, method = 'POST') =>
+    refuseRequest({ method, headers: { host, ...headers } });
   assert.equal(ok({}), null, 'curl / CLI / MCP send neither header');
   assert.equal(ok({ origin: 'http://localhost:4477', 'sec-fetch-site': 'same-origin' }), null, 'the viewer itself');
   assert.equal(ok({ 'sec-fetch-site': 'none' }), null, 'typed by the user');
@@ -51,18 +52,36 @@ test('refuseRequest: a state change from another site or origin is refused', () 
   assert.match(ok({ origin: 'http://localhost:6006' }) ?? '', /another origin/);
   assert.match(ok({ origin: 'null' }) ?? '', /another origin/);
   assert.match(ok({ origin: 'https://evil.example' }, 'PUT') ?? '', /another origin/);
-  assert.equal(ok({ origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' }, 'GET'), null, 'a read is left to CORS, which this server never opens');
+  assert.equal(
+    ok({ origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' }, 'GET'),
+    null,
+    'a read is left to CORS, which this server never opens',
+  );
 });
 
 test('settingsProblem: the shape the server reads, and never a secret value', () => {
   const src = { id: 'a', name: 'a', type: 'local', path: '.', enabled: true };
   assert.equal(settingsProblem({ sources: [src], collections: [] }), null);
-  assert.equal(settingsProblem({ sources: [{ ...src, type: 'work', auth: { kind: 'api-token', user: 'dev@example.com', secret: 'keychain:farsight/jira-example' } }] }), null);
+  assert.equal(
+    settingsProblem({
+      sources: [
+        {
+          ...src,
+          type: 'work',
+          auth: { kind: 'api-token', user: 'dev@example.com', secret: 'keychain:farsight/jira-example' },
+        },
+      ],
+    }),
+    null,
+  );
   assert.match(settingsProblem(null) ?? '', /JSON object/);
   assert.match(settingsProblem([]) ?? '', /JSON object/);
   assert.match(settingsProblem({}) ?? '', /sources must be an array/);
   assert.match(settingsProblem({ sources: [{ ...src, type: 'ftp' }] }) ?? '', /type must be one of/);
-  assert.match(settingsProblem({ sources: [{ ...src, type: 'git', path: '--upload-pack=touch x' }] }) ?? '', /not a clone URL/);
+  assert.match(
+    settingsProblem({ sources: [{ ...src, type: 'git', path: '--upload-pack=touch x' }] }) ?? '',
+    /not a clone URL/,
+  );
   const pasted = 'not-a-reference-but-a-pasted-token';
   const why = settingsProblem({ sources: [{ ...src, type: 'work', auth: { secret: pasted } }] }) ?? '';
   assert.match(why, /keychain: or env: reference/);
@@ -89,14 +108,22 @@ async function freePort(): Promise<number> {
 }
 
 /** node:http, because fetch will not let a caller set Host. */
-function call(method: string, path: string, headers: Record<string, string> = {}, body?: string): Promise<{ status: number; text: string }> {
+function call(
+  method: string,
+  path: string,
+  headers: Record<string, string> = {},
+  body?: string,
+): Promise<{ status: number; text: string }> {
   return new Promise((res, rej) => {
-    const r = request({ host: '127.0.0.1', port, method, path, headers: { host: `localhost:${port}`, ...headers } }, (resp) => {
-      let text = '';
-      resp.setEncoding('utf8');
-      resp.on('data', (c) => (text += c));
-      resp.on('end', () => res({ status: resp.statusCode ?? 0, text }));
-    });
+    const r = request(
+      { host: '127.0.0.1', port, method, path, headers: { host: `localhost:${port}`, ...headers } },
+      (resp) => {
+        let text = '';
+        resp.setEncoding('utf8');
+        resp.on('data', (c) => (text += c));
+        resp.on('end', () => res({ status: resp.statusCode ?? 0, text }));
+      },
+    );
     r.on('error', rej);
     if (body !== undefined) r.write(body);
     r.end();
@@ -107,8 +134,9 @@ before(async () => {
   work = mkdtempSync(join(tmpdir(), 'farsight-guard-'));
   new GraphStore().save(join(work, 'graph.json'));
   port = await freePort();
-  const boot = `const { serveGraph } = await import(${JSON.stringify(dist('index.js'))});\n`
-    + `serveGraph(${JSON.stringify(join(work, 'graph.json'))}, ${port}, ${JSON.stringify(work)});\n`;
+  const boot =
+    `const { serveGraph } = await import(${JSON.stringify(dist('index.js'))});\n` +
+    `serveGraph(${JSON.stringify(join(work, 'graph.json'))}, ${port}, ${JSON.stringify(work)});\n`;
   child = spawn(process.execPath, ['--input-type=module', '-e', boot], {
     cwd: work,
     env: { ...process.env, MODELHUB_DIR: join(work, 'modelhub'), FIGMA_TOKEN: '' },
@@ -116,10 +144,18 @@ before(async () => {
   }) as ChildProcessWithoutNullStreams;
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (d: string) => { log += d; });
-  child.stderr.on('data', (d: string) => { log += d; });
+  child.stdout.on('data', (d: string) => {
+    log += d;
+  });
+  child.stderr.on('data', (d: string) => {
+    log += d;
+  });
   for (let i = 0; i < 100; i++) {
-    try { if ((await call('GET', '/api/strings')).status === 200) return; } catch { /* not up yet */ }
+    try {
+      if ((await call('GET', '/api/strings')).status === 200) return;
+    } catch {
+      /* not up yet */
+    }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error(`server did not start:\n${log}`);
@@ -145,21 +181,44 @@ test('server: a rebound Host cannot read the graph or the settings', async () =>
 });
 
 test('server: a cross-site write is refused before it runs; the viewer and curl still write', async () => {
-  const settings = JSON.stringify({ defaultLens: 'code', sources: [{ id: 'w', name: 'w', type: 'local', path: '.', enabled: true }], collections: [] });
+  const settings = JSON.stringify({
+    defaultLens: 'code',
+    sources: [{ id: 'w', name: 'w', type: 'local', path: '.', enabled: true }],
+    collections: [],
+  });
   const file = join(work, '.farsight', 'settings.json');
 
-  const cross = await call('PUT', '/api/settings', { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site', 'content-type': 'text/plain' }, settings);
+  const cross = await call(
+    'PUT',
+    '/api/settings',
+    { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site', 'content-type': 'text/plain' },
+    settings,
+  );
   assert.equal(cross.status, 403);
   assert.ok(!existsSync(file), 'nothing written');
   for (const path of ['/api/sync', '/api/work/intent', '/api/work/sync']) {
-    assert.equal((await call('POST', path, { origin: 'https://evil.example', 'content-type': 'text/plain' }, '{}')).status, 403, path);
+    assert.equal(
+      (await call('POST', path, { origin: 'https://evil.example', 'content-type': 'text/plain' }, '{}')).status,
+      403,
+      path,
+    );
   }
 
-  const viewer = await call('PUT', '/api/settings', { origin: `http://localhost:${port}`, 'sec-fetch-site': 'same-origin' }, settings);
+  const viewer = await call(
+    'PUT',
+    '/api/settings',
+    { origin: `http://localhost:${port}`, 'sec-fetch-site': 'same-origin' },
+    settings,
+  );
   assert.equal(viewer.status, 200, viewer.text);
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).defaultLens, 'code');
 
-  const bad = await call('PUT', '/api/settings', {}, JSON.stringify({ sources: [{ id: 'j', name: 'j', type: 'work', auth: { secret: 'pasted-value' } }] }));
+  const bad = await call(
+    'PUT',
+    '/api/settings',
+    {},
+    JSON.stringify({ sources: [{ id: 'j', name: 'j', type: 'work', auth: { secret: 'pasted-value' } }] }),
+  );
   assert.equal(bad.status, 400);
   assert.ok(!bad.text.includes('pasted-value'));
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).defaultLens, 'code', 'a refused body leaves the file as it was');
@@ -167,14 +226,26 @@ test('server: a cross-site write is refused before it runs; the viewer and curl 
 
 test('refuseWrite: a read-only server refuses the routes that change settings, the graph or work items, and nothing else', async () => {
   const { refuseWrite, isWriteRoute } = await import(dist('guard.js'));
-  for (const [m, u] of [['PUT', '/api/settings'], ['POST', '/api/sync'], ['POST', '/api/work/sync'], ['POST', '/api/work/intent'], ['POST', '/api/work/item/KAN-1/comment']]) {
+  for (const [m, u] of [
+    ['PUT', '/api/settings'],
+    ['POST', '/api/sync'],
+    ['POST', '/api/work/sync'],
+    ['POST', '/api/work/intent'],
+    ['POST', '/api/work/item/KAN-1/comment'],
+  ]) {
     assert.equal(isWriteRoute(m, u), true, `${m} ${u}`);
     assert.match(refuseWrite('flag', m, u) ?? '', /read-only/, `${m} ${u}`);
     assert.match(refuseWrite('as-of', m, u) ?? '', /as-of/, `${m} ${u}`);
     assert.equal(refuseWrite(null, m, u), null, `writable: ${m} ${u}`);
   }
   // reads and the two diff routes (they compare a proposal and persist nothing) stay open
-  for (const [m, u] of [['GET', '/api/settings'], ['GET', '/api/work?x=1'], ['POST', '/api/design/diff'], ['POST', '/api/apis/diff'], ['HEAD', '/api/sync']]) {
+  for (const [m, u] of [
+    ['GET', '/api/settings'],
+    ['GET', '/api/work?x=1'],
+    ['POST', '/api/design/diff'],
+    ['POST', '/api/apis/diff'],
+    ['HEAD', '/api/sync'],
+  ]) {
     assert.equal(refuseWrite('flag', m, u), null, `${m} ${u}`);
   }
 });

@@ -10,7 +10,16 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GraphStore, diffGraphs, rowChangesOf, parsePolicy, applyPolicy, toSarif, toMarkdown, attributeChanges } from '../dist/index.js';
+import {
+  GraphStore,
+  diffGraphs,
+  rowChangesOf,
+  parsePolicy,
+  applyPolicy,
+  toSarif,
+  toMarkdown,
+  attributeChanges,
+} from '../dist/index.js';
 import type { GraphDiff, CommitRow, FileChange } from '../dist/index.js';
 import { validate } from './validate.ts';
 
@@ -30,16 +39,23 @@ test('golden fixture: diffGraphs(base, head) reproduces expected-diff.json exact
 });
 
 test('golden fixture: the schema file validates the real output', () => {
-  const schema = JSON.parse(readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-diff-v1.schema.json'), 'utf8'));
+  const schema = JSON.parse(
+    readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-diff-v1.schema.json'), 'utf8'),
+  );
   const errors = validate(diffGraphs(base, head), schema);
   assert.deepEqual(errors, []);
   // and the gate block validates too
-  const gated = applyPolicy(diffGraphs(base, head), parsePolicy('version: 1\nrules:\n  - rule: r\n    when: any\n    then: warn\n'));
+  const gated = applyPolicy(
+    diffGraphs(base, head),
+    parsePolicy('version: 1\nrules:\n  - rule: r\n    when: any\n    then: warn\n'),
+  );
   assert.deepEqual(validate(gated, schema), []);
 });
 
 test('the schema file rejects a non-conforming document', () => {
-  const schema = JSON.parse(readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-diff-v1.schema.json'), 'utf8'));
+  const schema = JSON.parse(
+    readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-diff-v1.schema.json'), 'utf8'),
+  );
   const broken = JSON.parse(JSON.stringify(expected));
   broken.changes[0].kind = 'route_repainted';
   delete broken.counts.guard_removed;
@@ -54,7 +70,11 @@ test('contract basics: version string, labels, stable ids, per-change confidence
   diff.changes.forEach((c, i) => assert.equal(c.id, `c${i + 1}`)); // deterministic order → stable ids
   for (const c of diff.changes) assert.ok(['resolved', 'HIGH', 'MEDIUM', 'LOW'].includes(c.confidence));
   // resolution-derived confidence appears once an edge is stamped (the fixture stamps one)
-  assert.ok(diff.changes.some((c) => c.kind === 'edge_confidence_changed' && c.confidence === 'MEDIUM' && c.technique === 'name-match'));
+  assert.ok(
+    diff.changes.some(
+      (c) => c.kind === 'edge_confidence_changed' && c.confidence === 'MEDIUM' && c.technique === 'name-match',
+    ),
+  );
 });
 
 test('truncation cuts changes but never counts', () => {
@@ -79,10 +99,13 @@ test('identical graphs diff to nothing', () => {
 
 test('policy: facts in the diff, judgment in compliance.yml, exit code from the verdict', () => {
   const diff = diffGraphs(base, head);
-  const failing = applyPolicy(diff, parsePolicy(
-    'version: 1\nrules:\n  - rule: no-guard-removals\n    when: guard_removed\n    then: fail\n  - rule: announce-new-routes\n    when: route_added\n    then: warn\n',
-    'test-policy',
-  ));
+  const failing = applyPolicy(
+    diff,
+    parsePolicy(
+      'version: 1\nrules:\n  - rule: no-guard-removals\n    when: guard_removed\n    then: fail\n  - rule: announce-new-routes\n    when: route_added\n    then: warn\n',
+      'test-policy',
+    ),
+  );
   assert.equal(failing.gate!.result, 'fail');
   assert.equal(failing.gate!.exit, 1);
   assert.equal(failing.gate!.policy, 'test-policy');
@@ -92,18 +115,27 @@ test('policy: facts in the diff, judgment in compliance.yml, exit code from the 
   assert.equal(failing.gate!.rules.find((r) => r.rule === 'announce-new-routes')!.result, 'warn');
   assert.equal(diff.gate, undefined); // applyPolicy is immutable over its input
 
-  const passing = applyPolicy(diff, parsePolicy('version: 1\nrules:\n  - rule: watch\n    when: severity:breaking\n    then: warn\n'));
+  const passing = applyPolicy(
+    diff,
+    parsePolicy('version: 1\nrules:\n  - rule: watch\n    when: severity:breaking\n    then: warn\n'),
+  );
   assert.equal(passing.gate!.result, 'pass');
   assert.equal(passing.gate!.exit, 0);
 });
 
 test('policy: severity: and any matchers', () => {
   const diff = diffGraphs(base, head);
-  const gated = applyPolicy(diff, parsePolicy(
-    'version: 1\nrules:\n  - rule: all-breaking\n    when: severity:breaking\n    then: fail\n  - rule: everything\n    when: any\n    then: allow\n',
-  ));
+  const gated = applyPolicy(
+    diff,
+    parsePolicy(
+      'version: 1\nrules:\n  - rule: all-breaking\n    when: severity:breaking\n    then: fail\n  - rule: everything\n    when: any\n    then: allow\n',
+    ),
+  );
   const breaking = gated.gate!.rules[0]!;
-  assert.deepEqual(breaking.changes, diff.changes.filter((c) => c.severity === 'breaking').map((c) => c.id));
+  assert.deepEqual(
+    breaking.changes,
+    diff.changes.filter((c) => c.severity === 'breaking').map((c) => c.id),
+  );
   assert.equal(gated.gate!.rules[1]!.changes.length, diff.changes.length);
 });
 
@@ -119,8 +151,14 @@ test('the repo-root compliance.yml (dogfood policy) parses and gates this fixtur
 
 test('policy parser rejects what the subset does not promise', () => {
   assert.throws(() => parsePolicy('version: 2\nrules:\n'), /unsupported version/);
-  assert.throws(() => parsePolicy('version: 1\nrules:\n  - rule: x\n    when: guard_removed\n'), /needs rule\/when\/then/);
-  assert.throws(() => parsePolicy('version: 1\nrules:\n  - rule: x\n    when: any\n    then: explode\n'), /then must be/);
+  assert.throws(
+    () => parsePolicy('version: 1\nrules:\n  - rule: x\n    when: guard_removed\n'),
+    /needs rule\/when\/then/,
+  );
+  assert.throws(
+    () => parsePolicy('version: 1\nrules:\n  - rule: x\n    when: any\n    then: explode\n'),
+    /then must be/,
+  );
   assert.throws(() => parsePolicy('nested:\n  deep: true\n'), /unsupported line|cannot parse/);
 });
 
@@ -142,7 +180,9 @@ test('markdown rendering mentions every non-zero kind', () => {
 });
 
 test('farsight-diff v1: the technique enumeration carries every ResolutionTechnique, additively', () => {
-  const schema = JSON.parse(readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-diff-v1.schema.json'), 'utf8'));
+  const schema = JSON.parse(
+    readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-diff-v1.schema.json'), 'utf8'),
+  );
   const doc = JSON.parse(JSON.stringify(diffGraphs(base, head))) as { changes: Record<string, unknown>[] };
   assert.ok(doc.changes.length >= 2, 'the fixture has changes to stamp');
   // a change derived from an edge the tests pass resolves, and one from the clarity phase's interface dispatch
@@ -155,11 +195,28 @@ test('farsight-diff v1: the technique enumeration carries every ResolutionTechni
 
   const techniques = schema.$defs.technique.enum as string[];
   const expected = [
-    'static-import', 'fetch→route', 'db-builder', 'annotation-scan', 'DI-binding', 'name-match',
-    'import-resolution', 'route-literal', 'coverage-report', 'method-name',
-    'interface', 'hook-binding', 'sdk-import', 'constant-host',
-    'raw-sql', 'same-file', 'jsx-render', 'detected',
-    'work-key', 'callback-prop', 'precondition', 'flag-gate',
+    'static-import',
+    'fetch→route',
+    'db-builder',
+    'annotation-scan',
+    'DI-binding',
+    'name-match',
+    'import-resolution',
+    'route-literal',
+    'coverage-report',
+    'method-name',
+    'interface',
+    'hook-binding',
+    'sdk-import',
+    'constant-host',
+    'raw-sql',
+    'same-file',
+    'jsx-render',
+    'detected',
+    'work-key',
+    'callback-prop',
+    'precondition',
+    'flag-gate',
   ];
   assert.deepEqual([...techniques].sort(), [...expected].sort());
 });
@@ -199,8 +256,18 @@ test('farsight-diff v1: attribution is an optional addition — the frozen outpu
 test('farsight-diff v1: attributeChanges adds the field to a real document and moves nothing else', () => {
   const schema = schemaFile();
   const plain = diffGraphs(base, head);
-  const commit = (sha: string, at: string, subject: string, indexed: boolean): CommitRow =>
-    ({ repo: 'invoice-app', sha, at, author: 'Ada', email: 'ada@example.com', subject, parents: [], merge: false, indexed, syncs: indexed ? [41] : [] });
+  const commit = (sha: string, at: string, subject: string, indexed: boolean): CommitRow => ({
+    repo: 'invoice-app',
+    sha,
+    at,
+    author: 'Ada',
+    email: 'ada@example.com',
+    subject,
+    parents: [],
+    merge: false,
+    indexed,
+    syncs: indexed ? [41] : [],
+  });
   const commits: CommitRow[] = [
     commit('aaaaaaa', '2026-09-20T10:00:00.000Z', 'routes', true),
     commit('bbbbbbb', '2026-09-19T10:00:00.000Z', 'routes and schemas', false),

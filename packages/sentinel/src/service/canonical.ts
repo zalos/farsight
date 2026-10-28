@@ -41,7 +41,7 @@ import type { SentinelStore } from '../store/index.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome.js';
 import { RuleLockBook } from './rule-locks.js';
-import { foundationProfile, unsupportedRules, type TrustedProfile } from './trusted-profile.js';
+import { unsupportedRules, type TrustedProfile } from './trusted-profile.js';
 import { ServiceError } from './owner-service.js';
 import { scannerReportOf } from '../reports/scanner.js';
 import { retainedBootstrapForReport } from '../execution/retained-bootstrap.js';

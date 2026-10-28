@@ -10,15 +10,22 @@ import { readFileSync } from 'node:fs';
 const here = dirname(fileURLToPath(import.meta.url));
 const M = await import(join(here, '..', 'public', 'app', 'lib', 'journey-model.js'));
 const fx = JSON.parse(readFileSync(join(here, 'fixtures', 'journey-billing-cycle.json'), 'utf8'));
-const sum = fx.summary, steps = fx.steps;
+const sum = fx.summary,
+  steps = fx.steps;
 const tree = M.buildTree(steps);
 
 test('the Sheet: one column per stop, the count the core types as actionStops, the layers in request order', () => {
   const sm = M.sheetModel(sum);
   assert.equal(sm.cols.length, 8);
   assert.equal(sm.cols.length, sum.counted.actionStops.n, 'stop n on the Sheet is stop n everywhere');
-  assert.deepEqual(sm.cols.map((c: any) => c.index), [0, 1, 2, 3, 4, 5, 6, 7]);
-  assert.deepEqual(sm.layers.map((l: any) => l.kind), ['user', 'repo', 'api', 'repo', 'gates', 'records', 'messages', 'verified']);
+  assert.deepEqual(
+    sm.cols.map((c: any) => c.index),
+    [0, 1, 2, 3, 4, 5, 6, 7],
+  );
+  assert.deepEqual(
+    sm.layers.map((l: any) => l.kind),
+    ['user', 'repo', 'api', 'repo', 'gates', 'records', 'messages', 'verified'],
+  );
   // the words come from the caller: the catalog's key by default, the surface passes `t`
   assert.equal(sm.layers[0].label, 'journey.layer.user');
   assert.equal(M.sheetModel(sum, { t: (k: string) => k.toUpperCase() }).layers[0].label, 'JOURNEY.LAYER.USER');
@@ -28,15 +35,25 @@ test('the actions of a screen in the order its manifest lists them, the walk ord
   const list = sum.segments[1];
   const ranked = M.rankOrder(list).map((mo: any) => mo.index);
   assert.deepEqual(ranked, [0, 1, 2, 3, 5, 4], 'finalize is last on the manifest though the walk met it fifth');
-  assert.deepEqual(list.moments.map((mo: any) => mo.index), [0, 1, 2, 3, 4, 5], 'the fold\'s own array is untouched');
+  assert.deepEqual(
+    list.moments.map((mo: any) => mo.index),
+    [0, 1, 2, 3, 4, 5],
+    "the fold's own array is untouched",
+  );
   assert.equal(M.momOrdinal(list, list.moments[4]), 6, 'finalize is action 6 of 6 on Invoice list');
-  assert.deepEqual(M.rankOrder({ moments: [{ index: 1 }, { index: 0 }] }).map((m: any) => m.index), [1, 0], 'no rank: walk order');
+  assert.deepEqual(
+    M.rankOrder({ moments: [{ index: 1 }, { index: 0 }] }).map((m: any) => m.index),
+    [1, 0],
+    'no rank: walk order',
+  );
 });
 
-test('the walk\'s tree from depths, and the stop a part sits in', () => {
+test("the walk's tree from depths, and the stop a part sits in", () => {
   assert.equal(tree.parent.length, steps.length);
   assert.deepEqual(tree.roots, [0]);
-  tree.parent.forEach((p: number, i: number) => { if (p >= 0) assert.ok(tree.children[p].includes(i)); });
+  tree.parent.forEach((p: number, i: number) => {
+    if (p >= 0) assert.ok(tree.children[p].includes(i));
+  });
   const fin = M.sheetModel(sum).cols[6];
   const call = fin.sg.markers.find((m: any) => m.kind === 'call' && m.moment === fin.mo.index);
   assert.deepEqual(M.stopOf(sum, call.stepOrder, tree.parent), { n: 7, t: 8 });
@@ -44,7 +61,7 @@ test('the walk\'s tree from depths, and the stop a part sits in', () => {
   assert.equal(M.actionOfMarker(M.sheetModel(sum).cols, call.stepOrder), 6);
 });
 
-test('a cell\'s tree: roots and tiers 0–1 drawn, a repeat folded under its first visit, plumbing per the helper', () => {
+test("a cell's tree: roots and tiers 0–1 drawn, a repeat folded under its first visit, plumbing per the helper", () => {
   const ms = [
     { stepOrder: 1, nodeId: 'a', tier: 0 },
     { stepOrder: 2, nodeId: 'b', tier: 1, under: 1 },
@@ -53,22 +70,48 @@ test('a cell\'s tree: roots and tiers 0–1 drawn, a repeat folded under its fir
     { stepOrder: 5, nodeId: 'h', tier: 1, under: 1, helper: true },
   ];
   const t0 = M.cellTree(ms);
-  assert.deepEqual(t0.top.map((m: any) => m.stepOrder), [1, 2]);
-  assert.deepEqual(t0.again(2).map((m: any) => m.stepOrder), [4]);
-  assert.deepEqual(t0.drill(2).map((m: any) => m.stepOrder), [3]);
-  assert.deepEqual(t0.drill(1).map((m: any) => m.stepOrder), [5], 'a helper folds under its part');
+  assert.deepEqual(
+    t0.top.map((m: any) => m.stepOrder),
+    [1, 2],
+  );
+  assert.deepEqual(
+    t0.again(2).map((m: any) => m.stepOrder),
+    [4],
+  );
+  assert.deepEqual(
+    t0.drill(2).map((m: any) => m.stepOrder),
+    [3],
+  );
+  assert.deepEqual(
+    t0.drill(1).map((m: any) => m.stepOrder),
+    [5],
+    'a helper folds under its part',
+  );
   const t1 = M.cellTree(ms, () => false);
-  assert.deepEqual(t1.top.map((m: any) => m.stepOrder), [1, 2, 5], 'a lens that folds nothing as plumbing draws it');
+  assert.deepEqual(
+    t1.top.map((m: any) => m.stepOrder),
+    [1, 2, 5],
+    'a lens that folds nothing as plumbing draws it',
+  );
 });
 
-test('the drill\'s beats of Finalize invoice: the screen kept open, browser, seam, server, the helper it calls', () => {
+test("the drill's beats of Finalize invoice: the screen kept open, browser, seam, server, the helper it calls", () => {
   const sm = M.sheetModel(sum);
   const layers = M.drillLayers(sum);
-  assert.deepEqual(layers.map((l: any) => l.kind), ['user', 'repo', 'api', 'repo', 'gates', 'records', 'messages', 'external']);
-  assert.equal(layers[7].absent, true, 'the third-party row stays, saying the core\'s word');
+  assert.deepEqual(
+    layers.map((l: any) => l.kind),
+    ['user', 'repo', 'api', 'repo', 'gates', 'records', 'messages', 'external'],
+  );
+  assert.equal(layers[7].absent, true, "the third-party row stays, saying the core's word");
   const b = M.drillBeats(sm.cols[6], layers, { steps, parent: tree.parent });
-  assert.deepEqual(b.beats.map((x: any) => x.kind), ['screen', 'part', 'seam', 'part', 'part']);
-  assert.deepEqual(b.beats.slice(1).map((x: any) => x.m.name), ['finalizeInvoice', 'POST /invoices/:id/finalize', 'finalizeInvoice', 'nextInvoiceNumber']);
+  assert.deepEqual(
+    b.beats.map((x: any) => x.kind),
+    ['screen', 'part', 'seam', 'part', 'part'],
+  );
+  assert.deepEqual(
+    b.beats.slice(1).map((x: any) => x.m.name),
+    ['finalizeInvoice', 'POST /invoices/:id/finalize', 'finalizeInvoice', 'nextInvoiceNumber'],
+  );
   assert.equal(b.call.kind, 'call');
   assert.equal(M.beatOrder(b.beats[0]), b.beats[0].order);
   // every box sits in a real layer and beat, and every wire names two boxes the cells draw
@@ -88,7 +131,10 @@ test('the drill\'s beats of Finalize invoice: the screen kept open, browser, sea
 test('an action with a contract gets its answer after the last server beat', () => {
   const sm = M.sheetModel(sum);
   const b = M.drillBeats(sm.cols[1], M.drillLayers(sum), { steps, parent: tree.parent });
-  assert.deepEqual(b.beats.map((x: any) => x.kind), ['part', 'part', 'seam', 'part', 'answer']);
+  assert.deepEqual(
+    b.beats.map((x: any) => x.kind),
+    ['part', 'part', 'seam', 'part', 'answer'],
+  );
   assert.ok(b.wires.some((w: any) => w.b === 'jrn-ans' && w.cls === 'dash'));
 });
 
@@ -97,12 +143,15 @@ test('a street screen stands for its segment and the screenless ones folded into
   assert.deepEqual(M.screenSegments(screens, 0), [0, 1]);
   assert.deepEqual(M.screenSegments(screens, 1), [2]);
   const cols = M.sheetModel(sum).cols;
-  assert.deepEqual(M.screenActions(cols, screens, 0).map((c: any) => c.index), [0, 1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(
+    M.screenActions(cols, screens, 0).map((c: any) => c.index),
+    [0, 1, 2, 3, 4, 5, 6],
+  );
   assert.equal(M.screenOfAction(cols, screens, 7), 1);
   assert.equal(M.screenOfAction(cols, screens, 99), -1);
 });
 
-test('the ladder: a column per system used, the call crossing the seam, an action\'s ladder kept to its own lines', () => {
+test("the ladder: a column per system used, the call crossing the seam, an action's ladder kept to its own lines", () => {
   const lm = M.ladderModel(sum, sum.segments[1], { steps });
   assert.equal(lm.lines.length, sum.segments[1].markers.length);
   assert.ok(lm.lines.some((l: any) => Object.values(l.cells).some((c: any) => c.type === 'seam')));
@@ -112,7 +161,7 @@ test('the ladder: a column per system used, the call crossing the seam, an actio
   assert.ok(al.lines[0].time.mo, 'the action starts on its first line');
 });
 
-test('one address: an action is named by its segment and its place in it — the Tests page\'s seg + action, 1-based', () => {
+test("one address: an action is named by its segment and its place in it — the Tests page's seg + action, 1-based", () => {
   const cols = M.sheetModel(sum).cols;
   // every column round-trips through the address
   for (const c of cols) {
@@ -123,7 +172,10 @@ test('one address: an action is named by its segment and its place in it — the
   }
   // the places within one segment are 1, 2, … in column order, the Tests page's 0-based `action` plus one
   const of2 = cols.filter((c: any) => c.sg.index === 1);
-  assert.deepEqual(of2.map((c: any) => M.segmentActionOf(cols, c.index).action), of2.map((_: any, i: number) => i + 1));
+  assert.deepEqual(
+    of2.map((c: any) => M.segmentActionOf(cols, c.index).action),
+    of2.map((_: any, i: number) => i + 1),
+  );
   assert.equal(M.actionAtSegment(cols, 2, of2.length + 1), null, 'past the last action of a segment: none');
   assert.equal(M.actionAtSegment(cols, 99, 1), null);
   assert.equal(M.segmentActionOf(cols, 999), null);
@@ -132,15 +184,31 @@ test('one address: an action is named by its segment and its place in it — the
 test('the journey page retired: the front door is all surfaces/journeys.js draws, and no overlay is left to open', () => {
   const app = join(here, '..', 'public', 'app');
   const front = readFileSync(join(app, 'surfaces', 'journeys.js'), 'utf8');
-  for (const gone of ['renderJourney', 'closeJourney', 'jrnTimelineHtml', 'jrnStoryboardHtml', 'jrnSetLayout', "getElementById('journey')"]) {
+  for (const gone of [
+    'renderJourney',
+    'closeJourney',
+    'jrnTimelineHtml',
+    'jrnStoryboardHtml',
+    'jrnSetLayout',
+    "getElementById('journey')",
+  ]) {
     assert.ok(!front.includes(gone), 'surfaces/journeys.js still holds ' + gone);
   }
   assert.match(front, /location\.hash = '#\/map\/' \+ encodeURIComponent\(id\)/, 'a journey opens on the Map');
   const draw = readFileSync(join(app, 'lib', 'journey-draw.js'), 'utf8');
-  for (const gone of ['renderJourney', 'jrnTimelineHtml', 'jrnStoryRender', "getElementById('journey')", 'journeyDrill']) {
+  for (const gone of [
+    'renderJourney',
+    'jrnTimelineHtml',
+    'jrnStoryRender',
+    "getElementById('journey')",
+    'journeyDrill',
+  ]) {
     assert.ok(!draw.includes(gone), 'lib/journey-draw.js still holds ' + gone);
   }
   const html = readFileSync(join(here, '..', 'public', 'viewer.html'), 'utf8');
-  assert.ok(!html.includes('id="journey"'), 'the overlay\'s markup is gone');
-  assert.ok(!html.includes('set-flag-drill') && !html.includes('set-flag-map'), 'the two retired flags are gone from Settings');
+  assert.ok(!html.includes('id="journey"'), "the overlay's markup is gone");
+  assert.ok(
+    !html.includes('set-flag-drill') && !html.includes('set-flag-map'),
+    'the two retired flags are gone from Settings',
+  );
 });

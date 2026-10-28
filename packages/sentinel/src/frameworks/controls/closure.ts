@@ -182,7 +182,7 @@ function collectClosure(
     let found: string | null = null;
     for (let d = from; ; d = dirname(d)) {
       const candidate = join(d, 'node_modules', name);
-      let isDir = false;
+      let isDir: boolean;
       try {
         isDir = statSync(candidate).isDirectory();
       } catch {
@@ -229,7 +229,7 @@ function collectClosure(
         const text = readlinkSync(abs);
         refuseEscape(resolve(dirname(abs), text));
         add(abs, 'link', text, label);
-        let real: string | null = null;
+        let real: string | null;
         try {
           real = realpathSync(abs);
         } catch {

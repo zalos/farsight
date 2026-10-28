@@ -28,8 +28,8 @@ const check = (ok, label) => {
   if (!ok) throw Error(label);
 };
 let stage = 'install',
-  consumer,
-  services = [];
+  consumer;
+const services = [];
 const evidence = {
   artifactDigest: digest(readFileSync(artifact)),
   offline: !!process.env.FARSIGHT_NPM_OFFLINE_CACHE,

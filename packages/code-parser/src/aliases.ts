@@ -11,7 +11,10 @@ const EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
  */
 export function resolveFileish(base: string): string | null {
   const bases = [base];
-  const remapped = base.replace(/\.jsx$/, '.tsx').replace(/\.js$/, '.ts').replace(/\.mjs$/, '.mts');
+  const remapped = base
+    .replace(/\.jsx$/, '.tsx')
+    .replace(/\.js$/, '.ts')
+    .replace(/\.mjs$/, '.mts');
   if (remapped !== base) bases.push(remapped);
   for (const b of bases) {
     for (const suffix of ['', ...EXTS, ...EXTS.map((e) => '/index' + e)]) {
@@ -77,7 +80,10 @@ export function createAliasClassifier(repoRoot: string): (importerAbs: string, s
     if (tsconfigByDir.has(dir)) return tsconfigByDir.get(dir)!;
     let result: TsconfigPaths | null = null;
     for (const name of ['tsconfig.json', 'tsconfig.base.json']) {
-      if (isFile(join(dir, name))) { result = loadTsconfig(join(dir, name), new Set()); break; }
+      if (isFile(join(dir, name))) {
+        result = loadTsconfig(join(dir, name), new Set());
+        break;
+      }
     }
     if (!result && dir !== repoRoot && dir.startsWith(repoRoot)) result = nearestTsconfig(dirname(dir));
     tsconfigByDir.set(dir, result);
@@ -92,8 +98,23 @@ export function createAliasClassifier(repoRoot: string): (importerAbs: string, s
       for (const m of matchPaths(spec, cfg.paths)) {
         const hit = resolveFileish(m.candidate);
         // a hit outside the repo is not addressable: it answers (path null) rather than falling through
-        if (hit) return { path: toRepoRelative(hit), via: 'paths', pattern: m.pattern, target: m.target, baseDir: m.baseDir, ...(m.star != null ? { star: m.star } : {}) };
-        missed ??= { path: null, via: 'paths', pattern: m.pattern, target: m.target, baseDir: m.baseDir, ...(m.star != null ? { star: m.star } : {}) };
+        if (hit)
+          return {
+            path: toRepoRelative(hit),
+            via: 'paths',
+            pattern: m.pattern,
+            target: m.target,
+            baseDir: m.baseDir,
+            ...(m.star != null ? { star: m.star } : {}),
+          };
+        missed ??= {
+          path: null,
+          via: 'paths',
+          pattern: m.pattern,
+          target: m.target,
+          baseDir: m.baseDir,
+          ...(m.star != null ? { star: m.star } : {}),
+        };
       }
       if (cfg.baseUrlDir) {
         const hit = resolveFileish(join(cfg.baseUrlDir, spec));
@@ -117,7 +138,9 @@ export function createAliasClassifier(repoRoot: string): (importerAbs: string, s
             join(best.dir, 'src/index'),
             join(best.dir, 'index'),
             // main usually points at dist (not ingested) — prefer the src twin
-            ...(best.main ? [join(best.dir, best.main.replace(/^(\.\/)?dist\//, 'src/')), join(best.dir, best.main)] : []),
+            ...(best.main
+              ? [join(best.dir, best.main.replace(/^(\.\/)?dist\//, 'src/')), join(best.dir, best.main)]
+              : []),
           ];
       for (const c of candidates) {
         const hit = resolveFileish(c);
@@ -137,21 +160,41 @@ function loadTsconfig(file: string, seen: Set<string>): TsconfigPaths | null {
     raw = parseJsonc(readFileSync(file, 'utf8'));
   } catch {
     const scope = currentRead();
-    if (scope) scope.report({ code: 'read-error', severity: 'error', message: 'A referenced TypeScript configuration could not be read.' });
+    if (scope)
+      scope.report({
+        code: 'read-error',
+        severity: 'error',
+        message: 'A referenced TypeScript configuration could not be read.',
+      });
     return null;
   }
   if (!raw || typeof raw !== 'object') {
     const scope = currentRead();
-    if (scope) scope.report({ code: 'parse-error', severity: 'error', path: scope.path(file), message: 'Invalid TypeScript configuration.' });
+    if (scope)
+      scope.report({
+        code: 'parse-error',
+        severity: 'error',
+        path: scope.path(file),
+        message: 'Invalid TypeScript configuration.',
+      });
     return null;
   }
-  const cfg = raw as { extends?: string | string[]; compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> } };
+  const cfg = raw as {
+    extends?: string | string[];
+    compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> };
+  };
   const out: TsconfigPaths = { baseUrlDir: null, paths: [] };
   const bases = Array.isArray(cfg.extends) ? cfg.extends : cfg.extends ? [cfg.extends] : [];
   for (const ext of bases) {
     if (!ext.startsWith('.')) {
       const scope = currentRead();
-      if (scope) scope.report({ code: 'unsupported', severity: 'warning', path: scope.path(file), message: 'Package-based TypeScript configuration extends is not resolved.' });
+      if (scope)
+        scope.report({
+          code: 'unsupported',
+          severity: 'warning',
+          path: scope.path(file),
+          message: 'Package-based TypeScript configuration extends is not resolved.',
+        });
       continue;
     }
     let target = resolvePath(dirname(file), ext);
@@ -173,7 +216,10 @@ function loadTsconfig(file: string, seen: Set<string>): TsconfigPaths | null {
 }
 
 /** Expand a spec against path rules; supports at most one `*` per pattern (TS's rule). */
-function matchPaths(spec: string, rules: PathRule[]): { candidate: string; pattern: string; target: string; baseDir: string; star?: string }[] {
+function matchPaths(
+  spec: string,
+  rules: PathRule[],
+): { candidate: string; pattern: string; target: string; baseDir: string; star?: string }[] {
   const out: { candidate: string; pattern: string; target: string; baseDir: string; star?: string }[] = [];
   for (const { pattern, targets, baseDir } of rules) {
     const star = pattern.indexOf('*');
@@ -189,7 +235,13 @@ function matchPaths(spec: string, rules: PathRule[]): { candidate: string; patte
     }
     if (matched === null) continue;
     for (const t of targets) {
-      out.push({ candidate: resolvePath(baseDir, t.replace('*', matched)), pattern, target: t, baseDir, ...(star >= 0 ? { star: matched } : {}) });
+      out.push({
+        candidate: resolvePath(baseDir, t.replace('*', matched)),
+        pattern,
+        target: t,
+        baseDir,
+        ...(star >= 0 ? { star: matched } : {}),
+      });
     }
   }
   return out;
@@ -198,14 +250,18 @@ function matchPaths(spec: string, rules: PathRule[]): { candidate: string; patte
 /** npm `workspaces` + pnpm-workspace.yaml → package name → { dir, main }. */
 function loadWorkspacePackages(repoRoot: string): Map<string, { dir: string; main?: string }> {
   const patterns: string[] = [];
-  const rootPkg = readJson(join(repoRoot, 'package.json')) as { workspaces?: string[] | { packages?: string[] } } | null;
+  const rootPkg = readJson(join(repoRoot, 'package.json')) as {
+    workspaces?: string[] | { packages?: string[] };
+  } | null;
   const ws = rootPkg?.workspaces;
   if (Array.isArray(ws)) patterns.push(...ws);
   else if (ws && Array.isArray(ws.packages)) patterns.push(...ws.packages);
   try {
     const yaml = readFileSync(join(repoRoot, 'pnpm-workspace.yaml'), 'utf8');
     for (const m of yaml.matchAll(/^\s*-\s*['"]?([^'"\n#]+?)['"]?\s*$/gm)) patterns.push(m[1]!);
-  } catch { /* no pnpm workspace file */ }
+  } catch {
+    /* no pnpm workspace file */
+  }
 
   const map = new Map<string, { dir: string; main?: string }>();
   for (const pattern of patterns) {
@@ -277,9 +333,17 @@ function readJson(file: string): unknown {
 }
 
 function isFile(p: string): boolean {
-  try { return statSync(p).isFile(); } catch { return false; }
+  try {
+    return statSync(p).isFile();
+  } catch {
+    return false;
+  }
 }
 
 function isDir(p: string): boolean {
-  try { return statSync(p).isDirectory(); } catch { return false; }
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
 }

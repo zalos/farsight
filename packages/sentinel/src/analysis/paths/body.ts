@@ -68,7 +68,7 @@ export function scanBody(text: string, functionNames: ReadonlySet<string>, ownNa
       if (!endsWithWord(text, p, NOT_CALLS)) callSites++;
     } else if (/[)\].>/]/.test(before)) callSites++;
     // Anything else directly before a parenthesis that is not an operator or opener could still be a callee.
-    else if (!/[(,;{}=!&|?:+\-*%^~<\[]/.test(before)) callSites++;
+    else if (!/[(,;{}=!&|?:+\-*%^~<[]/.test(before)) callSites++;
   }
   for (const m of text.matchAll(/\bnew\b/g)) if (m.index! >= skipUntil) callSites++;
   let valueReferences = 0;

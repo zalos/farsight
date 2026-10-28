@@ -1,5 +1,15 @@
 import { readFileSync } from 'node:fs';
-import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension, JourneyStorylineEntryDecl, JourneyStorylineLaneDecl, JourneyStorylineHandoffDecl, DecisionDecl } from './graph.js';
+import type {
+  GraphNode,
+  GraphEdge,
+  StoreKind,
+  StoreEngine,
+  TagDimension,
+  JourneyStorylineEntryDecl,
+  JourneyStorylineLaneDecl,
+  JourneyStorylineHandoffDecl,
+  DecisionDecl,
+} from './graph.js';
 import { humanizeName } from './query.js';
 
 /**
@@ -88,12 +98,35 @@ export type DecisionConfigEntry = Partial<Omit<DecisionDecl, 'id'>> & { id: stri
 
 /** The fields a farsight.config.json may give, in the order the docs list them. Any other key is ignored with a note. */
 export const CONFIG_FIELDS = [
-  'tags', 'glossary', 'guards', 'gateTiers', 'entrypoints', 'setup', 'plumbing', 'design', 'openapi', 'tests', 'storybook',
-  'externals', 'stores', 'journeys', 'projects', 'tooling', 'lifecycle', 'decisions', 'internalRoutes', 'validators',
+  'tags',
+  'glossary',
+  'guards',
+  'gateTiers',
+  'entrypoints',
+  'setup',
+  'plumbing',
+  'design',
+  'openapi',
+  'tests',
+  'storybook',
+  'externals',
+  'stores',
+  'journeys',
+  'projects',
+  'tooling',
+  'lifecycle',
+  'decisions',
+  'internalRoutes',
+  'validators',
 ] as const satisfies readonly (keyof FarsightConfig)[];
 
 /** Fields only the source's root farsight.config.json may give; a nested file's value is ignored with a note. */
-export const ROOT_ONLY_CONFIG_FIELDS = ['projects', 'tooling', 'internalRoutes', 'validators'] as const satisfies readonly (keyof FarsightConfig)[];
+export const ROOT_ONLY_CONFIG_FIELDS = [
+  'projects',
+  'tooling',
+  'internalRoutes',
+  'validators',
+] as const satisfies readonly (keyof FarsightConfig)[];
 
 /** `farsight.config.json → journeys`: the same shapes as a manifest's, every field but the id optional (an override gives only what it changes). */
 export interface JourneysConfig {
@@ -103,10 +136,33 @@ export interface JourneysConfig {
   /** storylines — named chains of journeys (round-2026-10-05 §2); an entry overrides the manifest's with the same id, field by field */
   storylines?: JourneysConfigStoryline[];
 }
-export interface JourneysConfigStoryline { id: string; name?: string; description?: string; journeys?: (string | JourneyStorylineEntryDecl)[]; lanes?: JourneyStorylineLaneDecl[]; handoffs?: JourneyStorylineHandoffDecl[] }
-export interface JourneysConfigPersona { id: string; name?: string; description?: string; routes?: string[]; signsInWith?: string[] }
-export interface JourneysConfigGroup { id: string; name?: string; description?: string; persona?: string }
-export interface JourneysConfigFlow { id: string; persona?: string | string[]; group?: string; order?: number }
+export interface JourneysConfigStoryline {
+  id: string;
+  name?: string;
+  description?: string;
+  journeys?: (string | JourneyStorylineEntryDecl)[];
+  lanes?: JourneyStorylineLaneDecl[];
+  handoffs?: JourneyStorylineHandoffDecl[];
+}
+export interface JourneysConfigPersona {
+  id: string;
+  name?: string;
+  description?: string;
+  routes?: string[];
+  signsInWith?: string[];
+}
+export interface JourneysConfigGroup {
+  id: string;
+  name?: string;
+  description?: string;
+  persona?: string;
+}
+export interface JourneysConfigFlow {
+  id: string;
+  persona?: string | string[];
+  group?: string;
+  order?: number;
+}
 
 /**
  * `farsight.config.json → lifecycle.<record>`: `views[<persona id>][<word>]` lists the statuses that
@@ -117,7 +173,11 @@ export interface LifecycleConfigEntry {
   views?: Record<string, Record<string, string[]>>;
   overlays?: LifecycleOverlayConfig[];
 }
-export interface LifecycleOverlayConfig { name: string; table: string; when: string }
+export interface LifecycleOverlayConfig {
+  name: string;
+  table: string;
+  when: string;
+}
 
 /**
  * `farsight.config.json → projects`. A dimension with the prefix or the key of a default
@@ -142,11 +202,14 @@ export interface ProjectsConfig {
  */
 export function graphFilePath(value: string): { path: string } | { note: string } {
   const raw = value.trim();
-  const refuse = (why: string) => ({ note: `projects.graphFile ${JSON.stringify(raw.slice(0, 200))} ${why}, so it is not read.` });
+  const refuse = (why: string) => ({
+    note: `projects.graphFile ${JSON.stringify(raw.slice(0, 200))} ${why}, so it is not read.`,
+  });
   if (!raw) return refuse('is empty');
   if (raw.includes('\0')) return refuse('holds a NUL character');
   const p = raw.replace(/\\/g, '/');
-  if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) return refuse('is an absolute path; it must name a file inside the source');
+  if (p.startsWith('/') || /^[A-Za-z]:/.test(p))
+    return refuse('is an absolute path; it must name a file inside the source');
   const parts = p.split('/').filter((x) => x && x !== '.');
   if (parts.includes('..')) return refuse('climbs out of the source with ..');
   if (!parts.length) return refuse('names no file');
@@ -215,16 +278,24 @@ export function stringList(v: string | string[] | undefined): string[] {
  */
 export function readConfigFile(path: string): { config: FarsightConfig } | { error: string } | { missing: true } {
   let text: string;
-  try { text = readFileSync(path, 'utf8'); } catch (err) {
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT' || code === 'ENOTDIR') return { missing: true };
     return { error: `could not be read (${code ?? (err as Error).message})` };
   }
   let raw: unknown;
-  try { raw = JSON.parse(text); } catch (err) { return { error: `is not valid JSON — ${(err as Error).message.split('\n')[0]}` }; }
+  try {
+    raw = JSON.parse(text);
+  } catch (err) {
+    return { error: `is not valid JSON — ${(err as Error).message.split('\n')[0]}` };
+  }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: 'is not a JSON object' };
   const config = raw as FarsightConfig;
-  sanitizeStores(config); sanitizeProjects(config); sanitizeJourneys(config);
+  sanitizeStores(config);
+  sanitizeProjects(config);
+  sanitizeJourneys(config);
   return { config };
 }
 
@@ -262,9 +333,17 @@ export function storylineLane(v: unknown): JourneyStorylineLaneDecl | undefined 
   const s = (x: unknown): string | undefined => (typeof x === 'string' && x.trim() ? x.trim() : undefined);
   if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
   const o = v as Record<string, unknown>;
-  const id = s(o.id), persona = s(o.persona), store = s(o.store);
+  const id = s(o.id),
+    persona = s(o.persona),
+    store = s(o.store);
   if (!id || (!persona && !store) || (persona && store)) return undefined;
-  return { id, ...(persona ? { persona } : {}), ...(store ? { store } : {}), ...(s(o.surface) ? { surface: s(o.surface)! } : {}), ...(s(o.name) ? { name: s(o.name)! } : {}) };
+  return {
+    id,
+    ...(persona ? { persona } : {}),
+    ...(store ? { store } : {}),
+    ...(s(o.surface) ? { surface: s(o.surface)! } : {}),
+    ...(s(o.name) ? { name: s(o.name)! } : {}),
+  };
 }
 
 /**
@@ -275,9 +354,17 @@ export function storylineHandoff(v: unknown): JourneyStorylineHandoffDecl | unde
   const s = (x: unknown): string | undefined => (typeof x === 'string' && x.trim() ? x.trim() : undefined);
   if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
   const o = v as Record<string, unknown>;
-  const from = s(o.from), to = s(o.to), kind = s(o.kind);
+  const from = s(o.from),
+    to = s(o.to),
+    kind = s(o.kind);
   if (!from || !to || (kind !== 'moves' && kind !== 'seen')) return undefined;
-  return { from, to, kind, ...(s(o.status) ? { status: s(o.status)! } : {}), ...(s(o.when) ? { when: s(o.when)! } : {}) };
+  return {
+    from,
+    to,
+    kind,
+    ...(s(o.status) ? { status: s(o.status)! } : {}),
+    ...(s(o.when) ? { when: s(o.when)! } : {}),
+  };
 }
 
 /**
@@ -287,11 +374,17 @@ export function storylineHandoff(v: unknown): JourneyStorylineHandoffDecl | unde
 export function sanitizeJourneys(config: FarsightConfig): FarsightConfig {
   if (config.journeys === undefined) return config;
   const raw = config.journeys as unknown;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { delete config.journeys; return config; }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    delete config.journeys;
+    return config;
+  }
   const r = raw as Record<string, unknown>;
   const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
   const entries = (v: unknown): Record<string, unknown>[] =>
-    (Array.isArray(v) ? v : []).filter((e): e is Record<string, unknown> => !!e && typeof e === 'object' && !Array.isArray(e) && !!str((e as Record<string, unknown>).id));
+    (Array.isArray(v) ? v : []).filter(
+      (e): e is Record<string, unknown> =>
+        !!e && typeof e === 'object' && !Array.isArray(e) && !!str((e as Record<string, unknown>).id),
+    );
   // a list of non-empty strings (a lone string is a list of one); absent or empty: undefined
   const strList = (v: unknown): string[] | undefined => {
     const list = (typeof v === 'string' ? [v] : Array.isArray(v) ? v : []).map(str).filter((x): x is string => !!x);
@@ -300,14 +393,18 @@ export function sanitizeJourneys(config: FarsightConfig): FarsightConfig {
   const out: JourneysConfig = {};
   if (r.personas !== undefined) {
     out.personas = entries(r.personas).map((e) => ({
-      id: str(e.id)!, ...(str(e.name) ? { name: str(e.name)! } : {}), ...(str(e.description) ? { description: str(e.description)! } : {}),
+      id: str(e.id)!,
+      ...(str(e.name) ? { name: str(e.name)! } : {}),
+      ...(str(e.description) ? { description: str(e.description)! } : {}),
       ...(strList(e.routes) ? { routes: strList(e.routes)! } : {}),
       ...(strList(e.signsInWith) ? { signsInWith: strList(e.signsInWith)! } : {}),
     }));
   }
   if (r.groups !== undefined) {
     out.groups = entries(r.groups).map((e) => ({
-      id: str(e.id)!, ...(str(e.name) ? { name: str(e.name)! } : {}), ...(str(e.description) ? { description: str(e.description)! } : {}),
+      id: str(e.id)!,
+      ...(str(e.name) ? { name: str(e.name)! } : {}),
+      ...(str(e.description) ? { description: str(e.description)! } : {}),
       ...(str(e.persona) ? { persona: str(e.persona)! } : {}),
     }));
   }
@@ -324,12 +421,20 @@ export function sanitizeJourneys(config: FarsightConfig): FarsightConfig {
   }
   if (r.storylines !== undefined) {
     out.storylines = entries(r.storylines).map((e) => {
-      const journeys = Array.isArray(e.journeys) ? e.journeys.map(storylineEntry).filter((x): x is string | JourneyStorylineEntryDecl => !!x) : undefined;
+      const journeys = Array.isArray(e.journeys)
+        ? e.journeys.map(storylineEntry).filter((x): x is string | JourneyStorylineEntryDecl => !!x)
+        : undefined;
       return {
-        id: str(e.id)!, ...(str(e.name) ? { name: str(e.name)! } : {}), ...(str(e.description) ? { description: str(e.description)! } : {}),
+        id: str(e.id)!,
+        ...(str(e.name) ? { name: str(e.name)! } : {}),
+        ...(str(e.description) ? { description: str(e.description)! } : {}),
         ...(journeys ? { journeys } : {}),
-        ...(Array.isArray(e.lanes) ? { lanes: e.lanes.map(storylineLane).filter((x): x is JourneyStorylineLaneDecl => !!x) } : {}),
-        ...(Array.isArray(e.handoffs) ? { handoffs: e.handoffs.map(storylineHandoff).filter((x): x is JourneyStorylineHandoffDecl => !!x) } : {}),
+        ...(Array.isArray(e.lanes)
+          ? { lanes: e.lanes.map(storylineLane).filter((x): x is JourneyStorylineLaneDecl => !!x) }
+          : {}),
+        ...(Array.isArray(e.handoffs)
+          ? { handoffs: e.handoffs.map(storylineHandoff).filter((x): x is JourneyStorylineHandoffDecl => !!x) }
+          : {}),
       };
     });
   }
@@ -354,9 +459,12 @@ export function sanitizeStores(config: FarsightConfig): FarsightConfig {
       if (!r || typeof r !== 'object') continue;
       const d = r as Record<string, unknown>;
       if (typeof d.name !== 'string' || !d.name.trim() || !STORE_KINDS.includes(d.kind as StoreKind)) continue;
-      const tables = Array.isArray(d.tables) ? d.tables.filter((t): t is string => typeof t === 'string' && !!t) : undefined;
+      const tables = Array.isArray(d.tables)
+        ? d.tables.filter((t): t is string => typeof t === 'string' && !!t)
+        : undefined;
       out.push({
-        name: d.name.trim(), kind: d.kind as StoreKind,
+        name: d.name.trim(),
+        kind: d.kind as StoreKind,
         ...(STORE_ENGINES.includes(d.engine as StoreEngine) ? { engine: d.engine as StoreEngine } : {}),
         ...(tables ? { tables } : {}),
       });
@@ -365,7 +473,8 @@ export function sanitizeStores(config: FarsightConfig): FarsightConfig {
   }
   if (Array.isArray(config.externals)) {
     for (const e of config.externals) {
-      if (e && typeof e === 'object' && 'store' in e && typeof e.store !== 'boolean') delete (e as { store?: unknown }).store;
+      if (e && typeof e === 'object' && 'store' in e && typeof e.store !== 'boolean')
+        delete (e as { store?: unknown }).store;
     }
   }
   return config;
@@ -380,7 +489,10 @@ export function sanitizeStores(config: FarsightConfig): FarsightConfig {
 export function sanitizeProjects(config: FarsightConfig): FarsightConfig {
   if (config.projects === undefined) return config;
   const raw = config.projects as unknown;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { delete config.projects; return config; }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    delete config.projects;
+    return config;
+  }
   const r = raw as Record<string, unknown>;
   const out: ProjectsConfig = {};
   if (Array.isArray(r.tagDimensions)) {
@@ -389,7 +501,11 @@ export function sanitizeProjects(config: FarsightConfig): FarsightConfig {
       if (!d || typeof d !== 'object') continue;
       const { key, prefix, label } = d as Record<string, unknown>;
       if (typeof key !== 'string' || !key.trim() || typeof prefix !== 'string' || !prefix.trim()) continue;
-      dims.push({ key: key.trim(), prefix: prefix.trim(), label: typeof label === 'string' && label.trim() ? label.trim() : key.trim() });
+      dims.push({
+        key: key.trim(),
+        prefix: prefix.trim(),
+        label: typeof label === 'string' && label.trim() ? label.trim() : key.trim(),
+      });
     }
     if (dims.length) out.tagDimensions = dims;
   }
@@ -397,7 +513,9 @@ export function sanitizeProjects(config: FarsightConfig): FarsightConfig {
     const values: Record<string, Record<string, string>> = {};
     for (const [key, words] of Object.entries(r.tagValues as Record<string, unknown>)) {
       if (!words || typeof words !== 'object' || Array.isArray(words)) continue;
-      const kept = Object.entries(words as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string' && !!e[1].trim());
+      const kept = Object.entries(words as Record<string, unknown>).filter(
+        (e): e is [string, string] => typeof e[1] === 'string' && !!e[1].trim(),
+      );
       if (kept.length) values[key] = Object.fromEntries(kept.map(([v, w]) => [v, w.trim()]));
     }
     if (Object.keys(values).length) out.tagValues = values;
@@ -412,7 +530,11 @@ const ROUTE_MATCHER = /^([A-Z]+) (\/\S*)$/;
 
 /** `{token}` / `:token` / `${x}` → one shape, so a config matcher meets a route however the adapter spelled it. */
 function routeKey(name: string): string {
-  return name.replace(/\$\{[^}]*\}/g, ':p').replace(/:[A-Za-z_]+/g, ':p').replace(/\{[^}/]+\}/g, ':p').replace(/\/$/, '');
+  return name
+    .replace(/\$\{[^}]*\}/g, ':p')
+    .replace(/:[A-Za-z_]+/g, ':p')
+    .replace(/\{[^}/]+\}/g, ':p')
+    .replace(/\/$/, '');
 }
 
 /**
@@ -430,11 +552,17 @@ export function globToRegExp(glob: string): RegExp {
     if (c === '*') {
       if (chars[i + 1] === '*') {
         i++;
-        if (chars[i + 1] === '/') { i++; out += '(?:[^/]+/)*'; } else out += '.*';
+        if (chars[i + 1] === '/') {
+          i++;
+          out += '(?:[^/]+/)*';
+        } else out += '.*';
       } else out += '[^/]*';
       continue;
     }
-    if (c === '?') { out += '[^/]'; continue; }
+    if (c === '?') {
+      out += '[^/]';
+      continue;
+    }
     out += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   }
   return new RegExp(`^${out}(?:/.*)?$`);
@@ -447,11 +575,19 @@ export function globToRegExp(glob: string): RegExp {
  * spec added). Config-declared gates are tagged `declared`: they are a
  * statement about the system, not something the parser observed.
  */
-export function applyRouteGuards(nodes: GraphNode[], config: FarsightConfig, edges: GraphEdge[], scope?: ConfigScope): number {
+export function applyRouteGuards(
+  nodes: GraphNode[],
+  config: FarsightConfig,
+  edges: GraphEdge[],
+  scope?: ConfigScope,
+): number {
   let added = 0;
   const byId = new Map(nodes.map((n) => [n.id, n]));
   for (const [label, matchers] of Object.entries(config.guards ?? {})) {
-    const routes = matchers.map((m) => m.match(ROUTE_MATCHER)).filter((m): m is RegExpMatchArray => !!m).map((m) => `${m[1]} ${routeKey(m[2]!)}`);
+    const routes = matchers
+      .map((m) => m.match(ROUTE_MATCHER))
+      .filter((m): m is RegExpMatchArray => !!m)
+      .map((m) => `${m[1]} ${routeKey(m[2]!)}`);
     if (!routes.length) continue;
     // a snapshot: the guard nodes pushed below are never routes, and the scope must not see them
     for (const node of [...nodes]) {
@@ -462,12 +598,24 @@ export function applyRouteGuards(nodes: GraphNode[], config: FarsightConfig, edg
       const repo = node.loc?.repo ?? node.id.split('::')[0]!;
       const guardId = `${repo}::guard::config:${label}`;
       if (!byId.has(guardId)) {
-        const guard: GraphNode = { id: guardId, kind: 'guard', name: label, tags: ['auth', 'declared'], facets: { business: { description: `Gate declared in farsight.config.json: ${label}.` } } };
+        const guard: GraphNode = {
+          id: guardId,
+          kind: 'guard',
+          name: label,
+          tags: ['auth', 'declared'],
+          facets: { business: { description: `Gate declared in farsight.config.json: ${label}.` } },
+        };
         nodes.push(guard);
         byId.set(guardId, guard);
       }
       if (edges.some((e) => e.kind === 'guards' && e.from === guardId && e.to === node.id)) continue;
-      edges.push({ id: `cfg-guard-${edges.length}`, kind: 'guards', from: guardId, to: node.id, resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' } });
+      edges.push({
+        id: `cfg-guard-${edges.length}`,
+        kind: 'guards',
+        from: guardId,
+        to: node.id,
+        resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' },
+      });
       added++;
     }
   }
@@ -486,7 +634,11 @@ export const DEFAULT_TOOLING: readonly string[] = ['scripts/**'];
  * and `journey()` does not follow it. Runs whether or not the repo has a config file.
  * Returns how many edges it demoted.
  */
-export function applyTooling(nodes: GraphNode[], edges: GraphEdge[], globs: readonly string[] = DEFAULT_TOOLING): number {
+export function applyTooling(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  globs: readonly string[] = DEFAULT_TOOLING,
+): number {
   if (!globs.length) return 0;
   const res = globs.map(globToRegExp);
   const tooling = new Set<string>();
@@ -524,7 +676,10 @@ export function applyTooling(nodes: GraphNode[], edges: GraphEdge[], globs: read
  * (`Business Central outbox worker: drain once`), never the bare class label, and does
  * not lend the class's description to a member it does not describe.
  */
-export function glossaryEntryFor(name: string, glossary: FarsightConfig['glossary']): { label: string; description?: string } | undefined {
+export function glossaryEntryFor(
+  name: string,
+  glossary: FarsightConfig['glossary'],
+): { label: string; description?: string } | undefined {
   if (!glossary) return undefined;
   const own = (k: string) => (Object.prototype.hasOwnProperty.call(glossary, k) ? glossary[k] : undefined);
   const exact = own(name);
@@ -548,7 +703,10 @@ export type ConfigScope = (node: GraphNode) => boolean;
 
 /** The scope of a nested config file at repo-relative `dir`: nodes whose `loc.path` is under `dir/`. `''` = the root = every node. */
 export function scopeOfDir(dir: string): ConfigScope | undefined {
-  const d = dir.replace(/\\/g, '/').replace(/^(\.\/)+/, '').replace(/\/+$/, '');
+  const d = dir
+    .replace(/\\/g, '/')
+    .replace(/^(\.\/)+/, '')
+    .replace(/\/+$/, '');
   if (!d || d === '.') return undefined;
   const prefix = `${d}/`;
   return (node) => !!node.loc?.path && node.loc.path.replace(/\\/g, '/').startsWith(prefix);
@@ -572,12 +730,19 @@ export interface ApplyConfigResult {
 }
 
 /** Apply tag rules, plumbing/setup tags, glossary facets, and declared guards/entrypoints to a fragment, in place. */
-export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: GraphEdge[] = [], options: ApplyConfigOptions = {}): ApplyConfigResult {
+export function applyConfig(
+  nodes: GraphNode[],
+  config: FarsightConfig,
+  edges: GraphEdge[] = [],
+  options: ApplyConfigOptions = {},
+): ApplyConfigResult {
   const { scope, guarded: already } = options;
   const guarded: string[] = [];
   const tagRules = Object.entries(config.tags ?? {});
   // function-shaped matchers only here; route-shaped ones are applyRouteGuards()
-  const guardRules = Object.entries(config.guards ?? {}).map(([l, ms]) => [l, ms.filter((m) => !ROUTE_MATCHER.test(m))] as const).filter(([, ms]) => ms.length);
+  const guardRules = Object.entries(config.guards ?? {})
+    .map(([l, ms]) => [l, ms.filter((m) => !ROUTE_MATCHER.test(m))] as const)
+    .filter(([, ms]) => ms.length);
   const entryRules = Object.entries(config.entrypoints ?? {});
   const tierRules = Object.entries(config.gateTiers ?? {});
   // plumbing is a path glob (a whole directory of helpers); setup is the guards' matcher shape (an exact node id or a substring of `path name`)
@@ -596,7 +761,10 @@ export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: G
       node.tags.push('plumbing');
     }
     // the setup closure's roots — an exact node id, or (functions only) the guards' substring matcher
-    if (!node.tags.includes('setup') && setupMatchers.some((m) => node.id === m || (node.kind === 'function' && hay.includes(m.toLowerCase())))) {
+    if (
+      !node.tags.includes('setup') &&
+      setupMatchers.some((m) => node.id === m || (node.kind === 'function' && hay.includes(m.toLowerCase())))
+    ) {
       node.tags.push('setup');
     }
     // before guard rules — they rename the node. A guard the adapter already found carries
@@ -609,7 +777,10 @@ export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: G
     }
     for (const [label, matchers] of guardRules) {
       if (!matchers.some((m) => hay.includes(m.toLowerCase()))) continue;
-      if (already?.has(node.id)) { options.onGuardConflict?.(node, label); continue; }
+      if (already?.has(node.id)) {
+        options.onGuardConflict?.(node, label);
+        continue;
+      }
       if (node.kind !== 'function') continue;
       node.kind = 'guard';
       guarded.push(node.id);
@@ -620,8 +791,18 @@ export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: G
       for (const e of [...edges]) {
         if (e.kind !== 'calls' || e.to !== node.id) continue;
         if (edges.some((g) => g.kind === 'guards' && g.from === node.id && g.to === e.from)) continue;
-        edges.push({ id: `g${edges.length}`, kind: 'guards', from: node.id, to: e.from,
-          resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `declared a guard by farsight.config.json (${label})` } });
+        edges.push({
+          id: `g${edges.length}`,
+          kind: 'guards',
+          from: node.id,
+          to: e.from,
+          resolution: {
+            status: 'resolved',
+            technique: 'annotation-scan',
+            confidence: 'HIGH',
+            note: `declared a guard by farsight.config.json (${label})`,
+          },
+        });
         e.meta = { ...e.meta, via: 'guard' };
       }
     }
@@ -644,7 +825,15 @@ export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: G
 }
 
 /** Edge kinds that carry the setup origin outward from the closure — everything a container build actually does. */
-const SETUP_ORIGIN_KINDS = new Set<GraphEdge['kind']>(['calls', 'reads', 'writes', 'publishes', 'http', 'validates', 'renders']);
+const SETUP_ORIGIN_KINDS = new Set<GraphEdge['kind']>([
+  'calls',
+  'reads',
+  'writes',
+  'publishes',
+  'http',
+  'validates',
+  'renders',
+]);
 
 /**
  * The setup closure and its origin stamp (the clarity-phase plan §2.3.3).
@@ -670,13 +859,15 @@ export function applySetupOrigin(nodes: GraphNode[], edges: GraphEdge[]): number
   const callsIn = new Map<string, GraphEdge[]>();
   for (const e of edges) {
     const out = outOf.get(e.from);
-    if (out) out.push(e); else outOf.set(e.from, [e]);
+    if (out) out.push(e);
+    else outOf.set(e.from, [e]);
     if (e.kind !== 'calls') continue;
     const inc = callsIn.get(e.to);
-    if (inc) inc.push(e); else callsIn.set(e.to, [e]);
+    if (inc) inc.push(e);
+    else callsIn.set(e.to, [e]);
   }
   const closure = new Set(roots);
-  for (let grew = true; grew; ) {
+  for (let grew = true; grew;) {
     grew = false;
     for (const [to, ins] of callsIn) {
       if (closure.has(to) || kindOf.get(to) !== 'function') continue;

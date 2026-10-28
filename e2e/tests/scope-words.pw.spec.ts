@@ -13,14 +13,18 @@ const PAGE = { list: 'invoice-app::page::/invoices', discard: 'invoice-app::page
 
 /** Every test chip in view, each with its scope words (or the not-built mark), its skip part and whether it says *passed*. */
 async function chips(page: Page, within: string) {
-  return page.locator(within + ' [data-tchip]').evaluateAll((els) => els
-    .filter((el) => (el as HTMLElement).offsetParent !== null)
-    .map((el) => ({
-      text: (el.textContent || '').replace(/\s+/g, ' ').trim(),
-      scope: (el.querySelector('.tc-scope') && (el.querySelector('.tc-scope')!.textContent || '').trim()) || '',
-      notBuilt: el.hasAttribute('data-not-built'),
-      skipped: el.querySelector('[data-run-part="skipped"]') ? (el.querySelector('[data-run-part="skipped"]')!.textContent || '').trim() : '',
-    })));
+  return page.locator(within + ' [data-tchip]').evaluateAll((els) =>
+    els
+      .filter((el) => (el as HTMLElement).offsetParent !== null)
+      .map((el) => ({
+        text: (el.textContent || '').replace(/\s+/g, ' ').trim(),
+        scope: (el.querySelector('.tc-scope') && (el.querySelector('.tc-scope')!.textContent || '').trim()) || '',
+        notBuilt: el.hasAttribute('data-not-built'),
+        skipped: el.querySelector('[data-run-part="skipped"]')
+          ? (el.querySelector('[data-run-part="skipped"]')!.textContent || '').trim()
+          : '',
+      })),
+  );
 }
 
 /** A chip's scope, or the not-built mark; never a bare number. */
@@ -48,7 +52,9 @@ test.describe('every test number carries its scope', () => {
    * @covers packages/server/public/app/lib/journey-draw.js::jrnHeaderHtml
    * @covers GET /api/journey
    */
-  test('the journey\'s head and its street: a scope on every chip, the skips shown, the not-built screen never passed', async ({ page }) => {
+  test("the journey's head and its street: a scope on every chip, the skips shown, the not-built screen never passed", async ({
+    page,
+  }) => {
     // the head: the table's (the journey page's header retired into it) — the journey's cases, *over this journey*,
     // *distinct* beside the per-screen counts of the street
     await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=table&lens=hybrid');
@@ -70,14 +76,19 @@ test.describe('every test number carries its scope', () => {
     heldToScope(cards, 'the street');
     expect(cards.some((c) => c.scope === 'over this screen')).toBe(true);
     const built = cards.filter((c) => !c.notBuilt);
-    skips.filter((n, i) => i < built.length).forEach((n, i) => {
-      if (n > 0) expect(built[i]!.skipped, `screen ${i + 1}: ${n} skipped hidden behind its word`).toBe(n + ' skipped');
-    });
+    skips
+      .filter((n, i) => i < built.length)
+      .forEach((n, i) => {
+        if (n > 0)
+          expect(built[i]!.skipped, `screen ${i + 1}: ${n} skipped hidden behind its word`).toBe(n + ' skipped');
+      });
     // the designed, not-built screen: no verdict, the sentence that says why
     const nb = page.locator(street + ' .map-scr [data-not-built]');
     await expect(nb).toHaveCount(1);
     await expect(nb).toContainText('designed, not built');
-    await expect(nb.locator('xpath=ancestor::div[contains(@class,"map-scr")]')).toContainText('no test can reach a screen with no code');
+    await expect(nb.locator('xpath=ancestor::div[contains(@class,"map-scr")]')).toContainText(
+      'no test can reach a screen with no code',
+    );
     await expect(nb).not.toContainText(/passed/i);
   });
 
@@ -86,14 +97,23 @@ test.describe('every test number carries its scope', () => {
    * @covers packages/server/public/app/lib/map-property-model.js::testsScopeLine
    * @covers GET /api/journey
    */
-  test('the Map property: the headline chip over this screen, one sentence of scopes, the case rows in the evidence words', async ({ page }) => {
+  test('the Map property: the headline chip over this screen, one sentence of scopes, the case rows in the evidence words', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/portfolio?lens=hybrid');
     await page.evaluate(() => {
       const S = (window as any).S;
-      S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+      S.SETTINGS = Object.assign({}, S.SETTINGS, {
+        flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+      });
     });
     const open = async (node: string) => {
-      await page.evaluate(([flow, n]) => { location.hash = '#/map/' + encodeURIComponent(flow) + '?node=' + encodeURIComponent(n); }, [FLOW, node]);
+      await page.evaluate(
+        ([flow, n]) => {
+          location.hash = '#/map/' + encodeURIComponent(flow) + '?node=' + encodeURIComponent(n);
+        },
+        [FLOW, node],
+      );
       await expect(page.locator('.mp')).toHaveAttribute('data-screen', node);
       await page.locator('#mp-tab-tests').click();
       await expect(page.locator('#mp-tab-tests')).toHaveAttribute('aria-selected', 'true');
@@ -108,7 +128,10 @@ test.describe('every test number carries its scope', () => {
     // the case rows print evidence words — never the tab's old labels
     const words = await page.locator('.mp-body .mp-row[data-map-card="test"] .mp-ev').allTextContents();
     expect(words.length).toBeGreaterThan(0);
-    for (const w of words) expect(w.trim()).toMatch(/^(declared only|reached by tests|verified by a run|verified · stale|passed, by its own declaration( · stale)?|seen by a coverage run( · stale)?)$/i);
+    for (const w of words)
+      expect(w.trim()).toMatch(
+        /^(declared only|reached by tests|verified by a run|verified · stale|passed, by its own declaration( · stale)?|seen by a coverage run( · stale)?)$/i,
+      );
     await open(PAGE.discard);
     const nb = await chips(page, '.mp-body');
     heldToScope(nb, 'the not-built property');
@@ -121,7 +144,10 @@ test.describe('every test number carries its scope', () => {
    * @covers GET /api/tests
    * @covers GET /api/tests/matrix
    */
-  test('the Tests page: every matrix cell over this journey, the level filter filters the rows, the CSV says the screen’s words', async ({ page, request }) => {
+  test('the Tests page: every matrix cell over this journey, the level filter filters the rows, the CSV says the screen’s words', async ({
+    page,
+    request,
+  }) => {
     await gotoReady(page, '#/tests?view=matrix');
     await expect(page.locator('.tst-table')).toBeVisible();
     heldToScope(await chips(page, '.tst-table'), 'the matrix');
@@ -131,11 +157,13 @@ test.describe('every test number carries its scope', () => {
     await expect(page.locator('.tst-table')).toBeVisible();
     const lv = await (await request.get('/api/tests?lean=1&level=unit')).json();
     expect(lv.journeys.length).toBeGreaterThan(0);
-    for (const r of lv.journeys) expect(r.coverage.counted.e2e.n, `${r.name}: an e2e case under the unit filter`).toBe(0);
+    for (const r of lv.journeys)
+      expect(r.coverage.counted.e2e.n, `${r.name}: an e2e case under the unit filter`).toBe(0);
     await expect(page.locator('.tst-table tbody tr')).toHaveCount(lv.journeys.length);
     // the e2e column would say *no e2e* of every row: under a unit filter it is not drawn
     await expect(page.locator('.tst-table thead th', { hasText: /end-to-end evidence/i })).toHaveCount(0);
-    if (lv.journeysLeftOut) await expect(page.locator('[data-left-out]')).toHaveAttribute('data-left-out', String(lv.journeysLeftOut));
+    if (lv.journeysLeftOut)
+      await expect(page.locator('[data-left-out]')).toHaveAttribute('data-left-out', String(lv.journeysLeftOut));
     expect(lv.journeys.length + (lv.journeysLeftOut || 0)).toBe(all);
     // the CSV: the two appended columns are the screen's words
     const csv = await (await request.get('/api/tests/matrix?format=csv')).text();

@@ -14,8 +14,14 @@ import { walk, isNode, lineIndex, stringValue, memberChain, type AstNode } from 
 import { parseDoc, docCommentAbove, type ParsedDoc } from '../shared/docs.js';
 import type { TestRef } from '@farsight/core';
 
-export { testGlobToRegExp, DEFAULT_TEST_GLOBS, runnerImports, isTestFile, type TestGlobs } from '@farsight/code-parser/support';
-import { testGlobToRegExp, DEFAULT_TEST_GLOBS, runnerImports, isTestFile, type TestGlobs } from '@farsight/code-parser/support';
+export {
+  testGlobToRegExp,
+  DEFAULT_TEST_GLOBS,
+  runnerImports,
+  isTestFile,
+  type TestGlobs,
+} from '@farsight/code-parser/support';
+import { runnerImports } from '@farsight/code-parser/support';
 
 /** Which runner a claimed file uses — its imports, else a guess from its name. */
 export function runnerOf(rel: string, source: string): TestRef['runner'] {
@@ -34,7 +40,20 @@ export function levelOf(rel: string, runner: TestRef['runner']): TestRef['level'
   return 'unit';
 }
 
-const LIFECYCLE = new Set(['beforeEach', 'beforeAll', 'afterEach', 'afterAll', 'use', 'extend', 'configure', 'setTimeout', 'info', 'expect', 'slow', 'fail']);
+const LIFECYCLE = new Set([
+  'beforeEach',
+  'beforeAll',
+  'afterEach',
+  'afterAll',
+  'use',
+  'extend',
+  'configure',
+  'setTimeout',
+  'info',
+  'expect',
+  'slow',
+  'fail',
+]);
 const SUITE_HEADS = new Set(['describe', 'suite', 'context']);
 const CASE_HEADS = new Set(['it', 'test', 'specify']);
 
@@ -86,7 +105,7 @@ export interface ExtractedFile {
   cases: TestCase[];
 }
 
-/** The file's leading doc block (`/** … *​/` with nothing but whitespace or line comments before it). */
+/** The file's leading documentation block, with only whitespace or line comments before it. */
 export function fileHeaderDoc(source: string): ParsedDoc | null {
   const head = source.slice(0, 16000);
   // the header region is everything before the first case/suite call — a block after
@@ -136,7 +155,10 @@ export function extractCases(program: AstNode, source: string, rel: string): Ext
     // it.each(table)('…', fn): the callee is itself a call
     let calleeNode = n.callee;
     let each = false;
-    if (isNode(calleeNode) && calleeNode.type === 'CallExpression') { calleeNode = calleeNode.callee; each = true; }
+    if (isNode(calleeNode) && calleeNode.type === 'CallExpression') {
+      calleeNode = calleeNode.callee;
+      each = true;
+    }
     const chain = memberChain(calleeNode);
     const shape = classifyCall(chain);
     if (!shape.kind) return;
@@ -147,15 +169,20 @@ export function extractCases(program: AstNode, source: string, rel: string): Ext
     const heuristicTitle = each || (isNode(titleArg) && titleArg.type === 'TemplateLiteral');
     const mods = each ? [...shape.mods, 'each'] : shape.mods;
 
-    if (shape.kind === 'suite') { suiteTitle.set(n, raw); suiteMods.set(n, mods); return; }
+    if (shape.kind === 'suite') {
+      suiteTitle.set(n, raw);
+      suiteMods.set(n, mods);
+      return;
+    }
     const enclosingCase = [...parents].reverse().find((p) => stepsOf.has(p));
     if (shape.kind === 'step') {
       if (enclosingCase) stepsOf.get(enclosingCase)!.push(raw);
       return;
     }
     const suite = parents.filter((p) => suiteTitle.has(p)).map((p) => suiteTitle.get(p)!);
-    const inactive = INACTIVE_MODS.some((m) => mods.includes(m))
-      || parents.some((p) => (suiteMods.get(p) ?? []).some((m) => INACTIVE_MODS.includes(m)));
+    const inactive =
+      INACTIVE_MODS.some((m) => mods.includes(m)) ||
+      parents.some((p) => (suiteMods.get(p) ?? []).some((m) => INACTIVE_MODS.includes(m)));
     const doc = parseDoc(docCommentAbove(source, n.start ?? 0, between));
     const steps: string[] = [];
     stepsOf.set(n, steps);
@@ -174,7 +201,8 @@ export function extractCases(program: AstNode, source: string, rel: string): Ext
   });
 
   return {
-    runner, level,
+    runner,
+    level,
     fileDeclares: header?.covers ?? [],
     ...(header?.docs ? { fileDocs: header.docs } : {}),
     cases,

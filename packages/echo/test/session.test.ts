@@ -10,119 +10,160 @@ import type { EchoContext } from '../dist/types.js';
 async function fixture(run: (path: string) => Promise<void>): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'echo-sessions-test-'));
   const path = join(directory, 'settings.json');
-  try { await initConfig(path); await run(path); } finally { await rm(directory, { recursive: true, force: true }); }
+  try {
+    await initConfig(path);
+    await run(path);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 
-test('sessions retain their profile binding after reloading settings and preserve only metadata', async () => fixture(async path => {
-  const personal = loadContext(path, 'personal');
-  await bindSession(personal, 'claude', 'a-session-private-identifier');
-  await bindSession(loadContext(path, 'personal'), 'claude', 'a-session-private-identifier');
-  await assert.rejects(bindSession(loadContext(path, 'work'), 'claude', 'a-session-private-identifier'), /already bound/);
-  await bindSession(loadContext(path, 'work'), 'codex', 'a-session-private-identifier');
-  const names = await readdir(join(personal.directory, 'sessions'));
-  assert.equal(names.length, 2);
-  for (const name of names) {
-    assert.match(name, /^[a-f0-9]{64}\.json$/);
-    const content = await readFile(join(personal.directory, 'sessions', name), 'utf8');
-    assert.equal(content.includes('a-session-private-identifier'), false);
-    assert.equal(content.includes('http://'), false);
-  }
-}));
+test('sessions retain their profile binding after reloading settings and preserve only metadata', async () =>
+  fixture(async (path) => {
+    const personal = loadContext(path, 'personal');
+    await bindSession(personal, 'claude', 'a-session-private-identifier');
+    await bindSession(loadContext(path, 'personal'), 'claude', 'a-session-private-identifier');
+    await assert.rejects(
+      bindSession(loadContext(path, 'work'), 'claude', 'a-session-private-identifier'),
+      /already bound/,
+    );
+    await bindSession(loadContext(path, 'work'), 'codex', 'a-session-private-identifier');
+    const names = await readdir(join(personal.directory, 'sessions'));
+    assert.equal(names.length, 2);
+    for (const name of names) {
+      assert.match(name, /^[a-f0-9]{64}\.json$/);
+      const content = await readFile(join(personal.directory, 'sessions', name), 'utf8');
+      assert.equal(content.includes('a-session-private-identifier'), false);
+      assert.equal(content.includes('http://'), false);
+    }
+  }));
 
-test('simultaneous cross-profile first binds admit exactly one profile, including repeated callers', async () => fixture(async path => {
-  const contexts = [loadContext(path, 'personal'), loadContext(path, 'work')];
-  const results = await Promise.allSettled(Array.from({ length: 20 }, (_, index) => bindSession(contexts[index % 2]!, 'codex', 'racing-session')));
-  assert.equal(results.filter(result => result.status === 'fulfilled').length, 10);
-  assert.equal(results.filter(result => result.status === 'rejected').length, 10);
-  const retries = await Promise.allSettled(contexts.map(ctx => bindSession(ctx, 'codex', 'racing-session')));
-  assert.equal(retries.filter(result => result.status === 'fulfilled').length, 1);
-}));
+test('simultaneous cross-profile first binds admit exactly one profile, including repeated callers', async () =>
+  fixture(async (path) => {
+    const contexts = [loadContext(path, 'personal'), loadContext(path, 'work')];
+    const results = await Promise.allSettled(
+      Array.from({ length: 20 }, (_, index) => bindSession(contexts[index % 2]!, 'codex', 'racing-session')),
+    );
+    assert.equal(results.filter((result) => result.status === 'fulfilled').length, 10);
+    assert.equal(results.filter((result) => result.status === 'rejected').length, 10);
+    const retries = await Promise.allSettled(contexts.map((ctx) => bindSession(ctx, 'codex', 'racing-session')));
+    assert.equal(retries.filter((result) => result.status === 'fulfilled').length, 1);
+  }));
 
-test('identity, model, store and config selection changes require a new session', async () => fixture(async path => {
-  const original = loadContext(path);
-  await bindSession(original, 'claude', 'immutable-session');
-  const changes: ((context: EchoContext) => void)[] = [
-    context => { context.profile.identity.individual = 'another'; },
-    context => { context.profile.identity.project = 'another'; },
-    context => { context.profile.identity.team = 'another'; },
-    context => { context.profile.model.model = 'another'; },
-    context => { context.profile.model.baseUrl = 'https://models.example.com'; },
-    context => { context.profile.backend.url = 'https://memory.example.com'; },
-    context => { context.profile.backend.secretRef = 'keychain:echo/another'; },
-    context => { context.configPath = `${context.directory}/other.json`; },
-  ];
-  for (const change of changes) {
-    const context = structuredClone(original); change(context);
-    await assert.rejects(bindSession(context, 'claude', 'immutable-session'), /already bound/);
-  }
-  const config = structuredClone(original.config);
-  config.profiles.personal!.model.model = 'a-selected-model';
-  await saveConfig(path, config);
-  await assert.rejects(bindSession(loadContext(path), 'claude', 'immutable-session'), /already bound/);
-  await bindSession(loadContext(path), 'claude', 'a-new-session');
-}));
+test('identity, model, store and config selection changes require a new session', async () =>
+  fixture(async (path) => {
+    const original = loadContext(path);
+    await bindSession(original, 'claude', 'immutable-session');
+    const changes: ((context: EchoContext) => void)[] = [
+      (context) => {
+        context.profile.identity.individual = 'another';
+      },
+      (context) => {
+        context.profile.identity.project = 'another';
+      },
+      (context) => {
+        context.profile.identity.team = 'another';
+      },
+      (context) => {
+        context.profile.model.model = 'another';
+      },
+      (context) => {
+        context.profile.model.baseUrl = 'https://models.example.com';
+      },
+      (context) => {
+        context.profile.backend.url = 'https://memory.example.com';
+      },
+      (context) => {
+        context.profile.backend.secretRef = 'keychain:echo/another';
+      },
+      (context) => {
+        context.configPath = `${context.directory}/other.json`;
+      },
+    ];
+    for (const change of changes) {
+      const context = structuredClone(original);
+      change(context);
+      await assert.rejects(bindSession(context, 'claude', 'immutable-session'), /already bound/);
+    }
+    const config = structuredClone(original.config);
+    config.profiles.personal!.model.model = 'a-selected-model';
+    await saveConfig(path, config);
+    await assert.rejects(bindSession(loadContext(path), 'claude', 'immutable-session'), /already bound/);
+    await bindSession(loadContext(path), 'claude', 'a-new-session');
+  }));
 
-test('corrupt bindings and missing session identifiers fail closed', async () => fixture(async path => {
-  const context = loadContext(path);
-  for (const id of ['', '\n', 'x'.repeat(1025)]) await assert.rejects(bindSession(context, 'codex', id), /valid host/);
-  await bindSession(context, 'codex', 'corrupt-session');
-  const directory = join(context.directory, 'sessions');
-  const [name] = await readdir(directory);
-  await writeFile(join(directory, name!), '{');
-  await assert.rejects(bindSession(context, 'codex', 'corrupt-session'), /could not be verified/);
-}));
+test('corrupt bindings and missing session identifiers fail closed', async () =>
+  fixture(async (path) => {
+    const context = loadContext(path);
+    for (const id of ['', '\n', 'x'.repeat(1025)])
+      await assert.rejects(bindSession(context, 'codex', id), /valid host/);
+    await bindSession(context, 'codex', 'corrupt-session');
+    const directory = join(context.directory, 'sessions');
+    const [name] = await readdir(directory);
+    await writeFile(join(directory, name!), '{');
+    await assert.rejects(bindSession(context, 'codex', 'corrupt-session'), /could not be verified/);
+  }));
 
-test('VS Code sessions keep an independent immutable binding and use the shared context fingerprint', async () => fixture(async path => {
-  const context = loadContext(path);
-  await bindSession(context, 'vscode', 'shared-id');
-  await bindSession(loadContext(path, 'work'), 'claude', 'shared-id');
-  await assert.rejects(bindSession(loadContext(path, 'work'), 'vscode', 'shared-id'), /already bound/);
-  const files = await readdir(join(context.directory, 'sessions'));
-  const bindings = await Promise.all(files.map(name => readFile(join(context.directory, 'sessions', name), 'utf8').then(JSON.parse)));
-  assert.equal(bindings.find(value => value.host === 'vscode').fingerprint, contextFingerprint(context));
-  const updated = structuredClone(context);
-  updated.profile.hooks.vscode = true;
-  updated.profile.web.port = 8999;
-  assert.equal(contextFingerprint(updated), contextFingerprint(context), 'non-identity setup changes do not invalidate a session');
-  updated.profile.identity.project = 'different';
-  assert.notEqual(contextFingerprint(updated), contextFingerprint(context));
-}));
+test('VS Code sessions keep an independent immutable binding and use the shared context fingerprint', async () =>
+  fixture(async (path) => {
+    const context = loadContext(path);
+    await bindSession(context, 'vscode', 'shared-id');
+    await bindSession(loadContext(path, 'work'), 'claude', 'shared-id');
+    await assert.rejects(bindSession(loadContext(path, 'work'), 'vscode', 'shared-id'), /already bound/);
+    const files = await readdir(join(context.directory, 'sessions'));
+    const bindings = await Promise.all(
+      files.map((name) => readFile(join(context.directory, 'sessions', name), 'utf8').then(JSON.parse)),
+    );
+    assert.equal(bindings.find((value) => value.host === 'vscode').fingerprint, contextFingerprint(context));
+    const updated = structuredClone(context);
+    updated.profile.hooks.vscode = true;
+    updated.profile.web.port = 8999;
+    assert.equal(
+      contextFingerprint(updated),
+      contextFingerprint(context),
+      'non-identity setup changes do not invalidate a session',
+    );
+    updated.profile.identity.project = 'different';
+    assert.notEqual(contextFingerprint(updated), contextFingerprint(context));
+  }));
 
-test('a workspace session cannot switch between local and global stores after reconnecting', async () => fixture(async path => {
-  const global = loadContext(path);
-  const workspace = join(global.directory, 'workspace');
-  const localPath = join(workspace, '.echo', 'settings.json');
-  await initConfig(localPath);
-  const local = loadContext(localPath);
-  await bindSession(local, 'codex', 'before-reconnect');
-  await assert.rejects(bindSession(global, 'codex', 'before-reconnect', { workspace }), /already bound/);
-  await bindSession(global, 'codex', 'fresh-global-session', { workspace });
-  await assert.rejects(bindSession(local, 'codex', 'fresh-global-session', { workspace }), /already bound/);
-  const otherWorkspace = join(global.directory, 'other-workspace');
-  await initConfig(join(otherWorkspace, '.echo', 'settings.json'));
-  await bindSession(global, 'codex', 'another-workspace-session', { workspace: otherWorkspace });
-  await bindSession(global, 'codex', 'fresh-global-session', { workspace });
-}));
+test('a workspace session cannot switch between local and global stores after reconnecting', async () =>
+  fixture(async (path) => {
+    const global = loadContext(path);
+    const workspace = join(global.directory, 'workspace');
+    const localPath = join(workspace, '.echo', 'settings.json');
+    await initConfig(localPath);
+    const local = loadContext(localPath);
+    await bindSession(local, 'codex', 'before-reconnect');
+    await assert.rejects(bindSession(global, 'codex', 'before-reconnect', { workspace }), /already bound/);
+    await bindSession(global, 'codex', 'fresh-global-session', { workspace });
+    await assert.rejects(bindSession(local, 'codex', 'fresh-global-session', { workspace }), /already bound/);
+    const otherWorkspace = join(global.directory, 'other-workspace');
+    await initConfig(join(otherWorkspace, '.echo', 'settings.json'));
+    await bindSession(global, 'codex', 'another-workspace-session', { workspace: otherWorkspace });
+    await bindSession(global, 'codex', 'fresh-global-session', { workspace });
+  }));
 
-test('session fingerprints include normalized sub-mind policies and all request budgets', async () => fixture(async path => {
-  const context = loadContext(path);
-  const legacy = structuredClone(context);
-  delete legacy.profile.submind;
-  const explicit = structuredClone(context);
-  explicit.profile.model.allowInsecureHttp = false;
-  assert.equal(contextFingerprint(legacy), contextFingerprint(context));
-  assert.equal(contextFingerprint(explicit), contextFingerprint(context));
-  await bindSession(context, 'claude', 'policy-session');
-  for (const key of Object.keys(context.profile.budget) as (keyof typeof context.profile.budget)[]) {
-    const changed = structuredClone(context);
-    changed.profile.budget[key]++;
-    await assert.rejects(bindSession(changed, 'claude', 'policy-session'), /already bound/);
-  }
-  for (const key of Object.keys(context.profile.submind!) as (keyof NonNullable<typeof context.profile.submind>)[]) {
-    const changed = structuredClone(context);
-    if (key === 'mode') changed.profile.submind!.mode = 'mock';
-    else if (key === 'hookResearch') changed.profile.submind!.hookResearch = 'background';
-    else changed.profile.submind![key]++;
-    await assert.rejects(bindSession(changed, 'claude', 'policy-session'), /already bound/);
-  }
-}));
+test('session fingerprints include normalized sub-mind policies and all request budgets', async () =>
+  fixture(async (path) => {
+    const context = loadContext(path);
+    const legacy = structuredClone(context);
+    delete legacy.profile.submind;
+    const explicit = structuredClone(context);
+    explicit.profile.model.allowInsecureHttp = false;
+    assert.equal(contextFingerprint(legacy), contextFingerprint(context));
+    assert.equal(contextFingerprint(explicit), contextFingerprint(context));
+    await bindSession(context, 'claude', 'policy-session');
+    for (const key of Object.keys(context.profile.budget) as (keyof typeof context.profile.budget)[]) {
+      const changed = structuredClone(context);
+      changed.profile.budget[key]++;
+      await assert.rejects(bindSession(changed, 'claude', 'policy-session'), /already bound/);
+    }
+    for (const key of Object.keys(context.profile.submind!) as (keyof NonNullable<typeof context.profile.submind>)[]) {
+      const changed = structuredClone(context);
+      if (key === 'mode') changed.profile.submind!.mode = 'mock';
+      else if (key === 'hookResearch') changed.profile.submind!.hookResearch = 'background';
+      else changed.profile.submind![key]++;
+      await assert.rejects(bindSession(changed, 'claude', 'policy-session'), /already bound/);
+    }
+  }));

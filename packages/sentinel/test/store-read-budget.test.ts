@@ -183,7 +183,7 @@ test('scope creation requires a genuine store and limits cannot raise the closed
 });
 
 test('readArtifact reserves every failed representation and never retries a latched budget failure', async (t) => {
-  const { s, store } = await fixture(t);
+  const { store } = await fixture(t);
   // A physical store admission fixture, not a fabricated executed/publication capability. Both encodings are
   // written under this actual owner and verified by the real ledger before the corrupt-representation fault.
   const bytes = Buffer.from('original retained representation fixture');

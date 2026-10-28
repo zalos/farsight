@@ -310,7 +310,7 @@ export async function ownerEvidenceCommand(ws: Workspace, p: ParsedCommand): Pro
       success = ack(command, 'read', { phase: 'readback', availability: 'not-evaluated' });
     } else if (action === 'abandon') {
       phase = 'receipt';
-      let preview = await abandonReportImport(store, ws, target, { timing });
+      const preview = await abandonReportImport(store, ws, target, { timing });
       if (preview.status === 'denied')
         return {
           result: result(command, 'refused', { reasonCode: reason('denied'), verdicts: printed(preview.admission) }),

@@ -15,8 +15,12 @@ test.describe('tests surface', () => {
       await expect(matrix.getByRole('row').filter({ hasText: `invoice-app::flow::${flow}` })).toHaveCount(1);
     }
     // a declared e2e case the report says passed earns observed for what it declares, and says so
-    await expect(matrix.getByRole('row').filter({ hasText: 'invoice-app::flow::billing-cycle' })).toContainText(/e2e observed/i);
-    await expect(matrix.getByRole('row').filter({ hasText: 'invoice-app::flow::new-invoice' })).toContainText('passed, by its own declaration');
+    await expect(matrix.getByRole('row').filter({ hasText: 'invoice-app::flow::billing-cycle' })).toContainText(
+      /e2e observed/i,
+    );
+    await expect(matrix.getByRole('row').filter({ hasText: 'invoice-app::flow::new-invoice' })).toContainText(
+      'passed, by its own declaration',
+    );
     // billing's create case passed on desktop-1440 and was skipped on mobile-390 by its own written condition: it passed
     // (outsider demo 2026-10-13, F3), so the flow it declares is observed, and the row says where it did not run
     const draft = matrix.getByRole('row').filter({ hasText: 'invoice-app::flow::draft-and-send' });
@@ -26,7 +30,9 @@ test.describe('tests surface', () => {
   });
 
   /** @covers packages/server/public/app/surfaces/tests.js::mountTests */
-  test('Suites lists the spec files with their runner and last run; the e2e filter narrows to playwright', async ({ page }) => {
+  test('Suites lists the spec files with their runner and last run; the e2e filter narrows to playwright', async ({
+    page,
+  }) => {
     await page.goto('/#/tests');
     await page.getByRole('button', { name: 'Suites', exact: true }).click();
     await expect(page).toHaveURL(/suites/);
@@ -41,7 +47,7 @@ test.describe('tests surface', () => {
    * @covers packages/server/public/app/surfaces/tests.js::declaredLineHtml
    * @covers GET /api/tests
    */
-  test('the e2e source card says why its passed cases are not a journey\'s number', async ({ page, request }) => {
+  test("the e2e source card says why its passed cases are not a journey's number", async ({ page, request }) => {
     // the fixture: new-invoice.pw.spec.ts declares new-invoice and INV-02, one case passed and one failed; billing's
     // create case passed on desktop and was skipped on mobile by its own condition, so it passed too (F3)
     const d = await (await request.get('/api/tests?level=e2e')).json();
@@ -50,12 +56,16 @@ test.describe('tests surface', () => {
     expect(card.runs.skipped).toBe(0);
     expect(card.counted.passedByDeclaration.n).toBe(2);
     expect(card.counted.passedByDeclaration.breakdown.map((p: { key: string; n: number }) => [p.key, p.n])).toEqual([
-      ['count.part.declaresKnown', 2], ['count.part.declaresUnmatched', 0], ['count.part.declaresNothing', 0],
+      ['count.part.declaresKnown', 2],
+      ['count.part.declaresUnmatched', 0],
+      ['count.part.declaresNothing', 0],
     ]);
     const row = d.journeys.find((j: { flowId: string }) => j.flowId === 'invoice-app::flow::new-invoice');
     expect(row.coverage.observedBy).toBe('declaration');
     expect(row.coverage.evidenceWord.key).toBe('tests.evidence.declaredPassed');
-    expect(row.coverage.counted.e2e.breakdown.find((p: { key: string }) => p.key === 'count.part.declaredPassed').n).toBe(1);
+    expect(
+      row.coverage.counted.e2e.breakdown.find((p: { key: string }) => p.key === 'count.part.declaredPassed').n,
+    ).toBe(1);
     // the failed case stays declared only
     expect(row.declared.map((t: { name: string }) => t.name)).toContain('a draft with no line items is refused');
 

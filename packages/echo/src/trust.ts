@@ -1,4 +1,16 @@
-import { constants, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  constants,
+  closeSync,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
@@ -7,7 +19,9 @@ import { withSettingsLock } from './settings-lock.js';
 import type { EchoConfig } from './types.js';
 
 type Kind = 'configs' | 'connections' | 'credentials';
-function fail(): never { throw new Error(echoConfigWord('echo.config.trust')); }
+function fail(): never {
+  throw new Error(echoConfigWord('echo.config.trust'));
+}
 const digest = (text: string) => createHash('sha256').update(text).digest('hex');
 
 /** User-owned receipts live outside the discovered workspace configuration. */
@@ -18,7 +32,13 @@ export function trustDirectory(): string {
 function privateDirectory(path: string, create: boolean): void {
   if (create) mkdirSync(path, { recursive: true, mode: 0o700 });
   const info = lstatSync(path);
-  if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o077) !== 0 || process.getuid && info.uid !== process.getuid()) fail();
+  if (
+    !info.isDirectory() ||
+    info.isSymbolicLink() ||
+    (info.mode & 0o077) !== 0 ||
+    (process.getuid && info.uid !== process.getuid())
+  )
+    fail();
 }
 function receiptPath(kind: Kind, subject: string, create = false): string {
   const root = trustDirectory();
@@ -33,14 +53,28 @@ function readReceipt(kind: Kind, subject: string): { version: number; subject: s
     const path = receiptPath(kind, subject);
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const info = fstatSync(fd);
-    if (!info.isFile() || info.size > 16_384 || (info.mode & 0o077) !== 0 || process.getuid && info.uid !== process.getuid()) fail();
+    if (
+      !info.isFile() ||
+      info.size > 16_384 ||
+      (info.mode & 0o077) !== 0 ||
+      (process.getuid && info.uid !== process.getuid())
+    )
+      fail();
     const receipt = JSON.parse(readFileSync(fd, 'utf8'));
-    if (receipt.version !== 1 || receipt.subject !== subject || typeof receipt.value !== 'string' || Object.keys(receipt).length !== 3) fail();
+    if (
+      receipt.version !== 1 ||
+      receipt.subject !== subject ||
+      typeof receipt.value !== 'string' ||
+      Object.keys(receipt).length !== 3
+    )
+      fail();
     return receipt;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     fail();
-  } finally { if (fd !== undefined) closeSync(fd); }
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
 }
 function writeReceipt(kind: Kind, subject: string, value: string): void {
   const path = receiptPath(kind, subject, true);
@@ -50,9 +84,15 @@ function writeReceipt(kind: Kind, subject: string, value: string): void {
   try {
     writeFileSync(temporary, `${JSON.stringify({ version: 1, subject, value })}\n`, { flag: 'wx', mode: 0o600 });
     renameSync(temporary, path);
-  } finally { try { unlinkSync(temporary); } catch {} }
+  } finally {
+    try {
+      unlinkSync(temporary);
+    } catch {}
+  }
 }
-function subjectPath(path: string): string { return realpathSync(resolve(path)); }
+function subjectPath(path: string): string {
+  return realpathSync(resolve(path));
+}
 
 export function recordFileTrust(kind: 'configs' | 'connections', path: string, contents: string): void {
   writeReceipt(kind, subjectPath(path), digest(contents));
@@ -94,12 +134,18 @@ async function withCredentialPins<T>(pins: Pin[], action: () => T | Promise<T>):
       for (const [ref, value] of selected) {
         if (readReceipt('credentials', ref)) continue;
         const path = receiptPath('credentials', ref);
-        const file = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+        const file = openSync(
+          path,
+          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+          0o600,
+        );
         try {
           const info = fstatSync(file);
           created.push({ path, ino: info.ino, dev: info.dev });
           writeFileSync(file, `${JSON.stringify({ version: 1, subject: ref, value })}\n`);
-        } finally { closeSync(file); }
+        } finally {
+          closeSync(file);
+        }
       }
       return { ok: true as const, value: await action() };
     } catch (error) {
@@ -121,7 +167,8 @@ export async function pinCredentialOrigin(ref: string, origin: string): Promise<
   await withCredentialPins([[ref, origin]], () => {});
 }
 export function requireCredentialOrigin(ref: string, origin?: string): void {
-  if (!origin || readReceipt('credentials', ref)?.value !== new URL(origin).origin) throw new Error(echoConfigWord('echo.secret.origin'));
+  if (!origin || readReceipt('credentials', ref)?.value !== new URL(origin).origin)
+    throw new Error(echoConfigWord('echo.secret.origin'));
 }
 export async function withConfigCredentialPins<T>(config: EchoConfig, action: () => T | Promise<T>): Promise<T> {
   const pins: Pin[] = [];

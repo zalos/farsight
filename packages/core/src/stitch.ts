@@ -47,11 +47,19 @@ export function stitchHttp(store: GraphStore): StitchReport {
     if (e.kind !== 'http' || !stubIds.has(e.to)) continue;
     const stub = store.nodeById(e.to) as GraphNode | undefined;
     const mp = stub ? methodPath(stub.name) : null;
-    if (!mp) { report.unresolved++; continue; }
+    if (!mp) {
+      report.unresolved++;
+      continue;
+    }
     const norm = normalizeRoutePath(mp.path);
     // `fetch(\`${base}/healthz\`)` leaves a templated host as a leading `:param` — treat it as a host wildcard
     const hostless = norm.startsWith(':param/') ? norm.slice(':param'.length) : null;
-    const candidates = [...new Set([...(routesByKey.get(`${mp.method} ${norm}`) ?? []), ...(hostless ? routesByKey.get(`${mp.method} ${hostless}`) ?? [] : [])])];
+    const candidates = [
+      ...new Set([
+        ...(routesByKey.get(`${mp.method} ${norm}`) ?? []),
+        ...(hostless ? (routesByKey.get(`${mp.method} ${hostless}`) ?? []) : []),
+      ]),
+    ];
     if (candidates.length === 1) {
       const target = candidates[0]!;
       const sameRepo = target.split('::')[0] === e.from.split('::')[0];
@@ -68,7 +76,16 @@ export function stitchHttp(store: GraphStore): StitchReport {
       store.replaceEdge(e.id, stitched);
       report.resolved++;
     } else if (candidates.length > 1) {
-      store.replaceEdge(e.id, { ...e, resolution: { status: 'unresolved', technique: 'fetch→route', confidence: 'LOW', candidates, note: 'more than one source serves this path' } });
+      store.replaceEdge(e.id, {
+        ...e,
+        resolution: {
+          status: 'unresolved',
+          technique: 'fetch→route',
+          confidence: 'LOW',
+          candidates,
+          note: 'more than one source serves this path',
+        },
+      });
       report.ambiguous++;
     } else {
       report.unresolved++;

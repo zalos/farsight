@@ -3,12 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scannerFixture } from './cli-scanners-helpers.ts';
-import { loadChecksBundle } from '../dist/adapters/trivy/index.js';
 import { unlock } from './snapshot-helpers.ts';
 const CLI = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const skip =

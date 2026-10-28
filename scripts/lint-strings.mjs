@@ -7,8 +7,9 @@
 //    module), a string literal containing three or more prose words must come
 //    from the catalog via t(...). Pragmatic detectable rule: a single- or
 //    double-quoted literal matching three word tokens in a row
-//    (/[A-Za-z][a-z’']* +[a-z][a-z’']* +[a-z]/) fails unless the same line
-//    calls t( or carries a `str:ok` pragma comment with a reason.
+//    (/[A-Za-z][a-z’']* +[a-z][a-z’']* +[a-z]/) fails unless its line or the
+//    following statement continuation calls t( or carries a `str:ok` pragma
+//    comment with a reason. The bounded forward scan is documented below.
 //    Deliberately NOT covered (documented grandfathering, migrated by the
 //    passes that rewrite them):
 //      - lib/graph-render.js + surfaces/journeys.js + store.js — pre-split
@@ -113,9 +114,6 @@ const CHROME_FILES = [
   'lib/tour.js',
   'lib/ask.js',
 ];
-// journeys.js: only its NEW surface chrome is expected to use t(); its legacy
-// overlay strings are grandfathered line-by-line below.
-const GRANDFATHERED = ['lib/graph-render.js', 'store.js', 'sym.js'];
 const JARGON_BUDGET = 5;
 
 const failures = [];
@@ -135,6 +133,27 @@ const viewerHtml = readFileSync(join(pub, 'viewer.html'), 'utf8');
 
 // ── RULE 1: raw prose literals in chrome files ──────────────────────────────
 const PROSE = /[A-Za-z][a-z’']* +[a-z][a-z’']* +[a-z]/;
+
+function statementAllowsProse(lines, start) {
+  // Scan the literal's line plus at most seven following lines. Stop at a blank
+  // line, a line ending in ;, { or }, or a case/default label. Check that boundary
+  // line first so its trailing // str:ok still applies; never scan into its body.
+  for (let i = start; i < Math.min(lines.length, start + 8); i++) {
+    const line = lines[i];
+    if (!line.trim()) break;
+    const code = line.replace(/^\s*(\/\/|\*|\/\*\*?).*$/, '');
+    if (/\bt\(/.test(code) || /\/\/\s*str:ok\b/.test(line)) return true;
+    // Mask quoted strings before stripping a trailing comment: https:// in a
+    // string must not hide the actual statement or block boundary after it.
+    const end = line
+      .replace(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"/g, "''")
+      .replace(/\/\/.*$/, '')
+      .trimEnd();
+    if (/[;{}]$/.test(end) || /^\s*(?:case\b.*|default)\s*:$/.test(end)) break;
+  }
+  return false;
+}
+
 // legacy journey-overlay prose kept verbatim from viewer.js (pre-catalog);
 // P5 rewrites the journeys surface and migrates these.
 // 'Forks along this journey', 'No forks recorded along this journey' and
@@ -173,7 +192,7 @@ for (const file of appFiles) {
       const lit = (m[1] ?? m[2]) || '';
       // strip html tags/attrs so class soup doesn't trip the prose matcher
       const text = lit.replace(/<[^>]*>/g, ' ').replace(/\b[\w-]+=\\?"[^"]*\\?"/g, ' ');
-      if (PROSE.test(text)) {
+      if (PROSE.test(text) && !statementAllowsProse(lines, i)) {
         failures.push(`RULE1 ${rel}:${i + 1} raw prose literal outside t(): ${JSON.stringify(lit.slice(0, 60))}`);
       }
     }

@@ -3,29 +3,124 @@ import { resolve, join, basename } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, statSync, realpathSync } from 'node:fs';
 import {
-  GraphStore, buildIndex, setFreshnessMeta,
-  SnapshotDb, SnapshotUnavailable, diffGraphs, parsePolicy, applyPolicy, toSarif, toMarkdown, changeSentence,
-  stitchHttp, apiSurface, graphToSpec, reconcile, driftMarkdown, loadConfig,
+  GraphStore,
+  buildIndex,
+  setFreshnessMeta,
+  SnapshotDb,
+  SnapshotUnavailable,
+  diffGraphs,
+  parsePolicy,
+  applyPolicy,
+  toSarif,
+  toMarkdown,
+  changeSentence,
+  stitchHttp,
+  apiSurface,
+  graphToSpec,
+  reconcile,
+  driftMarkdown,
+  loadConfig,
   storybookLive,
-  designSurface, reconcileDesign, designDriftMarkdown, isDesignManifest, buildLine, buildInfo, installState, currencyAdvice,
-  testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts, t as word, agentsCounted,
-  search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
-  packagesOf, importersOf, resolvePackage, configFilesText,
-  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, tourOf, tourLines, ask, askLines, stateOfPlay, stateOfPlayLines, historyFact, roleTable, roleTableLines, rolesCsv, decisionsAnswer, decisionsText,
-  attributeDiffOver, spineRowNote, spineSentences, parseSyncRef as parseSyncRefValue, INCOMPLETE_SENTENCE,
-  storylineDiff, storylineDiffDocument, storylineDiffLines, resolveCompareFrom, compareSideOf, parseFailOn, DELTA_KINDS,
+  designSurface,
+  reconcileDesign,
+  designDriftMarkdown,
+  isDesignManifest,
+  buildLine,
+  buildInfo,
+  installState,
+  currencyAdvice,
+  testsSurface,
+  formatMetric,
+  testsMatrixV1,
+  testsMatrixRows,
+  testsMatrixCsv,
+  countedLine,
+  breakdownText,
+  countedText,
+  storyCounts,
+  t as word,
+  agentsCounted,
+  search,
+  impactOf,
+  impactTestsV1,
+  impactTestsReaching,
+  nodesInHunks,
+  IMPACT_MAX_HOPS,
+  packagesOf,
+  importersOf,
+  resolvePackage,
+  configFilesText,
+  journeyTree,
+  pickJourneys,
+  journeyTreeLines,
+  unknownStorylineText,
+  tourOf,
+  tourLines,
+  ask,
+  askLines,
+  stateOfPlay,
+  stateOfPlayLines,
+  historyFact,
+  roleTable,
+  roleTableLines,
+  rolesCsv,
+  decisionsAnswer,
+  decisionsText,
+  attributeDiffOver,
+  spineRowNote,
+  spineSentences,
+  parseSyncRef as parseSyncRefValue,
+  storylineDiff,
+  storylineDiffDocument,
+  storylineDiffLines,
+  resolveCompareFrom,
+  compareSideOf,
+  parseFailOn,
+  DELTA_KINDS,
 } from '@farsight/core';
 import type {
-  SourceStat, GraphDiff, GraphNode, GraphEdge, TestsMeta, TestsMatrixIdentity, TestMatrixCell, ImpactNode, ImpactReport,
-  CommitInput, FileStatus,
+  SourceStat,
+  GraphDiff,
+  GraphNode,
+  GraphEdge,
+  TestsMeta,
+  TestsMatrixIdentity,
+  ImpactNode,
+  ImpactReport,
+  CommitInput,
 } from '@farsight/core';
 import {
-  ingestRepo, ingestSpec, isSpecUrl, readSpecSource, specToYaml, ingestDesign, readManifestSource,
-  importReports, repoContentDigest, gitHead, gitLog, commitInputsOf, gitTags, gitShallow, gitHeadRef, gitPrefix, DEFAULT_MAX_COMMITS,
-  GIT_ABSENT_WORD, headTitle, shallowFloorSentence,
+  ingestRepo,
+  ingestSpec,
+  isSpecUrl,
+  readSpecSource,
+  specToYaml,
+  ingestDesign,
+  readManifestSource,
+  importReports,
+  repoContentDigest,
+  gitHead,
+  gitLog,
+  commitInputsOf,
+  gitTags,
+  gitShallow,
+  gitHeadRef,
+  gitPrefix,
+  DEFAULT_MAX_COMMITS,
+  GIT_ABSENT_WORD,
+  headTitle,
+  shallowFloorSentence,
 } from '@farsight/parsers';
-import type { GitCommit, GitFileStatus } from '@farsight/parsers';
-import { serveGraph, writeSpine, resolveCommitNodes, syncWork, workSourcesOf, keyOptionsOf, keyDetector } from '@farsight/server';
+import type { GitCommit } from '@farsight/parsers';
+import {
+  serveGraph,
+  writeSpine,
+  resolveCommitNodes,
+  syncWork,
+  workSourcesOf,
+  keyOptionsOf,
+  keyDetector,
+} from '@farsight/server';
 import type { WorkSettingsSource } from '@farsight/server';
 import type { Settings } from '@farsight/server';
 import { runMcpServer } from '@farsight/mcp';
@@ -40,8 +135,12 @@ function flag(name: string, fallback?: string): string | undefined {
 }
 /** A flag that takes no value, so the word after it is a positional (`serve --read-only graph.json`). */
 const BOOL_FLAGS = new Set(['--read-only', '--json', '--post', '--confirm', '--csv', '--business']);
-function hasFlag(name: string): boolean { return rest.includes(`--${name}`); }
-const positional = rest.filter((a, i) => !a.startsWith('--') && (rest[i - 1]?.startsWith('--') !== true || BOOL_FLAGS.has(rest[i - 1] ?? '')));
+function hasFlag(name: string): boolean {
+  return rest.includes(`--${name}`);
+}
+const positional = rest.filter(
+  (a, i) => !a.startsWith('--') && (rest[i - 1]?.startsWith('--') !== true || BOOL_FLAGS.has(rest[i - 1] ?? '')),
+);
 
 const USAGE = `farsight — see your software the way you think about it
 ${buildLine()}
@@ -208,7 +307,10 @@ if (['version', '--version', '-v'].includes(command ?? '') || rest.includes('--v
 }
 // `work --help`, `work help` and a bare `work` print only the work section of
 // the usage — no banner, no settings read, no work.db created, no git
-if (command === 'work' && (!rest[0] || ['help', '--help', '-h'].includes(rest[0]) || rest.includes('--help') || rest.includes('-h'))) {
+if (
+  command === 'work' &&
+  (!rest[0] || ['help', '--help', '-h'].includes(rest[0]) || rest.includes('--help') || rest.includes('-h'))
+) {
   const lines = USAGE.split('\n');
   const from = lines.findIndex((l) => l.startsWith('  farsight work '));
   const to = lines.findIndex((l, i) => i > from && /^ {2}farsight (?!work )/.test(l));
@@ -265,11 +367,17 @@ function workspaceSource(repo: string): { path: string; exclude?: string[] } | u
  * `tests import --stamp` both need, resolved the same way so the digest they
  * compare can never be computed over two different file sets.
  */
-function repoCheckout(store: GraphStore | undefined, repo: string, pathArg?: string): { root: string; exclude?: string[] } {
+function repoCheckout(
+  store: GraphStore | undefined,
+  repo: string,
+  pathArg?: string,
+): { root: string; exclude?: string[] } {
   const source = workspaceSource(repo);
-  const root = pathArg ? resolve(pathArg) : store?.roots[repo] ?? (source ? resolve(source.path) : undefined);
+  const root = pathArg ? resolve(pathArg) : (store?.roots[repo] ?? (source ? resolve(source.path) : undefined));
   if (!root) {
-    fail(`no checkout recorded for "${repo}" — the graph records no root for it and no local source in .farsight/settings.json names it (pass the path: \`farsight ${command} --repo ${repo} <path>\`)`);
+    fail(
+      `no checkout recorded for "${repo}" — the graph records no root for it and no local source in .farsight/settings.json names it (pass the path: \`farsight ${command} --repo ${repo} <path>\`)`,
+    );
   }
   if (!existsSync(root)) fail(`the checkout recorded for "${repo}" is not there: ${root}`);
   return { root, ...(source?.exclude?.length ? { exclude: source.exclude } : {}) };
@@ -296,14 +404,20 @@ function stampReports(root: string, reports: TestsMeta['reports'], digest: strin
     if (!r.path || r.reason !== 'no-digest') continue;
     const abs = resolve(join(root, r.path));
     let text: string;
-    try { text = readFileSync(abs, 'utf8'); } catch { continue; }
+    try {
+      text = readFileSync(abs, 'utf8');
+    } catch {
+      continue;
+    }
     if (/^\s*</.test(text)) continue; // JUnit XML: no place for the key — the blind spot says so
     const end = text.lastIndexOf('}');
     if (end < 0) continue;
     const head = text.slice(0, end);
     const block = `${/[^\s{]\s*$/.test(head) ? ',' : ''}"farsight":${JSON.stringify({ sourceDigest: digest, stampedAt, repo, ...(commit ? { commit } : {}) })}`;
     const next = head + block + text.slice(end);
-    try { JSON.parse(next); } catch {
+    try {
+      JSON.parse(next);
+    } catch {
       console.error(`  ⚠ ${r.path}: not a JSON object this build can extend — left unstamped`);
       continue;
     }
@@ -318,7 +432,11 @@ function stampReports(root: string, reports: TestsMeta['reports'], digest: strin
  * never copied from what was there before (03 §3.6): a re-import that replaced a
  * report's evidence must not leave the old totals standing.
  */
-function countTests(repo: string, nodes: GraphNode[], edges: GraphEdge[]): { cases: number; files: number; edges: TestsMeta['edges']; runs: number } {
+function countTests(
+  repo: string,
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+): { cases: number; files: number; edges: TestsMeta['edges']; runs: number } {
   const mine = (id: string) => id.startsWith(`${repo}::`);
   const counts = { declared: 0, static: 0, observed: 0 };
   const files = new Set<string>();
@@ -336,7 +454,8 @@ function countTests(repo: string, nodes: GraphNode[], edges: GraphEdge[]): { cas
   for (const e of edges) {
     if (e.kind !== 'covers' || !tests.has(e.from)) continue;
     const cls = String(e.meta?.evidence ?? 'declared');
-    if (cls === 'static' || cls === 'observed') counts[cls]++; else counts.declared++;
+    if (cls === 'static' || cls === 'observed') counts[cls]++;
+    else counts.declared++;
   }
   return { cases, files: files.size, edges: counts, runs };
 }
@@ -359,7 +478,9 @@ function materializeAsOf(asOf: string): string {
   const path = resolve(join('.farsight', `graph@sync-${snap.sync}.json`));
   // not store.save(): that would stamp generatedAt=now and misrepresent an as-of read as fresh
   writeFileSync(path, JSON.stringify(store.toJSON(), null, 1));
-  console.error(`as-of sync:${snap.sync} (${snap.at} ${snap.tz}${snap.commit ? ` · ${snap.commit.slice(0, 7)}` : ''}) → ${path}`);
+  console.error(
+    `as-of sync:${snap.sync} (${snap.at} ${snap.tz}${snap.commit ? ` · ${snap.commit.slice(0, 7)}` : ''}) → ${path}`,
+  );
   return path;
 }
 
@@ -393,14 +514,26 @@ function runStorylineDiff(storyline: string): void {
   if ('error' in ref && fromArg.startsWith('tag:')) {
     // a release the history has no row for: the tag's commit date from git, read here, then the newest sync before it
     try {
-      const at = execFileSync('git', ['log', '-1', '--format=%cI', fromArg.slice(4)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-      if (at) { fromArg = at; ref = resolveCompareFrom(db, at, { head: toSync, storyline }); if (!('error' in ref)) ref = { ...ref, how: 'tag', label: flag('from')!.slice(4) }; }
-    } catch { /* not a git checkout, or no such tag: the history's answer stands */ }
+      const at = execFileSync('git', ['log', '-1', '--format=%cI', fromArg.slice(4)], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      if (at) {
+        fromArg = at;
+        ref = resolveCompareFrom(db, at, { head: toSync, storyline });
+        if (!('error' in ref)) ref = { ...ref, how: 'tag', label: flag('from')!.slice(4) };
+      }
+    } catch {
+      /* not a git checkout, or no such tag: the history's answer stands */
+    }
   }
   if ('error' in ref) fail(`--from: ${ref.error}`);
   if (ref.sync >= toSync) fail(`--from: sync ${ref.sync} is not before --to sync ${toSync}`);
   const diff = storylineDiff(compareSideOf(db, ref.sync), b, storyline, repo ? { repo } : {});
-  if (!diff) fail(`no storyline ${storyline} at sync ${ref.sync} or sync ${toSync} — \`farsight journeys\` lists the storylines`);
+  if (!diff)
+    fail(
+      `no storyline ${storyline} at sync ${ref.sync} or sync ${toSync} — \`farsight journeys\` lists the storylines`,
+    );
   let failOn: (typeof DELTA_KINDS)[number][] | undefined;
   if (flag('fail-on')) {
     const p = parseFailOn(flag('fail-on')!);
@@ -411,13 +544,23 @@ function runStorylineDiff(storyline: string): void {
   if (hasFlag('json')) console.log(JSON.stringify(doc, null, 2));
   else {
     for (const line of storylineDiffLines(diff, { biz: hasFlag('business') })) console.log(line);
-    if (doc.gate) console.log(`gate ${doc.gate.result.toUpperCase()} — ${doc.gate.policy}${doc.gate.rules.filter((r) => r.result === 'fail').map((r) => ` · ${r.rule}: ${r.changes.join(', ')}`).join('')}`);
+    if (doc.gate)
+      console.log(
+        `gate ${doc.gate.result.toUpperCase()} — ${doc.gate.policy}${doc.gate.rules
+          .filter((r) => r.result === 'fail')
+          .map((r) => ` · ${r.rule}: ${r.changes.join(', ')}`)
+          .join('')}`,
+      );
   }
   if (doc.gate?.exit) process.exit(1);
 }
 
 /** Resolve --from/--to into two stores + their changedBetween rows (defaults: latest-1 → latest). */
-function loadDiffEnds(): { base: ReturnType<SnapshotDb['read']>; head: ReturnType<SnapshotDb['read']>; db: SnapshotDb } {
+function loadDiffEnds(): {
+  base: ReturnType<SnapshotDb['read']>;
+  head: ReturnType<SnapshotDb['read']>;
+  db: SnapshotDb;
+} {
   const db = openDb();
   const toRef = parseSyncRef(flag('to', 'latest')!, 'to');
   const head = db.read(toRef);
@@ -440,19 +583,7 @@ function renderDiff(diff: GraphDiff, format: string): string {
   return fail(`unknown --format "${format}" (json|sarif|md)`);
 }
 
-
 // ── history: git as a lens on the snapshot spine (change-history-2026-09.md) ──
-
-/**
- * git's `--raw` status letter → the word `commit_file.status` stores. `B` is
- * git's own "pairing Broken", and `FileStatus` has no word for it: calling it
- * `modified` would assert the continuity git just said it could not establish,
- * so it lands on `unknown`, the one word that claims nothing.
- */
-const GIT_STATUS_WORD: Record<GitFileStatus, FileStatus> = {
-  A: 'added', C: 'copied', D: 'deleted', M: 'modified',
-  R: 'renamed', T: 'typechange', U: 'unmerged', B: 'unknown', X: 'unknown',
-};
 
 /**
  * The seam between the reader (`parsers/shared/git.ts`) and the tables
@@ -467,7 +598,13 @@ function commitInputs(commits: readonly GitCommit[]): CommitInput[] {
 }
 
 /** A release as §3 defines it: written down by a person, never discovered. */
-interface DeclaredRelease { name: string; commit?: string; tag?: string; at?: string; repo?: string }
+interface DeclaredRelease {
+  name: string;
+  commit?: string;
+  tag?: string;
+  at?: string;
+  repo?: string;
+}
 
 /**
  * The releases a workspace **declares** (§3). Read structurally rather than
@@ -481,7 +618,9 @@ interface DeclaredRelease { name: string; commit?: string; tag?: string; at?: st
  */
 function declaredReleases(repo: string): DeclaredRelease[] {
   try {
-    const s = JSON.parse(readFileSync(resolve(join('.farsight', 'settings.json')), 'utf8')) as { releases?: DeclaredRelease[] };
+    const s = JSON.parse(readFileSync(resolve(join('.farsight', 'settings.json')), 'utf8')) as {
+      releases?: DeclaredRelease[];
+    };
     return (s.releases ?? []).filter((r) => r && r.name && (!r.repo || r.repo === repo));
   } catch {
     return []; // no workspace settings here — nothing is declared, which is not the same as none existing
@@ -492,7 +631,9 @@ function declaredReleases(repo: string): DeclaredRelease[] {
 /** The workspace's settings sources (work sources included), or none when there is no settings file. */
 function settingsSources(): WorkSettingsSource[] {
   try {
-    const s = JSON.parse(readFileSync(resolve(join('.farsight', 'settings.json')), 'utf8')) as { sources?: WorkSettingsSource[] };
+    const s = JSON.parse(readFileSync(resolve(join('.farsight', 'settings.json')), 'utf8')) as {
+      sources?: WorkSettingsSource[];
+    };
     return s.sources ?? [];
   } catch {
     return [];
@@ -542,11 +683,21 @@ function num(n: number): string {
  *    from the graph on disk or the workspace source — never from the snapshots,
  *    which carry no `roots` by design.
  */
-function attributeDiff(diff: GraphDiff, db: SnapshotDb, live: GraphStore | undefined, base: number, head: number): GraphDiff {
+function attributeDiff(
+  diff: GraphDiff,
+  db: SnapshotDb,
+  live: GraphStore | undefined,
+  base: number,
+  head: number,
+): GraphDiff {
   const named = flag('repo');
   // `live` is the graph on disk, not a snapshot read: `roots` are per-machine
   // checkout paths and are deliberately not persisted in history (snapshots.ts:272)
-  const { diff: attributed, header, notes } = attributeDiffOver(diff, db, {
+  const {
+    diff: attributed,
+    header,
+    notes,
+  } = attributeDiffOver(diff, db, {
     base,
     head,
     ...(named ? { repos: [named] } : {}),
@@ -555,7 +706,9 @@ function attributeDiff(diff: GraphDiff, db: SnapshotDb, live: GraphStore | undef
       const root = live?.roots[repo] ?? (source ? resolve(source.path) : undefined);
       if (!root || !existsSync(root)) return { kind: 'missing', ...(root ? { root } : {}) };
       const p = gitPrefix(root);
-      return p.available ? { kind: 'prefix', prefix: p.prefix } : { kind: 'unreadable', root, reason: GIT_ABSENT_WORD[p.reason] };
+      return p.available
+        ? { kind: 'prefix', prefix: p.prefix }
+        : { kind: 'unreadable', root, reason: GIT_ABSENT_WORD[p.reason] };
     },
   });
 
@@ -570,43 +723,79 @@ switch (command) {
     // which build is installed (this CLI), which is running on the port, which wrote the graph — and what to do about it
     const port = Number(flag('port', '4477'));
     const running = buildInfo();
-    let server: { port: number; reachable: boolean; farsight?: typeof running; install?: ReturnType<typeof installState> } = { port, reachable: false };
-    let graphMeta: { farsight?: typeof running; generatedAt?: string; sync?: number; workspace?: string; graphPath?: string } | undefined;
+    let server: {
+      port: number;
+      reachable: boolean;
+      farsight?: typeof running;
+      install?: ReturnType<typeof installState>;
+    } = { port, reachable: false };
+    let graphMeta:
+      | { farsight?: typeof running; generatedAt?: string; sync?: number; workspace?: string; graphPath?: string }
+      | undefined;
     try {
       const r = await fetch(`http://127.0.0.1:${port}/api/version`, { signal: AbortSignal.timeout(1500) });
       if (r.ok) {
-        const v = await r.json() as { farsight?: typeof running; install?: ReturnType<typeof installState>; graph?: typeof graphMeta };
+        const v = (await r.json()) as {
+          farsight?: typeof running;
+          install?: ReturnType<typeof installState>;
+          graph?: typeof graphMeta;
+        };
         server = { port, reachable: true, farsight: v.farsight, install: v.install };
         graphMeta = v.graph;
       }
-    } catch { /* nothing listening, or an older server without /api/version: reported below */ }
+    } catch {
+      /* nothing listening, or an older server without /api/version: reported below */
+    }
     const graphFile = resolve(flag('graph', positional[0]) ?? 'graph.json');
     if (!graphMeta && existsSync(graphFile)) {
       const m = GraphStore.load(graphFile).meta;
-      graphMeta = { farsight: m.farsight, generatedAt: m.generatedAt, sync: m.sync, workspace: m.workspace, graphPath: graphFile };
+      graphMeta = {
+        farsight: m.farsight,
+        generatedAt: m.generatedAt,
+        sync: m.sync,
+        workspace: m.workspace,
+        graphPath: graphFile,
+      };
     }
-    const bl = (b?: { version: string; built: string; commit?: string }) => b ? `${b.version} · built ${b.built}${b.commit ? ` · commit ${b.commit}` : ''}` : 'unknown';
+    const bl = (b?: { version: string; built: string; commit?: string }) =>
+      b ? `${b.version} · built ${b.built}${b.commit ? ` · commit ${b.commit}` : ''}` : 'unknown';
     console.log(`installed: ${buildLine()}`);
-    console.log(server.reachable
-      ? `server:    port ${port} · ${bl(server.farsight)}${server.install ? ` · started ${server.install.startedAt}${server.install.newerInstalled ? ' · NEWER BUILD ON DISK' : ''}` : ''}`
-      : `server:    nothing answered on port ${port}`);
-    console.log(graphMeta
-      ? `graph:     ${graphMeta.graphPath ?? graphFile}${graphMeta.workspace ? ` · workspace "${graphMeta.workspace}"` : ''} · written by ${bl(graphMeta.farsight)} · generated ${graphMeta.generatedAt ?? 'unknown'}${graphMeta.sync != null ? ` · sync:${graphMeta.sync}` : ''}`
-      : `graph:     none at ${graphFile}`);
-    const a = currencyAdvice({ role: 'cli', running, install: installState(), ...(graphMeta ? { graph: graphMeta } : {}), server });
+    console.log(
+      server.reachable
+        ? `server:    port ${port} · ${bl(server.farsight)}${server.install ? ` · started ${server.install.startedAt}${server.install.newerInstalled ? ' · NEWER BUILD ON DISK' : ''}` : ''}`
+        : `server:    nothing answered on port ${port}`,
+    );
+    console.log(
+      graphMeta
+        ? `graph:     ${graphMeta.graphPath ?? graphFile}${graphMeta.workspace ? ` · workspace "${graphMeta.workspace}"` : ''} · written by ${bl(graphMeta.farsight)} · generated ${graphMeta.generatedAt ?? 'unknown'}${graphMeta.sync != null ? ` · sync:${graphMeta.sync}` : ''}`
+        : `graph:     none at ${graphFile}`,
+    );
+    const a = currencyAdvice({
+      role: 'cli',
+      running,
+      install: installState(),
+      ...(graphMeta ? { graph: graphMeta } : {}),
+      server,
+    });
     console.log('');
-    console.log(a.ok ? 'up to date: the installed build, the server and the graph agree.' : `${a.findings.length} thing(s) to do:`);
+    console.log(
+      a.ok
+        ? 'up to date: the installed build, the server and the graph agree.'
+        : `${a.findings.length} thing(s) to do:`,
+    );
     for (const f of a.findings) console.log(`  ⚠ ${f}`);
     console.log('');
     a.steps.forEach((st, i) => console.log(`  ${i + 1}. ${st}`));
     process.exit(a.ok ? 0 : 1);
+    break;
   }
   case 'export': {
     const graphFile = resolve(flag('graph', 'graph.json')!);
     if (!existsSync(graphFile)) fail(word('export.graph.missing', 'professional').replace('{path}', graphFile));
     const out = flag('out');
     if (out && existsSync(resolve(out))) {
-      const input = statSync(graphFile), output = statSync(resolve(out));
+      const input = statSync(graphFile),
+        output = statSync(resolve(out));
       if (input.dev === output.dev && input.ino === output.ino) fail(word('export.graph.sameFile', 'professional'));
     }
     const document = GraphStore.load(graphFile).toDocument(flag('source-id', 'workspace'));
@@ -624,21 +813,39 @@ switch (command) {
     for (const dir of dirs) {
       // a spec / a screens manifest as a source of its own: a file that parses as one, or a URL
       if (isSpecUrl(dir) || (/\.(ya?ml|json)$/i.test(dir) && existsSync(resolve(dir)) && !statIsDir(resolve(dir)))) {
-        const isDesign = /\.json$/i.test(dir) && !isSpecUrl(dir) && (() => { try { return isDesignManifest(JSON.parse(readFileSync(resolve(dir), 'utf8'))); } catch { return false; } })();
+        const isDesign =
+          /\.json$/i.test(dir) &&
+          !isSpecUrl(dir) &&
+          (() => {
+            try {
+              return isDesignManifest(JSON.parse(readFileSync(resolve(dir), 'utf8')));
+            } catch {
+              return false;
+            }
+          })();
         const fragment = isDesign
           ? await ingestDesign(dir, { repoName: dirs.length === 1 ? flag('repo') : undefined })
           : await ingestSpec(dir, { repoName: dirs.length === 1 ? flag('repo') : undefined });
         store.addFragment(fragment);
         const what = isDesign ? 'design' : 'spec';
-        sources.push({ name: fragment.repo, files: 1, status: `ok: ${fragment.nodes.length} nodes, ${fragment.edges.length} edges (${what})` });
-        console.log(`  + ${fragment.repo}: ${fragment.nodes.length} nodes, ${fragment.edges.length} edges (${what}: ${dir})`);
+        sources.push({
+          name: fragment.repo,
+          files: 1,
+          status: `ok: ${fragment.nodes.length} nodes, ${fragment.edges.length} edges (${what})`,
+        });
+        console.log(
+          `  + ${fragment.repo}: ${fragment.nodes.length} nodes, ${fragment.edges.length} edges (${what}: ${dir})`,
+        );
         continue;
       }
       const repoPath = resolve(dir);
       if (!existsSync(repoPath)) fail(`no such directory: ${dir}`);
       const fragment = await ingestRepo(repoPath, {
         repoName: dirs.length === 1 ? flag('repo') : undefined,
-        exclude: flag('exclude')?.split(',').map((s) => s.trim()).filter(Boolean),
+        exclude: flag('exclude')
+          ?.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
         gitignore: !rest.includes('--no-gitignore'),
       });
       store.roots[fragment.repo] = repoPath;
@@ -649,12 +856,17 @@ switch (command) {
         files: fragment.meta?.files,
         status: `ok: ${fragment.nodes.length} nodes, ${fragment.edges.length} edges`,
       });
-      console.log(`  + ${fragment.repo}: ${fragment.nodes.length} nodes, ${fragment.edges.length} edges${fragment.configApplied ? ' (config applied)' : ''}`);
+      console.log(
+        `  + ${fragment.repo}: ${fragment.nodes.length} nodes, ${fragment.edges.length} edges${fragment.configApplied ? ' (config applied)' : ''}`,
+      );
       for (const err of fragment.specErrors ?? []) console.error(`    ⚠ ${err}`);
     }
     // cross-source HTTP stitching: unresolved fetch stubs → routes any source declares
     const stitched = stitchHttp(store);
-    if (stitched.resolved || stitched.ambiguous) console.log(`  stitched ${stitched.resolved} HTTP call(s) across sources${stitched.ambiguous ? `, ${stitched.ambiguous} ambiguous` : ''}`);
+    if (stitched.resolved || stitched.ambiguous)
+      console.log(
+        `  stitched ${stitched.resolved} HTTP call(s) across sources${stitched.ambiguous ? `, ${stitched.ambiguous} ambiguous` : ''}`,
+      );
     store.meta.workspace = basename(process.cwd());
     // record the snapshot BEFORE save so graph.json carries sync/digest/commit/tz
     try {
@@ -671,7 +883,9 @@ switch (command) {
           if (said) console.log(`    ${name}: ${said}`);
         }
         const w = await syncWork(process.cwd(), workSources, store, db, { pull: false });
-        console.log(`  work items from the cache: ${w.nodes} node${w.nodes === 1 ? '' : 's'}, ${w.edges} tracks edge${w.edges === 1 ? '' : 's'}${w.unmatched.length ? `, ${w.unmatched.length} declared key${w.unmatched.length === 1 ? '' : 's'} unmatched` : ''}`);
+        console.log(
+          `  work items from the cache: ${w.nodes} node${w.nodes === 1 ? '' : 's'}, ${w.edges} tracks edge${w.edges === 1 ? '' : 's'}${w.unmatched.length ? `, ${w.unmatched.length} declared key${w.unmatched.length === 1 ? '' : 's'} unmatched` : ''}`,
+        );
       }
       const ref = db.write(store, { commit: gitHead(process.cwd()) ?? sources[0]?.commit, sources });
       console.log(`  snapshot sync:${ref.sync} · digest ${ref.digest} → ${dbPath()}`);
@@ -684,7 +898,12 @@ switch (command) {
     const ms = Math.round(performance.now() - started);
     console.log(`ingested ${dirs.length} repo${dirs.length > 1 ? 's' : ''} in ${ms}ms → ${out}`);
     console.log(`  ${stats.nodes} nodes, ${stats.edges} edges`);
-    console.log('  ' + Object.entries(stats.byKind).map(([k, v]) => `${k}:${v}`).join('  '));
+    console.log(
+      '  ' +
+        Object.entries(stats.byKind)
+          .map(([k, v]) => `${k}:${v}`)
+          .join('  '),
+    );
     break;
   }
   case 'serve': {
@@ -692,7 +911,7 @@ switch (command) {
     const graph = asOf ? materializeAsOf(asOf) : resolve(positional[0] ?? 'graph.json');
     if (!existsSync(graph)) fail(`no graph at ${graph} — run \`farsight ingest\` first`);
     // an --as-of snapshot is history: it is served read-only, and --read-only asks for the same on today's graph
-    const readOnly = asOf ? 'as-of' as const : hasFlag('read-only') ? 'flag' as const : null;
+    const readOnly = asOf ? ('as-of' as const) : hasFlag('read-only') ? ('flag' as const) : null;
     serveGraph(graph, Number(flag('port', '4477')), process.cwd(), { readOnly });
     break;
   }
@@ -749,11 +968,11 @@ switch (command) {
     if (!Number.isInteger(max) || max < 1) fail(`--max expects how many commits to walk (got "${maxFlag}")`);
 
     const named = flag('repo');
-    const repos = named
-      ? [named]
-      : [...new Set([...Object.keys(store?.roots ?? {}), ...workspaceRepos()])].sort();
+    const repos = named ? [named] : [...new Set([...Object.keys(store?.roots ?? {}), ...workspaceRepos()])].sort();
     if (!repos.length) {
-      fail(`farsight history needs --repo <source name>: there is no graph at ${graphFile} and .farsight/settings.json declares no local source`);
+      fail(
+        `farsight history needs --repo <source name>: there is no graph at ${graphFile} and .farsight/settings.json declares no local source`,
+      );
     }
 
     const db = openDb();
@@ -768,9 +987,16 @@ switch (command) {
       const keys = keyOptionsOf(workSourcesOf(process.cwd(), settingsSources()));
       const detect = keyDetector(keys.orgs);
       const wantKeys = (keys.projects?.length ?? 0) > 0 || !!keys.ado;
-      const log = gitLog(root, { ...(since ? { since } : {}), max, ...(wantKeys ? { keyRefs: (n: string) => detect(n, 'branch', keys).length > 0 } : {}) });
+      const log = gitLog(root, {
+        ...(since ? { since } : {}),
+        max,
+        ...(wantKeys ? { keyRefs: (n: string) => detect(n, 'branch', keys).length > 0 } : {}),
+      });
       const written = log.available
-        ? db.writeCommits(repo, wantKeys ? commitInputsOf(log.commits, { opts: keys, detect }) : commitInputs(log.commits))
+        ? db.writeCommits(
+            repo,
+            wantKeys ? commitInputsOf(log.commits, { opts: keys, detect }) : commitInputs(log.commits),
+          )
         : undefined;
       if (written && wantKeys && store) resolveCommitNodes(db, store, { name: repo, dir: root });
       // the spine is folded over what the *database* knows, which a bounded read
@@ -786,9 +1012,17 @@ switch (command) {
         repo,
         root,
         git: log.available
-          ? { available: true, read: log.commits.length, truncated: log.truncated, max: log.max, ...(since ? { since } : {}) }
+          ? {
+              available: true,
+              read: log.commits.length,
+              truncated: log.truncated,
+              max: log.max,
+              ...(since ? { since } : {}),
+            }
           : { available: false, reason: log.reason, ...(log.detail ? { detail: log.detail } : {}) },
-        head: head.available ? { sha: head.sha, ...(head.ref ? { ref: head.ref } : {}), detached: head.detached } : null,
+        head: head.available
+          ? { sha: head.sha, ...(head.ref ? { ref: head.ref } : {}), detached: head.detached }
+          : null,
         // null, never false: a shallow check that could not run has not said "not shallow"
         shallow: shallow.available ? shallow.shallow : null,
         written: written ?? null,
@@ -836,14 +1070,17 @@ switch (command) {
           commits: r.commits.map((c) => c.sha),
         })),
         releases: declared,
-        ...(agents ? {
-          agents: {
-            n: agents.n, of: agents.of,
-            byAgent: Object.fromEntries((agents.breakdown ?? []).map((p) => [p.label, p.n])),
-            // no session link is read or printed: the map of commits to sessions is the owner's
-            commits: agentRows.map((c) => ({ sha: c.sha, at: c.at, agent: c.agent, subject: c.subject })),
-          },
-        } : {}),
+        ...(agents
+          ? {
+              agents: {
+                n: agents.n,
+                of: agents.of,
+                byAgent: Object.fromEntries((agents.breakdown ?? []).map((p) => [p.label, p.n])),
+                // no session link is read or printed: the map of commits to sessions is the owner's
+                commits: agentRows.map((c) => ({ sha: c.sha, at: c.at, agent: c.agent, subject: c.subject })),
+              },
+            }
+          : {}),
         ...(tags
           ? {
               tags: tags.available
@@ -876,7 +1113,9 @@ switch (command) {
         console.log(`  ${GIT_ABSENT_WORD[log.reason]}${log.detail ? ` — git said: ${log.detail}` : ''}`);
         console.log('  the snapshot spine below is unchanged; every commit it cannot name reads "not indexed"');
       } else {
-        console.log(`  read ${num(log.commits.length)} commit${log.commits.length === 1 ? '' : 's'}${since ? ` since ${since}` : ''} · ${num(written!.files)} file changes · ${num(spine.commits)} in the history for this source`);
+        console.log(
+          `  read ${num(log.commits.length)} commit${log.commits.length === 1 ? '' : 's'}${since ? ` since ${since}` : ''} · ${num(written!.files)} file changes · ${num(spine.commits)} in the history for this source`,
+        );
       }
       // every sentence about the spine comes from one fold, shared with /api/history
       // (core `spineSentences`), so the command and the endpoint cannot word the
@@ -884,11 +1123,15 @@ switch (command) {
       // containing commits no sync ingested says so before any row is drawn, or a
       // row is read as a complete account of what happened.
       const said = spineSentences(spine);
-      const say = (x?: { level: 'note' | 'warn'; text: string }) => { if (x) console.log(`  ${x.level === 'warn' ? '⚠ ' : ''}${x.text}`); };
+      const say = (x?: { level: 'note' | 'warn'; text: string }) => {
+        if (x) console.log(`  ${x.level === 'warn' ? '⚠ ' : ''}${x.text}`);
+      };
       say(said.historyUnread);
       say(said.unindexed);
       if (log.available && log.truncated) {
-        console.log(`  ⚠ --max ${num(log.max)} bounded the walk — older commits exist in the repository and were not read, so the ancestry below is partial`);
+        console.log(
+          `  ⚠ --max ${num(log.max)} bounded the walk — older commits exist in the repository and were not read, so the ancestry below is partial`,
+        );
       }
       if (shallow.available && shallow.shallow) {
         const oldest = log.available ? log.commits[log.commits.length - 1]?.sha : undefined;
@@ -926,9 +1169,15 @@ switch (command) {
       }
       if (agents) {
         console.log('');
-        console.log(`  ${countedText(agents, { scope: false })}${agents.breakdown?.length ? ` — ${breakdownText(agents)}` : ''}`);
-        if (!spine.historyRead) console.log('  no history read for this source yet — run farsight history without --agents first');
-        for (const c of agentRows.slice(0, 50)) console.log(`    ${c.sha.slice(0, 7)}  ${c.at.slice(0, 10)}  ${word('history.agentMade', 'professional').replace('{name}', c.agent ?? '')}  ${c.subject.slice(0, 60)}`);
+        console.log(
+          `  ${countedText(agents, { scope: false })}${agents.breakdown?.length ? ` — ${breakdownText(agents)}` : ''}`,
+        );
+        if (!spine.historyRead)
+          console.log('  no history read for this source yet — run farsight history without --agents first');
+        for (const c of agentRows.slice(0, 50))
+          console.log(
+            `    ${c.sha.slice(0, 7)}  ${c.at.slice(0, 10)}  ${word('history.agentMade', 'professional').replace('{name}', c.agent ?? '')}  ${c.subject.slice(0, 60)}`,
+          );
         if (agentRows.length > 50) console.log(`    +${num(agentRows.length - 50)} more — --json lists them all`);
       }
       if (tags) {
@@ -941,17 +1190,27 @@ switch (command) {
         if (!tags.available) {
           console.log(`  tags: ${GIT_ABSENT_WORD[tags.reason]}${tags.detail ? ` — git said: ${tags.detail}` : ''}`);
         } else if (!tags.tags.length) {
-          console.log('  no tags in this repository — nothing to propose; a release is declared, so a repository without tags is not a repository without releases');
+          console.log(
+            '  no tags in this repository — nothing to propose; a release is declared, so a repository without tags is not a repository without releases',
+          );
         } else {
           const schemes = new Map<string, number>();
           for (const t of tags.tags) schemes.set(t.scheme, (schemes.get(t.scheme) ?? 0) + 1);
           const spelling = [...schemes].map(([s, n]) => `${s} ${n}`).join(' · ');
-          console.log(`  ${num(tags.tags.length)} tag${tags.tags.length === 1 ? '' : 's'} found in ${schemes.size} naming scheme${schemes.size === 1 ? '' : 's'} (${spelling}) — proposed, not releases:`);
-          console.log('    a release is declared, never discovered. Accept one by adding it to .farsight/settings.json:');
-          console.log(`    "releases": [{ "name": "${tags.tags[0]!.name}", "tag": "${tags.tags[0]!.name}", "repo": "${repo}" }]`);
+          console.log(
+            `  ${num(tags.tags.length)} tag${tags.tags.length === 1 ? '' : 's'} found in ${schemes.size} naming scheme${schemes.size === 1 ? '' : 's'} (${spelling}) — proposed, not releases:`,
+          );
+          console.log(
+            '    a release is declared, never discovered. Accept one by adding it to .farsight/settings.json:',
+          );
+          console.log(
+            `    "releases": [{ "name": "${tags.tags[0]!.name}", "tag": "${tags.tags[0]!.name}", "repo": "${repo}" }]`,
+          );
           for (const t of tags.tags.slice(0, 50)) {
             const when = t.at ? new Date(t.at * 1000).toISOString().slice(0, 10) : 'unknown date';
-            console.log(`    ${t.name.padEnd(18)}  ${t.sha.slice(0, 7)}  ${when}  ${(t.annotated ? 'annotated' : 'lightweight').padEnd(11)}  ${t.scheme}`);
+            console.log(
+              `    ${t.name.padEnd(18)}  ${t.sha.slice(0, 7)}  ${when}  ${(t.annotated ? 'annotated' : 'lightweight').padEnd(11)}  ${t.scheme}`,
+            );
           }
           if (tags.tags.length > 50) console.log(`    +${num(tags.tags.length - 50)} more`);
         }
@@ -960,12 +1219,21 @@ switch (command) {
     }
     db.close();
     if (asJson) {
-      console.log(JSON.stringify({ generatedAt: new Date().toISOString(), max, ...(since ? { since } : {}), repos: docs }, null, 2));
+      console.log(
+        JSON.stringify(
+          { generatedAt: new Date().toISOString(), max, ...(since ? { since } : {}), repos: docs },
+          null,
+          2,
+        ),
+      );
     }
     break;
   }
   case 'diff': {
-    if (flag('storyline')) { runStorylineDiff(flag('storyline')!); break; }
+    if (flag('storyline')) {
+      runStorylineDiff(flag('storyline')!);
+      break;
+    }
     const { base, head, db } = loadDiffEnds();
     const diff = diffGraphs(base.store, head.store, {
       changes: db.changedBetween(base.ref.sync, head.ref.sync),
@@ -975,8 +1243,14 @@ switch (command) {
     // document is byte for byte what the command has emitted since July (§2, H4)
     const graphFile = resolve(flag('graph', 'graph.json')!);
     const attributed = rest.includes('--attribute')
-      // the graph on disk, for its `roots`: the two snapshots carry none (snapshots.ts:272)
-      ? attributeDiff(diff, db, existsSync(graphFile) ? GraphStore.load(graphFile) : undefined, base.ref.sync, head.ref.sync)
+      ? // the graph on disk, for its `roots`: the two snapshots carry none (snapshots.ts:272)
+        attributeDiff(
+          diff,
+          db,
+          existsSync(graphFile) ? GraphStore.load(graphFile) : undefined,
+          base.ref.sync,
+          head.ref.sync,
+        )
       : diff;
     console.log(renderDiff(attributed, flag('format', 'json')!));
     break;
@@ -1001,14 +1275,19 @@ switch (command) {
       console.log(`gate ${gate.result.toUpperCase()} — ${diff.base} → ${diff.head} (${gate.policy})`);
       for (const r of gate.rules) {
         const mark = r.result === 'fail' ? '✗' : r.result === 'warn' ? '⚠' : '✓';
-        console.log(`  ${mark} ${r.rule}: ${r.result}${r.changes.length ? ` — ${r.changes.length} change${r.changes.length === 1 ? '' : 's'}` : ''}`);
+        console.log(
+          `  ${mark} ${r.rule}: ${r.result}${r.changes.length ? ` — ${r.changes.length} change${r.changes.length === 1 ? '' : 's'}` : ''}`,
+        );
         for (const id of r.changes) {
           const change = diff.changes.find((c) => c.id === id)!;
-          console.log(`      ${id}: ${changeSentence(change)}${change.loc ? ` (${change.loc.path}:${change.loc.line})` : ''}`);
+          console.log(
+            `      ${id}: ${changeSentence(change)}${change.loc ? ` (${change.loc.path}:${change.loc.line})` : ''}`,
+          );
         }
       }
     }
     process.exit(gate.exit);
+    break;
   }
   case 'api': {
     const sub = positional[0];
@@ -1020,13 +1299,22 @@ switch (command) {
     setFreshnessMeta(index, store.meta);
     if (sub === 'list' || !sub) {
       const apis = apiSurface(index);
-      if (!apis.length) { console.log('no HTTP routes in the graph — nothing to list'); break; }
-      console.log('  API                                       REPO             OPS  DECL  IMPL  NOT-IMPL  UNDOC  CONSUMERS  DRIFT  SOURCE');
+      if (!apis.length) {
+        console.log('no HTTP routes in the graph — nothing to list');
+        break;
+      }
+      console.log(
+        '  API                                       REPO             OPS  DECL  IMPL  NOT-IMPL  UNDOC  CONSUMERS  DRIFT  SOURCE',
+      );
       for (const a of apis) {
         const c = a.counts;
-        console.log(`  ${a.name.slice(0, 40).padEnd(40)}  ${a.repo.slice(0, 15).padEnd(15)}  ${String(c.operations).padStart(3)}  ${String(c.declared).padStart(4)}  ${String(c.implemented).padStart(4)}  ${String(c.notImplemented).padStart(8)}  ${String(c.undocumented).padStart(5)}  ${String(c.consumers).padStart(9)}  ${String(c.drift).padStart(5)}  ${a.kind === 'spec' ? a.specPath : '(implied from code — no spec on file)'}${a.specSource ? '  [spec-only source]' : ''}`);
+        console.log(
+          `  ${a.name.slice(0, 40).padEnd(40)}  ${a.repo.slice(0, 15).padEnd(15)}  ${String(c.operations).padStart(3)}  ${String(c.declared).padStart(4)}  ${String(c.implemented).padStart(4)}  ${String(c.notImplemented).padStart(8)}  ${String(c.undocumented).padStart(5)}  ${String(c.consumers).padStart(9)}  ${String(c.drift).padStart(5)}  ${a.kind === 'spec' ? a.specPath : '(implied from code — no spec on file)'}${a.specSource ? '  [spec-only source]' : ''}`,
+        );
       }
-      console.log('\n  ops = routes on this surface · decl = named in the spec · impl = with source · not-impl = in the spec, not the code (not a gap for a spec-only source) · undoc = in the code, not the spec');
+      console.log(
+        '\n  ops = routes on this surface · decl = named in the spec · impl = with source · not-impl = in the spec, not the code (not a gap for a spec-only source) · undoc = in the code, not the spec',
+      );
       break;
     }
     if (sub === 'spec') {
@@ -1037,8 +1325,10 @@ switch (command) {
       const format = flag('format', flag('out')?.endsWith('.json') ? 'json' : 'yaml');
       const text = format === 'json' ? JSON.stringify(doc, null, 2) + '\n' : specToYaml(doc);
       const out = flag('out');
-      if (out) { writeFileSync(resolve(out), text); console.error(`wrote ${Object.keys(doc.paths!).length} path(s) → ${out}`); }
-      else process.stdout.write(text);
+      if (out) {
+        writeFileSync(resolve(out), text);
+        console.error(`wrote ${Object.keys(doc.paths!).length} path(s) → ${out}`);
+      } else process.stdout.write(text);
       break;
     }
     if (sub === 'diff') {
@@ -1046,22 +1336,53 @@ switch (command) {
       if (!specRef) fail('api diff needs --spec <path|url>');
       const parsed = await readSpecSource(specRef);
       const repo = flag('repo');
-      const policyRoot = repo && store.roots[repo] ? store.roots[repo]! : repo && workspaceSource(repo) ? resolve(workspaceSource(repo)!.path) : process.cwd();
+      const policyRoot =
+        repo && store.roots[repo]
+          ? store.roots[repo]!
+          : repo && workspaceSource(repo)
+            ? resolve(workspaceSource(repo)!.path)
+            : process.cwd();
       const config = loadConfig(resolve(policyRoot, 'farsight.config.json'));
-      const policy = config?.openapi?.find((entry) => entry.url === specRef || (entry.path && existsSync(resolve(policyRoot, entry.path)) && !isSpecUrl(specRef) && realpathSync(resolve(policyRoot, entry.path)) === realpathSync(resolve(specRef))));
+      const policy = config?.openapi?.find(
+        (entry) =>
+          entry.url === specRef ||
+          (entry.path &&
+            existsSync(resolve(policyRoot, entry.path)) &&
+            !isSpecUrl(specRef) &&
+            realpathSync(resolve(policyRoot, entry.path)) === realpathSync(resolve(specRef))),
+      );
       const strictArg = rest.find((arg) => arg === '--strict' || arg.startsWith('--strict='));
-      const categories = strictArg === '--strict' ? ['missing', 'undocumented', 'notes'] : strictArg?.slice('--strict='.length).split(',');
-      if (categories && (new Set(categories).size !== categories.length || categories.some((kind) => !['missing', 'undocumented', 'notes'].includes(kind)))) fail(word('api.policy.strictError', 'professional'));
-      const result = reconcile(parsed.doc, index, { repo: repo ?? 'proposed', path: specRef, lineOf: parsed.lineOf }, {
-        ...(repo ? { repo } : {}), phase: flag('phase') ?? policy?.phase,
-        phaseOrder: policy?.phaseOrder, internalRoutes: config?.internalRoutes, guardNames: config?.guards, validators: config?.validators,
-      });
+      const categories =
+        strictArg === '--strict'
+          ? ['missing', 'undocumented', 'notes']
+          : strictArg?.slice('--strict='.length).split(',');
+      if (
+        categories &&
+        (new Set(categories).size !== categories.length ||
+          categories.some((kind) => !['missing', 'undocumented', 'notes'].includes(kind)))
+      )
+        fail(word('api.policy.strictError', 'professional'));
+      const result = reconcile(
+        parsed.doc,
+        index,
+        { repo: repo ?? 'proposed', path: specRef, lineOf: parsed.lineOf },
+        {
+          ...(repo ? { repo } : {}),
+          phase: flag('phase') ?? policy?.phase,
+          phaseOrder: policy?.phaseOrder,
+          internalRoutes: config?.internalRoutes,
+          guardNames: config?.guards,
+          validators: config?.validators,
+        },
+      );
       if (flag('format', 'md') === 'json') console.log(JSON.stringify(result, null, 2));
       else console.log(driftMarkdown(result));
-      if (categories?.some((kind) => result.policy.counts[kind as 'missing' | 'undocumented' | 'notes'] > 0)) process.exit(1);
+      if (categories?.some((kind) => result.policy.counts[kind as 'missing' | 'undocumented' | 'notes'] > 0))
+        process.exit(1);
       break;
     }
     fail(`unknown api subcommand: ${sub} (list | spec | diff)`);
+    break;
   }
   case 'deps': {
     // packages as nodes (docs/proposals/dependencies-and-nx.md §2.1, §2.3): the same folds
@@ -1077,56 +1398,113 @@ switch (command) {
     const repo = flag('repo');
     const hopsArg = flag('hops');
     const hops = hopsArg != null ? Number(hopsArg) : undefined;
-    if (hops != null && !(Number.isInteger(hops) && hops >= 1 && hops <= IMPACT_MAX_HOPS)) fail(`--hops must be a whole number from 1 to ${IMPACT_MAX_HOPS}`);
+    if (hops != null && !(Number.isInteger(hops) && hops >= 1 && hops <= IMPACT_MAX_HOPS))
+      fail(`--hops must be a whole number from 1 to ${IMPACT_MAX_HOPS}`);
     const json = rest.includes('--json');
-    const header = { format: 'farsight-deps', version: 0, frozen: false, note: 'not a frozen contract yet: fields may change' };
+    const header = {
+      format: 'farsight-deps',
+      version: 0,
+      frozen: false,
+      note: 'not a frozen contract yet: fields may change',
+    };
     if (!nodes.some((n) => n.kind === 'package')) {
-      const msg = 'no package nodes in this graph — it was written before imports were read as packages, or the code imports none; re-ingest to see them';
-      if (json) { console.log(JSON.stringify({ ...header, rows: [], note: msg }, null, 2)); break; }
+      const msg =
+        'no package nodes in this graph — it was written before imports were read as packages, or the code imports none; re-ingest to see them';
+      if (json) {
+        console.log(JSON.stringify({ ...header, rows: [], note: msg }, null, 2));
+        break;
+      }
       console.log(msg);
       break;
     }
     if (sub === 'list') {
-      const scope = rest.includes('--third-party') ? 'third-party' as const : rest.includes('--workspace') ? 'workspace' as const : undefined;
-      const list = packagesOf(index, { ...(repo ? { repo } : {}), ...(flag('project') ? { project: flag('project') } : {}), ...(scope ? { scope } : {}), ...(hops != null ? { hops } : {}) });
-      if (json) { console.log(JSON.stringify({ ...header, ...list, meta: store.meta.packages ?? {} }, null, 2)); break; }
-      if (!list.rows.length) { console.log('no package matches those filters'); break; }
+      const scope = rest.includes('--third-party')
+        ? ('third-party' as const)
+        : rest.includes('--workspace')
+          ? ('workspace' as const)
+          : undefined;
+      const list = packagesOf(index, {
+        ...(repo ? { repo } : {}),
+        ...(flag('project') ? { project: flag('project') } : {}),
+        ...(scope ? { scope } : {}),
+        ...(hops != null ? { hops } : {}),
+      });
+      if (json) {
+        console.log(JSON.stringify({ ...header, ...list, meta: store.meta.packages ?? {} }, null, 2));
+        break;
+      }
+      if (!list.rows.length) {
+        console.log('no package matches those filters');
+        break;
+      }
       console.log(`${countedText(list.packages)} (${breakdownText(list.packages)})\n`);
-      console.log('  PACKAGE                                  SOURCE           SCOPE        RANGE          FILES  JOURNEYS');
+      console.log(
+        '  PACKAGE                                  SOURCE           SCOPE        RANGE          FILES  JOURNEYS',
+      );
       for (const r of list.rows) {
         const range = r.version ?? (r.scope === 'workspace' ? '(alias)' : '(undeclared)');
-        console.log(`  ${r.name.slice(0, 40).padEnd(40)} ${r.repo.slice(0, 15).padEnd(15)}  ${r.scope.padEnd(11)}  ${(range + (r.dev ? ' dev' : '')).slice(0, 13).padEnd(13)}  ${String(r.importers.n).padStart(5)}  ${String(r.journeys.n).padStart(8)}`);
-        if (new Set(r.versions.map((v) => v.range)).size > 1) console.log(`      ranges: ${r.versions.map((v) => `${v.where} ${v.range}`).join(' · ')}`);
+        console.log(
+          `  ${r.name.slice(0, 40).padEnd(40)} ${r.repo.slice(0, 15).padEnd(15)}  ${r.scope.padEnd(11)}  ${(range + (r.dev ? ' dev' : '')).slice(0, 13).padEnd(13)}  ${String(r.importers.n).padStart(5)}  ${String(r.journeys.n).padStart(8)}`,
+        );
+        if (new Set(r.versions.map((v) => v.range)).size > 1)
+          console.log(`      ranges: ${r.versions.map((v) => `${v.where} ${v.range}`).join(' · ')}`);
         if (r.note) console.log(`      ⚠ ${r.note}`);
       }
-      const builtins = Object.entries(store.meta.packages ?? {}).filter(([rp]) => !repo || rp === repo)
-        .flatMap(([rp, m]) => (m.builtins ?? []).map((b) => `${b.spec}${Object.keys(store.meta.packages ?? {}).length > 1 ? ` (${rp})` : ''}`));
-      console.log(`\n  files = source files that import it (test and story files are not read) · journeys = journeys whose path passes through code that uses it, within ${hops ?? 2} uses — a floor`);
-      if (builtins.length) console.log(`  the runtime's own modules, never counted as packages: ${builtins.join(', ')}`);
+      const builtins = Object.entries(store.meta.packages ?? {})
+        .filter(([rp]) => !repo || rp === repo)
+        .flatMap(([rp, m]) =>
+          (m.builtins ?? []).map(
+            (b) => `${b.spec}${Object.keys(store.meta.packages ?? {}).length > 1 ? ` (${rp})` : ''}`,
+          ),
+        );
+      console.log(
+        `\n  files = source files that import it (test and story files are not read) · journeys = journeys whose path passes through code that uses it, within ${hops ?? 2} uses — a floor`,
+      );
+      if (builtins.length)
+        console.log(`  the runtime's own modules, never counted as packages: ${builtins.join(', ')}`);
       break;
     }
     if (sub === 'where') {
       const ref = positional[1];
       if (!ref) fail('deps where needs a package name or id (see `farsight deps list`)');
       const found = resolvePackage(index, ref, repo);
-      if (!found.hit) fail(found.candidates.length ? `${found.candidates.length} sources import a package named ${ref} — pass its id or --repo: ${found.candidates.join(', ')}` : `no package ${ref} in this graph (see \`farsight deps list\`)`);
+      if (!found.hit)
+        fail(
+          found.candidates.length
+            ? `${found.candidates.length} sources import a package named ${ref} — pass its id or --repo: ${found.candidates.join(', ')}`
+            : `no package ${ref} in this graph (see \`farsight deps list\`)`,
+        );
       const where = importersOf(index, found.hit.id, hops != null ? { hops } : {})!;
-      if (json) { console.log(JSON.stringify({ ...header, ...where }, null, 2)); break; }
+      if (json) {
+        console.log(JSON.stringify({ ...header, ...where }, null, 2));
+        break;
+      }
       const r = where.package;
-      console.log(`${r.name} · ${r.scope}${r.version ? ` · ${r.version}` : ''}${r.project ? ` · project ${r.project}` : ''} · ${r.repo}`);
-      console.log(`${countedText(where.importers)} · ${countedText(r.journeys, { scope: false })}${r.journeyRefs.length ? ` — ${r.journeyRefs.map((j) => j.name).join(', ')}` : ''}`);
-      for (const v of r.versions) console.log(`  declared ${v.range} in ${v.declaredIn} (${v.field}${v.where ? ` · ${v.where}` : ''})`);
+      console.log(
+        `${r.name} · ${r.scope}${r.version ? ` · ${r.version}` : ''}${r.project ? ` · project ${r.project}` : ''} · ${r.repo}`,
+      );
+      console.log(
+        `${countedText(where.importers)} · ${countedText(r.journeys, { scope: false })}${r.journeyRefs.length ? ` — ${r.journeyRefs.map((j) => j.name).join(', ')}` : ''}`,
+      );
+      for (const v of r.versions)
+        console.log(`  declared ${v.range} in ${v.declaredIn} (${v.field}${v.where ? ` · ${v.where}` : ''})`);
       if (r.note) console.log(`  ⚠ ${r.note}`);
       for (const g of where.groups) {
-        console.log(`\n  ${g.by === 'project' ? 'project' : 'source'} ${g.key} — ${countedText(g.count, { scope: false })}`);
+        console.log(
+          `\n  ${g.by === 'project' ? 'project' : 'source'} ${g.key} — ${countedText(g.count, { scope: false })}`,
+        );
         for (const i of g.importers) {
-          console.log(`    ${i.path}:${i.line}  ${i.specifier}${i.typeOnly ? '  (type only)' : ''}${i.form && i.form !== 'import' ? `  (${i.form})` : ''}`);
-          for (const u of i.users) console.log(`      used by ${u.name} (${u.kind})${u.line != null ? ` at line ${u.line}` : ''}`);
+          console.log(
+            `    ${i.path}:${i.line}  ${i.specifier}${i.typeOnly ? '  (type only)' : ''}${i.form && i.form !== 'import' ? `  (${i.form})` : ''}`,
+          );
+          for (const u of i.users)
+            console.log(`      used by ${u.name} (${u.kind})${u.line != null ? ` at line ${u.line}` : ''}`);
         }
       }
       break;
     }
     fail(`unknown deps subcommand: ${sub} (list | where)`);
+    break;
   }
   case 'config': {
     // every farsight.config.json per source, as ingest recorded them on meta.config — the same
@@ -1139,7 +1517,9 @@ switch (command) {
     const repo = flag('repo');
     const metas = store.meta.config ?? {};
     if (rest.includes('--json')) {
-      console.log(JSON.stringify(Object.fromEntries(Object.entries(metas).filter(([r]) => !repo || r === repo)), null, 2));
+      console.log(
+        JSON.stringify(Object.fromEntries(Object.entries(metas).filter(([r]) => !repo || r === repo)), null, 2),
+      );
       break;
     }
     console.log(configFilesText(metas, repo).join('\n'));
@@ -1160,10 +1540,14 @@ switch (command) {
     // so the two disagree exactly when files have been added or removed since that ingest
     const files = store?.repoMeta(repo)?.files;
     if (rest.includes('--json')) {
-      console.log(JSON.stringify({ repo, root, sourceDigest: digest, files: files ?? null, exclude: exclude ?? [] }, null, 2));
+      console.log(
+        JSON.stringify({ repo, root, sourceDigest: digest, files: files ?? null, exclude: exclude ?? [] }, null, 2),
+      );
     } else {
       // the digest alone on stdout, so `--stamp "$(farsight digest --repo r)"` works
-      console.error(`${repo} · ${root}${exclude ? ` · excludes ${exclude.join(', ')}` : ''}${files != null ? ` · ${files} files at last ingest` : ''}`);
+      console.error(
+        `${repo} · ${root}${exclude ? ` · excludes ${exclude.join(', ')}` : ''}${files != null ? ` · ${files} files at last ingest` : ''}`,
+      );
       console.log(digest);
     }
     break;
@@ -1190,24 +1574,34 @@ switch (command) {
     const VALUED = new Set(['hops', 'direction', 'graph', 'format', 'cap', 'repo']);
     for (let i = 0; i < rest.length; i++) {
       const tok = rest[i]!;
-      if (!tok.startsWith('--')) { free.push(tok); continue; }
+      if (!tok.startsWith('--')) {
+        free.push(tok);
+        continue;
+      }
       const name = tok.slice(2);
-      if (name === 'changed') { while (i + 1 < rest.length && !rest[i + 1]!.startsWith('--')) changed.push(rest[++i]!); continue; }
+      if (name === 'changed') {
+        while (i + 1 < rest.length && !rest[i + 1]!.startsWith('--')) changed.push(rest[++i]!);
+        continue;
+      }
       if (VALUED.has(name)) i++;
     }
 
     const hops = Number(flag('hops', '2'));
     if (!Number.isInteger(hops) || hops < 1 || hops > IMPACT_MAX_HOPS) {
-      fail(`--hops takes a whole number from 1 to ${IMPACT_MAX_HOPS} (got "${flag('hops', '2')}") — past ${IMPACT_MAX_HOPS} hops, "reaches it through others" describes the application rather than a dependency`);
+      fail(
+        `--hops takes a whole number from 1 to ${IMPACT_MAX_HOPS} (got "${flag('hops', '2')}") — past ${IMPACT_MAX_HOPS} hops, "reaches it through others" describes the application rather than a dependency`,
+      );
     }
     const direction = flag('direction', 'upstream')!;
-    if (direction !== 'upstream' && direction !== 'downstream') fail(`--direction takes upstream or downstream (got "${direction}")`);
+    if (direction !== 'upstream' && direction !== 'downstream')
+      fail(`--direction takes upstream or downstream (got "${direction}")`);
     const wantTests = rest.includes('--tests');
     const format = rest.includes('--json') ? 'json' : flag('format', 'text')!;
     if (format !== 'text' && format !== 'json') fail(`--format takes text or json (got "${format}")`);
     const capArg = flag('cap');
     const opts = {
-      hops, direction,
+      hops,
+      direction,
       ...(capArg ? { perHopCap: Number(capArg) } : {}),
       ...(rest.includes('--include-setup') ? { includeSetup: true } : {}),
       ...(rest.includes('--include-deferred') ? { includeDeferred: true } : {}),
@@ -1254,7 +1648,9 @@ switch (command) {
         const root = store.roots[repo] ?? (source ? resolve(source.path) : undefined);
         if (!root || !existsSync(root)) return undefined;
         return repoContentDigest(root, source?.exclude?.length ? { exclude: source.exclude } : {}) === recorded;
-      } catch { return undefined; }
+      } catch {
+        return undefined;
+      }
     };
     const digestByRepo = new Map<string, boolean | undefined>();
     const asOfFor = (repo: string) => {
@@ -1283,12 +1679,22 @@ switch (command) {
           generated_at: new Date().toISOString(),
         };
         const stale = [...digestByRepo.values()].some((v) => v === false);
-        console.log(JSON.stringify(impactTestsV1(
-          index,
-          reports.map(({ seed, report }) => ({ report, from: seed.from, ...(seed.hunk ? { hunk: seed.hunk } : {}) })),
-          identity,
-          stale ? { digestMatches: false } : {},
-        ), null, 2));
+        console.log(
+          JSON.stringify(
+            impactTestsV1(
+              index,
+              reports.map(({ seed, report }) => ({
+                report,
+                from: seed.from,
+                ...(seed.hunk ? { hunk: seed.hunk } : {}),
+              })),
+              identity,
+              stale ? { digestMatches: false } : {},
+            ),
+            null,
+            2,
+          ),
+        );
         break;
       }
       // the bare report: one seed prints the object, several print the array
@@ -1303,7 +1709,10 @@ switch (command) {
     const clip = (s: string, n: number): string => (s.length <= n ? s.padEnd(n) : `${s.slice(0, n - 1)}…`);
     const clipPath = (s: string, n: number): string => (s.length <= n ? s.padEnd(n) : `…${s.slice(-(n - 1))}`);
     const byKindWords = (m: Record<string, number>): string =>
-      Object.entries(m).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([k, n]) => `${n} ${k}`).join(' · ');
+      Object.entries(m)
+        .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+        .map(([k, n]) => `${n} ${k}`)
+        .join(' · ');
 
     /** The edge's own provenance, then the path's silences. Never a single ladder (§10.2). */
     const howWeKnow = (n: ImpactNode): string => {
@@ -1311,7 +1720,10 @@ switch (command) {
       const head = r ? `${r.technique} ${r.confidence}` : 'not recorded';
       const rest: string[] = [];
       if (n.hop > 1 && n.strength.unstamped) rest.push(`${n.strength.unstamped} on this path record nothing`);
-      if (n.oneOf) rest.push(`one of several — the code chooses ${n.oneOf.chosen} at run time and sets aside ${n.oneOf.alternatives.length}`);
+      if (n.oneOf)
+        rest.push(
+          `one of several — the code chooses ${n.oneOf.chosen} at run time and sets aside ${n.oneOf.alternatives.length}`,
+        );
       if (n.shared) rest.push('shared — listed, not opened');
       if (n.declaredOnly) rest.push('not built');
       return [head, ...rest].join(' · ');
@@ -1322,47 +1734,72 @@ switch (command) {
       console.log(`${s.name} — ${s.id}${hunk ? ` · changed in ${hunk}` : ''}`);
 
       // one clause per distance, never a sum: the type carries no total and neither does this
-      const clauses = report.hops.map((h) => h.hop === 1
-        ? `${h.found} ${report.direction === 'upstream' ? 'use it directly' : 'it uses directly'}`
-        : h.hop === 2 ? `${h.found} more reach it through those`
-        : `${h.found} more at ${h.hop} hops`);
-      console.log(clauses.length
-        ? `  ${clauses.join(' · ')} — read one at a time; they are never added together`
-        : `  none indexed — nothing in this graph ${report.direction === 'upstream' ? 'uses it' : 'it uses'}`);
-      console.log(report.bound === 'floor'
-        ? `  ≥ a floor: ${report.uncertainty?.note ?? 'something about this answer is incomplete'}`
-        : '  exact: nothing was cut, every path records how it was resolved, and the graph still matches the checkout');
+      const clauses = report.hops.map((h) =>
+        h.hop === 1
+          ? `${h.found} ${report.direction === 'upstream' ? 'use it directly' : 'it uses directly'}`
+          : h.hop === 2
+            ? `${h.found} more reach it through those`
+            : `${h.found} more at ${h.hop} hops`,
+      );
+      console.log(
+        clauses.length
+          ? `  ${clauses.join(' · ')} — read one at a time; they are never added together`
+          : `  none indexed — nothing in this graph ${report.direction === 'upstream' ? 'uses it' : 'it uses'}`,
+      );
+      console.log(
+        report.bound === 'floor'
+          ? `  ≥ a floor: ${report.uncertainty?.note ?? 'something about this answer is incomplete'}`
+          : '  exact: nothing was cut, every path records how it was resolved, and the graph still matches the checkout',
+      );
       const dm = digestByRepo.get(s.repo);
-      console.log(`  as of ${report.asOf.sync != null ? `sync ${report.asOf.sync}` : 'an unnumbered sync'}${report.asOf.commit ? ` · ${report.asOf.commit.slice(0, 7)}` : ''}`
-        + `${dm === true ? ' · the checkout still matches this graph' : dm === false ? ' · ⚠ the checkout no longer matches this graph' : ' · whether the checkout still matches is unknown'}`);
+      console.log(
+        `  as of ${report.asOf.sync != null ? `sync ${report.asOf.sync}` : 'an unnumbered sync'}${report.asOf.commit ? ` · ${report.asOf.commit.slice(0, 7)}` : ''}` +
+          `${dm === true ? ' · the checkout still matches this graph' : dm === false ? ' · ⚠ the checkout no longer matches this graph' : ' · whether the checkout still matches is unknown'}`,
+      );
 
       for (const h of report.hops) {
-        const head = h.hop === 1 ? 'uses it directly' : h.hop === 2 ? 'reaches it through those' : `reaches it through ${h.hop - 1} others`;
+        const head =
+          h.hop === 1
+            ? 'uses it directly'
+            : h.hop === 2
+              ? 'reaches it through those'
+              : `reaches it through ${h.hop - 1} others`;
         console.log(`\n  hop ${h.hop} — ${head} (${h.found}: ${byKindWords(h.byKind)})`);
         console.log(`    EDGE       ${'DEPENDENT'.padEnd(46)}  ${'WHERE'.padEnd(42)}  HOW WE KNOW`);
         for (const n of h.nodes) {
-          console.log(`    ${n.via.kind.padEnd(9)}  ${clip(n.name, 46)}  ${clipPath(place(n.via.loc ?? n.loc), 42)}  ${howWeKnow(n)}`);
+          console.log(
+            `    ${n.via.kind.padEnd(9)}  ${clip(n.name, 46)}  ${clipPath(place(n.via.loc ?? n.loc), 42)}  ${howWeKnow(n)}`,
+          );
         }
         // found · listed · behind are three numbers: a capped hop says all three rather
         // than shortening the list and letting the header's count look like the answer
-        if (h.found > h.nodes.length) console.log(`    … ${h.found} found here, ${h.nodes.length} listed — the ${h.found - h.nodes.length} over the cap are counted in this hop's kinds and stand under "not walked"`);
+        if (h.found > h.nodes.length)
+          console.log(
+            `    … ${h.found} found here, ${h.nodes.length} listed — the ${h.found - h.nodes.length} over the cap are counted in this hop's kinds and stand under "not walked"`,
+          );
         if (opts.tests) {
           // the union over hops 1..h, each test once (core `impactTestsReaching`) — the
           // same set the MCP and the viewer print under the same words, so it can only
           // stay level or grow from one distance to the next
           const reach = impactTestsReaching(report, h.hop);
           const label = h.hop === 1 ? 'hop 1' : `hops 1–${h.hop}, each test once`;
-          const per = Object.fromEntries(Object.entries(reach.byEvidence).map(([k, v]) => [EVIDENCE_WORD[k as keyof typeof EVIDENCE_WORD] ?? k, v]));
-          console.log(reach.total
-            ? `    tests reaching ${label}: ${reach.total} — ${byKindWords(per)}`
-            : `    tests reaching ${label}: none indexed`);
+          const per = Object.fromEntries(
+            Object.entries(reach.byEvidence).map(([k, v]) => [EVIDENCE_WORD[k as keyof typeof EVIDENCE_WORD] ?? k, v]),
+          );
+          console.log(
+            reach.total
+              ? `    tests reaching ${label}: ${reach.total} — ${byKindWords(per)}`
+              : `    tests reaching ${label}: none indexed`,
+          );
         }
         if (opts.flows) {
           const flows = new Map(h.nodes.flatMap((n) => n.flows ?? []).map((f) => [f.flowId, f]));
           const actions = h.nodes.flatMap((n) => n.flows ?? []).reduce((a, f) => a + f.actions.length, 0);
-          console.log(flows.size
-            ? `    journeys at hop ${h.hop}: ${flows.size} — ${[...flows.values()].map((f) => f.name).join(' · ')} (${actions} action reference(s))`
-            : `    journeys at hop ${h.hop}: not involved`);
+          console.log(
+            flows.size
+              ? `    journeys at hop ${h.hop}: ${flows.size} — ${[...flows.values()].map((f) => f.name).join(' · ')} (${actions} action reference(s))`
+              : `    journeys at hop ${h.hop}: not involved`,
+          );
         }
       }
 
@@ -1371,22 +1808,34 @@ switch (command) {
       const hopCuts = report.cutPoints.filter((c) => c.reason === 'hops');
       if (hopCuts.length) {
         // one ring past the budget, counted once as a set — a second fold, not an addition
-        const ring = hops < IMPACT_MAX_HOPS
-          ? impactOf(index, s.id, { ...opts, hops: hops + 1, asOf: asOfFor(s.repo) }).hops[hops]?.found ?? 0
-          : null;
-        lines.push(ring != null
-          ? `    ${`past the ${hops}-hop edge`.padEnd(20)} ${ring} more node(s) one hop further out, behind ${hopCuts.length} stop(s)`
-          : `    ${`past the ${hops}-hop edge`.padEnd(20)} ${hopCuts.length} stop(s) — ${IMPACT_MAX_HOPS} hops is as far as this answer goes`);
+        const ring =
+          hops < IMPACT_MAX_HOPS
+            ? (impactOf(index, s.id, { ...opts, hops: hops + 1, asOf: asOfFor(s.repo) }).hops[hops]?.found ?? 0)
+            : null;
+        lines.push(
+          ring != null
+            ? `    ${`past the ${hops}-hop edge`.padEnd(20)} ${ring} more node(s) one hop further out, behind ${hopCuts.length} stop(s)`
+            : `    ${`past the ${hops}-hop edge`.padEnd(20)} ${hopCuts.length} stop(s) — ${IMPACT_MAX_HOPS} hops is as far as this answer goes`,
+        );
       }
       for (const c of report.cutPoints.filter((x) => x.reason === 'shared')) {
-        lines.push(`    ${'shared'.padEnd(20)} ${c.name} — used by ${c.direct}, not opened (${c.behind} node(s) behind it)`);
+        lines.push(
+          `    ${'shared'.padEnd(20)} ${c.name} — used by ${c.direct}, not opened (${c.behind} node(s) behind it)`,
+        );
       }
       for (const c of report.cutPoints.filter((x) => x.reason === 'cap')) {
-        lines.push(`    ${'over the cap'.padEnd(20)} ${c.behind} dependent(s) at hop ${c.hop} were found and not listed`);
+        lines.push(
+          `    ${'over the cap'.padEnd(20)} ${c.behind} dependent(s) at hop ${c.hop} were found and not listed`,
+        );
       }
-      for (const n of report.excluded.setup) lines.push(`    ${'start-up, once'.padEnd(20)} ${n.name} — reached only through container construction`);
-      for (const n of report.excluded.deferred) lines.push(`    ${'afterwards'.padEnd(20)} ${n.name} — registered here, run later by something else`);
-      if (lines.length) { console.log('\n  not walked'); for (const l of lines) console.log(l); }
+      for (const n of report.excluded.setup)
+        lines.push(`    ${'start-up, once'.padEnd(20)} ${n.name} — reached only through container construction`);
+      for (const n of report.excluded.deferred)
+        lines.push(`    ${'afterwards'.padEnd(20)} ${n.name} — registered here, run later by something else`);
+      if (lines.length) {
+        console.log('\n  not walked');
+        for (const l of lines) console.log(l);
+      }
       console.log('');
     };
 
@@ -1416,13 +1865,18 @@ switch (command) {
       // the digest of the tree the run saw is written here. A named digest that is not
       // this checkout's is refused — evidence must never be attached to other code.
       const stamping = rest.includes('--stamp');
-      const named = (() => { const v = flag('stamp'); return v && !v.startsWith('--') ? v : undefined; })();
+      const named = (() => {
+        const v = flag('stamp');
+        return v && !v.startsWith('--') ? v : undefined;
+      })();
       let stamp: string | undefined;
       if (stamping) {
         const actual = repoContentDigest(root, exclude ? { exclude } : {});
         if (named && named !== actual && !rest.includes('--force-stamp')) {
           console.error(`--stamp ${named} is not the content digest of ${root} — that tree is ${actual}.`);
-          console.error('  the reports would be stamped for a checkout this is not. Re-run the tests here, or pass --force-stamp when you know the digest is right.');
+          console.error(
+            '  the reports would be stamped for a checkout this is not. Re-run the tests here, or pass --force-stamp when you know the digest is right.',
+          );
           process.exit(2);
         }
         stamp = named ?? actual;
@@ -1434,7 +1888,9 @@ switch (command) {
       // folded digest is nothing any single checkout can ever equal (A2.2)
       const rm = store.repoMeta(repo);
       const fragment = {
-        repo, nodes, edges,
+        repo,
+        nodes,
+        edges,
         meta: {
           files: rm?.files ?? store.meta.files ?? 0,
           sourceHash: rm?.sourceHash ?? store.meta.sourceHash ?? '',
@@ -1442,7 +1898,12 @@ switch (command) {
         },
       };
       // a glob stays as written (it is matched repo-relative); a real path is made repo-relative
-      const rel = (p: string) => (p.includes('*') ? p : resolve(p).startsWith(resolve(root)) ? resolve(p).slice(resolve(root).length + 1) : resolve(p));
+      const rel = (p: string) =>
+        p.includes('*')
+          ? p
+          : resolve(p).startsWith(resolve(root))
+            ? resolve(p).slice(resolve(root).length + 1)
+            : resolve(p);
       const config = {
         [level]: {
           ...(flag('runner') ? { runner: flag('runner') as 'vitest' } : {}),
@@ -1457,10 +1918,21 @@ switch (command) {
       let seq: number | null = null;
       const addEdge = (from: string, to: string, meta: GraphEdge['meta'], resolution: GraphEdge['resolution']) => {
         if (seq === null) seq = fragment.edges.length;
-        fragment.edges.push({ id: `test-import-e${seq++}`, kind: 'covers', from, to, ...(meta ? { meta } : {}), ...(resolution ? { resolution } : {}) });
+        fragment.edges.push({
+          id: `test-import-e${seq++}`,
+          kind: 'covers',
+          from,
+          to,
+          ...(meta ? { meta } : {}),
+          ...(resolution ? { resolution } : {}),
+        });
         matches.push(String(meta?.match ?? ''));
       };
-      const runImport = () => { matches.length = 0; seq = null; return importReports(fragment, root, config, addEdge, { replace: rest.includes('--replace') }); };
+      const runImport = () => {
+        matches.length = 0;
+        seq = null;
+        return importReports(fragment, root, config, addEdge, { replace: rest.includes('--replace') });
+      };
 
       let imported = runImport();
       const stamped = stamp ? stampReports(root, imported.reports, stamp, repo) : [];
@@ -1481,20 +1953,30 @@ switch (command) {
       // an import speaks only for the level it read: the e2e report that is still
       // missing, and a claim that still resolves to nothing, are facts about this graph
       // that this run did not look at and must not erase
-      const importedPaths = new Set(imported.reports.flatMap((r) => r.path ? [r.path] : []));
-      const aboutThisReport = (r: NonNullable<TestsMeta['reports']>[number]) => imported.reports.some((n) =>
-        n.level === r.level && n.kind === r.kind && (r.path ? n.path === r.path : n.glob === r.glob));
-      const aboutThisLevel = (g: NonNullable<TestsMeta['gaps']>[number]) => g.reportKind != null && g.level === level &&
-        (g.paths.some((p) => importedPaths.has(p)) || imported.reports.some((r) => r.kind === g.reportKind && r.glob === g.glob));
+      const importedPaths = new Set(imported.reports.flatMap((r) => (r.path ? [r.path] : [])));
+      const aboutThisReport = (r: NonNullable<TestsMeta['reports']>[number]) =>
+        imported.reports.some(
+          (n) => n.level === r.level && n.kind === r.kind && (r.path ? n.path === r.path : n.glob === r.glob),
+        );
+      const aboutThisLevel = (g: NonNullable<TestsMeta['gaps']>[number]) =>
+        g.reportKind != null &&
+        g.level === level &&
+        (g.paths.some((p) => importedPaths.has(p)) ||
+          imported.reports.some((r) => r.kind === g.reportKind && r.glob === g.glob));
       const dropped = (prior?.gaps ?? []).filter(aboutThisLevel);
-      const resolvedEach = (g: NonNullable<TestsMeta['gaps']>[number]) => g.kind === 'unjoined-each' && fragment.nodes.some((n) =>
-        n.loc?.repo === repo && n.test?.runs?.length && g.paths.includes(`${n.test.file}:${n.loc?.line ?? 0}`));
+      const resolvedEach = (g: NonNullable<TestsMeta['gaps']>[number]) =>
+        g.kind === 'unjoined-each' &&
+        fragment.nodes.some(
+          (n) => n.loc?.repo === repo && n.test?.runs?.length && g.paths.includes(`${n.test.file}:${n.loc?.line ?? 0}`),
+        );
       const keptGaps = (prior?.gaps ?? []).filter((g) => !aboutThisLevel(g) && !resolvedEach(g));
       // a folded sentence begins with its group's first gap text, so a dropped gap takes
       // its sentence with it; an older graph with no `gaps` cannot be filtered, and its
       // sentences give way to what was just read rather than being doubled up
       dropped.push(...(prior?.gaps ?? []).filter((g) => !aboutThisLevel(g) && resolvedEach(g)));
-      const keptBlind = prior?.gaps ? (prior.blindSpots ?? []).filter((b) => !dropped.some((g) => b.startsWith(g.text))) : [];
+      const keptBlind = prior?.gaps
+        ? (prior.blindSpots ?? []).filter((b) => !dropped.some((g) => b.startsWith(g.text)))
+        : [];
       out.meta.tests = {
         ...out.meta.tests,
         [repo]: {
@@ -1506,14 +1988,18 @@ switch (command) {
           gaps: [...keptGaps, ...imported.gaps],
           blindSpots: [...keptBlind, ...imported.blindSpots],
           ...(fragment.meta.sourceDigest ? { sourceDigest: fragment.meta.sourceDigest } : {}),
-          ...(imported.head ?? prior?.head ? { head: (imported.head ?? prior?.head)! } : {}),
+          ...((imported.head ?? prior?.head) ? { head: (imported.head ?? prior?.head)! } : {}),
         },
       };
       out.save(graphFile);
 
-      console.log(`imported ${imported.reports.filter((r) => r.path).length} report(s) into ${repo}: ${imported.runs} case run(s) joined, ${imported.edges} observed covers edge(s) → ${graphFile}`);
+      console.log(
+        `imported ${imported.reports.filter((r) => r.path).length} report(s) into ${repo}: ${imported.runs} case run(s) joined, ${imported.edges} observed covers edge(s) → ${graphFile}`,
+      );
       for (const line of reportLines(imported.reports, matches)) console.log(line);
-      console.log(`  ${repo}: ${counted.cases} case(s) · covers declared ${counted.edges.declared} · reached ${counted.edges.static} · observed ${counted.edges.observed} · ${counted.runs} run row(s)`);
+      console.log(
+        `  ${repo}: ${counted.cases} case(s) · covers declared ${counted.edges.declared} · reached ${counted.edges.static} · observed ${counted.edges.observed} · ${counted.runs} run row(s)`,
+      );
       for (const path of stamped) console.log(`  stamped ${path} with sourceDigest ${stamp}`);
       for (const b of imported.blindSpots) console.error(`  ⚠ ${b}`);
       for (const e of imported.errors) console.error(`  ⚠ ${e}`);
@@ -1524,7 +2010,8 @@ switch (command) {
           if (r.kind === 'coverage' && r.reason === 'empty') continue;
           if (r.reason === 'no-match') bad.push(`\`${r.glob}\` matched 0 files — no ${r.level} ${r.kind} report`);
           else if (r.reason === 'unreadable') bad.push(`\`${r.path}\` is not a report format this build reads`);
-          else if ((r.joined ?? 0) === 0 && (r.edges ?? 0) === 0) bad.push(`\`${r.path}\` joined 0 cases and produced 0 covers edges`);
+          else if ((r.joined ?? 0) === 0 && (r.edges ?? 0) === 0)
+            bad.push(`\`${r.path}\` joined 0 cases and produced 0 covers edges`);
         }
         if (bad.length) {
           console.error('');
@@ -1540,7 +2027,15 @@ switch (command) {
     const index = buildIndex(nodes, edges);
     setFreshnessMeta(index, store.meta);
     const scopeFlag = flag('scope');
-    const scope = scopeFlag && scopeFlag !== 'all' ? new Set(scopeFlag.split(',').map((x) => x.trim()).filter(Boolean)) : null;
+    const scope =
+      scopeFlag && scopeFlag !== 'all'
+        ? new Set(
+            scopeFlag
+              .split(',')
+              .map((x) => x.trim())
+              .filter(Boolean),
+          )
+        : null;
     const surfaceAll = testsSurface(index, scope, store.meta.tests);
     const surface = surfaceAll;
 
@@ -1554,11 +2049,22 @@ switch (command) {
         source_digest: repoDigests(store),
         farsight: buildLine(),
       };
-      if (format === 'json') { console.log(JSON.stringify(testsMatrixV1(index, surface, identity), null, 2)); break; }
+      if (format === 'json') {
+        console.log(JSON.stringify(testsMatrixV1(index, surface, identity), null, 2));
+        break;
+      }
       // the same bytes `GET /api/tests/matrix?format=csv` serves: one printer in core
-      if (format === 'csv') { console.log(testsMatrixCsv(testsMatrixRows(index, surface, identity))); break; }
-      if (!surface.journeys.length) { console.log('no flows in the graph — add a screens manifest (docs/proposals/design-source.md) and re-ingest'); break; }
-      console.log('  JOURNEY                                   COVERAGE       E2E  DECL  REACH   OBS  EVIDENCE · THEIR OWN LAST RUNS  GAP');
+      if (format === 'csv') {
+        console.log(testsMatrixCsv(testsMatrixRows(index, surface, identity)));
+        break;
+      }
+      if (!surface.journeys.length) {
+        console.log('no flows in the graph — add a screens manifest (docs/proposals/design-source.md) and re-ingest');
+        break;
+      }
+      console.log(
+        '  JOURNEY                                   COVERAGE       E2E  DECL  REACH   OBS  EVIDENCE · THEIR OWN LAST RUNS  GAP',
+      );
       for (const r of surface.journeys) {
         // the end-to-end word, never a tick: a header-only `@covers` is a claim, not evidence. The
         // evidence column is the cell's one verdict (core testVerdict) — the word the HUD prints — and
@@ -1566,10 +2072,16 @@ switch (command) {
         const v = r.coverage.verdict;
         const runs = v.runs.breakdown?.filter((p) => p.n) ?? [];
         const evidence = `${v.word.cls === 'none' ? 'nothing reaches it' : word(v.word.key, 'professional')} · ${v.runs.n} case(s)${runs.length ? ` (${breakdownText({ ...v.runs, breakdown: runs })})` : ''}`;
-        console.log(`  ${r.name.slice(0, 40).padEnd(40)}  ${formatMetric(r.coverage.metric).padStart(8)}  ${r.e2e.padStart(8)}  ${String(r.declared.length).padStart(4)}  ${String(r.inferred.length).padStart(5)}  ${String(r.observed.length).padStart(4)}  ${evidence}  ${r.gap}`);
+        console.log(
+          `  ${r.name.slice(0, 40).padEnd(40)}  ${formatMetric(r.coverage.metric).padStart(8)}  ${r.e2e.padStart(8)}  ${String(r.declared.length).padStart(4)}  ${String(r.inferred.length).padStart(5)}  ${String(r.observed.length).padStart(4)}  ${evidence}  ${r.gap}`,
+        );
       }
-      console.log(`\n  coverage is ${formatMetric(surface.metric)} of ${surface.metric.scopeLabel} — declared = an @covers claim · reached = what the test imports or opens · observed = a run reached it`);
-      console.log('  e2e = the end-to-end word for the journey: observed (a run saw it) · reached (a test body reaches a route or screen on it) · declared (claimed only) · none');
+      console.log(
+        `\n  coverage is ${formatMetric(surface.metric)} of ${surface.metric.scopeLabel} — declared = an @covers claim · reached = what the test imports or opens · observed = a run reached it`,
+      );
+      console.log(
+        '  e2e = the end-to-end word for the journey: observed (a run saw it) · reached (a test body reaches a route or screen on it) · declared (claimed only) · none',
+      );
       if (surface.metric.bound === 'floor') console.log(`  the value is a floor: ${surface.metric.uncertainty?.note}`);
       break;
     }
@@ -1584,26 +2096,39 @@ switch (command) {
         for (const b of surface.blindSpots) console.log(`  ⚠ ${b}`);
         break;
       }
-      console.log(`  ${surface.counted ? countedLine([surface.counted.cases, surface.counted.files, surface.counted.sources]) : `${surface.counts.cases} case(s) in ${surface.counts.files} file(s)`} · ${surface.counts.covers} covers edge(s): declared ${surface.counts.declared}${surface.counts.declaredPassed ? ` (${surface.counts.declaredPassed} by an end-to-end case that passed — observed, by its own declaration)` : ''} · reached ${surface.counts.static} · observed ${surface.counts.observed}`);
+      console.log(
+        `  ${surface.counted ? countedLine([surface.counted.cases, surface.counted.files, surface.counted.sources]) : `${surface.counts.cases} case(s) in ${surface.counts.files} file(s)`} · ${surface.counts.covers} covers edge(s): declared ${surface.counts.declared}${surface.counts.declaredPassed ? ` (${surface.counts.declaredPassed} by an end-to-end case that passed — observed, by its own declaration)` : ''} · reached ${surface.counts.static} · observed ${surface.counts.observed}`,
+      );
       console.log(`  coverage ${formatMetric(surface.metric)} of ${surface.metric.scopeLabel}\n`);
       console.log('  SOURCE            LEVEL        RUNNER       FILES  CASES  FRESHNESS');
       for (const c of surface.sources) {
         if (level && c.level !== level) continue;
-        const verdict = c.counted?.cases.breakdown?.filter((p) => p.n).length ? ` (${breakdownText({ ...c.counted.cases, breakdown: c.counted.cases.breakdown.filter((p) => p.n) })})` : '';
-        console.log(`  ${c.repo.slice(0, 16).padEnd(16)}  ${c.level.padEnd(11)}  ${c.runner.padEnd(11)}  ${String(c.files).padStart(5)}  ${String(c.cases).padStart(5)}  ${c.freshness}${verdict}`);
+        const verdict = c.counted?.cases.breakdown?.filter((p) => p.n).length
+          ? ` (${breakdownText({ ...c.counted.cases, breakdown: c.counted.cases.breakdown.filter((p) => p.n) })})`
+          : '';
+        console.log(
+          `  ${c.repo.slice(0, 16).padEnd(16)}  ${c.level.padEnd(11)}  ${c.runner.padEnd(11)}  ${String(c.files).padStart(5)}  ${String(c.cases).padStart(5)}  ${c.freshness}${verdict}`,
+        );
         // why the source's passed cases are not the number a journey counts: what each declares
-        if (c.counted?.passedByDeclaration) console.log(`  ${''.padEnd(16)}  ${countedText(c.counted.passedByDeclaration, { scope: false })}: ${breakdownText(c.counted.passedByDeclaration)}`);
+        if (c.counted?.passedByDeclaration)
+          console.log(
+            `  ${''.padEnd(16)}  ${countedText(c.counted.passedByDeclaration, { scope: false })}: ${breakdownText(c.counted.passedByDeclaration)}`,
+          );
       }
       console.log('');
       for (const s of surface.suites) {
         if (level && s.level !== level) continue;
         const verdict = `${s.counts.passed} passed${s.counts.failed ? `, ${s.counts.failed} failed` : ''}${s.counts.flaky ? `, ${s.counts.flaky} flaky` : ''}${s.counts.skipped ? `, ${s.counts.skipped} skipped` : ''}${s.counts.unknown ? `, ${s.counts.unknown} not run` : ''}`;
-        console.log(`      ${s.repo}/${s.file} — ${s.counts.cases} case(s) · ${verdict}${s.lastRun ? ` · last run ${s.lastRun.at.slice(0, 10)}${s.lastRun.stale ? ' ⚠ stale' : ''}` : ''}`);
+        console.log(
+          `      ${s.repo}/${s.file} — ${s.counts.cases} case(s) · ${verdict}${s.lastRun ? ` · last run ${s.lastRun.at.slice(0, 10)}${s.lastRun.stale ? ' ⚠ stale' : ''}` : ''}`,
+        );
       }
       if (surface.orphans.length) {
         console.log(`\n  ${surface.orphans.length} orphan(s):`);
         for (const o of surface.orphans.slice(0, 20)) {
-          console.log(`      ${o.file}${o.line ? `:${o.line}` : ''} — ${o.reason === 'unresolved-claim' ? `declares ${o.declares?.join(', ')}, which nothing in the graph matches` : 'covers nothing the graph knows'}`);
+          console.log(
+            `      ${o.file}${o.line ? `:${o.line}` : ''} — ${o.reason === 'unresolved-claim' ? `declares ${o.declares?.join(', ')}, which nothing in the graph matches` : 'covers nothing the graph knows'}`,
+          );
         }
       }
       if (surface.blindSpots.length) {
@@ -1613,39 +2138,93 @@ switch (command) {
       break;
     }
     fail(`unknown tests subcommand: ${sub} (list | matrix | import)`);
+    break;
   }
   case 'stories': {
     const graphFile = resolve(flag('graph', 'graph.json')!);
     if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
     const store = GraphStore.load(graphFile);
     const repo = flag('repo');
-    const answer = await storybookLive(store.allNodes(), store.meta.stories, { repos: repo ? new Set([repo]) : null, fresh: true });
+    const answer = await storybookLive(store.allNodes(), store.meta.stories, {
+      repos: repo ? new Set([repo]) : null,
+      fresh: true,
+    });
     const nodeId = flag('node');
     // a node's three numbers, named apart: its own stories, its docs pages, its parts' stories
-    const nodeCounts = nodeId ? (() => { const { partIds, ...c } = storyCounts(buildIndex(store.allNodes(), store.toJSON().edges), nodeId, answer.byNode); return { counts: c, parts: partIds }; })() : null;
+    const nodeCounts = nodeId
+      ? (() => {
+          const { partIds, ...c } = storyCounts(
+            buildIndex(store.allNodes(), store.toJSON().edges),
+            nodeId,
+            answer.byNode,
+          );
+          return { counts: c, parts: partIds };
+        })()
+      : null;
     if (rest.includes('--json')) {
-      console.log(JSON.stringify(nodeId ? { node: nodeId, stories: answer.byNode[nodeId] ?? [], storybooks: answer.storybooks, ...nodeCounts } : { meta: store.meta.stories ?? {}, ...answer }, null, 2));
+      console.log(
+        JSON.stringify(
+          nodeId
+            ? { node: nodeId, stories: answer.byNode[nodeId] ?? [], storybooks: answer.storybooks, ...nodeCounts }
+            : { meta: store.meta.stories ?? {}, ...answer },
+          null,
+          2,
+        ),
+      );
     } else if (nodeId) {
       const list = answer.byNode[nodeId] ?? [];
-      if (nodeCounts) console.log(countedLine([nodeCounts.counts.own, nodeCounts.counts.docs, nodeCounts.counts.parts], { zeroes: true }));
+      if (nodeCounts)
+        console.log(
+          countedLine([nodeCounts.counts.own, nodeCounts.counts.docs, nodeCounts.counts.parts], { zeroes: true }),
+        );
       if (!list.length) console.log(`no stories for ${nodeId}`);
-      for (const st of list) console.log(`  ${st.type.padEnd(5)}  ${st.name.slice(0, 30).padEnd(30)}  ${st.id.padEnd(50)}  ${st.frame ?? (st.live ? '' : 'not live')}`);
+      for (const st of list)
+        console.log(
+          `  ${st.type.padEnd(5)}  ${st.name.slice(0, 30).padEnd(30)}  ${st.id.padEnd(50)}  ${st.frame ?? (st.live ? '' : 'not live')}`,
+        );
     } else {
       const metas = Object.entries(store.meta.stories ?? {}).filter(([r]) => !repo || r === repo);
-      if (!metas.length) { console.log('no stories in the graph — no repo has a .storybook/main.* or *.stories.* files (or the graph predates the stories pass: re-ingest)'); break; }
+      if (!metas.length) {
+        console.log(
+          'no stories in the graph — no repo has a .storybook/main.* or *.stories.* files (or the graph predates the stories pass: re-ingest)',
+        );
+        break;
+      }
       for (const [r, m] of metas) {
         console.log(`${r}: ${m.stories} stories over ${m.components} components from ${m.files} story file(s)`);
-        for (const u of m.unresolved) console.log(`  ⚠ ${u.file}: ${u.reason}${u.component ? ` (${u.component})` : ''} — ${u.stories} stories`);
+        for (const u of m.unresolved)
+          console.log(`  ⚠ ${u.file}: ${u.reason}${u.component ? ` (${u.component})` : ''} — ${u.stories} stories`);
       }
       for (const b of answer.storybooks) {
         const where = b.url ?? 'no url recorded';
-        console.log(`\nStorybook ${b.name ?? b.configDir} (${b.repo}) at ${where}${b.urlFrom ? ` [url from ${b.urlFrom}]` : ''}`);
-        if (!b.reachable) { console.log(`  not reached (${b.error ?? 'unreachable'})${b.command ? ` — start it with: ${b.command}` : ''}`); continue; }
+        console.log(
+          `\nStorybook ${b.name ?? b.configDir} (${b.repo}) at ${where}${b.urlFrom ? ` [url from ${b.urlFrom}]` : ''}`,
+        );
+        if (!b.reachable) {
+          console.log(
+            `  not reached (${b.error ?? 'unreachable'})${b.command ? ` — start it with: ${b.command}` : ''}`,
+          );
+          continue;
+        }
         const c = b.counts!;
-        console.log(`  running · index: ${c.stories} stories + ${c.docs} docs · matched ${c.resolved} · matched nothing ${c.unresolved}`);
-        console.log(`  matched by: ${Object.entries(c.via).map(([k, v]) => `${k} ${v}`).join(' · ') || 'nothing'}`);
-        for (const u of b.unresolved ?? []) console.log(`  ✗ ${u.type} ${u.id}  title "${u.title}"  ${u.path ? `componentPath → ${u.path}  ` : ''}${u.reason}${u.candidates?.length ? ` (${u.candidates.join(', ')})` : ''}`);
-        if (b.notListed?.length) console.log(`  ${b.notListed.length} story(ies) in the files are not listed by the running index (it reads new files/globs on start): ${b.notListed.slice(0, 8).join(', ')}${b.notListed.length > 8 ? ' …' : ''}`);
+        console.log(
+          `  running · index: ${c.stories} stories + ${c.docs} docs · matched ${c.resolved} · matched nothing ${c.unresolved}`,
+        );
+        console.log(
+          `  matched by: ${
+            Object.entries(c.via)
+              .map(([k, v]) => `${k} ${v}`)
+              .join(' · ') || 'nothing'
+          }`,
+        );
+        for (const u of b.unresolved ?? [])
+          console.log(
+            `  ✗ ${u.type} ${u.id}  title "${u.title}"  ${u.path ? `componentPath → ${u.path}  ` : ''}${u.reason}${u.candidates?.length ? ` (${u.candidates.join(', ')})` : ''}`,
+          );
+        if (b.notListed?.length)
+          console.log(
+            `  ${b.notListed.length} story(ies) in the files are not listed by the running index (it reads new files/globs on start): ${b.notListed.slice(0, 8).join(', ')}${b.notListed.length > 8 ? ' …' : ''}`,
+          );
       }
     }
     if (answer.storybooks.some((b) => b.reachable && (b.counts?.unresolved ?? 0) > 0)) process.exitCode = 1;
@@ -1669,15 +2248,27 @@ switch (command) {
     setFreshnessMeta(index, store.meta);
     const q = { action: flag('action'), role: flag('role'), repo: flag('repo') };
     const table = roleTable(index, Object.fromEntries(Object.entries(q).filter(([, v]) => !!v)));
-    if (rest.includes('--json')) { console.log(JSON.stringify(table, null, 2)); break; }
-    if (rest.includes('--csv')) { process.stdout.write(rolesCsv(table)); break; }
-    console.log(roleTableLines(table, { business: rest.includes('--business'), cap: Number.MAX_SAFE_INTEGER }).join('\n'));
+    if (rest.includes('--json')) {
+      console.log(JSON.stringify(table, null, 2));
+      break;
+    }
+    if (rest.includes('--csv')) {
+      process.stdout.write(rolesCsv(table));
+      break;
+    }
+    console.log(
+      roleTableLines(table, { business: rest.includes('--business'), cap: Number.MAX_SAFE_INTEGER }).join('\n'),
+    );
     break;
   }
   case 'work': {
     await runWork({
-      sub: positional[0], positional: positional.slice(1), workspace: process.cwd(), fail,
-      flag: (n) => flag(n), has: (n) => rest.includes(`--${n}`),
+      sub: positional[0],
+      positional: positional.slice(1),
+      workspace: process.cwd(),
+      fail,
+      flag: (n) => flag(n),
+      has: (n) => rest.includes(`--${n}`),
     });
     break;
   }
@@ -1692,16 +2283,27 @@ switch (command) {
     setFreshnessMeta(index, store.meta);
     const repo = flag('repo');
     const scope = repo ? new Set([repo]) : null;
-    const repos = [...new Set(nodes.map((n) => n.loc?.repo).filter((r): r is string => !!r && (!scope || scope.has(r))))];
+    const repos = [
+      ...new Set(nodes.map((n) => n.loc?.repo).filter((r): r is string => !!r && (!scope || scope.has(r)))),
+    ];
     let history = null;
     if (repos.length && existsSync(dbPath())) {
       try {
         const db = new SnapshotDb(dbPath());
-        try { history = historyFact(repos.map((r) => db.commitSpine(r))); } finally { db.close(); }
-      } catch { history = null; }
+        try {
+          history = historyFact(repos.map((r) => db.commitSpine(r)));
+        } finally {
+          db.close();
+        }
+      } catch {
+        history = null;
+      }
     }
     const state = stateOfPlay(index, store.meta, { scope, history });
-    if (rest.includes('--json')) { console.log(JSON.stringify(state, null, 2)); break; }
+    if (rest.includes('--json')) {
+      console.log(JSON.stringify(state, null, 2));
+      break;
+    }
     console.log(stateOfPlayLines(state).join('\n'));
     break;
   }
@@ -1718,7 +2320,10 @@ switch (command) {
     const node = flag('node');
     if (node && !index.byId.has(node)) fail(`no node ${node} in ${graphFile}`);
     const opts = { ...(repo ? { repo } : {}), ...(id ? { id } : {}), ...(node ? { node } : {}) };
-    if (rest.includes('--json')) { console.log(JSON.stringify(decisionsAnswer(index, store.meta.decisions, opts), null, 2)); break; }
+    if (rest.includes('--json')) {
+      console.log(JSON.stringify(decisionsAnswer(index, store.meta.decisions, opts), null, 2));
+      break;
+    }
     console.log(decisionsText(store.meta.decisions, { ...opts, index }).join('\n'));
     break;
   }
@@ -1735,9 +2340,17 @@ switch (command) {
     const persona = flag('persona');
     const group = flag('group');
     const storyline = flag('storyline');
-    if (persona || group || storyline) tree = pickJourneys(tree, { ...(persona ? { persona } : {}), ...(group ? { group } : {}), ...(storyline ? { storyline } : {}) });
+    if (persona || group || storyline)
+      tree = pickJourneys(tree, {
+        ...(persona ? { persona } : {}),
+        ...(group ? { group } : {}),
+        ...(storyline ? { storyline } : {}),
+      });
     if (storyline && !tree.storylines.length) fail(unknownStorylineText(whole, storyline));
-    if (rest.includes('--json')) { console.log(JSON.stringify(tree, null, 2)); break; }
+    if (rest.includes('--json')) {
+      console.log(JSON.stringify(tree, null, 2));
+      break;
+    }
     console.log(journeyTreeLines(tree).join('\n'));
     break;
   }
@@ -1753,20 +2366,37 @@ switch (command) {
     setFreshnessMeta(index, store.meta);
     const repo = flag('repo');
     const words = positional.join(' ').trim();
-    if (!words) fail(command === 'tour' ? 'usage: farsight tour <storyline id | flow node id> [--repo name] [--persona p] [--business] [--json]' : 'usage: farsight ask "<question>" [--repo name] [--business] [--json]');
+    if (!words)
+      fail(
+        command === 'tour'
+          ? 'usage: farsight tour <storyline id | flow node id> [--repo name] [--persona p] [--business] [--json]'
+          : 'usage: farsight ask "<question>" [--repo name] [--business] [--json]',
+      );
     if (command === 'tour') {
       const persona = flag('persona');
-      const tour = tourOf(index, words, { metas: store.meta.journeys, ...(repo ? { repo } : {}), ...(persona ? { persona } : {}) });
+      const tour = tourOf(index, words, {
+        metas: store.meta.journeys,
+        ...(repo ? { repo } : {}),
+        ...(persona ? { persona } : {}),
+      });
       if (!tour) {
         const tree = journeyTree(index, store.meta.journeys, repo ? new Set([repo]) : null);
-        fail(`no storyline or journey "${words}" — storylines: ${tree.storylines.map((x) => `${x.id} (${x.repo})`).join(' · ') || 'none declared'}; or a flow node id (farsight journeys lists them)`);
+        fail(
+          `no storyline or journey "${words}" — storylines: ${tree.storylines.map((x) => `${x.id} (${x.repo})`).join(' · ') || 'none declared'}; or a flow node id (farsight journeys lists them)`,
+        );
       }
-      if (hasFlag('json')) { console.log(JSON.stringify(tour, null, 2)); break; }
+      if (hasFlag('json')) {
+        console.log(JSON.stringify(tour, null, 2));
+        break;
+      }
       console.log(tourLines(tour!, { business: hasFlag('business') }).join('\n'));
       break;
     }
     const answer = ask(index, words, { metas: store.meta.journeys, ...(repo ? { repo } : {}) });
-    if (hasFlag('json')) { console.log(JSON.stringify(answer, null, 2)); break; }
+    if (hasFlag('json')) {
+      console.log(JSON.stringify(answer, null, 2));
+      break;
+    }
     console.log(askLines(answer, { business: hasFlag('business') }).join('\n'));
     break;
   }
@@ -1780,20 +2410,40 @@ switch (command) {
     setFreshnessMeta(index, store.meta);
     if (sub === 'list' || !sub) {
       const designs = designSurface(index);
-      if (!designs.length) { console.log('no design source in the graph — add docs/design/screens.json to a repo (docs/proposals/design-source.md) and re-ingest'); break; }
-      console.log('  DESIGN                                    REPO             SCREENS  DESIGNED  BUILT  NOT-BUILT  UNDESIGNED  DRIFT  MANIFEST');
+      if (!designs.length) {
+        console.log(
+          'no design source in the graph — add docs/design/screens.json to a repo (docs/proposals/design-source.md) and re-ingest',
+        );
+        break;
+      }
+      console.log(
+        '  DESIGN                                    REPO             SCREENS  DESIGNED  BUILT  NOT-BUILT  UNDESIGNED  DRIFT  MANIFEST',
+      );
       for (const d of designs) {
         const c = d.counts;
-        console.log(`  ${d.name.slice(0, 40).padEnd(40)}  ${d.repo.slice(0, 15).padEnd(15)}  ${String(c.screens).padStart(7)}  ${String(c.designed).padStart(8)}  ${String(c.built).padStart(5)}  ${String(c.designOnly).padStart(9)}  ${String(c.codeOnly).padStart(10)}  ${String(c.drift).padStart(5)}  ${d.manifestPath}`);
+        console.log(
+          `  ${d.name.slice(0, 40).padEnd(40)}  ${d.repo.slice(0, 15).padEnd(15)}  ${String(c.screens).padStart(7)}  ${String(c.designed).padStart(8)}  ${String(c.built).padStart(5)}  ${String(c.designOnly).padStart(9)}  ${String(c.codeOnly).padStart(10)}  ${String(c.drift).padStart(5)}  ${d.manifestPath}`,
+        );
         for (const f of d.flows) {
-          console.log(`      flow     ${f.name.slice(0, 28).padEnd(28)} ${f.screens.join(' → ').slice(0, 28).padEnd(28)} ${`${f.built} of ${f.total} built`.padEnd(20)}${f.docs.length ? ` docs ${f.docs.join(', ')}` : ''}${f.drift.length ? ` · drift ${f.drift.map((x) => x.kind).join(', ')}` : ''}`);
+          console.log(
+            `      flow     ${f.name.slice(0, 28).padEnd(28)} ${f.screens.join(' → ').slice(0, 28).padEnd(28)} ${`${f.built} of ${f.total} built`.padEnd(20)}${f.docs.length ? ` docs ${f.docs.join(', ')}` : ''}${f.drift.length ? ` · drift ${f.drift.map((x) => x.kind).join(', ')}` : ''}`,
+          );
         }
         for (const sc of d.screens) {
-          const status = sc.status === 'both' ? 'designed + built' : sc.status === 'design-only' ? 'designed, not built' : 'built, not designed';
-          console.log(`      ${(sc.designId ?? '-').padEnd(8)} ${sc.name.slice(0, 28).padEnd(28)} ${(sc.route ?? sc.name).padEnd(28)} ${status.padEnd(20)}${sc.operations.length ? ` uses ${sc.operations.join(', ')}` : ''}${sc.drift.length ? ` · drift ${sc.drift.map((x) => x.kind).join(', ')}` : ''}`);
+          const status =
+            sc.status === 'both'
+              ? 'designed + built'
+              : sc.status === 'design-only'
+                ? 'designed, not built'
+                : 'built, not designed';
+          console.log(
+            `      ${(sc.designId ?? '-').padEnd(8)} ${sc.name.slice(0, 28).padEnd(28)} ${(sc.route ?? sc.name).padEnd(28)} ${status.padEnd(20)}${sc.operations.length ? ` uses ${sc.operations.join(', ')}` : ''}${sc.drift.length ? ` · drift ${sc.drift.map((x) => x.kind).join(', ')}` : ''}`,
+          );
         }
       }
-      console.log('\n  designed = has a row in the manifest · built = a page/component exists at that route · not-built = designed only · undesigned = a page with no row · flow = a named feature: screens in order, runs as a journey');
+      console.log(
+        '\n  designed = has a row in the manifest · built = a page/component exists at that route · not-built = designed only · undesigned = a page with no row · flow = a named feature: screens in order, runs as a journey',
+      );
       break;
     }
     if (sub === 'diff') {
@@ -1801,13 +2451,23 @@ switch (command) {
       if (!ref) fail('design diff needs --manifest <path|url>');
       const parsed = await readManifestSource(ref);
       const repo = flag('repo') ?? 'proposed';
-      const result = reconcileDesign(parsed.manifest, index, { repo, path: ref, ...(parsed.lastModified ? { lastModified: parsed.lastModified, freshness: parsed.freshness } : {}) }, { repo, designId: `${repo}::design::${ref}` });
+      const result = reconcileDesign(
+        parsed.manifest,
+        index,
+        {
+          repo,
+          path: ref,
+          ...(parsed.lastModified ? { lastModified: parsed.lastModified, freshness: parsed.freshness } : {}),
+        },
+        { repo, designId: `${repo}::design::${ref}` },
+      );
       if (flag('format', 'md') === 'json') console.log(JSON.stringify(result, null, 2));
       else console.log(designDriftMarkdown(result));
       if (rest.includes('--strict') && result.counts.drift > 0) process.exit(1);
       break;
     }
     fail(`unknown design subcommand: ${sub} (list | diff)`);
+    break;
   }
   default:
     fail(`unknown command: ${command}\n\n${USAGE}`);
@@ -1846,14 +2506,23 @@ function reportLines(reports: TestsMeta['reports'], matches: string[]): string[]
       const how = [...by].map(([k, v]) => `${k} ${v}`).join(' · ');
       bits.push(`edges ${r.edges}${how ? ` (${how})` : ''}`);
     }
-    bits.push(r.freshness === 'changed' && r.changedBy === 'working-tree' ? 'working tree differs from HEAD' : freshnessWord[r.freshness] ?? r.freshness);
-    if (r.reason === 'unreadable' || r.reason === 'empty') bits.push(r.reason === 'empty' ? 'empty report' : 'not a report format this build reads');
+    bits.push(
+      r.freshness === 'changed' && r.changedBy === 'working-tree'
+        ? 'working tree differs from HEAD'
+        : (freshnessWord[r.freshness] ?? r.freshness),
+    );
+    if (r.reason === 'unreadable' || r.reason === 'empty')
+      bits.push(r.reason === 'empty' ? 'empty report' : 'not a report format this build reads');
     return `  ${r.path}  ${bits.join(' · ')}`;
   });
 }
 
 function statIsDir(p: string): boolean {
-  try { return statSync(p).isDirectory(); } catch { return false; }
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 function fail(msg: string): never {

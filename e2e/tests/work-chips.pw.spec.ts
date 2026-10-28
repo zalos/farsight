@@ -26,7 +26,9 @@ test.describe('work chips', () => {
   });
 
   /** @covers packages/server/public/app/work-chips.js::flowChipHtml */
-  test('a journey\'s head on the Map carries the same chip, and it opens the work filtered to the journey', async ({ page }) => {
+  test("a journey's head on the Map carries the same chip, and it opens the work filtered to the journey", async ({
+    page,
+  }) => {
     await routeWorkSettings(page);
     await routeWork(page);
     await page.goto('/#/map/' + encodeURIComponent('invoice-app::flow::draft-and-send') + '?layout=table');
@@ -47,7 +49,9 @@ test.describe('work chips', () => {
     await page.goto('/#/codemap?node=' + encodeURIComponent('invoice-app::src/server/taxEngine.ts::computeTax'));
     const sec = page.locator('#insp-work');
     await expect(sec).toBeVisible();
-    await expect(sec).toContainText('tracked by INV-6 Tax rounds the wrong way on multi-line invoices (done, Jira — invoice-app)');
+    await expect(sec).toContainText(
+      'tracked by INV-6 Tax rounds the wrong way on multi-line invoices (done, Jira — invoice-app)',
+    );
     await sec.getByRole('link').first().click();
     await expect(page).toHaveURL(/#\/work\/work/);
   });
@@ -55,7 +59,9 @@ test.describe('work chips', () => {
   /** @covers packages/server/public/app/work-chips.js::workSourcesConfigured */
   test('a workspace with no work source asks for no work', async ({ page }) => {
     const asked: string[] = [];
-    page.on('request', (r) => { if (/\/api\/work/.test(r.url())) asked.push(r.url()); });
+    page.on('request', (r) => {
+      if (/\/api\/work/.test(r.url())) asked.push(r.url());
+    });
     await page.goto('/#/portfolio');
     await expect(page.locator('.pf-table').first()).toBeVisible();
     await page.goto('/#/codemap?node=' + encodeURIComponent('invoice-app::src/server/taxEngine.ts::computeTax'));

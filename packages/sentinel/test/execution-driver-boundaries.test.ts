@@ -129,7 +129,6 @@ for (const canceled of [false, true]) {
       t.mock.method(Date, 'now', () => wallNow + elapsed);
       let signal: AbortSignal | undefined;
       let notifications = 0;
-      let coordinator: Coordinator;
       const d = driver(f.p, {
         async prepare(ctx: any) {
           if (ctx.unit.id === f.p.ids.A) {
@@ -148,7 +147,7 @@ for (const canceled of [false, true]) {
           return { job: { unit: ctx.unit.id }, auxiliary: [] };
         },
       });
-      coordinator = await Coordinator.open(options(f, d));
+      const coordinator: Coordinator = await Coordinator.open(options(f, d));
       const summary = await coordinator.run();
       assert.equal(f.store.ledger.getPublication({ id: f.p.ids.A, revision: 1 }), null);
       assert.deepEqual(f.store.ledger.listAttempts({ id: f.p.ids.A, revision: 1 }), []);
@@ -198,7 +197,6 @@ for (const phase of ['prepare', 'normalize'] as const)
       const f = await setup(t, {}, mode === 'run-deadline' ? 1000 : 600000);
       const d = driver(f.p);
       const original = d[phase];
-      let c: Coordinator;
       let called = false;
       d[phase] = async (...args: any[]) => {
         if (args[0].unit.id === f.p.ids.A) {
@@ -210,7 +208,7 @@ for (const phase of ['prepare', 'normalize'] as const)
         }
         return original(...args);
       };
-      c = await Coordinator.open(options(f, d));
+      const c: Coordinator = await Coordinator.open(options(f, d));
       const summary = await c.run();
       assert.ok(called);
       assert.equal(f.store.ledger.getPublication({ id: f.p.ids.A, revision: 1 }), null);

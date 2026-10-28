@@ -4,7 +4,7 @@
 // valid. The service runs in this process over a real store; no run executes (authorization is decided first).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { adoptedPolicy, adoptWorkspaceSettings, confirmForService, workspaceOf } from '../dist/service/local.js';

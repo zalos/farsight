@@ -1,8 +1,8 @@
 import type { TestRef } from '@farsight/graph';
 /**
- * Glob → RegExp for test paths. `shared/files.ts` has its own, but its `**` /
- * `*` rewrite order collapses `**​/` into a single-segment match, which a claim
- * glob like `**​/*.spec.ts` cannot live with. Tokenized here instead.
+ * Glob → RegExp for test paths. `shared/files.ts` has its own, but its star
+ * rewrite order collapses a double-star path prefix into a single-segment match,
+ * which nested test globs cannot use. Tokenized here instead.
  */
 export function testGlobToRegExp(glob: string): RegExp {
   let out = '';
@@ -12,20 +12,36 @@ export function testGlobToRegExp(glob: string): RegExp {
     if (c === '*') {
       if (chars[i + 1] === '*') {
         i++;
-        if (chars[i + 1] === '/') { i++; out += '(?:[^/]+/)*'; } else out += '.*';
+        if (chars[i + 1] === '/') {
+          i++;
+          out += '(?:[^/]+/)*';
+        } else out += '.*';
       } else out += '[^/]*';
       continue;
     }
-    if (c === '?') { out += '[^/]'; continue; }
+    if (c === '?') {
+      out += '[^/]';
+      continue;
+    }
     out += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   }
   return new RegExp(`^${out}(?:/.*)?$`);
 }
 
-/** The default claim globs. Line comments only in this file — a `*​/` inside a block comment ends it. */
+/** The default claim globs. Avoid spelling a block-comment terminator inside documentation. */
 export const DEFAULT_TEST_GLOBS = [
-  '**/*.test.ts', '**/*.test.tsx', '**/*.test.js', '**/*.test.jsx', '**/*.test.mts', '**/*.test.mjs',
-  '**/*.spec.ts', '**/*.spec.tsx', '**/*.spec.js', '**/*.spec.jsx', '**/*.spec.mts', '**/*.spec.mjs',
+  '**/*.test.ts',
+  '**/*.test.tsx',
+  '**/*.test.js',
+  '**/*.test.jsx',
+  '**/*.test.mts',
+  '**/*.test.mjs',
+  '**/*.spec.ts',
+  '**/*.spec.tsx',
+  '**/*.spec.js',
+  '**/*.spec.jsx',
+  '**/*.spec.mts',
+  '**/*.spec.mjs',
   '**/__tests__/**',
   'e2e/**',
   'test/**',
@@ -43,7 +59,8 @@ const RUNNER_SPECIFIERS: Record<string, TestRef['runner']> = {
   'cypress': 'cypress',
 };
 
-const RUNNER_IMPORT_RE = /(?:^|\n)\s*(?:import[\s\S]{0,200}?from\s*|import\s*|(?:const|let|var)[\s\S]{0,120}?=\s*require\s*\(\s*)['"]([^'"]+)['"]/g;
+const RUNNER_IMPORT_RE =
+  /(?:^|\n)\s*(?:import[\s\S]{0,200}?from\s*|import\s*|(?:const|let|var)[\s\S]{0,120}?=\s*require\s*\(\s*)['"]([^'"]+)['"]/g;
 
 export interface TestGlobs {
   include?: string[];
@@ -74,5 +91,6 @@ export function isTestFile(rel: string, source?: string, globs: TestGlobs = {}):
   return !!source && runnerImports(source).length > 0;
 }
 
-
-export function isStoryFile(rel: string): boolean { return /\.(stories|story)\.[cm]?[jt]sx?$/.test(rel); }
+export function isStoryFile(rel: string): boolean {
+  return /\.(stories|story)\.[cm]?[jt]sx?$/.test(rel);
+}

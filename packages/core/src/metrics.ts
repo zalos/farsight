@@ -18,7 +18,12 @@ import { isDeclaredOnly, repoOf } from './query.js';
 export type MetricId =
   | 'test-coverage'
   // P3 (v3 §2.3) — defined here so the union is stable for consumers:
-  | 'sources' | 'indexed' | 'journeys' | 'guard-coverage' | 'guard-coverage-nonroute' | 'described';
+  | 'sources'
+  | 'indexed'
+  | 'journeys'
+  | 'guard-coverage'
+  | 'guard-coverage-nonroute'
+  | 'described';
 
 export interface MetricDefinition {
   id: MetricId;
@@ -97,8 +102,10 @@ export const METRICS: Partial<Record<MetricId, MetricDefinition>> = {
     version: 2,
     labelKey: 'metric.testCoverage',
     formula: 'nodes in scope with ≥1 covers edge ÷ nodes in scope a test could cover',
-    includes: 'function, component, page, route, guard and rule nodes in scope that have a source location, are not plumbing and are not presentational',
-    excludes: 'test nodes themselves, repo/module/file/api/design/flow/table/queue/external/unknown nodes, manifest-only pages, plumbing, presentational components, declared-only routes',
+    includes:
+      'function, component, page, route, guard and rule nodes in scope that have a source location, are not plumbing and are not presentational',
+    excludes:
+      'test nodes themselves, repo/module/file/api/design/flow/table/queue/external/unknown nodes, manifest-only pages, plumbing, presentational components, declared-only routes',
   },
 };
 
@@ -136,7 +143,9 @@ const DOES_WORK = new Set<GraphEdge['kind']>(['http', 'reads', 'writes', 'publis
  */
 export function isPresentational(index: GraphIndex, n: GraphNode): boolean {
   if (n.kind !== 'component') return false;
-  const renderedByView = (index.in.get(n.id) ?? []).some((e) => e.kind === 'renders' && index.byId.get(e.from)?.kind !== 'flow');
+  const renderedByView = (index.in.get(n.id) ?? []).some(
+    (e) => e.kind === 'renders' && index.byId.get(e.from)?.kind !== 'flow',
+  );
   if (!renderedByView) return false;
   const file = n.loc?.path;
   for (const e of index.out.get(n.id) ?? []) {
@@ -160,10 +169,7 @@ export function isPresentational(index: GraphIndex, n: GraphNode): boolean {
  * (`farsight.config.json → plumbing`); and a rendered UI primitive.
  */
 export function isCoverable(index: GraphIndex, n: GraphNode): boolean {
-  return COVERABLE.has(n.kind)
-    && !!n.loc
-    && !(n.tags ?? []).includes('plumbing')
-    && !isPresentational(index, n);
+  return COVERABLE.has(n.kind) && !!n.loc && !(n.tags ?? []).includes('plumbing') && !isPresentational(index, n);
 }
 
 /** Each node's place in the index's order, folded once per index (a WeakMap: an index nobody holds lets it go). */
@@ -187,7 +193,10 @@ function scopeNodes(index: GraphIndex, ids: Set<string> | null): Iterable<GraphN
   if (!ids) return index.byId.values();
   const order = orderOf(index);
   const out: GraphNode[] = [];
-  for (const id of ids) { const n = index.byId.get(id); if (n) out.push(n); }
+  for (const id of ids) {
+    const n = index.byId.get(id);
+    if (n) out.push(n);
+  }
   return out.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
 }
 
@@ -254,11 +263,19 @@ export function testsCovering(index: GraphIndex, nodeId: string): CoveringTest[]
     // data, so without this every reference-app flow read `0 seen in a run` under a
     // source card that said `89 passed` (story swarm 2026-09-25, 8 of 8). A
     // failed, flaky, skipped or unrun case stays declared.
-    const byDeclaration = edgeClass === 'declared' && t.test.level === 'e2e' && !t.test.runLevel && !inactive
-      && t.test.run?.status === 'passed';
+    const byDeclaration =
+      edgeClass === 'declared' &&
+      t.test.level === 'e2e' &&
+      !t.test.runLevel &&
+      !inactive &&
+      t.test.run?.status === 'passed';
     const evidence: CoveringTest['evidence'] = byDeclaration ? 'observed' : edgeClass;
     out.push({
-      id: t.id, name: t.name, level: t.test.level, runner: t.test.runner, evidence,
+      id: t.id,
+      name: t.name,
+      level: t.test.level,
+      runner: t.test.runner,
+      evidence,
       ...(byDeclaration ? { observedVia: 'declaration' as const } : {}),
       runLevel: !!t.test.runLevel,
       ...(inactive ? { inactive: true } : {}),
@@ -266,16 +283,24 @@ export function testsCovering(index: GraphIndex, nodeId: string): CoveringTest[]
       ...(t.test.run ? { run: t.test.run } : {}),
       ...(t.test.run?.project ? { project: t.test.run.project } : t.test.project ? { project: t.test.project } : {}),
       ...(t.test.run?.retries != null ? { retries: t.test.run.retries } : {}),
-      ...(e.resolution ? { technique: e.resolution.technique, confidence: e.resolution.confidence, ...(e.resolution.note ? { note: e.resolution.note } : {}) } : {}),
+      ...(e.resolution
+        ? {
+            technique: e.resolution.technique,
+            confidence: e.resolution.confidence,
+            ...(e.resolution.note ? { note: e.resolution.note } : {}),
+          }
+        : {}),
       ...(e.meta?.match ? { match: String(e.meta.match) } : {}),
       ...(t.test.files?.length ? { files: t.test.files } : {}),
     });
   }
   // an inactive case sorts last so the strongest *active* evidence is out[0]
-  return out.sort((a, b) =>
-    (a.inactive === b.inactive ? 0 : a.inactive ? 1 : -1)
-    || (EVIDENCE_RANK[b.evidence]! - EVIDENCE_RANK[a.evidence]!)
-    || a.name.localeCompare(b.name));
+  return out.sort(
+    (a, b) =>
+      (a.inactive === b.inactive ? 0 : a.inactive ? 1 : -1) ||
+      EVIDENCE_RANK[b.evidence]! - EVIDENCE_RANK[a.evidence]! ||
+      a.name.localeCompare(b.name),
+  );
 }
 
 /**
@@ -294,7 +319,10 @@ export function computeMetric(
   ctx: { asOf?: MetricValue['asOf']; cap?: number; storedVersion?: number } = {},
 ): MetricValue {
   const def = METRICS[id];
-  if (!def) throw new Error(`metric "${id}" is not implemented in this build (implemented: ${Object.keys(METRICS).join(', ')})`);
+  if (!def)
+    throw new Error(
+      `metric "${id}" is not implemented in this build (implemented: ${Object.keys(METRICS).join(', ')})`,
+    );
   if (id !== 'test-coverage') throw new Error(`metric "${id}" has a definition but no computation in this build`);
 
   const cap = ctx.cap ?? Infinity;
@@ -306,7 +334,10 @@ export function computeMetric(
   for (const n of scopeNodes(index, ids)) {
     if (n.kind === 'test' || !COVERABLE.has(n.kind)) continue;
     if (!inScope(n, scope, ids)) continue;
-    if (isCoverable(index, n)) { members.push(n); continue; }
+    if (isCoverable(index, n)) {
+      members.push(n);
+      continue;
+    }
     if (isDeclaredOnly(n)) excluded.declaredOnly++;
     else if (!n.loc) excluded.manifestOnly++;
     else if ((n.tags ?? []).includes('plumbing')) excluded.plumbing++;
@@ -333,7 +364,8 @@ export function computeMetric(
   for (const n of members) {
     const tests = testsCovering(index, n.id);
     if (!tests.length) {
-      if (gaps.length < cap) gaps.push({ nodeId: n.id, name: n.name, ...(n.loc ? { loc: n.loc } : {}), note: 'no test reaches this' });
+      if (gaps.length < cap)
+        gaps.push({ nodeId: n.id, name: n.name, ...(n.loc ? { loc: n.loc } : {}), note: 'no test reaches this' });
       continue;
     }
     covered++;
@@ -346,7 +378,10 @@ export function computeMetric(
     for (const t of tests) {
       if (t.evidence !== 'observed') continue;
       // a pass by declaration measured no line: it never makes a count exact
-      if (t.observedVia === 'declaration') { anyDeclaredPass = true; continue; }
+      if (t.observedVia === 'declaration') {
+        anyDeclaredPass = true;
+        continue;
+      }
       anyObserved = true;
       if (t.run?.freshness === 'unchanged') {
         if (t.runLevel) for (const f of t.files ?? []) freshFiles.add(f);
@@ -357,7 +392,9 @@ export function computeMetric(
     }
     if (evidence.length < cap) {
       evidence.push({
-        nodeId: n.id, name: n.name, ...(n.loc ? { loc: n.loc } : {}),
+        nodeId: n.id,
+        name: n.name,
+        ...(n.loc ? { loc: n.loc } : {}),
         note: `${tests.length} test${tests.length === 1 ? '' : 's'} · ${[...new Set(tests.map((t) => t.evidence))].join(' + ')}`,
       });
     }
@@ -398,9 +435,10 @@ export function computeMetric(
     }
   }
 
-  const wasDefinition = ctx.storedVersion != null && ctx.storedVersion < def.version
-    ? PRIOR_DEFINITIONS[id]?.[ctx.storedVersion]
-    : undefined;
+  const wasDefinition =
+    ctx.storedVersion != null && ctx.storedVersion < def.version
+      ? PRIOR_DEFINITIONS[id]?.[ctx.storedVersion]
+      : undefined;
 
   return {
     def,
@@ -419,7 +457,12 @@ export function computeMetric(
     parts: { ...parts, either: { numerator: covered, denominator, value } },
     excluded,
     ...(ctx.storedVersion != null && ctx.storedVersion < def.version
-      ? { definitionChanged: { fromVersion: ctx.storedVersion, was: wasDefinition ?? `version ${ctx.storedVersion} of ${def.id}, which this build no longer computes` } }
+      ? {
+          definitionChanged: {
+            fromVersion: ctx.storedVersion,
+            was: wasDefinition ?? `version ${ctx.storedVersion} of ${def.id}, which this build no longer computes`,
+          },
+        }
       : {}),
   };
 }

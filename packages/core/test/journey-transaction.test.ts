@@ -47,9 +47,13 @@ function submitAction(opts: { tx: boolean } = { tx: true }): { nodes: GraphNode[
   const nodes: GraphNode[] = [
     node(ROUTE, 'route', 'POST /submit', { loc: { repo: R, path: 'routes.ts', line: 3 } }),
     fn('submitDraftInvoice', 952),
-    fn('loadDraft', 400), fn('replaceLines', 20, 'pg.ts'), fn('auditEvent', 10, 'audit.ts'),
-    fn('enqueue', 41, 'outbox.ts'), fn('drainSubmission', 1174),
-    fn('setBcSync', 60, 'pg.ts'), fn('send', 80, 'notifier.ts'),
+    fn('loadDraft', 400),
+    fn('replaceLines', 20, 'pg.ts'),
+    fn('auditEvent', 10, 'audit.ts'),
+    fn('enqueue', 41, 'outbox.ts'),
+    fn('drainSubmission', 1174),
+    fn('setBcSync', 60, 'pg.ts'),
+    fn('send', 80, 'notifier.ts'),
     fn('invoiceCreated', 173, 'worker.ts'),
     node(`${R}::table::invoices`, 'table', 'invoices', { loc: { repo: R, path: 'schema.sql', line: 2 } }),
     node(`${R}::table::bc_outbox`, 'table', 'bc_outbox', { loc: { repo: R, path: 'schema.sql', line: 40 } }),
@@ -106,7 +110,10 @@ test('a later flagged run is inside a transaction again — and nothing counts t
   assert.equal(markerOf(sum, 'send').tx, 'inside');
   // the flag is per call site: no fold may publish a number of transactions, because two
   // neighbouring `inside` steps can sit in different ones (here they do: two callbacks)
-  assert.equal(Object.keys(sum.counts).some((k) => /tx|transaction/i.test(k)), false);
+  assert.equal(
+    Object.keys(sum.counts).some((k) => /tx|transaction/i.test(k)),
+    false,
+  );
 });
 
 test('work registered inside a transaction but run later takes no side', () => {
@@ -129,18 +136,27 @@ test('a graph with no transaction flag says so — it does not guess a side', ()
   assert.equal(sideOf.size, 0);
   assert.equal(sum.txKnown, false);
   // absent is not "everything is outside" and not "everything is inside"
-  assert.equal(sum.segments.flatMap((sg) => sg.markers).some((m) => m.tx), false);
+  assert.equal(
+    sum.segments.flatMap((sg) => sg.markers).some((m) => m.tx),
+    false,
+  );
 });
 
 test('a graph that records boundaries elsewhere is known, even where this walk meets none', () => {
   const { nodes, edges } = submitAction({ tx: false });
   // one transactional call somewhere else in the same graph
   const other = fn('archive', 10, 'jobs.ts');
-  const index = buildIndex([...nodes, other], [...edges, call(id('archive', 'jobs.ts'), id('replaceLines', 'pg.ts'), 12, { tx: true })]);
+  const index = buildIndex(
+    [...nodes, other],
+    [...edges, call(id('archive', 'jobs.ts'), id('replaceLines', 'pg.ts'), 12, { tx: true })],
+  );
   const j = journey(index, ROUTE);
   const sum = journeySummary(index, j, screensFor(index, ROUTE));
   assert.equal(journeyTransactions(index, j).known, true);
   assert.equal(sum.txKnown, true);
   // known, and still no claim on this walk's own steps
-  assert.equal(sum.segments.flatMap((sg) => sg.markers).some((m) => m.tx), false);
+  assert.equal(
+    sum.segments.flatMap((sg) => sg.markers).some((m) => m.tx),
+    false,
+  );
 });

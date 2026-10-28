@@ -18,10 +18,20 @@ const graph = join(dir, 'graph.json');
 const g = synthesize(parseArgs(['--preset', preset]));
 const bytes = writeGraph(g, graph);
 writeSettings(dir, g);
-console.log(`[perf] ${preset}: ${g.nodes.length} nodes · ${g.edges.length} edges · ${(bytes / 1e6).toFixed(1)} MB → ${graph}`);
+console.log(
+  `[perf] ${preset}: ${g.nodes.length} nodes · ${g.edges.length} edges · ${(bytes / 1e6).toFixed(1)} MB → ${graph}`,
+);
 // a full-preset graph is parsed into a few GB of objects: give the server's heap the room a real one would get
-const child = spawn(process.execPath, ['--max-old-space-size=8192', CLI, 'serve', graph, '--port', port], { cwd: dir, stdio: 'inherit' });
-const stop = () => { child.kill('SIGTERM'); };
+const child = spawn(process.execPath, ['--max-old-space-size=8192', CLI, 'serve', graph, '--port', port], {
+  cwd: dir,
+  stdio: 'inherit',
+});
+const stop = () => {
+  child.kill('SIGTERM');
+};
 process.on('SIGTERM', stop);
 process.on('SIGINT', stop);
-child.on('exit', (code) => { rmSync(dir, { recursive: true, force: true }); process.exit(code ?? 0); });
+child.on('exit', (code) => {
+  rmSync(dir, { recursive: true, force: true });
+  process.exit(code ?? 0);
+});

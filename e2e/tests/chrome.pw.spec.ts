@@ -36,7 +36,8 @@ test.describe('Settings is named', () => {
     // the Map and the action drill are no experiments since the journey page retired into the Map: one flag is left
     const notes = page.locator('.set-flagitem .set-note');
     await expect(notes).toHaveCount(1);
-    for (const w of await notes.evaluateAll((ns) => ns.map((n) => n.getBoundingClientRect().width))) expect(w).toBeGreaterThan(300);
+    for (const w of await notes.evaluateAll((ns) => ns.map((n) => n.getBoundingClientRect().width)))
+      expect(w).toBeGreaterThan(300);
   });
 });
 
@@ -62,7 +63,11 @@ async function freePort(): Promise<number> {
   return new Promise((res, rej) => {
     const s = createServer();
     s.once('error', rej);
-    s.listen(0, '127.0.0.1', () => { const a = s.address(); const p = typeof a === 'object' && a ? a.port : 0; s.close(() => res(p)); });
+    s.listen(0, '127.0.0.1', () => {
+      const a = s.address();
+      const p = typeof a === 'object' && a ? a.port : 0;
+      s.close(() => res(p));
+    });
   });
 }
 
@@ -73,10 +78,17 @@ test.describe('a read-only session', () => {
     const ws = makeWorkspace('readonly');
     cleanup = ws.cleanup;
     const port = await freePort();
-    server = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(port), '--read-only'], { cwd: ws.dir, stdio: 'ignore' });
+    server = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(port), '--read-only'], {
+      cwd: ws.dir,
+      stdio: 'ignore',
+    });
     base = `http://localhost:${port}/`;
     for (let i = 0; i < 100; i++) {
-      try { if ((await fetch(base + 'api/version')).ok) return; } catch { /* not yet */ }
+      try {
+        if ((await fetch(base + 'api/version')).ok) return;
+      } catch {
+        /* not yet */
+      }
       await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error('the read-only server never answered');
@@ -90,14 +102,18 @@ test.describe('a read-only session', () => {
    * @covers packages/server/src/guard.ts::refuseWrite
    * @covers packages/server/public/app/lib/read-only.js::applyReadOnly
    */
-  test('the chip says READ-ONLY, every write control is greyed with its reason, and the server refuses the write', async ({ page }) => {
+  test('the chip says READ-ONLY, every write control is greyed with its reason, and the server refuses the write', async ({
+    page,
+  }) => {
     const v = await (await fetch(base + 'api/version')).json();
     expect(Object.keys(v.session).sort()).toEqual(['instance', 'readOnly', 'why']);
     expect(v.session).toEqual({ readOnly: true, why: 'flag', instance: expect.stringMatching(/^host-[a-f0-9]{32}$/) });
     const put = await fetch(base + 'api/settings', { method: 'PUT', body: '{}' });
     expect(put.status).toBe(403);
     const writes: string[] = [];
-    page.on('request', (r) => { if (r.method() !== 'GET') writes.push(r.method() + ' ' + r.url()); });
+    page.on('request', (r) => {
+      if (r.method() !== 'GET') writes.push(r.method() + ' ' + r.url());
+    });
     await page.goto(base + '#/portfolio');
     await expect(page.locator('#stats')).not.toHaveText('loading…');
     await expect.poll(() => page.evaluate(() => (window as any).readOnlyWhy())).toBe('flag');
@@ -121,7 +137,10 @@ test.describe('a read-only session', () => {
    * always see. It never folds now; the search box gives up its word instead.
    * @covers packages/server/public/app/shell.js::fitTopbar
    */
-  for (const [w, h] of [[1440, 900], [1280, 800]]) {
+  for (const [w, h] of [
+    [1440, 900],
+    [1280, 800],
+  ]) {
     test(`READ-ONLY stays in the bar at ${w}, on the Portfolio and the Map`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: h });
       for (const hash of ['#/portfolio', '#/map']) {
@@ -133,7 +152,12 @@ test.describe('a read-only session', () => {
         const box = await chip.boundingBox();
         expect(box && box.x + box.width).toBeLessThanOrEqual(w);
         // the bar itself never scrolls sideways
-        expect(await page.evaluate(() => { const b = document.querySelector('.topbar') as HTMLElement; return b.scrollWidth - b.clientWidth; })).toBeLessThanOrEqual(1);
+        expect(
+          await page.evaluate(() => {
+            const b = document.querySelector('.topbar') as HTMLElement;
+            return b.scrollWidth - b.clientWidth;
+          }),
+        ).toBeLessThanOrEqual(1);
       }
     });
   }
@@ -141,10 +165,15 @@ test.describe('a read-only session', () => {
 
 /** Every visible control that would write, and which of them are live — none may be, on a read-only server. */
 async function liveWrites(page: import('@playwright/test').Page): Promise<string[]> {
-  return page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-write]')]
-    .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
-    .filter((e) => !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true')
-    .map((e) => (e.id || e.className || e.tagName) + ': ' + (e.textContent || '').trim().slice(0, 30)));
+  return page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('[data-write]')]
+      .filter((e) => {
+        const r = e.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      })
+      .filter((e) => !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true')
+      .map((e) => (e.id || e.className || e.tagName) + ': ' + (e.textContent || '').trim().slice(0, 30)),
+  );
 }
 
 test.describe('a read-only session, on every surface', () => {
@@ -157,10 +186,17 @@ test.describe('a read-only session, on every surface', () => {
     const ws = makeWorkspace('readonly-all');
     done = ws.cleanup;
     const port = await freePort();
-    srv = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(port), '--read-only'], { cwd: ws.dir, stdio: 'ignore' });
+    srv = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(port), '--read-only'], {
+      cwd: ws.dir,
+      stdio: 'ignore',
+    });
     url = `http://localhost:${port}/`;
     for (let i = 0; i < 100; i++) {
-      try { if ((await fetch(url + 'api/version')).ok) return; } catch { /* not yet */ }
+      try {
+        if ((await fetch(url + 'api/version')).ok) return;
+      } catch {
+        /* not yet */
+      }
       await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error('the read-only server never answered');
@@ -175,9 +211,13 @@ test.describe('a read-only session, on every surface', () => {
    * @covers packages/server/public/app/lib/read-only.js::installReadOnly
    * @covers packages/server/public/app/surfaces/work.js::workSync
    */
-  test('Work, an item, Settings, the journey, the Map and the Portfolio: the chip, and no live write control', async ({ page }) => {
+  test('Work, an item, Settings, the journey, the Map and the Portfolio: the chip, and no live write control', async ({
+    page,
+  }) => {
     const writes: string[] = [];
-    page.on('request', (r) => { if (r.method() !== 'GET') writes.push(r.method() + ' ' + r.url()); });
+    page.on('request', (r) => {
+      if (r.method() !== 'GET') writes.push(r.method() + ' ' + r.url());
+    });
     await routeWork(page);
     // the Map is a workspace flag: on for this walk, read from the settings the server serves
     await page.route('**/api/settings', async (route) => {
@@ -191,7 +231,11 @@ test.describe('a read-only session, on every surface', () => {
       ['work', '#/work', '.wk-syncbtn'],
       ['an item', '#/work/' + encodeURIComponent('work::invoice-jira::INV-3'), '.wk-head'],
       ['settings', '#/settings', '#savebtn'],
-      ['the journey', '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?layout=table', '.map-table .jrn-sheet'],
+      [
+        'the journey',
+        '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?layout=table',
+        '.map-table .jrn-sheet',
+      ],
       ['the map', '#/map', '.map-district'],
       ['the portfolio', '#/portfolio', '.pf-wrap'],
     ];
@@ -226,13 +270,18 @@ test.describe('a read-only session, on every surface', () => {
 
 test.describe('the Map toolbar', () => {
   /** @covers packages/server/public/app/surfaces/map.js::fitChrome */
-  for (const [w, h] of [[1440, 900], [1280, 800]]) {
+  for (const [w, h] of [
+    [1440, 900],
+    [1280, 800],
+  ]) {
     test(`fits at ${w}: nothing past the right edge, the legend button on screen`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: h });
       await gotoReady(page, '#/portfolio');
       await page.evaluate(() => {
         const S = (window as any).S;
-        S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+        S.SETTINGS = Object.assign({}, S.SETTINGS, {
+          flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }),
+        });
         location.hash = '#/map';
       });
       const chrome = page.locator('.map-chrome');
@@ -247,7 +296,7 @@ test.describe('the Map toolbar', () => {
 
 test.describe('the journey', () => {
   /** @covers packages/server/public/app/lib/journey-draw.js::jrnSheetVerifiedHtml */
-  test('the table\'s Verified-by cell keeps its words inside its column', async ({ page }) => {
+  test("the table's Verified-by cell keeps its words inside its column", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openJourneyAt(page, 'table');
     await expect(page.locator('.jrn-scell .jrn-tfoot').first()).toBeVisible();
@@ -270,9 +319,13 @@ test.describe('the journey', () => {
    * @covers packages/server/public/app/surfaces/map-stops.js::registerView
    * @covers packages/server/public/app/surfaces/map-stops.js::setLayout
    */
-  test('the register decides where a journey opens on the Map, and each register remembers its own choice', async ({ page }) => {
-    const door = (lens: string) => gotoReady(page, '#/journeys?lens=' + lens)
-      .then(() => page.locator('.dsg-flow.pinned').first().getByRole('button', { name: 'Open journey' }).click());
+  test('the register decides where a journey opens on the Map, and each register remembers its own choice', async ({
+    page,
+  }) => {
+    const door = (lens: string) =>
+      gotoReady(page, '#/journeys?lens=' + lens).then(() =>
+        page.locator('.dsg-flow.pinned').first().getByRole('button', { name: 'Open journey' }).click(),
+      );
     // hybrid: the table
     await door('hybrid');
     await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();

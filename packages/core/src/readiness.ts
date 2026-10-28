@@ -24,13 +24,21 @@ import { type GraphIndex, journey, journeySummary } from './query.js';
 import { screensFor } from './design.js';
 import { counted, type Counted } from './counts.js';
 import { gateCard, gateNameParts } from './gates.js';
-import { ownCaseHold, projectSplitWords, caseProjectSplit, type ProjectSplit, type CoverageTestRef, type EvidenceWord, type OwnCaseHold } from './coverage.js';
+import {
+  ownCaseHold,
+  projectSplitWords,
+  caseProjectSplit,
+  type ProjectSplit,
+  type CoverageTestRef,
+  type EvidenceWord,
+  type OwnCaseHold,
+} from './coverage.js';
 import type { TestRunProject } from './graph.js';
 import type { JourneyTree, JourneyStoryline, JourneyRow } from './journeys.js';
 
 /** Why a row holds — a closed set, printed through `readiness.hold.<reason>`. */
 export const READINESS_HOLD_REASONS = ['notBuilt', 'failed', 'skipped'] as const;
-export type ReadinessHoldReason = typeof READINESS_HOLD_REASONS[number];
+export type ReadinessHoldReason = (typeof READINESS_HOLD_REASONS)[number];
 
 export interface ReadinessRow {
   /** `1`, `2`, … for a step; `2b` for a branch that leaves step 2 (`2c` for a second) */
@@ -70,7 +78,17 @@ export interface ReadinessRow {
    * own cases that passed on one project and were skipped on another by their own condition (outsider demo
    * 2026-10-13, F3: the reference app's storyline-wide case held all six journeys on its mobile skip)
    */
-  notes: { skipped: number; failed: number; projectSkips: { id: string; name: string; passedOn: string[]; skippedOn: { project: string; reason?: string }[]; words: { text: string; biz: string } }[] };
+  notes: {
+    skipped: number;
+    failed: number;
+    projectSkips: {
+      id: string;
+      name: string;
+      passedOn: string[];
+      skippedOn: { project: string; reason?: string }[];
+      words: { text: string; biz: string };
+    }[];
+  };
   owner?: string;
 }
 
@@ -102,13 +120,20 @@ export interface Readiness {
    * share is one in the header and one on each row, so the rows add up to more (the reference app: 12 distinct
    * skipped cases, 46 on the rows; 5 gates, 8 on the rows).
    */
-  distinct: { skipped: { label: string; name: string; n: number }[]; unreached: { label: string; name: string; n: number }[] };
+  distinct: {
+    skipped: { label: string; name: string; n: number }[];
+    unreached: { label: string; name: string; n: number }[];
+  };
 }
 
 /** A row's note for its own case a project skipped: *note: <case> passed on … · skipped on … (…)*, both registers. */
 function noteWords(name: string, split: ProjectSplit): { text: string; biz: string } {
-  const say = (key: string, words: string) => t(key, 'professional').split('{name}').join(name).split('{split}').join(words);
-  return { text: say('readiness.note.projectSkip', projectSplitWords(split)), biz: say('readiness.note.projectSkip', projectSplitWords(split, true)) };
+  const say = (key: string, words: string) =>
+    t(key, 'professional').split('{name}').join(name).split('{split}').join(words);
+  return {
+    text: say('readiness.note.projectSkip', projectSplitWords(split)),
+    biz: say('readiness.note.projectSkip', projectSplitWords(split, true)),
+  };
 }
 
 /** The order the register reads: business first, then policy, then technical — and within a tier the fewest tests first. */
@@ -118,12 +143,22 @@ const SRC = 'core readiness.ts readiness';
 type CommitsSince = (repo: string, parts: { node: string; path?: string }[], since: string) => number | null;
 
 /** The brief for one storyline; undefined when the tree declares no storyline of that id. */
-export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: string, opts: { commitsSince?: CommitsSince; repo?: string } = {}): Readiness | undefined {
+export function readiness(
+  index: GraphIndex,
+  tree: JourneyTree,
+  storylineId: string,
+  opts: { commitsSince?: CommitsSince; repo?: string } = {},
+): Readiness | undefined {
   // two sources may each declare a storyline of the same id: `repo` names the one asked for
-  const st: JourneyStoryline | undefined = tree.storylines.find((s) => s.id === storylineId && (!opts.repo || s.repo === opts.repo));
+  const st: JourneyStoryline | undefined = tree.storylines.find(
+    (s) => s.id === storylineId && (!opts.repo || s.repo === opts.repo),
+  );
   if (!st) return undefined;
   const cards = new Map<string, ReturnType<typeof gateCard>>();
-  const card = (id: string) => { if (!cards.has(id)) cards.set(id, gateCard(index, id)); return cards.get(id); };
+  const card = (id: string) => {
+    if (!cards.has(id)) cards.set(id, gateCard(index, id));
+    return cards.get(id);
+  };
   const rules = new Map<string, { node: GraphNode; screens: Set<string>; owners: Set<string> }>();
   const allCases = new Map<string, CoverageTestRef>();
 
@@ -137,16 +172,17 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
       const j = journey(index, r.nodeId);
       const sum = journeySummary(index, j, screensFor(index, r.nodeId));
       screens = sum.user.map((u) => ({ id: u.id, name: u.name, built: !!u.loc }));
-      for (const seg of sum.segments) for (const g of seg.gates) {
-        if (g.planned) continue;
-        gateIds.add(g.id);
-        const n = index.byId.get(g.id);
-        if (!n) continue;
-        const e = rules.get(g.id) ?? { node: n, screens: new Set<string>(), owners: new Set<string>() };
-        if (seg.screen) e.screens.add(seg.screen.id);
-        if (r.owner) e.owners.add(r.owner);
-        rules.set(g.id, e);
-      }
+      for (const seg of sum.segments)
+        for (const g of seg.gates) {
+          if (g.planned) continue;
+          gateIds.add(g.id);
+          const n = index.byId.get(g.id);
+          if (!n) continue;
+          const e = rules.get(g.id) ?? { node: n, screens: new Set<string>(), owners: new Set<string>() };
+          if (seg.screen) e.screens.add(seg.screen.id);
+          if (r.owner) e.owners.add(r.owner);
+          rules.set(g.id, e);
+        }
       const seen = new Set<string>();
       for (const s of j.steps) {
         if (seen.has(s.nodeId)) continue;
@@ -161,21 +197,33 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
         verdict = { word, ...(cov.verdict.status ? { status: cov.verdict.status } : {}), runs: cov.verdict.runs };
         refs = cov.tests.filter((t) => !t.runLevel);
       }
-    } catch { /* a journey that cannot be walked: its row says what the tree knows and nothing more */ }
+    } catch {
+      /* a journey that cannot be walked: its row says what the tree knows and nothing more */
+    }
     for (const t of refs) allCases.set(t.id, t);
     const part = (k: string) => verdict?.runs.breakdown?.find((p) => p.key === `count.part.${k}`)?.n ?? 0;
-    const ats = refs.map((t) => t.at).filter((x): x is string => !!x).sort();
-    const greens = refs.filter((t) => t.status === 'passed' && t.at).map((t) => t.at!).sort();
+    const ats = refs
+      .map((t) => t.at)
+      .filter((x): x is string => !!x)
+      .sort();
+    const greens = refs
+      .filter((t) => t.status === 'passed' && t.at)
+      .map((t) => t.at!)
+      .sort();
     const lastGreen = greens.pop() ?? null;
     // the journey's own declared cases: an end-to-end case whose `@covers` names this journey (by its id or node id)
     const { own, hold: ownHold } = ownCaseHold(index, [r.id, r.nodeId], refs);
     const ownIds = new Set(own.map((t) => t.id));
     const holdCases = ownHold?.cases ?? [];
-    const projectSkips = own.filter((t) => t.status === 'passed' && t.projects?.some((p) => p.status === 'skipped'))
+    const projectSkips = own
+      .filter((t) => t.status === 'passed' && t.projects?.some((p) => p.status === 'skipped'))
       .map((t) => ({
-        id: t.id, name: t.name,
+        id: t.id,
+        name: t.name,
         passedOn: t.projects!.filter((p) => p.status === 'passed').map((p) => p.project),
-        skippedOn: t.projects!.filter((p) => p.status === 'skipped').map((p: TestRunProject) => ({ project: p.project, ...(p.reason ? { reason: p.reason } : {}) })),
+        skippedOn: t
+          .projects!.filter((p) => p.status === 'skipped')
+          .map((p: TestRunProject) => ({ project: p.project, ...(p.reason ? { reason: p.reason } : {}) })),
         // the row's note in words, made once here (`readiness.note.projectSkip` over `projectSplitWords`)
         words: noteWords(t.name, caseProjectSplit(t)!),
       }))
@@ -185,7 +233,8 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
       failed: refs.filter((t) => t.status === 'failed' && !ownIds.has(t.id)).length,
       projectSkips,
     };
-    const unreached = [...gateIds].filter((id) => (card(id)?.tests.length ?? 0) === 0)
+    const unreached = [...gateIds]
+      .filter((id) => (card(id)?.tests.length ?? 0) === 0)
       .map((id) => ({ id, name: index.byId.get(id)?.name ?? id }));
     const builtN = screens.length ? screens.filter((s) => s.built).length : r.built;
     const of = screens.length || r.total;
@@ -194,16 +243,22 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
     if (!allBuilt) hold.push('notBuilt');
     if (holdCases.some((c) => c.status === 'failed')) hold.push('failed');
     if (holdCases.some((c) => c.status === 'skipped')) hold.push('skipped');
-    const commitsSince = lastGreen && opts.commitsSince && parts.length ? opts.commitsSince(r.repo, parts, lastGreen) : null;
+    const commitsSince =
+      lastGreen && opts.commitsSince && parts.length ? opts.commitsSince(r.repo, parts, lastGreen) : null;
     return {
-      label, kind, flowId: r.nodeId, name: r.name,
+      label,
+      kind,
+      flowId: r.nodeId,
+      name: r.name,
       ...(r.description ? { description: r.description } : {}),
       screens,
       built: { all: allBuilt, n: builtN, of },
       verdict,
       lastRun: ats.pop() ?? null,
       lastGreen,
-      skipped: part('skipped'), failed: part('failed'), unrun: part('noRun'),
+      skipped: part('skipped'),
+      failed: part('failed'),
+      unrun: part('noRun'),
       gates: { n: gateIds.size, unreached },
       commitsSince,
       ship: hold.length === 0,
@@ -226,22 +281,34 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
     });
   });
 
-  const ruleRows: ReadinessRule[] = [...rules.values()].map(({ node, screens, owners }) => {
-    const c = card(node.id);
-    const { ident, phrase } = gateNameParts(node.name);
-    const words = c?.gate.business ?? node.precondition?.words ?? (ident ? phrase : undefined);
-    const t = gateTierOf(node);
-    return {
-      id: node.id, name: node.name, kind: node.kind === 'rule' ? 'rule' as const : 'guard' as const, ident: ident || node.name,
-      ...(words ? { words } : {}),
-      screens: screens.size,
-      tests: c ? c.tests.filter((t) => !t.runLevel).length : 0,
-      owners: [...owners].sort(),
-      tier: t.tier, class: t.class,
-    };
-  // ranked by tier, then by how few cases reach it: the business rule no test reaches reads first (swarm round 3,
-  // the executive: the one rule that gates paying money had 0 tests and sorted below cookie checks)
-  }).sort((a, b) => (TIER_RANK[a.tier ?? 'business']! - TIER_RANK[b.tier ?? 'business']!) || a.tests - b.tests || b.screens - a.screens || a.name.localeCompare(b.name));
+  const ruleRows: ReadinessRule[] = [...rules.values()]
+    .map(({ node, screens, owners }) => {
+      const c = card(node.id);
+      const { ident, phrase } = gateNameParts(node.name);
+      const words = c?.gate.business ?? node.precondition?.words ?? (ident ? phrase : undefined);
+      const t = gateTierOf(node);
+      return {
+        id: node.id,
+        name: node.name,
+        kind: node.kind === 'rule' ? ('rule' as const) : ('guard' as const),
+        ident: ident || node.name,
+        ...(words ? { words } : {}),
+        screens: screens.size,
+        tests: c ? c.tests.filter((t) => !t.runLevel).length : 0,
+        owners: [...owners].sort(),
+        tier: t.tier,
+        class: t.class,
+      };
+      // ranked by tier, then by how few cases reach it: the business rule no test reaches reads first (swarm round 3,
+      // the executive: the one rule that gates paying money had 0 tests and sorted below cookie checks)
+    })
+    .sort(
+      (a, b) =>
+        TIER_RANK[a.tier ?? 'business']! - TIER_RANK[b.tier ?? 'business']! ||
+        a.tests - b.tests ||
+        b.screens - a.screens ||
+        a.name.localeCompare(b.name),
+    );
 
   const steps = rows.filter((r) => r.kind === 'step').length;
   const ship = rows.filter((r) => r.ship).length;
@@ -255,9 +322,14 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
     counted: {
       steps: counted(rows.length, 'count.unit.journeys', scope, `${SRC} → storyline steps and branches`, {
         bizUnit: 'count.unit.journeys',
-        breakdown: [{ key: 'count.part.storylineSteps', n: steps }, { key: 'count.part.storylineBranches', n: rows.length - steps }],
+        breakdown: [
+          { key: 'count.part.storylineSteps', n: steps },
+          { key: 'count.part.storylineBranches', n: rows.length - steps },
+        ],
       }),
-      ship: counted(ship, 'count.unit.readinessShip', scope, `${SRC} → rows with no hold reason`, { bizUnit: 'count.unit.readinessShip' }),
+      ship: counted(ship, 'count.unit.readinessShip', scope, `${SRC} → rows with no hold reason`, {
+        bizUnit: 'count.unit.readinessShip',
+      }),
       hold: counted(rows.length - ship, 'count.unit.readinessHold', scope, `${SRC} → rows with a hold reason`, {
         bizUnit: 'count.unit.readinessHold',
         breakdown: [
@@ -266,9 +338,27 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
           { key: 'count.part.holdSkipped', n: rows.filter((r) => r.hold[0] === 'skipped').length },
         ],
       }),
-      skipped: counted(skippedCases, 'count.unit.readinessSkipped', scope, `${SRC} → distinct cases over the storyline whose own last run skipped (rows: ${rows.reduce((s, r) => s + r.skipped, 0)})`, { bizUnit: 'count.unit.readinessSkipped' }),
-      unreached: counted(unreachedIds.size, 'count.unit.readinessUnreached', scope, `${SRC} → distinct gates on its screens with no case in their gate card`, { bizUnit: 'count.unit.readinessUnreached' }),
-      rules: counted(ruleRows.length, 'count.unit.readinessRules', scope, `${SRC} → distinct gates and rules on its screens`, { bizUnit: 'count.unit.readinessRules' }),
+      skipped: counted(
+        skippedCases,
+        'count.unit.readinessSkipped',
+        scope,
+        `${SRC} → distinct cases over the storyline whose own last run skipped (rows: ${rows.reduce((s, r) => s + r.skipped, 0)})`,
+        { bizUnit: 'count.unit.readinessSkipped' },
+      ),
+      unreached: counted(
+        unreachedIds.size,
+        'count.unit.readinessUnreached',
+        scope,
+        `${SRC} → distinct gates on its screens with no case in their gate card`,
+        { bizUnit: 'count.unit.readinessUnreached' },
+      ),
+      rules: counted(
+        ruleRows.length,
+        'count.unit.readinessRules',
+        scope,
+        `${SRC} → distinct gates and rules on its screens`,
+        { bizUnit: 'count.unit.readinessRules' },
+      ),
     },
     distinct: {
       skipped: rows.map((r) => ({ label: r.label, name: r.name, n: r.skipped })),
@@ -280,15 +370,50 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
 /** The brief as a spreadsheet: one line per row, the words a reader sees (the CLI and the viewer's CSV). */
 export function readinessCsvRows(r: Readiness, word: (key: string) => string): { header: string[]; rows: string[][] } {
   // `notes` is appended last so a sheet that reads the earlier columns by position keeps reading them
-  const header = ['step', 'journey', 'kind', 'branch_of', 'when', 'built', 'screens_built', 'screens', 'verdict', 'last_run', 'skipped', 'failed', 'unrun', 'gates', 'gates_no_test', 'commits_since_green', 'decision', 'reasons', 'owner', 'notes'];
+  const header = [
+    'step',
+    'journey',
+    'kind',
+    'branch_of',
+    'when',
+    'built',
+    'screens_built',
+    'screens',
+    'verdict',
+    'last_run',
+    'skipped',
+    'failed',
+    'unrun',
+    'gates',
+    'gates_no_test',
+    'commits_since_green',
+    'decision',
+    'reasons',
+    'owner',
+    'notes',
+  ];
   const rows = r.rows.map((x) => [
-    x.label, x.name, x.kind, x.branchOf?.name ?? '', x.branchOf?.when ?? '',
-    x.built.all ? 'yes' : 'no', String(x.built.n), String(x.built.of),
-    x.verdict ? word(x.verdict.word.key) : '', x.lastRun ?? '',
-    String(x.skipped), String(x.failed), String(x.unrun), String(x.gates.n), String(x.gates.unreached.length),
+    x.label,
+    x.name,
+    x.kind,
+    x.branchOf?.name ?? '',
+    x.branchOf?.when ?? '',
+    x.built.all ? 'yes' : 'no',
+    String(x.built.n),
+    String(x.built.of),
+    x.verdict ? word(x.verdict.word.key) : '',
+    x.lastRun ?? '',
+    String(x.skipped),
+    String(x.failed),
+    String(x.unrun),
+    String(x.gates.n),
+    String(x.gates.unreached.length),
     x.commitsSince == null ? '' : String(x.commitsSince),
     x.ship ? 'ship' : 'hold',
-    [...x.hold.map((h) => word(`readiness.hold.${h}`)), ...x.holdCases.map((c) => (c.where ? `${c.name} (${c.where.text})` : c.name))].join(' · '),
+    [
+      ...x.hold.map((h) => word(`readiness.hold.${h}`)),
+      ...x.holdCases.map((c) => (c.where ? `${c.name} (${c.where.text})` : c.name)),
+    ].join(' · '),
     x.owner ?? '',
     (x.notes.projectSkips ?? []).map((p) => p.words.text).join(' · '),
   ]);

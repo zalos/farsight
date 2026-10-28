@@ -99,7 +99,7 @@ test(
     const f = await publishedSecrets(t, 'positive', { 'structural.env': text });
     const a = await assessRun(f.store, f.runId, { trustDir: f.ws.trustDir });
     assert.ok(a.observations.some((o: any) => o.evidence.some((e: any) => e.content === sha(text))));
-    let outcome = '';
+    let outcome: string;
     try {
       const r = await fullReport({
         store: f.store,

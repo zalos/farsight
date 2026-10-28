@@ -15,12 +15,22 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  countedText, breakdownText, historySentence, t, fillFreshness, freshnessVars,
-  type StateOfPlay, type HistoryFact,
+  countedText,
+  breakdownText,
+  historySentence,
+  t,
+  fillFreshness,
+  freshnessVars,
+  type StateOfPlay,
+  type HistoryFact,
 } from '@farsight/core';
 
 /** One lesson the owner wrote for agents: its words, whether it is pinned (read at every session start), when. */
-export interface Lesson { text: string; pinned?: boolean; date?: string }
+export interface Lesson {
+  text: string;
+  pinned?: boolean;
+  date?: string;
+}
 
 /** The three things an MCP session reads from `.farsight/settings.json` — and nothing else. */
 export interface AgentSettings {
@@ -42,7 +52,11 @@ export function readAgentSettings(workspace: string): AgentSettings {
   const p = join(workspace, '.farsight', 'settings.json');
   if (!existsSync(p)) return { lessons: [] };
   let raw: { mcp?: { tools?: unknown; budget?: unknown }; lessons?: unknown };
-  try { raw = JSON.parse(readFileSync(p, 'utf8')); } catch { return { lessons: [] }; }
+  try {
+    raw = JSON.parse(readFileSync(p, 'utf8'));
+  } catch {
+    return { lessons: [] };
+  }
   const out: AgentSettings = { lessons: lessonsOf(raw?.lessons) };
   if (raw?.mcp && typeof raw.mcp === 'object') {
     if (raw.mcp.tools !== undefined) out.tools = raw.mcp.tools;
@@ -102,16 +116,24 @@ export function contextBlock(c: ContextInput): string[] {
   ].join(' ');
   const s = c.state;
   const out = [`<farsight-context ${attrs}>`];
-  out.push(`built: ${[w(s.built.journeys), w(s.built.screens), w(s.built.operations), w(s.built.storylines)].join(' · ')}`);
-  const verdicts = s.validated.byVerdict.filter((v) => v.word.cls !== 'none').map((v) => `${w(v.journeys)} ${t(v.word.key, 'professional')}`);
+  out.push(
+    `built: ${[w(s.built.journeys), w(s.built.screens), w(s.built.operations), w(s.built.storylines)].join(' · ')}`,
+  );
+  const verdicts = s.validated.byVerdict
+    .filter((v) => v.word.cls !== 'none')
+    .map((v) => `${w(v.journeys)} ${t(v.word.key, 'professional')}`);
   // build state wins: the journeys not fully built are counted apart, never under a word (swarm round 3)
   if (s.validated.notFullyBuilt?.n) verdicts.push(w(s.validated.notFullyBuilt));
   const lastRun = s.validated.lastE2e
     ? `${t('state.lastE2e', 'professional').replace('{date}', s.validated.lastE2e.at.slice(0, 10))}${s.validated.lastE2e.fresh ? ` (${fillFreshness(t(s.validated.lastE2e.fresh.key, 'professional'), freshnessVars(s.validated.lastE2e.fresh))})` : ''}`
     : t('state.noE2e', 'professional');
-  out.push(`validated: ${[...verdicts, lastRun, `${w(s.validated.cases)} (${breakdownText({ ...s.validated.cases, breakdown: (s.validated.cases.breakdown ?? []).filter((x) => x.n) })})`].join(' · ')}`);
+  out.push(
+    `validated: ${[...verdicts, lastRun, `${w(s.validated.cases)} (${breakdownText({ ...s.validated.cases, breakdown: (s.validated.cases.breakdown ?? []).filter((x) => x.n) })})`].join(' · ')}`,
+  );
   const notBuilt = s.open.notBuiltNames.length ? ` (${s.open.notBuiltNames.join(', ')})` : '';
-  out.push(`open: ${[`${w(s.open.screensNotBuilt)}${notBuilt}`, w(s.open.operationsNotImplemented), w(s.open.blindSpots), w(s.open.drift)].join(' · ')}`);
+  out.push(
+    `open: ${[`${w(s.open.screensNotBuilt)}${notBuilt}`, w(s.open.operationsNotImplemented), w(s.open.blindSpots), w(s.open.drift)].join(' · ')}`,
+  );
   if (c.history) {
     out.push(`history: ${historySentence(c.history)}${c.history.agents ? ` · ${w(c.history.agents)}` : ''}`);
   }
@@ -127,10 +149,16 @@ export function contextBlock(c: ContextInput): string[] {
   }
   const pinned = c.lessons.filter((l) => l.pinned);
   if (pinned.length) {
-    const shown = pinned.slice(0, LESSONS_SHOWN).map((l) => `"${l.text.replace(/\s+/g, ' ')}"${l.date ? ` (${l.date})` : ''}`);
-    out.push(`lessons pinned by the owner (${pinned.length} of ${c.lessons.length}): ${shown.join(' · ')}${pinned.length > LESSONS_SHOWN ? ` · … +${pinned.length - LESSONS_SHOWN} more` : ''}`);
+    const shown = pinned
+      .slice(0, LESSONS_SHOWN)
+      .map((l) => `"${l.text.replace(/\s+/g, ' ')}"${l.date ? ` (${l.date})` : ''}`);
+    out.push(
+      `lessons pinned by the owner (${pinned.length} of ${c.lessons.length}): ${shown.join(' · ')}${pinned.length > LESSONS_SHOWN ? ` · … +${pinned.length - LESSONS_SHOWN} more` : ''}`,
+    );
   } else {
-    out.push(`lessons: none pinned${c.lessons.length ? ` (${c.lessons.length} written, none pinned)` : ''} — the owner writes them on the Settings page (Lessons for agents); an agent never does`);
+    out.push(
+      `lessons: none pinned${c.lessons.length ? ` (${c.lessons.length} written, none pinned)` : ''} — the owner writes them on the Settings page (Lessons for agents); an agent never does`,
+    );
   }
   out.push(c.tools);
   out.push('</farsight-context>');

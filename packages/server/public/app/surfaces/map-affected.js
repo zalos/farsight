@@ -22,13 +22,29 @@ import { countedHtml, countedUnit, defAttrs, plainTip } from '../lib/counted.js'
 import { tipAttrs } from '../lib/tooltip.js';
 import { withParams } from '../lib/route-url.js';
 import {
-  AFF_HOPS, AFF_MAX_HOPS, parseSeedSpec, hopsOf, pickSeeds, combineReaches, reachKey, hopGroups, testEvidenceKey,
-  groupScreens, furthestHop, affectedRows, affectedTests, affectedCsv, affectedJson,
+  AFF_HOPS,
+  AFF_MAX_HOPS,
+  parseSeedSpec,
+  hopsOf,
+  pickSeeds,
+  combineReaches,
+  reachKey,
+  hopGroups,
+  testEvidenceKey,
+  groupScreens,
+  furthestHop,
+  affectedRows,
+  affectedTests,
+  affectedCsv,
+  affectedJson,
 } from '../lib/map-affected-model.js';
 
 /** The mode's state. `state`: idle · loading · ok · failed · unknown · noParts. */
 const AFF = {
-  spec: null, hops: AFF_HOPS, state: 'idle', gen: 0,
+  spec: null,
+  hops: AFF_HOPS,
+  state: 'idle',
+  gen: 0,
   /** the parts asked about: `{ id, name, node }` */
   seeds: [],
   /** parts the change touched beyond the ones asked about */
@@ -45,32 +61,63 @@ const AFF = {
 };
 const LISTENERS = new Set();
 const biz = () => currentLens() === 'business';
-function syncKey() { return String((S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || ''); }
-function notify() { for (const fn of LISTENERS) { try { fn(); } catch { /* a listener that throws does not stop the others */ } } }
+function syncKey() {
+  return String((S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || '');
+}
+function notify() {
+  for (const fn of LISTENERS) {
+    try {
+      fn();
+    } catch {
+      /* a listener that throws does not stop the others */
+    }
+  }
+}
 
 /** Tell the map when the mode moves (a seed, a distance, an answer, clear). Returns the way to stop listening. @group Map */
-export function onAffectedChange(fn) { LISTENERS.add(fn); return () => LISTENERS.delete(fn); }
+export function onAffectedChange(fn) {
+  LISTENERS.add(fn);
+  return () => LISTENERS.delete(fn);
+}
 /** Whether the board is dimmed around something (or about to be). @group Map */
-export function affectedOn() { return !!AFF.spec; }
+export function affectedOn() {
+  return !!AFF.spec;
+}
 /** Whether the answer is in and the board is drawn dimmed. @group Map */
-export function affectedReady() { return AFF.state === 'ok' && !!AFF.combined; }
+export function affectedReady() {
+  return AFF.state === 'ok' && !!AFF.combined;
+}
 /** The seed as the link writes it, or null. @group Map */
-export function affectedSpec() { return AFF.spec; }
+export function affectedSpec() {
+  return AFF.spec;
+}
 /** The distance the mode asks at. @group Map */
-export function affectedHops() { return AFF.hops; }
+export function affectedHops() {
+  return AFF.hops;
+}
 
 // ── the answers, one per seed and distance, kept per sync ─────────────────
 const CACHE = new Map();
 function impactOf(id, hops) {
   const key = id + '|' + hops + '@' + syncKey();
   if (!CACHE.has(key)) {
-    CACHE.set(key, fetch('/api/impact?node=' + encodeURIComponent(id) + '&direction=upstream&hops=' + hops + '&tests=1&reach=1')
-      .then((r) => (r.ok ? r.json() : null)).catch(() => null));
+    CACHE.set(
+      key,
+      fetch('/api/impact?node=' + encodeURIComponent(id) + '&direction=upstream&hops=' + hops + '&tests=1&reach=1')
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    );
   }
   return CACHE.get(key);
 }
-const json = (url) => fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-const nodeSeed = (id) => { const n = S.BYID && S.BYID[id]; return n ? { id, name: n.name, node: n } : null; };
+const json = (url) =>
+  fetch(url)
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+const nodeSeed = (id) => {
+  const n = S.BYID && S.BYID[id];
+  return n ? { id, name: n.name, node: n } : null;
+};
 
 /** What a seed in the link names: the parts to ask about and the seed's own words. */
 async function resolveSeeds(p) {
@@ -80,28 +127,40 @@ async function resolveSeeds(p) {
   }
   if (p.type === 'work') {
     let id = p.id.includes('::') ? p.id : null;
-    let label = p.id;
     if (!id) {
       const list = await json('/api/work?q=' + encodeURIComponent(p.id));
-      const hit = list && (list.items || []).find((i) => String(i.key).toUpperCase() === p.id.toUpperCase() || i.id === p.id);
+      const hit =
+        list && (list.items || []).find((i) => String(i.key).toUpperCase() === p.id.toUpperCase() || i.id === p.id);
       if (!hit) return { unknown: true };
       id = hit.id;
     }
     const ans = await json('/api/work/item/' + encodeURIComponent(id));
     if (!ans || !ans.item) return { unknown: true };
-    label = biz() ? (ans.item.title || ans.item.key) : [ans.item.key, ans.item.title].filter(Boolean).join(' · ');
+    const label = biz() ? ans.item.title || ans.item.key : [ans.item.key, ans.item.title].filter(Boolean).join(' · ');
     // the parts its commits touched; else the parts the item is linked to
     let ids = (ans.commits || []).flatMap((c) => c.nodes || []);
     if (!ids.length) ids = (ans.links || []).map((l) => l.id || l.nodeId).filter(Boolean);
-    const picked = pickSeeds(ids.map(nodeSeed).filter(Boolean).map((s) => ({ ...s, kind: s.node.kind })));
+    const picked = pickSeeds(
+      ids
+        .map(nodeSeed)
+        .filter(Boolean)
+        .map((s) => ({ ...s, kind: s.node.kind })),
+    );
     return picked.seeds.length ? { seeds: picked.seeds, more: picked.more, label } : { noParts: true, label };
   }
   // a commit: the parts its lines (else its files) touched
   const c = await json('/api/history/commit?sha=' + encodeURIComponent(p.id));
   if (!c) return { unknown: true };
   const subject = String(c.subject || '');
-  const label = (biz() ? unCode(subject.replace(/^\w+(?:\([^)]*\))?!?:\s*/, '')) : String(c.sha || '').slice(0, 7) + ' · ' + subject);
-  const picked = pickSeeds((c.parts || []).map((x) => nodeSeed(x.node)).filter(Boolean).map((s) => ({ ...s, kind: s.node.kind })));
+  const label = biz()
+    ? unCode(subject.replace(/^\w+(?:\([^)]*\))?!?:\s*/, ''))
+    : String(c.sha || '').slice(0, 7) + ' · ' + subject;
+  const picked = pickSeeds(
+    (c.parts || [])
+      .map((x) => nodeSeed(x.node))
+      .filter(Boolean)
+      .map((s) => ({ ...s, kind: s.node.kind })),
+  );
   return picked.seeds.length ? { seeds: picked.seeds, more: picked.more, label } : { noParts: true, label };
 }
 
@@ -113,7 +172,10 @@ async function resolveSeeds(p) {
  */
 export async function setAffected(spec, opts = {}) {
   const p = parseSeedSpec(spec);
-  if (!p) { clearAffected(); return; }
+  if (!p) {
+    clearAffected();
+    return;
+  }
   const hops = hopsOf(opts.hops != null ? opts.hops : AFF.spec === p.spec ? AFF.hops : AFF_HOPS);
   if (AFF.spec === p.spec && AFF.hops === hops && AFF.state !== 'failed') return;
   const same = AFF.spec === p.spec && AFF.seeds.length;
@@ -125,12 +187,20 @@ export async function setAffected(spec, opts = {}) {
   if (!same) {
     const r = await resolveSeeds(p);
     if (gen !== AFF.gen) return;
-    if (r.unknown || r.noParts) { Object.assign(AFF, { state: r.unknown ? 'unknown' : 'noParts', label: r.label || p.id }); notify(); return; }
+    if (r.unknown || r.noParts) {
+      Object.assign(AFF, { state: r.unknown ? 'unknown' : 'noParts', label: r.label || p.id });
+      notify();
+      return;
+    }
     Object.assign(AFF, { seeds: r.seeds, more: r.more, label: r.label });
   }
   const reports = await Promise.all(AFF.seeds.map((s) => impactOf(s.id, hops)));
   if (gen !== AFF.gen) return;
-  if (reports.some((x) => !x || !x.reach)) { AFF.state = 'failed'; notify(); return; }
+  if (reports.some((x) => !x || !x.reach)) {
+    AFF.state = 'failed';
+    notify();
+    return;
+  }
   AFF.entries = AFF.seeds.map((s, i) => ({ seed: s.id, report: reports[i] }));
   AFF.combined = combineReaches(AFF.entries.map((e) => ({ seed: e.seed, reach: e.report.reach })));
   AFF.pick = Math.min(AFF.pick, AFF.entries.length - 1);
@@ -138,39 +208,78 @@ export async function setAffected(spec, opts = {}) {
   notify();
 }
 /** Ask again at another distance (the bar's stepper). @group Map */
-export function setAffectedHops(h) { if (AFF.spec) setAffected(AFF.spec, { hops: h }); }
+export function setAffectedHops(h) {
+  if (AFF.spec) setAffected(AFF.spec, { hops: h });
+}
 /** Leave the mode: the board is lit again. @group Map */
 export function clearAffected() {
   if (!AFF.spec && AFF.state === 'idle') return;
   AFF.gen++;
-  Object.assign(AFF, { spec: null, hops: AFF_HOPS, state: 'idle', seeds: [], more: 0, label: '', origin: null, entries: [], combined: null, pick: 0 });
+  Object.assign(AFF, {
+    spec: null,
+    hops: AFF_HOPS,
+    state: 'idle',
+    seeds: [],
+    more: 0,
+    label: '',
+    origin: null,
+    entries: [],
+    combined: null,
+    pick: 0,
+  });
   notify();
 }
 /** Forget the mode without telling anyone — the map is going away. @group Map */
 export function resetAffected() {
   AFF.gen++;
-  Object.assign(AFF, { spec: null, hops: AFF_HOPS, state: 'idle', seeds: [], more: 0, label: '', origin: null, entries: [], combined: null, pick: 0 });
+  Object.assign(AFF, {
+    spec: null,
+    hops: AFF_HOPS,
+    state: 'idle',
+    seeds: [],
+    more: 0,
+    label: '',
+    origin: null,
+    entries: [],
+    combined: null,
+    pick: 0,
+  });
   LISTENERS.clear();
 }
 /** Which seed the tab reads. @group Map */
-export function pickAffected(i) { if (AFF.entries[i]) { AFF.pick = i; notify(); } }
+export function pickAffected(i) {
+  if (AFF.entries[i]) {
+    AFF.pick = i;
+    notify();
+  }
+}
 
 /** The link parameters for the mode, or nulls that take them out. @group Map */
 export function affectedParams() {
   return { affected: AFF.spec || null, ahops: AFF.spec && AFF.hops !== AFF_HOPS ? String(AFF.hops) : null };
 }
 /** A hash with the mode carried, for links that open another screen or journey in the mode. */
-function carry(hash) { return withParams(hash, affectedParams()); }
+function carry(hash) {
+  return withParams(hash, affectedParams());
+}
 
 // ── how a place is reached ────────────────────────────────────────────────
 /** A journey's reach, or null. @group Map */
-export function journeyReach(flow) { return affectedReady() ? AFF.combined.journeys.get(flow) || null : null; }
+export function journeyReach(flow) {
+  return affectedReady() ? AFF.combined.journeys.get(flow) || null : null;
+}
 /** A screen's reach in one journey, or null. @group Map */
-export function screenReach(flow, screenId) { return affectedReady() ? AFF.combined.screens.get(flow + '|' + screenId) || null : null; }
+export function screenReach(flow, screenId) {
+  return affectedReady() ? AFF.combined.screens.get(flow + '|' + screenId) || null : null;
+}
 /** A call's or a data node's reach, or null. @group Map */
-export function nodeReach(nodeId) { return affectedReady() ? AFF.combined.nodes.get(nodeId) || null : null; }
+export function nodeReach(nodeId) {
+  return affectedReady() ? AFF.combined.nodes.get(nodeId) || null : null;
+}
 /** Whether this node is one of the parts asked about. @group Map */
-export function isSeed(nodeId) { return AFF.seeds.some((s) => s.id === nodeId); }
+export function isSeed(nodeId) {
+  return AFF.seeds.some((s) => s.id === nodeId);
+}
 
 function seedName(id) {
   const s = AFF.seeds.find((x) => x.id === id);
@@ -188,13 +297,35 @@ function reachWords(hop) {
 export function reachBadgeHtml(r, cls) {
   if (!r) return '';
   const key = reachKey(r.hop, biz());
-  const tip = AFF.seeds.length > 1
-    ? tipAttrs({ id: 'table', noFocus: true, args: { caption: 'map.affected.bySeeds', rows: r.by.map((b) => [seedName(b.seed), reachWords(b.hop)]) } })
-    : tipAttrs({ key, noFocus: true });
-  return '<span class="map-affb ' + (cls || '') + (r.hop === 0 ? ' self' : '') + '" data-hop="' + r.hop + '"' + tip + '>' + esc(reachWords(r.hop)) + '</span>';
+  const tip =
+    AFF.seeds.length > 1
+      ? tipAttrs({
+          id: 'table',
+          noFocus: true,
+          args: { caption: 'map.affected.bySeeds', rows: r.by.map((b) => [seedName(b.seed), reachWords(b.hop)]) },
+        })
+      : tipAttrs({ key, noFocus: true });
+  return (
+    '<span class="map-affb ' +
+    (cls || '') +
+    (r.hop === 0 ? ' self' : '') +
+    '" data-hop="' +
+    r.hop +
+    '"' +
+    tip +
+    '>' +
+    esc(reachWords(r.hop)) +
+    '</span>'
+  );
 }
 function seedBadgeHtml() {
-  return '<span class="map-affb seed"' + tipAttrs({ key: 'map.affected.seed', noFocus: true }) + '>' + esc(t('map.affected.seed')) + '</span>';
+  return (
+    '<span class="map-affb seed"' +
+    tipAttrs({ key: 'map.affected.seed', noFocus: true }) +
+    '>' +
+    esc(t('map.affected.seed')) +
+    '</span>'
+  );
 }
 
 /**
@@ -215,7 +346,13 @@ export function paintDistrict(el, flow, model) {
   const seedHere = screens.some((s) => isSeed(s.id)) || (AFF.origin && AFF.origin.flow === flow);
   el.classList.add(jr ? 'aff-hit' : 'aff-dim');
   if (seedHere) el.classList.add('aff-seed');
-  const jb = jr ? reachBadgeHtml(jr, 'j') : '<span class="map-affb not"' + tipAttrs({ key: 'map.affected.not', noFocus: true }) + '>' + esc(t('map.affected.not')) + '</span>';
+  const jb = jr
+    ? reachBadgeHtml(jr, 'j')
+    : '<span class="map-affb not"' +
+      tipAttrs({ key: 'map.affected.not', noFocus: true }) +
+      '>' +
+      esc(t('map.affected.not')) +
+      '</span>';
   el.querySelectorAll('.map-dhead .agg, .map-dcover-in .agg').forEach((a) => a.insertAdjacentHTML('afterbegin', jb));
   // at the board the cover's own badge is small: a lit journey also carries one large badge on its corner,
   // counter-scaled like the cover, so lit and dimmed read apart at the fit (round 2)
@@ -232,7 +369,10 @@ export function paintDistrict(el, flow, model) {
     const s = screens[+x.dataset.si];
     const c = s && s.calls[+x.dataset.ci];
     const nodeId = c ? (x.classList.contains('map-pl') ? c.nodeId : (c.data[+x.dataset.di] || {}).nodeId) : null;
-    if (!nodeId) { x.classList.add('aff-dim'); return; }
+    if (!nodeId) {
+      x.classList.add('aff-dim');
+      return;
+    }
     const seed = isSeed(nodeId);
     const r = nodeReach(nodeId);
     x.classList.add(seed || r ? 'aff-hit' : 'aff-dim');
@@ -254,31 +394,115 @@ export function affectedBarHtml() {
   if (!AFF.spec) return '';
   const name = AFF.label || (AFF.seeds[0] ? seedName(AFF.seeds[0].id) : '');
   let state = '';
-  if (AFF.state === 'loading') state = '<span class="map-affst"' + defAttrs('map.affected.reading') + '>' + esc(t('map.affected.reading')) + '</span>';
-  else if (AFF.state === 'failed') state = '<span class="map-affst warn"' + defAttrs('map.affected.failed') + '>' + esc(t('map.affected.failed')) + '</span>';
-  else if (AFF.state === 'unknown') state = '<span class="map-affst warn"' + defAttrs('map.affected.unknown') + '>' + esc(t('map.affected.unknown')) + '</span>';
-  else if (AFF.state === 'noParts') state = '<span class="map-affst warn"' + defAttrs('map.affected.noParts') + '>' + esc(t('map.affected.noParts')) + '</span>';
+  if (AFF.state === 'loading')
+    state =
+      '<span class="map-affst"' + defAttrs('map.affected.reading') + '>' + esc(t('map.affected.reading')) + '</span>';
+  else if (AFF.state === 'failed')
+    state =
+      '<span class="map-affst warn"' +
+      defAttrs('map.affected.failed') +
+      '>' +
+      esc(t('map.affected.failed')) +
+      '</span>';
+  else if (AFF.state === 'unknown')
+    state =
+      '<span class="map-affst warn"' +
+      defAttrs('map.affected.unknown') +
+      '>' +
+      esc(t('map.affected.unknown')) +
+      '</span>';
+  else if (AFF.state === 'noParts')
+    state =
+      '<span class="map-affst warn"' +
+      defAttrs('map.affected.noParts') +
+      '>' +
+      esc(t('map.affected.noParts')) +
+      '</span>';
   const more = AFF.more
-    ? '<span class="map-affst"><span class="n"' + plainTip(AFF.more, 'map.affected.partsMore', 'map.affected.partsScope', '/api/impact').replace(' tabindex="0"', '') + '>' + AFF.more + '</span> '
-      + esc(t('map.affected.partsMore').split('{n}').slice(1).join(String(AFF.more)).trim()) + '</span>' : '';
-  let step = '<span class="map-affhops" role="group" aria-label="' + esc(t('impact.hops.label')) + '"><span class="hud-label"' + defAttrs('impact.hops.label') + '>' + esc(t('impact.hops.label')) + '</span>';
+    ? '<span class="map-affst"><span class="n"' +
+      plainTip(AFF.more, 'map.affected.partsMore', 'map.affected.partsScope', '/api/impact').replace(
+        ' tabindex="0"',
+        '',
+      ) +
+      '>' +
+      AFF.more +
+      '</span> ' +
+      esc(t('map.affected.partsMore').split('{n}').slice(1).join(String(AFF.more)).trim()) +
+      '</span>'
+    : '';
+  let step =
+    '<span class="map-affhops" role="group" aria-label="' +
+    esc(t('impact.hops.label')) +
+    '"><span class="hud-label"' +
+    defAttrs('impact.hops.label') +
+    '>' +
+    esc(t('impact.hops.label')) +
+    '</span>';
   for (let h = 1; h <= AFF_MAX_HOPS; h++) {
     const label = t(h === 1 ? 'impact.hops.buttonOne' : 'impact.hops.button').replace('{n}', String(h));
-    step += '<button type="button" data-act="aff-hops" data-h="' + h + '" aria-pressed="' + (h === AFF.hops) + '" aria-label="' + esc(label) + '">' + h + '</button>';
+    step +=
+      '<button type="button" data-act="aff-hops" data-h="' +
+      h +
+      '" aria-pressed="' +
+      (h === AFF.hops) +
+      '" aria-label="' +
+      esc(label) +
+      '">' +
+      h +
+      '</button>';
   }
   step += '</span>';
   // a longer reach that finds nothing new says so, instead of printing the same numbers silently (round 2)
   const far = AFF.state === 'ok' ? furthestHop(AFF.entries) : null;
-  const noMore = far != null && far < AFF.hops
-    ? '<span class="map-affst map-affnomore"' + defAttrs('map.affected.noMore') + '>' + esc(t('map.affected.noMore').replace('{n}', String(Math.max(far, 1)))) + '</span>' : '';
+  const noMore =
+    far != null && far < AFF.hops
+      ? '<span class="map-affst map-affnomore"' +
+        defAttrs('map.affected.noMore') +
+        '>' +
+        esc(t('map.affected.noMore').replace('{n}', String(Math.max(far, 1)))) +
+        '</span>'
+      : '';
   const ready = AFF.state === 'ok';
-  const btn = (act, key) => '<button type="button" class="map-tb map-affact" data-act="' + act + '"' + (ready ? '' : ' disabled') + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
-  return '<div class="map-affbar" role="region" aria-label="' + esc(t('map.affected.title')) + '">'
-    + '<span class="hud-label ttl"' + defAttrs('map.affected.title') + '>' + esc(t('map.affected.title')) + '</span>'
-    + '<span class="on"><span class="hud-label"' + defAttrs('map.affected.on') + '>' + esc(t('map.affected.on')) + '</span> <b class="map-affname"' + tipAttrs({ text: name, noFocus: true }) + '>' + esc(name) + '</b></span>'
-    + barCounts() + more + step + noMore + state
-    + btn('aff-fit', 'map.affected.fit') + btn('aff-list', 'map.affected.list')
-    + '<button type="button" class="map-tb" data-act="aff-clear"' + tipAttrs({ key: 'map.affected.clear', noFocus: true }) + '>' + esc(t('map.affected.clear')) + '</button></div>';
+  const btn = (act, key) =>
+    '<button type="button" class="map-tb map-affact" data-act="' +
+    act +
+    '"' +
+    (ready ? '' : ' disabled') +
+    tipAttrs({ key, noFocus: true }) +
+    '>' +
+    esc(t(key)) +
+    '</button>';
+  return (
+    '<div class="map-affbar" role="region" aria-label="' +
+    esc(t('map.affected.title')) +
+    '">' +
+    '<span class="hud-label ttl"' +
+    defAttrs('map.affected.title') +
+    '>' +
+    esc(t('map.affected.title')) +
+    '</span>' +
+    '<span class="on"><span class="hud-label"' +
+    defAttrs('map.affected.on') +
+    '>' +
+    esc(t('map.affected.on')) +
+    '</span> <b class="map-affname"' +
+    tipAttrs({ text: name, noFocus: true }) +
+    '>' +
+    esc(name) +
+    '</b></span>' +
+    barCounts() +
+    more +
+    step +
+    noMore +
+    state +
+    btn('aff-fit', 'map.affected.fit') +
+    btn('aff-list', 'map.affected.list') +
+    '<button type="button" class="map-tb" data-act="aff-clear"' +
+    tipAttrs({ key: 'map.affected.clear', noFocus: true }) +
+    '>' +
+    esc(t('map.affected.clear')) +
+    '</button></div>'
+  );
 }
 
 /** One seed's journeys and screens — core's own Counteds; several seeds print none here (never a sum across them). */
@@ -286,14 +510,27 @@ function barCounts() {
   if (AFF.state !== 'ok' || AFF.entries.length !== 1) return '';
   const k = AFF.entries[0].report.reach.counted;
   // screens first (each page once), then the journeys they are in
-  return '<span class="map-affn">' + [k.screens, k.journeys].map((c) => countedHtml(c, '/api/impact', { cls: 'map-chip' })).join('') + '</span>';
+  return (
+    '<span class="map-affn">' +
+    [k.screens, k.journeys].map((c) => countedHtml(c, '/api/impact', { cls: 'map-chip' })).join('') +
+    '</span>'
+  );
 }
 /** The seed and its counts in one line, for the property's head while the mode is on (round 2). @group Map */
 export function affectedSummaryHtml() {
   if (!AFF.spec) return '';
   const name = AFF.label || (AFF.seeds[0] ? seedName(AFF.seeds[0].id) : '');
-  return '<span class="mp-affhead"><span class="hud-label"' + defAttrs('map.affected.on') + '>' + esc(t('map.affected.on')) + '</span> <b>' + esc(name) + '</b>'
-    + (AFF.state === 'ok' ? barCounts() : ' ' + affectedBarState()) + '</span>';
+  return (
+    '<span class="mp-affhead"><span class="hud-label"' +
+    defAttrs('map.affected.on') +
+    '>' +
+    esc(t('map.affected.on')) +
+    '</span> <b>' +
+    esc(name) +
+    '</b>' +
+    (AFF.state === 'ok' ? barCounts() : ' ' + affectedBarState()) +
+    '</span>'
+  );
 }
 /** The journeys any answer reaches, for Fit-to-affected. @group Map */
 export function affectedFlows() {
@@ -318,7 +555,8 @@ export function affectedListRows(board = {}) {
 /** The rows as text to copy: `csv` or `json` (farsight-affected v0, not frozen). @group Map */
 export function affectedExport(kind, board) {
   const rows = affectedListRows(board);
-  if (kind === 'json') return { text: affectedJson(rows, { seed: AFF.spec, hops: AFF.hops, sync: syncKey() }), n: rows.length };
+  if (kind === 'json')
+    return { text: affectedJson(rows, { seed: AFF.spec, hops: AFF.hops, sync: syncKey() }), n: rows.length };
   return { text: affectedCsv(rows), n: rows.length };
 }
 /** The list panel's body: per distance, journeys (with owners), screens once (with their journeys), owners, tests. @group Map */
@@ -332,25 +570,73 @@ export function affectedListHtml(board = {}) {
     if (!m.has(r.distance)) m.set(r.distance, []);
     m.get(r.distance).push(r);
   }
-  const head = '<div class="al-top"><span class="hud-label"' + defAttrs('map.affected.listTitle') + '>' + esc(t('map.affected.listTitle')) + '</span>'
-    + '<button type="button" class="x" data-act="aff-list-close" aria-label="' + esc(t('map.affected.listClose')) + '">✕</button></div>'
-    + '<div class="al-acts"><button type="button" class="map-tb" data-act="aff-copy" data-kind="csv"' + tipAttrs({ key: 'map.affected.copyCsv', noFocus: true }) + '>' + esc(t('map.affected.copyCsv')) + '</button>'
-    + '<button type="button" class="map-tb" data-act="aff-copy" data-kind="json"' + tipAttrs({ key: 'map.affected.copyJson', noFocus: true }) + '>' + esc(t('map.affected.copyJson')) + '</button>'
-    + '<span class="al-copied" aria-live="polite"></span></div>';
-  const bound = AFF.entries.map((e) => boundHtml(e.report)).filter((x, i, a) => a.indexOf(x) === i).join('');
+  const head =
+    '<div class="al-top"><span class="hud-label"' +
+    defAttrs('map.affected.listTitle') +
+    '>' +
+    esc(t('map.affected.listTitle')) +
+    '</span>' +
+    '<button type="button" class="x" data-act="aff-list-close" aria-label="' +
+    esc(t('map.affected.listClose')) +
+    '">✕</button></div>' +
+    '<div class="al-acts"><button type="button" class="map-tb" data-act="aff-copy" data-kind="csv"' +
+    tipAttrs({ key: 'map.affected.copyCsv', noFocus: true }) +
+    '>' +
+    esc(t('map.affected.copyCsv')) +
+    '</button>' +
+    '<button type="button" class="map-tb" data-act="aff-copy" data-kind="json"' +
+    tipAttrs({ key: 'map.affected.copyJson', noFocus: true }) +
+    '>' +
+    esc(t('map.affected.copyJson')) +
+    '</button>' +
+    '<span class="al-copied" aria-live="polite"></span></div>';
+  const bound = AFF.entries
+    .map((e) => boundHtml(e.report))
+    .filter((x, i, a) => a.indexOf(x) === i)
+    .join('');
   // the tests first, each once: the list a person runs — its spec file and line, its level, its own last run
   const tests = affectedTests(rows);
-  const runWord = (r) => (['passed', 'failed', 'skipped', 'flaky', 'unknown'].includes(r.lastRun) ? t('tests.run.' + r.lastRun) : '');
+  const runWord = (r) =>
+    ['passed', 'failed', 'skipped', 'flaky', 'unknown'].includes(r.lastRun) ? t('tests.run.' + r.lastRun) : '';
   const testRow = (r) => {
-    const loc = r.spec && !biz() ? '<span class="loc map-code"' + tipAttrs({ text: r.spec + (r.line !== '' ? ':' + r.line : ''), noFocus: true }) + '>'
-      + esc(r.spec.split('/').pop() + (r.line !== '' ? ':' + r.line : '')) + '</span>' : '';
+    const loc =
+      r.spec && !biz()
+        ? '<span class="loc map-code"' +
+          tipAttrs({ text: r.spec + (r.line !== '' ? ':' + r.line : ''), noFocus: true }) +
+          '>' +
+          esc(r.spec.split('/').pop() + (r.line !== '' ? ':' + r.line : '')) +
+          '</span>'
+        : '';
     const run = runWord(r);
-    const facts = [r.level ? t('tests.level.' + r.level) : '', run ? t('map.affected.lastRun').replace('{status}', run) : r.evidence].filter(Boolean).map(esc);
+    const facts = [
+      r.level ? t('tests.level.' + r.level) : '',
+      run ? t('map.affected.lastRun').replace('{status}', run) : r.evidence,
+    ]
+      .filter(Boolean)
+      .map(esc);
     if (run && r.at) facts.push('<span class="at">' + esc(String(r.at).slice(0, 10)) + '</span>');
-    return '<div class="al-row" data-kind="test" data-run="' + esc(r.lastRun || '') + '"><span class="nm">' + esc(r.name) + '</span><span class="sub">' + loc + (loc && facts.length ? ' · ' : '') + facts.join(' · ') + '</span></div>';
+    return (
+      '<div class="al-row" data-kind="test" data-run="' +
+      esc(r.lastRun || '') +
+      '"><span class="nm">' +
+      esc(r.name) +
+      '</span><span class="sub">' +
+      loc +
+      (loc && facts.length ? ' · ' : '') +
+      facts.join(' · ') +
+      '</span></div>'
+    );
   };
   const testsSec = tests.length
-    ? '<section class="al-tests"><div class="mp-affsub hud-label"' + defAttrs('map.affected.testsToRun') + '>' + esc(t('map.affected.testsToRun')) + ' · ' + tests.length + '</div>' + tests.map(testRow).join('') + '</section>'
+    ? '<section class="al-tests"><div class="mp-affsub hud-label"' +
+      defAttrs('map.affected.testsToRun') +
+      '>' +
+      esc(t('map.affected.testsToRun')) +
+      ' · ' +
+      tests.length +
+      '</div>' +
+      tests.map(testRow).join('') +
+      '</section>'
     : '';
   let body = '';
   for (const [seed, groups] of bySeed) {
@@ -358,13 +644,48 @@ export function affectedListHtml(board = {}) {
     for (const [hop, list] of [...groups.entries()].sort((a, b) => a[0] - b[0])) {
       const sec = (kind, key, line) => {
         const xs = list.filter((r) => r.kind === kind);
-        return xs.length ? '<div class="mp-affsub hud-label"' + defAttrs(key) + '>' + esc(t(key)) + ' · ' + xs.length + '</div>' + xs.map(line).join('') : '';
+        return xs.length
+          ? '<div class="mp-affsub hud-label"' +
+              defAttrs(key) +
+              '>' +
+              esc(t(key)) +
+              ' · ' +
+              xs.length +
+              '</div>' +
+              xs.map(line).join('')
+          : '';
       };
-      body += '<section class="al-hop" data-hop="' + hop + '">' + groupHead(hop)
-        + sec('journey', 'map.affected.journeys', (r) => '<div class="al-row" data-kind="journey"><span class="nm">' + esc(r.name) + '</span>' + (r.owner ? '<span class="sub">' + esc(r.owner) + '</span>' : '') + '</div>')
-        + sec('screen', 'map.affected.screens', (r) => '<div class="al-row" data-kind="screen"><span class="nm">' + esc(r.name) + '</span><span class="sub">' + esc(t('map.affected.onJourneys').replace('{list}', r.journeys)) + '</span></div>')
-        + sec('owner', 'map.affected.owners', (r) => '<div class="al-row" data-kind="owner"><span class="nm">' + esc(r.name) + '</span></div>')
-        + '</section>';
+      body +=
+        '<section class="al-hop" data-hop="' +
+        hop +
+        '">' +
+        groupHead(hop) +
+        sec(
+          'journey',
+          'map.affected.journeys',
+          (r) =>
+            '<div class="al-row" data-kind="journey"><span class="nm">' +
+            esc(r.name) +
+            '</span>' +
+            (r.owner ? '<span class="sub">' + esc(r.owner) + '</span>' : '') +
+            '</div>',
+        ) +
+        sec(
+          'screen',
+          'map.affected.screens',
+          (r) =>
+            '<div class="al-row" data-kind="screen"><span class="nm">' +
+            esc(r.name) +
+            '</span><span class="sub">' +
+            esc(t('map.affected.onJourneys').replace('{list}', r.journeys)) +
+            '</span></div>',
+        ) +
+        sec(
+          'owner',
+          'map.affected.owners',
+          (r) => '<div class="al-row" data-kind="owner"><span class="nm">' + esc(r.name) + '</span></div>',
+        ) +
+        '</section>';
     }
   }
   return head + bound + testsSec + (body || testsSec ? body : '<p class="mp-dim">' + esc(t('impact.none')) + '</p>');
@@ -374,12 +695,26 @@ export function affectedListHtml(board = {}) {
 /** A chip's words with how its screen is reached, for the card's *on* row while the mode is on. @group Map */
 export function screenChipReach(flow, screenId) {
   if (!affectedReady()) return '';
-  return reachBadgeHtml(screenReach(flow, screenId), 'c') || '<span class="map-affb not"' + tipAttrs({ key: 'map.affected.not', noFocus: true }) + '>' + esc(t('map.affected.not')) + '</span>';
+  return (
+    reachBadgeHtml(screenReach(flow, screenId), 'c') ||
+    '<span class="map-affb not"' +
+      tipAttrs({ key: 'map.affected.not', noFocus: true }) +
+      '>' +
+      esc(t('map.affected.not')) +
+      '</span>'
+  );
 }
 /** How another journey is reached, for the property's *also in* chips while the mode is on. @group Map */
 export function journeyChipReach(flow) {
   if (!affectedReady()) return '';
-  return reachBadgeHtml(journeyReach(flow), 'c') || '<span class="map-affb not"' + tipAttrs({ key: 'map.affected.not', noFocus: true }) + '>' + esc(t('map.affected.not')) + '</span>';
+  return (
+    reachBadgeHtml(journeyReach(flow), 'c') ||
+    '<span class="map-affb not"' +
+      tipAttrs({ key: 'map.affected.not', noFocus: true }) +
+      '>' +
+      esc(t('map.affected.not')) +
+      '</span>'
+  );
 }
 
 // ── the Affected tab ──────────────────────────────────────────────────────
@@ -390,12 +725,22 @@ export function affectedTabCount() {
 }
 function rowHtml(label, sub, right, href) {
   const open = href ? '<a class="mp-row card" href="' + esc(href) + '">' : '<div class="mp-row">';
-  return open + '<div class="l"><span class="nm">' + label + '</span>' + (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>'
-    + (right ? '<div class="r">' + right + '</div>' : '') + (href ? '</a>' : '</div>');
+  return (
+    open +
+    '<div class="l"><span class="nm">' +
+    label +
+    '</span>' +
+    (sub ? '<span class="sub">' + sub + '</span>' : '') +
+    '</div>' +
+    (right ? '<div class="r">' + right + '</div>' : '') +
+    (href ? '</a>' : '</div>')
+  );
 }
 function groupHead(hop) {
   const key = hop === 0 ? 'map.affected.self' : hop === 1 ? 'impact.hop1' : hop === 2 ? 'impact.hop2' : 'impact.hopN';
-  return '<h4 class="hud-label mp-affhop"' + defAttrs(key) + '>' + esc(t(key).replace('{n}', String(hop - 1))) + '</h4>';
+  return (
+    '<h4 class="hud-label mp-affhop"' + defAttrs(key) + '>' + esc(t(key).replace('{n}', String(hop - 1))) + '</h4>'
+  );
 }
 function flowName(id, fallback) {
   const d = S.BYID && S.BYID[id];
@@ -412,21 +757,59 @@ function testsHtml(tests) {
   if (biz()) {
     const levels = {};
     for (const x of tests) levels[x.level] = (levels[x.level] || 0) + 1;
-    const rows = Object.keys(levels).sort().map((k) => [t('tests.level.' + k), levels[k]]);
-    return '<div class="mp-row none"><span class="mp-note"' + plainTip(tests.length, 'map.affected.testsBiz', 'count.scope.affected', '/api/impact', rows) + '>'
-      + esc(t('map.affected.testsBiz').replace('{n}', String(tests.length))) + '</span></div>';
+    const rows = Object.keys(levels)
+      .sort()
+      .map((k) => [t('tests.level.' + k), levels[k]]);
+    return (
+      '<div class="mp-row none"><span class="mp-note"' +
+      plainTip(tests.length, 'map.affected.testsBiz', 'count.scope.affected', '/api/impact', rows) +
+      '>' +
+      esc(t('map.affected.testsBiz').replace('{n}', String(tests.length))) +
+      '</span></div>'
+    );
   }
-  return '<div class="mp-affsub hud-label"' + defAttrs('map.affected.tests') + '>' + esc(t('map.affected.tests')) + '</div>'
-    + tests.map((x) => rowHtml(esc(x.name), esc(t('tests.level.' + x.level)), '<span class="api-chip"' + defAttrs(testEvidenceKey(x)) + '>' + esc(t(testEvidenceKey(x))) + '</span>')).join('');
+  return (
+    '<div class="mp-affsub hud-label"' +
+    defAttrs('map.affected.tests') +
+    '>' +
+    esc(t('map.affected.tests')) +
+    '</div>' +
+    tests
+      .map((x) =>
+        rowHtml(
+          esc(x.name),
+          esc(t('tests.level.' + x.level)),
+          '<span class="api-chip"' + defAttrs(testEvidenceKey(x)) + '>' + esc(t(testEvidenceKey(x))) + '</span>',
+        ),
+      )
+      .join('')
+  );
 }
 function boundHtml(r) {
-  if (r.bound !== 'floor') return '<p class="mp-dim mp-affbound"' + defAttrs('impact.bound.exact') + '>' + esc(t('impact.bound.exact')) + '</p>';
-  if (!biz()) return '<p class="mp-dim mp-affbound"' + defAttrs('impact.bound.floor') + '>' + esc(t('impact.bound.floor').replace('{why}', (r.uncertainty && r.uncertainty.note) || '')) + '</p>';
+  if (r.bound !== 'floor')
+    return (
+      '<p class="mp-dim mp-affbound"' + defAttrs('impact.bound.exact') + '>' + esc(t('impact.bound.exact')) + '</p>'
+    );
+  if (!biz())
+    return (
+      '<p class="mp-dim mp-affbound"' +
+      defAttrs('impact.bound.floor') +
+      '>' +
+      esc(t('impact.bound.floor').replace('{why}', (r.uncertainty && r.uncertainty.note) || '')) +
+      '</p>'
+    );
   const why = [];
   if (r.cutPoints.length) why.push(t('impact.biz.why.cut'));
   if (r.hops.some((h) => h.nodes.some((n) => n.oneOf))) why.push(t('impact.biz.why.runtime'));
-  if (r.hops.some((h) => h.nodes.some((n) => !n.via.resolution || n.strength.unstamped))) why.push(t('impact.biz.why.unrecorded'));
-  return '<p class="mp-dim mp-affbound"' + defAttrs('impact.biz.floor') + '>' + esc(t('impact.biz.floor').replace('{why}', why.join('; '))) + '</p>';
+  if (r.hops.some((h) => h.nodes.some((n) => !n.via.resolution || n.strength.unstamped)))
+    why.push(t('impact.biz.why.unrecorded'));
+  return (
+    '<p class="mp-dim mp-affbound"' +
+    defAttrs('impact.biz.floor') +
+    '>' +
+    esc(t('impact.biz.floor').replace('{why}', why.join('; '))) +
+    '</p>'
+  );
 }
 function stopsHtml(r) {
   const stops = r.cutPoints.filter((c) => c.nodeId);
@@ -435,10 +818,33 @@ function stopsHtml(r) {
     const n = S.BYID && S.BYID[c.nodeId];
     const name = n ? (biz() ? bizName(n) : n.name) : c.name || '';
     if (biz()) return rowHtml(esc(t('map.affected.stop').replace('{name}', name)), '', '');
-    const why = c.reason === 'shared' ? t('impact.sharedHere') : c.reason === 'setup' ? t('impact.excluded.setup') : c.reason === 'deferred' ? t('impact.excluded.deferred') : t('impact.notWalked');
-    return rowHtml(esc(name), esc(why), '<span' + plainTip(c.behind, 'impact.behind', 'count.scope.affected', '/api/impact') + '>' + esc(t('impact.behind').replace('{n}', String(c.behind))) + '</span>');
+    const why =
+      c.reason === 'shared'
+        ? t('impact.sharedHere')
+        : c.reason === 'setup'
+          ? t('impact.excluded.setup')
+          : c.reason === 'deferred'
+            ? t('impact.excluded.deferred')
+            : t('impact.notWalked');
+    return rowHtml(
+      esc(name),
+      esc(why),
+      '<span' +
+        plainTip(c.behind, 'impact.behind', 'count.scope.affected', '/api/impact') +
+        '>' +
+        esc(t('impact.behind').replace('{n}', String(c.behind))) +
+        '</span>',
+    );
   });
-  return '<section class="mp-sec mp-affstops"><h3 class="hud-label"' + defAttrs('impact.notWalked') + '>' + esc(t('impact.notWalked')) + '</h3>' + rows.join('') + '</section>';
+  return (
+    '<section class="mp-sec mp-affstops"><h3 class="hud-label"' +
+    defAttrs('impact.notWalked') +
+    '>' +
+    esc(t('impact.notWalked')) +
+    '</h3>' +
+    rows.join('') +
+    '</section>'
+  );
 }
 
 /**
@@ -448,42 +854,138 @@ function stopsHtml(r) {
  * @group Map
  */
 export function affectedTabHtml(ctx) {
-  if (!AFF.spec) return '<div class="mp-row none"><span class="mp-note"' + defAttrs('map.affected.tabOff') + '>' + sym('absent') + esc(t('map.affected.tabOff')) + '</span></div>';
+  if (!AFF.spec)
+    return (
+      '<div class="mp-row none"><span class="mp-note"' +
+      defAttrs('map.affected.tabOff') +
+      '>' +
+      sym('absent') +
+      esc(t('map.affected.tabOff')) +
+      '</span></div>'
+    );
   if (AFF.state !== 'ok') return '<div class="mp-row none mp-loading">' + affectedBarState() + '</div>';
   const e = AFF.entries[AFF.pick];
   const r = e.report;
   const reach = r.reach;
   const k = reach.counted;
-  const pick = AFF.entries.length > 1
-    ? '<div class="mp-affpick"><span class="hud-label"' + defAttrs('map.affected.seedFor') + '>' + esc(t('map.affected.seedFor')) + '</span>'
-      + AFF.entries.map((x, i) => '<button type="button" class="api-chip' + (i === AFF.pick ? ' on' : '') + '" data-act="aff-pick" data-i="' + i + '" aria-pressed="' + (i === AFF.pick) + '">' + esc(seedName(x.seed)) + '</button>').join('') + '</div>' : '';
-  const counts = [k.screens, k.journeys, k.calls, k.tests].filter((c) => countedUnit(c))
-    .map((c) => (c === k.tests
-      // the tests count with its scope on the chip (round 2026-10-10): over what reaches the seed, as far as asked
-      ? '<span data-tchip class="tchip" data-scope="' + esc(c.scope) + '">' + countedHtml(c, '/api/impact', { cls: 'mp-chip' }) + '<span class="tc-sep"> · </span>' + scopeWordHtml(scopeWordKeyOf(c.scope)) + withinHtml() + '</span>'
-      : countedHtml(c, '/api/impact', { cls: 'mp-chip' }))).join('');
-  const scope = '<div class="mp-affscope"><span class="hud-label"' + defAttrs('count.scope.affected') + '>' + esc(t('count.scope.affected')) + '</span> <b>' + esc(seedName(e.seed)) + '</b></div>';
-  const groups = hopGroups(r).map((g) => {
-    const j = g.journeys.map((x) => rowHtml(esc(flowName(x.flowId, x.name)), '', '', carry('#/map/' + encodeURIComponent(x.flowId))));
-    // a screen several journeys share is listed once, with its journeys (round 2); it opens on the journey on screen when it is one of them
-    const s = groupScreens(g.screens).map((x) => {
-      const flow = ctx && x.flows.includes(ctx.flow) ? ctx.flow : x.flows[0];
-      return rowHtml(esc(x.name), esc(t('map.affected.onJourneys').replace('{list}', x.flows.map((f) => flowName(f)).join(' · '))), '', carry('#/map/' + encodeURIComponent(flow) + '?node=' + encodeURIComponent(x.screenId)));
-    });
-    const c = g.calls.map((x) => rowHtml(esc(callName(x.nodeId, x.name)), biz() ? '' : '<code>' + esc(x.name) + '</code>', isSeed(x.nodeId) ? '<span class="api-chip">' + esc(t('map.affected.seed')) + '</span>' : ''));
-    const sub = (key, rows) => (rows.length ? '<div class="mp-affsub hud-label"' + defAttrs(key) + '>' + esc(t(key)) + '</div>' + rows.join('') : '');
-    return '<section class="mp-sec mp-affgroup" data-hop="' + g.hop + '">' + groupHead(g.hop)
-      + sub('map.affected.journeys', j) + sub('map.affected.screens', s) + sub('map.affected.calls', c) + testsHtml(g.tests) + '</section>';
-  }).join('');
-  return '<section class="mp-sec mp-aff">' + pick + scope + '<div class="mp-chips">' + counts + '</div>' + boundHtml(r) + '</section>'
-    + (groups || '<div class="mp-row none">' + esc(t('impact.none')) + '</div>') + stopsHtml(r);
+  const pick =
+    AFF.entries.length > 1
+      ? '<div class="mp-affpick"><span class="hud-label"' +
+        defAttrs('map.affected.seedFor') +
+        '>' +
+        esc(t('map.affected.seedFor')) +
+        '</span>' +
+        AFF.entries
+          .map(
+            (x, i) =>
+              '<button type="button" class="api-chip' +
+              (i === AFF.pick ? ' on' : '') +
+              '" data-act="aff-pick" data-i="' +
+              i +
+              '" aria-pressed="' +
+              (i === AFF.pick) +
+              '">' +
+              esc(seedName(x.seed)) +
+              '</button>',
+          )
+          .join('') +
+        '</div>'
+      : '';
+  const counts = [k.screens, k.journeys, k.calls, k.tests]
+    .filter((c) => countedUnit(c))
+    .map((c) =>
+      c === k.tests
+        ? // the tests count with its scope on the chip (round 2026-10-10): over what reaches the seed, as far as asked
+          '<span data-tchip class="tchip" data-scope="' +
+          esc(c.scope) +
+          '">' +
+          countedHtml(c, '/api/impact', { cls: 'mp-chip' }) +
+          '<span class="tc-sep"> · </span>' +
+          scopeWordHtml(scopeWordKeyOf(c.scope)) +
+          withinHtml() +
+          '</span>'
+        : countedHtml(c, '/api/impact', { cls: 'mp-chip' }),
+    )
+    .join('');
+  const scope =
+    '<div class="mp-affscope"><span class="hud-label"' +
+    defAttrs('count.scope.affected') +
+    '>' +
+    esc(t('count.scope.affected')) +
+    '</span> <b>' +
+    esc(seedName(e.seed)) +
+    '</b></div>';
+  const groups = hopGroups(r)
+    .map((g) => {
+      const j = g.journeys.map((x) =>
+        rowHtml(esc(flowName(x.flowId, x.name)), '', '', carry('#/map/' + encodeURIComponent(x.flowId))),
+      );
+      // a screen several journeys share is listed once, with its journeys (round 2); it opens on the journey on screen when it is one of them
+      const s = groupScreens(g.screens).map((x) => {
+        const flow = ctx && x.flows.includes(ctx.flow) ? ctx.flow : x.flows[0];
+        return rowHtml(
+          esc(x.name),
+          esc(t('map.affected.onJourneys').replace('{list}', x.flows.map((f) => flowName(f)).join(' · '))),
+          '',
+          carry('#/map/' + encodeURIComponent(flow) + '?node=' + encodeURIComponent(x.screenId)),
+        );
+      });
+      const c = g.calls.map((x) =>
+        rowHtml(
+          esc(callName(x.nodeId, x.name)),
+          biz() ? '' : '<code>' + esc(x.name) + '</code>',
+          isSeed(x.nodeId) ? '<span class="api-chip">' + esc(t('map.affected.seed')) + '</span>' : '',
+        ),
+      );
+      const sub = (key, rows) =>
+        rows.length
+          ? '<div class="mp-affsub hud-label"' + defAttrs(key) + '>' + esc(t(key)) + '</div>' + rows.join('')
+          : '';
+      return (
+        '<section class="mp-sec mp-affgroup" data-hop="' +
+        g.hop +
+        '">' +
+        groupHead(g.hop) +
+        sub('map.affected.journeys', j) +
+        sub('map.affected.screens', s) +
+        sub('map.affected.calls', c) +
+        testsHtml(g.tests) +
+        '</section>'
+      );
+    })
+    .join('');
+  return (
+    '<section class="mp-sec mp-aff">' +
+    pick +
+    scope +
+    '<div class="mp-chips">' +
+    counts +
+    '</div>' +
+    boundHtml(r) +
+    '</section>' +
+    (groups || '<div class="mp-row none">' + esc(t('impact.none')) + '</div>') +
+    stopsHtml(r)
+  );
 }
 /** The tests count's scope word: how far the answer was asked. */
 function withinHtml() {
-  return '<span class="mp-affwithin"' + defAttrs('map.affected.within') + '>' + esc(t('map.affected.within').replace('{n}', String(AFF.hops))) + '</span>';
+  return (
+    '<span class="mp-affwithin"' +
+    defAttrs('map.affected.within') +
+    '>' +
+    esc(t('map.affected.within').replace('{n}', String(AFF.hops))) +
+    '</span>'
+  );
 }
 function affectedBarState() {
-  const key = AFF.state === 'loading' ? 'map.affected.reading' : AFF.state === 'unknown' ? 'map.affected.unknown' : AFF.state === 'noParts' ? 'map.affected.noParts' : 'map.affected.failed';
+  const key =
+    AFF.state === 'loading'
+      ? 'map.affected.reading'
+      : AFF.state === 'unknown'
+        ? 'map.affected.unknown'
+        : AFF.state === 'noParts'
+          ? 'map.affected.noParts'
+          : 'map.affected.failed';
   return '<span class="mp-note"' + defAttrs(key) + '>' + esc(t(key)) + '</span>';
 }
 

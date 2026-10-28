@@ -8,7 +8,8 @@ import { test, expect, gotoReady } from './support';
 import type { Page } from '@playwright/test';
 
 const TABLE = 'invoice-app::table::invoices';
-const hash = (hops: number) => '#/codemap?node=' + encodeURIComponent(TABLE) + '&impact=' + encodeURIComponent(TABLE) + '&hops=' + hops;
+const hash = (hops: number) =>
+  '#/codemap?node=' + encodeURIComponent(TABLE) + '&impact=' + encodeURIComponent(TABLE) + '&hops=' + hops;
 
 /** The number at the head of each "tests reaching" line's tip — its total, from the line's own words. */
 async function testLines(page: Page): Promise<string[]> {
@@ -21,7 +22,8 @@ function unionUpTo(report: { hops: { hop: number; nodes: { tests?: { id: string 
   for (const h of report.hops) if (h.hop <= n) for (const x of h.nodes) for (const t of x.tests ?? []) ids.add(t.id);
   return ids.size;
 }
-const total = (line: string) => [...line.matchAll(/(\d+) (?:e2e|unit|integration)/g)].reduce((a, m) => a + Number(m[1]), 0);
+const total = (line: string) =>
+  [...line.matchAll(/(\d+) (?:e2e|unit|integration)/g)].reduce((a, m) => a + Number(m[1]), 0);
 
 test.describe('change impact', () => {
   /**
@@ -30,8 +32,13 @@ test.describe('change impact', () => {
    * @covers packages/server/public/app/impact.js::impScopeHtml
    * @covers GET /api/impact
    */
-  test('each distance counts the tests reaching everything up to it, each once — never fewer than the line above', async ({ page, request }) => {
-    const report = await (await request.get('/api/impact?node=' + encodeURIComponent(TABLE) + '&hops=4&tests=1')).json();
+  test('each distance counts the tests reaching everything up to it, each once — never fewer than the line above', async ({
+    page,
+    request,
+  }) => {
+    const report = await (
+      await request.get('/api/impact?node=' + encodeURIComponent(TABLE) + '&hops=4&tests=1')
+    ).json();
     await gotoReady(page, hash(4));
     await expect(page.locator('#impact.open .imp-hop').first()).toBeVisible();
     const lines = await testLines(page);
@@ -60,7 +67,9 @@ test.describe('change impact', () => {
     await ctl.getByRole('button', { name: 'walk 3 links out' }).click();
     await expect(page).toHaveURL(/[?&]hops=3\b/);
     await expect(page.locator('#impact .imp-hop:not(.imp-notwalked)')).toHaveCount(3);
-    await expect(page.getByRole('group', { name: /how far|range/i }).getByRole('button', { name: 'walk 3 links out' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(
+      page.getByRole('group', { name: /how far|range/i }).getByRole('button', { name: 'walk 3 links out' }),
+    ).toHaveAttribute('aria-pressed', 'true');
 
     await ctl.getByRole('button', { name: 'walk 1 link out' }).click();
     await expect(page).toHaveURL(/[?&]hops=1\b/);
@@ -70,7 +79,9 @@ test.describe('change impact', () => {
   /** @covers packages/server/public/app/impact.js::impactFromRoute */
   test('a shared link opens on the distance it names', async ({ page }) => {
     await gotoReady(page, hash(4));
-    await expect(page.getByRole('group', { name: /how far|range/i }).getByRole('button', { name: 'walk 4 links out' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(
+      page.getByRole('group', { name: /how far|range/i }).getByRole('button', { name: 'walk 4 links out' }),
+    ).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('#impact .imp-hop:not(.imp-notwalked)')).toHaveCount(4);
   });
 

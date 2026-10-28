@@ -13,16 +13,29 @@ import { sym } from './sym.js';
 import { countedHtml, countWords, defAttrs } from './lib/counted.js';
 
 /** The catalog word for each state category. @group Work */
-export const CAT_KEY = { todo: 'work.state.todo', 'in-progress': 'work.state.inProgress', done: 'work.state.done', removed: 'work.state.removed' };
+export const CAT_KEY = {
+  todo: 'work.state.todo',
+  'in-progress': 'work.state.inProgress',
+  done: 'work.state.done',
+  removed: 'work.state.removed',
+};
 /** The categories in the order work moves through them. @group Work */
 export const CATS = ['todo', 'in-progress', 'done', 'removed'];
-const PROVIDER_KEY = { jira: 'work.hud.provider.jira', 'azure-devops': 'work.hud.provider.ado', fixture: 'work.hud.provider.fixture' };
+const PROVIDER_KEY = {
+  jira: 'work.hud.provider.jira',
+  'azure-devops': 'work.hud.provider.ado',
+  fixture: 'work.hud.provider.fixture',
+};
 
 /** True in the business lens: keys, ids, shas and files stay out. @group Work */
-export function workBiz() { return currentLens() === 'business'; }
+export function workBiz() {
+  return currentLens() === 'business';
+}
 
 /** The tracker's name in words (`Jira`, `Azure DevOps`), or the provider id for one this build does not know. @group Work */
-export function providerWord(p) { return PROVIDER_KEY[p] ? t(PROVIDER_KEY[p]) : String(p || ''); }
+export function providerWord(p) {
+  return PROVIDER_KEY[p] ? t(PROVIDER_KEY[p]) : String(p || '');
+}
 
 /** Whether the workspace settings name an enabled work source — no source, no request. @group Work */
 export function workSourcesConfigured() {
@@ -46,8 +59,19 @@ export function stateHtml(state, plain) {
   const st = state || {};
   const cat = CAT_KEY[st.category] ? st.category : 'todo';
   const catWord = t(CAT_KEY[cat]);
-  const name = st.name && st.name.toLowerCase() !== catWord.toLowerCase() ? '<span class="nm">' + esc(st.name) + '</span>' : '';
-  return '<span class="wk-state ' + esc(cat) + '"><span class="dot"></span><span class="cat"' + (plain ? '' : defAttrs(CAT_KEY[cat])) + '>' + esc(catWord) + '</span>' + name + '</span>';
+  const name =
+    st.name && st.name.toLowerCase() !== catWord.toLowerCase() ? '<span class="nm">' + esc(st.name) + '</span>' : '';
+  return (
+    '<span class="wk-state ' +
+    esc(cat) +
+    '"><span class="dot"></span><span class="cat"' +
+    (plain ? '' : defAttrs(CAT_KEY[cat])) +
+    '>' +
+    esc(catWord) +
+    '</span>' +
+    name +
+    '</span>'
+  );
 }
 
 /** "3 minutes ago" from seconds, in the catalog's words. @group Work */
@@ -80,26 +104,44 @@ export function whenWords(iso) {
 export function freshHtml(fr) {
   const f = fr || { state: 'never' };
   let key = 'work.fresh.never';
-  let words = '';
+  let words;
   let glyph = 'absent';
   if (f.state === 'synced') {
-    key = 'work.fresh.synced'; glyph = 'live';
-    const ago = f.ago != null ? f.ago : (f.since ? (Date.now() - Date.parse(f.since)) / 1000 : null);
+    key = 'work.fresh.synced';
+    glyph = 'live';
+    const ago = f.ago != null ? f.ago : f.since ? (Date.now() - Date.parse(f.since)) / 1000 : null;
     words = t(key).replace('{ago}', ago != null ? agoWords(ago) : whenWords(f.since));
   } else if (f.state === 'unreachable') {
-    key = 'work.fresh.unreachable'; glyph = 'syncfail';
+    key = 'work.fresh.unreachable';
+    glyph = 'syncfail';
     words = t(key).replace('{since}', whenWords(f.since));
   } else if (f.state === 'credential-expired') {
-    key = 'work.fresh.credential'; glyph = 'warning';
+    key = 'work.fresh.credential';
+    glyph = 'warning';
     words = t(key);
   } else words = t(key);
   const err = f.error && !workBiz() ? ' <span class="wk-dim">(' + esc(f.error) + ')</span>' : '';
-  return '<span class="wk-fresh ' + esc(f.state || 'never') + '">' + sym(glyph) + '<span' + defAttrs(key) + '>' + esc(words) + '</span>' + err + '</span>';
+  return (
+    '<span class="wk-fresh ' +
+    esc(f.state || 'never') +
+    '">' +
+    sym(glyph) +
+    '<span' +
+    defAttrs(key) +
+    '>' +
+    esc(words) +
+    '</span>' +
+    err +
+    '</span>'
+  );
 }
 
 /** Part words of a by-state breakdown, without the numbers' tips (the total carries them). @group Work */
 function partsText(c) {
-  return ((c && c.breakdown) || []).filter((p) => p.n).map((p) => countWords(p.key, p.n)).join(' · ');
+  return ((c && c.breakdown) || [])
+    .filter((p) => p.n)
+    .map((p) => countWords(p.key, p.n))
+    .join(' · ');
 }
 
 /**
@@ -114,8 +156,15 @@ export function flowChipHtml(resp) {
   const total = resp && resp.counts && resp.counts.items;
   if (!total || !total.n) return '';
   const parts = partsText(c);
-  return '<span class="wk-chip" data-flow="' + esc(resp.flow || '') + '">' + sym('work') + countedHtml(total, '/api/work/flow')
-    + (parts ? ' <a href="#/work?flow=' + encodeURIComponent(resp.flow || '') + '">· ' + esc(parts) + '</a>' : '') + '</span>';
+  return (
+    '<span class="wk-chip" data-flow="' +
+    esc(resp.flow || '') +
+    '">' +
+    sym('work') +
+    countedHtml(total, '/api/work/flow') +
+    (parts ? ' <a href="#/work?flow=' + encodeURIComponent(resp.flow || '') + '">· ' + esc(parts) + '</a>' : '') +
+    '</span>'
+  );
 }
 
 const FLOW_CACHE = new Map();
@@ -129,13 +178,19 @@ export function flowWork(flowId) {
   if (!flowId || !workSourcesConfigured()) return Promise.resolve(null);
   const key = flowId + '@' + ((S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || '');
   if (!FLOW_CACHE.has(key)) {
-    FLOW_CACHE.set(key, fetch('/api/work/flow/' + encodeURIComponent(flowId))
-      .then((r) => (r.ok ? r.json() : null)).catch(() => null));
+    FLOW_CACHE.set(
+      key,
+      fetch('/api/work/flow/' + encodeURIComponent(flowId))
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    );
   }
   return FLOW_CACHE.get(key);
 }
 /** Forget every cached flow answer (a work sync moved them). @group Work */
-export function forgetFlowWork() { FLOW_CACHE.clear(); }
+export function forgetFlowWork() {
+  FLOW_CACHE.clear();
+}
 
 /**
  * The inspector's *Tracked work* section for a node: an empty placeholder now,
@@ -148,18 +203,40 @@ export function nodeWorkSecHtml(n) {
   if (!n || !n.id || !workSourcesConfigured()) return '';
   const id = n.id;
   setTimeout(() => {
-    fetch('/api/work/links?node=' + encodeURIComponent(id)).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((resp) => {
-      const el = document.getElementById('insp-work');
-      if (!el || el.dataset.node !== id || !resp || !(resp.items || []).length) return;
-      const biz = workBiz();
-      el.innerHTML = '<span class="hud-label">' + esc(t('work.hud.insp.head')) + ' · ' + countedHtml(resp.counts && resp.counts.items, '/api/work/links', { words: String(resp.items.length) }) + '</span>'
-        + resp.items.map((it) => '<a class="wk-tracked" href="#/work/' + encodeURIComponent(it.id) + '">' + sym('work')
-          + '<span' + defAttrs('work.hud.chip.trackedBy') + '>' + esc(t('work.hud.chip.trackedBy')
-            .replace('{item}', biz ? it.title : it.key + ' ' + it.title)
-            .replace('{state}', t(CAT_KEY[it.state && it.state.category] || CAT_KEY.todo))
-            .replace('{source}', sourceName(it.source))) + '</span></a>').join('');
-      el.hidden = false;
-    });
+    fetch('/api/work/links?node=' + encodeURIComponent(id))
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((resp) => {
+        const el = document.getElementById('insp-work');
+        if (!el || el.dataset.node !== id || !resp || !(resp.items || []).length) return;
+        const biz = workBiz();
+        el.innerHTML =
+          '<span class="hud-label">' +
+          esc(t('work.hud.insp.head')) +
+          ' · ' +
+          countedHtml(resp.counts && resp.counts.items, '/api/work/links', { words: String(resp.items.length) }) +
+          '</span>' +
+          resp.items
+            .map(
+              (it) =>
+                '<a class="wk-tracked" href="#/work/' +
+                encodeURIComponent(it.id) +
+                '">' +
+                sym('work') +
+                '<span' +
+                defAttrs('work.hud.chip.trackedBy') +
+                '>' +
+                esc(
+                  t('work.hud.chip.trackedBy')
+                    .replace('{item}', biz ? it.title : it.key + ' ' + it.title)
+                    .replace('{state}', t(CAT_KEY[it.state && it.state.category] || CAT_KEY.todo))
+                    .replace('{source}', sourceName(it.source)),
+                ) +
+                '</span></a>',
+            )
+            .join('');
+        el.hidden = false;
+      });
   }, 0);
   return '<div class="insp-sec" id="insp-work" data-node="' + esc(id) + '" hidden></div>';
 }

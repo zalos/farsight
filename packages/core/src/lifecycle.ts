@@ -42,15 +42,33 @@ export function lifecycleCounts(life: RecordLifecycle): LifecycleCounts {
   return {
     statuses: counted(life.statuses.length, 'lifecycle.count.statuses', 'count.scope.node', `${SOURCE}.statuses`, {
       bizUnit: 'lifecycle.count.statuses',
-      breakdown: [{ key: 'lifecycle.part.written', n: written }, { key: 'lifecycle.part.unwritten', n: unwritten }],
+      breakdown: [
+        { key: 'lifecycle.part.written', n: written },
+        { key: 'lifecycle.part.unwritten', n: unwritten },
+      ],
     }),
-    transitions: counted(life.transitions.length, 'lifecycle.count.transitions', 'count.scope.node', `${SOURCE}.transitions`, {
-      bizUnit: 'lifecycle.count.transitions',
-      breakdown: [{ key: 'lifecycle.part.withFrom', n: withFrom }, { key: 'lifecycle.part.noFrom', n: life.transitions.length - withFrom }],
-    }),
-    unwritten: counted(unwritten, 'lifecycle.count.unwritten', 'count.scope.node', `${SOURCE}.statuses − transitions[].to`, {
-      bizUnit: 'lifecycle.count.unwritten',
-    }),
+    transitions: counted(
+      life.transitions.length,
+      'lifecycle.count.transitions',
+      'count.scope.node',
+      `${SOURCE}.transitions`,
+      {
+        bizUnit: 'lifecycle.count.transitions',
+        breakdown: [
+          { key: 'lifecycle.part.withFrom', n: withFrom },
+          { key: 'lifecycle.part.noFrom', n: life.transitions.length - withFrom },
+        ],
+      },
+    ),
+    unwritten: counted(
+      unwritten,
+      'lifecycle.count.unwritten',
+      'count.scope.node',
+      `${SOURCE}.statuses − transitions[].to`,
+      {
+        bizUnit: 'lifecycle.count.unwritten',
+      },
+    ),
   };
 }
 
@@ -62,20 +80,30 @@ const nameOfId = (id: string): string => id.split('::').pop() ?? id;
  * moves with their writers (node ids, so an agent can follow them), the statuses nothing writes,
  * and where the list is declared. Empty when the node has no lifecycle.
  */
-export function lifecycleLines(node: GraphNode, opts: { register?: Register; byName?: (id: string) => string | undefined } = {}): string[] {
+export function lifecycleLines(
+  node: GraphNode,
+  opts: { register?: Register; byName?: (id: string) => string | undefined } = {},
+): string[] {
   const life = node.lifecycle;
   if (!life) return [];
   const reg = opts.register ?? 'professional';
   const c = lifecycleCounts(life);
   const lines: string[] = [];
-  lines.push(`${t('lifecycle.word', reg)} · ${t('lifecycle.ofRecord', reg).replace('{name}', node.name).replace('{field}', life.field)}`
-    + ` — ${countedText(c.statuses, { register: reg, scope: false })} · ${countedText(c.transitions, { register: reg, scope: false })} · ${countedText(c.unwritten, { register: reg, scope: false })}`);
+  lines.push(
+    `${t('lifecycle.word', reg)} · ${t('lifecycle.ofRecord', reg).replace('{name}', node.name).replace('{field}', life.field)}` +
+      ` — ${countedText(c.statuses, { register: reg, scope: false })} · ${countedText(c.transitions, { register: reg, scope: false })} · ${countedText(c.unwritten, { register: reg, scope: false })}`,
+  );
   lines.push(`  ${life.statuses.join(' · ')}`);
   for (const tr of life.transitions) {
-    const move = tr.from !== undefined || tr.fromAny?.length
-      ? t('lifecycle.move', reg).replace('{from}', tr.from ?? tr.fromAny!.join(t('lifecycle.table.fromOr', reg))).replace('{to}', tr.to)
-      : t('lifecycle.moveInto', reg).replace('{to}', tr.to);
-    lines.push(`  ${move}  ${t('lifecycle.by', reg).replace('{name}', opts.byName?.(tr.by) ?? nameOfId(tr.by))} (${t(`lifecycle.via.${tr.via}`, reg)}) · ${tr.by}${tr.line ? `:${tr.line}` : ''}`);
+    const move =
+      tr.from !== undefined || tr.fromAny?.length
+        ? t('lifecycle.move', reg)
+            .replace('{from}', tr.from ?? tr.fromAny!.join(t('lifecycle.table.fromOr', reg)))
+            .replace('{to}', tr.to)
+        : t('lifecycle.moveInto', reg).replace('{to}', tr.to);
+    lines.push(
+      `  ${move}  ${t('lifecycle.by', reg).replace('{name}', opts.byName?.(tr.by) ?? nameOfId(tr.by))} (${t(`lifecycle.via.${tr.via}`, reg)}) · ${tr.by}${tr.line ? `:${tr.line}` : ''}`,
+    );
   }
   const none = unwrittenStatuses(life);
   if (none.length) lines.push(`  ${t('lifecycle.unwritten', reg)}: ${none.join(' · ')}`);
@@ -105,7 +133,11 @@ export interface JourneyLifecycle {
 export function journeyLifecycles(
   index: { byId: Map<string, GraphNode> } | GraphIndex,
   j: { steps: { nodeId: string; switchedOff?: unknown }[] },
-  opts: { personas?: LifecyclePersona[]; locate?: (writerId: string) => LifecyclePlace | undefined; places?: (writerId: string) => LifecyclePlaces } = {},
+  opts: {
+    personas?: LifecyclePersona[];
+    locate?: (writerId: string) => LifecyclePlace | undefined;
+    places?: (writerId: string) => LifecyclePlaces;
+  } = {},
 ): JourneyLifecycle[] {
   // a call a constant switches off is named, not run: its writer is not on the journey
   const visited = new Set(j.steps.filter((s) => !s.switchedOff).map((s) => s.nodeId));
@@ -119,8 +151,12 @@ export function journeyLifecycles(
     const writers: Record<string, string> = {};
     for (const tr of n.lifecycle.transitions) writers[tr.by] = index.byId.get(tr.by)?.name ?? nameOfId(tr.by);
     out.push({
-      nodeId: n.id, name: n.name, lifecycle: n.lifecycle, counts: lifecycleCounts(n.lifecycle),
-      onJourney: n.lifecycle.transitions.map((tr) => visited.has(tr.by)), writers,
+      nodeId: n.id,
+      name: n.name,
+      lifecycle: n.lifecycle,
+      counts: lifecycleCounts(n.lifecycle),
+      onJourney: n.lifecycle.transitions.map((tr) => visited.has(tr.by)),
+      writers,
       ...('in' in index ? { views: lifecycleViews(index, n, opts) } : {}),
     });
   }
@@ -134,22 +170,36 @@ export function journeyLifecycles(
 // constant, and what moves a record into it — each writer placed on a journey screen when one is known;
 // then the overlays, conditions a person sees that are not a status, as rows of their own kind.
 
-export interface LifecyclePersona { id: string; name: string }
+export interface LifecyclePersona {
+  id: string;
+  name: string;
+}
 /** Where a writer runs: a journey's screen (1-based ordinal of its summary segment) — the journey link's `step`. */
 export interface LifecyclePlace {
-  flowId: string; flowName: string; screen: number; screenName: string; here: boolean;
+  flowId: string;
+  flowName: string;
+  screen: number;
+  screenName: string;
+  here: boolean;
   /** the action on that screen whose call reaches the writer, when one does (its label as the moment prints it) */
   action?: string;
   /** how many calls under that action's call the writer runs (0 = the action's call is the writer) */
   hops?: number;
 }
 /** A place whose action holds the call to the writer under a constant that switches it off. */
-export interface LifecycleSwitchedPlace extends LifecyclePlace { flag: string; value: boolean; at: string }
+export interface LifecycleSwitchedPlace extends LifecyclePlace {
+  flag: string;
+  value: boolean;
+  at: string;
+}
 /**
  * Every place a writer runs (lane moves, 2026-10-13): the live ones, the action that calls the writer most directly
  * first — never the first place the walk met — and the ones a constant switches off, listed apart.
  */
-export interface LifecyclePlaces { live: LifecyclePlace[]; off: LifecycleSwitchedPlace[] }
+export interface LifecyclePlaces {
+  live: LifecyclePlace[];
+  off: LifecycleSwitchedPlace[];
+}
 export interface LifecycleMover {
   /** node id of the function that writes it */
   by: string;
@@ -217,7 +267,13 @@ function wordsFor(life: RecordLifecycle, persona?: LifecyclePersona): Record<str
 }
 
 type Locate = { locate?: (id: string) => LifecyclePlace | undefined; places?: (id: string) => LifecyclePlaces };
-function moverOf(index: GraphIndex, by: string, via: LifecycleMover['via'], loc: Locate, extra: { from?: string; fromAny?: string[]; line?: number; when?: string } = {}): LifecycleMover {
+function moverOf(
+  index: GraphIndex,
+  by: string,
+  via: LifecycleMover['via'],
+  loc: Locate,
+  extra: { from?: string; fromAny?: string[]; line?: number; when?: string } = {},
+): LifecycleMover {
   const n = index.byId.get(by);
   const name = n?.name ?? nameOfId(by);
   const all = loc.places?.(by);
@@ -225,9 +281,16 @@ function moverOf(index: GraphIndex, by: string, via: LifecycleMover['via'], loc:
   const also = all?.live.slice(1) ?? [];
   const off = all?.off ?? [];
   return {
-    by, name, words: n?.facets?.business?.label ?? humanizeName((name.split(': ')[0] ?? name).split('.').pop() ?? name), via,
-    ...(extra.from !== undefined ? { from: extra.from } : {}), ...(extra.fromAny?.length ? { fromAny: extra.fromAny } : {}),
-    ...(extra.line ? { line: extra.line } : {}), ...(at ? { at } : {}), ...(also.length ? { also } : {}), ...(off.length ? { switchedOff: off } : {}),
+    by,
+    name,
+    words: n?.facets?.business?.label ?? humanizeName((name.split(': ')[0] ?? name).split('.').pop() ?? name),
+    via,
+    ...(extra.from !== undefined ? { from: extra.from } : {}),
+    ...(extra.fromAny?.length ? { fromAny: extra.fromAny } : {}),
+    ...(extra.line ? { line: extra.line } : {}),
+    ...(at ? { at } : {}),
+    ...(also.length ? { also } : {}),
+    ...(off.length ? { switchedOff: off } : {}),
     ...(extra.when ? { when: extra.when } : {}),
   };
 }
@@ -239,7 +302,11 @@ function moverOf(index: GraphIndex, by: string, via: LifecycleMover['via'], loc:
 export function lifecycleViews(
   index: GraphIndex,
   node: GraphNode,
-  opts: { personas?: LifecyclePersona[]; locate?: (writerId: string) => LifecyclePlace | undefined; places?: (writerId: string) => LifecyclePlaces } = {},
+  opts: {
+    personas?: LifecyclePersona[];
+    locate?: (writerId: string) => LifecyclePlace | undefined;
+    places?: (writerId: string) => LifecyclePlaces;
+  } = {},
 ): LifecycleView[] {
   const life = node.lifecycle;
   if (!life) return [];
@@ -250,7 +317,15 @@ export function lifecycleViews(
     const list = movers.get(tr.to) ?? [];
     // where the record comes from: the status the writer checks, else the statuses its table of moves or its check lets
     // it leave (swarm round 3: approve requires *under review* and the lifecycle never said *from*)
-    if (!list.some((m) => m.by === tr.by)) list.push(moverOf(index, tr.by, tr.via, opts, { ...(tr.from !== undefined ? { from: tr.from } : {}), ...(tr.fromAny?.length ? { fromAny: tr.fromAny } : {}), ...(tr.line ? { line: tr.line } : {}), ...(tr.when ? { when: tr.when } : {}) }));
+    if (!list.some((m) => m.by === tr.by))
+      list.push(
+        moverOf(index, tr.by, tr.via, opts, {
+          ...(tr.from !== undefined ? { from: tr.from } : {}),
+          ...(tr.fromAny?.length ? { fromAny: tr.fromAny } : {}),
+          ...(tr.line ? { line: tr.line } : {}),
+          ...(tr.when ? { when: tr.when } : {}),
+        }),
+      );
     movers.set(tr.to, list);
   }
   // a writer every one of whose places a constant switches off is not what moves the record there: the live movers
@@ -265,14 +340,29 @@ export function lifecycleViews(
       seen.add(e.from);
       ms.push(moverOf(index, e.from, 'writes', opts));
     }
-    return { kind: 'overlay', name: o.name, when: o.when, table: o.table, tableId: o.tableId, tableName: index.byId.get(o.tableId)?.name ?? o.table, movers: ms };
+    return {
+      kind: 'overlay',
+      name: o.name,
+      when: o.when,
+      table: o.table,
+      tableId: o.tableId,
+      tableName: index.byId.get(o.tableId)?.name ?? o.table,
+      movers: ms,
+    };
   });
   return personas.map((persona) => {
     const words = wordsFor(life, persona);
     const rows: LifecycleStatusRow[] = life.statuses.map((status) => {
       const word = words?.[status];
       const ms = movers.get(status) ?? [];
-      return { kind: 'status', status, word: word ?? humanizeName(status), declared: word !== undefined, written: ms.length > 0, movers: ms };
+      return {
+        kind: 'status',
+        status,
+        word: word ?? humanizeName(status),
+        declared: word !== undefined,
+        written: ms.length > 0,
+        movers: ms,
+      };
     });
     const moved = rows.filter((r) => r.written).length;
     const declared = rows.some((r) => r.declared);
@@ -284,11 +374,32 @@ export function lifecycleViews(
       counts: {
         statuses: counted(rows.length, 'lifecycle.count.statuses', 'count.scope.node', `${VIEW_SOURCE}.statuses`, {
           bizUnit: 'lifecycle.count.statuses',
-          breakdown: [{ key: 'lifecycle.part.written', n: moved }, { key: 'lifecycle.part.unwritten', n: rows.length - moved }],
+          breakdown: [
+            { key: 'lifecycle.part.written', n: moved },
+            { key: 'lifecycle.part.unwritten', n: rows.length - moved },
+          ],
         }),
-        moved: counted(moved, 'lifecycle.count.moved', 'count.scope.node', `${VIEW_SOURCE}.statuses ∩ transitions[].to`, { bizUnit: 'lifecycle.biz.moved' }),
-        unmoved: counted(rows.length - moved, 'lifecycle.count.unwritten', 'count.scope.node', `${VIEW_SOURCE}.statuses − transitions[].to`, { bizUnit: 'lifecycle.biz.unmoved' }),
-        overlays: counted(overlays.length, 'lifecycle.count.overlays', 'count.scope.node', `${VIEW_SOURCE}.names.overlays`, { bizUnit: 'lifecycle.count.overlays' }),
+        moved: counted(
+          moved,
+          'lifecycle.count.moved',
+          'count.scope.node',
+          `${VIEW_SOURCE}.statuses ∩ transitions[].to`,
+          { bizUnit: 'lifecycle.biz.moved' },
+        ),
+        unmoved: counted(
+          rows.length - moved,
+          'lifecycle.count.unwritten',
+          'count.scope.node',
+          `${VIEW_SOURCE}.statuses − transitions[].to`,
+          { bizUnit: 'lifecycle.biz.unmoved' },
+        ),
+        overlays: counted(
+          overlays.length,
+          'lifecycle.count.overlays',
+          'count.scope.node',
+          `${VIEW_SOURCE}.names.overlays`,
+          { bizUnit: 'lifecycle.count.overlays' },
+        ),
       },
       from: declared || overlays.length ? [...(life.names?.from ?? [])] : [],
     };
@@ -300,7 +411,11 @@ export function lifecycleViews(
  * manifest's `persona`; each id matched to a declared persona's id or name (case ignored), else kept as
  * written. Empty for anything that is not a flow, or a flow that names nobody.
  */
-export function flowPersonas(index: { byId: Map<string, GraphNode> }, metas: Record<string, JourneysMeta> | undefined, flowId: string): LifecyclePersona[] {
+export function flowPersonas(
+  index: { byId: Map<string, GraphNode> },
+  metas: Record<string, JourneysMeta> | undefined,
+  flowId: string,
+): LifecyclePersona[] {
   const flow = index.byId.get(flowId);
   if (!flow || flow.kind !== 'flow') return [];
   const repo = flowId.split('::')[0]!;
@@ -321,7 +436,12 @@ export function flowPersonas(index: { byId: Map<string, GraphNode> }, metas: Rec
  * Where each writer runs on one journey: the summary segment whose markers name it, else whose steps
  * include it (a function the action reaches). `here` — the journey the reader has open.
  */
-export function placeOnJourney(flow: { id: string; name: string }, j: Pick<Journey, 'steps'>, summary: Pick<JourneySummary, 'segments'>, here = true): (writerId: string) => LifecyclePlace | undefined {
+export function placeOnJourney(
+  flow: { id: string; name: string },
+  j: Pick<Journey, 'steps'>,
+  summary: Pick<JourneySummary, 'segments'>,
+  here = true,
+): (writerId: string) => LifecyclePlace | undefined {
   const all = placesOnJourney(flow, j, summary, here);
   return (id) => all(id).live[0];
 }
@@ -333,12 +453,29 @@ export function placeOnJourney(flow: { id: string; name: string }, j: Pick<Journ
  * each action whose call to the writer a constant switches off. A lead segment with no screen folds into the next
  * screen, as the street draws it; one place per screen and action.
  */
-export function placesOnJourney(flow: { id: string; name: string }, j: Pick<Journey, 'steps'>, summary: Pick<JourneySummary, 'segments'>, here = true): (writerId: string) => LifecyclePlaces {
+export function placesOnJourney(
+  flow: { id: string; name: string },
+  j: Pick<Journey, 'steps'>,
+  summary: Pick<JourneySummary, 'segments'>,
+  here = true,
+): (writerId: string) => LifecyclePlaces {
   const cache = new Map<string, LifecyclePlaces>();
-  const shown = (seg: JourneySummary['segments'][number]) => (seg.screen ? seg : summary.segments.find((sg) => sg.index > seg.index && sg.screen) ?? seg);
-  const place = (seg: JourneySummary['segments'][number], extra: { action?: string; hops?: number } = {}): LifecyclePlace => {
+  const shown = (seg: JourneySummary['segments'][number]) =>
+    seg.screen ? seg : (summary.segments.find((sg) => sg.index > seg.index && sg.screen) ?? seg);
+  const place = (
+    seg: JourneySummary['segments'][number],
+    extra: { action?: string; hops?: number } = {},
+  ): LifecyclePlace => {
     const sg = shown(seg);
-    return { flowId: flow.id, flowName: flow.name, screen: sg.index + 1, screenName: sg.screen?.name ?? '', here, ...(extra.action ? { action: extra.action } : {}), ...(extra.hops != null ? { hops: extra.hops } : {}) };
+    return {
+      flowId: flow.id,
+      flowName: flow.name,
+      screen: sg.index + 1,
+      screenName: sg.screen?.name ?? '',
+      here,
+      ...(extra.action ? { action: extra.action } : {}),
+      ...(extra.hops != null ? { hops: extra.hops } : {}),
+    };
   };
   return (id) => {
     const hit = cache.get(id);
@@ -351,20 +488,32 @@ export function placesOnJourney(flow: { id: string; name: string }, j: Pick<Jour
         const mv = mo.preconditions?.moves.filter((m) => m.by === id) ?? [];
         if (mv.length) live.push(place(sg, { action: mo.label, hops: Math.min(...mv.map((m) => m.hops ?? 0)) }));
         const so = mo.preconditions?.switchedOff?.find((m) => m.by === id);
-        if (so && !mv.length) off.push({ ...place(sg, { action: mo.label, hops: so.hops ?? 0 }), flag: so.flag, value: so.value, at: so.at });
+        if (so && !mv.length)
+          off.push({
+            ...place(sg, { action: mo.label, hops: so.hops ?? 0 }),
+            flag: so.flag,
+            value: so.value,
+            at: so.at,
+          });
       }
     }
     if (!live.length) {
       // a writer whose record the action does not reach as a walked step: the screens that name or walk it
       const orders = j.steps.filter((s) => s.nodeId === id && !s.switchedOff).map((s) => s.order);
       for (const sg of summary.segments) {
-        if (sg.markers.some((m) => m.nodeId === id) || orders.some((o) => o >= sg.from && o <= sg.to)) live.push(place(sg));
+        if (sg.markers.some((m) => m.nodeId === id) || orders.some((o) => o >= sg.from && o <= sg.to))
+          live.push(place(sg));
       }
     }
     const order = (a: LifecyclePlace, b: LifecyclePlace) => (a.hops ?? 99) - (b.hops ?? 99) || a.screen - b.screen;
-    const dedupe = <T extends LifecyclePlace>(xs: T[]): T[] => { const seen = new Set<string>(); return xs.filter((p) => !seen.has(keyOf(p)) && !!seen.add(keyOf(p))); };
+    const dedupe = <T extends LifecyclePlace>(xs: T[]): T[] => {
+      const seen = new Set<string>();
+      return xs.filter((p) => !seen.has(keyOf(p)) && !!seen.add(keyOf(p)));
+    };
     // a switched-off call is one fact per action, however many screens show that action
-    const offs = off.sort(order).filter((p, i, xs) => xs.findIndex((q) => q.action === p.action && q.flag === p.flag) === i);
+    const offs = off
+      .sort(order)
+      .filter((p, i, xs) => xs.findIndex((q) => q.action === p.action && q.flag === p.flag) === i);
     const out = { live: dedupe(live.sort(order)), off: offs };
     cache.set(id, out);
     return out;
@@ -377,9 +526,14 @@ export function lifecycleViewLines(views: LifecycleView[], reg: Register = 'prof
   for (const v of views) {
     if (!v.declared) continue;
     const who = v.persona?.name ?? '';
-    out.push(`  ${t('lifecycle.view.line', reg).replace('{persona}', who)}: ${v.rows.map((r) => `${r.word} (${r.status})`).join(' · ')}`);
+    out.push(
+      `  ${t('lifecycle.view.line', reg).replace('{persona}', who)}: ${v.rows.map((r) => `${r.word} (${r.status})`).join(' · ')}`,
+    );
   }
   const ov = views[0]?.overlays ?? [];
-  for (const o of ov) out.push(`  ${t('lifecycle.overlay.word', reg)}: ${o.name} — ${o.when} · ${o.tableName}${o.movers.length ? ` · ${t('lifecycle.by', reg).replace('{name}', o.movers.map((m) => m.name).join(', '))}` : ''}`);
+  for (const o of ov)
+    out.push(
+      `  ${t('lifecycle.overlay.word', reg)}: ${o.name} — ${o.when} · ${o.tableName}${o.movers.length ? ` · ${t('lifecycle.by', reg).replace('{name}', o.movers.map((m) => m.name).join(', '))}` : ''}`,
+    );
   return out;
 }

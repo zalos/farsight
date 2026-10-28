@@ -19,15 +19,25 @@ import { t } from '../strings.js';
 import { sym } from '../sym.js';
 import { tipAttrs } from './tooltip.js';
 import {
-  footerFacts, footerLines, exportFilename, pictureScale, pictureSelector,
-  pdfPage, pdfA4, pdfFromJpeg, toCsv, cellWords, keptRows,
+  footerFacts,
+  footerLines,
+  exportFilename,
+  pictureScale,
+  pictureSelector,
+  pdfPage,
+  pdfA4,
+  pdfFromJpeg,
+  toCsv,
+  cellWords,
+  keptRows,
 } from './export-model.js';
 
 const XHTML = 'http://www.w3.org/1999/xhtml';
 /** The board's margin around a world picture, in CSS pixels. */
 const WORLD_PAD = 32;
 /** The footer's height per line and its padding, in CSS pixels (scaled with the picture). */
-const FOOT_LINE = 17, FOOT_PAD = 14;
+const FOOT_LINE = 17,
+  FOOT_PAD = 14;
 
 /** surface → provider: () => Promise<{el}|{world,size,scale}> plus { title, csv? } */
 const PROVIDERS = new Map();
@@ -52,9 +62,22 @@ export function registerExport(surface, provider, extra) {
  * @group Export
  */
 export function exportToolHtml(surface, cls) {
-  return '<button type="button" class="fx-tool ' + esc(cls || '') + '" data-export="' + esc(surface) + '" data-export-skip'
-    + ' aria-haspopup="menu" aria-expanded="false" aria-label="' + esc(t('export.menu')) + '"'
-    + tipAttrs({ key: 'export.tool', noFocus: true }) + '>' + sym('save') + '<span>' + esc(t('export.tool')) + '</span></button>';
+  return (
+    '<button type="button" class="fx-tool ' +
+    esc(cls || '') +
+    '" data-export="' +
+    esc(surface) +
+    '" data-export-skip' +
+    ' aria-haspopup="menu" aria-expanded="false" aria-label="' +
+    esc(t('export.menu')) +
+    '"' +
+    tipAttrs({ key: 'export.tool', noFocus: true }) +
+    '>' +
+    sym('save') +
+    '<span>' +
+    esc(t('export.tool')) +
+    '</span></button>'
+  );
 }
 
 // ── the menu ────────────────────────────────────────────────────────────────
@@ -77,16 +100,34 @@ function closeMenu(refocus) {
  */
 export function openExportMenu(btn) {
   const surface = btn.dataset.export;
-  if (MENU && MENU.btn === btn) { closeMenu(true); return; }
+  if (MENU && MENU.btn === btn) {
+    closeMenu(true);
+    return;
+  }
   closeMenu(false);
   const reg = PROVIDERS.get(surface);
-  const items = [['png', 'export.png'], ['pdf', 'export.pdf']].concat(reg && reg.csv ? [['csv', 'export.csv']] : []);
+  const items = [
+    ['png', 'export.png'],
+    ['pdf', 'export.pdf'],
+  ].concat(reg && reg.csv ? [['csv', 'export.csv']] : []);
   const el = document.createElement('div');
   el.className = 'fx-menu';
   el.setAttribute('role', 'menu');
   el.setAttribute('aria-label', t('export.menu'));
-  el.innerHTML = items.map(([fmt, key]) => '<button type="button" role="menuitem" data-fx-fmt="' + fmt + '"' + tipAttrs({ key, noFocus: true }) + '>'
-    + sym('save') + '<span>' + esc(t(key)) + '</span></button>').join('');
+  el.innerHTML = items
+    .map(
+      ([fmt, key]) =>
+        '<button type="button" role="menuitem" data-fx-fmt="' +
+        fmt +
+        '"' +
+        tipAttrs({ key, noFocus: true }) +
+        '>' +
+        sym('save') +
+        '<span>' +
+        esc(t(key)) +
+        '</span></button>',
+    )
+    .join('');
   document.body.appendChild(el);
   const r = btn.getBoundingClientRect();
   const w = el.offsetWidth;
@@ -104,21 +145,33 @@ export function openExportMenu(btn) {
   el.addEventListener('keydown', (e) => {
     const all = [...el.querySelectorAll('[role="menuitem"]')];
     const i = all.indexOf(document.activeElement);
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(true); }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); all[(i + 1) % all.length].focus(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); all[(i - 1 + all.length) % all.length].focus(); }
-    else if (e.key === 'Tab') closeMenu(false);
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu(true);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      all[(i + 1) % all.length].focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      all[(i - 1 + all.length) % all.length].focus();
+    } else if (e.key === 'Tab') closeMenu(false);
   });
   const first = el.querySelector('[role="menuitem"]');
   if (first) first.focus();
 }
 
 // a module the server's tests import under a stand-in document: the listener only where there is a real one
-if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') document.addEventListener('click', (e) => {
-  const btn = e.target.closest && e.target.closest('[data-export]');
-  if (btn) { e.preventDefault(); openExportMenu(btn); return; }
-  if (MENU && !MENU.el.contains(e.target)) closeMenu(false);
-});
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function')
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('[data-export]');
+    if (btn) {
+      e.preventDefault();
+      openExportMenu(btn);
+      return;
+    }
+    if (MENU && !MENU.el.contains(e.target)) closeMenu(false);
+  });
 
 // ── the status line ─────────────────────────────────────────────────────────
 
@@ -137,7 +190,10 @@ function say(text, busy) {
   el.hidden = false;
   el.classList.toggle('busy', !!busy);
   clearTimeout(toastT);
-  if (!busy) toastT = setTimeout(() => { el.hidden = true; }, 3200);
+  if (!busy)
+    toastT = setTimeout(() => {
+      el.hidden = true;
+    }, 3200);
 }
 
 // ── the copy: the page's stylesheet, the element, its ancestors ─────────────
@@ -155,50 +211,78 @@ function pictureCss() {
   const walk = (rules) => {
     for (const r of rules) {
       if (r.type === 1) out.push(pictureSelector(r.selectorText) + '{' + r.style.cssText + '}');
-      else if (r.type === 4) { if (window.matchMedia(r.media.mediaText).matches) walk(r.cssRules); }
-      else if (r.type === 12) { if (CSS.supports(r.conditionText)) walk(r.cssRules); }
-      else if (r.cssRules && r.selectorText == null && r.type !== 7) walk(r.cssRules);
+      else if (r.type === 4) {
+        if (window.matchMedia(r.media.mediaText).matches) walk(r.cssRules);
+      } else if (r.type === 12) {
+        if (CSS.supports(r.conditionText)) walk(r.cssRules);
+      } else if (r.cssRules && r.selectorText == null && r.type !== 7) walk(r.cssRules);
       else out.push(r.cssText);
     }
   };
   for (const sh of document.styleSheets) {
-    let rules = null;
-    try { rules = sh.cssRules; } catch { rules = null; }
+    let rules;
+    try {
+      rules = sh.cssRules;
+    } catch {
+      rules = null;
+    }
     if (rules) walk(rules);
   }
-  out.push('.fx-root *,.fx-root *::before,.fx-root *::after{animation:none!important;transition:none!important;caret-color:transparent}');
+  out.push(
+    '.fx-root *,.fx-root *::before,.fx-root *::after{animation:none!important;transition:none!important;caret-color:transparent}',
+  );
   out.push('.fx-root [data-export-skip]{display:none!important}');
   return out.join('\n');
 }
 function cssText() {
   // a media query can change with the window or the theme: the cache is per width × theme × lens
-  const k = window.innerWidth + '|' + (document.documentElement.getAttribute('data-theme') || '') + '|' + document.body.className;
+  const k =
+    window.innerWidth +
+    '|' +
+    (document.documentElement.getAttribute('data-theme') || '') +
+    '|' +
+    document.body.className;
   if (!CSS_CACHE || CSS_CACHE.k !== k) CSS_CACHE = { k, css: pictureCss() };
   return CSS_CACHE.css;
 }
 
 /** Every same-origin image in the copy, read into the copy as data, so the picture holds it (an SVG picture loads nothing). */
 async function inlineImages(orig, copy) {
-  const a = [...orig.querySelectorAll('img')], b = [...copy.querySelectorAll('img')];
+  const a = [...orig.querySelectorAll('img')],
+    b = [...copy.querySelectorAll('img')];
   const cache = new Map();
-  await Promise.all(b.map(async (img, i) => {
-    const src = (a[i] && (a[i].currentSrc || a[i].src)) || img.getAttribute('src') || '';
-    img.removeAttribute('srcset');
-    img.removeAttribute('loading');
-    if (!src || src.startsWith('data:')) return;
-    try {
-      if (!cache.has(src)) {
-        cache.set(src, fetch(src, { credentials: 'same-origin' }).then((r) => (r.ok ? r.blob() : null)).then((bl) => (bl ? new Promise((res) => {
-          const fr = new FileReader();
-          fr.onload = () => res(String(fr.result));
-          fr.onerror = () => res(null);
-          fr.readAsDataURL(bl);
-        }) : null)));
+  await Promise.all(
+    b.map(async (img, i) => {
+      const src = (a[i] && (a[i].currentSrc || a[i].src)) || img.getAttribute('src') || '';
+      img.removeAttribute('srcset');
+      img.removeAttribute('loading');
+      if (!src || src.startsWith('data:')) return;
+      try {
+        if (!cache.has(src)) {
+          cache.set(
+            src,
+            fetch(src, { credentials: 'same-origin' })
+              .then((r) => (r.ok ? r.blob() : null))
+              .then((bl) =>
+                bl
+                  ? new Promise((res) => {
+                      const fr = new FileReader();
+                      fr.onload = () => res(String(fr.result));
+                      fr.onerror = () => res(null);
+                      fr.readAsDataURL(bl);
+                    })
+                  : null,
+              ),
+          );
+        }
+        const data = await cache.get(src);
+        if (data) img.setAttribute('src', data);
+        else img.removeAttribute('src');
+      } catch {
+        img.removeAttribute('src');
       }
-      const data = await cache.get(src);
-      if (data) img.setAttribute('src', data); else img.removeAttribute('src');
-    } catch { img.removeAttribute('src'); }
-  }));
+    }),
+  );
 }
 
 /** The sprite glyphs (`<use href="#sym-…">`) copied in: the picture cannot reach the page's sprite. */
@@ -207,8 +291,12 @@ function inlineGlyphs(copy) {
     const ref = use.getAttribute('href') || use.getAttribute('xlink:href') || '';
     const symEl = ref.startsWith('#') ? document.getElementById(ref.slice(1)) : null;
     const svg = use.ownerSVGElement || use.parentNode;
-    if (!symEl) { use.remove(); continue; }
-    if (svg && svg.setAttribute && !svg.getAttribute('viewBox') && symEl.getAttribute('viewBox')) svg.setAttribute('viewBox', symEl.getAttribute('viewBox'));
+    if (!symEl) {
+      use.remove();
+      continue;
+    }
+    if (svg && svg.setAttribute && !svg.getAttribute('viewBox') && symEl.getAttribute('viewBox'))
+      svg.setAttribute('viewBox', symEl.getAttribute('viewBox'));
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     for (const c of symEl.childNodes) g.appendChild(c.cloneNode(true));
     use.replaceWith(g);
@@ -217,14 +305,19 @@ function inlineGlyphs(copy) {
 
 /** Form fields keep what the reader typed or picked (a copy carries attributes, not values). */
 function keepValues(orig, copy) {
-  const a = [...orig.querySelectorAll('input,textarea,select')], b = [...copy.querySelectorAll('input,textarea,select')];
+  const a = [...orig.querySelectorAll('input,textarea,select')],
+    b = [...copy.querySelectorAll('input,textarea,select')];
   b.forEach((el, i) => {
     const o = a[i];
     if (!o) return;
     if (el.tagName === 'TEXTAREA') el.textContent = o.value;
-    else if (el.tagName === 'SELECT') [...el.options].forEach((op, j) => { if (o.options[j] && o.options[j].selected) op.setAttribute('selected', ''); });
-    else if (o.type === 'checkbox' || o.type === 'radio') { if (o.checked) el.setAttribute('checked', ''); }
-    else el.setAttribute('value', o.value);
+    else if (el.tagName === 'SELECT')
+      [...el.options].forEach((op, j) => {
+        if (o.options[j] && o.options[j].selected) op.setAttribute('selected', '');
+      });
+    else if (o.type === 'checkbox' || o.type === 'radio') {
+      if (o.checked) el.setAttribute('checked', '');
+    } else el.setAttribute('value', o.value);
   });
 }
 
@@ -239,7 +332,8 @@ function setImportant(el, props) {
  */
 function svgOf(copy, orig, w, h, r, opts) {
   const root = document.createElementNS(XHTML, 'div');
-  for (const a of document.documentElement.attributes) if (a.name !== 'class' && a.name !== 'style') root.setAttribute(a.name, a.value);
+  for (const a of document.documentElement.attributes)
+    if (a.name !== 'class' && a.name !== 'style') root.setAttribute(a.name, a.value);
   root.setAttribute('class', 'fx-root fx-html ' + (document.documentElement.className || ''));
   const style = document.createElementNS(XHTML, 'style');
   style.textContent = cssText();
@@ -257,17 +351,47 @@ function svgOf(copy, orig, w, h, r, opts) {
     const shell = n.cloneNode(false);
     shell.removeAttribute('hidden');
     setImportant(shell, {
-      position: 'relative', display: 'block', overflow: 'visible', inset: 'auto', transform: 'none',
-      width: w + 'px', 'max-width': 'none', 'min-width': '0', height: opts.fixedHeight ? h + 'px' : 'auto', 'max-height': 'none', 'min-height': '0',
-      margin: '0', padding: '0', border: '0', 'box-shadow': 'none', opacity: '1', visibility: 'visible',
+      position: 'relative',
+      display: 'block',
+      overflow: 'visible',
+      inset: 'auto',
+      transform: 'none',
+      width: w + 'px',
+      'max-width': 'none',
+      'min-width': '0',
+      height: opts.fixedHeight ? h + 'px' : 'auto',
+      'max-height': 'none',
+      'min-height': '0',
+      margin: '0',
+      padding: '0',
+      border: '0',
+      'box-shadow': 'none',
+      opacity: '1',
+      visibility: 'visible',
     });
     at.appendChild(shell);
     at = shell;
   }
   at.appendChild(copy);
   const xml = new XMLSerializer().serializeToString(root);
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + Math.round(w * r) + '" height="' + Math.round(h * r) + '" viewBox="0 0 ' + w + ' ' + h + '">'
-    + '<foreignObject x="0" y="0" width="' + w + '" height="' + h + '">' + xml + '</foreignObject></svg>';
+  return (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' +
+    Math.round(w * r) +
+    '" height="' +
+    Math.round(h * r) +
+    '" viewBox="0 0 ' +
+    w +
+    ' ' +
+    h +
+    '">' +
+    '<foreignObject x="0" y="0" width="' +
+    w +
+    '" height="' +
+    h +
+    '">' +
+    xml +
+    '</foreignObject></svg>'
+  );
 }
 
 /** `rgb(…)` / `rgba(…)` as three numbers (a computed colour is always one of these). */
@@ -302,7 +426,11 @@ function keptHeight(el) {
  * @returns {Promise<{canvas:HTMLCanvasElement, w:number, h:number, r:number}>}
  */
 async function drawPicture(src) {
-  let orig, copy, w, h, fixedHeight = false;
+  let orig,
+    copy,
+    w,
+    h,
+    fixedHeight = false;
   if (src.world) {
     // the Map's world, at the scale the board was fitted to, with a margin round it
     orig = src.world;
@@ -310,7 +438,11 @@ async function drawPicture(src) {
     w = Math.ceil(src.size.w * s + WORLD_PAD * 2);
     h = Math.ceil(src.size.h * s + WORLD_PAD * 2);
     copy = orig.cloneNode(true);
-    setImportant(copy, { transform: 'translate(' + WORLD_PAD + 'px,' + WORLD_PAD + 'px) scale(' + s + ')', 'transform-origin': '0 0', transition: 'none' });
+    setImportant(copy, {
+      transform: 'translate(' + WORLD_PAD + 'px,' + WORLD_PAD + 'px) scale(' + s + ')',
+      'transform-origin': '0 0',
+      transition: 'none',
+    });
     fixedHeight = true;
   } else {
     orig = src.el;
@@ -318,7 +450,15 @@ async function drawPicture(src) {
     // with room to spare: the copy may lay out a little taller than the page; the empty rows are cut below
     h = Math.ceil(keptHeight(orig) * 1.25 + 120);
     copy = orig.cloneNode(true);
-    setImportant(copy, { width: w + 'px', 'max-width': 'none', margin: '0', height: 'auto', 'max-height': 'none', overflow: 'visible', position: 'relative' });
+    setImportant(copy, {
+      width: w + 'px',
+      'max-width': 'none',
+      margin: '0',
+      height: 'auto',
+      'max-height': 'none',
+      overflow: 'visible',
+      position: 'relative',
+    });
   }
   keepValues(orig, copy);
   await inlineImages(orig, copy);
@@ -331,7 +471,8 @@ async function drawPicture(src) {
   // an element's copy: cut the rows of ground under its last drawn part (a world is drawn at its own size)
   if (!src.world) {
     const probe = document.createElement('canvas');
-    probe.width = w; probe.height = h;
+    probe.width = w;
+    probe.height = h;
     const pc = probe.getContext('2d');
     const g = parseColor(getComputedStyle(document.body).backgroundColor);
     pc.fillStyle = 'rgb(' + g.join(',') + ')';
@@ -353,14 +494,25 @@ async function drawPicture(src) {
   ctx.fillStyle = v('--ground', '#0A0D14');
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   // the picture's rows above the cut, drawn at r × (the source rect is in the SVG's own pixels)
-  ctx.drawImage(img, 0, 0, img.naturalWidth || img.width, Math.round((img.naturalHeight || img.height) * h / fullH), 0, 0, Math.round(w * r), Math.round(h * r));
+  ctx.drawImage(
+    img,
+    0,
+    0,
+    img.naturalWidth || img.width,
+    Math.round(((img.naturalHeight || img.height) * h) / fullH),
+    0,
+    0,
+    Math.round(w * r),
+    Math.round(h * r),
+  );
   // the footer: a rule, then what it shows, where and when it is true, and who drew it
   ctx.scale(r, r);
   ctx.fillStyle = v('--panel', '#111623');
   ctx.fillRect(0, h, w, foot);
   ctx.fillStyle = v('--line', '#232C42');
   ctx.fillRect(0, h, w, 1);
-  const hud = v('--hud', 'Futura, sans-serif'), mono = v('--mono', 'Menlo, monospace');
+  const hud = v('--hud', 'Futura, sans-serif'),
+    mono = v('--mono', 'Menlo, monospace');
   lines.forEach((line, i) => {
     const y = h + FOOT_PAD + FOOT_LINE * i + 12;
     ctx.fillStyle = i === 0 ? v('--accent', '#5BC8DD') : i === 1 ? v('--ink', '#DCE4F5') : v('--muted', '#99A3BA');
@@ -374,7 +526,9 @@ async function drawPicture(src) {
 // ── the files ───────────────────────────────────────────────────────────────
 
 function blobOf(canvas, type, q) {
-  return new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error(t('export.why.tooBig')))), type, q));
+  return new Promise((res, rej) =>
+    canvas.toBlob((b) => (b ? res(b) : rej(new Error(t('export.why.tooBig')))), type, q),
+  );
 }
 function download(blob, name) {
   const a = document.createElement('a');
@@ -389,7 +543,13 @@ function download(blob, name) {
 
 /** The footer facts of this page now, for a surface and its title. */
 function factsFor(surface, title) {
-  return footerFacts({ meta: (S.GRAPH && S.GRAPH.meta) || {}, version: S.VERSION, lens: currentLens(), surface, title });
+  return footerFacts({
+    meta: (S.GRAPH && S.GRAPH.meta) || {},
+    version: S.VERSION,
+    lens: currentLens(),
+    surface,
+    title,
+  });
 }
 
 /**
@@ -414,8 +574,15 @@ export async function saveView(surface, format, opts = {}) {
     const f = factsFor(surface, src.title);
     // a provider may add lines under the footer's own (the Map's comparison: one line per change)
     const lines = [...footerLines(f, t), ...(src.extraLines || [])];
-    const name = exportFilename({ surface, source: f.source, subject: src.subject, sync: f.sync, date: f.date, ext: format });
-    let out = { file: name, footer: lines.join(' | ') };
+    const name = exportFilename({
+      surface,
+      source: f.source,
+      subject: src.subject,
+      sync: f.sync,
+      date: f.date,
+      ext: format,
+    });
+    const out = { file: name, footer: lines.join(' | ') };
     if (format === 'csv') {
       if (!reg.csv) throw new Error(t('export.why.notTable'));
       const tab = reg.csv();
@@ -425,14 +592,22 @@ export async function saveView(surface, format, opts = {}) {
       else download(new Blob([text], { type: 'text/csv;charset=utf-8' }), name);
     } else {
       const pic = await drawPicture({ ...src, lines });
-      out.width = pic.canvas.width; out.height = pic.canvas.height;
+      out.width = pic.canvas.width;
+      out.height = pic.canvas.height;
       if (format === 'pdf') {
         const jpeg = new Uint8Array(await (await blobOf(pic.canvas, 'image/jpeg', 0.92)).arrayBuffer());
         // a document (the readiness brief) lies on one A4 page, the picture fitted inside its margins
         const a4 = src.a4 ? pdfA4(pic.w, pic.h) : null;
-        const bytes = pdfFromJpeg(jpeg, pic.canvas.width, pic.canvas.height, { page: a4 ? a4.page : pdfPage(pic.w, pic.h), ...(a4 ? { place: a4.place } : {}), title: lines[0], subject: lines[1] });
+        const bytes = pdfFromJpeg(jpeg, pic.canvas.width, pic.canvas.height, {
+          page: a4 ? a4.page : pdfPage(pic.w, pic.h),
+          ...(a4 ? { place: a4.place } : {}),
+          title: lines[0],
+          subject: lines[1],
+        });
         out.bytes = bytes.length;
-        if (opts.dataUrl) out.dataUrl = 'data:application/pdf;base64,' + btoa(Array.from(bytes, (c) => String.fromCharCode(c)).join(''));
+        if (opts.dataUrl)
+          out.dataUrl =
+            'data:application/pdf;base64,' + btoa(Array.from(bytes, (c) => String.fromCharCode(c)).join(''));
         else download(new Blob([bytes], { type: 'application/pdf' }), name);
       } else if (opts.dataUrl) out.dataUrl = pic.canvas.toDataURL('image/png');
       else download(await blobOf(pic.canvas, 'image/png'), name);
@@ -481,8 +656,13 @@ export function tableRows(root, spec) {
       while (p && p.tagName !== 'TABLE' && !p.matches(s.before)) p = p.previousElementSibling;
       return p && p.tagName !== 'TABLE' ? headWords(p) : '';
     });
-    if (!header.length) header.push(...spec.sections.map((s) => s.label), ...[...table.querySelectorAll('thead th')].map((th) => cellWords(th.innerText || th.textContent)));
-    for (const tr of table.querySelectorAll('tbody tr')) rows.push([...ctx, ...[...tr.children].map((td) => cellWords(td.innerText || td.textContent))]);
+    if (!header.length)
+      header.push(
+        ...spec.sections.map((s) => s.label),
+        ...[...table.querySelectorAll('thead th')].map((th) => cellWords(th.innerText || th.textContent)),
+      );
+    for (const tr of table.querySelectorAll('tbody tr'))
+      rows.push([...ctx, ...[...tr.children].map((td) => cellWords(td.innerText || td.textContent))]);
   }
   return { header, rows };
 }

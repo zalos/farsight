@@ -8,10 +8,24 @@ import { WorkCache, workDbPath, workItemId, syncSource } from '../dist/index.js'
 import type { WorkItem, WorkProvider, SourceConfig, PullPage } from '../dist/index.js';
 
 const mk = (key: string, o: Partial<WorkItem> = {}): WorkItem => ({
-  id: workItemId('s', key), source: 's', provider: 'fixture', key, url: `https://x/browse/${key}`,
-  type: { name: 'Story', category: 'story' }, title: key, state: { name: 'To Do', category: 'todo' },
-  labels: [], links: [], created: '2026-09-01T00:00:00Z', updated: '2026-09-01T00:00:00Z', revision: 'r1',
-  comments: [], history: [], fields: {}, raw: {}, ...o,
+  id: workItemId('s', key),
+  source: 's',
+  provider: 'fixture',
+  key,
+  url: `https://x/browse/${key}`,
+  type: { name: 'Story', category: 'story' },
+  title: key,
+  state: { name: 'To Do', category: 'todo' },
+  labels: [],
+  links: [],
+  created: '2026-09-01T00:00:00Z',
+  updated: '2026-09-01T00:00:00Z',
+  revision: 'r1',
+  comments: [],
+  history: [],
+  fields: {},
+  raw: {},
+  ...o,
 });
 const comment = { id: 'c1', author: { id: 'a1', name: 'Ada' }, created: '2026-09-01T00:00:00Z', body: 'hello' };
 
@@ -34,7 +48,13 @@ function tracker(): WorkProvider {
 
 test('engine: an item re-sent at the revision the cache holds keeps its hydrated comments and its interval', async () => {
   const cache = new WorkCache(workDbPath(mkdtempSync(join(tmpdir(), 'work-engine-'))));
-  const cfg: SourceConfig = { id: 's', type: 'work', provider: 'fake', path: '', scope: { projects: ['INV'] } } as SourceConfig;
+  const cfg: SourceConfig = {
+    id: 's',
+    type: 'work',
+    provider: 'fake',
+    path: '',
+    scope: { projects: ['INV'] },
+  } as SourceConfig;
   const p = tracker();
   const r1 = await syncSource(cfg, p, cache);
   assert.equal(r1.error, undefined);

@@ -4,11 +4,26 @@
 // over a synthetic 20,000-node workspace. Runs against the built package: `pnpm build` first.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildIndex, projectGraph, projectNodeIds, appClosure, projectsSummaryLine, graphFilePath, sanitizeProjects, countedProblems } from '../dist/index.js';
+import {
+  buildIndex,
+  projectGraph,
+  projectNodeIds,
+  appClosure,
+  projectsSummaryLine,
+  graphFilePath,
+  sanitizeProjects,
+  countedProblems,
+} from '../dist/index.js';
 import type { GraphNode, ProjectsMeta, Counted } from '../dist/index.js';
 
 function node(id: string, kind: GraphNode['kind'], project: string, repo = 'ws'): GraphNode {
-  return { id: `${repo}::${id}`, kind, name: id, loc: { repo, path: `libs/${project}/${id}.ts`, line: 1 }, project: { name: project, root: `libs/${project}` } } as GraphNode;
+  return {
+    id: `${repo}::${id}`,
+    kind,
+    name: id,
+    loc: { repo, path: `libs/${project}/${id}.ts`, line: 1 },
+    project: { name: project, root: `libs/${project}` },
+  } as GraphNode;
 }
 
 function meta(names: string[], imports: [string, string][], extra: Partial<ProjectsMeta> = {}): ProjectsMeta {
@@ -16,7 +31,13 @@ function meta(names: string[], imports: [string, string][], extra: Partial<Proje
     tool: 'nx',
     projects: names.map((name) => ({ name, root: `libs/${name}`, tags: [], via: 'project.json' as const })),
     tagDimensions: [],
-    imports: imports.map(([from, to]) => ({ from, to, imports: 1, files: 1, top: [{ path: `libs/${from}/a.ts`, imports: 1 }] })),
+    imports: imports.map(([from, to]) => ({
+      from,
+      to,
+      imports: 1,
+      files: 1,
+      top: [{ path: `libs/${from}/a.ts`, imports: 1 }],
+    })),
     ...extra,
   };
 }
@@ -41,13 +62,24 @@ test('the fold is kept per index: the same index answers the same object, a diff
 
 test('every row carries its closure, the same as appClosure, project first then nearest first', () => {
   const names = ['app', 'feat', 'ui', 'util', 'data', 'lonely'];
-  const metas = { ws: meta(names, [['app', 'feat'], ['app', 'util'], ['feat', 'ui'], ['feat', 'data'], ['ui', 'util']]) };
+  const metas = {
+    ws: meta(names, [
+      ['app', 'feat'],
+      ['app', 'util'],
+      ['feat', 'ui'],
+      ['feat', 'data'],
+      ['ui', 'util'],
+    ]),
+  };
   const pg = projectGraph(buildIndex([], []), metas);
   for (const row of pg.projects) assert.deepEqual(row.closure, appClosure(pg, row.name)!.projects, row.name);
   const app = appClosure(pg, 'app')!;
   assert.deepEqual(app.projects, ['app', 'feat', 'util', 'data', 'ui']);
   assert.equal(app.count.n, 4);
-  assert.deepEqual(app.dependencies.map((d) => `${d.from}>${d.to}`), ['app>feat', 'app>util', 'feat>data', 'feat>ui', 'ui>util']);
+  assert.deepEqual(
+    app.dependencies.map((d) => `${d.from}>${d.to}`),
+    ['app>feat', 'app>util', 'feat>data', 'feat>ui', 'ui>util'],
+  );
   assert.deepEqual(pg.projects.find((p) => p.name === 'lonely')!.closure, ['lonely']);
   // asked again it is the same answer, never a shared array a caller could change
   app.projects.push('x');
@@ -74,7 +106,10 @@ test('NX project-graph dependencies merge: one both know is nx, one only NX know
   assert.equal(dep('e2e', 'app').imports, 0);
   assert.equal(dep('e2e', 'ghost'), undefined, 'a name no source declares never becomes a dependency');
   assert.deepEqual(pg.projects.find((p) => p.name === 'e2e')!.closure, ['e2e', 'app', 'lib']);
-  assert.deepEqual(pg.counts.dependencies.breakdown?.map((p) => `${p.key}:${p.n}`), ['count.part.depsImported:1', 'count.part.depsNxGraph:1']);
+  assert.deepEqual(
+    pg.counts.dependencies.breakdown?.map((p) => `${p.key}:${p.n}`),
+    ['count.part.depsImported:1', 'count.part.depsNxGraph:1'],
+  );
   assert.deepEqual(countedProblems(pg.counts.dependencies as Counted, 'deps'), []);
   assert.match(projectsSummaryLine(pg), /· 2 project dependencies · nx graph: 3 dependencies read$/);
   assert.equal(pg.repos[0]!.graphFile?.path, '.nx/workspace-data/project-graph.json');
@@ -104,9 +139,15 @@ test('timing: 20,000 nodes over 30 projects fold once and answer 30 closures wel
   const t0 = performance.now();
   const pg = projectGraph(index, metas);
   for (const n of names) appClosure(pg, n);
-  for (let k = 0; k < 100; k++) { projectGraph(index, metas); projectGraph(index, metas, { repo: 'ws' }); }
+  for (let k = 0; k < 100; k++) {
+    projectGraph(index, metas);
+    projectGraph(index, metas, { repo: 'ws' });
+  }
   const ms = performance.now() - t0;
   assert.ok(ms < 1000, `fold + 30 closures + 200 cached answers took ${ms.toFixed(0)} ms`);
-  assert.equal(pg.projects.reduce((a, p) => a + p.nodes.n, 0), 20_000);
+  assert.equal(
+    pg.projects.reduce((a, p) => a + p.nodes.n, 0),
+    20_000,
+  );
   assert.equal(pg.projects[0]!.closure.length, 30);
 });

@@ -24,13 +24,33 @@ export interface SqlOp {
   write: boolean;
 }
 
-const CONSTRAINT_WORDS = new Set(['primary', 'constraint', 'unique', 'check', 'foreign', 'index', 'key', 'exclude', 'like']);
-const KEYWORD_TABLES = new Set(['select', 'lateral', 'unnest', 'values', 'generate_series', 'only', 'jsonb_array_elements', 'json_array_elements', 'dual']);
+const CONSTRAINT_WORDS = new Set([
+  'primary',
+  'constraint',
+  'unique',
+  'check',
+  'foreign',
+  'index',
+  'key',
+  'exclude',
+  'like',
+]);
+const KEYWORD_TABLES = new Set([
+  'select',
+  'lateral',
+  'unnest',
+  'values',
+  'generate_series',
+  'only',
+  'jsonb_array_elements',
+  'json_array_elements',
+  'dual',
+]);
 const STATEMENT_START = /^\s*(?:--[^\n]*\n\s*|\/\*[\s\S]*?\*\/\s*)*(select|insert|update|delete|with|create)\b/i;
 
 /** `"schema"."name"` · `schema.name` · `name` → `name` (quotes and schema stripped, lower-cased). */
 function cleanName(raw: string): string {
-  const parts = raw.replace(/["`\]\[]/g, '').split('.');
+  const parts = raw.replace(/["`\][]/g, '').split('.');
   return (parts[parts.length - 1] ?? '').toLowerCase();
 }
 
@@ -53,7 +73,9 @@ export function sqlTables(text: string): SqlTable[] {
     const name = cleanName(m[1]!);
     if (!name) continue;
     // balance the parentheses to find the column list
-    let depth = 1, i = re.lastIndex, start = i;
+    let depth = 1,
+      i = re.lastIndex;
+    const start = i;
     while (i < text.length && depth > 0) {
       const ch = text[i];
       if (ch === '(') depth++;
@@ -61,15 +83,22 @@ export function sqlTables(text: string): SqlTable[] {
       i++;
     }
     // comments inside the column list are prose, never a column (`-- a and b`)
-    const body = text.slice(start, i - 1).replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const body = text
+      .slice(start, i - 1)
+      .replace(/--[^\n]*/g, ' ')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ');
     const columns: string[] = [];
     // split on top-level commas only
-    let cur = '', d = 0;
+    let cur = '',
+      d = 0;
     const defs: string[] = [];
     for (const ch of body) {
       if (ch === '(') d++;
       else if (ch === ')') d--;
-      if (ch === ',' && d === 0) { defs.push(cur); cur = ''; } else cur += ch;
+      if (ch === ',' && d === 0) {
+        defs.push(cur);
+        cur = '';
+      } else cur += ch;
     }
     defs.push(cur);
     for (const def of defs) {
@@ -107,9 +136,13 @@ export function sqlOps(text: string): SqlOp[] {
     ops.push({ table, op, write: op !== 'select' });
   };
   const deletes = new Set<string>();
-  for (const m of t.matchAll(/\bdelete\s+from\s+(?:only\s+)?([\w."`]+)/gi)) { push(m[1]!, 'delete'); deletes.add(cleanName(m[1]!)); }
+  for (const m of t.matchAll(/\bdelete\s+from\s+(?:only\s+)?([\w."`]+)/gi)) {
+    push(m[1]!, 'delete');
+    deletes.add(cleanName(m[1]!));
+  }
   for (const m of t.matchAll(/\binsert\s+into\s+([\w."`]+)/gi)) push(m[1]!, 'insert');
-  for (const m of t.matchAll(/\bupdate\s+(?:only\s+)?([\w."`]+)(?:\s+(?:as\s+)?[\w"]+)?\s+set\b/gi)) push(m[1]!, 'update'); // `UPDATE t alias SET`
+  for (const m of t.matchAll(/\bupdate\s+(?:only\s+)?([\w."`]+)(?:\s+(?:as\s+)?[\w"]+)?\s+set\b/gi))
+    push(m[1]!, 'update'); // `UPDATE t alias SET`
   for (const m of t.matchAll(/\b(?:from|join)\s+(?:only\s+)?([\w."`]+)/gi)) {
     const name = cleanName(m[1]!);
     if (deletes.has(name)) continue;

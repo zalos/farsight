@@ -30,15 +30,29 @@ export async function withSettingsLock<T>(configPath: string, action: () => Prom
       // malformed or foreign file is never deleted as an assumed stale lock.
       try {
         const before = await lstat(path);
-        if (!before.isFile() || before.isSymbolicLink() || before.size > 256 || process.getuid && before.uid !== process.getuid()) throw new Error();
+        if (
+          !before.isFile() ||
+          before.isSymbolicLink() ||
+          before.size > 256 ||
+          (process.getuid && before.uid !== process.getuid())
+        )
+          throw new Error(undefined, { cause: error });
         const owner = JSON.parse(await readFile(path, 'utf8')) as { pid?: unknown; nonce?: unknown };
-        if (!Number.isSafeInteger(owner.pid) || Number(owner.pid) <= 0 || typeof owner.nonce !== 'string' || !/^[a-f0-9-]{36}$/.test(owner.nonce)) {
+        if (
+          !Number.isSafeInteger(owner.pid) ||
+          Number(owner.pid) <= 0 ||
+          typeof owner.nonce !== 'string' ||
+          !/^[a-f0-9-]{36}$/.test(owner.nonce)
+        ) {
           // Another writer may still be filling its newly created lock.
-          if (Date.now() - before.mtimeMs > 5000) throw new Error();
+          if (Date.now() - before.mtimeMs > 5000) throw new Error(undefined, { cause: error });
         } else {
           let stopped = false;
-          try { process.kill(Number(owner.pid), 0); }
-          catch (failure) { if ((failure as NodeJS.ErrnoException).code === 'ESRCH') stopped = true; }
+          try {
+            process.kill(Number(owner.pid), 0);
+          } catch (failure) {
+            if ((failure as NodeJS.ErrnoException).code === 'ESRCH') stopped = true;
+          }
           if (stopped) {
             const current = await lstat(path);
             if (current.ino === before.ino && current.dev === before.dev) await unlink(path);
@@ -50,7 +64,7 @@ export async function withSettingsLock<T>(configPath: string, action: () => Prom
         // An empty lock is possible between exclusive creation and its first
         // write. Retry within the same bounded interval without adopting it.
       }
-      if (Date.now() >= deadline) throw new Error(echoConfigWord('echo.config.write'));
+      if (Date.now() >= deadline) throw new Error(echoConfigWord('echo.config.write'), { cause: error });
       await delay(15);
     }
   }

@@ -11,7 +11,16 @@ import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { loadSqlite, type SqliteModule } from '@farsight/core';
 import type {
-  WorkItem, WorkType, StateCategory, Person, Intent, IntentState, Verdicts, ApplyResult, WorkAction, RequestedBy,
+  WorkItem,
+  WorkType,
+  StateCategory,
+  Person,
+  Intent,
+  IntentState,
+  Verdicts,
+  ApplyResult,
+  WorkAction,
+  RequestedBy,
 } from './contract.js';
 import type { Cursor, Schema, SourceConfig } from './provider.js';
 
@@ -174,7 +183,10 @@ export interface AuditRow {
   preview?: PreviewFact;
 }
 
-export interface PreviewFact { ok: boolean; reason: string }
+export interface PreviewFact {
+  ok: boolean;
+  reason: string;
+}
 
 type Db = InstanceType<SqliteModule['DatabaseSync']>;
 const hash = (json: string) => createHash('sha1').update(json).digest('hex');
@@ -244,7 +256,9 @@ export class WorkCache {
   }
 
   listSources(): SourceRow[] {
-    return (this.db.prepare('SELECT id FROM source ORDER BY id').all() as { id: string }[]).map((r) => this.getSource(r.id)!);
+    return (this.db.prepare('SELECT id FROM source ORDER BY id').all() as { id: string }[]).map((r) =>
+      this.getSource(r.id)!,
+    );
   }
 
   setSchema(id: string, schema: Schema, at: string): void {
@@ -262,18 +276,33 @@ export class WorkCache {
   finishSync(
     sourceId: string,
     no: number,
-    o: { at: string; pulled: number; changed: number; deleted: number; cursor: Cursor | null; durationMs: number; error?: string; errorKind?: SourceRow['lastErrorKind'] },
+    o: {
+      at: string;
+      pulled: number;
+      changed: number;
+      deleted: number;
+      cursor: Cursor | null;
+      durationMs: number;
+      error?: string;
+      errorKind?: SourceRow['lastErrorKind'];
+    },
   ): void {
     this.db
-      .prepare('UPDATE sync SET pulled = ?, changed = ?, deleted = ?, cursor = ?, duration_ms = ?, error = ? WHERE no = ?')
+      .prepare(
+        'UPDATE sync SET pulled = ?, changed = ?, deleted = ?, cursor = ?, duration_ms = ?, error = ? WHERE no = ?',
+      )
       .run(o.pulled, o.changed, o.deleted, o.cursor, o.durationMs, o.error ?? null, no);
     if (o.error) {
       this.db
-        .prepare('UPDATE source SET last_error = ?, last_error_kind = ?, failing_since = COALESCE(failing_since, ?) WHERE id = ?')
+        .prepare(
+          'UPDATE source SET last_error = ?, last_error_kind = ?, failing_since = COALESCE(failing_since, ?) WHERE id = ?',
+        )
         .run(o.error, o.errorKind ?? 'other', o.at, sourceId);
     } else {
       this.db
-        .prepare('UPDATE source SET cursor = ?, last_ok_at = ?, last_sync = ?, last_error = NULL, last_error_kind = NULL, failing_since = NULL WHERE id = ?')
+        .prepare(
+          'UPDATE source SET cursor = ?, last_ok_at = ?, last_sync = ?, last_error = NULL, last_error_kind = NULL, failing_since = NULL WHERE id = ?',
+        )
         .run(o.cursor, o.at, no, sourceId);
     }
   }
@@ -284,18 +313,39 @@ export class WorkCache {
    * item re-read is not the whole source agreeing with the tracker).
    */
   writeSync(sourceId: string, at: string): number {
-    const r = this.db.prepare("INSERT INTO sync (source, kind, at, pulled, changed, deleted) VALUES (?, 'write', ?, 1, 1, 0)").run(sourceId, at);
+    const r = this.db
+      .prepare("INSERT INTO sync (source, kind, at, pulled, changed, deleted) VALUES (?, 'write', ?, 1, 1, 0)")
+      .run(sourceId, at);
     return Number(r.lastInsertRowid);
   }
 
   /** How many syncs of this kind the source has had, the open one included. */
   countSyncs(sourceId: string, kind: 'pull' | 'write' = 'pull'): number {
-    return (this.db.prepare('SELECT COUNT(*) AS n FROM sync WHERE source = ? AND kind = ?').get(sourceId, kind) as { n: number }).n;
+    return (
+      this.db.prepare('SELECT COUNT(*) AS n FROM sync WHERE source = ? AND kind = ?').get(sourceId, kind) as {
+        n: number;
+      }
+    ).n;
   }
 
   /** Recent syncs of a source, newest first. */
-  listSyncs(sourceId: string, limit = 20): { no: number; kind: string; at: string; pulled: number | null; changed: number | null; deleted: number | null; error: string | null }[] {
-    return this.db.prepare('SELECT no, kind, at, pulled, changed, deleted, error FROM sync WHERE source = ? ORDER BY no DESC LIMIT ?').all(sourceId, limit) as never;
+  listSyncs(
+    sourceId: string,
+    limit = 20,
+  ): {
+    no: number;
+    kind: string;
+    at: string;
+    pulled: number | null;
+    changed: number | null;
+    deleted: number | null;
+    error: string | null;
+  }[] {
+    return this.db
+      .prepare(
+        'SELECT no, kind, at, pulled, changed, deleted, error FROM sync WHERE source = ? ORDER BY no DESC LIMIT ?',
+      )
+      .all(sourceId, limit) as never;
   }
 
   // ── items ────────────────────────────────────────────────────────────────
@@ -314,30 +364,59 @@ export class WorkCache {
            ON CONFLICT(id) DO UPDATE SET source = excluded.source, key = excluded.key, type = excluded.type, state = excluded.state,
              assignee = excluded.assignee, updated = excluded.updated, parent = excluded.parent, deleted = 0, sync = excluded.sync, json = excluded.json`,
         )
-        .run(item.id, sourceId, item.key, item.type.category, item.state.category, item.assignee?.id ?? null, item.updated, item.parent ?? null, syncNo, json);
+        .run(
+          item.id,
+          sourceId,
+          item.key,
+          item.type.category,
+          item.state.category,
+          item.assignee?.id ?? null,
+          item.updated,
+          item.parent ?? null,
+          syncNo,
+          json,
+        );
 
-      const open = this.db.prepare('SELECT first_sync, hash FROM item_rev WHERE id = ? AND last_sync IS NULL').get(item.id) as
-        | { first_sync: number; hash: string }
-        | undefined;
+      const open = this.db
+        .prepare('SELECT first_sync, hash FROM item_rev WHERE id = ? AND last_sync IS NULL')
+        .get(item.id) as { first_sync: number; hash: string } | undefined;
       let changed = false;
       if (!open || open.hash !== h) {
         changed = true;
         if (open) {
           // a second write in the same sync replaces that sync's version rather than making an empty interval
-          if (open.first_sync === syncNo) this.db.prepare('DELETE FROM item_rev WHERE id = ? AND first_sync = ?').run(item.id, syncNo);
-          else this.db.prepare('UPDATE item_rev SET last_sync = ? WHERE id = ? AND last_sync IS NULL').run(syncNo - 1, item.id);
+          if (open.first_sync === syncNo)
+            this.db.prepare('DELETE FROM item_rev WHERE id = ? AND first_sync = ?').run(item.id, syncNo);
+          else
+            this.db
+              .prepare('UPDATE item_rev SET last_sync = ? WHERE id = ? AND last_sync IS NULL')
+              .run(syncNo - 1, item.id);
         }
-        this.db.prepare('INSERT INTO item_rev (id, first_sync, last_sync, hash, json) VALUES (?,?,NULL,?,?)').run(item.id, syncNo, h, json);
+        this.db
+          .prepare('INSERT INTO item_rev (id, first_sync, last_sync, hash, json) VALUES (?,?,NULL,?,?)')
+          .run(item.id, syncNo, h, json);
       }
 
       this.db.prepare('DELETE FROM comment WHERE item = ?').run(item.id);
-      const cst = this.db.prepare('INSERT OR REPLACE INTO comment (item, id, author, created, updated, json) VALUES (?,?,?,?,?,?)');
-      for (const c of item.comments) cst.run(item.id, c.id, c.author.id, c.created, c.updated ?? null, JSON.stringify(c));
+      const cst = this.db.prepare(
+        'INSERT OR REPLACE INTO comment (item, id, author, created, updated, json) VALUES (?,?,?,?,?,?)',
+      );
+      for (const c of item.comments)
+        cst.run(item.id, c.id, c.author.id, c.created, c.updated ?? null, JSON.stringify(c));
       this.db.prepare('DELETE FROM change WHERE item = ?').run(item.id);
-      const hst = this.db.prepare('INSERT INTO change (item, seq, at, by, field, from_value, to_value) VALUES (?,?,?,?,?,?,?)');
-      item.history.forEach((c, i) => hst.run(item.id, i, c.at, c.by?.id ?? null, c.field, c.from ?? null, c.to ?? null));
+      const hst = this.db.prepare(
+        'INSERT INTO change (item, seq, at, by, field, from_value, to_value) VALUES (?,?,?,?,?,?,?)',
+      );
+      item.history.forEach((c, i) =>
+        hst.run(item.id, i, c.at, c.by?.id ?? null, c.field, c.from ?? null, c.to ?? null),
+      );
 
-      const seen = [item.assignee, item.reporter, ...item.comments.map((c) => c.author), ...item.history.map((c) => c.by)];
+      const seen = [
+        item.assignee,
+        item.reporter,
+        ...item.comments.map((c) => c.author),
+        ...item.history.map((c) => c.by),
+      ];
       for (const p of seen) if (p) this.putPerson(p, item.updated);
       return changed;
     });
@@ -355,12 +434,18 @@ export class WorkCache {
 
   /** People last seen with this exact name (case-insensitive) — display names are not unique. */
   findPeople(name: string): Person[] {
-    return (this.db.prepare('SELECT id, name, email FROM person WHERE lower(name) = lower(?) ORDER BY id').all(name) as { id: string; name: string; email: string | null }[])
-      .map((r) => ({ id: r.id, name: r.name, ...(r.email ? { email: r.email } : {}) }));
+    return (
+      this.db.prepare('SELECT id, name, email FROM person WHERE lower(name) = lower(?) ORDER BY id').all(name) as {
+        id: string;
+        name: string;
+        email: string | null;
+      }[]
+    ).map((r) => ({ id: r.id, name: r.name, ...(r.email ? { email: r.email } : {}) }));
   }
 
   getPerson(id: string): Person | null {
-    const r = this.db.prepare('SELECT id, name, email FROM person WHERE id = ?').get(id) as { id: string; name: string; email: string | null } | undefined;
+    const r = this.db.prepare('SELECT id, name, email FROM person WHERE id = ?').get(id) as
+      { id: string; name: string; email: string | null } | undefined;
     return r ? { id: r.id, name: r.name, ...(r.email ? { email: r.email } : {}) } : null;
   }
 
@@ -374,15 +459,19 @@ export class WorkCache {
   }
 
   getItem(id: string, opts: { includeDeleted?: boolean } = {}): WorkItem | null {
-    const r = this.db.prepare(`SELECT json FROM item WHERE id = ?${opts.includeDeleted ? '' : ' AND deleted = 0'}`).get(id) as { json: string } | undefined;
+    const r = this.db
+      .prepare(`SELECT json FROM item WHERE id = ?${opts.includeDeleted ? '' : ' AND deleted = 0'}`)
+      .get(id) as { json: string } | undefined;
     return r ? (JSON.parse(r.json) as WorkItem) : null;
   }
 
   /** Items whose key is `key` (a key is unique per source, not across sources). */
   findByKey(key: string, source?: string): WorkItem[] {
-    const rows = (source
-      ? this.db.prepare('SELECT json FROM item WHERE key = ? AND source = ? AND deleted = 0').all(key, source)
-      : this.db.prepare('SELECT json FROM item WHERE key = ? AND deleted = 0 ORDER BY source').all(key)) as { json: string }[];
+    const rows = (
+      source
+        ? this.db.prepare('SELECT json FROM item WHERE key = ? AND source = ? AND deleted = 0').all(key, source)
+        : this.db.prepare('SELECT json FROM item WHERE key = ? AND deleted = 0 ORDER BY source').all(key)
+    ) as { json: string }[];
     return rows.map((r) => JSON.parse(r.json) as WorkItem);
   }
 
@@ -390,33 +479,55 @@ export class WorkCache {
     const where: string[] = [];
     const args: (string | number)[] = [];
     if (!filter.includeDeleted) where.push('deleted = 0');
-    if (filter.source) { where.push('source = ?'); args.push(filter.source); }
-    if (filter.state) { where.push('state = ?'); args.push(filter.state); }
-    if (filter.type) { where.push('type = ?'); args.push(filter.type); }
-    if (filter.parent) { where.push('parent = ?'); args.push(filter.parent); }
+    if (filter.source) {
+      where.push('source = ?');
+      args.push(filter.source);
+    }
+    if (filter.state) {
+      where.push('state = ?');
+      args.push(filter.state);
+    }
+    if (filter.type) {
+      where.push('type = ?');
+      args.push(filter.type);
+    }
+    if (filter.parent) {
+      where.push('parent = ?');
+      args.push(filter.parent);
+    }
     const sql = `SELECT json FROM item${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY source, key`;
     let items = (this.db.prepare(sql).all(...args) as { json: string }[]).map((r) => JSON.parse(r.json) as WorkItem);
     if (filter.assignee) {
       const a = filter.assignee.toLowerCase();
-      items = items.filter((i) => i.assignee && (i.assignee.id === filter.assignee || i.assignee.name.toLowerCase().includes(a)));
+      items = items.filter(
+        (i) => i.assignee && (i.assignee.id === filter.assignee || i.assignee.name.toLowerCase().includes(a)),
+      );
     }
     // natural key order: INV-2 before INV-10
-    return items.sort((x, y) => x.source.localeCompare(y.source) || x.key.localeCompare(y.key, undefined, { numeric: true }));
+    return items.sort(
+      (x, y) => x.source.localeCompare(y.source) || x.key.localeCompare(y.key, undefined, { numeric: true }),
+    );
   }
 
   /** The item as it was at sync `syncNo` (interval read), or null when it did not exist then. */
   itemAt(id: string, syncNo: number): WorkItem | null {
     const r = this.db
-      .prepare('SELECT json FROM item_rev WHERE id = ? AND first_sync <= ? AND (last_sync IS NULL OR last_sync >= ?) ORDER BY first_sync DESC LIMIT 1')
+      .prepare(
+        'SELECT json FROM item_rev WHERE id = ? AND first_sync <= ? AND (last_sync IS NULL OR last_sync >= ?) ORDER BY first_sync DESC LIMIT 1',
+      )
       .get(id, syncNo, syncNo) as { json: string } | undefined;
     return r ? (JSON.parse(r.json) as WorkItem) : null;
   }
 
   /** Every version of an item: `{ firstSync, lastSync|null, item }`, oldest first. */
   revisions(id: string): { firstSync: number; lastSync: number | null; item: WorkItem }[] {
-    return (this.db.prepare('SELECT first_sync, last_sync, json FROM item_rev WHERE id = ? ORDER BY first_sync').all(id) as {
-      first_sync: number; last_sync: number | null; json: string;
-    }[]).map((r) => ({ firstSync: r.first_sync, lastSync: r.last_sync, item: JSON.parse(r.json) as WorkItem }));
+    return (
+      this.db.prepare('SELECT first_sync, last_sync, json FROM item_rev WHERE id = ? ORDER BY first_sync').all(id) as {
+        first_sync: number;
+        last_sync: number | null;
+        json: string;
+      }[]
+    ).map((r) => ({ firstSync: r.first_sync, lastSync: r.last_sync, item: JSON.parse(r.json) as WorkItem }));
   }
 
   // ── links (§9) ───────────────────────────────────────────────────────────
@@ -429,9 +540,19 @@ export class WorkCache {
 
   /** Links touching `id`, whether it is the work item or the graph node. */
   linksFor(id: string): WorkLink[] {
-    return (this.db.prepare('SELECT * FROM link WHERE work = ? OR node = ? ORDER BY work, node').all(id, id) as Record<string, string>[]).map((r) => ({
-      work: r.work!, node: r.node!, kind: r.kind!, provenance: r.provenance!, tier: r.tier as WorkLink['tier'],
-      ...(r.detail ? { detail: r.detail } : {}), at: r.at!,
+    return (
+      this.db.prepare('SELECT * FROM link WHERE work = ? OR node = ? ORDER BY work, node').all(id, id) as Record<
+        string,
+        string
+      >[]
+    ).map((r) => ({
+      work: r.work!,
+      node: r.node!,
+      kind: r.kind!,
+      provenance: r.provenance!,
+      tier: r.tier as WorkLink['tier'],
+      ...(r.detail ? { detail: r.detail } : {}),
+      at: r.at!,
     }));
   }
 
@@ -439,14 +560,35 @@ export class WorkCache {
 
   enqueueIntent(source: string, intent: Intent, at: string): void {
     this.db
-      .prepare('INSERT INTO outbox (id, source, item, action, payload, requested_by, base_revision, state, created, updated) VALUES (?,?,?,?,?,?,?,?,?,?)')
-      .run(intent.id, source, intent.item, intent.action, JSON.stringify(intent.payload), JSON.stringify(intent.requestedBy), intent.baseRevision ?? null, 'queued', at, at);
+      .prepare(
+        'INSERT INTO outbox (id, source, item, action, payload, requested_by, base_revision, state, created, updated) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      )
+      .run(
+        intent.id,
+        source,
+        intent.item,
+        intent.action,
+        JSON.stringify(intent.payload),
+        JSON.stringify(intent.requestedBy),
+        intent.baseRevision ?? null,
+        'queued',
+        at,
+        at,
+      );
   }
 
   updateIntent(id: string, patch: { state: IntentState; verdicts?: Verdicts; result?: ApplyResult; at: string }): void {
     this.db
-      .prepare('UPDATE outbox SET state = ?, verdicts = COALESCE(?, verdicts), result = COALESCE(?, result), updated = ? WHERE id = ?')
-      .run(patch.state, patch.verdicts ? JSON.stringify(patch.verdicts) : null, patch.result ? JSON.stringify(patch.result) : null, patch.at, id);
+      .prepare(
+        'UPDATE outbox SET state = ?, verdicts = COALESCE(?, verdicts), result = COALESCE(?, result), updated = ? WHERE id = ?',
+      )
+      .run(
+        patch.state,
+        patch.verdicts ? JSON.stringify(patch.verdicts) : null,
+        patch.result ? JSON.stringify(patch.result) : null,
+        patch.at,
+        id,
+      );
   }
 
   getIntent(id: string): OutboxRow | null {
@@ -456,40 +598,78 @@ export class WorkCache {
   listOutbox(filter: { source?: string; state?: IntentState; item?: string; id?: string } = {}): OutboxRow[] {
     const where: string[] = [];
     const args: string[] = [];
-    for (const [col, v] of [['source', filter.source], ['state', filter.state], ['item', filter.item], ['id', filter.id]] as const) {
-      if (v) { where.push(`${col} = ?`); args.push(v); }
+    for (const [col, v] of [
+      ['source', filter.source],
+      ['state', filter.state],
+      ['item', filter.item],
+      ['id', filter.id],
+    ] as const) {
+      if (v) {
+        where.push(`${col} = ?`);
+        args.push(v);
+      }
     }
-    const rows = this.db.prepare(`SELECT * FROM outbox${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY created, id`).all(...args) as Record<string, string | null>[];
+    const rows = this.db
+      .prepare(`SELECT * FROM outbox${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY created, id`)
+      .all(...args) as Record<string, string | null>[];
     return rows.map((r) => ({
       intent: {
-        id: r.id!, item: r.item!, action: r.action as WorkAction, payload: JSON.parse(r.payload!), requestedBy: JSON.parse(r.requested_by!),
+        id: r.id!,
+        item: r.item!,
+        action: r.action as WorkAction,
+        payload: JSON.parse(r.payload!),
+        requestedBy: JSON.parse(r.requested_by!),
         ...(r.base_revision ? { baseRevision: r.base_revision } : {}),
       },
-      source: r.source!, state: r.state as IntentState,
+      source: r.source!,
+      state: r.state as IntentState,
       ...(r.verdicts ? { verdicts: JSON.parse(r.verdicts) } : {}),
       ...(r.result ? { result: JSON.parse(r.result) } : {}),
-      created: r.created!, updated: r.updated!,
+      created: r.created!,
+      updated: r.updated!,
     }));
   }
 
   audit(row: AuditRow): number {
     const r = this.db
-      .prepare('INSERT INTO audit (at, source, intent, item, action, requested_by, verdicts, outcome, detail, preview) VALUES (?,?,?,?,?,?,?,?,?,?)')
-      .run(row.at, row.source, row.intent ?? null, row.item ?? null, row.action ?? null,
-        row.requestedBy ? JSON.stringify(row.requestedBy) : null, row.verdicts ? JSON.stringify(row.verdicts) : null,
-        row.outcome, row.detail === undefined ? null : JSON.stringify(row.detail), row.preview ? JSON.stringify(row.preview) : null);
+      .prepare(
+        'INSERT INTO audit (at, source, intent, item, action, requested_by, verdicts, outcome, detail, preview) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      )
+      .run(
+        row.at,
+        row.source,
+        row.intent ?? null,
+        row.item ?? null,
+        row.action ?? null,
+        row.requestedBy ? JSON.stringify(row.requestedBy) : null,
+        row.verdicts ? JSON.stringify(row.verdicts) : null,
+        row.outcome,
+        row.detail === undefined ? null : JSON.stringify(row.detail),
+        row.preview ? JSON.stringify(row.preview) : null,
+      );
     return Number(r.lastInsertRowid);
   }
 
   listAudit(filter: { source?: string; item?: string; intent?: string } = {}): AuditRow[] {
     const where: string[] = [];
     const args: string[] = [];
-    for (const [col, v] of [['source', filter.source], ['item', filter.item], ['intent', filter.intent]] as const) {
-      if (v) { where.push(`${col} = ?`); args.push(v); }
+    for (const [col, v] of [
+      ['source', filter.source],
+      ['item', filter.item],
+      ['intent', filter.intent],
+    ] as const) {
+      if (v) {
+        where.push(`${col} = ?`);
+        args.push(v);
+      }
     }
-    const rows = this.db.prepare(`SELECT * FROM audit${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY seq`).all(...args) as Record<string, string | number | null>[];
+    const rows = this.db
+      .prepare(`SELECT * FROM audit${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY seq`)
+      .all(...args) as Record<string, string | number | null>[];
     return rows.map((r) => ({
-      seq: r.seq as number, at: r.at as string, source: r.source as string,
+      seq: r.seq as number,
+      at: r.at as string,
+      source: r.source as string,
       ...(r.intent ? { intent: r.intent as string } : {}),
       ...(r.item ? { item: r.item as string } : {}),
       ...(r.action ? { action: r.action as WorkAction } : {}),

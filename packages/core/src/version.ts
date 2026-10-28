@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-declare const __FARSIGHT_BUILD__: { version: string; built: string; commit?: string; codeCommit?: string; dirty?: boolean } | undefined;
+declare const __FARSIGHT_BUILD__:
+  { version: string; built: string; commit?: string; codeCommit?: string; dirty?: boolean } | undefined;
 
 export interface BuildInfo {
   /** semver of the farsight-cli package / workspace */
@@ -49,7 +50,11 @@ let cached: BuildInfo | undefined;
  * if `buildInfo()` is first asked after a rebuild rewrote the file on disk.
  */
 const LOADED_MTIME_MS: number = (() => {
-  try { return statSync(fileURLToPath(import.meta.url)).mtimeMs; } catch { return 0; }
+  try {
+    return statSync(fileURLToPath(import.meta.url)).mtimeMs;
+  } catch {
+    return 0;
+  }
 })();
 
 /** The file the core build writes beside `dist/version.js` (scripts/stamp-build.mjs). */
@@ -62,18 +67,30 @@ export function buildInfo(): BuildInfo {
     cached = { ...__FARSIGHT_BUILD__, source: 'packed' };
     return cached;
   }
-  let version = '0.0.0', built = new Date(0).toISOString();
-  let here = '', mtime = 0;
-  try { here = dirname(fileURLToPath(import.meta.url)); } catch { /* not a file URL: keep the defaults */ }
+  let version = '0.0.0',
+    built = new Date(0).toISOString();
+  let here = '',
+    mtime = 0;
+  try {
+    here = dirname(fileURLToPath(import.meta.url));
+  } catch {
+    /* not a file URL: keep the defaults */
+  }
   try {
     // packages/core/dist/version.js → ../../../package.json (the workspace root)
     const pkg = JSON.parse(readFileSync(join(here, '..', '..', '..', 'package.json'), 'utf8')) as { version?: string };
     if (pkg.version) version = pkg.version;
-  } catch { /* no workspace package.json in reach */ }
-  if (LOADED_MTIME_MS) { mtime = LOADED_MTIME_MS; built = new Date(mtime).toISOString(); } /* else keep the epoch: "unknown" reads honestly as 1970 */
+  } catch {
+    /* no workspace package.json in reach */
+  }
+  if (LOADED_MTIME_MS) {
+    mtime = LOADED_MTIME_MS;
+    built = new Date(mtime).toISOString();
+  } /* else keep the epoch: "unknown" reads honestly as 1970 */
   const git = workspaceStamp(here, mtime) ?? { commit: here ? gitIdentity(here).commit : undefined };
   cached = {
-    version, built,
+    version,
+    built,
     ...(git.commit ? { commit: git.commit } : {}),
     ...(git.codeCommit ? { codeCommit: git.codeCommit } : {}),
     ...(git.codeCommit && typeof git.dirty === 'boolean' ? { dirty: git.dirty } : {}),
@@ -93,10 +110,17 @@ export function buildInfo(): BuildInfo {
 function workspaceStamp(here: string, mtime: number): { commit?: string; codeCommit?: string; dirty?: boolean } | null {
   if (!here || !mtime) return null;
   try {
-    const st = JSON.parse(readFileSync(join(here, BUILD_STAMP_FILE), 'utf8')) as { commit?: string; codeCommit?: string; dirty?: boolean; moduleMtimeMs?: number };
+    const st = JSON.parse(readFileSync(join(here, BUILD_STAMP_FILE), 'utf8')) as {
+      commit?: string;
+      codeCommit?: string;
+      dirty?: boolean;
+      moduleMtimeMs?: number;
+    };
     if (typeof st.moduleMtimeMs !== 'number' || Math.abs(st.moduleMtimeMs - mtime) > 1) return null;
     return st;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -106,7 +130,14 @@ function workspaceStamp(here: string, mtime: number): { commit?: string; codeCom
  * docs, the e2e results, a workspace's `.farsight/settings.json` — is not a
  * change to the code, and must not make a build look dirty or new.
  */
-export const BUILD_PATHS = ['packages', 'scripts', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.base.json'];
+export const BUILD_PATHS = [
+  'packages',
+  'scripts',
+  'package.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+  'tsconfig.base.json',
+];
 
 /**
  * The git facts a build identity carries, read from `cwd` at build time: HEAD,
@@ -118,12 +149,28 @@ export const BUILD_PATHS = ['packages', 'scripts', 'package.json', 'pnpm-lock.ya
  * is never taken for clean.
  */
 export function gitIdentity(cwd: string): { commit?: string; codeCommit?: string; dirty?: boolean } {
-  const run = (args: string[], at = cwd) => execFileSync('git', args, { cwd: at, stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 }).toString().trim();
+  const run = (args: string[], at = cwd) =>
+    execFileSync('git', args, { cwd: at, stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 })
+      .toString()
+      .trim();
   const out: { commit?: string; codeCommit?: string; dirty?: boolean } = {};
-  let top = '';
-  try { out.commit = run(['rev-parse', '--short', 'HEAD']) || undefined; top = run(['rev-parse', '--show-toplevel']); } catch { return out; }
-  try { out.codeCommit = run(['log', '-1', '--first-parent', '--format=%h', '--', ...BUILD_PATHS], top) || undefined; } catch { /* keep the rest */ }
-  try { out.dirty = run(['status', '--porcelain', '--', ...BUILD_PATHS], top).length > 0; } catch { /* unknown stays absent */ }
+  let top: string;
+  try {
+    out.commit = run(['rev-parse', '--short', 'HEAD']) || undefined;
+    top = run(['rev-parse', '--show-toplevel']);
+  } catch {
+    return out;
+  }
+  try {
+    out.codeCommit = run(['log', '-1', '--first-parent', '--format=%h', '--', ...BUILD_PATHS], top) || undefined;
+  } catch {
+    /* keep the rest */
+  }
+  try {
+    out.dirty = run(['status', '--porcelain', '--', ...BUILD_PATHS], top).length > 0;
+  } catch {
+    /* unknown stays absent */
+  }
   return out;
 }
 
@@ -172,7 +219,9 @@ function installedBuild(file: string, mtimeMs: number): InstallState['installed'
     try {
       const st = JSON.parse(readFileSync(join(dir, BUILD_STAMP_FILE), 'utf8')) as InstallState['installed'];
       return st && typeof st.built === 'string' ? st : undefined;
-    } catch { return undefined; }
+    } catch {
+      return undefined;
+    }
   }
   const st = workspaceStamp(dir, mtimeMs);
   if (!st) return undefined;
@@ -214,7 +263,9 @@ export function installState(): InstallState {
       // a few seconds of slack: a build finishing as the process starts is not "newer"
       out.newerInstalled = m.getTime() > startedAt.getTime() + 5000;
     }
-  } catch { /* not a file URL, or unreadable: nothing to compare against */ }
+  } catch {
+    /* not a file URL, or unreadable: nothing to compare against */
+  }
   return out;
 }
 
@@ -227,7 +278,11 @@ export interface CurrencyFacts {
   /** that process's file on disk */
   install?: InstallState;
   /** the graph in use: which build wrote it, when */
-  graph?: { farsight?: Pick<BuildInfo, 'version' | 'built'> & Omit<BuildIdentity, 'built'>; generatedAt?: string; sync?: number };
+  graph?: {
+    farsight?: Pick<BuildInfo, 'version' | 'built'> & Omit<BuildIdentity, 'built'>;
+    generatedAt?: string;
+    sync?: number;
+  };
   /** the CLI only: the HUD server it could reach on the workspace port */
   server?: { port: number; reachable: boolean; farsight?: BuildInfo; install?: InstallState };
 }
@@ -283,31 +338,48 @@ export function sameBuild(a?: BuildIdentity, b?: BuildIdentity): boolean {
  */
 export function currencyAdvice(f: CurrencyFacts): CurrencyAdvice {
   const findings: string[] = [];
-  const short = (b?: { version?: string } & BuildIdentity) => b ? `${b.version ?? ''} · built ${b.built ?? '?'}${b.commit ? ` · ${b.commit}` : ''}${b.dirty ? ' (uncommitted changes)' : ''}`.trim() : 'unknown';
+  const short = (b?: { version?: string } & BuildIdentity) =>
+    b
+      ? `${b.version ?? ''} · built ${b.built ?? '?'}${b.commit ? ` · ${b.commit}` : ''}${b.dirty ? ' (uncommitted changes)' : ''}`.trim()
+      : 'unknown';
   const me = f.role === 'server' ? 'this server' : f.role === 'mcp' ? 'this MCP process' : 'this CLI';
   if (f.install?.newerInstalled) {
-    findings.push(f.install.basis === 'build' && f.install.installed
-      ? `a newer build is installed (${short(f.install.installed)}) than ${me} runs (${short(f.running)}, started ${f.install.startedAt}) — restart it`
-      : `a newer build is installed (${f.install.file ?? 'the install'} written ${f.install.installedAt}) than ${me} runs (started ${f.install.startedAt}) — restart it`);
+    findings.push(
+      f.install.basis === 'build' && f.install.installed
+        ? `a newer build is installed (${short(f.install.installed)}) than ${me} runs (${short(f.running)}, started ${f.install.startedAt}) — restart it`
+        : `a newer build is installed (${f.install.file ?? 'the install'} written ${f.install.installedAt}) than ${me} runs (started ${f.install.startedAt}) — restart it`,
+    );
   }
   if (f.server) {
-    if (!f.server.reachable) findings.push(`no HUD server answered on port ${f.server.port} — start one with \`farsight serve\` in the workspace`);
+    if (!f.server.reachable)
+      findings.push(
+        `no HUD server answered on port ${f.server.port} — start one with \`farsight serve\` in the workspace`,
+      );
     else {
-      if (f.server.install?.newerInstalled) findings.push(f.server.install.basis === 'build' && f.server.install.installed
-        ? `the server on port ${f.server.port} runs ${short(f.server.farsight)}, and ${short(f.server.install.installed)} is installed — restart it`
-        : `the server on port ${f.server.port} runs an older build than is installed (started ${f.server.install.startedAt}, install written ${f.server.install.installedAt}) — restart it`);
-      else if (f.server.farsight && !sameBuild(f.server.farsight, f.running)) findings.push(`the server on port ${f.server.port} is ${short(f.server.farsight)}; this CLI is ${short(f.running)} — restart the server`);
+      if (f.server.install?.newerInstalled)
+        findings.push(
+          f.server.install.basis === 'build' && f.server.install.installed
+            ? `the server on port ${f.server.port} runs ${short(f.server.farsight)}, and ${short(f.server.install.installed)} is installed — restart it`
+            : `the server on port ${f.server.port} runs an older build than is installed (started ${f.server.install.startedAt}, install written ${f.server.install.installedAt}) — restart it`,
+        );
+      else if (f.server.farsight && !sameBuild(f.server.farsight, f.running))
+        findings.push(
+          `the server on port ${f.server.port} is ${short(f.server.farsight)}; this CLI is ${short(f.running)} — restart the server`,
+        );
     }
   }
   const g = f.graph?.farsight;
   if (g && !sameBuild(g, f.running) && !(f.server?.farsight && sameBuild(g, f.server.farsight))) {
-    findings.push(`the graph was written by ${short(g)}; ${me} is ${short(f.running)} — re-ingest so the graph carries what this build knows`);
+    findings.push(
+      `the graph was written by ${short(g)}; ${me} is ${short(f.running)} — re-ingest so the graph carries what this build knows`,
+    );
   } else if (f.graph && !g) {
     findings.push('the graph carries no build stamp (written by an older Farsight) — re-ingest');
   }
-  const restart = f.role === 'mcp'
-    ? 'restart: reconnect this MCP server (Claude Code: /mcp → reconnect; it starts a fresh `farsight mcp` from the installed build)'
-    : 'restart: stop the `farsight serve` process and run `farsight serve` again in the workspace (the running process keeps old code in memory; a reinstall only changes the files on disk)';
+  const restart =
+    f.role === 'mcp'
+      ? 'restart: reconnect this MCP server (Claude Code: /mcp → reconnect; it starts a fresh `farsight mcp` from the installed build)'
+      : 'restart: stop the `farsight serve` process and run `farsight serve` again in the workspace (the running process keeps old code in memory; a reinstall only changes the files on disk)';
   const steps = [
     'check: `farsight status` (or `farsight --version` + GET /api/version on the server, or MCP graph_overview) — which build is installed, which is running, which wrote the graph',
     'update: `npm install -g <farsight-cli tarball>` (from a Farsight checkout: `node scripts/pack.mjs` builds it into build/)',

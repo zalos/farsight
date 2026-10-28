@@ -1,12 +1,34 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync, realpathSync, chmodSync, symlinkSync, lstatSync } from 'node:fs';
+import {
+  mkdtempSync,
+  rmSync,
+  mkdirSync,
+  writeFileSync,
+  existsSync,
+  readFileSync,
+  realpathSync,
+  chmodSync,
+  symlinkSync,
+  lstatSync,
+} from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createServer } from 'node:http';
 import { defaultConfig, loadContext, saveConfig } from '../dist/config.js';
-import { renderEngineConfig, workerEnvironment, backendRequest, startBackend, enginePath, installRuntime, runtimeInstalled, hasGlobalBackendConfig, ENGINE_VERSION, type RuntimeOptions } from '../dist/runtime.js';
+import {
+  renderEngineConfig,
+  workerEnvironment,
+  backendRequest,
+  startBackend,
+  enginePath,
+  installRuntime,
+  runtimeInstalled,
+  hasGlobalBackendConfig,
+  ENGINE_VERSION,
+  type RuntimeOptions,
+} from '../dist/runtime.js';
 import type { EchoContext } from '../dist/types.js';
 
 async function fixture(fn: (ctx: EchoContext) => Promise<void>) {
@@ -15,11 +37,13 @@ async function fixture(fn: (ctx: EchoContext) => Promise<void>) {
     const configPath = join(directory, 'settings.json');
     await saveConfig(configPath, defaultConfig());
     await fn(loadContext(configPath));
-  } finally { rmSync(directory, { recursive: true, force: true }); }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 test('managed process configuration isolates all state and does not inherit model credentials', async () => {
-  await fixture(async ctx => {
+  await fixture(async (ctx) => {
     const original = process.env.ANTHROPIC_API_KEY;
     process.env.ANTHROPIC_API_KEY = 'synthetic-test-credential';
     try {
@@ -35,10 +59,15 @@ test('managed process configuration isolates all state and does not inherit mode
       assert.ok(!rendered.includes('ephemeral-test-secret'));
       const config = JSON.parse(rendered);
       assert.ok(config.workers.every((w: any) => !w.config.host || w.config.host === '127.0.0.1'));
-      assert.ok(config.workers.filter((w: any) => w.config.adapter?.config?.file_path).every((w: any) => w.config.adapter.config.file_path.startsWith(ctx.dataDirectory)));
+      assert.ok(
+        config.workers
+          .filter((w: any) => w.config.adapter?.config?.file_path)
+          .every((w: any) => w.config.adapter.config.file_path.startsWith(ctx.dataDirectory)),
+      );
       assert.ok(!config.workers.some((w: any) => w.name === 'iii-exec'));
     } finally {
-      if (original === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = original;
+      if (original === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = original;
     }
   });
 });
@@ -50,12 +79,20 @@ function fakeRuntime(ctx: EchoContext): { options: RuntimeOptions; binary: strin
   const marker = join(ctx.directory, 'executed');
   const source = `#!/bin/sh\nprintf 'executed' > '${marker.replaceAll("'", "'\\''")}'\nprintf 'iii ${ENGINE_VERSION}\\n'\n`;
   writeFileSync(binary, source, { mode: 0o700 });
-  writeFileSync(`${binary}.sha256.json`, JSON.stringify({ version: ENGINE_VERSION, platform: `${process.platform}-${process.arch}`, sha256: createHash('sha256').update(source).digest('hex') }), { mode: 0o600 });
+  writeFileSync(
+    `${binary}.sha256.json`,
+    JSON.stringify({
+      version: ENGINE_VERSION,
+      platform: `${process.platform}-${process.arch}`,
+      sha256: createHash('sha256').update(source).digest('hex'),
+    }),
+    { mode: 0o600 },
+  );
   return { options, binary, marker };
 }
 
 test('checksum mismatch never installs or executes downloaded bytes', async () => {
-  await fixture(async ctx => {
+  await fixture(async (ctx) => {
     const options: RuntimeOptions = { home: ctx.directory, fetch: async () => new Response('not the pinned release') };
     await assert.rejects(installRuntime(ctx, options), /archive did not match/);
     assert.equal(existsSync(enginePath(ctx, options)), false);
@@ -64,7 +101,7 @@ test('checksum mismatch never installs or executes downloaded bytes', async () =
 });
 
 test('runtime ignores workspace executables and rejects linked or public caches', async () => {
-  await fixture(async ctx => {
+  await fixture(async (ctx) => {
     const { options, binary, marker } = fakeRuntime(ctx);
     const local = join(ctx.directory, 'runtime', ENGINE_VERSION, 'iii');
     const localMarker = join(ctx.directory, 'workspace-executed');
@@ -86,7 +123,7 @@ test('runtime ignores workspace executables and rejects linked or public caches'
 });
 
 test('changed engine is refused before doctor version probe, reinstall verification and backend launch', async () => {
-  await fixture(async ctx => {
+  await fixture(async (ctx) => {
     const { options, binary, marker } = fakeRuntime(ctx);
     assert.equal(runtimeInstalled(ctx, options), true);
     rmSync(marker);
@@ -100,7 +137,7 @@ test('changed engine is refused before doctor version probe, reinstall verificat
 });
 
 test('global backend environment file refuses managed startup before executing the engine', async () => {
-  await fixture(async ctx => {
+  await fixture(async (ctx) => {
     const { options, marker } = fakeRuntime(ctx);
     mkdirSync(join(ctx.directory, '.agentmemory'));
     writeFileSync(join(ctx.directory, '.agentmemory', '.env'), 'SYNTHETIC_PRIVATE_CONFIG=true');
@@ -112,28 +149,32 @@ test('global backend environment file refuses managed startup before executing t
 });
 
 test('occupied managed port is refused without stopping the listener or retaining a writer lock', async () => {
-  await fixture(async ctx => {
+  await fixture(async (ctx) => {
     const { options } = fakeRuntime(ctx);
     const server = createServer();
-    await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
-    const address = server.address(); assert.ok(address && typeof address !== 'string');
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
     ctx.profile.backend.url = `http://127.0.0.1:${address.port}`;
     try {
       await assert.rejects(startBackend(ctx, options), new RegExp(`Port ${address.port} is already in use`));
       assert.equal(server.listening, true);
       assert.equal(existsSync(join(ctx.dataDirectory, 'echo-owner.json')), false);
-    } finally { await new Promise<void>(r => server.close(() => r())); }
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
   });
 });
 
 test('only a verified dead owner lock is recovered; live, malformed and linked locks survive refusal', async () => {
-  await fixture(async ctx => {
+  await fixture(async (ctx) => {
     const { options } = fakeRuntime(ctx);
     mkdirSync(ctx.dataDirectory, { recursive: true, mode: 0o700 });
     const lock = join(ctx.dataDirectory, 'echo-owner.json');
     const server = createServer();
-    await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
-    const address = server.address(); assert.ok(address && typeof address !== 'string');
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
     ctx.profile.backend.url = `http://127.0.0.1:${address.port}`;
     try {
       for (const value of [{ pid: process.pid }, { pid: -1 }, { pid: 2147483647, nonce: 'invalid' }]) {
@@ -154,7 +195,9 @@ test('only a verified dead owner lock is recovered; live, malformed and linked l
       await assert.rejects(startBackend(ctx, options), /already in use/);
       assert.equal(existsSync(lock), false);
       assert.equal(server.listening, true);
-    } finally { await new Promise<void>(r => server.close(() => r())); }
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
   });
 });
 
@@ -162,12 +205,24 @@ test('backend adapter authenticates requests and refuses credential-bearing redi
   let authorization: string | undefined;
   const server = createServer((req, res) => {
     authorization = req.headers.authorization;
-    if (req.url === '/redirect') { res.writeHead(302, { location: '/other' }); res.end(); return; }
-    if (req.url === '/failure') { res.writeHead(401); res.end('sensitive response content'); return; }
-    if (req.url === '/invalid') { res.end('synthetic-private-response'); return; }
-    res.setHeader('content-type', 'application/json'); res.end('{"ok":true}');
+    if (req.url === '/redirect') {
+      res.writeHead(302, { location: '/other' });
+      res.end();
+      return;
+    }
+    if (req.url === '/failure') {
+      res.writeHead(401);
+      res.end('sensitive response content');
+      return;
+    }
+    if (req.url === '/invalid') {
+      res.end('synthetic-private-response');
+      return;
+    }
+    res.setHeader('content-type', 'application/json');
+    res.end('{"ok":true}');
   });
-  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
   const connection = { url: `http://127.0.0.1:${address.port}`, secret: 'synthetic-secret', close: async () => {} };
@@ -175,17 +230,29 @@ test('backend adapter authenticates requests and refuses credential-bearing redi
     assert.deepEqual(await backendRequest(connection, '/good'), { ok: true });
     assert.equal(authorization, 'Bearer synthetic-secret');
     await assert.rejects(backendRequest(connection, '/redirect'));
-    await assert.rejects(backendRequest(connection, '/failure'), (error: Error) => !error.message.includes('sensitive') && error.message.includes('401'));
-    await assert.rejects(backendRequest(connection, '/invalid'), (error: Error) => !error.message.includes('synthetic-private-response'));
-  } finally { await new Promise<void>(r => server.close(() => r())); }
+    await assert.rejects(
+      backendRequest(connection, '/failure'),
+      (error: Error) => !error.message.includes('sensitive') && error.message.includes('401'),
+    );
+    await assert.rejects(
+      backendRequest(connection, '/invalid'),
+      (error: Error) => !error.message.includes('synthetic-private-response'),
+    );
+  } finally {
+    await new Promise<void>((r) => server.close(() => r()));
+  }
 });
 
 test('external backend close never stops its server', async () => {
-  await fixture(async ctx => {
+  await fixture(async (ctx) => {
     let compatible = false;
-    const server = createServer((_, res) => { res.setHeader('content-type', 'application/json'); res.end(compatible ? '{"status":"healthy","service":"agentmemory","version":"0.9.30"}' : '{"status":"ok"}'); });
-    await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
-    const address = server.address(); assert.ok(address && typeof address !== 'string');
+    const server = createServer((_, res) => {
+      res.setHeader('content-type', 'application/json');
+      res.end(compatible ? '{"status":"healthy","service":"agentmemory","version":"0.9.30"}' : '{"status":"ok"}');
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
     ctx.profile.backend = { mode: 'external', url: `http://127.0.0.1:${address.port}` };
     try {
       await assert.rejects(startBackend(ctx));
@@ -194,6 +261,8 @@ test('external backend close never stops its server', async () => {
       await connection.close();
       assert.ok(server.listening);
       assert.equal(existsSync(join(ctx.dataDirectory, 'echo-owner.json')), false);
-    } finally { await new Promise<void>(r => server.close(() => r())); }
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
   });
 });

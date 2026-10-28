@@ -7,7 +7,16 @@ import { cpSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createFixtureProvider, INVOICE_APP_FIXTURE } from '../dist/index.js';
-import { WorkCache, workDbPath, syncSource, connectSource, applyIntent, classifyError, parseDuration, freshness } from '@farsight/work';
+import {
+  WorkCache,
+  workDbPath,
+  syncSource,
+  connectSource,
+  applyIntent,
+  classifyError,
+  parseDuration,
+  freshness,
+} from '@farsight/work';
 import type { SourceConfig, WorkProvider, Session, Scope, Permissions } from '@farsight/work';
 
 function setup(extra: Partial<SourceConfig> = {}) {
@@ -16,7 +25,14 @@ function setup(extra: Partial<SourceConfig> = {}) {
   cpSync(INVOICE_APP_FIXTURE, dir, { recursive: true });
   let t = Date.UTC(2026, 8, 30, 12, 0, 0);
   const now = () => new Date((t += 1000));
-  const cfg: SourceConfig = { id: 'invoice-jira', type: 'work', provider: 'fixture', path: dir, scope: { projects: ['INV'] }, ...extra };
+  const cfg: SourceConfig = {
+    id: 'invoice-jira',
+    type: 'work',
+    provider: 'fixture',
+    path: dir,
+    scope: { projects: ['INV'] },
+    ...extra,
+  };
   return { dir, cfg, now, provider: createFixtureProvider({ now }), cache: new WorkCache(workDbPath(root)) };
 }
 const id = (k: string) => `work::invoice-jira::${k}`;
@@ -24,7 +40,13 @@ const id = (k: string) => `work::invoice-jira::${k}`;
 test('reconcile: every Nth sync passes the known ids and drops what the tracker no longer has', async () => {
   const { cfg, provider, cache, now } = setup({ reconcileEvery: 3 });
   const scopes: Scope[] = [];
-  const spy: WorkProvider = { ...provider, pull: (s, c, scope) => { scopes.push(scope); return provider.pull(s, c, scope); } };
+  const spy: WorkProvider = {
+    ...provider,
+    pull: (s, c, scope) => {
+      scopes.push(scope);
+      return provider.pull(s, c, scope);
+    },
+  };
   await syncSource(cfg, spy, cache, { now }); // 1: full, never a reconcile
   // an item the tracker never sends a delete for
   cache.replaceItem(cfg.id, { ...cache.getItem(id('INV-1'))!, id: id('INV-404'), key: 'INV-404' }, 1);
@@ -40,11 +62,17 @@ test('reconcile: every Nth sync passes the known ids and drops what the tracker 
 test('schema: the cached discover() reaches the provider; discover runs again only when stale', async () => {
   const { cfg, provider, cache, now } = setup({ rediscoverAfter: '1h' });
   let discovers = 0;
-  const seen: (unknown)[] = [];
+  const seen: unknown[] = [];
   const spy: WorkProvider = {
     ...provider,
-    discover: async (s) => { discovers++; return provider.discover(s); },
-    connect: async (c, sec, ctx) => { seen.push(ctx?.schema); return provider.connect(c, sec, ctx); },
+    discover: async (s) => {
+      discovers++;
+      return provider.discover(s);
+    },
+    connect: async (c, sec, ctx) => {
+      seen.push(ctx?.schema);
+      return provider.connect(c, sec, ctx);
+    },
   };
   await syncSource(cfg, spy, cache, { now });
   await syncSource(cfg, spy, cache, { now });
@@ -67,9 +95,18 @@ test('schema: a 4xx under a cached schema re-discovers once and retries', async 
   let failed = false;
   const flaky: WorkProvider = {
     ...provider,
-    discover: async (s) => { discovers++; return provider.discover(s); },
+    discover: async (s) => {
+      discovers++;
+      return provider.discover(s);
+    },
     pull: (s: Session, c, scope) => {
-      if (!failed) { failed = true; return (async function* () { throw Object.assign(new Error('field gone'), { status: 400 }); })(); }
+      if (!failed) {
+        failed = true;
+        // eslint-disable-next-line require-yield -- This failure fixture rejects its first next() without yielding a page.
+        return (async function* () {
+          throw Object.assign(new Error('field gone'), { status: 400 });
+        })();
+      }
       return provider.pull(s, c, scope);
     },
   };
@@ -80,7 +117,12 @@ test('schema: a 4xx under a cached schema re-discovers once and retries', async 
 });
 
 test('credential: provider auth errors classify as credential', () => {
-  class AzdoAuthUnavailable extends Error { constructor() { super('Azure DevOps credential (pat) unavailable'); this.name = 'AzdoAuthUnavailable'; } }
+  class AzdoAuthUnavailable extends Error {
+    constructor() {
+      super('Azure DevOps credential (pat) unavailable');
+      this.name = 'AzdoAuthUnavailable';
+    }
+  }
   assert.equal(classifyError(new AzdoAuthUnavailable()), 'credential');
   assert.equal(classifyError(Object.assign(new Error('x'), { code: 'auth' })), 'credential');
   assert.equal(classifyError(Object.assign(new Error('x'), { code: 'credential' })), 'credential');
@@ -89,7 +131,14 @@ test('credential: provider auth errors classify as credential', () => {
 
 test('credential: an AzdoAuthUnavailable at connect reads credential expired', async () => {
   const { cfg, provider, cache, now } = setup();
-  const bad: WorkProvider = { ...provider, connect: async () => { const e = new Error('no token'); e.name = 'AzdoAuthUnavailable'; throw e; } };
+  const bad: WorkProvider = {
+    ...provider,
+    connect: async () => {
+      const e = new Error('no token');
+      e.name = 'AzdoAuthUnavailable';
+      throw e;
+    },
+  };
   await syncSource(cfg, bad, cache, { now });
   assert.equal(freshness(cache.getSource(cfg.id)).state, 'credential-expired');
 });
@@ -98,19 +147,41 @@ const GRANT: Permissions = { grants: [{ actions: ['comment', 'label'], principal
 
 test('dry run: recorded beside the three verdicts; a refusal stops the write', async () => {
   const { cfg, provider, cache, now, dir } = setup({ mode: 'edit', permissions: GRANT });
-  writeFileSync(join(dir, 'permissions.json'), JSON.stringify({ credential: { read: true, write: true }, dryRunRefuses: { 'INV-3': { label: 'the label field is read-only on this screen' } } }));
+  writeFileSync(
+    join(dir, 'permissions.json'),
+    JSON.stringify({
+      credential: { read: true, write: true },
+      dryRunRefuses: { 'INV-3': { label: 'the label field is read-only on this screen' } },
+    }),
+  );
   await syncSource(cfg, provider, cache, { now });
   const session = await connectSource(cfg, provider);
   let hydrates = 0;
-  const spy: WorkProvider = { ...provider, hydrate: async (s, ids) => { hydrates++; return provider.hydrate(s, ids); } };
-  const ok = await applyIntent({ id: 'a', item: id('INV-5'), action: 'comment', payload: { body: 'hi' }, requestedBy: { kind: 'human', id: 'u' } }, { cfg, provider: spy, session, cache, now });
+  const spy: WorkProvider = {
+    ...provider,
+    hydrate: async (s, ids) => {
+      hydrates++;
+      return provider.hydrate(s, ids);
+    },
+  };
+  const ok = await applyIntent(
+    { id: 'a', item: id('INV-5'), action: 'comment', payload: { body: 'hi' }, requestedBy: { kind: 'human', id: 'u' } },
+    { cfg, provider: spy, session, cache, now },
+  );
   assert.equal(ok.state, 'confirmed');
   assert.deepEqual(ok.preview, { ok: true, reason: 'ok' });
-  assert.equal(hydrates, 2, 'the freshness check, then the full re-read — a provider\'s ApplyResult.item carries fields only (Jira returns no comments there), so the cache is filled from hydrate');
+  assert.equal(
+    hydrates,
+    2,
+    "the freshness check, then the full re-read — a provider's ApplyResult.item carries fields only (Jira returns no comments there), so the cache is filled from hydrate",
+  );
   assert.equal(cache.getItem(id('INV-5'))!.comments.at(-1)!.body.text, 'hi');
   assert.deepEqual(cache.listAudit().at(-1)!.preview, { ok: true, reason: 'ok' });
   assert.equal(Object.keys(cache.listAudit().at(-1)!.verdicts!).length, 3);
-  const no = await applyIntent({ id: 'b', item: id('INV-3'), action: 'label', payload: { add: ['x'] }, requestedBy: { kind: 'human', id: 'u' } }, { cfg, provider, session, cache, now });
+  const no = await applyIntent(
+    { id: 'b', item: id('INV-3'), action: 'label', payload: { add: ['x'] }, requestedBy: { kind: 'human', id: 'u' } },
+    { cfg, provider, session, cache, now },
+  );
   assert.equal(no.state, 'denied');
   assert.equal(no.preview!.ok, false);
   assert.match(no.preview!.reason, /read-only on this screen/);

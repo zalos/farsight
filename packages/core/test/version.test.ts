@@ -8,8 +8,22 @@ import { sameBuild, currencyAdvice, gitIdentity, buildInfo, installState, BUILD_
 
 // the case that cried wolf: `pnpm build` wrote the workspace dist, `node scripts/pack.mjs` stamped the
 // tarball seconds later, both from one clean commit
-const workspace = { version: '0.1.0', built: '2026-09-25T03:10:00.100Z', commit: 'a94a943', codeCommit: 'a94a943', dirty: false, source: 'workspace' as const };
-const packed = { version: '0.1.0', built: '2026-09-25T03:10:07.900Z', commit: 'a94a943', codeCommit: 'a94a943', dirty: false, source: 'packed' as const };
+const workspace = {
+  version: '0.1.0',
+  built: '2026-09-25T03:10:00.100Z',
+  commit: 'a94a943',
+  codeCommit: 'a94a943',
+  dirty: false,
+  source: 'workspace' as const,
+};
+const packed = {
+  version: '0.1.0',
+  built: '2026-09-25T03:10:07.900Z',
+  commit: 'a94a943',
+  codeCommit: 'a94a943',
+  dirty: false,
+  source: 'packed' as const,
+};
 
 test('sameBuild: one clean code commit is one build, whatever seconds separate the stamps', () => {
   assert.equal(sameBuild(workspace, packed), true);
@@ -18,7 +32,17 @@ test('sameBuild: one clean code commit is one build, whatever seconds separate t
 });
 
 test('farsight status: a workspace server and the installed CLI of the same clean commit agree — exit 0', () => {
-  const a = currencyAdvice({ role: 'cli', running: packed, server: { port: 4477, reachable: true, farsight: workspace, install: { startedAt: workspace.built, newerInstalled: false } }, graph: { farsight: workspace } });
+  const a = currencyAdvice({
+    role: 'cli',
+    running: packed,
+    server: {
+      port: 4477,
+      reachable: true,
+      farsight: workspace,
+      install: { startedAt: workspace.built, newerInstalled: false },
+    },
+    graph: { farsight: workspace },
+  });
   assert.deepEqual(a.findings, []);
   assert.equal(a.ok, true);
   // and the server's own view of the graph an installed CLI wrote
@@ -29,7 +53,11 @@ test('farsight status: a workspace server and the installed CLI of the same clea
 test('sameBuild: a different code commit is a different build', () => {
   const next = { ...packed, commit: 'bbbbbbb', codeCommit: 'bbbbbbb' };
   assert.equal(sameBuild(workspace, next), false);
-  const a = currencyAdvice({ role: 'cli', running: next, server: { port: 4477, reachable: true, farsight: workspace } });
+  const a = currencyAdvice({
+    role: 'cli',
+    running: next,
+    server: { port: 4477, reachable: true, farsight: workspace },
+  });
   assert.equal(a.ok, false);
   assert.match(a.findings[0]!, /restart the server/);
 });
@@ -41,7 +69,11 @@ test('sameBuild: with uncommitted changes the stamp is the only distinguisher, a
   assert.equal(sameBuild(workspace, dirtyPk), false);
   assert.equal(sameBuild(dirtyWs, dirtyPk), false, 'both dirty, built apart: two edits of one commit');
   assert.equal(sameBuild(dirtyWs, { ...dirtyWs }), true, 'the same stamp is the same build, dirty or not');
-  const a = currencyAdvice({ role: 'cli', running: dirtyPk, server: { port: 4477, reachable: true, farsight: dirtyWs } });
+  const a = currencyAdvice({
+    role: 'cli',
+    running: dirtyPk,
+    server: { port: 4477, reachable: true, farsight: dirtyWs },
+  });
   assert.match(a.findings[0]!, /uncommitted changes.* restart the server/);
 });
 
@@ -85,10 +117,21 @@ test('currencyAdvice: a build-to-build restart names both builds; a same-code re
   const running = { ...workspace };
   const sameCode = { built: '2026-09-25T09:00:00.000Z', commit: 'a94a943', codeCommit: 'a94a943', dirty: false };
   assert.equal(sameBuild(sameCode, running), true, 'rebuilt hours later from the same clean commit');
-  const ok = currencyAdvice({ role: 'server', running, install: { startedAt: running.built, basis: 'build', installed: sameCode, newerInstalled: false } });
+  const ok = currencyAdvice({
+    role: 'server',
+    running,
+    install: { startedAt: running.built, basis: 'build', installed: sameCode, newerInstalled: false },
+  });
   assert.deepEqual(ok.findings, []);
   const next = { built: '2026-09-25T09:00:00.000Z', commit: 'bbbbbbb', codeCommit: 'bbbbbbb', dirty: false };
-  const a = currencyAdvice({ role: 'server', running, install: { startedAt: running.built, basis: 'build', installed: next, newerInstalled: true } });
+  const a = currencyAdvice({
+    role: 'server',
+    running,
+    install: { startedAt: running.built, basis: 'build', installed: next, newerInstalled: true },
+  });
   assert.equal(a.findings.length, 1);
-  assert.match(a.findings[0]!, /newer build is installed \(.*bbbbbbb\) than this server runs \(.*a94a943.*\) — restart it/);
+  assert.match(
+    a.findings[0]!,
+    /newer build is installed \(.*bbbbbbb\) than this server runs \(.*a94a943.*\) — restart it/,
+  );
 });

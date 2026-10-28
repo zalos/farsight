@@ -216,6 +216,8 @@ Set `CI=1` to get the runner's Playwright behaviour: `test.only` fails the run, 
 a warning. Such a branch relies on CI's `commits` check until it rebases. Never commit on main from a worktree whose
 branch predates lefthook.
 
+`scripts/install-hooks.mjs` sets `blame.ignoreRevsFile` to `.git-blame-ignore-revs` when that file exists.
+
 Linked worktrees share one hooks directory. Installing from a worktree embeds that worktree's absolute lefthook
 binary path in the shared hooks; removing the worktree breaks those hooks. After this PR merges, run `pnpm install`
 once in the primary checkout so the hooks point at a lasting path. Keep `no_auto_install: true` so commits cannot

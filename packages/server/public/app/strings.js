@@ -31,7 +31,9 @@ export function def(key) {
 /** Callbacks re-run whenever the register flips (chrome + active surface). */
 const registerListeners = [];
 /** @group Grammar */
-export function onRegisterChange(fn) { registerListeners.push(fn); }
+export function onRegisterChange(fn) {
+  registerListeners.push(fn);
+}
 
 /**
  * Flip or set the register ('hud' | 'professional'), persist it, restyle the
@@ -40,13 +42,23 @@ export function onRegisterChange(fn) { registerListeners.push(fn); }
  */
 export function setRegister(r, opts) {
   S.register = r === 'hud' ? 'hud' : 'professional';
-  if (!opts || !opts.transient) { try { localStorage.setItem('fs-register', S.register); } catch (err) {} }
+  if (!opts || !opts.transient) {
+    try {
+      localStorage.setItem('fs-register', S.register);
+    } catch (err) {}
+  }
   document.body.dataset.register = S.register;
-  registerListeners.forEach((fn) => { try { fn(); } catch (err) {} });
+  registerListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch (err) {}
+  });
 }
 
 /** @group Grammar */
-export function toggleRegister() { setRegister(S.register === 'hud' ? 'professional' : 'hud'); }
+export function toggleRegister() {
+  setRegister(S.register === 'hud' ? 'professional' : 'hud');
+}
 
 /**
  * Load the persisted register (default: professional — the words that are
@@ -56,14 +68,22 @@ export function toggleRegister() { setRegister(S.register === 'hud' ? 'professio
  */
 export function initRegister() {
   let r = 'professional';
-  try { r = localStorage.getItem('fs-register') || 'professional'; } catch (err) {}
+  try {
+    r = localStorage.getItem('fs-register') || 'professional';
+  } catch (err) {}
   setRegister(r, { transient: true });
   let printFlipped = false;
   window.addEventListener('beforeprint', () => {
-    if (S.register === 'hud') { printFlipped = true; setRegister('professional', { transient: true }); }
+    if (S.register === 'hud') {
+      printFlipped = true;
+      setRegister('professional', { transient: true });
+    }
   });
   window.addEventListener('afterprint', () => {
-    if (printFlipped) { printFlipped = false; setRegister('hud', { transient: true }); }
+    if (printFlipped) {
+      printFlipped = false;
+      setRegister('hud', { transient: true });
+    }
   });
 }
 
@@ -97,11 +117,14 @@ export function evidenceWord(facts) {
 // An ADR number is not one of them: it is the citation key a reader quotes the
 // decision by, so it stays in every register (swarm 2026-10-05, the business analyst).
 // A one-letter id (`D6`, `G8`) is a plan's own numbering of its decisions and goals.
-const DOC_REF = /\b(?:PBI\s?#?\d+|(?!ADR-)[A-Z]{2,5}-\d+(?:\.\d+)?[a-z]?|Route\s\d+[a-z]?|RFC\s?\d+|MVP|(?:[Dd]ecision\s+)?[A-Z]\d{1,2}[a-z]?)\b|§\s?\d+[a-z]?/;
+const DOC_REF =
+  /\b(?:PBI\s?#?\d+|(?!ADR-)[A-Z]{2,5}-\d+(?:\.\d+)?[a-z]?|Route\s\d+[a-z]?|RFC\s?\d+|MVP|(?:[Dd]ecision\s+)?[A-Z]\d{1,2}[a-z]?)\b|§\s?\d+[a-z]?/;
 const DOC_REF_G = new RegExp(DOC_REF.source, 'g');
 // A piece of code in prose: a backticked span, a path, a URL path, a file name, an HTTP verb.
-const CODE_BIT = /`[^`]*`|(?:^|[\s(])\/[\w{}:.\-]+|\b[\w-]+\/[\w./-]*\w\.\w+|\b\w+\.(?:tsx?|jsx?|mjs|json|md|ya?ml)\b|\b(?:GET|POST|PUT|PATCH|DELETE)s?\b|=>|\w\(\)/;
-const IDENT = /\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b|\b[a-z0-9]+(?:_[a-z0-9]+)+\b|\b[A-Z0-9]+(?:_[A-Z0-9]+)+\b/g;
+const CODE_BIT =
+  /`[^`]*`|(?:^|[\s(])\/[\w{}:.-]+|\b[\w-]+\/[\w./-]*\w\.\w+|\b\w+\.(?:tsx?|jsx?|mjs|json|md|ya?ml)\b|\b(?:GET|POST|PUT|PATCH|DELETE)s?\b|=>|\w\(\)/;
+const IDENT =
+  /\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b|\b[a-z0-9]+(?:_[a-z0-9]+)+\b|\b[A-Z0-9]+(?:_[A-Z0-9]+)+\b/g;
 
 /**
  * The words of a sentence somebody wrote, as the business lens may print them.
@@ -118,7 +141,9 @@ const IDENT = /\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b
  * @group Grammar
  */
 export function plainWords(text) {
-  let s = String(text || '').replace(/\s+/g, ' ').trim();
+  let s = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (!s) return '';
   // a design id the sentence uses as a place (*on CON-03 with business info*) is a screen: its name, never a hole
   s = screenIdsAsNames(s);
@@ -128,23 +153,38 @@ export function plainWords(text) {
   s = s.replace(/`([A-Za-z][A-Za-z ]*)`/g, '$1');
   // references and code inside parentheses are asides: drop the aside, keep the sentence
   for (let i = 0; i < 3; i++) {
-    s = s.replace(/\s*\(([^()]*)\)/g, (m, inner) => (DOC_REF.test(inner) || CODE_BIT.test(inner) || /\b[a-z]+[A-Z]/.test(inner) ? '' : m));
+    s = s.replace(/\s*\(([^()]*)\)/g, (m, inner) =>
+      DOC_REF.test(inner) || CODE_BIT.test(inner) || /\b[a-z]+[A-Z]/.test(inner) ? '' : m,
+    );
   }
   // a reference left in the sentence is a label on something the sentence names anyway
   s = s.replace(DOC_REF_G, '').replace(/\s+—\s+(?=[—.,;])/g, ' ');
   // a sentence still carrying code goes whole: half a sentence with its object cut out reads worse than none
   const sentences = s.split(/(?<=[.!?])\s+(?=[A-Z0-9"“‘(])/);
-  s = sentences.map((x) => {
-    if (!CODE_BIT.test(x)) return x;
-    // a trailing clause set off by a dash can go on its own; the sentence keeps what came before it
-    const parts = x.split(/\s+—\s+/);
-    const cut = parts.findIndex((c) => CODE_BIT.test(c));
-    const keep = parts.slice(0, cut);
-    return keep.length ? keep.join(' — ').replace(/[,;:\s]+$/, '').replace(/([^.!?])$/, '$1.') : '';
-  }).filter(Boolean).join(' ');
+  s = sentences
+    .map((x) => {
+      if (!CODE_BIT.test(x)) return x;
+      // a trailing clause set off by a dash can go on its own; the sentence keeps what came before it
+      const parts = x.split(/\s+—\s+/);
+      const cut = parts.findIndex((c) => CODE_BIT.test(c));
+      const keep = parts.slice(0, cut);
+      return keep.length
+        ? keep
+            .join(' — ')
+            .replace(/[,;:\s]+$/, '')
+            .replace(/([^.!?])$/, '$1.')
+        : '';
+    })
+    .filter(Boolean)
+    .join(' ');
   s = s.replace(IDENT, (w) => humanize(w).toLowerCase());
-  return s.replace(/\s+([,.;:!?])/g, '$1').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ')
-    .replace(/\s+—\s*([.,;]|$)/g, '$1').replace(/^[\s,;:—–-]+/, '').trim();
+  return s
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/\(\s*\)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+—\s*([.,;]|$)/g, '$1')
+    .replace(/^[\s,;:—–-]+/, '')
+    .trim();
 }
 
 // ── the business register's words for what the app wrote (outsider round 2026-10-13, F6) ──
@@ -192,7 +232,8 @@ export function screenIdsAsNames(text) {
 export function filledMessage(text) {
   const v = t('plain.aValue');
   return String(text || '')
-    .replace(/\(\s*…\s*\)/g, v).replace(/…/g, v)
+    .replace(/\(\s*…\s*\)/g, v)
+    .replace(/…/g, v)
     .replace(/\b[A-Z]{4,}(?:_[A-Z]+)*\b/g, (w) => (/^ADR/.test(w) ? w : w.replace(/_/g, ' ').toLowerCase()));
 }
 
@@ -215,11 +256,26 @@ export function refusalWords(text, lens) {
  */
 export function schemaWords(name) {
   const s = String(name || '').trim();
-  const words = (x) => x.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().trim();
+  const words = (x) =>
+    x
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/[_-]+/g, ' ')
+      .toLowerCase()
+      .trim();
   const sm = /^([A-Za-z][A-Za-z0-9]*?)Schema$/.exec(s);
   if (sm) return t('plain.schema').replace('{name}', words(sm[1]));
   const pm = /^[\w.$]+:\s*(\w+)\.(\w+)\s*(?:=|∈)\s*\{?([^}]+)\}?$/.exec(s);
-  if (pm) return t('plain.mustBe').replace('{record}', words(pm[1])).replace('{field}', words(pm[2])).replace('{value}', pm[3].split(/\s*,\s*/).map((x) => words(x)).join(' or '));
+  if (pm)
+    return t('plain.mustBe')
+      .replace('{record}', words(pm[1]))
+      .replace('{field}', words(pm[2]))
+      .replace(
+        '{value}',
+        pm[3]
+          .split(/\s*,\s*/)
+          .map((x) => words(x))
+          .join(' or '),
+      );
   return s;
 }
 

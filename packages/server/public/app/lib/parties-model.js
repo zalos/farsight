@@ -18,11 +18,28 @@ export function offPlatformStages(stages) {
       if (seen.has(k)) continue;
       seen.add(k);
       out.push({
-        key: 'o:' + k, off: true, decl: step,
-        lane: step.party ? 'pt:' + step.party.id : st.lane, col: st.col, row: 0,
-        flowId: st.flowId, journeyId: st.journeyId, journeyName: st.journeyName, screenIndex: st.screenIndex,
-        screenId: st.screenId, designId: 'o:' + k, name: step.name, words: '', sub: '', state: 'off', read: true, segs: [],
-        decisions: [], ...(st.branch ? { branch: st.branch } : {}), ...(st.step != null ? { step: st.step } : {}), of: st.key,
+        key: 'o:' + k,
+        off: true,
+        decl: step,
+        lane: step.party ? 'pt:' + step.party.id : st.lane,
+        col: st.col,
+        row: 0,
+        flowId: st.flowId,
+        journeyId: st.journeyId,
+        journeyName: st.journeyName,
+        screenIndex: st.screenIndex,
+        screenId: st.screenId,
+        designId: 'o:' + k,
+        name: step.name,
+        words: '',
+        sub: '',
+        state: 'off',
+        read: true,
+        segs: [],
+        decisions: [],
+        ...(st.branch ? { branch: st.branch } : {}),
+        ...(st.step != null ? { step: st.step } : {}),
+        of: st.key,
       });
     }
   }
@@ -35,7 +52,16 @@ export function partyLanes(offStages) {
   for (const s of offStages) {
     const p = s.decl.party;
     if (!p || lanes.some((l) => l.party.id === p.id)) continue;
-    lanes.push({ id: 'party:' + p.name, ref: 'pt:' + p.id, kind: 'party', party: p, name: p.name, description: p.role || '', surface: '', declared: null });
+    lanes.push({
+      id: 'party:' + p.name,
+      ref: 'pt:' + p.id,
+      kind: 'party',
+      party: p,
+      name: p.name,
+      description: p.role || '',
+      surface: '',
+      declared: null,
+    });
   }
   return lanes;
 }
@@ -43,7 +69,13 @@ export function partyLanes(offStages) {
 /** A party lane's count: the cards in it, over the storyline (or the journey). Pure. */
 export function partyLaneCount(lane, stages, scope) {
   const n = stages.filter((s) => s.off && s.lane === lane.id).length;
-  return { n, unit: 'party.lane.count', bizUnit: 'party.lane.count', scope, source: 'laneLayout ← /api/journey segments[].offPlatform (manifest steps[].by)' }; // str:ok a Counted's source: where the number was read
+  return {
+    n,
+    unit: 'party.lane.count',
+    bizUnit: 'party.lane.count',
+    scope,
+    source: 'laneLayout ← /api/journey segments[].offPlatform (manifest steps[].by)',
+  }; // str:ok a Counted's source: where the number was read
 }
 
 /** Who does it, in words: the party's name, else the team's `who`, else *a person · a partner · another system*. Pure. */
@@ -58,8 +90,15 @@ export function offWho(step) {
 export function offPlatformCounted(offStages, scope) {
   const by = (k) => offStages.filter((s) => s.decl.by === k).length;
   return {
-    n: offStages.length, unit: 'count.unit.offPlatform', bizUnit: 'count.unit.offPlatform', scope,
+    n: offStages.length,
+    unit: 'count.unit.offPlatform',
+    bizUnit: 'count.unit.offPlatform',
+    scope,
     source: 'laneLayout ← /api/journey segments[].offPlatform (manifest steps[].by)', // str:ok a Counted's source: where the number was read
-    breakdown: [{ key: 'count.part.offPlatformPerson', n: by('person') }, { key: 'count.part.offPlatformPartner', n: by('partner') }, { key: 'count.part.offPlatformExternal', n: by('external') }],
+    breakdown: [
+      { key: 'count.part.offPlatformPerson', n: by('person') },
+      { key: 'count.part.offPlatformPartner', n: by('partner') },
+      { key: 'count.part.offPlatformExternal', n: by('external') },
+    ],
   };
 }

@@ -204,7 +204,7 @@ export function readZap(doc: Json, c: Collector, plus: boolean): Json {
 function exchange(c: Collector, inst: JsonObject, ip: string, uri: string | null, method: string | null): void {
   const rh = inst['request-header'];
   const sh = inst['response-header'];
-  let request: RequestInfo | null = null;
+  let request: RequestInfo | null;
   if (typeof rh === 'string') {
     const head = parseHead<RequestLine>(rh, parseRequestLine, c.budget);
     if (!head.ok) request = { ok: false, reason: head.code };

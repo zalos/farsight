@@ -18,7 +18,13 @@ export function recStatus(name: string): number {
   return JSON.parse(readFileSync(join(FIX, `${name}.json`), 'utf8')).status;
 }
 
-export interface Seen { method: string; path: string; query: URLSearchParams; body: any; auth: string | null }
+export interface Seen {
+  method: string;
+  path: string;
+  query: URLSearchParams;
+  body: any;
+  auth: string | null;
+}
 export type Handler = (req: Seen) => { status?: number; body?: unknown; headers?: Record<string, string> } | undefined;
 
 export interface FakeOptions {
@@ -32,7 +38,10 @@ export function fakeAdo(opts: FakeOptions = {}) {
   const seen: Seen[] = [];
   const items = opts.items ?? new Map<number, any>(rec('batch').value.map((v: any) => [v.id, structuredClone(v)]));
   const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
-    new Response(body === undefined ? '' : JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
+    new Response(body === undefined ? '' : JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json', ...headers },
+    });
   const defaults: Handler = (r) => {
     const p = r.path;
     if (p === '/_apis/connectionData') return { body: rec('connectionData') };
@@ -40,13 +49,17 @@ export function fakeAdo(opts: FakeOptions = {}) {
     if (p === '/ExampleProject/_apis/wit/workitemtypes') return { body: rec('workitemtypes') };
     if (p === '/ExampleProject/_apis/wit/fields') return { body: rec('fields') };
     if (p === '/ExampleProject/_apis/work/teamsettings/iterations') return { body: rec('iterations') };
-    if (p === '/ExampleProject/_apis/wit/classificationnodes/Areas') return { body: rec('classificationnodes').value[0] };
+    if (p === '/ExampleProject/_apis/wit/classificationnodes/Areas')
+      return { body: rec('classificationnodes').value[0] };
     if (p === '/_apis/wit/workitemrelationtypes') return { body: rec('relationtypes') };
     if (p === '/ExampleProject/_apis/wit/wiql' && r.method === 'POST') {
       const q: string = r.body.query;
       const after = Number(/\[System\.Id\] > (\d+)/.exec(q)?.[1] ?? 0);
       const top = Number(r.query.get('$top') ?? 20000);
-      const ids = [...items.keys()].sort((a, b) => a - b).filter((id) => id > after).slice(0, top);
+      const ids = [...items.keys()]
+        .sort((a, b) => a - b)
+        .filter((id) => id > after)
+        .slice(0, top);
       return { body: { queryType: 'flat', asOf: '2026-09-30T22:31:39.617Z', workItems: ids.map((id) => ({ id })) } };
     }
     if (p === '/_apis/wit/workitemsbatch' && r.method === 'POST') {
@@ -54,7 +67,8 @@ export function fakeAdo(opts: FakeOptions = {}) {
     }
     if (p === '/ExampleProject/_apis/wit/reporting/workitemrevisions') {
       // one recorded page; a token past it answers an empty last batch
-      if (r.query.get('continuationToken')) return { body: { values: [], continuationToken: r.query.get('continuationToken'), isLastBatch: true } };
+      if (r.query.get('continuationToken'))
+        return { body: { values: [], continuationToken: r.query.get('continuationToken'), isLastBatch: true } };
       return { body: rec('revisions-0') };
     }
     let m = /^\/_apis\/wit\/workitems\/(\d+)$/.exec(p);
@@ -66,7 +80,13 @@ export function fakeAdo(opts: FakeOptions = {}) {
       const it = items.get(Number(m[1]));
       const test = r.body?.[0];
       if (test?.op === 'test' && test.path === '/rev' && test.value !== it.rev) {
-        return { status: 412, body: { message: `VS403351: Test Operation for path /rev failed, value ${it.rev} was not equal to test value ${test.value}.`, typeKey: 'TestPatchOperationFailedException' } };
+        return {
+          status: 412,
+          body: {
+            message: `VS403351: Test Operation for path /rev failed, value ${it.rev} was not equal to test value ${test.value}.`,
+            typeKey: 'TestPatchOperationFailedException',
+          },
+        };
       }
       if (r.query.get('validateOnly') === 'true') return { body: it };
       it.rev += 1;
@@ -82,7 +102,14 @@ export function fakeAdo(opts: FakeOptions = {}) {
       return { body: { id: 1, workItemId: it.id, text: r.body.text, format: r.query.get('format') ?? undefined } };
     }
     if (p === '/_apis/security/permissionevaluationbatch') {
-      return { body: { evaluations: r.body.evaluations.map((e: any) => ({ ...e, value: e.securityNamespaceId.startsWith('83e2') ? e.permissions !== 512 : e.permissions === 1 })) } };
+      return {
+        body: {
+          evaluations: r.body.evaluations.map((e: any) => ({
+            ...e,
+            value: e.securityNamespaceId.startsWith('83e2') ? e.permissions !== 512 : e.permissions === 1,
+          })),
+        },
+      };
     }
     return undefined;
   };
@@ -109,8 +136,13 @@ export function fakeAdo(opts: FakeOptions = {}) {
 
 export const ORG = 'https://dev.azure.com/example-org';
 export const cfg = (extra: Record<string, unknown> = {}) => ({
-  id: 'example-azdo', type: 'work' as const, provider: 'azure-devops', org: ORG,
-  scope: { projects: ['ExampleProject'] }, auth: { kind: 'pat' as const, secret: 'keychain:farsight/ado-example' }, ...extra,
+  id: 'example-azdo',
+  type: 'work' as const,
+  provider: 'azure-devops',
+  org: ORG,
+  scope: { projects: ['ExampleProject'] },
+  auth: { kind: 'pat' as const, secret: 'keychain:farsight/ado-example' },
+  ...extra,
 });
 /** A stand-in PAT for fixture tests; never a real one. */
 export const FAKE_PAT = 'fake-pat-for-tests';

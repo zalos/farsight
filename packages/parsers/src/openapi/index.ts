@@ -24,7 +24,12 @@ export interface SpecApplication {
 }
 
 /** Discover + reconcile every spec for the repo into the fragment (in place). Never throws: unreadable specs are reported in `errors`. */
-export async function applySpecs(fragment: GraphFragment, repoRoot: string, options: IngestOptions, workspace?: WorkspaceConfig): Promise<{ applied: SpecApplication[]; errors: string[] }> {
+export async function applySpecs(
+  fragment: GraphFragment,
+  repoRoot: string,
+  options: IngestOptions,
+  workspace?: WorkspaceConfig,
+): Promise<{ applied: SpecApplication[]; errors: string[] }> {
   const config = (workspace ?? loadWorkspaceConfig(repoRoot, options)).merged;
   const { specs, errors } = await discoverSpecs(repoRoot, options, config.openapi ?? []);
   const applied: SpecApplication[] = [];
@@ -32,7 +37,18 @@ export async function applySpecs(fragment: GraphFragment, repoRoot: string, opti
   const hash = createHash('sha1').update(fragment.meta?.sourceHash ?? '');
   for (const spec of specs) {
     const policy = config.openapi?.find((entry) => entry.path === spec.path || entry.url === spec.path);
-    const result = applySpecToFragment(fragment, spec.doc, { repo: fragment.repo, path: spec.path, lineOf: spec.lineOf, ...(spec.name ? { name: spec.name } : {}) }, { phase: policy?.phase, phaseOrder: policy?.phaseOrder, internalRoutes: config.internalRoutes, guardNames: config.guards, validators: config.validators });
+    const result = applySpecToFragment(
+      fragment,
+      spec.doc,
+      { repo: fragment.repo, path: spec.path, lineOf: spec.lineOf, ...(spec.name ? { name: spec.name } : {}) },
+      {
+        phase: policy?.phase,
+        phaseOrder: policy?.phaseOrder,
+        internalRoutes: config.internalRoutes,
+        guardNames: config.guards,
+        validators: config.validators,
+      },
+    );
     applied.push({ path: spec.path, origin: spec.origin, result });
     hash.update(`\n${spec.path}:`).update(spec.text);
   }
@@ -46,10 +62,25 @@ export async function applySpecs(fragment: GraphFragment, repoRoot: string, opti
  * not implemented — until another source implements them and stitchHttp
  * links consumers).
  */
-export async function ingestSpec(pathOrUrl: string, options: { repoName?: string; name?: string } = {}): Promise<GraphFragment> {
+export async function ingestSpec(
+  pathOrUrl: string,
+  options: { repoName?: string; name?: string } = {},
+): Promise<GraphFragment> {
   const parsed = await readSpecSource(pathOrUrl);
-  const repo = options.repoName ?? (isSpecUrl(pathOrUrl) ? new URL(pathOrUrl).hostname : pathOrUrl.split('/').pop()!.replace(/\.(ya?ml|json)$/i, ''));
-  const fragment = specToFragment(parsed.doc, { repo, path: pathOrUrl, lineOf: parsed.lineOf, ...(options.name ? { name: options.name } : {}) });
+  const repo =
+    options.repoName ??
+    (isSpecUrl(pathOrUrl)
+      ? new URL(pathOrUrl).hostname
+      : pathOrUrl
+          .split('/')
+          .pop()!
+          .replace(/\.(ya?ml|json)$/i, ''));
+  const fragment = specToFragment(parsed.doc, {
+    repo,
+    path: pathOrUrl,
+    lineOf: parsed.lineOf,
+    ...(options.name ? { name: options.name } : {}),
+  });
   fragment.meta = { files: 1, sourceHash: createHash('sha1').update(parsed.text).digest('hex').slice(0, 12) };
   return fragment;
 }

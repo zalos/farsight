@@ -39,20 +39,31 @@ const recording = async (url, init) => {
     headers,
     response: text ? JSON.parse(text) : null,
   });
-  return new Response([101, 204, 205, 304].includes(res.status) ? null : text, { status: res.status, headers: res.headers });
+  return new Response([101, 204, 205, 304].includes(res.status) ? null : text, {
+    status: res.status,
+    headers: res.headers,
+  });
 };
 const save = (name) => {
   // Jira's XSRF token (atl_token, in operations links) is session-bound, not a credential,
   // but it is the recording session's own value: it never goes into a public fixture
   const json = JSON.stringify(tape, null, 1).replace(/atl_token=[0-9a-f]{40}/g, `atl_token=${'0'.repeat(40)}`);
   const enc = Buffer.from(`${USER}:${secret}`).toString('base64');
-  if (json.includes(secret) || json.includes(enc)) throw new Error(`refusing to write ${name}: it would contain the credential`);
+  if (json.includes(secret) || json.includes(enc))
+    throw new Error(`refusing to write ${name}: it would contain the credential`);
   writeFileSync(new URL(name, OUT), json + '\n');
   console.log(`${name}: ${tape.length} calls`);
   tape = [];
 };
 
-const cfg = { id: 'jira-example', type: 'work', provider: 'jira', site: SITE, scope: { projects: ['KAN', 'SAM1'] }, auth: { kind: 'api-token', user: USER, secret: REF } };
+const cfg = {
+  id: 'jira-example',
+  type: 'work',
+  provider: 'jira',
+  site: SITE,
+  scope: { projects: ['KAN', 'SAM1'] },
+  auth: { kind: 'api-token', user: USER, secret: REF },
+};
 const provider = createJiraProvider({ fetcher: recording, pageSize: 5 });
 
 const session = await provider.connect(cfg, secret);
@@ -61,22 +72,51 @@ await provider.discover(session);
 save('discover.json');
 let cursor = null;
 const full = [];
-for await (const page of provider.pull(session, null, cfg.scope)) { full.push(...page.items); cursor = page.cursor; if (page.isLast) break; }
+for await (const page of provider.pull(session, null, cfg.scope)) {
+  full.push(...page.items);
+  cursor = page.cursor;
+  if (page.isLast) break;
+}
 save('pull-full.json');
-await provider.hydrate(session, full.filter((i) => i.key.startsWith('KAN-')).map((i) => i.id));
+await provider.hydrate(
+  session,
+  full.filter((i) => i.key.startsWith('KAN-')).map((i) => i.id),
+);
 save('hydrate.json');
 const kan1 = full.find((i) => i.key === 'KAN-1');
-for (const action of ['comment', 'edit', 'assign', 'transition', 'link', 'label']) await provider.can(session, kan1, action);
+for (const action of ['comment', 'edit', 'assign', 'transition', 'link', 'label'])
+  await provider.can(session, kan1, action);
 save('can.json');
 const kan2 = full.find((i) => i.key === 'KAN-2');
 const who = { kind: 'human', id: session.user.id };
-const c = await provider.apply(session, { id: 'rec-1', item: kan2.id, action: 'comment', payload: { body: 'Recorded by **record-fixtures**: see `finalizeInvoice`.' }, requestedBy: who, baseRevision: kan2.revision });
+const c = await provider.apply(session, {
+  id: 'rec-1',
+  item: kan2.id,
+  action: 'comment',
+  payload: { body: 'Recorded by **record-fixtures**: see `finalizeInvoice`.' },
+  requestedBy: who,
+  baseRevision: kan2.revision,
+});
 save('apply-comment.json');
-await provider.apply(session, { id: 'rec-2', item: kan2.id, action: 'label', payload: { add: ['recorded'], remove: [] }, requestedBy: who, baseRevision: c.revision });
+await provider.apply(session, {
+  id: 'rec-2',
+  item: kan2.id,
+  action: 'label',
+  payload: { add: ['recorded'], remove: [] },
+  requestedBy: who,
+  baseRevision: c.revision,
+});
 save('apply-label.json');
 await new Promise((r) => setTimeout(r, 3000));
-for await (const page of provider.pull(session, cursor, cfg.scope)) { if (page.isLast) break; }
+for await (const page of provider.pull(session, cursor, cfg.scope)) {
+  if (page.isLast) break;
+}
 save('pull-incremental.json');
-for await (const page of provider.pull(session, cursor, { ...cfg.scope, reconcile: { known: full.map((i) => i.id).concat('work::jira-example::KAN-999') } })) { if (page.isLast) break; }
+for await (const page of provider.pull(session, cursor, {
+  ...cfg.scope,
+  reconcile: { known: full.map((i) => i.id).concat('work::jira-example::KAN-999') },
+})) {
+  if (page.isLast) break;
+}
 save('pull-reconcile.json');
 console.log(`cursor after full pull: ${cursor}`);

@@ -48,14 +48,25 @@ export interface NxGraphRead {
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /** The file to read: the configured one (checked), else the first NX cache path that exists. */
-function locate(repoRoot: string, configured: string | undefined, notes: string[]): { abs: string; rel: string } | undefined {
+function locate(
+  repoRoot: string,
+  configured: string | undefined,
+  notes: string[],
+): { abs: string; rel: string } | undefined {
   if (configured !== undefined) {
     const checked = graphFilePath(configured);
-    if ('note' in checked) { notes.push(checked.note); return undefined; }
+    if ('note' in checked) {
+      notes.push(checked.note);
+      return undefined;
+    }
     return { abs: join(repoRoot, checked.path), rel: checked.path };
   }
   for (const rel of NX_GRAPH_PATHS) {
-    try { if (statSync(join(repoRoot, rel)).isFile()) return { abs: join(repoRoot, rel), rel }; } catch { /* not written there */ }
+    try {
+      if (statSync(join(repoRoot, rel)).isFile()) return { abs: join(repoRoot, rel), rel };
+    } catch {
+      /* not written there */
+    }
   }
   return undefined;
 }
@@ -65,7 +76,11 @@ function locate(repoRoot: string, configured: string | undefined, notes: string[
  * dependencies (and a note when something was named but could not be read) whenever the file is
  * missing, outside the source, too large, not JSON, or not the shape NX writes.
  */
-export function readNxProjectGraph(repoRoot: string, projects: readonly ProjectDecl[], configured?: string): NxGraphRead {
+export function readNxProjectGraph(
+  repoRoot: string,
+  projects: readonly ProjectDecl[],
+  configured?: string,
+): NxGraphRead {
   const out: NxGraphRead = { dependencies: [], types: new Map(), notes: [] };
   const where = locate(repoRoot, configured, out.notes);
   if (!where) return out;
@@ -81,24 +96,34 @@ export function readNxProjectGraph(repoRoot: string, projects: readonly ProjectD
       return out;
     }
   } catch {
-    if (configured !== undefined) out.notes.push(`The NX project graph ${rel} named in farsight.config.json was not found.`);
+    if (configured !== undefined)
+      out.notes.push(`The NX project graph ${rel} named in farsight.config.json was not found.`);
     return out;
   }
   let text: string;
   try {
     const st = statSync(real);
-    if (!st.isFile()) { out.notes.push(`The NX project graph ${rel} is not a file, so it is not read.`); return out; }
+    if (!st.isFile()) {
+      out.notes.push(`The NX project graph ${rel} is not a file, so it is not read.`);
+      return out;
+    }
     if (st.size > NX_GRAPH_MAX_BYTES) {
-      out.notes.push(`The NX project graph ${rel} is ${(st.size / 1048576).toFixed(1)} MB, over the ${NX_GRAPH_MAX_BYTES / 1048576} MB Farsight reads, so it is not read.`);
+      out.notes.push(
+        `The NX project graph ${rel} is ${(st.size / 1048576).toFixed(1)} MB, over the ${NX_GRAPH_MAX_BYTES / 1048576} MB Farsight reads, so it is not read.`,
+      );
       return out;
     }
     text = readFileSync(real, 'utf8');
   } catch (err) {
-    out.notes.push(`The NX project graph ${rel} could not be read (${(err as NodeJS.ErrnoException).code ?? 'error'}).`);
+    out.notes.push(
+      `The NX project graph ${rel} could not be read (${(err as NodeJS.ErrnoException).code ?? 'error'}).`,
+    );
     return out;
   }
   let parsed: unknown;
-  try { parsed = JSON.parse(text); } catch (err) {
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
     out.notes.push(`The NX project graph ${rel} could not be read as JSON (${(err as Error).message.slice(0, 120)}).`);
     return out;
   }
@@ -112,7 +137,10 @@ export function readNxProjectGraph(repoRoot: string, projects: readonly ProjectD
   const unknown = new Set<string>();
   let listed = 0;
   for (const name of Object.keys(g.nodes)) {
-    if (!known.has(name)) { unknown.add(name); continue; }
+    if (!known.has(name)) {
+      unknown.add(name);
+      continue;
+    }
     listed++;
     const node = g.nodes[name];
     const type = isObject(node) && typeof node.type === 'string' ? NX_TYPES[node.type] : undefined;
@@ -121,14 +149,31 @@ export function readNxProjectGraph(repoRoot: string, projects: readonly ProjectD
   const pairs = new Map<string, NxProjectDependency>();
   let malformed = 0;
   for (const [source, list] of Object.entries(g.dependencies)) {
-    if (!Array.isArray(list)) { malformed++; continue; }
+    if (!Array.isArray(list)) {
+      malformed++;
+      continue;
+    }
     for (const d of list) {
-      if (!isObject(d) || typeof d.target !== 'string' || typeof d.type !== 'string' || !DEP_TYPES.has(d.type as NxProjectDependency['type'])) { malformed++; continue; }
+      if (
+        !isObject(d) ||
+        typeof d.target !== 'string' ||
+        typeof d.type !== 'string' ||
+        !DEP_TYPES.has(d.type as NxProjectDependency['type'])
+      ) {
+        malformed++;
+        continue;
+      }
       const from = typeof d.source === 'string' ? d.source : source;
       const to = d.target;
       if (to.startsWith('npm:')) continue; // an npm package — the dependencies pass reads those from the imports
-      if (!known.has(from)) { unknown.add(from); continue; }
-      if (!known.has(to)) { unknown.add(to); continue; }
+      if (!known.has(from)) {
+        unknown.add(from);
+        continue;
+      }
+      if (!known.has(to)) {
+        unknown.add(to);
+        continue;
+      }
       if (from === to) continue;
       const type = d.type as NxProjectDependency['type'];
       const k = `${from}\u0000${to}`;
@@ -138,7 +183,13 @@ export function readNxProjectGraph(repoRoot: string, projects: readonly ProjectD
   }
   out.dependencies = [...pairs.values()].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
   out.graphFile = { path: rel, projects: listed, dependencies: out.dependencies.length };
-  if (unknown.size) out.notes.push(`The NX project graph ${rel} names ${unknown.size} project${unknown.size === 1 ? '' : 's'} this source does not declare; their dependencies are left out.`);
-  if (malformed) out.notes.push(`The NX project graph ${rel} has ${malformed} dependenc${malformed === 1 ? 'y' : 'ies'} of a shape Farsight does not read; they are left out.`);
+  if (unknown.size)
+    out.notes.push(
+      `The NX project graph ${rel} names ${unknown.size} project${unknown.size === 1 ? '' : 's'} this source does not declare; their dependencies are left out.`,
+    );
+  if (malformed)
+    out.notes.push(
+      `The NX project graph ${rel} has ${malformed} dependenc${malformed === 1 ? 'y' : 'ies'} of a shape Farsight does not read; they are left out.`,
+    );
   return out;
 }

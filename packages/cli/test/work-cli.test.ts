@@ -13,9 +13,14 @@ const cli = join(repoRoot, 'packages/cli/dist/cli.js');
 const ws = mkdtempSync(join(tmpdir(), 'work-cli-'));
 cpSync(join(repoRoot, 'packages/work-fixture/fixtures/invoice-app'), join(ws, 'invoice-app'), { recursive: true });
 mkdirSync(join(ws, '.farsight'));
-writeFileSync(join(ws, '.farsight', 'settings.json'), JSON.stringify({
-  sources: [{ id: 'invoice-jira', type: 'work', provider: 'fixture', path: 'invoice-app', scope: { projects: ['INV'] } }],
-}));
+writeFileSync(
+  join(ws, '.farsight', 'settings.json'),
+  JSON.stringify({
+    sources: [
+      { id: 'invoice-jira', type: 'work', provider: 'fixture', path: 'invoice-app', scope: { projects: ['INV'] } },
+    ],
+  }),
+);
 const run = (...args: string[]) => spawnSync(process.execPath, [cli, 'work', ...args], { cwd: ws, encoding: 'utf8' });
 
 test('work sync → list → show → links on the fixture source', () => {
@@ -44,15 +49,27 @@ test('work status and the write verbs print the three verdicts, the dry run and 
   const ew = mkdtempSync(join(tmpdir(), 'work-cli-edit-'));
   cpSync(join(repoRoot, 'packages/work-fixture/fixtures/invoice-app'), join(ew, 'invoice-app'), { recursive: true });
   mkdirSync(join(ew, '.farsight'));
-  writeFileSync(join(ew, '.farsight', 'settings.json'), JSON.stringify({
-    sources: [{
-      id: 'invoice-jira', type: 'work', provider: 'fixture', path: 'invoice-app', scope: { projects: ['INV'] }, mode: 'edit',
-      permissions: { grants: [
-        { actions: ['comment'], principals: ['human'] },
-        { actions: ['transition'], to: ['in-progress', 'done'], principals: ['human'], confirm: 'always' },
-      ] },
-    }],
-  }));
+  writeFileSync(
+    join(ew, '.farsight', 'settings.json'),
+    JSON.stringify({
+      sources: [
+        {
+          id: 'invoice-jira',
+          type: 'work',
+          provider: 'fixture',
+          path: 'invoice-app',
+          scope: { projects: ['INV'] },
+          mode: 'edit',
+          permissions: {
+            grants: [
+              { actions: ['comment'], principals: ['human'] },
+              { actions: ['transition'], to: ['in-progress', 'done'], principals: ['human'], confirm: 'always' },
+            ],
+          },
+        },
+      ],
+    }),
+  );
   const w = (...args: string[]) => spawnSync(process.execPath, [cli, 'work', ...args], { cwd: ew, encoding: 'utf8' });
   assert.equal(w('sync').status, 0);
   const st = w('status');
@@ -62,14 +79,21 @@ test('work status and the write verbs print the three verdicts, the dry run and 
 
   const c = w('comment', 'INV-5', 'on', 'it');
   assert.equal(c.status, 0, c.stderr);
-  assert.match(c.stdout, /your policy: yes[\s\S]*the tracker: yes[\s\S]*the credential: yes[\s\S]*dry run: ok[\s\S]*written/);
+  assert.match(
+    c.stdout,
+    /your policy: yes[\s\S]*the tracker: yes[\s\S]*the credential: yes[\s\S]*dry run: ok[\s\S]*written/,
+  );
   const m = w('move', 'INV-5', 'in-progress');
   assert.equal(m.status, 2);
   assert.match(m.stdout, /waiting for a person to confirm/);
   assert.match(w('status').stdout, /1 write waiting for a person/);
   const ok = w('move', 'INV-5', 'in-progress', '--confirm');
   assert.equal(ok.status, 0, ok.stdout);
-  assert.match(w('status').stdout, /0 writes waiting for a person/, 'confirming the waiting write confirms that intent');
+  assert.match(
+    w('status').stdout,
+    /0 writes waiting for a person/,
+    'confirming the waiting write confirms that intent',
+  );
   const no = w('assign', 'INV-5', 'none');
   assert.equal(no.status, 1);
   assert.match(no.stdout, /your policy: no — no grant allows assign[\s\S]*not asked[\s\S]*not written/);

@@ -48,7 +48,11 @@ const isRec = (x: unknown): x is Rec => !!x && typeof x === 'object' && !Array.i
 export function leanMetric(m: unknown): unknown {
   if (!isRec(m)) return m;
   const out: Rec = { ...m };
-  for (const k of ['evidence', 'gaps'] as const) if (Array.isArray(m[k])) { delete out[k]; out[k + 'Count'] = (m[k] as unknown[]).length; }
+  for (const k of ['evidence', 'gaps'] as const)
+    if (Array.isArray(m[k])) {
+      delete out[k];
+      out[k + 'Count'] = (m[k] as unknown[]).length;
+    }
   if (isRec(m['uncertainty'])) {
     const u = m['uncertainty'];
     const { affects, ...rest } = u;
@@ -65,7 +69,10 @@ export function leanMetric(m: unknown): unknown {
 export function leanCoverage(c: unknown): unknown {
   if (!isRec(c)) return c;
   const out: Rec = { ...c, metric: leanMetric(c['metric']) };
-  if (Array.isArray(c['tests'])) { delete out['tests']; out['testsCount'] = (c['tests'] as unknown[]).length; }
+  if (Array.isArray(c['tests'])) {
+    delete out['tests'];
+    out['testsCount'] = (c['tests'] as unknown[]).length;
+  }
   return out;
 }
 
@@ -73,6 +80,10 @@ export function leanCoverage(c: unknown): unknown {
 export function leanJourneyRow(r: unknown): unknown {
   if (!isRec(r)) return r;
   const out: Rec = { ...r, coverage: leanCoverage(r['coverage']) };
-  for (const k of ['declared', 'inferred', 'observed'] as const) if (Array.isArray(r[k])) { delete out[k]; out[k + 'Count'] = (r[k] as unknown[]).length; }
+  for (const k of ['declared', 'inferred', 'observed'] as const)
+    if (Array.isArray(r[k])) {
+      delete out[k];
+      out[k + 'Count'] = (r[k] as unknown[]).length;
+    }
   return out;
 }

@@ -13,7 +13,6 @@ import { scratchUnder, removeScratch } from './lease-helpers.ts';
 import { initWorkspace } from '../dist/cli/init.js';
 import { planWorkspaceCanonical } from '../dist/service/canonical.js';
 import { builtinPackDir } from '../dist/service/package-paths.js';
-import { loadPlan } from '../dist/execution/plans.js';
 import { assessRun, fullReport, renderingOf } from '../dist/service/full-report.js';
 import { publicRegistry, scannerExecution } from '../dist/service/scanner-profile.js';
 import { adoptScannerAsset } from '../dist/service/scanner-assets.js';

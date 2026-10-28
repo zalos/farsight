@@ -11,7 +11,13 @@ test.describe('faults', () => {
      * @covers GET /api/tests
      */
     test('the Tests surface says it could not load, shows the status, and recovers on retry', async ({ page }) => {
-      await page.route('**/api/tests?*', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'injected by e2e' }) }));
+      await page.route('**/api/tests?*', (route) =>
+        route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'injected by e2e' }),
+        }),
+      );
       await page.goto('/#/tests');
       const body = page.locator('#tst-body');
       await expect(body).toContainText('Could not load the tests surface.');

@@ -15,7 +15,12 @@ async function gateIdsByColumn(page: import('@playwright/test').Page, lens: stri
     const out: Record<string, string[]> = {};
     for (const c of cells) {
       const ids = new Set<string>();
-      c.querySelectorAll('[data-gate-ids]').forEach((g) => (g.getAttribute('data-gate-ids') || '').split(' ').filter(Boolean).forEach((x) => ids.add(x)));
+      c.querySelectorAll('[data-gate-ids]').forEach((g) =>
+        (g.getAttribute('data-gate-ids') || '')
+          .split(' ')
+          .filter(Boolean)
+          .forEach((x) => ids.add(x)),
+      );
       out[c.getAttribute('data-col')!] = [...ids].sort();
     }
     return out;
@@ -27,12 +32,17 @@ async function gateIdsByColumn(page: import('@playwright/test').Page, lens: stri
  * @covers packages/server/public/app/lib/journey-draw.js::jrnGateTiersHtml
  * @covers packages/server/public/app/lib/journey-model.js::jrnGatesIn
  */
-test('register parity: every gate a column holds in hybrid it holds in business — a row, a folded wording or the technical fold', async ({ page }) => {
+test('register parity: every gate a column holds in hybrid it holds in business — a row, a folded wording or the technical fold', async ({
+  page,
+}) => {
   const hybrid = await gateIdsByColumn(page, 'hybrid');
   const business = await gateIdsByColumn(page, 'business');
   const cols = Object.keys(hybrid);
   expect(cols.length).toBeGreaterThan(0);
-  expect(cols.some((c) => hybrid[c]!.length > 0), 'the fixture has gates on its actions').toBe(true);
+  expect(
+    cols.some((c) => hybrid[c]!.length > 0),
+    'the fixture has gates on its actions',
+  ).toBe(true);
   for (const c of cols) expect(business[c] ?? [], 'column ' + c).toEqual(hybrid[c]);
 });
 
@@ -42,9 +52,19 @@ test('a gate whose @guard label is code is named by its @business sentence, neve
   const words = await page.evaluate(async () => {
     const m = await import('/app/lib/journey-draw.js' as string);
     return [
-      m.jrnGateInWords({ id: 'x::requireOpsRole', kind: 'guard', name: 'requireOpsRole: entraSession role', facets: { business: { description: 'Refuses a console action the signed-in operator’s role does not allow.' } } }),
+      m.jrnGateInWords({
+        id: 'x::requireOpsRole',
+        kind: 'guard',
+        name: 'requireOpsRole: entraSession role',
+        facets: { business: { description: 'Refuses a console action the signed-in operator’s role does not allow.' } },
+      }),
       m.jrnGateInWords({ id: 'x::requireOpsRole', kind: 'guard', name: 'requireOpsRole: entraSession role' }),
-      m.jrnGateInWords({ id: 'x::g', kind: 'guard', name: 'g: approver role', facets: { business: { description: 'Someone wrote this.' } } }),
+      m.jrnGateInWords({
+        id: 'x::g',
+        kind: 'guard',
+        name: 'g: approver role',
+        facets: { business: { description: 'Someone wrote this.' } },
+      }),
     ];
   });
   expect(words[0]).toBe('Refuses a console action the signed-in operator’s role does not allow.');
@@ -61,10 +81,14 @@ test('a gate card opened from the rightmost column of the table opens inside the
   await expect(gates.first()).toBeVisible();
   // the gate furthest right on the page
   const n = await gates.count();
-  let best = 0, x = -1;
+  let best = 0,
+    x = -1;
   for (let i = 0; i < n; i++) {
     const b = await gates.nth(i).boundingBox();
-    if (b && b.x > x && b.x + 20 < 1280) { x = b.x; best = i; }
+    if (b && b.x > x && b.x + 20 < 1280) {
+      x = b.x;
+      best = i;
+    }
   }
   await gates.nth(best).click();
   const tip = page.locator('.fs-tip.gc-tip');
@@ -78,7 +102,9 @@ test('a gate card opened from the rightmost column of the table opens inside the
  * @covers packages/server/public/app/surfaces/roles.js::mountRoles
  * @covers GET /api/roles
  */
-test('#/roles answers from the server: the counts, a row per guarded action or the empty sentence, and its exports', async ({ page }) => {
+test('#/roles answers from the server: the counts, a row per guarded action or the empty sentence, and its exports', async ({
+  page,
+}) => {
   const api = await (await page.request.get('/api/roles')).json();
   expect(api.counted.actions.n).toBe(api.rows.length);
   const csv = await (await page.request.get('/api/roles?format=csv')).text();

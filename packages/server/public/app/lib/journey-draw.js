@@ -17,7 +17,7 @@
 //
 // Everything from the server is untrusted display data → esc().
 
-import { S, expose, esc, jsArg, repoOf, bizLabel, humanize, currentLens } from '../store.js';
+import { S, expose, esc, jsArg, repoOf, humanize, currentLens } from '../store.js';
 import { t, def, evidenceWord, plainWords, proseHtml, unTick } from '../strings.js';
 import { sym } from '../sym.js';
 import { vsl, linkHtml, designThumbHtml } from './graph-render.js';
@@ -29,7 +29,16 @@ import { defAttrs, countKey } from './counted.js';
 import { jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnInspPanelHtml } from '../surfaces/journey-drill.js';
 import { lifecycleStripHtml, headerLifecycles } from './lifecycle-strip.js';
 import { freshLineHtml, freshSentence, freshShown } from './freshness.js';
-import { momOrdinal, buildTree, cellTree, sheetModel, stopOf, ladderModel, LADDER, jrnGatesIn } from './journey-model.js';
+import {
+  momOrdinal,
+  buildTree,
+  cellTree,
+  sheetModel,
+  stopOf,
+  ladderModel,
+  LADDER,
+  jrnGatesIn,
+} from './journey-model.js';
 import { testChipHtml, distinctArgs, builtOnlyHtml } from './test-chip.js';
 import { scopeWordKey } from './scope-words.js';
 
@@ -41,14 +50,23 @@ const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
  * Stable per-repo band colour: hash the repo name into the 6-colour token cycle.
  * @group Journey view
  */
-function jrnRepoColor(repo) { let h = 0; const s = String(repo || ''); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return JRN_REPO_COLORS[h % JRN_REPO_COLORS.length]; }
+function jrnRepoColor(repo) {
+  let h = 0;
+  const s = String(repo || '');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return JRN_REPO_COLORS[h % JRN_REPO_COLORS.length];
+}
 /** Business/humanized label for a journey node (server bizLabel, else humanize).
  * @group Journey view */
-export function jrnLabel(n) { return (n && n.bizLabel) || humanize((n && n.name) || ''); }
+export function jrnLabel(n) {
+  return (n && n.bizLabel) || humanize((n && n.name) || '');
+}
 /** Words somebody wrote, in the lens on screen: the business lens reads their plain
  * words (no document ids, paths or identifiers — `plainWords`), the others read them whole.
  * @group Journey view */
-export function jrnWords(text) { return currentLens() === 'business' ? plainWords(text) : String(text || ''); }
+export function jrnWords(text) {
+  return currentLens() === 'business' ? plainWords(text) : String(text || '');
+}
 /** An action's name in the lens on screen — the business lens reads its plain words,
  * then the sentence written for it, and says so where nobody wrote any.
  * @group Journey view */
@@ -60,7 +78,9 @@ export function jrnMoLabel(mo) {
 /** A design id beside a screen's name — outside the business lens, which reads the name alone.
  * @group Journey view */
 export function jrnDesignIdHtml(sg) {
-  return sg && sg.screen && sg.screen.designId && currentLens() !== 'business' ? '<span class="dsg-id">' + esc(sg.screen.designId) + '</span>' : '';
+  return sg && sg.screen && sg.screen.designId && currentLens() !== 'business'
+    ? '<span class="dsg-id">' + esc(sg.screen.designId) + '</span>'
+    : '';
 }
 /**
  * Verb shown on a step's incoming arrow, keyed by edge kind.
@@ -69,15 +89,24 @@ export function jrnDesignIdHtml(sg) {
 function jrnVerb(s) {
   const n = s.node || {};
   switch (s.via) {
-    case 'calls': return 'calls';
-    case 'http': return (n.name && /^(GET|POST|PUT|PATCH|DELETE)\b/.test(n.name)) ? 'HTTP ' + n.name : 'HTTP call';
-    case 'renders': return 'shows';
-    case 'publishes': return 'emits';
-    case 'consumes': return 'handles';
-    case 'reads': return 'reads';
-    case 'writes': return 'saves to';
-    case 'planned': return t('journey.planned.' + ((s.planned || {}).kind || 'step'));
-    default: return '';
+    case 'calls':
+      return 'calls';
+    case 'http':
+      return n.name && /^(GET|POST|PUT|PATCH|DELETE)\b/.test(n.name) ? 'HTTP ' + n.name : 'HTTP call';
+    case 'renders':
+      return 'shows';
+    case 'publishes':
+      return 'emits';
+    case 'consumes':
+      return 'handles';
+    case 'reads':
+      return 'reads';
+    case 'writes':
+      return 'saves to';
+    case 'planned':
+      return t('journey.planned.' + ((s.planned || {}).kind || 'step'));
+    default:
+      return '';
   }
 }
 /**
@@ -86,7 +115,9 @@ function jrnVerb(s) {
  * dashed and marked, not as an abstract planned card.
  * @group Journey view
  */
-function jrnIsPlannedCall(s) { return !!(s && s.planned && s.planned.kind === 'calls' && s.node); }
+function jrnIsPlannedCall(s) {
+  return !!(s && s.planned && s.planned.kind === 'calls' && s.node);
+}
 
 /**
  * Cross-boundary divider text for a step, or '' if it isn't a boundary.
@@ -95,11 +126,19 @@ function jrnIsPlannedCall(s) { return !!(s && s.planned && s.planned.kind === 'c
  */
 function jrnBannerHtml(s) {
   const n = s.node || {};
-  let text = '', cls = 'jrn-banner', icon = '';
+  let text,
+    cls = 'jrn-banner',
+    icon = '';
   if (s.via === 'http') text = '⇄ HTTP ' + (n.name || 'call') + ' → ' + (n.repo || '');
-  else if (s.via === 'publishes') { icon = sym('bolt'); text = ' async via ' + (n.name || 'queue'); cls += ' async'; }
-  else if (s.via === 'consumes') { icon = sym('bolt'); text = ' async → ' + (n.name || '') + ' (' + (n.repo || '') + ')'; cls += ' async'; }
-  else if (s.crossRepo) text = '⇄ crosses into ' + (n.repo || '');
+  else if (s.via === 'publishes') {
+    icon = sym('bolt');
+    text = ' async via ' + (n.name || 'queue');
+    cls += ' async';
+  } else if (s.via === 'consumes') {
+    icon = sym('bolt');
+    text = ' async → ' + (n.name || '') + ' (' + (n.repo || '') + ')';
+    cls += ' async';
+  } else if (s.crossRepo) text = '⇄ crosses into ' + (n.repo || '');
   else return '';
   return '<div class="' + cls + '">' + icon + esc(text) + '</div>';
 }
@@ -114,7 +153,7 @@ function jrnBannerHtml(s) {
  * @group Journey view
  */
 export function jrnDocLinkHtml(repo, link) {
-  const path = link && typeof link === 'object' ? (link.ref || link.url) : link;
+  const path = link && typeof link === 'object' ? link.ref || link.url : link;
   if (!path) return '';
   if (/^https?:\/\//i.test(path)) return linkHtml(path);
   const title0 = link && typeof link === 'object' && link.title ? String(link.title) : '';
@@ -129,7 +168,15 @@ export function jrnDocLinkHtml(repo, link) {
   if (business && !title) return '';
   const base = String(path).split('/').pop();
   // the hover keeps the path — and the whole title, since a narrow lane clips it
-  return '<span class="dsg-doc" title="' + esc(title ? title + '\n' + path : path) + '"><span class="l">' + esc(title || base) + '</span>' + vsl(repo, path, 1) + '</span>';
+  return (
+    '<span class="dsg-doc" title="' +
+    esc(title ? title + '\n' + path : path) +
+    '"><span class="l">' +
+    esc(title || base) +
+    '</span>' +
+    vsl(repo, path, 1) +
+    '</span>'
+  );
 }
 // ── journey tree & splice (pure — no DOM, unit-testable) ────────
 /**
@@ -137,7 +184,9 @@ export function jrnDocLinkHtml(repo, link) {
  * of journey steps (the wire order from /api/journey).
  * @group Journey view
  */
-export function jrnBuildTree(steps) { return buildTree(steps); }
+export function jrnBuildTree(steps) {
+  return buildTree(steps);
+}
 /**
  * Pure: split a code block spanning absolute lines
  * [startLine … startLine+lineCount-1] at child call sites. kids is
@@ -149,29 +198,37 @@ export function jrnBuildTree(steps) { return buildTree(steps); }
  * @group Journey view
  */
 function jrnSpliceSegments(startLine, lineCount, kids) {
-  const endLine = startLine + lineCount - 1, segs = [];
-  const inline = kids.filter((k) => k.line != null && lineCount > 0 && k.line >= startLine && k.line <= endLine)
+  const endLine = startLine + lineCount - 1,
+    segs = [];
+  const inline = kids
+    .filter((k) => k.line != null && lineCount > 0 && k.line >= startLine && k.line <= endLine)
     .sort((a, b) => a.line - b.line || a.idx - b.idx);
   const inSet = new Set(inline.map((k) => k.idx));
   let cur = startLine;
   if (lineCount > 0) {
     for (const k of inline) {
-      if (k.line >= cur) { segs.push({ kind: 'code', from: cur, to: k.line }); cur = k.line + 1; }
+      if (k.line >= cur) {
+        segs.push({ kind: 'code', from: cur, to: k.line });
+        cur = k.line + 1;
+      }
       segs.push({ kind: 'child', idx: k.idx });
     }
     if (cur <= endLine) segs.push({ kind: 'code', from: cur, to: endLine });
   }
-  kids.forEach((k) => { if (!inSet.has(k.idx)) segs.push({ kind: 'child', idx: k.idx, detached: true }); });
+  kids.forEach((k) => {
+    if (!inSet.has(k.idx)) segs.push({ kind: 'child', idx: k.idx, detached: true });
+  });
   return segs;
 }
 /** Children of step i as splice inputs: call-site line when it lands in the
  * parent's own file, else null (detached).
  * @group Journey view */
 function jrnKidsOf(i) {
-  const p = S.JOURNEY.steps[i] || {}, ppath = p.node && p.node.loc && p.node.loc.path;
+  const p = S.JOURNEY.steps[i] || {},
+    ppath = p.node && p.node.loc && p.node.loc.path;
   return S.JRN_TREE.children[i].map((ci) => {
     const cs = (S.JOURNEY.steps[ci] || {}).callSite;
-    return { idx: ci, line: (cs && ppath && cs.path === ppath) ? cs.line : null };
+    return { idx: ci, line: cs && ppath && cs.path === ppath ? cs.line : null };
   });
 }
 /** Accumulated path conditions (root-first along the step tree) that must
@@ -181,14 +238,16 @@ function jrnAccConditions(i) {
   const chain = [];
   for (let cur = i; cur != null && cur >= 0; cur = S.JRN_TREE.parent[cur]) chain.push(cur);
   const out = [];
-  chain.reverse().forEach((si) => ((((S.JOURNEY.steps[si] || {}).conditions)) || []).forEach((c) => out.push(c)));
+  chain.reverse().forEach((si) => ((S.JOURNEY.steps[si] || {}).conditions || []).forEach((c) => out.push(c)));
   return out;
 }
 /** Journey children of step i whose call-site line sits inside [from,to]
  * of step i's own file (used to link fork arms to steps).
  * @group Journey view */
 function jrnCallsInSpan(i, from, to) {
-  return jrnKidsOf(i).filter((k) => k.line != null && k.line >= from && k.line <= to).map((k) => k.idx);
+  return jrnKidsOf(i)
+    .filter((k) => k.line != null && k.line >= from && k.line <= to)
+    .map((k) => k.idx);
 }
 
 // ── journey fork cards & panel ──────────────────────────────────
@@ -199,10 +258,26 @@ function jrnArmOutcome(i, bp, arm) {
   const hits = jrnCallsInSpan(i, arm.line || 0, arm.endLine || 0);
   // the arm names the part it reaches and the stop that part sits in — a walk
   // index (`step 38`) is not a position a reader can find anywhere else
-  if (hits.length) return hits.map((ci) => '<span class="jrn-fk-step" onclick="event.stopPropagation();jrnScrollTo(' + ci + ')">'
-    + esc(t('journey.fork.jump').replace('{name}', ((S.JOURNEY.steps[ci] || {}).node || {}).name || '')) + (jrnStopText(ci) ? ' · ' + esc(jrnStopText(ci)) : '') + '</span>').join(' ');
-  if (arm.exits || (bp.exits && (bp.arms || []).length === 1)) return '<span class="jrn-fk-exit">' + esc(t('journey.fork.exits')) + '</span>';
-  return '<span class="jrn-fk-none">' + esc(t('journey.fork.noCalls')) + (bp.exits ? ' · ' + esc(t('journey.fork.mayExit')) : '') + '</span>';
+  if (hits.length)
+    return hits
+      .map(
+        (ci) =>
+          '<span class="jrn-fk-step" onclick="event.stopPropagation();jrnScrollTo(' +
+          ci +
+          ')">' +
+          esc(t('journey.fork.jump').replace('{name}', ((S.JOURNEY.steps[ci] || {}).node || {}).name || '')) +
+          (jrnStopText(ci) ? ' · ' + esc(jrnStopText(ci)) : '') +
+          '</span>',
+      )
+      .join(' ');
+  if (arm.exits || (bp.exits && (bp.arms || []).length === 1))
+    return '<span class="jrn-fk-exit">' + esc(t('journey.fork.exits')) + '</span>';
+  return (
+    '<span class="jrn-fk-none">' +
+    esc(t('journey.fork.noCalls')) +
+    (bp.exits ? ' · ' + esc(t('journey.fork.mayExit')) : '') +
+    '</span>'
+  );
 }
 /** Inline fork card for branch point bi of step i, toggled from the fork gutter:
  * lens-aware condition (business label + raw), category chip, arms with
@@ -211,17 +286,48 @@ function jrnArmOutcome(i, bp, arm) {
  * @group Journey view */
 function jrnForkCardHtml(i, bi, bp) {
   const cat = bp.category || 'branch';
-  const sn = ((S.JOURNEY.steps[i] || {}).node) || {};
-  const arms = (bp.arms || []).map((a) => '<span class="jrn-fk-arm' + (a.business ? ' has-biz' : '') + '"><span class="jrn-fk-lbl">' + esc(a.label || '') + '</span>'
-    + (a.business ? '<span class="fk-biz">' + esc(a.business) + '</span>' : '')
-    + '<span class="jrn-fk-req fk-req">' + esc(a.requires || '') + '</span>' + jrnArmOutcome(i, bp, a) + '</span>').join('');
-  return '<span class="jrn-fork-card" id="jrn-fc-' + i + '-' + bi + '" style="display:none" onclick="event.stopPropagation()">'
-    + '<span class="jrn-fk-head' + (bp.business ? ' has-biz' : '') + '">' + sym('fork') + ' '
-      + (bp.business ? '<span class="fk-biz">' + esc(bp.business) + '</span>' : '')
-      + '<span class="fk-req">' + esc(bp.condition || '') + '</span>'
-      + '<span class="jrn-fk-cat cat-' + esc(cat) + '">' + esc(cat) + '</span>'
-      + (sn.loc ? vsl(sn.repo, sn.loc.path, bp.line || sn.loc.line) : '') + '</span>'
-    + arms + '</span>';
+  const sn = (S.JOURNEY.steps[i] || {}).node || {};
+  const arms = (bp.arms || [])
+    .map(
+      (a) =>
+        '<span class="jrn-fk-arm' +
+        (a.business ? ' has-biz' : '') +
+        '"><span class="jrn-fk-lbl">' +
+        esc(a.label || '') +
+        '</span>' +
+        (a.business ? '<span class="fk-biz">' + esc(a.business) + '</span>' : '') +
+        '<span class="jrn-fk-req fk-req">' +
+        esc(a.requires || '') +
+        '</span>' +
+        jrnArmOutcome(i, bp, a) +
+        '</span>',
+    )
+    .join('');
+  return (
+    '<span class="jrn-fork-card" id="jrn-fc-' +
+    i +
+    '-' +
+    bi +
+    '" style="display:none" onclick="event.stopPropagation()">' +
+    '<span class="jrn-fk-head' +
+    (bp.business ? ' has-biz' : '') +
+    '">' +
+    sym('fork') +
+    ' ' +
+    (bp.business ? '<span class="fk-biz">' + esc(bp.business) + '</span>' : '') +
+    '<span class="fk-req">' +
+    esc(bp.condition || '') +
+    '</span>' +
+    '<span class="jrn-fk-cat cat-' +
+    esc(cat) +
+    '">' +
+    esc(cat) +
+    '</span>' +
+    (sn.loc ? vsl(sn.repo, sn.loc.path, bp.line || sn.loc.line) : '') +
+    '</span>' +
+    arms +
+    '</span>'
+  );
 }
 /** Toggle an inline fork card open/closed from its gutter line.
  * @group Journey view */
@@ -234,12 +340,14 @@ function jrnToggleFork(id, ev) {
  * repeated step doesn't list its branches twice.
  * @group Journey view */
 export function jrnCollectForks() {
-  const out = [], seen = new Set();
+  const out = [],
+    seen = new Set();
   ((S.JOURNEY && S.JOURNEY.steps) || []).forEach((s, i) => {
     const n = s.node || {};
     if (!Array.isArray(n.branches) || !n.branches.length) return;
-    const key = n.id || ('step' + i);
-    if (seen.has(key)) return; seen.add(key);
+    const key = n.id || 'step' + i;
+    if (seen.has(key)) return;
+    seen.add(key);
     n.branches.forEach((bp, bi) => out.push({ i, bi, bp }));
   });
   return out;
@@ -248,23 +356,63 @@ export function jrnCollectForks() {
  * step links and a copyable mock-state recipe (accumulated requires ∧ arm).
  * @group Journey view */
 export function jrnForkEntryHtml(f) {
-  const s = S.JOURNEY.steps[f.i] || {}, n = s.node || {};
+  const s = S.JOURNEY.steps[f.i] || {},
+    n = s.node || {};
   if (currentLens() === 'business') return jrnForkEntryBizHtml(f, n, 1);
   const loc = (n.loc ? n.loc.path : '') + ':' + (f.bp.line || '');
-  const acc = jrnAccConditions(f.i).map((c) => c.requires).filter(Boolean);
-  const arms = (f.bp.arms || []).map((a) => {
-    // recipe stays raw code (reproduces state) in every lens — not lens-aware
-    const recipe = acc.concat(a.requires ? [a.requires] : []).join(' && ');
-    return '<div class="jrn-fkp-arm' + (a.business ? ' has-biz' : '') + '"><span class="jrn-fk-lbl">' + esc(a.label || '') + '</span>'
-      + (a.business ? '<span class="fk-biz">' + esc(a.business) + '</span>' : '')
-      + '<span class="jrn-fk-req fk-req">' + esc(a.requires || '') + '</span>' + jrnArmOutcome(f.i, f.bp, a)
-      + (recipe ? '<button class="jrn-fk-copy" data-recipe="' + esc(recipe) + '" onclick="jrnCopyRecipe(this,event)" title="Copy mock-state recipe">' + sym('open') + '</button>' : '') + '</div>';
-  }).join('');
-  return '<div class="jrn-fkp-entry" onclick="jrnForkJump(' + f.i + ',' + f.bi + ')">'
-    + '<div class="jrn-fkp-cond' + (f.bp.business ? ' has-biz' : '') + '">' + sym('fork') + ' '
-      + (f.bp.business ? '<span class="fk-biz">' + esc(f.bp.business) + '</span>' : '')
-      + '<span class="fk-req">' + esc(f.bp.condition || '') + '</span></div>'
-    + '<div class="jrn-fkp-loc">' + esc(loc) + ' · ' + esc(n.name || '') + (n.loc ? vsl(n.repo, n.loc.path, f.bp.line || n.loc.line) : '') + '</div>' + arms + '</div>';
+  const acc = jrnAccConditions(f.i)
+    .map((c) => c.requires)
+    .filter(Boolean);
+  const arms = (f.bp.arms || [])
+    .map((a) => {
+      // recipe stays raw code (reproduces state) in every lens — not lens-aware
+      const recipe = acc.concat(a.requires ? [a.requires] : []).join(' && ');
+      return (
+        '<div class="jrn-fkp-arm' +
+        (a.business ? ' has-biz' : '') +
+        '"><span class="jrn-fk-lbl">' +
+        esc(a.label || '') +
+        '</span>' +
+        (a.business ? '<span class="fk-biz">' + esc(a.business) + '</span>' : '') +
+        '<span class="jrn-fk-req fk-req">' +
+        esc(a.requires || '') +
+        '</span>' +
+        jrnArmOutcome(f.i, f.bp, a) +
+        (recipe
+          ? '<button class="jrn-fk-copy" data-recipe="' +
+            esc(recipe) +
+            '" onclick="jrnCopyRecipe(this,event)" title="Copy mock-state recipe">' +
+            sym('open') +
+            '</button>'
+          : '') +
+        '</div>'
+      );
+    })
+    .join('');
+  return (
+    '<div class="jrn-fkp-entry" onclick="jrnForkJump(' +
+    f.i +
+    ',' +
+    f.bi +
+    ')">' +
+    '<div class="jrn-fkp-cond' +
+    (f.bp.business ? ' has-biz' : '') +
+    '">' +
+    sym('fork') +
+    ' ' +
+    (f.bp.business ? '<span class="fk-biz">' + esc(f.bp.business) + '</span>' : '') +
+    '<span class="fk-req">' +
+    esc(f.bp.condition || '') +
+    '</span></div>' +
+    '<div class="jrn-fkp-loc">' +
+    esc(loc) +
+    ' · ' +
+    esc(n.name || '') +
+    (n.loc ? vsl(n.repo, n.loc.path, f.bp.line || n.loc.line) : '') +
+    '</div>' +
+    arms +
+    '</div>'
+  );
 }
 /** Step order → the segment marker the fold drew for it, so the drawer can
  * reach the words the fold already chose for that part (`SegmentMarker.title`
@@ -278,9 +426,11 @@ function jrnForkMarks() {
   if (JRN_FORK_MARKS) return JRN_FORK_MARKS;
   const m = new Map();
   const sum = (S.JOURNEY && S.JOURNEY.summary) || null;
-  ((sum && sum.segments) || []).forEach((sg) => (sg.markers || []).forEach((mk) => {
-    if (mk.stepOrder != null && !m.has(mk.stepOrder)) m.set(mk.stepOrder, mk);
-  }));
+  ((sum && sum.segments) || []).forEach((sg) =>
+    (sg.markers || []).forEach((mk) => {
+      if (mk.stepOrder != null && !m.has(mk.stepOrder)) m.set(mk.stepOrder, mk);
+    }),
+  );
   JRN_FORK_MARKS = m;
   return m;
 }
@@ -308,17 +458,34 @@ function jrnForkPartWords(i, n) {
  */
 function jrnForkEntryBizHtml(f, n, count) {
   const head = plainWords(String(f.bp.business || '').trim() || jrnForkPartWords(f.i, n));
-  const untr = '<span class="jrn-fkp-untr" title="' + esc(def('journey.biz.absent.notTranslated') || '') + '">'
-    + sym('absent') + esc(t('journey.biz.absent.notTranslated')) + '</span>';
+  const untr =
+    '<span class="jrn-fkp-untr" title="' +
+    esc(def('journey.biz.absent.notTranslated') || '') +
+    '">' +
+    sym('absent') +
+    esc(t('journey.biz.absent.notTranslated')) +
+    '</span>';
   // the same part, holding several of them: one card and ×n — the idiom the
   // gate checkpoints already fold with, so nothing new is spelled and the
   // group's count above still adds up to every branch, not to every card
-  const many = count > 1
-    ? '<span class="jrn-fkp-n" title="' + esc(def('journey.biz.untranslated') || '') + '">×' + count + '</span>' : '';
-  return '<div class="jrn-fkp-entry biz" onclick="jrnForkJump(' + f.i + ',' + f.bi + ')">'
-    + '<div class="jrn-fkp-biz">' + sym('fork')
-    + (head ? '<b>' + esc(head) + '</b>' : untr) + many + '</div>'
-    + (head && !f.bp.business ? '<div class="jrn-fkp-sub">' + untr + '</div>' : '') + '</div>';
+  const many =
+    count > 1
+      ? '<span class="jrn-fkp-n" title="' + esc(def('journey.biz.untranslated') || '') + '">×' + count + '</span>'
+      : '';
+  return (
+    '<div class="jrn-fkp-entry biz" onclick="jrnForkJump(' +
+    f.i +
+    ',' +
+    f.bi +
+    ')">' +
+    '<div class="jrn-fkp-biz">' +
+    sym('fork') +
+    (head ? '<b>' + esc(head) + '</b>' : untr) +
+    many +
+    '</div>' +
+    (head && !f.bp.business ? '<div class="jrn-fkp-sub">' + untr + '</div>' : '') +
+    '</div>'
+  );
 }
 /** One category's forks as cards. The business register folds the branches of
  * one part into a single card with ×n — ten identical sentences in a row is not
@@ -328,10 +495,10 @@ function jrnForkListHtml(list, biz) {
   if (!biz) return list.map(jrnForkEntryHtml).join('');
   let out = '';
   for (let k = 0; k < list.length;) {
-    const id = (list[k].i) + '|' + (((S.JOURNEY.steps[list[k].i] || {}).node || {}).id || '');
+    const id = list[k].i + '|' + (((S.JOURNEY.steps[list[k].i] || {}).node || {}).id || '');
     let j = k + 1;
-    while (j < list.length && ((list[j].i) + '|' + (((S.JOURNEY.steps[list[j].i] || {}).node || {}).id || '')) === id) j++;
-    out += jrnForkEntryBizHtml(list[k], ((S.JOURNEY.steps[list[k].i] || {}).node || {}), j - k);
+    while (j < list.length && list[j].i + '|' + (((S.JOURNEY.steps[list[j].i] || {}).node || {}).id || '') === id) j++;
+    out += jrnForkEntryBizHtml(list[k], (S.JOURNEY.steps[list[k].i] || {}).node || {}, j - k);
     k = j;
   }
   return out;
@@ -348,16 +515,43 @@ export function jrnForksPanelHtml(forks) {
   // the words change, so a reader who switches registers keeps their place
   const title = esc(t(biz ? 'journey.biz.forks.title' : 'journey.forks.title'));
   const tip = esc(def(biz ? 'journey.biz.forks.title' : 'journey.forks.title') || '');
-  const head = '<div class="jrn-fkp-head"><span class="hud-label" title="' + tip + '">' + title + '</span>'
-    + '<button class="x" onclick="jrnToggleForks()" aria-label="' + esc(t('journey.closeExpanded')) + '">✕</button></div>';
-  if (!forks.length) return head + '<div class="jrn-fkp-empty">' + esc(t('journey.forks.empty'))
-    + (biz ? '' : '<br>' + esc(t('journey.forks.reingest'))) + '</div>';
+  const head =
+    '<div class="jrn-fkp-head"><span class="hud-label" title="' +
+    tip +
+    '">' +
+    title +
+    '</span>' +
+    '<button class="x" onclick="jrnToggleForks()" aria-label="' +
+    esc(t('journey.closeExpanded')) +
+    '">✕</button></div>';
+  if (!forks.length)
+    return (
+      head +
+      '<div class="jrn-fkp-empty">' +
+      esc(t('journey.forks.empty')) +
+      (biz ? '' : '<br>' + esc(t('journey.forks.reingest'))) +
+      '</div>'
+    );
   const byCat = {};
-  forks.forEach((f) => { const c = f.bp.category || 'branch'; (byCat[c] = byCat[c] || []).push(f); });
+  forks.forEach((f) => {
+    const c = f.bp.category || 'branch';
+    (byCat[c] = byCat[c] || []).push(f);
+  });
   const cats = JRN_CATS.filter((c) => byCat[c]).concat(Object.keys(byCat).filter((c) => !JRN_CATS.includes(c)));
-  return head + cats.map((cat) => '<div class="jrn-fkp-cat">' + jrnForkCatChip(cat, biz)
-      + '<span class="jrn-fkp-n">' + byCat[cat].length + '</span></div>'
-      + jrnForkListHtml(byCat[cat], biz)).join('');
+  return (
+    head +
+    cats
+      .map(
+        (cat) =>
+          '<div class="jrn-fkp-cat">' +
+          jrnForkCatChip(cat, biz) +
+          '<span class="jrn-fkp-n">' +
+          byCat[cat].length +
+          '</span></div>' +
+          jrnForkListHtml(byCat[cat], biz),
+      )
+      .join('')
+  );
 }
 /**
  * The forks button of the table's head (the code register): every raw branch the walk met, as a count that opens the
@@ -367,8 +561,15 @@ export function jrnForksPanelHtml(forks) {
 export function jrnForksBtnHtml(data, forks) {
   const n = data && data.forkCount != null ? data.forkCount : (forks || []).length;
   if (!n || currentLens() !== 'code') return '';
-  return '<button type="button" class="jrn-forksbtn" id="jrn-forksbtn" onclick="jrnToggleForks()">' + sym('fork') + ' '
-    + esc(jrnCountWord('journey.forks.count', n)).replace(String(n), () => jrnNumHtml(n, 'journey.forks.count', 'journey.scopeAll', { num: true, noFocus: true })) + '</button>';
+  return (
+    '<button type="button" class="jrn-forksbtn" id="jrn-forksbtn" onclick="jrnToggleForks()">' +
+    sym('fork') +
+    ' ' +
+    esc(jrnCountWord('journey.forks.count', n)).replace(String(n), () =>
+      jrnNumHtml(n, 'journey.forks.count', 'journey.scopeAll', { num: true, noFocus: true }),
+    ) +
+    '</button>'
+  );
 }
 /** The chip naming how a branch was sorted. Two of the six kinds are read off
  * the branch's shape (a catch, a path that returns or throws) and are facts;
@@ -378,16 +579,26 @@ export function jrnForksBtnHtml(data, forks) {
 function jrnForkCatChip(cat, biz) {
   const key = (biz ? 'journey.biz.forkCat.' : 'journey.forkCat.') + cat;
   const known = S.STRINGS && S.STRINGS[key];
-  return '<span class="jrn-fk-cat cat-' + esc(cat) + (biz ? ' biz' : '') + '"'
-    + (known && def(key) ? ' title="' + esc(def(key)) + '"' : '') + '>'
-    + esc(known ? t(key) : cat) + '</span>';
+  return (
+    '<span class="jrn-fk-cat cat-' +
+    esc(cat) +
+    (biz ? ' biz' : '') +
+    '"' +
+    (known && def(key) ? ' title="' + esc(def(key)) + '"' : '') +
+    '>' +
+    esc(known ? t(key) : cat) +
+    '</span>'
+  );
 }
 /** Open/close the forks drawer (pass true/false to force a state).
  * @group Journey view */
 export function jrnToggleForks(force) {
-  S.jrnForksOpen = (force === true || force === false) ? force : !S.jrnForksOpen;
+  S.jrnForksOpen = force === true || force === false ? force : !S.jrnForksOpen;
   const d = document.getElementById('jrn-forks');
-  if (d) { d.classList.toggle('open', S.jrnForksOpen); jrnDrawerInert(d, S.jrnForksOpen); }
+  if (d) {
+    d.classList.toggle('open', S.jrnForksOpen);
+    jrnDrawerInert(d, S.jrnForksOpen);
+  }
 }
 /**
  * A drawer parked off the right edge is out of reach, not only out of sight:
@@ -398,7 +609,8 @@ export function jrnToggleForks(force) {
  * @group Journey view
  */
 function jrnDrawerInert(d, open) {
-  if (open) d.removeAttribute('inert'); else d.setAttribute('inert', '');
+  if (open) d.removeAttribute('inert');
+  else d.setAttribute('inert', '');
   d.setAttribute('aria-hidden', open ? 'false' : 'true');
 }
 /** Jump from a forks-panel entry to its step on the timeline: expand the step,
@@ -411,7 +623,8 @@ function jrnForkJump(i, bi) {
   const line = document.getElementById('jrn-fl-' + i + '-' + bi);
   if (line && line.offsetParent) {
     line.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    line.classList.add('flash'); setTimeout(() => line.classList.remove('flash'), 1200);
+    line.classList.add('flash');
+    setTimeout(() => line.classList.remove('flash'), 1200);
   }
 }
 /** Copy a mock-state recipe (from data-recipe) to the clipboard.
@@ -419,7 +632,10 @@ function jrnForkJump(i, bi) {
 function jrnCopyRecipe(btn, ev) {
   if (ev) ev.stopPropagation();
   navigator.clipboard.writeText(btn.dataset.recipe || '');
-  btn.innerHTML = '✓'; setTimeout(() => { btn.innerHTML = sym('open'); }, 1200);
+  btn.innerHTML = '✓';
+  setTimeout(() => {
+    btn.innerHTML = sym('open');
+  }, 1200);
 }
 
 // ── journey rendering ───────────────────────────────────────────
@@ -432,10 +648,29 @@ export function jrnReqChips(i) {
   // condition in code (`canFile(accounts)`) is not a sentence
   const cs = jrnAccConditions(i).filter((c) => currentLens() !== 'business' || c.business);
   if (!cs.length) return '';
-  const shown = cs.slice(0, 3).map((c) => '<span class="jrn-req' + (c.business ? ' has-biz' : '') + '" title="' + esc((c.name || '') + ' ' + (c.path || '') + ':' + (c.line || '')) + '">' + sym('fork') + ' '
-    + (c.business ? '<span class="fk-biz">' + esc(c.business) + '</span>' : '')
-    + '<span class="fk-req">' + esc(c.requires || '') + '</span></span>').join('');
-  return '<span class="jrn-reqs">' + shown + (cs.length > 3 ? '<span class="jrn-req more">+' + (cs.length - 3) + '</span>' : '') + '</span>';
+  const shown = cs
+    .slice(0, 3)
+    .map(
+      (c) =>
+        '<span class="jrn-req' +
+        (c.business ? ' has-biz' : '') +
+        '" title="' +
+        esc((c.name || '') + ' ' + (c.path || '') + ':' + (c.line || '')) +
+        '">' +
+        sym('fork') +
+        ' ' +
+        (c.business ? '<span class="fk-biz">' + esc(c.business) + '</span>' : '') +
+        '<span class="fk-req">' +
+        esc(c.requires || '') +
+        '</span></span>',
+    )
+    .join('');
+  return (
+    '<span class="jrn-reqs">' +
+    shown +
+    (cs.length > 3 ? '<span class="jrn-req more">+' + (cs.length - 3) + '</span>' : '') +
+    '</span>'
+  );
 }
 /**
  * The reference anchors for a node, unwrapped: the design deep link, `@see`
@@ -458,7 +693,9 @@ export function jrnRefAnchors(n) {
  * Business phrasing for a journey gate: guard/rule name minus code prefixes.
  * @group Journey view
  */
-export function jrnGateText(g) { return String(g.name || '').replace(/^requireScope: /, 'scope '); }
+export function jrnGateText(g) {
+  return String(g.name || '').replace(/^requireScope: /, 'scope ');
+}
 /**
  * Decision block for step i in the business flow: a diamond with the fork's
  * business label (`@business` tag on the branch point/arm, else the raw
@@ -477,7 +714,7 @@ function jrnFlowDecision(s, i) {
   if (!conds.length) return '';
   const c0 = conds[0];
   const pi = S.JRN_TREE.parent[i];
-  const pn = pi >= 0 ? (((S.JOURNEY.steps[pi] || {}).node) || {}) : {};
+  const pn = pi >= 0 ? (S.JOURNEY.steps[pi] || {}).node || {} : {};
   const bp = (pn.branches || []).find((b) => b && b.line === c0.line);
   let alts = '';
   if (bp) {
@@ -485,18 +722,44 @@ function jrnFlowDecision(s, i) {
       if (a.label === c0.arm) return;
       const hits = pi >= 0 ? jrnCallsInSpan(pi, a.line || 0, a.endLine || 0) : [];
       const out = hits.length
-        ? hits.map((ci) => '<span class="jrn-fl-goto" onclick="event.stopPropagation();jrnScrollTo(' + ci + ')">→ ' + esc(jrnLabel(((S.JOURNEY.steps[ci] || {}).node) || {})) + '</span>').join(' ')
-        : (a.exits || bp.exits ? '<span class="jrn-fl-ends">' + sym('stopped') + ' flow ends here</span>' : '<span class="jrn-fl-ends">no tracked steps</span>');
-      alts += '<div class="jrn-fl-arm"><span class="jrn-fl-armlbl">' + esc(a.label || 'else') + '</span>'
-        + (a.business ? '<span class="jrn-fl-armtxt">' + esc(a.business) + '</span>' : '') + out + '</div>';
+        ? hits
+            .map(
+              (ci) =>
+                '<span class="jrn-fl-goto" onclick="event.stopPropagation();jrnScrollTo(' +
+                ci +
+                ')">→ ' +
+                esc(jrnLabel((S.JOURNEY.steps[ci] || {}).node || {})) +
+                '</span>',
+            )
+            .join(' ')
+        : a.exits || bp.exits
+          ? '<span class="jrn-fl-ends">' + sym('stopped') + ' flow ends here</span>'
+          : '<span class="jrn-fl-ends">no tracked steps</span>';
+      alts +=
+        '<div class="jrn-fl-arm"><span class="jrn-fl-armlbl">' +
+        esc(a.label || 'else') +
+        '</span>' +
+        (a.business ? '<span class="jrn-fl-armtxt">' + esc(a.business) + '</span>' : '') +
+        out +
+        '</div>';
     });
   }
-  return '<div class="jrn-fl-dec" title="' + esc(conds.map((c) => c.requires).join(' && ')) + '">'
-    + '<div class="jrn-fl-diamond"><span class="jrn-fl-dq"><i>?</i></span>'
-      + '<span class="jrn-fl-dtxt">' + esc(c0.business || c0.requires) + '</span>'
-      + (conds.length > 1 ? '<span class="jrn-fl-more">+' + (conds.length - 1) + ' more</span>' : '') + '</div>'
-    + '<div class="jrn-fl-taken">✓ ' + esc(c0.business ? c0.business : 'when ' + c0.requires) + ' — continues below</div>'
-    + (alts ? '<div class="jrn-fl-alts">' + alts + '</div>' : '') + '</div>';
+  return (
+    '<div class="jrn-fl-dec" title="' +
+    esc(conds.map((c) => c.requires).join(' && ')) +
+    '">' +
+    '<div class="jrn-fl-diamond"><span class="jrn-fl-dq"><i>?</i></span>' +
+    '<span class="jrn-fl-dtxt">' +
+    esc(c0.business || c0.requires) +
+    '</span>' +
+    (conds.length > 1 ? '<span class="jrn-fl-more">+' + (conds.length - 1) + ' more</span>' : '') +
+    '</div>' +
+    '<div class="jrn-fl-taken">✓ ' +
+    esc(c0.business ? c0.business : 'when ' + c0.requires) +
+    ' — continues below</div>' +
+    (alts ? '<div class="jrn-fl-alts">' + alts + '</div>' : '') +
+    '</div>'
+  );
 }
 /**
  * One line-numbered code segment of step i covering absolute lines [from,to]:
@@ -512,9 +775,32 @@ function jrnCodeSeg(s, i, from, to, lines, startLine, callLines) {
     const bIdx = branches.findIndex((b) => b && b.line === L);
     const isCall = callLines.has(L);
     const mark = '<span class="lm">' + (bIdx >= 0 ? sym('fork') : isCall ? '↳' : '') + '</span>';
-    out += '<span class="cl' + (isCall ? ' call' : '') + (bIdx >= 0 ? ' fork' : '') + '"'
-      + (bIdx >= 0 ? ' id="jrn-fl-' + i + '-' + bIdx + '" onclick="jrnToggleFork(\'jrn-fc-' + i + '-' + bIdx + '\',event)" title="' + esc((branches[bIdx].business ? branches[bIdx].business + ' — ' : '') + (branches[bIdx].category || 'branch') + ' fork — click for arms') + '"' : '')
-      + '>' + mark + (esc(txt) || ' ') + '</span>';
+    out +=
+      '<span class="cl' +
+      (isCall ? ' call' : '') +
+      (bIdx >= 0 ? ' fork' : '') +
+      '"' +
+      (bIdx >= 0
+        ? ' id="jrn-fl-' +
+          i +
+          '-' +
+          bIdx +
+          '" onclick="jrnToggleFork(\'jrn-fc-' +
+          i +
+          '-' +
+          bIdx +
+          '\',event)" title="' +
+          esc(
+            (branches[bIdx].business ? branches[bIdx].business + ' — ' : '') +
+              (branches[bIdx].category || 'branch') +
+              ' fork — click for arms',
+          ) +
+          '"'
+        : '') +
+      '>' +
+      mark +
+      (esc(txt) || ' ') +
+      '</span>';
     if (bIdx >= 0) out += jrnForkCardHtml(i, bIdx, branches[bIdx]);
   }
   return '<pre class="jrn-pre" style="counter-reset:jrnln ' + (from - 1) + '">' + out + '</pre>';
@@ -527,20 +813,27 @@ function jrnCodeSeg(s, i, from, to, lines, startLine, callLines) {
  * @group Journey view
  */
 function jrnSegmentsHtml(i) {
-  const s = S.JOURNEY.steps[i] || {}, n = s.node || {};
-  const lines = (s.code == null || s.code === '') ? [] : String(s.code).split('\n');
+  const s = S.JOURNEY.steps[i] || {},
+    n = s.node || {};
+  const lines = s.code == null || s.code === '' ? [] : String(s.code).split('\n');
   const startLine = s.codeStartLine || (n.loc && n.loc.line) || 1;
   const kids = jrnKidsOf(i);
   const callLines = new Set(kids.map((k) => k.line).filter((l) => l != null));
   const segs = jrnSpliceSegments(startLine, lines.length, kids);
   let html = '';
-  if (!lines.length) html += '<div class="jrn-event">' + esc(jrnVerb(s) || 'event') + (n.loc ? ' · ' + esc(n.loc.path) : '') + '</div>';
+  if (!lines.length)
+    html += '<div class="jrn-event">' + esc(jrnVerb(s) || 'event') + (n.loc ? ' · ' + esc(n.loc.path) : '') + '</div>';
   segs.forEach((g) => {
     if (g.kind === 'code') html += jrnCodeSeg(s, i, g.from, g.to, lines, startLine, callLines);
     else {
       const c = S.JOURNEY.steps[g.idx] || {};
-      html += '<div class="jrn-splice" style="border-left-color:' + jrnRepoColor(c.node && c.node.repo) + '">'
-        + jrnBannerHtml(c) + jrnSectionHtml(g.idx) + '</div>';
+      html +=
+        '<div class="jrn-splice" style="border-left-color:' +
+        jrnRepoColor(c.node && c.node.repo) +
+        '">' +
+        jrnBannerHtml(c) +
+        jrnSectionHtml(g.idx) +
+        '</div>';
     }
   });
   if (s.codeTruncated) html += '<div class="jrn-trunc-note">… code truncated</div>';
@@ -554,66 +847,171 @@ function jrnSegmentsHtml(i) {
  * @group Journey view
  */
 function jrnSectionHtml(i) {
-  const s = S.JOURNEY.steps[i] || {}, n = s.node || {};
+  const s = S.JOURNEY.steps[i] || {},
+    n = s.node || {};
   const color = jrnRepoColor(n.repo);
   const plannedCall = jrnIsPlannedCall(s);
   if (s.planned && !plannedCall) {
     const p = s.planned;
-    return '<section class="jrn-sec jrn-sec-planned" id="jrn-sec-' + i + '" style="border-left-color:' + color + '">'
-      + '<div class="jrn-sec-head" data-order="' + i + '">'
-      + '<span class="jrn-stepno">' + (i + 1) + '</span>'
-      + '<span class="jrn-cchip k-planned">' + esc(t('journey.planned')) + '</span>'
-      + '<span class="jrn-biz">' + esc(t('journey.planned.' + (p.kind || 'step'))) + ' ' + esc(p.label || '') + '</span>'
-      + (p.detail ? '<span class="jrn-code-name">' + esc(p.detail) + '</span>' : '')
-      + (n.contract ? '<a class="jrn-contract" href="#/apis/' + encodeURIComponent(n.contract.apiId) + '?op=' + encodeURIComponent(n.routeId || '') + '">' + sym('api') + esc(t('apis.contractLink')) + '</a>' : '')
-      + '</div><div class="jrn-event jrn-plan-note">' + esc(t('journey.plannedNote')) + '</div></section>';
+    return (
+      '<section class="jrn-sec jrn-sec-planned" id="jrn-sec-' +
+      i +
+      '" style="border-left-color:' +
+      color +
+      '">' +
+      '<div class="jrn-sec-head" data-order="' +
+      i +
+      '">' +
+      '<span class="jrn-stepno">' +
+      (i + 1) +
+      '</span>' +
+      '<span class="jrn-cchip k-planned">' +
+      esc(t('journey.planned')) +
+      '</span>' +
+      '<span class="jrn-biz">' +
+      esc(t('journey.planned.' + (p.kind || 'step'))) +
+      ' ' +
+      esc(p.label || '') +
+      '</span>' +
+      (p.detail ? '<span class="jrn-code-name">' + esc(p.detail) + '</span>' : '') +
+      (n.contract
+        ? '<a class="jrn-contract" href="#/apis/' +
+          encodeURIComponent(n.contract.apiId) +
+          '?op=' +
+          encodeURIComponent(n.routeId || '') +
+          '">' +
+          sym('api') +
+          esc(t('apis.contractLink')) +
+          '</a>'
+        : '') +
+      '</div><div class="jrn-event jrn-plan-note">' +
+      esc(t('journey.plannedNote')) +
+      '</div></section>'
+    );
   }
   if (s.repeat || s.cycle) {
     const canExpand = !!(s.repeat || s.code);
     const label = s.cycle ? '↺ recursion — traversal stopped' : '↻ already shown';
-    return '<section class="jrn-sec jrn-collapsed" id="jrn-sec-' + i + '" style="border-left-color:' + color + '">'
-      + '<div class="jrn-sec-head" data-order="' + i + '">'
-      + '<span class="jrn-stepno">' + (i + 1) + '</span>'
-      + '<span class="jrn-cchip k-' + esc(n.kind || '') + '">' + esc(n.kind || '') + '</span>'
-      + '<span class="jrn-code-name">' + esc(n.name || '') + '</span>'
-      + '<span class="jrn-collabel">' + label + '</span>'
-      + (canExpand ? '<button class="jrn-expbtn" onclick="jrnExpandRepeat(this)">expand</button>' : '')
-      + '</div>'
-      + (canExpand ? '<div class="jrn-repeat-body" style="display:none">' + jrnSegmentsHtml(i) + '</div>' : '')
-      + '</section>';
+    return (
+      '<section class="jrn-sec jrn-collapsed" id="jrn-sec-' +
+      i +
+      '" style="border-left-color:' +
+      color +
+      '">' +
+      '<div class="jrn-sec-head" data-order="' +
+      i +
+      '">' +
+      '<span class="jrn-stepno">' +
+      (i + 1) +
+      '</span>' +
+      '<span class="jrn-cchip k-' +
+      esc(n.kind || '') +
+      '">' +
+      esc(n.kind || '') +
+      '</span>' +
+      '<span class="jrn-code-name">' +
+      esc(n.name || '') +
+      '</span>' +
+      '<span class="jrn-collabel">' +
+      label +
+      '</span>' +
+      (canExpand ? '<button class="jrn-expbtn" onclick="jrnExpandRepeat(this)">expand</button>' : '') +
+      '</div>' +
+      (canExpand ? '<div class="jrn-repeat-body" style="display:none">' + jrnSegmentsHtml(i) + '</div>' : '') +
+      '</section>'
+    );
   }
-  const gateBanners = (s.gates || []).map((g) => {
-    const gn = S.BYID[g.id];
-    return '<div class="jrn-gate-banner' + (g.kind === 'rule' ? ' rule' : '') + (g.planned ? ' planned' : '') + '"' + (gn ? gateAttrs(g.id, { step: s.order, config: g.config }) : '') + '>'
-      + sym(g.kind === 'rule' ? 'shield' : 'lock') + ' requires ' + esc(String(g.name || '').replace(/^requireScope: /, ''))
-      + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '')
-      + (gn && gn.loc ? vsl(repoOf(gn), gn.loc.path, gn.loc.line) : '') + '</div>';
-  }).join('');
+  const gateBanners = (s.gates || [])
+    .map((g) => {
+      const gn = S.BYID[g.id];
+      return (
+        '<div class="jrn-gate-banner' +
+        (g.kind === 'rule' ? ' rule' : '') +
+        (g.planned ? ' planned' : '') +
+        '"' +
+        (gn ? gateAttrs(g.id, { step: s.order, config: g.config }) : '') +
+        '>' +
+        sym(g.kind === 'rule' ? 'shield' : 'lock') +
+        ' requires ' +
+        esc(String(g.name || '').replace(/^requireScope: /, '')) +
+        (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '') +
+        (gn && gn.loc ? vsl(repoOf(gn), gn.loc.path, gn.loc.line) : '') +
+        '</div>'
+      );
+    })
+    .join('');
   const meta = [n.loc ? n.loc.path + ':' + n.loc.line : '', n.repo, n.group].filter(Boolean).join(' · ');
-  const head = '<div class="jrn-sec-head" data-order="' + i + '">'
-    + '<span class="jrn-stepno">' + (i + 1) + '</span>'
-    + '<span class="jrn-cchip k-' + esc(n.kind || '') + '">' + esc(n.kind || '') + '</span>'
-    + '<span class="jrn-biz">' + esc(jrnLabel(n)) + '</span>'
-    + '<span class="jrn-code-name">' + esc(n.name || '') + '</span>'
-    + jrnReqChips(i)
-    + (n.contract ? '<a class="jrn-contract" href="#/apis/' + encodeURIComponent(n.contract.apiId) + '?op=' + encodeURIComponent(n.id) + '" title="' + esc(n.contract.summary || '') + '">' + sym('api') + esc(t('apis.contractLink')) + '</a>' : '')
-    + '<span class="jrn-meta">' + esc(meta) + '</span>'
-    + (n.loc ? vsl(n.repo, n.loc.path, n.loc.line) : '') + '</div>';
+  const head =
+    '<div class="jrn-sec-head" data-order="' +
+    i +
+    '">' +
+    '<span class="jrn-stepno">' +
+    (i + 1) +
+    '</span>' +
+    '<span class="jrn-cchip k-' +
+    esc(n.kind || '') +
+    '">' +
+    esc(n.kind || '') +
+    '</span>' +
+    '<span class="jrn-biz">' +
+    esc(jrnLabel(n)) +
+    '</span>' +
+    '<span class="jrn-code-name">' +
+    esc(n.name || '') +
+    '</span>' +
+    jrnReqChips(i) +
+    (n.contract
+      ? '<a class="jrn-contract" href="#/apis/' +
+        encodeURIComponent(n.contract.apiId) +
+        '?op=' +
+        encodeURIComponent(n.id) +
+        '" title="' +
+        esc(n.contract.summary || '') +
+        '">' +
+        sym('api') +
+        esc(t('apis.contractLink')) +
+        '</a>'
+      : '') +
+    '<span class="jrn-meta">' +
+    esc(meta) +
+    '</span>' +
+    (n.loc ? vsl(n.repo, n.loc.path, n.loc.line) : '') +
+    '</div>';
   const pi = S.JRN_TREE ? S.JRN_TREE.parent[i] : -1;
-  const prepo = pi >= 0 ? (((S.JOURNEY.steps[pi] || {}).node || {}).repo || n.repo) : n.repo;
-  const callsite = s.callSite ? '<div class="jrn-callsite">← from ' + esc(s.callSite.path) + ':' + s.callSite.line + vsl(prepo, s.callSite.path, s.callSite.line) + '</div>' : '';
+  const prepo = pi >= 0 ? ((S.JOURNEY.steps[pi] || {}).node || {}).repo || n.repo : n.repo;
+  const callsite = s.callSite
+    ? '<div class="jrn-callsite">← from ' +
+      esc(s.callSite.path) +
+      ':' +
+      s.callSite.line +
+      vsl(prepo, s.callSite.path, s.callSite.line) +
+      '</div>'
+    : '';
   // a flow entry has no code of its own: what it does carry is the design's
   // description of the feature and the product docs that specify it
   const refs = n.kind === 'flow' ? jrnRefAnchors(n) : [];
-  const flowNote = n.kind === 'flow'
-    ? ((n.bizDescription || n.docs ? '<div class="jrn-event jrn-flow-note">' + esc(n.bizDescription || n.docs) + '</div>' : '')
-      + (refs.length ? '<div class="jrn-refs">' + refs.join(' ') + '</div>' : ''))
-    : '';
-  return gateBanners
-    + '<section class="jrn-sec' + (plannedCall ? ' jrn-sec-planned' : '') + '" id="jrn-sec-' + i + '" style="border-left-color:' + color + '">'
-    + head + callsite + flowNote
-    + (plannedCall ? '<div class="jrn-event jrn-plan-note">' + esc(t('design.plannedCall')) + '</div>' : '')
-    + jrnSegmentsHtml(i) + '</section>';
+  const flowNote =
+    n.kind === 'flow'
+      ? (n.bizDescription || n.docs
+          ? '<div class="jrn-event jrn-flow-note">' + esc(n.bizDescription || n.docs) + '</div>'
+          : '') + (refs.length ? '<div class="jrn-refs">' + refs.join(' ') + '</div>' : '')
+      : '';
+  return (
+    gateBanners +
+    '<section class="jrn-sec' +
+    (plannedCall ? ' jrn-sec-planned' : '') +
+    '" id="jrn-sec-' +
+    i +
+    '" style="border-left-color:' +
+    color +
+    '">' +
+    head +
+    callsite +
+    flowNote +
+    (plannedCall ? '<div class="jrn-event jrn-plan-note">' + esc(t('design.plannedCall')) + '</div>' : '') +
+    jrnSegmentsHtml(i) +
+    '</section>'
+  );
 }
 
 // ── the system drawing the Map's stops reuse ──
@@ -629,7 +1027,15 @@ const JRN_LADDER_LINES = 26;
 export function jrnScreenNode(sg) {
   const id = sg.screen && sg.screen.id;
   if (!id) return null;
-  return (S.JOURNEY.screens || []).find((n) => n && n.id === id) || S.BYID[id] || { id, name: sg.screen.name, kind: sg.screen.kind, design: sg.screen.designStatus ? { status: sg.screen.designStatus, id: sg.screen.designId } : undefined };
+  return (
+    (S.JOURNEY.screens || []).find((n) => n && n.id === id) ||
+    S.BYID[id] || {
+      id,
+      name: sg.screen.name,
+      kind: sg.screen.kind,
+      design: sg.screen.designStatus ? { status: sg.screen.designStatus, id: sg.screen.designId } : undefined,
+    }
+  );
 }
 /** First sentence of a business text (cut at ". "), capped so a flowchart step stays one box.
  * @group Journey view */
@@ -697,15 +1103,23 @@ export function jrnGateInWords(g) {
   if (phrase && !JRN_BARE_IDENT.test(phrase) && !JRN_DEV_TOKEN.test(phrase)) return phrase;
   // the sentence the team wrote for it (`@business`) before *a check nobody has put in words* (outsider round
   // 2026-10-13, F2: the role guard carries one, and its card said nobody had)
-  const own = (node && node.facets && node.facets.business && node.facets.business.description)
-    || (g && g.facets && g.facets.business && g.facets.business.description);
+  const own =
+    (node && node.facets && node.facets.business && node.facets.business.description) ||
+    (g && g.facets && g.facets.business && g.facets.business.description);
   return own ? String(own).trim() : '';
 }
 /** `ops.reviewer, ops.approver` → *reviewer or approver*: the last part of each role, in words.
  * @group Journey view */
 export function jrnRoleWords(requires) {
-  const roles = String(requires || '').split(/,\s*/).filter(Boolean).map((r) => humanize(r.split(/[.:/]/).pop() || r).toLowerCase());
-  return roles.length > 1 ? t('pre.or').replace('{a}', roles.slice(0, -1).join(', ')).replace('{b}', roles[roles.length - 1]) : (roles[0] || '');
+  const roles = String(requires || '')
+    .split(/,\s*/)
+    .filter(Boolean)
+    .map((r) => humanize(r.split(/[.:/]/).pop() || r).toLowerCase());
+  return roles.length > 1
+    ? t('pre.or')
+        .replace('{a}', roles.slice(0, -1).join(', '))
+        .replace('{b}', roles[roles.length - 1])
+    : roles[0] || '';
 }
 /**
  * What to call a checkpoint, in the register the reader asked for — the ONE
@@ -745,25 +1159,63 @@ function jrnGateRowHtml(g, qualifier) {
   const gn = S.BYID[g.id];
   const words = jrnGateLabel(g);
   // a click (or Enter) opens the gate card; a planned gate is not in the graph, so it still walks to its step
-  const opens = gn ? gateAttrs(g.id, { step: g.stepOrder, config: g.config })
+  const opens = gn
+    ? gateAttrs(g.id, { step: g.stepOrder, config: g.config })
     : ' onclick="jrnScrollTo(' + g.stepOrder + ')"';
-  return '<div class="jrn-gl-row' + (g.kind === 'rule' ? ' rule' : '') + (g.config ? ' config' : '') + (g.planned ? ' planned' : '') + '"'
-    + opens + ' title="' + esc(g.name || '') + '">'
-    + sym(g.config ? 'gear' : g.kind === 'rule' ? 'shield' : 'lock')
-    + '<span class="jrn-gl-w">' + esc(words) + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '')
+  return (
+    '<div class="jrn-gl-row' +
+    (g.kind === 'rule' ? ' rule' : '') +
+    (g.config ? ' config' : '') +
+    (g.planned ? ' planned' : '') +
+    '"' +
+    opens +
+    ' title="' +
+    esc(g.name || '') +
+    '">' +
+    sym(g.config ? 'gear' : g.kind === 'rule' ? 'shield' : 'lock') +
+    '<span class="jrn-gl-w">' +
+    esc(words) +
+    (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '') +
     // the roles this action's call site handed a role guard, as the code names them (business says them in its words above)
-    + (g.requires && currentLens() !== 'business' ? ' <code class="jrn-gl-req"' + tipAttrs({ key: 'roles.col.roles', noFocus: true }) + '>' + esc(g.requires) + '</code>' : '')
+    (g.requires && currentLens() !== 'business'
+      ? ' <code class="jrn-gl-req"' +
+        tipAttrs({ key: 'roles.col.roles', noFocus: true }) +
+        '>' +
+        esc(g.requires) +
+        '</code>'
+      : '') +
     // the tier beside the name outside the business register, which groups by it instead
-    + (g.tier && !g.config ? ' <span class="gate-tier ' + esc(g.tier) + '"' + tipAttrs({ key: 'gate.tier.' + g.tier }) + '>' + esc(t('gate.tier.' + g.tier)) + '</span>' : '')
+    (g.tier && !g.config
+      ? ' <span class="gate-tier ' +
+        esc(g.tier) +
+        '"' +
+        tipAttrs({ key: 'gate.tier.' + g.tier }) +
+        '>' +
+        esc(t('gate.tier.' + g.tier)) +
+        '</span>'
+      : '') +
     // a real space, not only the margin: this row is read in a screenshot and
     // pasted into a ticket as often as it is clicked
-    + (qualifier ? ' <i class="jrn-gl-same" title="' + esc(def('journey.sameWords') || '') + '">' + esc(qualifier) + '</i>' : '') + '</span>'
+    (qualifier
+      ? ' <i class="jrn-gl-same" title="' + esc(def('journey.sameWords') || '') + '">' + esc(qualifier) + '</i>'
+      : '') +
+    '</span>' +
     // ×n is a number: its tip says what it counts — the times this list met the gate (finding 3.4)
-    + '<span class="jrn-gl-x"' + (g.count > 1 ? ' aria-label="' + esc(t('journey.gateTimes').replace('{n}', g.count)) + '"' + tipAttrs({ key: 'journey.gateTimes', noFocus: true }) : '') + '>'
-    + (g.count > 1 ? '×' + g.count : '') + '</span>'
+    '<span class="jrn-gl-x"' +
+    (g.count > 1
+      ? ' aria-label="' +
+        esc(t('journey.gateTimes').replace('{n}', g.count)) +
+        '"' +
+        tipAttrs({ key: 'journey.gateTimes', noFocus: true })
+      : '') +
+    '>' +
+    (g.count > 1 ? '×' + g.count : '') +
+    '</span>' +
     // the doors on the row itself, not behind a ▸ (the business register draws none: they open code)
-    + '<span class="jrn-gl-go">' + (gn ? doorsHtml(doorsFor(g.kind === 'rule' ? 'rule' : 'gate', gn)) : '')
-    + '</span></div>';
+    '<span class="jrn-gl-go">' +
+    (gn ? doorsHtml(doorsFor(g.kind === 'rule' ? 'rule' : 'gate', gn)) : '') +
+    '</span></div>'
+  );
 }
 /**
  * One named list of checkpoints: a heading carrying THIS screen's count, then
@@ -783,15 +1235,32 @@ function jrnBizGroupHtml(key, total, body, mute, cls, scopeKey) {
   // a number equal to the count, which reads as though some were shown — and
   // wears `empty` so it collapses to one line instead of reserving a list's room.
   const allMuted = total > 0 && mute >= total;
-  return '<div class="jrn-gl-grp' + (cls ? ' ' + cls : '') + (allMuted ? ' empty' : '') + '">'
-    + '<div class="jrn-gl-head"><span class="hud-label" title="' + esc(def(key) || '') + '">' + esc(t(key)) + '</span>'
+  return (
+    '<div class="jrn-gl-grp' +
+    (cls ? ' ' + cls : '') +
+    (allMuted ? ' empty' : '') +
+    '">' +
+    '<div class="jrn-gl-head"><span class="hud-label" title="' +
+    esc(def(key) || '') +
+    '">' +
+    esc(t(key)) +
+    '</span>' +
     // which scope this number counts over, on the screen rather than in a
     // tooltip: the control above this cell counts the same word journey-wide
-    + (scopeKey ? '<span class="jrn-gl-scope" title="' + esc(def(scopeKey) || '') + '">' + esc(t(scopeKey)) + '</span>' : '')
-    + jrnNumHtml(total, key, scopeKey || 'count.scope.action', { num: true, noFocus: true, cls: 'n' }) + '</div>' + (allMuted ? '' : body)
-    + (mute ? '<div class="jrn-gl-mute">' + sym('warning')
-      + esc(allMuted ? t('journey.biz.noneInWords') : t('journey.biz.notInWords').replace('{n}', mute)) + '</div>' : '')
-    + '</div>';
+    (scopeKey
+      ? '<span class="jrn-gl-scope" title="' + esc(def(scopeKey) || '') + '">' + esc(t(scopeKey)) + '</span>'
+      : '') +
+    jrnNumHtml(total, key, scopeKey || 'count.scope.action', { num: true, noFocus: true, cls: 'n' }) +
+    '</div>' +
+    (allMuted ? '' : body) +
+    (mute
+      ? '<div class="jrn-gl-mute">' +
+        sym('warning') +
+        esc(allMuted ? t('journey.biz.noneInWords') : t('journey.biz.notInWords').replace('{n}', mute)) +
+        '</div>'
+      : '') +
+    '</div>'
+  );
 }
 function jrnGateGroupHtml(list, key, scopeKey, cls) {
   if (!list.length) return '';
@@ -805,21 +1274,32 @@ function jrnGateGroupHtml(list, key, scopeKey, cls) {
   // Keyed on jrnGateLabel, which is what the row actually prints, so the
   // qualifier appears exactly when a reader would see two rows reading alike.
   const same = new Map();
-  drawn.forEach((g) => { const w = jrnGateLabel(g); same.set(w, (same.get(w) || 0) + 1); });
-  const seen = new Map();
-  const html = drawn.map((g) => {
+  drawn.forEach((g) => {
     const w = jrnGateLabel(g);
-    const n = same.get(w) || 1;
-    if (n < 2) return jrnGateRowHtml(g);
-    const i = (seen.get(w) || 0) + 1;
-    seen.set(w, i);
-    return jrnGateRowHtml(g, t('journey.sameWords').replace('{i}', i).replace('{n}', n));
-  }).join('');
+    same.set(w, (same.get(w) || 0) + 1);
+  });
+  const seen = new Map();
+  const html = drawn
+    .map((g) => {
+      const w = jrnGateLabel(g);
+      const n = same.get(w) || 1;
+      if (n < 2) return jrnGateRowHtml(g);
+      const i = (seen.get(w) || 0) + 1;
+      seen.set(w, i);
+      return jrnGateRowHtml(g, t('journey.sameWords').replace('{i}', i).replace('{n}', n));
+    })
+    .join('');
   // every gate this group holds, drawn, folded into another row's wording or counted as not in words: the register
   // parity check reads it (a gate present in one register is never absent from another — outsider round 2026-10-13)
   const ids = [...new Set(rows.flatMap((g) => [g.id, ...(g.foldedIds || [])]))];
-  return jrnBizGroupHtml(key, rows.length, '<div class="jrn-gl-rows">' + html + '</div>',
-    mute, cls || (key === 'journey.bizGroup.rules' ? 'rules' : ''), scopeKey).replace('<div class="jrn-gl-grp', '<div data-gate-ids="' + esc(ids.join(' ')) + '" class="jrn-gl-grp');
+  return jrnBizGroupHtml(
+    key,
+    rows.length,
+    '<div class="jrn-gl-rows">' + html + '</div>',
+    mute,
+    cls || (key === 'journey.bizGroup.rules' ? 'rules' : ''),
+    scopeKey,
+  ).replace('<div class="jrn-gl-grp', '<div data-gate-ids="' + esc(ids.join(' ')) + '" class="jrn-gl-grp');
 }
 /**
  * The gates and rules of one screen as two aligned lists rather than one cloud
@@ -833,13 +1313,24 @@ function jrnGateListHtml(gates, scopeKey, configChecks) {
   const cfg = (configChecks || []).map((g) => ({ ...g, kind: 'guard', config: true }));
   if ((!gates || !gates.length) && !cfg.length) return '';
   // the business register reads the checks by who they matter to (gates lane 2026-10-10)
-  if (currentLens() === 'business' && (gates || []).some((g) => g.tier)) return jrnGateTiersHtml(gates, scopeKey, cfg, { legend: !!scopeKey });
-  return '<div class="jrn-gatelist">'
-    + jrnGateGroupHtml((gates || []).filter((g) => g.kind !== 'rule'), 'journey.bizGroup.gates', scopeKey)
-    + jrnGateGroupHtml((gates || []).filter((g) => g.kind === 'rule'), 'journey.bizGroup.rules', scopeKey)
+  if (currentLens() === 'business' && (gates || []).some((g) => g.tier))
+    return jrnGateTiersHtml(gates, scopeKey, cfg, { legend: !!scopeKey });
+  return (
+    '<div class="jrn-gatelist">' +
+    jrnGateGroupHtml(
+      (gates || []).filter((g) => g.kind !== 'rule'),
+      'journey.bizGroup.gates',
+      scopeKey,
+    ) +
+    jrnGateGroupHtml(
+      (gates || []).filter((g) => g.kind === 'rule'),
+      'journey.bizGroup.rules',
+      scopeKey,
+    ) +
     // the config checks the screen's code meets on the way: listed apart, counted apart (swarm-fixes 2026-10-05, finding 4)
-    + jrnGateGroupHtml(cfg, 'journey.bizGroup.configChecks', scopeKey, 'config')
-    + '</div>';
+    jrnGateGroupHtml(cfg, 'journey.bizGroup.configChecks', scopeKey, 'config') +
+    '</div>'
+  );
 }
 /**
  * The checks split by tier, the business register's reading (gates lane 2026-10-10): *who may*
@@ -854,24 +1345,51 @@ export function jrnGateTiersHtml(gates, scopeKey, cfg, o) {
   const opt = o || {};
   const { who, record, policy, technical } = jrnGateTiers(gates);
   const tech = technical.length
-    ? '<details class="jrn-gl-tech"><summary' + tipAttrs({ key: 'gate.group.technical' }) + '>'
-      + esc(jrnCountWord('gate.group.technical', technical.length)) + '</summary>'
-      + jrnGateGroupHtml(technical, 'gate.tier.technical', scopeKey, 'technical') + '</details>'
+    ? '<details class="jrn-gl-tech"><summary' +
+      tipAttrs({ key: 'gate.group.technical' }) +
+      '>' +
+      esc(jrnCountWord('gate.group.technical', technical.length)) +
+      '</summary>' +
+      jrnGateGroupHtml(technical, 'gate.tier.technical', scopeKey, 'technical') +
+      '</details>'
     : '';
   // the tier counts and where a tier comes from, once per screen's list — not in every action's cell
   // counted by each check's own tier, never by the group it reads under (a sign-in check is *policy* under *who may*)
   const byTier = (k) => (gates || []).filter((g) => (g.tier || 'business') === k).length;
-  const legend = !opt.legend ? '' : '<div class="jrn-gl-legend">' + ['business', 'policy', 'technical'].map((k) => {
-    const n = byTier(k);
-    return '<span class="gate-tier ' + k + '"' + tipAttrs({ key: 'gate.tier.' + k }) + '>' + esc(t('gate.tier.' + k)) + ' ' + n + '</span>';
-  }).join('') + '<span class="jrn-gl-legend-w"' + tipAttrs({ key: 'gate.tierFrom.class' }) + '>' + esc(t('gate.tierFrom.class')) + '</span></div>';
-  return '<div class="jrn-gatelist tiers">'
-    + jrnGateGroupHtml(who, 'gate.group.whoMay', scopeKey, 'who')
-    + jrnGateGroupHtml(record, 'gate.group.record', scopeKey, 'record')
-    + jrnGateGroupHtml(policy, 'gate.group.policy', scopeKey, 'policy')
-    + tech
-    + (cfg && cfg.length ? jrnGateGroupHtml(cfg, 'journey.bizGroup.configChecks', scopeKey, 'config') : '')
-    + legend + '</div>';
+  const legend = !opt.legend
+    ? ''
+    : '<div class="jrn-gl-legend">' +
+      ['business', 'policy', 'technical']
+        .map((k) => {
+          const n = byTier(k);
+          return (
+            '<span class="gate-tier ' +
+            k +
+            '"' +
+            tipAttrs({ key: 'gate.tier.' + k }) +
+            '>' +
+            esc(t('gate.tier.' + k)) +
+            ' ' +
+            n +
+            '</span>'
+          );
+        })
+        .join('') +
+      '<span class="jrn-gl-legend-w"' +
+      tipAttrs({ key: 'gate.tierFrom.class' }) +
+      '>' +
+      esc(t('gate.tierFrom.class')) +
+      '</span></div>';
+  return (
+    '<div class="jrn-gatelist tiers">' +
+    jrnGateGroupHtml(who, 'gate.group.whoMay', scopeKey, 'who') +
+    jrnGateGroupHtml(record, 'gate.group.record', scopeKey, 'record') +
+    jrnGateGroupHtml(policy, 'gate.group.policy', scopeKey, 'policy') +
+    tech +
+    (cfg && cfg.length ? jrnGateGroupHtml(cfg, 'journey.bizGroup.configChecks', scopeKey, 'config') : '') +
+    legend +
+    '</div>'
+  );
 }
 /**
  * One list of gates split by tier: who may (sign-in checks folded, one row per wording with the
@@ -886,18 +1404,30 @@ export function jrnGateTiers(gates) {
   // the groups are by what a check is about; the tier stays the check's own and rides on its row (swarm round 3:
   // a sign-in check is tier *policy* and still reads under *who may*; four-eyes is tier *business* and reads
   // under *the record must be*)
-  const record = kept.filter((g) => g.class === 'record-state' || g.class === 'completeness' || g.class === 'integrity');
+  const record = kept.filter(
+    (g) => g.class === 'record-state' || g.class === 'completeness' || g.class === 'integrity',
+  );
   const isWho = (g) => g.class === 'identity' || g.class === 'authorisation' || (!g.class && g.tier !== 'policy');
-  const whoAll = kept.filter((g) => !record.includes(g) && (isWho(g) || (g.tier !== 'policy' && g.tier !== 'technical')));
+  const whoAll = kept.filter(
+    (g) => !record.includes(g) && (isWho(g) || (g.tier !== 'policy' && g.tier !== 'technical')),
+  );
   const policy = kept.filter((g) => !record.includes(g) && !whoAll.includes(g));
   // sign-in checks say the same thing to a business reader: one row per wording, the times summed
   const who = [];
   const byWords = new Map();
   for (const g of whoAll) {
-    if (g.class !== 'identity') { who.push(g); continue; }
+    if (g.class !== 'identity') {
+      who.push(g);
+      continue;
+    }
     const w = jrnGateLabel(g) || t('gate.signedIn');
     const have = byWords.get(w);
-    if (have) { have.count = (have.count || 1) + (g.count || 1); have.folded = (have.folded || 1) + 1; have.foldedIds = [...(have.foldedIds || []), g.id]; continue; }
+    if (have) {
+      have.count = (have.count || 1) + (g.count || 1);
+      have.folded = (have.folded || 1) + 1;
+      have.foldedIds = [...(have.foldedIds || []), g.id];
+      continue;
+    }
     const row = { ...g, words: g.words || (jrnGateLabel(g) ? '' : t('gate.signedIn')) };
     if (!row.words) delete row.words;
     byWords.set(w, row);
@@ -943,11 +1473,19 @@ export function jrnChecksHtml(sg, mo) {
   // that can name none of them says *n of these are not written in plain
   // language* under a heading that says n, and never *none indexed* about
   // decisions the walk plainly found
-  const decs = tab === 'gates' || !inRange.length ? ''
-    : '<div class="jrn-gatelist">' + jrnBizGroupHtml('journey.decisions', inRange.length,
-      shown.map(jrnSheetDecChipHtml).join(''), inRange.length - shown.length) + '</div>';
+  const decs =
+    tab === 'gates' || !inRange.length
+      ? ''
+      : '<div class="jrn-gatelist">' +
+        jrnBizGroupHtml(
+          'journey.decisions',
+          inRange.length,
+          shown.map(jrnSheetDecChipHtml).join(''),
+          inRange.length - shown.length,
+        ) +
+        '</div>';
   const body = (tab === 'decisions' ? '' : jrnGateListHtml(gates, undefined, configs)) + decs;
-  return body ? body + untr : (untr || jrnAbsentHtml('noneIndexed'));
+  return body ? body + untr : untr || jrnAbsentHtml('noneIndexed');
 }
 /** What the walk could not put into words, said in the register's own voice — a
  * sentence in business, a chip beside the checks elsewhere. One line, every view.
@@ -957,10 +1495,20 @@ export function jrnUntranslatedHtml(n, scope, c, list) {
   const biz = currentLens() === 'business';
   const key = biz ? 'journey.biz.untranslated' : 'count.unit.notInWords';
   // with no typed count (an action's cell), the same builder over a bare one, so the list rides along
-  const cc = c || { n, unit: 'count.unit.notInWords', bizUnit: 'journey.biz.untranslated', scope: scope || 'journey.scopeHere' };
+  const cc = c || {
+    n,
+    unit: 'count.unit.notInWords',
+    bizUnit: 'journey.biz.untranslated',
+    scope: scope || 'journey.scopeHere',
+  };
   const tip = tipAttrs({ id: 'jrnCounted', args: { c: cc, list: list || undefined } });
   // its scope beside it, every time: 10 · 27 · 96 · 136 on four panels read as one number that would not hold still (swarm round 3)
-  const over = ' <span class="tc-scope" data-scope-word="' + esc(scopeWordKey(cc.scope)) + '">' + esc(t(scopeWordKey(cc.scope))) + '</span>';
+  const over =
+    ' <span class="tc-scope" data-scope-word="' +
+    esc(scopeWordKey(cc.scope)) +
+    '">' +
+    esc(t(scopeWordKey(cc.scope))) +
+    '</span>';
   return biz
     ? '<div class="jrn-untr sentence"' + tip + '>' + sym('warning') + esc(jrnCountWord(key, n)) + over + '</div>'
     : '<span class="jrn-untr"' + tip + '>' + sym('warning') + esc(jrnCountWord(key, n)) + over + '</span>';
@@ -979,8 +1527,12 @@ const JRN_BIZ_TABS = ['words', 'gates', 'decisions'];
  * @group Journey view */
 export function jrnBizTab() {
   if (!S.jrnBiz) {
-    let v = null;
-    try { v = localStorage.getItem('fs-jrn-biz'); } catch (e) { v = null; }
+    let v;
+    try {
+      v = localStorage.getItem('fs-jrn-biz');
+    } catch (e) {
+      v = null;
+    }
     S.jrnBiz = JRN_BIZ_TABS.indexOf(v) >= 0 ? v : 'words';
   }
   return S.jrnBiz;
@@ -994,7 +1546,11 @@ export function jrnBizTab() {
  */
 export function jrnSetBizTab(v) {
   S.jrnBiz = JRN_BIZ_TABS.indexOf(v) >= 0 ? v : 'words';
-  try { localStorage.setItem('fs-jrn-biz', S.jrnBiz); } catch (e) { /* private mode: the tab is just not remembered */ }
+  try {
+    localStorage.setItem('fs-jrn-biz', S.jrnBiz);
+  } catch (e) {
+    /* private mode: the tab is just not remembered */
+  }
   // the stop on the Map draws the checks inside a grid whose columns are measured together, so it redraws whole —
   // the open screen, action and register are all state and survive it (surfaces/map-stops.js redrawStops)
   if (S.JOURNEY && S.JRN_REDRAW) S.JRN_REDRAW();
@@ -1044,7 +1600,10 @@ function jrnBizCounts(sum) {
   const segs = sum.segments || [];
   const wrap = (n, unit) => ({ n, unit, scope: 'journey.scopeAll', source: 'journeySummary()' });
   return {
-    words: wrap(segs.filter((sg) => sg.screen || segs.length === 1).length + dec.filter((d) => d.class !== 'guard').length, 'count.unit.inWords'),
+    words: wrap(
+      segs.filter((sg) => sg.screen || segs.length === 1).length + dec.filter((d) => d.class !== 'guard').length,
+      'count.unit.inWords',
+    ),
     gates: wrap((sum.counts && sum.counts.gates) || 0, 'journey.countGates'),
     decisions: wrap((sum.counts && sum.counts.decisions) || 0, 'journey.countDecisions'),
   };
@@ -1061,25 +1620,62 @@ export function jrnBizTabsHtml(sum) {
   const c = jrnBizCounts(sum);
   // the tab is a button, so the number inside it carries the tip (hover) and the
   // button keeps its own click: what it counts, over the whole journey, and how it splits
-  const btn = (k, key, c) => '<button class="jrn-biztab' + (at === k ? ' on' : '') + '" role="tab" aria-selected="' + (at === k) + '"'
-    + ' onclick="jrnSetBizTab(\'' + k + '\')">'
-    + '<span class="l">' + esc(t(key)) + '</span><span class="n"' + tipAttrs({ id: 'jrnCounted', args: { c }, noFocus: true, tipKey: 'biztab-' + k }) + '>' + (c ? c.n : 0) + '</span></button>';
+  const btn = (k, key, c) =>
+    '<button class="jrn-biztab' +
+    (at === k ? ' on' : '') +
+    '" role="tab" aria-selected="' +
+    (at === k) +
+    '"' +
+    ' onclick="jrnSetBizTab(\'' +
+    k +
+    '\')">' +
+    '<span class="l">' +
+    esc(t(key)) +
+    '</span><span class="n"' +
+    tipAttrs({ id: 'jrnCounted', args: { c }, noFocus: true, tipKey: 'biztab-' + k }) +
+    '>' +
+    (c ? c.n : 0) +
+    '</span></button>';
   // the control's numbers are journey-wide and each cell's heading is its
   // screen's: three totals used to sit on one screen with nothing saying the
   // scopes differed (visual swarm 2026-09-24), so each says which it is
-  return '<div class="jrn-biztabs" role="tablist" aria-label="' + esc(t('journey.bizTabs')) + '">'
-    + btn('words', 'journey.bizTab.words', c.words)
-    + btn('gates', 'journey.bizTab.gates', c.gates)
-    + btn('decisions', 'journey.bizTab.decisions', c.decisions)
-    + '<span class="jrn-bizscope" title="' + esc(def('journey.scopeAll') || '') + '">' + esc(t('journey.scopeAll')) + '</span></div>';
+  return (
+    '<div class="jrn-biztabs" role="tablist" aria-label="' +
+    esc(t('journey.bizTabs')) +
+    '">' +
+    btn('words', 'journey.bizTab.words', c.words) +
+    btn('gates', 'journey.bizTab.gates', c.gates) +
+    btn('decisions', 'journey.bizTab.decisions', c.decisions) +
+    '<span class="jrn-bizscope" title="' +
+    esc(def('journey.scopeAll') || '') +
+    '">' +
+    esc(t('journey.scopeAll')) +
+    '</span></div>'
+  );
 }
 /** The segment's decisions as one line of ⑂ chips that jump to their fork — the compact form.
  * @group Journey view */
 function jrnDecChipsHtml(list) {
-  return '<div class="jrn-decs">' + jrnNumHtml(list.length, 'journey.decisionsFolded', 'journey.scopeHere', { noFocus: true, cls: 'jrn-decn' })
-    + list.map((d) => '<span class="jrn-dec-chip" onclick="jrnScrollTo(' + d.order + ')" title="' + esc(t('journey.decisionChip')) + '">'
-      + sym('fork') + esc(d.label) + '</span>').join('') + '</div>';
+  return (
+    '<div class="jrn-decs">' +
+    jrnNumHtml(list.length, 'journey.decisionsFolded', 'journey.scopeHere', { noFocus: true, cls: 'jrn-decn' }) +
+    list
+      .map(
+        (d) =>
+          '<span class="jrn-dec-chip" onclick="jrnScrollTo(' +
+          d.order +
+          ')" title="' +
+          esc(t('journey.decisionChip')) +
+          '">' +
+          sym('fork') +
+          esc(d.label) +
+          '</span>',
+      )
+      .join('') +
+    '</div>'
+  );
 }
+/* eslint-disable no-unused-vars -- Retained journey/test proposals reference this renderer; deletion needs a documentation migration. */
 /**
  * Lane 2 cell: what the business promises during one segment — ▶ start on the
  * first, the sentence the person is living through, then whichever of the
@@ -1093,26 +1689,37 @@ function jrnDecChipsHtml(list) {
  * @business This part of the journey in words: what the person does, and — one click away — who is allowed in and where it can branch.
  */
 function jrnBizCellHtml(sg, last) {
+  /* eslint-enable no-unused-vars */
   const scr = sg.screen;
   // the flowchart step is the first sentence of the screen's business text — the
   // full description stays on the screen card above the line of visibility
-  const full = (scr && scr.business) || (scr && scr.name) || (S.JOURNEY.entry && (S.JOURNEY.entry.bizDescription || S.JOURNEY.entry.docs)) || '';
+  const full =
+    (scr && scr.business) ||
+    (scr && scr.name) ||
+    (S.JOURNEY.entry && (S.JOURNEY.entry.bizDescription || S.JOURNEY.entry.docs)) ||
+    '';
   const business = currentLens() === 'business';
   // the business lens reads the sentence's plain words; where nothing plain is
   // left, the screen's name stands in — the line the tab's count promises is drawn
-  const text = business ? (jrnFirstSentence(plainWords(full)) || (scr && scr.name) || '') : jrnFirstSentence(full);
+  const text = business ? jrnFirstSentence(plainWords(full)) || (scr && scr.name) || '' : jrnFirstSentence(full);
   const d = jrnBizDecs(sg);
   const tab = jrnBizTab();
   let html = '<div class="jrn-cell jrn-bizcell tab-' + tab + (business ? '' : ' compact') + '"><div class="jrn-flowh">';
   if (sg.index === 0) html += '<span class="jrn-fl-start">▶ ' + esc(t('journey.start')) + '</span>';
   html += '<div class="jrn-flowcol">';
   if (text) {
-    html += '<div class="jrn-fl-step" onclick="jrnSelectSegment(' + sg.index + ')"><span class="jrn-fl-verb">'
-      + esc(sg.index === 0 ? t('journey.verb.first') : t('journey.verb.then')) + '</span>' + esc(text) + '</div>';
+    html +=
+      '<div class="jrn-fl-step" onclick="jrnSelectSegment(' +
+      sg.index +
+      ')"><span class="jrn-fl-verb">' +
+      esc(sg.index === 0 ? t('journey.verb.first') : t('journey.verb.then')) +
+      '</span>' +
+      esc(text) +
+      '</div>';
   }
   // exactly one of the three, and an empty cell always says which kind is absent
   // rather than leaving a reader to wonder whether it was merely not drawn
-  let body = '';
+  let body;
   if (tab === 'gates') {
     body = jrnGateListHtml(sg.gates, 'journey.scopeHere', sg.configChecks);
   } else if (tab === 'decisions') {
@@ -1124,19 +1731,40 @@ function jrnBizCellHtml(sg, last) {
     // what its count claims. (Before the views, those decisions were counted by the
     // fold and drawn nowhere — 27 of the reference app's 42 on the submission flow.)
     const plain = [];
-    const drawn = d.shown.map((x) => {
-      const dia = jrnFlowDecision(S.JOURNEY.steps[x.order], x.order);
-      if (!dia) plain.push(x);
-      return dia;
-    }).join('') + (plain.length ? jrnDecChipsHtml(plain) : '');
+    const drawn =
+      d.shown
+        .map((x) => {
+          const dia = jrnFlowDecision(S.JOURNEY.steps[x.order], x.order);
+          if (!dia) plain.push(x);
+          return dia;
+        })
+        .join('') + (plain.length ? jrnDecChipsHtml(plain) : '');
     body = d.all.length
-      ? '<div class="jrn-gatelist">' + jrnBizGroupHtml('journey.decisions', d.all.length, drawn, d.all.length - d.shown.length, '', 'journey.scopeHere') + '</div>'
+      ? '<div class="jrn-gatelist">' +
+        jrnBizGroupHtml(
+          'journey.decisions',
+          d.all.length,
+          drawn,
+          d.all.length - d.shown.length,
+          '',
+          'journey.scopeHere',
+        ) +
+        '</div>'
       : '';
   } else {
     // the words view draws the screen's sentence (above) and, under it, the
     // decisions somebody described in words — the lines the tab's number counts
     body = d.inWords.length
-      ? '<div class="jrn-gatelist">' + jrnBizGroupHtml('journey.bizGroup.words', d.inWords.length, jrnDecChipsHtml(d.inWords), 0, '', 'journey.scopeHere') + '</div>'
+      ? '<div class="jrn-gatelist">' +
+        jrnBizGroupHtml(
+          'journey.bizGroup.words',
+          d.inWords.length,
+          jrnDecChipsHtml(d.inWords),
+          0,
+          '',
+          'journey.scopeHere',
+        ) +
+        '</div>'
       : '';
   }
   // the gates and decisions views exist to draw their kind, so an empty one names the
@@ -1149,8 +1777,12 @@ function jrnBizCellHtml(sg, last) {
   // also draw as decisions and still count here
   const nw = sg.counted && sg.counted.notInWords;
   const un = nw ? nw.n : (sg.untranslated || 0) + jrnSegDecisions(sg).filter((x) => x.cls === 'guard').length;
-  if (un) html += jrnUntranslatedHtml(un, 'journey.scopeHere', nw || null, { t: [sg.from, sg.to], g: [sg.from, sg.to] });
-  html += '</div>' + (last ? '<span class="jrn-fl-end">■ ' + esc(t('journey.end')) + '</span>' : '<span class="jrn-fl-next">▶</span>') + '</div></div>';
+  if (un)
+    html += jrnUntranslatedHtml(un, 'journey.scopeHere', nw || null, { t: [sg.from, sg.to], g: [sg.from, sg.to] });
+  html +=
+    '</div>' +
+    (last ? '<span class="jrn-fl-end">■ ' + esc(t('journey.end')) + '</span>' : '<span class="jrn-fl-next">▶</span>') +
+    '</div></div>';
   return html;
 }
 /**
@@ -1174,7 +1806,8 @@ export function jrnSegDecisions(sg) {
   if (folds || (Array.isArray(sg.decisions) && sg.decisions.length && sg.decisions[0].stepOrder != null)) {
     return (sg.decisions || []).map((d) => ({ order: d.stepOrder, label: d.label || d.arm || '', cls: d.class }));
   }
-  const out = [], seen = new Set();
+  const out = [],
+    seen = new Set();
   for (let i = sg.from; i <= sg.to; i++) {
     const st = S.JOURNEY.steps[i];
     const conds = ((st && st.conditions) || []).filter((c) => c && c.requires);
@@ -1199,7 +1832,8 @@ function jrnMarkGlyph(m, n) {
 /** The plain text a marker shows — one source for the drawn chip and for the column measurement.
  * @group Journey view */
 export function jrnMarkerText(m) {
-  const s = S.JOURNEY.steps[m.stepOrder] || {}, n = s.node || {};
+  const s = S.JOURNEY.steps[m.stepOrder] || {},
+    n = s.node || {};
   const lens = currentLens();
   // one written call with several implementations behind it: the call as the source
   // writes it, and how many could run — never one implementation's name (blocker 3)
@@ -1223,7 +1857,8 @@ export function jrnMarkerText(m) {
   // wrote. Never a humanized guess, and the same words MCP prints, so the two
   // surfaces cannot name one marker differently.
   const title = jrnMarkerTitle(m);
-  if (lens === 'business') return plainWords(title) || plainWords(n.bizLabel) || humanize(String(n.name || m.name || ''));
+  if (lens === 'business')
+    return plainWords(title) || plainWords(n.bizLabel) || humanize(String(n.name || m.name || ''));
   // hybrid = the identifier, plus a NAME beside it — never a guess (§1.4), and
   // never a paragraph: a band column is one chip wide, so a sentence per chip
   // buys readable words with a row three times as tall. The fold says which of
@@ -1232,7 +1867,7 @@ export function jrnMarkerText(m) {
   // documentation sentence stays in the tooltip, the panel and the business
   // register, where it has room.
   const short = title && title !== name && (m.titleFrom === 'label' || m.titleFrom === 'route') ? title : '';
-  const label = short || ((n.bizLabel && n.bizLabel !== name) ? n.bizLabel : '');
+  const label = short || (n.bizLabel && n.bizLabel !== name ? n.bizLabel : '');
   return label ? name + ' · ' + unTick(label) : name;
 }
 /**
@@ -1242,22 +1877,35 @@ export function jrnMarkerText(m) {
  * second rule in the viewer is how two surfaces start disagreeing.
  * @group Journey view
  */
-export function jrnMarkerTitle(m) { return String((m && m.title) || '').trim(); }
+export function jrnMarkerTitle(m) {
+  return String((m && m.title) || '').trim();
+}
 /** A call in the business lens's words: its authored label, else the summary its
  * contract gives it, else its route said the way humanize() says it — never the
  * verb, the operationId or the path.
  * @group Journey view */
 export function jrnCallWords(m, n) {
   const c = (n && n.contract) || {};
-  return plainWords(n && n.bizLabel) || plainWords(jrnMarkerTitle(m)) || plainWords(c.summary)
-    || humanize(String((n && n.name) || m.name || ''));
+  return (
+    plainWords(n && n.bizLabel) ||
+    plainWords(jrnMarkerTitle(m)) ||
+    plainWords(c.summary) ||
+    humanize(String((n && n.name) || m.name || ''))
+  );
 }
 /** Every candidate of a run-time choice, and the sentence that refuses to pick one — as tooltip text.
  * @group Journey view */
 export function jrnChoiceTip(c) {
-  return c.label + ' · ' + t('journey.oneOf').replace('{n}', c.candidates.length)
-    + ' — ' + t('journey.oneOf.unknown') + '\n' + c.candidates.map((x) => x.name + (x.title ? ' — ' + x.title : '')).join('\n')
-    + (c.setAside && c.setAside.length ? '\n' + t('journey.oneOf.setAside').replace('{list}', c.setAside.join(', ')) : '');
+  return (
+    c.label +
+    ' · ' +
+    t('journey.oneOf').replace('{n}', c.candidates.length) +
+    ' — ' +
+    t('journey.oneOf.unknown') +
+    '\n' +
+    c.candidates.map((x) => x.name + (x.title ? ' — ' + x.title : '')).join('\n') +
+    (c.setAside && c.setAside.length ? '\n' + t('journey.oneOf.setAside').replace('{list}', c.setAside.join(', ')) : '')
+  );
 }
 /**
  * The run-time choice behind one call, opened: where the call is written, the
@@ -1276,23 +1924,64 @@ export function jrnChoiceHtml(c) {
   const row = (x) => {
     const n = (S.JOURNEY.steps[x.stepOrder] || {}).node || null;
     const loc = n && n.loc && !biz ? vsl(n.loc.repo || (n.id || '').split('::')[0], n.loc.path, n.loc.line) : '';
-    const head = biz ? (x.title || x.words || x.name) : x.name;
+    const head = biz ? x.title || x.words || x.name : x.name;
     return '<li><b>' + esc(head) + '</b>' + loc + (x.title && !biz ? '<i>' + esc(x.title) + '</i>' : '') + '</li>';
   };
-  const at = c.at && !biz ? '<span class="at">' + esc(c.at.name + ' · ' + c.at.path + ':' + c.at.line) + vsl((c.at.nodeId || '').split('::')[0], c.at.path, c.at.line) + '</span>' : '';
-  return '<div class="jrn-oneof">'
-    + '<span class="hd">' + sym('oneof') + '<b>' + esc(biz ? c.words : c.label) + '</b>'
-    + '<span class="n" title="' + esc(def('journey.oneOf') || '') + '">'
-    + esc(biz ? t('journey.biz.oneOf').replace('{n}', c.candidates.length) : t('journey.oneOf').replace('{n}', c.candidates.length)) + '</span>'
-    + (c.iface && !biz ? '<span class="via" title="' + esc(def('journey.oneOf.through') || '') + '">' + esc(t('journey.oneOf.through').replace('{iface}', c.iface)) + '</span>' : '')
-    + '</span>'
-    + at
-    + '<span class="why">' + esc(t('journey.oneOf.unknown')) + '</span>'
-    + '<span class="hud-label">' + esc(t('journey.oneOf.candidates')) + '</span>'
-    + '<ul>' + c.candidates.map(row).join('') + '</ul>'
-    + (!biz && c.setAside && c.setAside.length ? '<span class="aside">' + esc(t('journey.oneOf.setAside').replace('{list}', c.setAside.join(', '))) + '</span>' : '')
-    + (!biz && c.technique ? '<span class="how">' + esc(t('journey.oneOf.how').replace('{technique}', c.technique).replace('{confidence}', c.confidence || '')) + '</span>' : '')
-    + '</div>';
+  const at =
+    c.at && !biz
+      ? '<span class="at">' +
+        esc(c.at.name + ' · ' + c.at.path + ':' + c.at.line) +
+        vsl((c.at.nodeId || '').split('::')[0], c.at.path, c.at.line) +
+        '</span>'
+      : '';
+  return (
+    '<div class="jrn-oneof">' +
+    '<span class="hd">' +
+    sym('oneof') +
+    '<b>' +
+    esc(biz ? c.words : c.label) +
+    '</b>' +
+    '<span class="n" title="' +
+    esc(def('journey.oneOf') || '') +
+    '">' +
+    esc(
+      biz
+        ? t('journey.biz.oneOf').replace('{n}', c.candidates.length)
+        : t('journey.oneOf').replace('{n}', c.candidates.length),
+    ) +
+    '</span>' +
+    (c.iface && !biz
+      ? '<span class="via" title="' +
+        esc(def('journey.oneOf.through') || '') +
+        '">' +
+        esc(t('journey.oneOf.through').replace('{iface}', c.iface)) +
+        '</span>'
+      : '') +
+    '</span>' +
+    at +
+    '<span class="why">' +
+    esc(t('journey.oneOf.unknown')) +
+    '</span>' +
+    '<span class="hud-label">' +
+    esc(t('journey.oneOf.candidates')) +
+    '</span>' +
+    '<ul>' +
+    c.candidates.map(row).join('') +
+    '</ul>' +
+    (!biz && c.setAside && c.setAside.length
+      ? '<span class="aside">' + esc(t('journey.oneOf.setAside').replace('{list}', c.setAside.join(', '))) + '</span>'
+      : '') +
+    (!biz && c.technique
+      ? '<span class="how">' +
+        esc(
+          t('journey.oneOf.how')
+            .replace('{technique}', c.technique)
+            .replace('{confidence}', c.confidence || ''),
+        ) +
+        '</span>'
+      : '') +
+    '</div>'
+  );
 }
 /**
  * One marker on a system row: method + operationId for a call, the name for a
@@ -1302,27 +1991,58 @@ export function jrnChoiceHtml(c) {
  * @group Journey view
  */
 export function jrnMarkerHtml(m) {
-  const s = S.JOURNEY.steps[m.stepOrder] || {}, n = s.node || {};
+  const s = S.JOURNEY.steps[m.stepOrder] || {},
+    n = s.node || {};
   const gk = jrnMarkGlyph(m, n);
   const lens = currentLens();
   let label;
-  if (m.kind === 'call' && m.method && lens !== 'business') label = '<b>' + esc(m.method) + '</b> ' + esc(jrnMarkerText(m).slice(m.method.length + 1));
+  if (m.kind === 'call' && m.method && lens !== 'business')
+    label = '<b>' + esc(m.method) + '</b> ' + esc(jrnMarkerText(m).slice(m.method.length + 1));
   else label = esc(jrnMarkerText(m));
   // which side of a transaction boundary this part is written on: the mark is quiet (a rule
   // down its edge) and the words are the catalog's, so a chip cannot say it in its own way
   const txKey = m.tx ? (lens === 'business' ? 'journey.biz.tx.' + m.tx : 'journey.tx.' + m.tx) : '';
   // the chip clips to its column, so the tooltip carries both halves in full:
   // the identifier it is, and the words it was given
-  const tip = m.choice ? jrnChoiceTip(m.choice)
+  const tip = m.choice
+    ? jrnChoiceTip(m.choice)
     : [m.name, jrnMarkerTitle(m) || m.business].filter((x, i, a) => x && a.indexOf(x) === i).join(' · ');
-  const title = tip + (m.path ? ' · ' + m.method + ' ' + m.path : '')
-    + (m.planned ? ' · ' + t('journey.plannedNote') : '') + (m.repeat ? ' · ' + t('journey.repeated') : '')
-    + (txKey ? ' · ' + t(txKey) : '');
-  return '<span class="jrn-mk ' + (m.choice ? 'oneof ' : '') + gk.c + (m.tx ? ' tx-' + m.tx : '') + (m.planned ? ' planned' : '') + (m.repeat ? ' rep' : '') + (m.helper ? ' helper' : '')
-    + '" data-order="' + m.stepOrder + '" tabindex="0" onclick="event.stopPropagation();jrnSelect(' + m.stepOrder + ')" title="' + esc(title) + '">'
-    + sym(m.choice ? 'oneof' : gk.g) + '<span class="lb">' + label + '</span>' + (m.op ? '<i>' + esc(t('journey.op.' + m.op)) + '</i>' : '') + (m.repeat ? '<span class="rep">↺</span>' : '')
-    + (m.cut ? '<span class="cut" title="' + esc(def('journey.cutPoints')) + '">▸ ' + esc(t('journey.notFollowed').replace('{n}', m.cut)) + '</span>' : '')
-    + '</span>';
+  const title =
+    tip +
+    (m.path ? ' · ' + m.method + ' ' + m.path : '') +
+    (m.planned ? ' · ' + t('journey.plannedNote') : '') +
+    (m.repeat ? ' · ' + t('journey.repeated') : '') +
+    (txKey ? ' · ' + t(txKey) : '');
+  return (
+    '<span class="jrn-mk ' +
+    (m.choice ? 'oneof ' : '') +
+    gk.c +
+    (m.tx ? ' tx-' + m.tx : '') +
+    (m.planned ? ' planned' : '') +
+    (m.repeat ? ' rep' : '') +
+    (m.helper ? ' helper' : '') +
+    '" data-order="' +
+    m.stepOrder +
+    '" tabindex="0" onclick="event.stopPropagation();jrnSelect(' +
+    m.stepOrder +
+    ')" title="' +
+    esc(title) +
+    '">' +
+    sym(m.choice ? 'oneof' : gk.g) +
+    '<span class="lb">' +
+    label +
+    '</span>' +
+    (m.op ? '<i>' + esc(t('journey.op.' + m.op)) + '</i>' : '') +
+    (m.repeat ? '<span class="rep">↺</span>' : '') +
+    (m.cut
+      ? '<span class="cut" title="' +
+        esc(def('journey.cutPoints')) +
+        '">▸ ' +
+        esc(t('journey.notFollowed').replace('{n}', m.cut)) +
+        '</span>'
+      : '') +
+    '</span>'
+  );
 }
 /**
  * The seam card: one call drawn as the line where the UX meets the API —
@@ -1334,57 +2054,134 @@ export function jrnMarkerHtml(m) {
  * @business Shows each API call as the promise it is, with the screen that asks and the service that answers.
  */
 export function jrnSeamCardHtml(m) {
-  const s = S.JOURNEY.steps[m.stepOrder] || {}, n = s.node || {};
+  const s = S.JOURNEY.steps[m.stepOrder] || {},
+    n = s.node || {};
   const c = n.contract || {};
   const lens = currentLens();
   const opId = c.spec && c.spec.operationId;
   const business = lens === 'business';
-  const name = business ? jrnCallWords(m, n) : (opId || m.path || m.name);
-  const summary0 = c.summary && c.summary !== name ? c.summary : (n.bizLabel && n.bizLabel !== name ? n.bizLabel : '');
+  const name = business ? jrnCallWords(m, n) : opId || m.path || m.name;
+  const summary0 = c.summary && c.summary !== name ? c.summary : n.bizLabel && n.bizLabel !== name ? n.bizLabel : '';
   const summary = business ? (plainWords(summary0) !== name ? plainWords(summary0) : '') : summary0;
-  const statusKey = c.status === 'both' ? 'apis.status.both' : c.status === 'spec-only' ? 'apis.status.specOnly'
-    : c.status === 'declared' ? 'apis.status.declared' : c.status === 'code-only' ? 'apis.status.codeOnly' : 'apis.status.implemented';
-  const statusCls = c.status === 'both' ? ' ok' : c.status === 'code-only' ? ' warn' : c.status === 'spec-only' ? ' stub' : '';
-  const end = (e, cls, word) => e
-    // the path keeps its two ends and breaks at `/`; its tip carries it whole (nothing clips at the column's edge)
-    ? '<span class="' + cls + '">' + esc(word) + ' ' + pathHtml(e.path + ':' + e.line) + vsl(e.repo, e.path, e.line) + '</span>'
-    : '<span class="' + cls + ' miss">' + esc(word) + ': ' + esc(t('journey.seam.notBuilt')) + '</span>';
-  return '<span class="jrn-seam' + (m.planned ? ' planned' : '') + (m.repeat ? ' rep' : '') + '" data-order="' + m.stepOrder + '" tabindex="0"'
-    + ' onclick="jrnSelect(' + m.stepOrder + ')" title="' + esc((m.method || '') + ' ' + (m.path || '')) + '">'
-    + '<span class="l1">' + sym('api') + (m.method && !business ? '<b>' + esc(m.method) + '</b>' : '') + '<span class="nm">' + esc(name) + '</span>'
+  const statusKey =
+    c.status === 'both'
+      ? 'apis.status.both'
+      : c.status === 'spec-only'
+        ? 'apis.status.specOnly'
+        : c.status === 'declared'
+          ? 'apis.status.declared'
+          : c.status === 'code-only'
+            ? 'apis.status.codeOnly'
+            : 'apis.status.implemented';
+  const statusCls =
+    c.status === 'both' ? ' ok' : c.status === 'code-only' ? ' warn' : c.status === 'spec-only' ? ' stub' : '';
+  const end = (e, cls, word) =>
+    e
+      ? // the path keeps its two ends and breaks at `/`; its tip carries it whole (nothing clips at the column's edge)
+        '<span class="' +
+        cls +
+        '">' +
+        esc(word) +
+        ' ' +
+        pathHtml(e.path + ':' + e.line) +
+        vsl(e.repo, e.path, e.line) +
+        '</span>'
+      : '<span class="' + cls + ' miss">' + esc(word) + ': ' + esc(t('journey.seam.notBuilt')) + '</span>';
+  return (
+    '<span class="jrn-seam' +
+    (m.planned ? ' planned' : '') +
+    (m.repeat ? ' rep' : '') +
+    '" data-order="' +
+    m.stepOrder +
+    '" tabindex="0"' +
+    ' onclick="jrnSelect(' +
+    m.stepOrder +
+    ')" title="' +
+    esc((m.method || '') + ' ' + (m.path || '')) +
+    '">' +
+    '<span class="l1">' +
+    sym('api') +
+    (m.method && !business ? '<b>' + esc(m.method) + '</b>' : '') +
+    '<span class="nm">' +
+    esc(name) +
+    '</span>' +
     // the code names no method and several endpoints share the address: the read one is shown, and says so
-    + (m.methodAssumed ? '<span class="api-chip warn"' + tipAttrs({ key: 'journey.seam.methodAssumed', noFocus: true }) + '>' + esc(t('journey.seam.methodAssumed')) + '</span>' : '')
-    + (summary ? '<span class="sum"' + tipAttrs({ text: summary, noFocus: true }) + '>' + proseHtml(summary) + '</span>' : '')
+    (m.methodAssumed
+      ? '<span class="api-chip warn"' +
+        tipAttrs({ key: 'journey.seam.methodAssumed', noFocus: true }) +
+        '>' +
+        esc(t('journey.seam.methodAssumed')) +
+        '</span>'
+      : '') +
+    (summary
+      ? '<span class="sum"' + tipAttrs({ text: summary, noFocus: true }) + '>' + proseHtml(summary) + '</span>'
+      : '') +
     // whether the spec and the code agree is a developer's question
-    + (business ? '' : '<span class="api-chip' + statusCls + '">' + esc(t(statusKey)) + '</span>')
-    + (m.repeat ? '<span class="rep">↺</span>' : '') + '</span>'
-    + '<span class="l2">' + end(m.caller, 'ux', '← ' + t('journey.seam.from')) + end(m.handler, 'sv', '→ ' + t('journey.seam.handled')) + '</span></span>';
+    (business ? '' : '<span class="api-chip' + statusCls + '">' + esc(t(statusKey)) + '</span>') +
+    (m.repeat ? '<span class="rep">↺</span>' : '') +
+    '</span>' +
+    '<span class="l2">' +
+    end(m.caller, 'ux', '← ' + t('journey.seam.from')) +
+    end(m.handler, 'sv', '→ ' + t('journey.seam.handled')) +
+    '</span></span>'
+  );
 }
 /** The component a moment's action lives in: a span header, or the continuation line when it stayed open.
  * @group Journey view */
 function jrnCompSpanHtml(mo) {
   if (!mo.component) return '';
   const open = mo.component.stepOrder < mo.from;
-  return '<span class="jrn-compspan' + (open ? ' cont' : '') + '" onclick="jrnScrollTo(' + mo.component.stepOrder + ')" title="' + esc(mo.component.name) + '">'
-    + sym('screen') + '<span class="nm">' + esc(mo.component.label) + (open ? ' · ' + esc(t('journey.stillOpen')) : '') + '</span>'
-    + jrnCompStoryHtml(mo.component.id) + '</span>';
+  return (
+    '<span class="jrn-compspan' +
+    (open ? ' cont' : '') +
+    '" onclick="jrnScrollTo(' +
+    mo.component.stepOrder +
+    ')" title="' +
+    esc(mo.component.name) +
+    '">' +
+    sym('screen') +
+    '<span class="nm">' +
+    esc(mo.component.label) +
+    (open ? ' · ' + esc(t('journey.stillOpen')) : '') +
+    '</span>' +
+    jrnCompStoryHtml(mo.component.id) +
+    '</span>'
+  );
 }
 /** A story glyph on a component span when the component can be seen on its own — opens the large story view.
  * @group Journey view */
 function jrnCompStoryHtml(id) {
   const c = id && S.BYID[id];
   if (!c || !(c.stories || []).length) return '';
-  return '<button class="sb-compspan" onclick="event.stopPropagation();openStoryLightbox(' + jsArg(id) + ')" title="' + esc(t('stories.openLarge') + ' · ' + t('stories.title')) + '" aria-label="' + esc(t('stories.openLarge') + ' · ' + t('stories.title')) + '">' + sym('story') + '</button>';
+  return (
+    '<button class="sb-compspan" onclick="event.stopPropagation();openStoryLightbox(' +
+    jsArg(id) +
+    ')" title="' +
+    esc(t('stories.openLarge') + ' · ' + t('stories.title')) +
+    '" aria-label="' +
+    esc(t('stories.openLarge') + ' · ' + t('stories.title')) +
+    '">' +
+    sym('story') +
+    '</button>'
+  );
 }
 /** Label + sub-line for a system row by its kind — a repo row names the side of the seam it is.
  * @group Journey view */
 export function jrnRowLabel(r) {
-  if (r.kind === 'api') return { label: t('journey.row.api') + ' · ' + r.label, sub: r.planned ? t('journey.rowPlanned') : t('journey.rowSub.api') };
+  if (r.kind === 'api')
+    return {
+      label: t('journey.row.api') + ' · ' + r.label,
+      sub: r.planned ? t('journey.rowPlanned') : t('journey.rowSub.api'),
+    };
   if (r.kind === 'repo') {
     const side = r.side === 'ux' ? 'ux' : 'server';
-    return { label: t('journey.row.' + side), sub: r.planned ? t('journey.rowPlanned') : r.label + ' · ' + t('journey.rowSub.' + side) };
+    return {
+      label: t('journey.row.' + side),
+      sub: r.planned ? t('journey.rowPlanned') : r.label + ' · ' + t('journey.rowSub.' + side),
+    };
   }
-  if (r.kind === 'external') return { label: t('journey.row.external') + ' · ' + r.label, sub: t('journey.rowSub.external') };
+  if (r.kind === 'external')
+    return { label: t('journey.row.external') + ' · ' + r.label, sub: t('journey.rowSub.external') };
   return { label: t('journey.row.' + r.kind), sub: t('journey.rowSub.' + r.kind) };
 }
 // ── the view axis: lens × view × band (journey-views-pass-2026-09 §2.1) ──
@@ -1400,7 +2197,11 @@ export function jrnRowLabel(r) {
  */
 export function jrnDock() {
   if (!S.jrnDock) {
-    try { S.jrnDock = localStorage.getItem('fs-jrn-dock'); } catch (e) { S.jrnDock = null; }
+    try {
+      S.jrnDock = localStorage.getItem('fs-jrn-dock');
+    } catch (e) {
+      S.jrnDock = null;
+    }
     if (!/^(inline|bottom|right)$/.test(S.jrnDock || '')) S.jrnDock = 'right';
   }
   return S.jrnDock;
@@ -1413,7 +2214,11 @@ export function jrnDock() {
  */
 export function jrnSetDock(v) {
   S.jrnDock = /^(inline|bottom|right)$/.test(v) ? v : 'right';
-  try { localStorage.setItem('fs-jrn-dock', S.jrnDock); } catch (e) { /* private mode: the pane is just not remembered */ }
+  try {
+    localStorage.setItem('fs-jrn-dock', S.jrnDock);
+  } catch (e) {
+    /* private mode: the pane is just not remembered */
+  }
   jrnApplyDock();
   if (S.JOURNEY && S.JRN_MARK && !S.JRN_DRILL) jrnSelect(S.journeyActive, true);
 }
@@ -1451,13 +2256,20 @@ function jrnDockGrip(e) {
   let size = from;
   const move = (ev) => {
     size = Math.max(160, Math.min(max, from + (start - (d === 'bottom' ? ev.clientY : ev.clientX))));
-    if (d === 'bottom') pane.style.height = size + 'px'; else pane.style.width = size + 'px';
+    if (d === 'bottom') pane.style.height = size + 'px';
+    else pane.style.width = size + 'px';
   };
   const up = () => {
-    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
-    try { localStorage.setItem('fs-jrn-dock-' + d, String(Math.round(size))); } catch (err) { /* not remembered */ }
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    try {
+      localStorage.setItem('fs-jrn-dock-' + d, String(Math.round(size)));
+    } catch (err) {
+      /* not remembered */
+    }
   };
-  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
 }
 /** Fill the pinned pane with the selected marker's expansion, or with the hint when nothing is selected.
  * @group Journey view */
@@ -1466,8 +2278,12 @@ function jrnDockSize() {
   if (!pane) return;
   const d = S.JRN_DRILL ? 'inline' : jrnDock();
   const open = !pane.classList.contains('empty');
-  let size = 0;
-  try { size = +localStorage.getItem('fs-jrn-dock-' + d) || 0; } catch (e) { size = 0; }
+  let size;
+  try {
+    size = +localStorage.getItem('fs-jrn-dock-' + d) || 0;
+  } catch (e) {
+    size = 0;
+  }
   pane.style.height = d === 'bottom' && size && open ? size + 'px' : '';
   pane.style.width = d === 'right' && size && open ? size + 'px' : '';
 }
@@ -1479,21 +2295,28 @@ function jrnDockSize() {
 function jrnDockRender(i) {
   const pane = document.getElementById('jrn-dock');
   if (!pane) return;
-  const grip = '<div class="jrn-dock-grip" onpointerdown="jrnDockGrip(event)" title="' + esc(t('journey.dockResize')) + '"></div>';
+  const grip =
+    '<div class="jrn-dock-grip" onpointerdown="jrnDockGrip(event)" title="' + esc(t('journey.dockResize')) + '"></div>';
   const open = i >= 0 && S.JRN_MARK && S.JRN_MARK[i];
   // an empty pane holds no code, so it takes no room: it collapses to its one-line
   // hint until a marker is chosen. Held open it cost the bottom 40% of the journey —
   // and with it the records, messages, third-party and Verified-by rows.
   pane.classList.toggle('empty', !open);
-  pane.innerHTML = grip + '<div class="jrn-dock-body">'
-    + (open ? jrnExpHtml(i) : '<div class="jrn-dock-hint">' + esc(t('journey.expandHint')) + '</div>') + '</div>';
+  pane.innerHTML =
+    grip +
+    '<div class="jrn-dock-body">' +
+    (open ? jrnExpHtml(i) : '<div class="jrn-dock-hint">' + esc(t('journey.expandHint')) + '</div>') +
+    '</div>';
   jrnDockSize();
 }
 
 // ── the ladder (board F): one segment on its side ───────────────
 /** Short column label for a system in the ladder header.
  * @group Journey view */
-function jrnLadderColLabel(r) { const lb = jrnRowLabel(r); return lb.label; }
+function jrnLadderColLabel(r) {
+  const lb = jrnRowLabel(r);
+  return lb.label;
+}
 // The ladder's widths. A column a screen uses is never narrower than twice the
 // share it had when every system drew a full lane (172 px), and grows to what
 // it holds; a column it skips between two it uses keeps its place, narrow; the
@@ -1510,18 +2333,33 @@ const { TIME: JRN_LAD_TIME, SKIP: JRN_LAD_SKIP, END: JRN_LAD_END } = LADDER;
  * @business Works out which parts of the system one screen actually uses, so the ones it never reaches fold into one column that says so.
  */
 function jrnLadderModel(sum, sg) {
-  const lm = ladderModel(sum, sg, { steps: S.JOURNEY.steps, text: jrnMarkerText, word: (key) => jrnAbsentWord(sg, null, key) });
+  const lm = ladderModel(sum, sg, {
+    steps: S.JOURNEY.steps,
+    text: jrnMarkerText,
+    word: (key) => jrnAbsentWord(sg, null, key),
+  });
   // the model's cells are plain descriptors; the overlay draws them as it always has
   // a path keeps its two ends and its tip carries it whole; a name ellipsises inside its column (the marker's title)
-  const cell = (c) => (c.type === 'caller' ? '<span class="go">' + pathHtml(c.at, { max: 34 }) + ' →</span>'
-    : c.type === 'seam' ? jrnSeamCardHtml(c.m) + '<span class="go"> →</span>'
-    : c.type === 'out' ? '<span class="go out">→</span>'
-    : c.type === 'marker' ? jrnMarkerHtml(c.m)
-    : '<span class="ind"></span>'.repeat(c.tier) + jrnMarkerHtml(c.m) + (c.loc ? '<span class="back">' + pathHtml(c.loc, { max: 34 }) + '</span>' : ''));
+  const cell = (c) =>
+    c.type === 'caller'
+      ? '<span class="go">' + pathHtml(c.at, { max: 34 }) + ' →</span>'
+      : c.type === 'seam'
+        ? jrnSeamCardHtml(c.m) + '<span class="go"> →</span>'
+        : c.type === 'out'
+          ? '<span class="go out">→</span>'
+          : c.type === 'marker'
+            ? jrnMarkerHtml(c.m)
+            : '<span class="ind"></span>'.repeat(c.tier) +
+              jrnMarkerHtml(c.m) +
+              (c.loc ? '<span class="back">' + pathHtml(c.loc, { max: 34 }) + '</span>' : '');
   lm.lines = lm.lines.map((l) => {
     const cells = {};
-    Object.keys(l.cells).forEach((k) => { cells[k] = cell(l.cells[k]); });
-    const time = l.time.mo ? '<span class="o">' + jrnMomOrdinal(sg, l.time.mo) + ' · ' + esc(jrnMoLabel(l.time.mo)) + '</span>' : String(l.time.n);
+    Object.keys(l.cells).forEach((k) => {
+      cells[k] = cell(l.cells[k]);
+    });
+    const time = l.time.mo
+      ? '<span class="o">' + jrnMomOrdinal(sg, l.time.mo) + ' · ' + esc(jrnMoLabel(l.time.mo)) + '</span>'
+      : String(l.time.n);
     return { m: l.m, time, cells };
   });
   return lm;
@@ -1531,13 +2369,21 @@ function jrnLadderModel(sum, sg) {
 function jrnLadderTemplate(lm) {
   if (lm.full) return 'grid-template-columns:' + JRN_LAD_TIME + 'px repeat(' + lm.cols.length + ',minmax(0,1fr))';
   const n = Math.max(1, Math.min(lm.lines.length, JRN_LADDER_LINES));
-  return 'grid-template-rows:repeat(' + (n + 1) + ',auto) minmax(0,1fr);grid-template-columns:' + JRN_LAD_TIME + 'px '
-    + lm.cols.map((c, i) => (c.state === 'skip' ? JRN_LAD_SKIP + 'px' : 'minmax(0,' + lm.widths[i] + 'fr)')).join(' ')
-    + (lm.end.length ? ' ' + JRN_LAD_END + 'px' : '');
+  return (
+    'grid-template-rows:repeat(' +
+    (n + 1) +
+    ',auto) minmax(0,1fr);grid-template-columns:' +
+    JRN_LAD_TIME +
+    'px ' +
+    lm.cols.map((c, i) => (c.state === 'skip' ? JRN_LAD_SKIP + 'px' : 'minmax(0,' + lm.widths[i] + 'fr)')).join(' ') +
+    (lm.end.length ? ' ' + JRN_LAD_END + 'px' : '')
+  );
 }
 /** The absence word for a system the ladder does not draw as a column, in the lens's words.
  * @group Journey view */
-function jrnLadderAbsentWord(word) { return jrnAbsentText(word); }
+function jrnLadderAbsentWord(word) {
+  return jrnAbsentText(word);
+}
 /**
  * One ladder line: the time cell, then one cell per drawn column. A column the
  * screen does not use holds one cell that spans the lines on show — its words
@@ -1547,9 +2393,20 @@ function jrnLadderAbsentWord(word) { return jrnAbsentText(word); }
  */
 function jrnLadderLine(lm, time, cells, cls, i, span) {
   const spanned = (html) => (i === 0 ? html : i < span.n ? '' : span.pad);
-  return '<div class="jrn-lline' + (cls ? ' ' + cls : '') + '"><div class="t">' + time + '</div>'
-    + lm.cols.map((c) => (c.state === 'skip' ? spanned(span.skip[c.r.key]) : '<div class="lc">' + (cells[c.r.key] || '') + '</div>')).join('')
-    + (lm.end.length ? spanned(span.end) : '') + '</div>';
+  return (
+    '<div class="jrn-lline' +
+    (cls ? ' ' + cls : '') +
+    '"><div class="t">' +
+    time +
+    '</div>' +
+    lm.cols
+      .map((c) =>
+        c.state === 'skip' ? spanned(span.skip[c.r.key]) : '<div class="lc">' + (cells[c.r.key] || '') + '</div>',
+      )
+      .join('') +
+    (lm.end.length ? spanned(span.end) : '') +
+    '</div>'
+  );
 }
 /**
  * One segment as a ladder: the systems it uses as columns, time running down,
@@ -1568,40 +2425,112 @@ export function jrnLadderCellHtml(sum, sg) {
   const biz = currentLens() === 'business';
   const endKey = biz ? 'journey.biz.ladder.end' : 'journey.ladder.end';
   const colTip = (key) => tipAttrs({ id: 'jrnLadderCol', args: { seg: sg.index, key } });
-  const head = '<div class="jrn-lline jrn-lhead"><div class="t">' + esc(t('journey.ladder.time')) + ' ↓</div>'
-    + lm.cols.map((c) => {
-      const r = c.r, k = ' k-' + esc(r.kind) + (r.side ? ' side-' + esc(r.side) : '');
-      if (c.state === 'skip') {
-        return '<div class="lc skip' + k + '"' + colTip(r.key) + ' aria-label="' + esc(jrnLadderColLabel(r) + ' · ' + jrnLadderAbsentWord(lm.word(r.key))) + '">'
-          + sym('absent') + '</div>';
-      }
-      return '<div class="lc' + k + '">' + esc(jrnLadderColLabel(r)) + '</div>';
-    }).join('')
-    + (lm.end.length ? '<div class="lc lend"' + colTip('end') + '>' + esc(t(endKey)) + '</div>' : '') + '</div>';
+  const head =
+    '<div class="jrn-lline jrn-lhead"><div class="t">' +
+    esc(t('journey.ladder.time')) +
+    ' ↓</div>' +
+    lm.cols
+      .map((c) => {
+        const r = c.r,
+          k = ' k-' + esc(r.kind) + (r.side ? ' side-' + esc(r.side) : '');
+        if (c.state === 'skip') {
+          return (
+            '<div class="lc skip' +
+            k +
+            '"' +
+            colTip(r.key) +
+            ' aria-label="' +
+            esc(jrnLadderColLabel(r) + ' · ' + jrnLadderAbsentWord(lm.word(r.key))) +
+            '">' +
+            sym('absent') +
+            '</div>'
+          );
+        }
+        return '<div class="lc' + k + '">' + esc(jrnLadderColLabel(r)) + '</div>';
+      })
+      .join('') +
+    (lm.end.length ? '<div class="lc lend"' + colTip('end') + '>' + esc(t(endKey)) + '</div>' : '') +
+    '</div>';
   const n = Math.max(1, Math.min(lm.lines.length, JRN_LADDER_LINES));
   // the spans reach one row further, into a filler row that is the grid's only
   // flexible one: an end list taller than the lines grows that row, never the lines
   const rows = ' style="grid-row:span ' + (n + 1) + '"';
   const skip = {};
   lm.cols.forEach((c) => {
-    if (c.state === 'skip') skip[c.r.key] = '<div class="lc skip"' + rows + ' data-sys="' + esc(c.r.key) + '" data-absent="' + lm.word(c.r.key) + '"><span class="v">' + esc(jrnLadderColLabel(c.r) + ' · ' + jrnLadderAbsentWord(lm.word(c.r.key))) + '</span></div>';
+    if (c.state === 'skip')
+      skip[c.r.key] =
+        '<div class="lc skip"' +
+        rows +
+        ' data-sys="' +
+        esc(c.r.key) +
+        '" data-absent="' +
+        lm.word(c.r.key) +
+        '"><span class="v">' +
+        esc(jrnLadderColLabel(c.r) + ' · ' + jrnLadderAbsentWord(lm.word(c.r.key))) +
+        '</span></div>';
   });
-  const end = '<div class="lc lend-list"' + rows + '>'
-    + lm.end.map((r) => '<span class="le" data-sys="' + esc(r.key) + '" data-absent="' + lm.word(r.key) + '">' + sym('absent') + '<span class="le-n">' + esc(jrnLadderColLabel(r)) + '</span>'
-      + '<span class="le-w">' + esc(jrnLadderAbsentWord(lm.word(r.key))) + '</span></span>').join('') + '</div>';
+  const end =
+    '<div class="lc lend-list"' +
+    rows +
+    '>' +
+    lm.end
+      .map(
+        (r) =>
+          '<span class="le" data-sys="' +
+          esc(r.key) +
+          '" data-absent="' +
+          lm.word(r.key) +
+          '">' +
+          sym('absent') +
+          '<span class="le-n">' +
+          esc(jrnLadderColLabel(r)) +
+          '</span>' +
+          '<span class="le-w">' +
+          esc(jrnLadderAbsentWord(lm.word(r.key))) +
+          '</span></span>',
+      )
+      .join('') +
+    '</div>';
   const span = { n, skip, end, pad: '<div class="lc lpad"></div>' };
-  const lines = lm.lines.map((l, i) => jrnLadderLine(lm, l.time, l.cells, i >= JRN_LADDER_LINES ? 'over s' + sg.index : '', i, span));
+  const lines = lm.lines.map((l, i) =>
+    jrnLadderLine(lm, l.time, l.cells, i >= JRN_LADDER_LINES ? 'over s' + sg.index : '', i, span),
+  );
   // a screen with no line at all still says where it stops
   if (!lines.length && !lm.full) lines.push(jrnLadderLine(lm, '', {}, '', 0, span));
   if (!lm.full) {
-    lines.splice(n, 0, '<div class="jrn-lline lfill"><div class="t"></div>'
-      + lm.cols.map((c) => (c.state === 'used' ? '<div class="lc"></div>' : '')).join('') + '</div>');
+    lines.splice(
+      n,
+      0,
+      '<div class="jrn-lline lfill"><div class="t"></div>' +
+        lm.cols.map((c) => (c.state === 'used' ? '<div class="lc"></div>' : '')).join('') +
+        '</div>',
+    );
   }
   const hidden = Math.max(0, lm.lines.length - JRN_LADDER_LINES);
-  return '<div class="jrn-cell jrn-laddercell' + (lm.full ? '' : ' folded') + '" data-seg="' + sg.index + '" data-used="' + lm.cols.filter((c) => c.state === 'used').length
-    + '" data-end="' + lm.end.length + '"><div class="jrn-ladder" style="' + jrnLadderTemplate(lm) + '">' + head + lines.join('') + '</div>'
-    + (hidden ? '<button class="jrn-lmore" onclick="jrnLadderMore(' + sg.index + ',this)">▾ ' + esc(t('journey.moreSteps').replace('{n}', hidden)) + '</button>' : '')
-    + '</div>';
+  return (
+    '<div class="jrn-cell jrn-laddercell' +
+    (lm.full ? '' : ' folded') +
+    '" data-seg="' +
+    sg.index +
+    '" data-used="' +
+    lm.cols.filter((c) => c.state === 'used').length +
+    '" data-end="' +
+    lm.end.length +
+    '"><div class="jrn-ladder" style="' +
+    jrnLadderTemplate(lm) +
+    '">' +
+    head +
+    lines.join('') +
+    '</div>' +
+    (hidden
+      ? '<button class="jrn-lmore" onclick="jrnLadderMore(' +
+        sg.index +
+        ',this)">▾ ' +
+        esc(t('journey.moreSteps').replace('{n}', hidden)) +
+        '</button>'
+      : '') +
+    '</div>'
+  );
 }
 /**
  * The tip on a ladder column the screen does not use: the end column (what it
@@ -1617,20 +2546,37 @@ function jrnLadderColTip(el, args) {
   const biz = currentLens() === 'business';
   if (args.key === 'end') {
     const k = biz ? 'journey.biz.ladder.end' : 'journey.ladder.end';
-    return '<div class="tip-h">' + esc(t(k)) + '</div><p class="tip-p">' + esc(def(k) || '') + '</p>'
-      + tableTip({ caption: 'journey.ladder.folded', rows: lm.end.map((r) => [jrnLadderColLabel(r), jrnLadderAbsentWord(lm.word(r.key))]) });
+    return (
+      '<div class="tip-h">' +
+      esc(t(k)) +
+      '</div><p class="tip-p">' +
+      esc(def(k) || '') +
+      '</p>' +
+      tableTip({
+        caption: 'journey.ladder.folded',
+        rows: lm.end.map((r) => [jrnLadderColLabel(r), jrnLadderAbsentWord(lm.word(r.key))]),
+      })
+    );
   }
   const r = sum.systems.find((x) => x.key === args.key);
   if (!r) return '';
   const k = biz ? 'journey.biz.ladder.skip' : 'journey.ladder.skip';
-  return '<div class="tip-h">' + esc(jrnLadderColLabel(r) + ' · ' + jrnLadderAbsentWord(lm.word(r.key))) + '</div>'
-    + '<p class="tip-p">' + esc(def(k) || '') + '</p>';
+  return (
+    '<div class="tip-h">' +
+    esc(jrnLadderColLabel(r) + ' · ' + jrnLadderAbsentWord(lm.word(r.key))) +
+    '</div>' +
+    '<p class="tip-p">' +
+    esc(def(k) || '') +
+    '</p>'
+  );
 }
 registerTip('jrnLadderCol', jrnLadderColTip);
 /** Reveal the lines past a ladder's budget.
  * @group Journey view */
 function jrnLadderMore(si, btn) {
-  jrnHostEl().querySelectorAll('.jrn-lline.over.s' + si).forEach((el) => el.classList.remove('over'));
+  jrnHostEl()
+    .querySelectorAll('.jrn-lline.over.s' + si)
+    .forEach((el) => el.classList.remove('over'));
   if (btn) btn.style.display = 'none';
 }
 /**
@@ -1641,7 +2587,9 @@ function jrnLadderMore(si, btn) {
  * choice made here and nowhere else.
  * @group Journey view
  */
-export function jrnMomOrdinal(sg, mo) { return momOrdinal(sg, mo); }
+export function jrnMomOrdinal(sg, mo) {
+  return momOrdinal(sg, mo);
+}
 /**
  * The drill tree of one cell (a system row × a moment): who hangs under whom,
  * from the core's `under`, and which markers are drawn by default — every root
@@ -1659,7 +2607,9 @@ export function jrnMomOrdinal(sg, mo) { return momOrdinal(sg, mo); }
  * @group Journey view
  * @business Groups a step's inner workings under it — the controller, then what it calls, then the details on demand.
  */
-export function jrnCellTree(ms) { return cellTree(ms, jrnHelperTest()); }
+export function jrnCellTree(ms) {
+  return cellTree(ms, jrnHelperTest());
+}
 /** Whether a marker folds as plumbing in the lens on screen: the core's `helper`, and in the business lens a part tagged `plumbing`.
  * @group Journey view */
 export function jrnHelperTest() {
@@ -1679,12 +2629,17 @@ function jrnMarkerTreeHtml(m, tree, parentFold) {
  * @group Journey view */
 export function jrnCellFoldsHtml(m, tree, parentFold) {
   const rep = tree.again ? tree.again(m.stepOrder) : [];
-  return (rep.length ? jrnFoldHtml(rep, tree, parentFold, rep.length === 1 ? 'journey.againOne' : 'journey.again') : '')
-    + jrnFoldHtml(tree.drill(m.stepOrder), tree, parentFold);
+  return (
+    (rep.length ? jrnFoldHtml(rep, tree, parentFold, rep.length === 1 ? 'journey.againOne' : 'journey.again') : '') +
+    jrnFoldHtml(tree.drill(m.stepOrder), tree, parentFold)
+  );
 }
 /** Forget every fold before a layout is drawn (they register while it draws).
  * @group Journey view */
-export function jrnResetFolds() { S.JRN_FOLDS = []; S.JRN_FOLD_OF = {}; }
+export function jrnResetFolds() {
+  S.JRN_FOLDS = [];
+  S.JRN_FOLD_OF = {};
+}
 /**
  * The steps folded under a part: one `▸ n inside` chip (`▸ n helpers` when
  * all of them are plumbing) that opens them in place, each with its own fold
@@ -1701,18 +2656,42 @@ export function jrnFoldHtml(list, tree, parentFold, word) {
   const id = 'jrn-fold-' + S.JRN_FOLDS.length;
   const f = { id, orders: list.map((m) => m.stepOrder), open: false, parent: parentFold || null };
   S.JRN_FOLDS.push(f);
-  f.orders.forEach((o) => { S.JRN_FOLD_OF[o] = f; });
+  f.orders.forEach((o) => {
+    S.JRN_FOLD_OF[o] = f;
+  });
   const helper = jrnHelperTest();
-  const key = word || (list.every(helper) ? (currentLens() === 'business' ? 'journey.biz.helpersFolded' : 'journey.helpersFolded') : 'journey.inside');
+  const key =
+    word ||
+    (list.every(helper)
+      ? currentLens() === 'business'
+        ? 'journey.biz.helpersFolded'
+        : 'journey.helpersFolded'
+      : 'journey.inside');
   // the button opens the fold; its number carries the tip (what is folded, and where)
-  return '<button class="jrn-foldbtn" id="' + id + '-b" onclick="jrnToggleHelpers(\'' + id + '\')">'
-    + '▸ ' + esc(jrnCountWord(key, list.length)).replace(String(list.length), () => jrnNumHtml(list.length, key, 'count.scope.node', { num: true, noFocus: true })) + '</button>'
-    + '<span class="jrn-fold" id="' + id + '">' + list.map((m) => jrnMarkerTreeHtml(m, tree, id)).join('') + '</span>';
+  return (
+    '<button class="jrn-foldbtn" id="' +
+    id +
+    '-b" onclick="jrnToggleHelpers(\'' +
+    id +
+    '\')">' +
+    '▸ ' +
+    esc(jrnCountWord(key, list.length)).replace(String(list.length), () =>
+      jrnNumHtml(list.length, key, 'count.scope.node', { num: true, noFocus: true }),
+    ) +
+    '</button>' +
+    '<span class="jrn-fold" id="' +
+    id +
+    '">' +
+    list.map((m) => jrnMarkerTreeHtml(m, tree, id)).join('') +
+    '</span>'
+  );
 }
 /** Open / close one fold and re-walk the j/k order around it.
  * @group Journey view */
 function jrnToggleHelpers(id) {
-  const el = document.getElementById(id), btn = document.getElementById(id + '-b'), f = (S.JRN_FOLDS || []).find((x) => x.id === id);
+  const el = document.getElementById(id),
+    btn = document.getElementById(id + '-b'),
+    f = (S.JRN_FOLDS || []).find((x) => x.id === id);
   if (!el) return;
   const open = !el.classList.contains('open');
   el.classList.toggle('open', open);
@@ -1731,7 +2710,13 @@ function jrnUnfolded(o) {
  * parts at the action stop — minus what is still folded away.
  * @group Journey view */
 function jrnOrdersNow() {
-  const all = S.JRN_SHEET ? jrnSheetOrders() : S.JRN_DRILL ? jrnDrillOrders() : Object.keys(S.JRN_MARK || {}).map(Number).sort((a, b) => a - b);
+  const all = S.JRN_SHEET
+    ? jrnSheetOrders()
+    : S.JRN_DRILL
+      ? jrnDrillOrders()
+      : Object.keys(S.JRN_MARK || {})
+          .map(Number)
+          .sort((a, b) => a - b);
   return all.filter(jrnUnfolded);
 }
 /**
@@ -1772,7 +2757,9 @@ function jrnRevealFold(i) {
   const cell = el.closest('.jrn-scell');
   if (cell && !cell.classList.contains('open')) {
     cell.classList.add('open');
-    cell.querySelectorAll('.jrn-smore').forEach((b) => { b.style.display = 'none'; });
+    cell.querySelectorAll('.jrn-smore').forEach((b) => {
+      b.style.display = 'none';
+    });
     S.JRN_ORDERS = jrnOrdersNow();
   }
 }
@@ -1807,7 +2794,13 @@ function jrnC(sum, name) {
     steps: [cnt.steps, 'journey.countSteps', ''],
   }[name];
   if (!old || old[0] == null) return null;
-  return { n: old[0], unit: old[1], bizUnit: old[2] || undefined, scope: 'journey.scopeAll', source: 'journeySummary().counts' };
+  return {
+    n: old[0],
+    unit: old[1],
+    bizUnit: old[2] || undefined,
+    scope: 'journey.scopeAll',
+    source: 'journeySummary().counts',
+  };
 }
 /**
  * A typed count in the words of the lens on screen: its `bizUnit` in the
@@ -1825,7 +2818,10 @@ export function jrnCountedWords(c, unit) {
 /** A part of a breakdown in words, its number left to the column beside it.
  * @group Journey view */
 function jrnPartWords(p) {
-  const w = jrnCountWord(p.key, p.n).replace(String(p.n), '').replace(/\s{2,}/g, ' ').trim();
+  const w = jrnCountWord(p.key, p.n)
+    .replace(String(p.n), '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
   return (p.label ? p.label + ' · ' : '') + w;
 }
 /**
@@ -1844,17 +2840,28 @@ function jrnCountedTip(el, a) {
   const src = tipSource(a.api || '/api/journey');
   if (!biz && c.source) src.note = c.source;
   const rows = (c.breakdown || []).map((p) => [jrnPartWords(p), p.n]);
-  const rel = (a.rel || []).filter((r) => r && r.n).map((r) => {
-    const w = jrnCountedWords(r);
-    if (!w) return null;
-    // every part, zeroes too: `80 e2e` travels with `0 seen in a run`
-    const parts = (r.breakdown || []).map((p) => jrnCountWord(p.key, p.n)).join(' · ');
-    return [w + (parts && (r.breakdown || []).length > 1 ? ' (' + parts + ')' : '')];
-  }).filter(Boolean);
-  return numberTip({ count: c.n, of, vars: { m: c.of != null ? c.of : '' }, scope: c.scope, source: src,
-    breakdown: rows.length ? { rows } : null })
-    + (a.list ? jrnUntrListTip(a.list, c.n) : '')
-    + (rel.length ? tableTip({ caption: 'tip.journey.related', rows: rel }) : '');
+  const rel = (a.rel || [])
+    .filter((r) => r && r.n)
+    .map((r) => {
+      const w = jrnCountedWords(r);
+      if (!w) return null;
+      // every part, zeroes too: `80 e2e` travels with `0 seen in a run`
+      const parts = (r.breakdown || []).map((p) => jrnCountWord(p.key, p.n)).join(' · ');
+      return [w + (parts && (r.breakdown || []).length > 1 ? ' (' + parts + ')' : '')];
+    })
+    .filter(Boolean);
+  return (
+    numberTip({
+      count: c.n,
+      of,
+      vars: { m: c.of != null ? c.of : '' },
+      scope: c.scope,
+      source: src,
+      breakdown: rows.length ? { rows } : null,
+    }) +
+    (a.list ? jrnUntrListTip(a.list, c.n) : '') +
+    (rel.length ? tableTip({ caption: 'tip.journey.related', rows: rel }) : '')
+  );
 }
 registerTip('jrnCounted', jrnCountedTip);
 /**
@@ -1880,24 +2887,45 @@ function jrnUntrListTip(list, n) {
     if (!biz) return name || '';
     return plainWords(jrnForkPartWords(o, stepNode(o))) || t('journey.biz.noWords');
   };
-  const items = un.items.filter((u) => inR(list.t, u.stepOrder))
-    .map((u) => ({ o: u.stepOrder, where: where(u.stepOrder, u.name), kind: (biz ? 'journey.biz.forkCat.' : 'journey.forkCat.') + (u.category || 'branch'), cond: u.requires || '' }))
-    .concat((sum.business.decisions || []).filter((d) => d.class === 'guard' && inR(list.g, d.stepOrder))
-      .map((d) => ({ o: d.stepOrder, where: where(d.stepOrder, (S.BYID[d.nodeId] && S.BYID[d.nodeId].name) || ''), kind: 'tip.untr.gate', cond: d.label || '' })))
+  const items = un.items
+    .filter((u) => inR(list.t, u.stepOrder))
+    .map((u) => ({
+      o: u.stepOrder,
+      where: where(u.stepOrder, u.name),
+      kind: (biz ? 'journey.biz.forkCat.' : 'journey.forkCat.') + (u.category || 'branch'),
+      cond: u.requires || '',
+    }))
+    .concat(
+      (sum.business.decisions || [])
+        .filter((d) => d.class === 'guard' && inR(list.g, d.stepOrder))
+        .map((d) => ({
+          o: d.stepOrder,
+          where: where(d.stepOrder, (S.BYID[d.nodeId] && S.BYID[d.nodeId].name) || ''),
+          kind: 'tip.untr.gate',
+          cond: d.label || '',
+        })),
+    )
     .sort((x, y) => x.o - y.o);
   if (!items.length || items.length !== n) return '';
   if (!biz) {
-    return tableTip({ caption: 'tip.untr.caption', columns: ['tip.untr.col.where', 'tip.untr.col.kind', { label: 'tip.untr.col.cond', code: true }],
-      rows: items.map((u) => [{ text: u.where, code: true }, u.kind, { text: u.cond, code: true }]) });
+    return tableTip({
+      caption: 'tip.untr.caption',
+      columns: ['tip.untr.col.where', 'tip.untr.col.kind', { label: 'tip.untr.col.cond', code: true }],
+      rows: items.map((u) => [{ text: u.where, code: true }, u.kind, { text: u.cond, code: true }]),
+    });
   }
   const groups = new Map();
   for (const u of items) {
     const k = u.where + '\u0000' + u.kind;
     const g = groups.get(k) || { where: u.where, kind: u.kind, n: 0 };
-    g.n++; groups.set(k, g);
+    g.n++;
+    groups.set(k, g);
   }
-  return tableTip({ caption: 'tip.untr.caption', columns: ['tip.untr.col.where', 'tip.untr.col.kind', { label: 'tip.untr.col.n', num: true }],
-    rows: [...groups.values()].map((g) => [g.where, g.kind, g.n]) });
+  return tableTip({
+    caption: 'tip.untr.caption',
+    columns: ['tip.untr.col.where', 'tip.untr.col.kind', { label: 'tip.untr.col.n', num: true }],
+    rows: [...groups.values()].map((g) => [g.where, g.kind, g.n]),
+  });
 }
 /**
  * A typed count drawn as words with its tip — the one way a journey prints a
@@ -1910,9 +2938,20 @@ export function jrnCountedHtml(c, o) {
   const opt = o || {};
   const words = opt.num ? String(c ? c.n : '') : jrnCountedWords(c, opt.unit);
   if (!c || !words) return '';
-  return '<span class="jrn-num' + (opt.cls ? ' ' + opt.cls : '') + '"'
-    + tipAttrs({ id: 'jrnCounted', args: { c, rel: opt.rel || undefined, api: opt.api || undefined, list: opt.list || undefined }, tipKey: opt.tipKey, noFocus: opt.noFocus })
-    + '>' + esc(words) + '</span>';
+  return (
+    '<span class="jrn-num' +
+    (opt.cls ? ' ' + opt.cls : '') +
+    '"' +
+    tipAttrs({
+      id: 'jrnCounted',
+      args: { c, rel: opt.rel || undefined, api: opt.api || undefined, list: opt.list || undefined },
+      tipKey: opt.tipKey,
+      noFocus: opt.noFocus,
+    }) +
+    '>' +
+    esc(words) +
+    '</span>'
+  );
 }
 /**
  * A number the viewer counts itself — the markers in one cell, the chips a fold
@@ -1922,9 +2961,15 @@ export function jrnCountedHtml(c, o) {
  */
 function jrnNumHtml(n, key, scope, o) {
   const opt = o || {};
-  return '<span class="jrn-num' + (opt.cls ? ' ' + opt.cls : '') + '"'
-    + tipAttrs({ number: { count: n, of: key, scope, source: tipSource('/api/journey') }, noFocus: opt.noFocus })
-    + '>' + esc(opt.num ? String(n) : jrnCountWord(key, n)) + '</span>';
+  return (
+    '<span class="jrn-num' +
+    (opt.cls ? ' ' + opt.cls : '') +
+    '"' +
+    tipAttrs({ number: { count: n, of: key, scope, source: tipSource('/api/journey') }, noFocus: opt.noFocus }) +
+    '>' +
+    esc(opt.num ? String(n) : jrnCountWord(key, n)) +
+    '</span>'
+  );
 }
 /**
  * The journey header's `N screens` tip: the count, what it counts, over what,
@@ -1944,14 +2989,34 @@ function jrnScreensTip() {
   const biz = currentLens() === 'business';
   // the split is built / not built — it adds up to the count; the screens
   // themselves follow as a list, which is not a breakdown and is not captioned as one
-  return numberTip({
-    count, of: biz ? 'journey.biz.countScreens' : 'journey.countScreens', scope: 'tip.screens.scope', source: tipSource('/api/journey'),
-    breakdown: user.length === count ? { rows: [['journey.status.built', nBuilt], ['journey.status.notBuilt', count - nBuilt]] } : null,
-  }) + (user.length ? tableTip({
-    caption: 'tip.journey.screensList',
-    columns: ['tip.screens.col.n', 'tip.screens.col.screen', 'tip.screens.col.status'],
-    rows: user.map((u, i) => [String(i + 1), u.name || '', built(u) ? 'journey.status.built' : 'journey.status.notBuilt']),
-  }) : '');
+  return (
+    numberTip({
+      count,
+      of: biz ? 'journey.biz.countScreens' : 'journey.countScreens',
+      scope: 'tip.screens.scope',
+      source: tipSource('/api/journey'),
+      breakdown:
+        user.length === count
+          ? {
+              rows: [
+                ['journey.status.built', nBuilt],
+                ['journey.status.notBuilt', count - nBuilt],
+              ],
+            }
+          : null,
+    }) +
+    (user.length
+      ? tableTip({
+          caption: 'tip.journey.screensList',
+          columns: ['tip.screens.col.n', 'tip.screens.col.screen', 'tip.screens.col.status'],
+          rows: user.map((u, i) => [
+            String(i + 1),
+            u.name || '',
+            built(u) ? 'journey.status.built' : 'journey.status.notBuilt',
+          ]),
+        })
+      : '')
+  );
 }
 registerTip('jrnScreens', jrnScreensTip);
 /** How many conditions of this action the core could not translate into a
@@ -1988,7 +3053,8 @@ function jrnMomentCut(sg, mo) {
 // kind of empty it is. Every chip is a step of the walk — clicking one opens
 // the same expansion the timeline opens, as a full-width row under its layer.
 
-const JRN_SHEET_COL = 214, JRN_SHEET_LANE = 178;
+const JRN_SHEET_COL = 214,
+  JRN_SHEET_LANE = 178;
 
 /**
  * The sheet's model: the columns (every moment of every segment in journey
@@ -1998,16 +3064,22 @@ const JRN_SHEET_COL = 214, JRN_SHEET_LANE = 178;
  * touches has no row, and the always-present rows say so in words.
  * @group Journey view
  */
-export function jrnSheetModel(sum) { return sheetModel(sum, { t, rowLabel: jrnRowLabel }); }
+export function jrnSheetModel(sum) {
+  return sheetModel(sum, { t, rowLabel: jrnRowLabel });
+}
 /** The markers one cell of the sheet draws: this layer's markers inside this
  * action, with their drill tree — the parts on top, what they called folded under them.
  * @group Journey view */
 function jrnSheetCellMarkers(layer, col) {
   const { sg, mo } = col;
   if (!layer.row) return { ms: [], tree: jrnCellTree([]) };
-  const ms = sg.markers.filter((m) => m.system === layer.key && m.moment === mo.index
-    // the moment's component is the user layer's span header — never drawn twice
-    && !(layer.cls === 'app' && mo.component && m.stepOrder === mo.component.stepOrder));
+  const ms = sg.markers.filter(
+    (m) =>
+      m.system === layer.key &&
+      m.moment === mo.index &&
+      // the moment's component is the user layer's span header — never drawn twice
+      !(layer.cls === 'app' && mo.component && m.stepOrder === mo.component.stepOrder),
+  );
   return { ms, tree: jrnCellTree(ms) };
 }
 /** The call that gives an action its outcomes — the moment's own call step,
@@ -2068,8 +3140,18 @@ export function jrnAbsentHtml(kind, why) {
   const subKey = 'journey.absentSub.' + kind;
   const sub = S.STRINGS && S.STRINGS[subKey] ? t(subKey) : '';
   const reason = why || sub || def('journey.absent.' + kind) || '';
-  return '<span class="jrn-mk none ' + kind + '" data-absent="' + kind + '" title="' + esc(reason) + '">'
-    + sym(kind === 'notBuilt' ? 'warning' : 'absent') + esc(jrnAbsentText(kind)) + '</span>';
+  return (
+    '<span class="jrn-mk none ' +
+    kind +
+    '" data-absent="' +
+    kind +
+    '" title="' +
+    esc(reason) +
+    '">' +
+    sym(kind === 'notBuilt' ? 'warning' : 'absent') +
+    esc(jrnAbsentText(kind)) +
+    '</span>'
+  );
 }
 /** `req → res` for a call, from the contract's request body and its first 2xx
  * response — schema names as plain chips, no tree.
@@ -2078,17 +3160,40 @@ export function jrnSchemaChipHtml(m) {
   const n = (S.JOURNEY.steps[m.stepOrder] || {}).node || {};
   const c = n.contract || {};
   const req = (c.requestBody && c.requestBody.schema) || '';
-  const res = (c.responses || []).filter((r) => /^2/.test(String(r.status))).map((r) => r.schema).filter(Boolean)[0] || '';
+  const res =
+    (c.responses || [])
+      .filter((r) => /^2/.test(String(r.status)))
+      .map((r) => r.schema)
+      .filter(Boolean)[0] || '';
   if (!req && !res) return '';
-  const text = req ? t('journey.schemaChip').replace('{req}', req).replace('{res}', res) : t('journey.schemaOut').replace('{res}', res);
-  return '<span class="jrn-mk schema" onclick="jrnSelect(' + m.stepOrder + ')" title="' + esc(text.trim()) + '"><span class="lb">' + esc(text.trim()) + '</span></span>';
+  const text = req
+    ? t('journey.schemaChip').replace('{req}', req).replace('{res}', res)
+    : t('journey.schemaOut').replace('{res}', res);
+  return (
+    '<span class="jrn-mk schema" onclick="jrnSelect(' +
+    m.stepOrder +
+    ')" title="' +
+    esc(text.trim()) +
+    '"><span class="lb">' +
+    esc(text.trim()) +
+    '</span></span>'
+  );
 }
 /** One translated decision as a sheet chip — a fork the flow can take in this action.
  * @group Journey view */
 function jrnSheetDecChipHtml(d) {
   // the condition is code and can be long: it ellipsises inside its cell, and the tip carries it whole
-  return '<span class="jrn-mk dec" onclick="jrnScrollTo(' + d.order + ')" title="' + esc(d.label + ' · ' + t('journey.decisionChip')) + '">'
-    + sym('fork') + '<span class="lb">' + esc(d.label) + '</span></span>';
+  return (
+    '<span class="jrn-mk dec" onclick="jrnScrollTo(' +
+    d.order +
+    ')" title="' +
+    esc(d.label + ' · ' + t('journey.decisionChip')) +
+    '">' +
+    sym('fork') +
+    '<span class="lb">' +
+    esc(d.label) +
+    '</span></span>'
+  );
 }
 /**
  * The chips of one cell under the fold rule: two are shown, the rest hide
@@ -2099,9 +3204,25 @@ function jrnSheetDecChipHtml(d) {
 function jrnSheetChipsHtml(chips, li, ci) {
   const rest = chips.slice(2);
   // the `+n` names what it folds: its tip lists the rest, one name each, in the cell's order
-  return chips.slice(0, 2).join('')
-    + (rest.length ? '<span class="jrn-sx">' + rest.join('') + '</span>'
-      + '<button class="jrn-smore" onclick="jrnSheetOpen(' + li + ',' + ci + ',\'open\',this)"' + tipAttrs({ text: rest.map(chipText).filter(Boolean).join(' · '), noFocus: true }) + '>' + esc(t('journey.moreChips')).replace('{n}', () => jrnNumHtml(rest.length, 'journey.moreChips', 'count.scope.action', { num: true, noFocus: true })) + '</button>' : '')
+  return (
+    chips.slice(0, 2).join('') +
+    (rest.length
+      ? '<span class="jrn-sx">' +
+        rest.join('') +
+        '</span>' +
+        '<button class="jrn-smore" onclick="jrnSheetOpen(' +
+        li +
+        ',' +
+        ci +
+        ",'open',this)\"" +
+        tipAttrs({ text: rest.map(chipText).filter(Boolean).join(' · '), noFocus: true }) +
+        '>' +
+        esc(t('journey.moreChips')).replace('{n}', () =>
+          jrnNumHtml(rest.length, 'journey.moreChips', 'count.scope.action', { num: true, noFocus: true }),
+        ) +
+        '</button>'
+      : '')
+  );
 }
 /** The words a chip's HTML reads as (its text, entities decoded) — what a `+n` tip lists. */
 function chipText(html) {
@@ -2135,7 +3256,9 @@ const JRN_FOOT_NONE = '<span class="ev none" title="';
  */
 function jrnTestFacts(refs) {
   const by = new Map();
-  (refs || []).forEach((x) => { if (x && x.id && !by.has(x.id)) by.set(x.id, x); });
+  (refs || []).forEach((x) => {
+    if (x && x.id && !by.has(x.id)) by.set(x.id, x);
+  });
   const all = [...by.values()];
   const cases = all.filter((x) => !x.runLevel);
   return {
@@ -2160,15 +3283,26 @@ export function jrnFoldFacts(cov) {
   if (!cov) return null;
   const k = cov.counted || {};
   const c = (cov.counts && cov.counts.tests) || {};
-  const n = (x, fb) => (x ? x.n : (fb || 0));
-  const e2e = n(k.e2e, c.e2e), unit = n(k.unit, c.unit), integration = n(k.integration, c.integration);
+  const n = (x, fb) => (x ? x.n : fb || 0);
+  const e2e = n(k.e2e, c.e2e),
+    unit = n(k.unit, c.unit),
+    integration = n(k.integration, c.integration);
   return {
-    e2e, unit, integration, observed: n(k.observed, c.observed), runLevel: n(k.runReports, c.runLevel),
+    e2e,
+    unit,
+    integration,
+    observed: n(k.observed, c.observed),
+    runLevel: n(k.runReports, c.runLevel),
     total: k.tests ? k.tests.n : e2e + unit + integration,
-    evidenceWord: cov.evidenceWord || null, counted: cov.counted || null, observation: cov.observation || null,
+    evidenceWord: cov.evidenceWord || null,
+    counted: cov.counted || null,
+    observation: cov.observation || null,
     // the cell's one verdict (core `testVerdict`): the word, its own run's status, every case by its run
     verdict: cov.verdict || null,
-    chip: cov.chip || 'none', run: cov.run || null, note: cov.note, freshness: cov.freshness || null,
+    chip: cov.chip || 'none',
+    run: cov.run || null,
+    note: cov.note,
+    freshness: cov.freshness || null,
     // a designed, not-built screen: no verdict, the cases that reach the route it will call (core `segmentCoverage`)
     notBuilt: !!(cov.notBuilt || (cov.verdict && cov.verdict.notBuilt)),
   };
@@ -2179,7 +3313,7 @@ export function jrnStepTestFacts(i) {
   const s = (S.JOURNEY && S.JOURNEY.steps[i]) || {};
   if (s.coverage && s.coverage.evidenceWord) return jrnFoldFacts(s.coverage);
   const direct = (s.coverage && s.coverage.tests) || [];
-  const f = jrnTestFacts(direct.length ? direct : (Array.isArray(s.coverageVia) ? s.coverageVia : []));
+  const f = jrnTestFacts(direct.length ? direct : Array.isArray(s.coverageVia) ? s.coverageVia : []);
   // a table's accessors' cases by their own runs, counted in core
   if (!direct.length && s.coverageViaRuns) f.verdict = { runs: s.coverageViaRuns };
   return f;
@@ -2222,7 +3356,15 @@ export function jrnStepActionFacts(i) {
 export function jrnFootScopeHtml(facts) {
   const scope = facts && facts.counted && facts.counted.tests && facts.counted.tests.scope;
   if (!scope) return '';
-  return '<div class="line"><span class="hud-label jrn-tscope" data-scope="' + esc(scope) + '"' + tipAttrs({ key: scope }) + '>' + esc(t(scope)) + '</span></div>';
+  return (
+    '<div class="line"><span class="hud-label jrn-tscope" data-scope="' +
+    esc(scope) +
+    '"' +
+    tipAttrs({ key: scope }) +
+    '>' +
+    esc(t(scope)) +
+    '</span></div>'
+  );
 }
 /**
  * The wider scope beside an empty narrow one: a step no test reaches, inside an
@@ -2233,8 +3375,15 @@ export function jrnFootScopeHtml(facts) {
 function jrnFootWiderHtml(wider) {
   const k = wider && wider.counted && wider.counted.tests;
   if (!k || !k.n) return '';
-  return '<div class="line jrn-twider" data-scope="' + esc(k.scope) + '"' + tipAttrs({ key: 'journey.tests.widerScope' }) + '>'
-    + esc(t('journey.tests.widerScope')).replace('{n}', () => jrnCountedHtml(k, { noFocus: true })) + '</div>';
+  return (
+    '<div class="line jrn-twider" data-scope="' +
+    esc(k.scope) +
+    '"' +
+    tipAttrs({ key: 'journey.tests.widerScope' }) +
+    '>' +
+    esc(t('journey.tests.widerScope')).replace('{n}', () => jrnCountedHtml(k, { noFocus: true })) +
+    '</div>'
+  );
 }
 /**
  * The covering tests' own last runs as a line of its own: how many cases, as a
@@ -2251,20 +3400,45 @@ export function jrnRunLineHtml(facts, chipped) {
   // under a test chip the cases are already printed with their scope and their skips (round 2026-10-10): the line keeps
   // only where they ran, so no second bare number of the same cases stands under the chip
   if (chipped) {
-    return run && run.projects && run.projects.length ? '<div class="line jrn-runs"><span class="rl rl-proj"' + tipAttrs({ key: 'journey.tests.runProjects' }) + '>'
-      + esc(t('journey.tests.runProjects').replace('{list}', run.projects.join(', '))) + '</span></div>' : '';
+    return run && run.projects && run.projects.length
+      ? '<div class="line jrn-runs"><span class="rl rl-proj"' +
+          tipAttrs({ key: 'journey.tests.runProjects' }) +
+          '>' +
+          esc(t('journey.tests.runProjects').replace('{list}', run.projects.join(', '))) +
+          '</span></div>'
+      : '';
   }
-  return '<div class="line jrn-runs"><span class="hud-label"' + tipAttrs({ key: 'journey.tests.theirRuns' }) + '>' + esc(t('journey.tests.theirRuns')) + '</span>'
-    + jrnCountedHtml(runs, { noFocus: true, cls: 'rl' })
+  return (
+    '<div class="line jrn-runs"><span class="hud-label"' +
+    tipAttrs({ key: 'journey.tests.theirRuns' }) +
+    '>' +
+    esc(t('journey.tests.theirRuns')) +
+    '</span>' +
+    jrnCountedHtml(runs, { noFocus: true, cls: 'rl' }) +
     // its own sentence: beside the freshness it read as one ungrammatical phrase (round 2)
-    + (run && run.projects && run.projects.length ? '<span class="rl rl-proj"' + tipAttrs({ key: 'journey.tests.runProjects' }) + '>' + esc(t('journey.tests.runProjects').replace('{list}', run.projects.join(', '))) + '</span>' : '')
-    + '</div>';
+    (run && run.projects && run.projects.length
+      ? '<span class="rl rl-proj"' +
+        tipAttrs({ key: 'journey.tests.runProjects' }) +
+        '>' +
+        esc(t('journey.tests.runProjects').replace('{list}', run.projects.join(', '))) +
+        '</span>'
+      : '') +
+    '</div>'
+  );
 }
 /** The foot's *open the list* door, scoped — '' where the foot has no scope to keep.
  * @group Journey view */
 function jrnCasesDoorHtml(scope) {
   if (!scope) return '';
-  return '<div class="line jrn-cases"><a href="' + esc(jrnCasesHref(scope)) + '" title="' + esc(def('journey.tests.open') || '') + '">' + esc(t('journey.tests.open')) + '</a></div>';
+  return (
+    '<div class="line jrn-cases"><a href="' +
+    esc(jrnCasesHref(scope)) +
+    '" title="' +
+    esc(def('journey.tests.open') || '') +
+    '">' +
+    esc(t('journey.tests.open')) +
+    '</a></div>'
+  );
 }
 /**
  * The door from a foot to the cases it counts, keeping the foot's scope: the
@@ -2278,8 +3452,11 @@ export function jrnCasesHref(scope) {
   const flow = S.JOURNEY && S.JOURNEY.entry && S.JOURNEY.entry.id;
   if (sc.node) return '#/tests?node=' + encodeURIComponent(sc.node);
   if (!flow) return '#/tests';
-  return '#/tests?flow=' + encodeURIComponent(flow)
-    + (sc.seg != null ? '&seg=' + sc.seg + (sc.action != null ? '&action=' + sc.action : '') : '');
+  return (
+    '#/tests?flow=' +
+    encodeURIComponent(flow) +
+    (sc.seg != null ? '&seg=' + sc.seg + (sc.action != null ? '&action=' + sc.action : '') : '')
+  );
 }
 /**
  * The run behind an evidence word, in words: who observed it — test cases a
@@ -2300,7 +3477,12 @@ export function jrnObsText(facts, opts = {}) {
  * @group Journey view */
 function jrnObsWho(o) {
   // a declaration's cases are known to have passed; a case coverage placed is known to have run
-  return [o.cases ? jrnCountWord(o.by === 'declaration' ? 'journey.obs.passed' : 'journey.obs.cases', o.cases) : '', o.reports ? jrnCountWord('journey.obs.reports', o.reports) : ''].filter(Boolean).join(' · ');
+  return [
+    o.cases ? jrnCountWord(o.by === 'declaration' ? 'journey.obs.passed' : 'journey.obs.cases', o.cases) : '',
+    o.reports ? jrnCountWord('journey.obs.reports', o.reports) : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 /**
  * The evidence chip's tip: the word and what it means, then the run behind it
@@ -2312,24 +3494,47 @@ function jrnEvidenceTip(el, a) {
   const ev = (a && a.ev) || {};
   if (!ev.key) return '';
   const o = a.obs;
-  const rows = o ? [
-    // a declaration's cases earned the word; *observed by* would word a pass as a run seen reaching the code
-    [o.by === 'declaration' ? 'tip.journey.obs.byDecl' : 'tip.journey.obs.by', jrnObsWho(o)],
-    ['tip.journey.obs.when', (o.at || '').slice(0, 10)],
-    // the cell's verdict (core `testVerdict().status`): none when a coverage report alone earned the word
-    ['tip.journey.obs.verdict', a.verdict ? (a.verdict.status ? 'tests.run.' + a.verdict.status : '') : o.by === 'runs' ? '' : 'tests.run.' + (o.status || 'unknown')],
-    ['tip.journey.obs.since', o.freshness === 'changed' && o.changedBy === 'working-tree' ? 'tests.freshness.changedTree' : 'tests.freshness.' + (o.freshness || 'unknown')],
-  ].filter((r) => r[1]) : null;
+  const rows = o
+    ? [
+        // a declaration's cases earned the word; *observed by* would word a pass as a run seen reaching the code
+        [o.by === 'declaration' ? 'tip.journey.obs.byDecl' : 'tip.journey.obs.by', jrnObsWho(o)],
+        ['tip.journey.obs.when', (o.at || '').slice(0, 10)],
+        // the cell's verdict (core `testVerdict().status`): none when a coverage report alone earned the word
+        [
+          'tip.journey.obs.verdict',
+          a.verdict
+            ? a.verdict.status
+              ? 'tests.run.' + a.verdict.status
+              : ''
+            : o.by === 'runs'
+              ? ''
+              : 'tests.run.' + (o.status || 'unknown'),
+        ],
+        [
+          'tip.journey.obs.since',
+          o.freshness === 'changed' && o.changedBy === 'working-tree'
+            ? 'tests.freshness.changedTree'
+            : 'tests.freshness.' + (o.freshness || 'unknown'),
+        ],
+      ].filter((r) => r[1])
+    : null;
   const biz = currentLens() === 'business';
   // no run handed with the word: a word a run earned says nothing more here (its run is on the surface that drew it);
   // a claim or a reading says so as a sentence — never a table row reading *observed by — nothing observed* (swarm round 3)
-  const noRun = !rows && ev.cls !== 'observed' && ev.cls !== 'stale' ? '<p class="tip-p">' + esc(def('journey.obs.none')) + '</p>' : '';
-  return '<div class="tip-h">' + esc(t(ev.key)) + '</div>'
-    + (def(ev.key) ? '<p class="tip-p">' + esc(def(ev.key)) + '</p>' : '')
-    + (biz && ev.biz ? '<p class="tip-p">' + esc(t(ev.biz)) + '</p>' : '')
-    + (rows ? tableTip({ caption: 'tip.journey.obs.head', rows }) : noRun)
+  const noRun =
+    !rows && ev.cls !== 'observed' && ev.cls !== 'stale'
+      ? '<p class="tip-p">' + esc(def('journey.obs.none')) + '</p>'
+      : '';
+  return (
+    '<div class="tip-h">' +
+    esc(t(ev.key)) +
+    '</div>' +
+    (def(ev.key) ? '<p class="tip-p">' + esc(def(ev.key)) + '</p>' : '') +
+    (biz && ev.biz ? '<p class="tip-p">' + esc(t(ev.biz)) + '</p>' : '') +
+    (rows ? tableTip({ caption: 'tip.journey.obs.head', rows }) : noRun) +
     // *stale* as a comparison: the sentence that names the run's side and the code's (core freshness.ts)
-    + (freshShown(a.fresh) ? '<p class="tip-p jrn-fresh-tip">' + esc(freshSentence(a.fresh)) + '</p>' : '');
+    (freshShown(a.fresh) ? '<p class="tip-p jrn-fresh-tip">' + esc(freshSentence(a.fresh)) + '</p>' : '')
+  );
 }
 registerTip('jrnEvidence', jrnEvidenceTip);
 /** The evidence chip: the core's word, its class for the shape, and its tip.
@@ -2339,9 +3544,27 @@ export function jrnEvChipHtml(facts) {
   const cls = ev.cls;
   if (cls === 'none') return '';
   const pb = builtOnlyHtml(ev);
-  return pb.before + JRN_FOOT_EV + esc(cls) + pb.cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
-    + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
-    + esc(t(ev.key)) + '</span>' + pb.after;
+  return (
+    pb.before +
+    JRN_FOOT_EV +
+    esc(cls) +
+    pb.cls +
+    '"' +
+    tipAttrs({
+      id: 'jrnEvidence',
+      args: {
+        ev,
+        obs: facts.observation || null,
+        verdict: facts.verdict ? { status: facts.verdict.status } : null,
+        fresh: facts.freshness || null,
+      },
+    }) +
+    '>' +
+    (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '') +
+    esc(t(ev.key)) +
+    '</span>' +
+    pb.after
+  );
 }
 // written out whole: an attribute assembled from pieces reads as prose to the lint
 const JRN_IMPDOOR = '<div class="line imp-door"><a href="#" onclick="return impactGo(this)" data-node="';
@@ -2357,7 +3580,9 @@ const JRN_IMPDOOR = '<div class="line imp-door"><a href="#" onclick="return impa
  */
 function jrnImpactDoorHtml(id) {
   if (!id || !S.impactHasEndpoint) return '';
-  return JRN_IMPDOOR + esc(id) + '" title="' + esc(def('impact.door') || '') + '">' + esc(t('impact.door')) + '</a></div>';
+  return (
+    JRN_IMPDOOR + esc(id) + '" title="' + esc(def('impact.door') || '') + '">' + esc(t('impact.door')) + '</a></div>'
+  );
 }
 /**
  * The tests foot: one evidence chip — the core's word, never the viewer's — with
@@ -2378,16 +3603,39 @@ export function jrnTestsFootHtml(facts, opts) {
   const o = opts || {};
   const business = currentLens() === 'business';
   if (!(S.JOURNEY && S.JOURNEY.summary && S.JOURNEY.summary.coverage)) {
-    return '<div class="jrn-tfoot"><div class="line">' + JRN_FOOT_NONE + esc(t('journey.noTestsSub')) + '">'
-      + sym('absent') + esc(t('journey.noTests')) + '</span></div></div>';
+    return (
+      '<div class="jrn-tfoot"><div class="line">' +
+      JRN_FOOT_NONE +
+      esc(t('journey.noTestsSub')) +
+      '">' +
+      sym('absent') +
+      esc(t('journey.noTests')) +
+      '</span></div></div>'
+    );
   }
   if (facts && facts.notBuilt) {
     // no code, no verdict: what the cases do reach, with that scope — never *passed* on a screen with no code
-    return '<div class="jrn-tfoot"><div class="line">' + testChipHtml(facts) + '</div>' + jrnCasesDoorHtml(o.cases) + '</div>';
+    return (
+      '<div class="jrn-tfoot"><div class="line">' +
+      testChipHtml(facts) +
+      '</div>' +
+      jrnCasesDoorHtml(o.cases) +
+      '</div>'
+    );
   }
   if (!facts || (!facts.total && !facts.runLevel)) {
-    return '<div class="jrn-tfoot"><div class="line">' + JRN_FOOT_NONE + esc((facts && facts.note) || def('journey.absent.notReached') || '') + '">'
-      + sym('absent') + esc(t(o.absent || 'journey.noTestReaches')) + '</span></div>' + jrnFootWiderHtml(o.wider) + jrnImpactDoorHtml(o.impact) + '</div>';
+    return (
+      '<div class="jrn-tfoot"><div class="line">' +
+      JRN_FOOT_NONE +
+      esc((facts && facts.note) || def('journey.absent.notReached') || '') +
+      '">' +
+      sym('absent') +
+      esc(t(o.absent || 'journey.noTestReaches')) +
+      '</span></div>' +
+      jrnFootWiderHtml(o.wider) +
+      jrnImpactDoorHtml(o.impact) +
+      '</div>'
+    );
   }
   // one chip: the count, the scope it counts over, the cell's one word, and the skips beside it (round 2026-10-10)
   // — a table's accessors carry no typed count, so their foot keeps the plain evidence chip
@@ -2398,19 +3646,40 @@ export function jrnTestsFootHtml(facts, opts) {
   const num = (c, n) => (c ? jrnCountedHtml(c, { num: true, noFocus: true }) : esc(String(n)));
   if (business) {
     const ev = evidenceWord(facts);
-    const runKey = ev.biz || (facts.chip === 'observed-stale' ? 'journey.biz.testsRun.stale' : 'journey.biz.testsRun.none');
-    return '<div class="jrn-tfoot"><div class="line">' + chip + '</div>'
-      + '<div class="line biz">' + esc(t(runKey)) + '</div>' + jrnCasesDoorHtml(o.cases) + jrnImpactDoorHtml(o.impact) + '</div>';
+    const runKey =
+      ev.biz || (facts.chip === 'observed-stale' ? 'journey.biz.testsRun.stale' : 'journey.biz.testsRun.none');
+    return (
+      '<div class="jrn-tfoot"><div class="line">' +
+      chip +
+      '</div>' +
+      '<div class="line biz">' +
+      esc(t(runKey)) +
+      '</div>' +
+      jrnCasesDoorHtml(o.cases) +
+      jrnImpactDoorHtml(o.impact) +
+      '</div>'
+    );
   }
   const obs = jrnObsText(facts);
-  return '<div class="jrn-tfoot">'
-    + '<div class="line">' + chip + (obs ? '<span class="obs">' + esc(obs) + '</span>' : '') + '</div>'
-    + (chip.indexOf('data-tchip') >= 0 ? '' : jrnFootScopeHtml(facts)) + '<div class="line"><span class="cnt">'
-    + esc(t('journey.tests.foot')).replace('{e2e}', () => num(k.e2e, facts.e2e)).replace('{unit}', () => num(k.unit, facts.unit))
-      .replace('{int}', () => num(k.integration, facts.integration)).replace('{obs}', () => num(k.observed, facts.observed)) + '</span></div>'
-    + jrnRunLineHtml(facts, chip.indexOf('data-tchip') >= 0)
-    + jrnCasesDoorHtml(o.cases)
-    + jrnImpactDoorHtml(o.impact) + '</div>';
+  return (
+    '<div class="jrn-tfoot">' +
+    '<div class="line">' +
+    chip +
+    (obs ? '<span class="obs">' + esc(obs) + '</span>' : '') +
+    '</div>' +
+    (chip.indexOf('data-tchip') >= 0 ? '' : jrnFootScopeHtml(facts)) +
+    '<div class="line"><span class="cnt">' +
+    esc(t('journey.tests.foot'))
+      .replace('{e2e}', () => num(k.e2e, facts.e2e))
+      .replace('{unit}', () => num(k.unit, facts.unit))
+      .replace('{int}', () => num(k.integration, facts.integration))
+      .replace('{obs}', () => num(k.observed, facts.observed)) +
+    '</span></div>' +
+    jrnRunLineHtml(facts, chip.indexOf('data-tchip') >= 0) +
+    jrnCasesDoorHtml(o.cases) +
+    jrnImpactDoorHtml(o.impact) +
+    '</div>'
+  );
 }
 /**
  * The *Verified by* cell of one action: the foot over the core's own fold for
@@ -2422,7 +3691,15 @@ export function jrnTestsFootHtml(facts, opts) {
  */
 function jrnSheetVerifiedHtml(sg, mo) {
   const cov = S.JOURNEY.summary && S.JOURNEY.summary.coverage;
-  if (!cov) return '<span class="jrn-mk none" title="' + esc(t('journey.noTestsSub')) + '">' + sym('absent') + esc(t('journey.noTests')) + '</span>';
+  if (!cov)
+    return (
+      '<span class="jrn-mk none" title="' +
+      esc(t('journey.noTestsSub')) +
+      '">' +
+      sym('absent') +
+      esc(t('journey.noTests')) +
+      '</span>'
+    );
   const k = (sg.moments || []).indexOf(mo);
   return jrnTestsFootHtml(jrnActionTestFacts(sg, mo), { cases: { seg: sg.index, action: k >= 0 ? k : mo.index } });
 }
@@ -2437,12 +3714,20 @@ function jrnSheetVerifiedHtml(sg, mo) {
 function jrnSheetCellHtml(layer, li, col) {
   const { sg, mo } = col;
   const business = currentLens() === 'business';
-  let inner = '';
+  let inner;
   if (layer.kind === 'user') {
     // the screen itself is what the user sees when the action has no component of its own
     const scr = col.first || !mo.component ? jrnScreenNode(sg) : null;
-    inner = (mo.component ? jrnCompSpanHtml(mo) : '')
-      + (scr ? '<span class="jrn-mk ui" onclick="jrnSelectSegment(' + sg.index + ')">' + sym('screen') + esc((sg.screen && sg.screen.name) || scr.name || '') + '</span>' : '');
+    inner =
+      (mo.component ? jrnCompSpanHtml(mo) : '') +
+      (scr
+        ? '<span class="jrn-mk ui" onclick="jrnSelectSegment(' +
+          sg.index +
+          ')">' +
+          sym('screen') +
+          esc((sg.screen && sg.screen.name) || scr.name || '') +
+          '</span>'
+        : '');
     if (!inner) inner = jrnAbsentHtml(jrnAbsentWord(sg, mo, 'user'));
   } else if (layer.kind === 'gates') {
     // one renderer for the checks, shared with the storyboard and the timeline's
@@ -2455,13 +3740,30 @@ function jrnSheetCellHtml(layer, li, col) {
   } else {
     const mk = jrnSheetCellMarkers(layer, col);
     // a part, then its repeats and what it called folded under it (the seam card keeps its schema chip first)
-    const draw = (m) => (m.kind === 'call' ? jrnSeamCardHtml(m) + (business ? '' : jrnSchemaChipHtml(m)) : jrnMarkerHtml(m))
-      + jrnCellFoldsHtml(m, mk.tree, null);
+    const draw = (m) =>
+      (m.kind === 'call' ? jrnSeamCardHtml(m) + (business ? '' : jrnSchemaChipHtml(m)) : jrnMarkerHtml(m)) +
+      jrnCellFoldsHtml(m, mk.tree, null);
     inner = mk.tree.top.length
       ? jrnSheetChipsHtml(mk.tree.top.map(draw), li, col.index)
       : jrnAbsentHtml(jrnAbsentWord(sg, mo, layer.key));
   }
-  return '<div class="jrn-scell ' + esc(layer.cls || '') + '" data-layer="' + li + '" data-col="' + col.index + '" data-sys="' + esc(layer.key) + '" data-seg="' + sg.index + '" data-mo="' + mo.index + '">' + inner + '</div>';
+  return (
+    '<div class="jrn-scell ' +
+    esc(layer.cls || '') +
+    '" data-layer="' +
+    li +
+    '" data-col="' +
+    col.index +
+    '" data-sys="' +
+    esc(layer.key) +
+    '" data-seg="' +
+    sg.index +
+    '" data-mo="' +
+    mo.index +
+    '">' +
+    inner +
+    '</div>'
+  );
 }
 /**
  * One column head — the action stop: its ordinal, its name, a person glyph
@@ -2472,22 +3774,50 @@ function jrnSheetCellHtml(layer, li, col) {
  * @business One action of the journey: what the person (or the system) does, and what the contract says can come back.
  */
 function jrnSheetHeadHtml(col) {
-  const mo = col.mo, sg = col.sg;
+  const mo = col.mo,
+    sg = col.sg;
   const call = jrnSheetMomentCall(sg, mo);
-  const n = call ? ((S.JOURNEY.steps[call.stepOrder] || {}).node || {}) : {};
-  const outs = ((n.contract && n.contract.responses) || []).map((r) => {
-    const cls = /^2/.test(String(r.status)) ? ' ok' : /^4/.test(String(r.status)) ? ' warn' : '';
-    return '<span class="api-chip st' + cls + '" title="' + esc(t('journey.fromSpec') + ' · ' + (r.description || '')) + '">' + esc(String(r.status)) + '</span>';
-  }).join('');
+  const n = call ? (S.JOURNEY.steps[call.stepOrder] || {}).node || {} : {};
+  const outs = ((n.contract && n.contract.responses) || [])
+    .map((r) => {
+      const cls = /^2/.test(String(r.status)) ? ' ok' : /^4/.test(String(r.status)) ? ' warn' : '';
+      return (
+        '<span class="api-chip st' +
+        cls +
+        '" title="' +
+        esc(t('journey.fromSpec') + ' · ' + (r.description || '')) +
+        '">' +
+        esc(String(r.status)) +
+        '</span>'
+      );
+    })
+    .join('');
   const cut = jrnMomentCut(sg, mo);
-  return '<div class="jrn-sbh' + (mo.repeat ? ' rep' : '') + '" data-col="' + col.index + '"'
-    + ' onclick="jrnScrollTo(' + (mo.callStep != null ? mo.callStep : mo.actionStep) + ')" title="' + esc([jrnMoLabel(mo), mo.business || mo.label].filter((x, i, a) => x && a.indexOf(x) === i).join(' · ')) + '">'
+  return (
+    '<div class="jrn-sbh' +
+    (mo.repeat ? ' rep' : '') +
+    '" data-col="' +
+    col.index +
+    '"' +
+    ' onclick="jrnScrollTo(' +
+    (mo.callStep != null ? mo.callStep : mo.actionStep) +
+    ')" title="' +
+    esc([jrnMoLabel(mo), mo.business || mo.label].filter((x, i, a) => x && a.indexOf(x) === i).join(' · ')) +
+    '">' +
     // the name clamps to two lines inside its column; the title carries it whole
-    + '<span class="t"><span class="ord">' + (col.index + 1) + '</span>' + sym(mo.component ? 'human' : 'automation') + '<span class="tx">' + esc(jrnMoLabel(mo)) + '</span></span>'
-    + '<span class="out">' + outs
-      + (mo.repeat ? '<span class="api-chip rep">' + esc(t('journey.repeated')) + '</span>' : '')
-      + (cut ? '<span class="api-chip warn">' + esc(t('journey.countCut').replace('{n}', cut)) + '</span>' : '')
-    + '</span></div>';
+    '<span class="t"><span class="ord">' +
+    (col.index + 1) +
+    '</span>' +
+    sym(mo.component ? 'human' : 'automation') +
+    '<span class="tx">' +
+    esc(jrnMoLabel(mo)) +
+    '</span></span>' +
+    '<span class="out">' +
+    outs +
+    (mo.repeat ? '<span class="api-chip rep">' + esc(t('journey.repeated')) + '</span>' : '') +
+    (cut ? '<span class="api-chip warn">' + esc(t('journey.countCut').replace('{n}', cut)) + '</span>' : '') +
+    '</span></div>'
+  );
 }
 /** The screen a run of columns belongs to, spanning them — name, route,
  * design id and (outside the code lens) the thumbnail it was designed as.
@@ -2497,10 +3827,24 @@ function jrnSheetScreenHtml(sg, from, span) {
   const name = (sg.screen && sg.screen.name) || (n && n.name) || t('journey.beforeFirstScreen');
   // the route is code: the business lens reads the screen's name alone
   const sub = n && n.name !== name && currentLens() !== 'business' ? n.name : '';
-  return '<div class="jrn-sscr' + (sg.screen ? '' : ' entry') + '" style="grid-column:' + (from + 2) + ' / span ' + span + '" onclick="jrnSelectSegment(' + sg.index + ')">'
-    + (n ? designThumbHtml(n, 'sheet') : '')
-    + '<span class="tx"><span class="t">' + jrnDesignIdHtml(sg) + esc(name) + '</span>'
-    + (sub ? '<span class="s">' + esc(sub) + '</span>' : '') + '</span></div>';
+  return (
+    '<div class="jrn-sscr' +
+    (sg.screen ? '' : ' entry') +
+    '" style="grid-column:' +
+    (from + 2) +
+    ' / span ' +
+    span +
+    '" onclick="jrnSelectSegment(' +
+    sg.index +
+    ')">' +
+    (n ? designThumbHtml(n, 'sheet') : '') +
+    '<span class="tx"><span class="t">' +
+    jrnDesignIdHtml(sg) +
+    esc(name) +
+    '</span>' +
+    (sub ? '<span class="s">' + esc(sub) + '</span>' : '') +
+    '</span></div>'
+  );
 }
 /** j/k order in the sheet: down a column, then on to the next action — the way
  * the sheet is read. Folded plumbing joins the walk when its fold is opened.
@@ -2509,9 +3853,11 @@ function jrnSheetOrders() {
   const sh = S.JRN_SHEET;
   if (!sh) return [];
   const out = [];
-  sh.cols.forEach((col) => sh.layers.forEach((layer) => {
-    jrnSheetCellMarkers(layer, col).ms.forEach((m) => out.push(m.stepOrder));
-  }));
+  sh.cols.forEach((col) =>
+    sh.layers.forEach((layer) => {
+      jrnSheetCellMarkers(layer, col).ms.forEach((m) => out.push(m.stepOrder));
+    }),
+  );
   return out;
 }
 /**
@@ -2523,11 +3869,15 @@ function jrnSheetOrders() {
 export function jrnSheetIndex(sum) {
   S.JRN_SHEET = jrnSheetModel(sum);
   const byKey = {};
-  S.JRN_SHEET.layers.forEach((l, li) => { if (l.key) byKey[l.key] = li; });
+  S.JRN_SHEET.layers.forEach((l, li) => {
+    if (l.key) byKey[l.key] = li;
+  });
   S.JRN_MARK = {};
-  sum.segments.forEach((sg) => sg.markers.forEach((m) => {
-    S.JRN_MARK[m.stepOrder] = { seg: sg.index, row: byKey[m.system] != null ? byKey[m.system] : 0 };
-  }));
+  sum.segments.forEach((sg) =>
+    sg.markers.forEach((m) => {
+      S.JRN_MARK[m.stepOrder] = { seg: sg.index, row: byKey[m.system] != null ? byKey[m.system] : 0 };
+    }),
+  );
   S.JRN_ORDERS = jrnSheetOrders();
 }
 /**
@@ -2540,8 +3890,17 @@ export function jrnSheetIndex(sum) {
 export function jrnSheetHtml(sum) {
   const sh = S.JRN_SHEET;
   const cols = sh.cols;
-  const style = 'grid-template-columns:' + JRN_SHEET_LANE + 'px repeat(' + cols.length + ',minmax(' + JRN_SHEET_COL + 'px,1fr));'
-    + 'min-width:' + (JRN_SHEET_LANE + cols.length * JRN_SHEET_COL) + 'px';
+  const style =
+    'grid-template-columns:' +
+    JRN_SHEET_LANE +
+    'px repeat(' +
+    cols.length +
+    ',minmax(' +
+    JRN_SHEET_COL +
+    'px,1fr));' +
+    'min-width:' +
+    (JRN_SHEET_LANE + cols.length * JRN_SHEET_COL) +
+    'px';
   let html = '<div class="jrn-sheet" style="' + style + '">';
   html += '<div class="jrn-slane scrlane"></div>';
   let at = 0;
@@ -2556,18 +3915,34 @@ export function jrnSheetHtml(sum) {
   // and the number above them are one count, not the header's actions
   const stops = sum.counted && sum.counted.actionStops;
   const cornerKey = currentLens() === 'business' ? 'journey.biz.sheetCorner' : 'journey.sheetCorner';
-  html += '<div class="jrn-slane corner"><span class="hud-label"' + tipAttrs({ key: cornerKey, noFocus: true }) + '>' + esc(t(cornerKey)) + '</span>'
-    + (stops && stops.n === cols.length ? '<span class="sub">' + jrnCountedHtml(stops, { num: false, noFocus: true }) + '</span>' : '') + '</div>'
-    + cols.map(jrnSheetHeadHtml).join('');
+  html +=
+    '<div class="jrn-slane corner"><span class="hud-label"' +
+    tipAttrs({ key: cornerKey, noFocus: true }) +
+    '>' +
+    esc(t(cornerKey)) +
+    '</span>' +
+    (stops && stops.n === cols.length
+      ? '<span class="sub">' + jrnCountedHtml(stops, { num: false, noFocus: true }) + '</span>'
+      : '') +
+    '</div>' +
+    cols.map(jrnSheetHeadHtml).join('');
   sh.layers.forEach((layer, li) => {
-    html += '<div class="jrn-slane ' + esc(layer.cls || '') + '"><span class="hud-label">' + esc(layer.label) + '</span>'
-      + (layer.sub ? '<span class="sub">' + esc(layer.sub) + '</span>' : '')
+    html +=
+      '<div class="jrn-slane ' +
+      esc(layer.cls || '') +
+      '"><span class="hud-label">' +
+      esc(layer.label) +
+      '</span>' +
+      (layer.sub ? '<span class="sub">' + esc(layer.sub) + '</span>' : '') +
       // the checks lane carries the same control the timeline's lane carries, in
       // the same state: a reader who narrowed to the gates and pressed `v` is
       // still looking at the gates
-      + (layer.kind === 'gates' ? jrnBizTabsHtml(sum) : '') + '</div>'
-      + cols.map((col) => jrnSheetCellHtml(layer, li, col)).join('')
-      + '<div class="jrn-exp jrn-sexp" id="jrn-exp-' + li + '" style="display:none"></div>';
+      (layer.kind === 'gates' ? jrnBizTabsHtml(sum) : '') +
+      '</div>' +
+      cols.map((col) => jrnSheetCellHtml(layer, li, col)).join('') +
+      '<div class="jrn-exp jrn-sexp" id="jrn-exp-' +
+      li +
+      '" style="display:none"></div>';
   });
   return html + '</div>';
 }
@@ -2583,8 +3958,16 @@ export function jrnSheetHtml(sum) {
 export function jrnLifecycleHtml(data) {
   const { shown, more } = headerLifecycles(data && data.lifecycles);
   const flow = data && data.entry && data.entry.kind === 'flow' ? data.entry.id : '';
-  return shown.map((lc) => lifecycleStripHtml(lc, '/api/journey', { flow })).join('')
-    + (more ? '<span class="lc-more"' + defAttrs('lifecycle.more') + '>' + esc(t('lifecycle.more').replace('{n}', more)) + '</span>' : '');
+  return (
+    shown.map((lc) => lifecycleStripHtml(lc, '/api/journey', { flow })).join('') +
+    (more
+      ? '<span class="lc-more"' +
+        defAttrs('lifecycle.more') +
+        '>' +
+        esc(t('lifecycle.more').replace('{n}', more)) +
+        '</span>'
+      : '')
+  );
 }
 /**
  * The header count line: five named groups instead of a run of fourteen counts
@@ -2612,19 +3995,46 @@ export function jrnHeaderHtml(data, sum, cnt, lens) {
   // draws — those are the rail's stops, named as stops in the tip
   const actions = C('actions') || (cnt.called != null ? jrnC({ counts: cnt }, 'actions') : null);
   const groups = [];
-  const g = (cls, items) => { const html = items.filter(Boolean).join(' · '); if (html) groups.push('<span class="jrn-hg ' + cls + '">' + html + '</span>'); };
+  const g = (cls, items) => {
+    const html = items.filter(Boolean).join(' · ');
+    if (html) groups.push('<span class="jrn-hg ' + cls + '">' + html + '</span>');
+  };
   // screens: the list is the tip — the screens in order, built or not
   const screens = C('screens');
   g('g-screens', [
-    screens ? '<span class="jrn-num jrn-screens"' + tipAttrs({ id: 'jrnScreens' }) + '>' + esc(jrnCountedWords(screens)) + '</span>' : '',
+    screens
+      ? '<span class="jrn-num jrn-screens"' +
+        tipAttrs({ id: 'jrnScreens' }) +
+        '>' +
+        esc(jrnCountedWords(screens)) +
+        '</span>'
+      : '',
     jrnCountedHtml(C('built'), { cls: 'jrn-built' }),
   ]);
   // what a person can do; again, declared-not-called and the rail's stops are
   // other numbers about the same calls, so they are named in its tip, never summed into it
-  const touches = ((sum && sum.systems) || []).filter((r) => r.kind === 'records' || r.kind === 'messages' || r.kind === 'external').map((r) => r.label);
+  const touches = ((sum && sum.systems) || [])
+    .filter((r) => r.kind === 'records' || r.kind === 'messages' || r.kind === 'external')
+    .map((r) => r.label);
   g('g-actions', [
-    jrnCountedHtml(actions, { cls: 'jrn-actions', rel: [C('again'), C('declaredNotCalled'), C('actionStops'), C('planned'), C('setup'), C('deferred'), C('choices'), C('systems')] }),
-    business && touches.length ? '<span class="jrn-touches">' + esc(t('journey.biz.touches').replace('{systems}', touches.join(' · '))) + '</span>' : '',
+    jrnCountedHtml(actions, {
+      cls: 'jrn-actions',
+      rel: [
+        C('again'),
+        C('declaredNotCalled'),
+        C('actionStops'),
+        C('planned'),
+        C('setup'),
+        C('deferred'),
+        C('choices'),
+        C('systems'),
+      ],
+    }),
+    business && touches.length
+      ? '<span class="jrn-touches">' +
+        esc(t('journey.biz.touches').replace('{systems}', touches.join(' · '))) +
+        '</span>'
+      : '',
   ]);
   // the gates split by who they matter to (gates lane 2026-10-10): two numbers that partition the
   // gates & rules — the whole sits in their tips, so the header never prints three claims about one list
@@ -2638,9 +4048,22 @@ export function jrnHeaderHtml(data, sum, cnt, lens) {
   // every lens: one concept, one number. The header uses the short words; the
   // tip heads with the business sentence in the business lens.
   const nw = C('notInWords');
-  g('g-words', [jrnCountedHtml(nw, { unit: 'count.unit.notInWords', cls: 'jrn-untrn', rel: [C('decisions'), C('inWords')], list: { t: true, g: true } })
-    // its scope, as every other panel's count of the same thing says its own (swarm round 3)
-    + (nw && nw.n ? ' <span class="tc-scope" data-scope-word="' + esc(scopeWordKey(nw.scope)) + '">' + esc(t(scopeWordKey(nw.scope))) + '</span>' : '')]);
+  g('g-words', [
+    jrnCountedHtml(nw, {
+      unit: 'count.unit.notInWords',
+      cls: 'jrn-untrn',
+      rel: [C('decisions'), C('inWords')],
+      list: { t: true, g: true },
+    }) +
+      // its scope, as every other panel's count of the same thing says its own (swarm round 3)
+      (nw && nw.n
+        ? ' <span class="tc-scope" data-scope-word="' +
+          esc(scopeWordKey(nw.scope)) +
+          '">' +
+          esc(t(scopeWordKey(nw.scope))) +
+          '</span>'
+        : ''),
+  ]);
   // the tests: how many reach the journey, the evidence word, and the run behind
   // it beside the word — so *seen by a coverage run* never stands alone above a
   // `0 observed` it does not explain. The e2e rung is in the tests' tip.
@@ -2650,9 +4073,33 @@ export function jrnHeaderHtml(data, sum, cnt, lens) {
   const chipCls = ev.cls === 'none' ? '' : ev.cls;
   // the shared-evidence case says it in a sentence: nothing of this flow is
   // built, so no word about it is a claim this flow can earn (blocker 2)
-  const evHtml = cov && cov.sharedEvidence
-    ? '<span class="jrn-e2e shared"' + tipAttrs({ key: 'journey.evidenceShared' }) + '>' + esc(t('journey.evidenceShared')) + '</span>'
-    : chipCls ? builtOnlyHtml(ev).before + '<span class="jrn-e2e ' + esc(chipCls) + builtOnlyHtml(ev).cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null, fresh: (cov && cov.freshness) || null } }) + '>' + esc(t(ev.key)) + '</span>' + builtOnlyHtml(ev).after : '';
+  const evHtml =
+    cov && cov.sharedEvidence
+      ? '<span class="jrn-e2e shared"' +
+        tipAttrs({ key: 'journey.evidenceShared' }) +
+        '>' +
+        esc(t('journey.evidenceShared')) +
+        '</span>'
+      : chipCls
+        ? builtOnlyHtml(ev).before +
+          '<span class="jrn-e2e ' +
+          esc(chipCls) +
+          builtOnlyHtml(ev).cls +
+          '"' +
+          tipAttrs({
+            id: 'jrnEvidence',
+            args: {
+              ev,
+              obs: (cov && cov.observation) || null,
+              verdict: cov && cov.verdict ? { status: cov.verdict.status } : null,
+              fresh: (cov && cov.freshness) || null,
+            },
+          }) +
+          '>' +
+          esc(t(ev.key)) +
+          '</span>' +
+          builtOnlyHtml(ev).after
+        : '';
   const chipped = !!(cov && cov.counted && cov.counted.tests && cov.counted.tests.n);
   // who earned the word and when is the word's own tip (*earned by* · *when*): the head keeps its one row for the chip
   // and the freshness sentence (swarm round 3 — *29 of them passed* beside PASSED read as 29 of the 401)
@@ -2661,8 +4108,15 @@ export function jrnHeaderHtml(data, sum, cnt, lens) {
     // one chip: the cases, *over this journey*, *distinct* beside per-screen counts (its tip is the per-screen
     // table), the one word and the skips — the shared-evidence case keeps its sentence instead of the word
     cov && cov.counted && cov.counted.tests && cov.counted.tests.n
-      // the declaring cases are named in the word's tip (*earned by*), not on the line: the head keeps one row for the chip
-      ? testChipHtml(facts, { distinct: distinctArgs(sum), word: !cov.sharedEvidence, cls: 'jrn-htests', evCls: 'jrn-e2e', basis: false, builtShown: !!C('built') }) + (cov.sharedEvidence ? ' ' + evHtml : '')
+      ? // the declaring cases are named in the word's tip (*earned by*), not on the line: the head keeps one row for the chip
+        testChipHtml(facts, {
+          distinct: distinctArgs(sum),
+          word: !cov.sharedEvidence,
+          cls: 'jrn-htests',
+          evCls: 'jrn-e2e',
+          basis: false,
+          builtShown: !!C('built'),
+        }) + (cov.sharedEvidence ? ' ' + evHtml : '')
       : jrnCountedHtml(tk.tests, { rel: [tk.e2e, tk.unit, tk.integration, tk.runReports] }) + evHtml,
     obs ? '<span class="jrn-obs">' + esc(obs) + '</span>' : '',
     // the freshness sentence beside the word: *stale* with both sides, or *current as of sync N* (finding 2)
@@ -2682,7 +4136,8 @@ function jrnCodeWindow(i, around, span) {
   const lines = String(s.code).split('\n');
   const start = s.codeStartLine || (s.node && s.node.loc && s.node.loc.line) || 1;
   const at = around || start;
-  const from = Math.max(start, at - span), to = Math.min(start + lines.length - 1, at + span);
+  const from = Math.max(start, at - span),
+    to = Math.min(start + lines.length - 1, at + span);
   return jrnCodeSeg(s, i, from, to, lines, start, new Set(around ? [around] : []));
 }
 /** The contract block of a call: what the operation does, requires, returns and how it stands against the code.
@@ -2691,15 +4146,31 @@ export function jrnContractHtml(n) {
   const c = n.contract;
   if (!c) return '';
   const row = (k, v) => '<span class="k">' + esc(k) + '</span><span>' + v + '</span>';
-  const statusKey = c.status === 'both' ? 'apis.status.both' : c.status === 'spec-only' ? 'apis.status.specOnly'
-    : c.status === 'declared' ? 'apis.status.declared' : c.status === 'code-only' ? 'apis.status.codeOnly' : 'apis.status.implemented';
-  let out = '<div class="jrn-contract-card"><span class="hd">' + sym('api') + esc(t('journey.contractHead')) + '</span>';
+  const statusKey =
+    c.status === 'both'
+      ? 'apis.status.both'
+      : c.status === 'spec-only'
+        ? 'apis.status.specOnly'
+        : c.status === 'declared'
+          ? 'apis.status.declared'
+          : c.status === 'code-only'
+            ? 'apis.status.codeOnly'
+            : 'apis.status.implemented';
+  let out =
+    '<div class="jrn-contract-card"><span class="hd">' + sym('api') + esc(t('journey.contractHead')) + '</span>';
   if (c.summary || c.description) out += row(t('journey.contract.does'), proseHtml(c.description || c.summary));
-  if ((c.security || []).length) out += row(t('journey.contract.requires'), (c.security || []).map((x) => sym('lock') + esc(x)).join(' '));
+  if ((c.security || []).length)
+    out += row(t('journey.contract.requires'), (c.security || []).map((x) => sym('lock') + esc(x)).join(' '));
   const ret = (c.responses || []).filter((r) => /^2/.test(String(r.status)));
-  if (ret.length) out += row(t('journey.contract.returns'), ret.map((r) => '<code>' + esc(r.status + (r.schema ? ' ' + r.schema : '')) + '</code>').join(' '));
+  if (ret.length)
+    out += row(
+      t('journey.contract.returns'),
+      ret.map((r) => '<code>' + esc(r.status + (r.schema ? ' ' + r.schema : '')) + '</code>').join(' '),
+    );
   out += row(t('journey.contract.status'), esc(t(statusKey)));
-  (c.drift || []).forEach((d) => { out += row('', '<span class="drift">' + esc(t('apis.drift.' + d.kind)) + '</span>'); });
+  (c.drift || []).forEach((d) => {
+    out += row('', '<span class="drift">' + esc(t('apis.drift.' + d.kind)) + '</span>');
+  });
   return out + '</div>';
 }
 /**
@@ -2731,7 +4202,9 @@ function jrnExpHtml(i) {
 export function jrnTxLineHtml(mk) {
   const biz = currentLens() === 'business';
   if (S.JOURNEY && S.JOURNEY.summary && S.JOURNEY.summary.txKnown === false) {
-    return '<div class="jrn-insp-tx none">' + esc(t(biz ? 'journey.biz.txFallback' : 'journey.drill.txFallback')) + '</div>';
+    return (
+      '<div class="jrn-insp-tx none">' + esc(t(biz ? 'journey.biz.txFallback' : 'journey.drill.txFallback')) + '</div>'
+    );
   }
   if (!mk || !mk.tx) return '';
   const key = (biz ? 'journey.biz.tx.' : 'journey.tx.') + mk.tx;
@@ -2740,28 +4213,64 @@ export function jrnTxLineHtml(mk) {
 /** The body of a step's expansion without its head — the seam splice for a call, the spliced code for anything else (the drill's CODE tab draws this alone).
  * @group Journey view */
 export function jrnExpBodyHtml(i) {
-  const s = S.JOURNEY.steps[i] || {}, n = s.node || {};
+  const s = S.JOURNEY.steps[i] || {},
+    n = s.node || {};
   const mk = jrnMarkerAt(i);
   // a call with several implementations opens with all of them, then the code
   const oneof = mk && mk.choice ? jrnChoiceHtml(mk.choice) : '';
   if (oneof) return oneof + '<div class="jrn-code">' + jrnSectionHtml(i) + '</div>';
   if (mk && mk.kind === 'call') {
-    const where = (e, label) => e
-      ? '<span class="from">' + esc(label + ' ' + e.path + ':' + e.line) + vsl(e.repo, e.path, e.line) + '</span>'
-      : '<span class="from miss">' + esc(label + ' ' + t('journey.seam.notBuilt')) + '</span>';
-    const caller = mk.caller ? '<span class="from">' + esc(mk.caller.name + ' · ' + mk.caller.path) + vsl(mk.caller.repo, mk.caller.path, mk.caller.line) + '</span>' : '';
-    const route = n.loc ? '<span class="from">' + esc((n.name || '') + ' · ' + n.loc.path + ':' + n.loc.line) + vsl(n.repo, n.loc.path, n.loc.line) + '</span>' : '';
+    const where = (e, label) =>
+      e
+        ? '<span class="from">' + esc(label + ' ' + e.path + ':' + e.line) + vsl(e.repo, e.path, e.line) + '</span>'
+        : '<span class="from miss">' + esc(label + ' ' + t('journey.seam.notBuilt')) + '</span>';
+    const caller = mk.caller
+      ? '<span class="from">' +
+        esc(mk.caller.name + ' · ' + mk.caller.path) +
+        vsl(mk.caller.repo, mk.caller.path, mk.caller.line) +
+        '</span>'
+      : '';
+    const route = n.loc
+      ? '<span class="from">' +
+        esc((n.name || '') + ' · ' + n.loc.path + ':' + n.loc.line) +
+        vsl(n.repo, n.loc.path, n.loc.line) +
+        '</span>'
+      : '';
     // the caller's fetch line, then the route's own registration, then what it continues into
     const callerCode = mk.caller ? jrnCodeWindow(i - 1, mk.caller.line, 2) : '';
     const routeCode = mk.handler ? jrnCodeWindow(i, mk.handler.line, 1) : '';
     const next = S.JOURNEY.steps[i + 1];
     const cont = next && next.node && next.node.loc && next.depth === s.depth + 1;
-    return '<div class="jrn-splice3">'
-      + '<div class="side ux"><span class="hud-label">← ' + esc(t('journey.seam.uxSide')) + '</span>' + caller + where(mk.caller, '←' + ' ' + t('journey.seam.from')) + callerCode + '</div>'
-      + '<div class="side ct">' + jrnContractHtml(n) + jrnReqChips(i) + '</div>'
-      + '<div class="side sv"><span class="hud-label">→ ' + esc(t('journey.seam.apiSide')) + '</span>' + route + where(mk.handler, '→ ' + t('journey.seam.handled')) + routeCode
-      + (cont ? '<span class="from">' + esc(t('journey.seam.continues')) + ' ▸ ' + esc(jrnLabel(next.node) + ' · ' + next.node.loc.path + ':' + next.node.loc.line) + vsl(next.node.repo, next.node.loc.path, next.node.loc.line) + '</span>' + jrnCodeWindow(i + 1, null, 2) : '')
-      + '</div></div>';
+    return (
+      '<div class="jrn-splice3">' +
+      '<div class="side ux"><span class="hud-label">← ' +
+      esc(t('journey.seam.uxSide')) +
+      '</span>' +
+      caller +
+      where(mk.caller, '←' + ' ' + t('journey.seam.from')) +
+      callerCode +
+      '</div>' +
+      '<div class="side ct">' +
+      jrnContractHtml(n) +
+      jrnReqChips(i) +
+      '</div>' +
+      '<div class="side sv"><span class="hud-label">→ ' +
+      esc(t('journey.seam.apiSide')) +
+      '</span>' +
+      route +
+      where(mk.handler, '→ ' + t('journey.seam.handled')) +
+      routeCode +
+      (cont
+        ? '<span class="from">' +
+          esc(t('journey.seam.continues')) +
+          ' ▸ ' +
+          esc(jrnLabel(next.node) + ' · ' + next.node.loc.path + ':' + next.node.loc.line) +
+          vsl(next.node.repo, next.node.loc.path, next.node.loc.line) +
+          '</span>' +
+          jrnCodeWindow(i + 1, null, 2)
+        : '') +
+      '</div></div>'
+    );
   }
   return '<div class="jrn-code">' + jrnSectionHtml(i) + '</div>';
 }
@@ -2770,7 +4279,10 @@ export function jrnExpBodyHtml(i) {
 export function jrnMarkerAt(i) {
   const sum = S.JOURNEY && S.JOURNEY.summary;
   if (!sum) return null;
-  for (const sg of sum.segments) { const m = sg.markers.find((x) => x.stepOrder === i); if (m) return m; }
+  for (const sg of sum.segments) {
+    const m = sg.markers.find((x) => x.stepOrder === i);
+    if (m) return m;
+  }
   return null;
 }
 /**
@@ -2784,17 +4296,29 @@ export function jrnSelect(i, noScroll) {
   if (i >= 0 && S.JRN_DRILL) jrnDrillEnsureAction(i);
   if (i >= 0) jrnRevealFold(i);
   S.journeyActive = i;
-  jrnHostEl().querySelectorAll('.jrn-mk, .jrn-seam, .jrn-bx').forEach((el) => el.classList.toggle('on', +el.dataset.order === i));
-  jrnHostEl().querySelectorAll('.jrn-exp').forEach((el) => { el.style.display = 'none'; el.innerHTML = ''; });
+  jrnHostEl()
+    .querySelectorAll('.jrn-mk, .jrn-seam, .jrn-bx')
+    .forEach((el) => el.classList.toggle('on', +el.dataset.order === i));
+  jrnHostEl()
+    .querySelectorAll('.jrn-exp')
+    .forEach((el) => {
+      el.style.display = 'none';
+      el.innerHTML = '';
+    });
   const mk = S.JRN_MARK[i];
   if (S.JRN_DRILL) jrnDrillSelected(mk && mk.row >= 0 ? i : -1);
   else if (jrnDock() !== 'inline') jrnDockRender(mk && mk.row >= 0 ? i : -1);
   else if (mk && mk.row >= 0) {
     const slot = document.getElementById('jrn-exp-' + mk.row);
-    if (slot) { slot.innerHTML = jrnExpHtml(i); slot.style.display = ''; }
+    if (slot) {
+      slot.innerHTML = jrnExpHtml(i);
+      slot.style.display = '';
+    }
   }
   if (!noScroll) {
-    const el = jrnHostEl().querySelector('.jrn-mk[data-order="' + i + '"], .jrn-seam[data-order="' + i + '"], .jrn-bx[data-order="' + i + '"]');
+    const el = jrnHostEl().querySelector(
+      '.jrn-mk[data-order="' + i + '"], .jrn-seam[data-order="' + i + '"], .jrn-bx[data-order="' + i + '"]',
+    );
     if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   jrnImpactRings();
@@ -2808,7 +4332,11 @@ export function jrnSelectSegment(si) {
   const sg = sum && sum.segments[si];
   if (!sg) return;
   if (sg.markers.length) jrnSelect(sg.markers[0].stepOrder);
-  else { S.journeyActive = sg.from; jrnSelect(-1, true); S.journeyActive = sg.from; }
+  else {
+    S.journeyActive = sg.from;
+    jrnSelect(-1, true);
+    S.journeyActive = sg.from;
+  }
 }
 /**
  * Jump to step i from a chip, a gate or the forks drawer: the step's own
@@ -2821,7 +4349,10 @@ export function jrnScrollTo(i) {
   if (!S.JOURNEY || !S.JRN_MARK) return;
   let cur = i;
   while (cur != null && cur >= 0 && !S.JRN_MARK[cur]) cur = S.JRN_TREE.parent[cur];
-  if (cur != null && cur >= 0 && S.JRN_MARK[cur]) { jrnSelect(cur); return; }
+  if (cur != null && cur >= 0 && S.JRN_MARK[cur]) {
+    jrnSelect(cur);
+    return;
+  }
   const sum = S.JOURNEY.summary;
   const sg = sum && sum.segments.find((x) => i >= x.from && i <= x.to);
   if (sg) jrnSelectSegment(sg.index);
@@ -2841,7 +4372,11 @@ function jrnExpandRepeat(btn) {
   if (window.event) window.event.stopPropagation();
   const sec = btn.closest('.jrn-sec');
   const body = sec && sec.querySelector('.jrn-repeat-body');
-  if (body) { body.style.display = ''; btn.style.display = 'none'; sec.classList.remove('jrn-collapsed'); }
+  if (body) {
+    body.style.display = '';
+    btn.style.display = 'none';
+    sec.classList.remove('jrn-collapsed');
+  }
 }
 
 /**
@@ -2855,13 +4390,19 @@ export function jrnHostEl() {
 }
 /** Whether the forks drawer is open (Esc routing).
  * @group Journey view */
-export function forksOpen() { return S.jrnForksOpen; }
+export function forksOpen() {
+  return S.jrnForksOpen;
+}
 /** Whether a marker's contract / code is expanded (Esc closes it before the stop).
  * @group Journey view */
-export function expandedOpen() { return !!(S.JOURNEY && S.JRN_MARK && S.journeyActive >= 0 && S.JRN_MARK[S.journeyActive]); }
+export function expandedOpen() {
+  return !!(S.JOURNEY && S.JRN_MARK && S.journeyActive >= 0 && S.JRN_MARK[S.journeyActive]);
+}
 /** Close the expanded marker (Esc routing).
  * @group Journey view */
-export function closeExpanded() { jrnSelect(-1, true); }
+export function closeExpanded() {
+  jrnSelect(-1, true);
+}
 
 // ── the cut list: where the walk stopped short (the Map's table carries it) ──
 /**
@@ -2884,22 +4425,44 @@ export function jrnCutChip(data, cnt) {
   const n = cnt.cutPoints || 0;
   jrnToggleCuts(false);
   el.style.display = n ? '' : 'none';
-  if (!n) { el.innerHTML = ''; jrnCutListFill(null, cnt); return; }
+  if (!n) {
+    el.innerHTML = '';
+    jrnCutListFill(null, cnt);
+    return;
+  }
   // the same cuts the number counts: a re-visit hides nothing, so it is not one
   const cuts = (data.cutPoints || []).filter((c) => c.reason !== 'repeat');
   const by = {};
-  cuts.forEach((c) => { by[c.reason] = (by[c.reason] || 0) + 1; });
+  cuts.forEach((c) => {
+    by[c.reason] = (by[c.reason] || 0) + 1;
+  });
   // the chip is a button (it opens the list); its number carries the tip — what a
   // cut point is, over the journey, split by the budget that ran out
   const c = sum0Cut(data, n, by);
-  el.innerHTML = sym('warning') + esc(t(countKey('journey.cutPoints', n))).replace('{n}', () => '<span class="jrn-num"' + tipAttrs({ number: c, noFocus: true }) + '>' + n + '</span>');
+  el.innerHTML =
+    sym('warning') +
+    esc(t(countKey('journey.cutPoints', n))).replace(
+      '{n}',
+      () => '<span class="jrn-num"' + tipAttrs({ number: c, noFocus: true }) + '>' + n + '</span>',
+    );
   el.removeAttribute('title');
   jrnCutListFill(data.summary, cnt);
 }
 /** The cut chip's number tip: the count, over the journey, split by reason (the parts add up to it). */
 function sum0Cut(data, n, by) {
-  const rows = jrnCutReasons(by).map((k) => [t('journey.cutReason.' + k).replace('{n}', '').trim(), by[k]]);
-  return { count: n, of: 'journey.cutPoints', scope: 'journey.scopeAll', source: tipSource('/api/journey'), breakdown: rows.length ? { rows } : undefined };
+  const rows = jrnCutReasons(by).map((k) => [
+    t('journey.cutReason.' + k)
+      .replace('{n}', '')
+      .trim(),
+    by[k],
+  ]);
+  return {
+    count: n,
+    of: 'journey.cutPoints',
+    scope: 'journey.scopeAll',
+    source: tipSource('/api/journey'),
+    breakdown: rows.length ? { rows } : undefined,
+  };
 }
 /** The reasons a cut can have, the known ones first — an unknown one from a newer core still lists, last.
  * @group Journey view */
@@ -2919,28 +4482,47 @@ function jrnCutReasons(by) {
 function jrnCutRows(sum) {
   const entry = (S.JOURNEY && S.JOURNEY.entry) || {};
   const entryName = (entry.design && entry.design.name) || jrnLabel(entry);
-  return (sum.segments || []).flatMap((sg) => (sg.cutPoints || []).map((c) => {
-    const mo = (sg.moments || []).find((m) => m.index === c.moment);
-    const mk = (sg.markers || []).find((m) => m.stepOrder === c.parentStep);
-    return {
-      reason: c.reason,
-      name: c.name || c.nodeId,
-      seg: sg.index,
-      moment: c.moment,
-      parentStep: c.parentStep,
-      parent: (mk && mk.name) || '',
-      action: mo ? jrnMomOrdinal(sg, mo) : c.moment + 1,
-      screen: (sg.screen && sg.screen.name) || entryName,
-    };
-  }));
+  return (sum.segments || []).flatMap((sg) =>
+    (sg.cutPoints || []).map((c) => {
+      const mo = (sg.moments || []).find((m) => m.index === c.moment);
+      const mk = (sg.markers || []).find((m) => m.stepOrder === c.parentStep);
+      return {
+        reason: c.reason,
+        name: c.name || c.nodeId,
+        seg: sg.index,
+        moment: c.moment,
+        parentStep: c.parentStep,
+        parent: (mk && mk.name) || '',
+        action: mo ? jrnMomOrdinal(sg, mo) : c.moment + 1,
+        screen: (sg.screen && sg.screen.name) || entryName,
+      };
+    }),
+  );
 }
 /** One row of the cut list: what the walk did not enter, and where it was standing when it stopped.
  * @group Journey view */
 function jrnCutRowHtml(r) {
-  const where = t('journey.cutPoint.row').replace('{parent}', r.parent).replace('{a}', r.action).replace('{screen}', r.screen);
-  return '<button class="jrn-cut-entry" onclick="jrnCutJump(' + r.seg + ',' + r.moment + ',' + r.parentStep + ')" title="' + esc(def('journey.cutPoint.row') || '') + '">'
-    + '<span class="jrn-cut-what">' + esc(r.name) + '</span>'
-    + '<span class="jrn-cut-where">' + esc(where) + '</span></button>';
+  const where = t('journey.cutPoint.row')
+    .replace('{parent}', r.parent)
+    .replace('{a}', r.action)
+    .replace('{screen}', r.screen);
+  return (
+    '<button class="jrn-cut-entry" onclick="jrnCutJump(' +
+    r.seg +
+    ',' +
+    r.moment +
+    ',' +
+    r.parentStep +
+    ')" title="' +
+    esc(def('journey.cutPoint.row') || '') +
+    '">' +
+    '<span class="jrn-cut-what">' +
+    esc(r.name) +
+    '</span>' +
+    '<span class="jrn-cut-where">' +
+    esc(where) +
+    '</span></button>'
+  );
 }
 /**
  * Draw the drawer behind the chip: the chip's own number as the head, the
@@ -2955,27 +4537,53 @@ function jrnCutListFill(sum, cnt) {
   const d = document.getElementById('jrn-cutlist');
   if (!d) return;
   const n = cnt.cutPoints || 0;
-  if (!sum || !Array.isArray(sum.segments) || !n) { d.innerHTML = ''; return; }
+  if (!sum || !Array.isArray(sum.segments) || !n) {
+    d.innerHTML = '';
+    return;
+  }
   const rows = jrnCutRows(sum);
   const by = {};
-  rows.forEach((r) => { (by[r.reason] = by[r.reason] || []).push(r); });
+  rows.forEach((r) => {
+    (by[r.reason] = by[r.reason] || []).push(r);
+  });
   const head = t(countKey('journey.cutPoints', n)).replace('{n}', n);
   d.setAttribute('aria-label', head);
-  d.innerHTML = '<div class="jrn-fkp-head"><span class="hud-label">' + sym('warning') + ' ' + esc(head) + '</span>'
-    + '<button class="x" onclick="jrnToggleCuts(false)" aria-label="Close">✕</button></div>'
-    + '<p class="jrn-cut-sub">' + esc(def('journey.cutPoints') || '') + '</p>'
-    + jrnCutReasons(by).map((r) => '<div class="jrn-fkp-cat"><span class="jrn-cut-reason">'
-      + esc(t('journey.cutReason.' + r).replace('{n}', by[r].length)) + '</span></div>'
-      + by[r].map(jrnCutRowHtml).join('')).join('')
-    + (cnt.repeats ? '<div class="jrn-cut-foot" title="' + esc(def('journey.countRepeats') || '') + '">'
-      + esc(t('journey.countRepeats').replace('{n}', cnt.repeats)) + '</div>' : '');
+  d.innerHTML =
+    '<div class="jrn-fkp-head"><span class="hud-label">' +
+    sym('warning') +
+    ' ' +
+    esc(head) +
+    '</span>' +
+    '<button class="x" onclick="jrnToggleCuts(false)" aria-label="Close">✕</button></div>' +
+    '<p class="jrn-cut-sub">' +
+    esc(def('journey.cutPoints') || '') +
+    '</p>' +
+    jrnCutReasons(by)
+      .map(
+        (r) =>
+          '<div class="jrn-fkp-cat"><span class="jrn-cut-reason">' +
+          esc(t('journey.cutReason.' + r).replace('{n}', by[r].length)) +
+          '</span></div>' +
+          by[r].map(jrnCutRowHtml).join(''),
+      )
+      .join('') +
+    (cnt.repeats
+      ? '<div class="jrn-cut-foot" title="' +
+        esc(def('journey.countRepeats') || '') +
+        '">' +
+        esc(t('journey.countRepeats').replace('{n}', cnt.repeats)) +
+        '</div>'
+      : '');
 }
 /** Open / close the cut list (pass true/false to force a state).
  * @group Journey view */
 export function jrnToggleCuts(force) {
-  S.jrnCutsOpen = (force === true || force === false) ? force : !S.jrnCutsOpen;
+  S.jrnCutsOpen = force === true || force === false ? force : !S.jrnCutsOpen;
   const d = document.getElementById('jrn-cutlist');
-  if (d) { d.classList.toggle('open', S.jrnCutsOpen); jrnDrawerInert(d, S.jrnCutsOpen); }
+  if (d) {
+    d.classList.toggle('open', S.jrnCutsOpen);
+    jrnDrawerInert(d, S.jrnCutsOpen);
+  }
   const chip = document.getElementById('jrn-cuts');
   if (chip) chip.setAttribute('aria-expanded', S.jrnCutsOpen ? 'true' : 'false');
 }
@@ -2992,7 +4600,9 @@ function jrnCutJump(si, mi, order) {
 }
 /** Whether the cut list is open (Esc routing).
  * @group Journey view */
-export function cutsOpen() { return !!S.jrnCutsOpen; }
+export function cutsOpen() {
+  return !!S.jrnCutsOpen;
+}
 
 // ── impact rings on the sheet (B5.4 · dependency-impact §4.3) ────
 /**
@@ -3070,9 +4680,16 @@ export function jrnImpactRings() {
     // distance is the outline; being a stop is a second fact and gets a second
     // mark rather than replacing the first — a listed node that the walk also
     // stopped at is both, and neither half may eat the other
-    if (m.hop[id] === 1) { el.classList.add('imp-1'); m.drawn++; }
-    else if (m.hop[id] > 1) { el.classList.add('imp-n'); m.drawn++; }
-    else if (m.cut.has(id)) { el.classList.add('imp-cut'); m.drawn++; }
+    if (m.hop[id] === 1) {
+      el.classList.add('imp-1');
+      m.drawn++;
+    } else if (m.hop[id] > 1) {
+      el.classList.add('imp-n');
+      m.drawn++;
+    } else if (m.cut.has(id)) {
+      el.classList.add('imp-cut');
+      m.drawn++;
+    }
     if (m.cut.has(id) && m.hop[id]) el.insertAdjacentHTML('beforeend', jrnImpactStopHtml());
   });
 }
@@ -3088,7 +4705,29 @@ function jrnImpactStopHtml() {
  * @group Journey view */
 function jrnImpactHaloHtml(m) {
   const tip = t('impact.halo').replace('{d}', m.direct).replace('{t}', m.through).replace('{c}', m.behind);
-  return JRN_HALO + esc(tip) + '">' + esc('\u2191' + m.direct + ' \u223c' + m.through + ' \u22ef' + m.behind) + '</span>';
+  return (
+    JRN_HALO + esc(tip) + '">' + esc('\u2191' + m.direct + ' \u223c' + m.through + ' \u22ef' + m.behind) + '</span>'
+  );
 }
 
-expose({ jrnScrollTo, jrnSelect, jrnSelectSegment, jrnToggleFork, jrnToggleForks, jrnForkJump, jrnCopyRecipe, jrnExpandRepeat, jrnNav, jrnSetBizTab, jrnSetDock, jrnDockGrip, jrnSheetOpen, jrnToggleHelpers, jrnLadderMore, jrnToggleCuts, jrnCutJump, jrnImpactRings, jrnStepOf });
+expose({
+  jrnScrollTo,
+  jrnSelect,
+  jrnSelectSegment,
+  jrnToggleFork,
+  jrnToggleForks,
+  jrnForkJump,
+  jrnCopyRecipe,
+  jrnExpandRepeat,
+  jrnNav,
+  jrnSetBizTab,
+  jrnSetDock,
+  jrnDockGrip,
+  jrnSheetOpen,
+  jrnToggleHelpers,
+  jrnLadderMore,
+  jrnToggleCuts,
+  jrnCutJump,
+  jrnImpactRings,
+  jrnStepOf,
+});

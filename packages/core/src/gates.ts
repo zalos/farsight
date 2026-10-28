@@ -20,7 +20,15 @@ function tierOfNode(node: GraphNode): { tier: GateTier; class: GateClass; tierFr
   return { tier: t.tier, class: t.class, tierFrom: t.tierFrom };
 }
 import { testsCovering, EVIDENCE_RANK } from './metrics.js';
-import { toCoverageRef, evidenceFacts, type CoverageTestRef, type EvidenceWord, type CoverageCounted, type CoverageFacts, type TestVerdict } from './coverage.js';
+import {
+  toCoverageRef,
+  evidenceFacts,
+  type CoverageTestRef,
+  type EvidenceWord,
+  type CoverageCounted,
+  type CoverageFacts,
+  type TestVerdict,
+} from './coverage.js';
 import { counted, type Counted } from './counts.js';
 import { isConfigCheck } from './config-check.js';
 
@@ -160,13 +168,25 @@ export function gateCard(index: GraphIndex, gateId: string): GateCard | undefine
     for (const id of frontier) {
       const n = index.byId.get(id);
       if (!n) continue;
-      if (n.kind === 'route') { if (!calls.has(id)) calls.set(id, { ...partOf(n), depth, ...routeFacts(n) }); continue; }
-      if (n.kind === 'page') { if (!pages.has(id)) pages.set(id, partOf(n)); continue; }
-      if (depth === GATE_REACH_DEPTH) { truncated = true; continue; }
+      if (n.kind === 'route') {
+        if (!calls.has(id)) calls.set(id, { ...partOf(n), depth, ...routeFacts(n) });
+        continue;
+      }
+      if (n.kind === 'page') {
+        if (!pages.has(id)) pages.set(id, partOf(n));
+        continue;
+      }
+      if (depth === GATE_REACH_DEPTH) {
+        truncated = true;
+        continue;
+      }
       for (const e of index.in.get(id) ?? []) {
         if (e.kind !== 'calls' && e.kind !== 'renders') continue;
         if (depthOf.has(e.from)) continue;
-        if (visited >= GATE_REACH_BUDGET) { truncated = true; break; }
+        if (visited >= GATE_REACH_BUDGET) {
+          truncated = true;
+          break;
+        }
         depthOf.set(e.from, depth + 1);
         visited++;
         next.push(e.from);
@@ -192,14 +212,21 @@ export function gateCard(index: GraphIndex, gateId: string): GateCard | undefine
   take(gateId);
   const onGate = new Set(byTest.keys());
   for (const c of callList) take(c.id);
-  const tests = [...byTest.values()].sort((a, b) => Number(b.reaches.nodeId === gateId) - Number(a.reaches.nodeId === gateId)
-    || a.level.localeCompare(b.level) || a.name.localeCompare(b.name));
+  const tests = [...byTest.values()].sort(
+    (a, b) =>
+      Number(b.reaches.nodeId === gateId) - Number(a.reaches.nodeId === gateId) ||
+      a.level.localeCompare(b.level) ||
+      a.name.localeCompare(b.name),
+  );
   const facts = evidenceFacts(tests, 'count.scope.gate', 'gateCard().tests');
 
   const src = `gateCard(${gateId})`;
   return {
     gate: {
-      ...partOf(node), gateKind: node.kind === 'rule' ? 'rule' : 'guard', ident, phrase,
+      ...partOf(node),
+      gateKind: node.kind === 'rule' ? 'rule' : 'guard',
+      ident,
+      phrase,
       ...(business ? { business } : {}),
       ...(firstSentence(node.docs) ? { docs: firstSentence(node.docs)! } : {}),
       configCheck: isConfigCheck(node),
@@ -227,7 +254,9 @@ export function gateCard(index: GraphIndex, gateId: string): GateCard | undefine
           { key: 'count.part.gateCallsUnder', n: callList.filter((c) => c.depth > 0).length },
         ],
       }),
-      pages: counted(pageList.length, 'count.unit.gatePages', 'count.scope.gate', `${src}.pages.length`, { bizUnit: 'count.unit.gatePages' }),
+      pages: counted(pageList.length, 'count.unit.gatePages', 'count.scope.gate', `${src}.pages.length`, {
+        bizUnit: 'count.unit.gatePages',
+      }),
       tests: facts.counted,
     },
     truncated,
@@ -282,7 +311,11 @@ export interface ActionMove {
   when?: string;
 }
 /** A move the action's code would make, under a call a constant switches off: listed, never credited. */
-export interface SwitchedOffMove extends ActionMove { flag: string; value: boolean; at: string }
+export interface SwitchedOffMove extends ActionMove {
+  flag: string;
+  value: boolean;
+  at: string;
+}
 /** What one action needs, in the order a reader meets it: who, the record's own state, the records around it, policy, then the technical checks. */
 export interface ActionPreconditions {
   /** the route the action calls, else the function that starts it */
@@ -302,10 +335,19 @@ const CARD_FACTS = new WeakMap<GraphIndex, Map<string, ActionPrecondition['evide
 /** The gate card's verdict for one gate, folded once per index. */
 function evidenceOf(index: GraphIndex, id: string): ActionPrecondition['evidence'] | undefined {
   let m = CARD_FACTS.get(index);
-  if (!m) { m = new Map(); CARD_FACTS.set(index, m); }
+  if (!m) {
+    m = new Map();
+    CARD_FACTS.set(index, m);
+  }
   if (m.has(id)) return m.get(id) ?? undefined;
   const card = gateCard(index, id);
-  const ev = card ? { word: card.verdict.word, tests: card.tests.length, ...(card.verdict.status ? { status: card.verdict.status } : {}) } : null;
+  const ev = card
+    ? {
+        word: card.verdict.word,
+        tests: card.tests.length,
+        ...(card.verdict.status ? { status: card.verdict.status } : {}),
+      }
+    : null;
   m.set(id, ev);
   return ev ?? undefined;
 }
@@ -320,10 +362,21 @@ function preconditionOf(index: GraphIndex, g: JourneyGate): ActionPrecondition {
   const loc = pre ? `${pre.path}:${pre.line}` : node?.loc ? `${node.loc.path}:${node.loc.line}` : undefined;
   const ev = node ? evidenceOf(index, g.id) : undefined;
   return {
-    id: g.id, tier: g.tier ?? t.tier, class: g.class ?? t.class,
-    ...(pre ? { record: pre.record, field: pre.field, requires: pre.requires, ...(pre.excludes ? { excludes: pre.excludes } : {}), relation: pre.relation } : {}),
+    id: g.id,
+    tier: g.tier ?? t.tier,
+    class: g.class ?? t.class,
+    ...(pre
+      ? {
+          record: pre.record,
+          field: pre.field,
+          requires: pre.requires,
+          ...(pre.excludes ? { excludes: pre.excludes } : {}),
+          relation: pre.relation,
+        }
+      : {}),
     ...(g.requires ? { role: g.requires } : {}),
-    words, wordsFrom: pre ? pre.wordsFrom : phrase && ident ? 'guard' : 'name',
+    words,
+    wordsFrom: pre ? pre.wordsFrom : phrase && ident ? 'guard' : 'name',
     ...(ev ? { evidence: ev } : {}),
     ...(loc ? { loc } : {}),
     ...(g.planned ? { planned: true as const } : {}),
@@ -343,14 +396,23 @@ function needOrder(a: ActionPrecondition, b: ActionPrecondition): number {
  * gate card's own, folded once per gate per index.
  */
 /** writer id → the lifecycle moves it performs, folded once per index */
-const MOVES_BY_WRITER = new WeakMap<GraphIndex, Map<string, { table: GraphNode; tr: NonNullable<GraphNode['lifecycle']>['transitions'][number] }[]>>();
-export function movesByWriter(index: GraphIndex): Map<string, { table: GraphNode; tr: NonNullable<GraphNode['lifecycle']>['transitions'][number] }[]> {
+const MOVES_BY_WRITER = new WeakMap<
+  GraphIndex,
+  Map<string, { table: GraphNode; tr: NonNullable<GraphNode['lifecycle']>['transitions'][number] }[]>
+>();
+export function movesByWriter(
+  index: GraphIndex,
+): Map<string, { table: GraphNode; tr: NonNullable<GraphNode['lifecycle']>['transitions'][number] }[]> {
   let m = MOVES_BY_WRITER.get(index);
   if (m) return m;
   m = new Map();
   for (const n of index.byId.values()) {
     if (n.kind !== 'table' || !n.lifecycle) continue;
-    for (const tr of n.lifecycle.transitions) { const l = m.get(tr.by) ?? []; l.push({ table: n, tr }); m.set(tr.by, l); }
+    for (const tr of n.lifecycle.transitions) {
+      const l = m.get(tr.by) ?? [];
+      l.push({ table: n, tr });
+      m.set(tr.by, l);
+    }
   }
   MOVES_BY_WRITER.set(index, m);
   return m;
@@ -360,7 +422,11 @@ export function movesByWriter(index: GraphIndex): Map<string, { table: GraphNode
  * The moves a switched-off call would make: the writer it names, or a writer it calls within the move depth over
  * live edges. Never credited — a surface lists them as *switched off by <flag>*.
  */
-function switchedOffMoves(index: GraphIndex, nodeId: string, sw: { flag: string; value: boolean; at: string }): SwitchedOffMove[] {
+function switchedOffMoves(
+  index: GraphIndex,
+  nodeId: string,
+  sw: { flag: string; value: boolean; at: string },
+): SwitchedOffMove[] {
   const byWriter = movesByWriter(index);
   const out: SwitchedOffMove[] = [];
   const seen = new Set<string>();
@@ -373,9 +439,22 @@ function switchedOffMoves(index: GraphIndex, nodeId: string, sw: { flag: string;
       for (const { table, tr } of byWriter.get(id) ?? []) {
         if (out.some((m) => m.table === table.id && m.to === tr.to && m.by === tr.by)) continue;
         const creates = !tr.from && tr.to === table.lifecycle!.statuses[0];
-        out.push({ record: table.name, table: table.id, field: table.lifecycle!.field, ...(tr.from ? { from: tr.from } : {}), ...(tr.fromAny ? { fromAny: tr.fromAny } : {}), to: tr.to, by: tr.by, checked: creates || !!tr.from || !!tr.fromAny?.length, ...(creates ? { creates: true as const } : {}), hops: hop, ...sw });
+        out.push({
+          record: table.name,
+          table: table.id,
+          field: table.lifecycle!.field,
+          ...(tr.from ? { from: tr.from } : {}),
+          ...(tr.fromAny ? { fromAny: tr.fromAny } : {}),
+          to: tr.to,
+          by: tr.by,
+          checked: creates || !!tr.from || !!tr.fromAny?.length,
+          ...(creates ? { creates: true as const } : {}),
+          hops: hop,
+          ...sw,
+        });
       }
-      for (const e of index.out.get(id) ?? []) if (e.kind === 'calls' && !e.meta?.inactive && !e.meta?.deferred) next.push(e.to);
+      for (const e of index.out.get(id) ?? [])
+        if (e.kind === 'calls' && !e.meta?.inactive && !e.meta?.deferred) next.push(e.to);
     }
     frontier = next;
   }
@@ -383,7 +462,11 @@ function switchedOffMoves(index: GraphIndex, nodeId: string, sw: { flag: string;
 }
 
 /** The handler a route's own file exports, run by the route node: the route's body, not a call under it. */
-function isRouteBody(index: GraphIndex, st: Journey['steps'][number], stepAt: Map<number, Journey['steps'][number]>): boolean {
+function isRouteBody(
+  index: GraphIndex,
+  st: Journey['steps'][number],
+  stepAt: Map<number, Journey['steps'][number]>,
+): boolean {
   if (st.via !== 'calls' || st.depth === 0) return false;
   const n = index.byId.get(st.nodeId);
   if (!n || n.kind !== 'function') return false;
@@ -424,7 +507,8 @@ export function withJourneyPreconditions(index: GraphIndex, j: Journey, summary:
         if (!st) continue;
         // a call a constant switches off runs nothing: its moves are listed apart, its gates stand in front of nothing
         if (st.switchedOff) {
-          for (const m of switchedOffMoves(index, st.nodeId, st.switchedOff)) if (!off.some((x) => x.table === m.table && x.to === m.to && x.by === m.by)) off.push(m);
+          for (const m of switchedOffMoves(index, st.nodeId, st.switchedOff))
+            if (!off.some((x) => x.table === m.table && x.to === m.to && x.by === m.by)) off.push(m);
           continue;
         }
         const h = hopsAt(st);
@@ -446,16 +530,39 @@ export function withJourneyPreconditions(index: GraphIndex, j: Journey, summary:
       // the records the moment walks into, then the records its in-range writers move (a writer reached again, its
       // subtree not walked twice, still makes its move: every live path, never only the first the walk met)
       const byWriter = movesByWriter(index);
-      for (const id of inRange) for (const { table } of byWriter.get(id) ?? []) if (!tables.includes(table)) tables.push(table);
+      for (const id of inRange)
+        for (const { table } of byWriter.get(id) ?? []) if (!tables.includes(table)) tables.push(table);
       for (const t of tables) {
         for (const tr of t.lifecycle!.transitions) {
           if (!inRange.has(tr.by)) continue;
           // a record written in its first status is being created: there is no status to move from
           const creates = !tr.from && tr.to === t.lifecycle!.statuses[0];
-          const checked = creates || !!tr.from || !!tr.fromAny?.length
-            || needs.some((p) => p.relation === 'own' && p.field && index.byId.get(p.id)?.precondition?.table === t.id && p.field.replace(/_/g, '').toLowerCase() === t.lifecycle!.field.replace(/_/g, '').toLowerCase() && !!p.requires?.length);
+          const checked =
+            creates ||
+            !!tr.from ||
+            !!tr.fromAny?.length ||
+            needs.some(
+              (p) =>
+                p.relation === 'own' &&
+                p.field &&
+                index.byId.get(p.id)?.precondition?.table === t.id &&
+                p.field.replace(/_/g, '').toLowerCase() === t.lifecycle!.field.replace(/_/g, '').toLowerCase() &&
+                !!p.requires?.length,
+            );
           if (moves.some((m) => m.table === t.id && m.to === tr.to && m.by === tr.by)) continue;
-          moves.push({ record: t.name, table: t.id, field: t.lifecycle!.field, ...(tr.from ? { from: tr.from } : {}), ...(tr.fromAny ? { fromAny: tr.fromAny } : {}), to: tr.to, by: tr.by, checked, ...(creates ? { creates: true as const } : {}), hops: hopsOf.get(tr.by) ?? 0, ...(tr.when ? { when: tr.when } : {}) });
+          moves.push({
+            record: t.name,
+            table: t.id,
+            field: t.lifecycle!.field,
+            ...(tr.from ? { from: tr.from } : {}),
+            ...(tr.fromAny ? { fromAny: tr.fromAny } : {}),
+            to: tr.to,
+            by: tr.by,
+            checked,
+            ...(creates ? { creates: true as const } : {}),
+            hops: hopsOf.get(tr.by) ?? 0,
+            ...(tr.when ? { when: tr.when } : {}),
+          });
         }
       }
       // a move the action makes live is never also listed as switched off
@@ -465,15 +572,24 @@ export function withJourneyPreconditions(index: GraphIndex, j: Journey, summary:
       const action = callNode ?? stepAt.get(mo.actionStep)?.nodeId ?? '';
       const tiers = (k: GateTier) => needs.filter((p) => p.tier === k).length;
       mo.preconditions = {
-        action, moves, ...(offOnly.length ? { switchedOff: offOnly } : {}), preconditions: needs,
-        counted: counted(needs.length, 'count.unit.preconditions', 'count.scope.action', `journeySummary().segments[${sg.index}].moments[${mo.index}].preconditions`, {
-          bizUnit: 'count.unit.preconditions',
-          breakdown: [
-            { key: 'count.part.tierBusiness', n: tiers('business') },
-            { key: 'count.part.tierPolicy', n: tiers('policy') },
-            { key: 'count.unit.gatesTechnical', n: tiers('technical') },
-          ],
-        }),
+        action,
+        moves,
+        ...(offOnly.length ? { switchedOff: offOnly } : {}),
+        preconditions: needs,
+        counted: counted(
+          needs.length,
+          'count.unit.preconditions',
+          'count.scope.action',
+          `journeySummary().segments[${sg.index}].moments[${mo.index}].preconditions`,
+          {
+            bizUnit: 'count.unit.preconditions',
+            breakdown: [
+              { key: 'count.part.tierBusiness', n: tiers('business') },
+              { key: 'count.part.tierPolicy', n: tiers('policy') },
+              { key: 'count.unit.gatesTechnical', n: tiers('technical') },
+            ],
+          },
+        ),
       };
     }
   }

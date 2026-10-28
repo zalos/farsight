@@ -6,7 +6,14 @@ import { GraphStore, type GraphMeta } from './store.js';
 import type { GraphNode, GraphEdge } from './graph.js';
 import { spineOf, commitsInRange } from './history.js';
 import type {
-  CommitInput, CommitRange, CommitRow, CommitSpine, FileChange, FileStatus, HistoryRows, IncompleteReason,
+  CommitInput,
+  CommitRange,
+  CommitRow,
+  CommitSpine,
+  FileChange,
+  FileStatus,
+  HistoryRows,
+  IncompleteReason,
   SpineSnapshot,
 } from './history.js';
 
@@ -274,7 +281,8 @@ export class SnapshotDb {
     // and keeps every row; old rows read null (the spine cannot tell a working-tree
     // change from a re-index there, and says nothing rather than guess)
     const cols = this.db.prepare('PRAGMA table_info(snapshot_source)').all() as { name: string }[];
-    if (!cols.some((c) => c.name === 'source_digest')) this.db.exec('ALTER TABLE snapshot_source ADD COLUMN source_digest TEXT');
+    if (!cols.some((c) => c.name === 'source_digest'))
+      this.db.exec('ALTER TABLE snapshot_source ADD COLUMN source_digest TEXT');
     // additive (round 2026-10-10, proposal 9): the AI assistant a commit's trailers name as a co-author. A store
     // read before it reads null — *not read*, never *made by a person* — until the next history read rewrites the row
     const commitCols = this.db.prepare('PRAGMA table_info("commit")').all() as { name: string }[];
@@ -303,16 +311,30 @@ export class SnapshotDb {
       const maxRow = this.db.prepare('SELECT MAX(sync) AS max FROM snapshot').get() as { max: number | null };
       const sync = (maxRow.max ?? 0) + 1;
 
-      this.writeInterval('node', 'id', sync, g.nodes.map((n: GraphNode) => [n.id, JSON.stringify(n)]));
-      this.writeInterval('edge', 'key', sync, g.edges.map((e: GraphEdge) => [e.id, JSON.stringify(e)]));
+      this.writeInterval(
+        'node',
+        'id',
+        sync,
+        g.nodes.map((n: GraphNode) => [n.id, JSON.stringify(n)]),
+      );
+      this.writeInterval(
+        'edge',
+        'key',
+        sync,
+        g.edges.map((e: GraphEdge) => [e.id, JSON.stringify(e)]),
+      );
 
       this.db
-        .prepare('INSERT INTO snapshot (sync, at, tz, commit_sha, digest, files, nodes, edges, pinned) VALUES (?,?,?,?,?,?,?,?,0)')
+        .prepare(
+          'INSERT INTO snapshot (sync, at, tz, commit_sha, digest, files, nodes, edges, pinned) VALUES (?,?,?,?,?,?,?,?,0)',
+        )
         .run(sync, at, tz, ctx.commit ?? null, digest, store.meta.files ?? 0, g.nodes.length, g.edges.length);
       // what the nodes cannot carry: the identity fields come from the snapshot row on a read, never from here
       const kept: Partial<GraphMeta> = { ...store.meta };
       for (const k of ['sync', 'digest', 'tz', 'commit', 'generatedAt', 'graphPath'] as const) delete kept[k];
-      this.db.prepare('INSERT OR REPLACE INTO snapshot_meta (sync, json) VALUES (?, ?)').run(sync, JSON.stringify(kept));
+      this.db
+        .prepare('INSERT OR REPLACE INTO snapshot_meta (sync, json) VALUES (?, ?)')
+        .run(sync, JSON.stringify(kept));
       const srcStmt = this.db.prepare(
         'INSERT INTO snapshot_source (sync, name, commit_sha, files, status, source_digest) VALUES (?,?,?,?,?,?)',
       );
@@ -336,13 +358,16 @@ export class SnapshotDb {
   /** SCD2 bookkeeping for one interval table. `rows` = [key, json] of the current graph. */
   private writeInterval(table: 'node' | 'edge', keyCol: 'id' | 'key', sync: number, rows: [string, string][]): void {
     const open = new Map<string, string>(); // key → hash of the currently-open row
-    for (const r of this.db
-      .prepare(`SELECT ${keyCol} AS key, hash FROM ${table} WHERE last_sync IS NULL`)
-      .all() as { key: string; hash: string }[]) {
+    for (const r of this.db.prepare(`SELECT ${keyCol} AS key, hash FROM ${table} WHERE last_sync IS NULL`).all() as {
+      key: string;
+      hash: string;
+    }[]) {
       open.set(r.key, r.hash);
     }
     const closeStmt = this.db.prepare(`UPDATE ${table} SET last_sync = ? WHERE ${keyCol} = ? AND last_sync IS NULL`);
-    const insertStmt = this.db.prepare(`INSERT INTO ${table} (${keyCol}, first_sync, last_sync, hash, json) VALUES (?,?,NULL,?,?)`);
+    const insertStmt = this.db.prepare(
+      `INSERT INTO ${table} (${keyCol}, first_sync, last_sync, hash, json) VALUES (?,?,NULL,?,?)`,
+    );
 
     const seen = new Set<string>();
     for (const [key, json] of rows) {
@@ -382,9 +407,16 @@ export class SnapshotDb {
 
     const store = new GraphStore();
     store.addFragment({ repo: '', nodes, edges });
-    const metaRow = this.db.prepare('SELECT json FROM snapshot_meta WHERE sync = ?').get(snap.sync) as { json: string } | undefined;
+    const metaRow = this.db.prepare('SELECT json FROM snapshot_meta WHERE sync = ?').get(snap.sync) as
+      { json: string } | undefined;
     let kept: Partial<GraphMeta> = {};
-    if (metaRow) { try { kept = JSON.parse(metaRow.json) as Partial<GraphMeta>; } catch { kept = {}; } }
+    if (metaRow) {
+      try {
+        kept = JSON.parse(metaRow.json) as Partial<GraphMeta>;
+      } catch {
+        kept = {};
+      }
+    }
     store.meta = {
       ...kept,
       generatedAt: snap.at,
@@ -426,9 +458,12 @@ export class SnapshotDb {
    * that name for the repository or no sync before it.
    */
   syncOfRelease(repo: string, name: string): { sync: number; sha: string; at: string } | undefined {
-    const rel = this.db.prepare('SELECT sha, at FROM "release" WHERE repo = ? AND name = ?').get(repo, name) as { sha: string; at: string } | undefined;
+    const rel = this.db.prepare('SELECT sha, at FROM "release" WHERE repo = ? AND name = ?').get(repo, name) as
+      { sha: string; at: string } | undefined;
     if (!rel) return undefined;
-    const linked = this.db.prepare('SELECT MAX(sync) AS s FROM commit_sync WHERE repo = ? AND sha = ?').get(repo, rel.sha) as { s: number | null };
+    const linked = this.db
+      .prepare('SELECT MAX(sync) AS s FROM commit_sync WHERE repo = ? AND sha = ?')
+      .get(repo, rel.sha) as { s: number | null };
     const sync = linked?.s ?? this.syncAtOrBefore(rel.at);
     return sync == null ? undefined : { sync, sha: rel.sha, at: rel.at };
   }
@@ -436,10 +471,19 @@ export class SnapshotDb {
   /** Newest first. */
   list(limit = 20): SnapshotListing[] {
     const rows = this.db
-      .prepare('SELECT sync, at, tz, commit_sha, digest, files, nodes, edges, pinned FROM snapshot ORDER BY sync DESC LIMIT ?')
+      .prepare(
+        'SELECT sync, at, tz, commit_sha, digest, files, nodes, edges, pinned FROM snapshot ORDER BY sync DESC LIMIT ?',
+      )
       .all(limit) as {
-      sync: number; at: string; tz: string; commit_sha: string | null;
-      digest: string; files: number; nodes: number; edges: number; pinned: number;
+      sync: number;
+      at: string;
+      tz: string;
+      commit_sha: string | null;
+      digest: string;
+      files: number;
+      nodes: number;
+      edges: number;
+      pinned: number;
     }[];
     return rows.map((r) => ({
       sync: r.sync,
@@ -461,7 +505,9 @@ export class SnapshotDb {
    * table rather than a page of {@link list}, so a long history has no cliff.
    */
   previous(sync: number): number | undefined {
-    const row = this.db.prepare('SELECT MAX(sync) AS prev FROM snapshot WHERE sync < ?').get(sync) as { prev: number | null };
+    const row = this.db.prepare('SELECT MAX(sync) AS prev FROM snapshot WHERE sync < ?').get(sync) as {
+      prev: number | null;
+    };
     return row?.prev ?? undefined;
   }
 
@@ -471,15 +517,20 @@ export class SnapshotDb {
    * (swarm round 3: nine syncs in a row re-read one commit, so *the sync before* always compared to nothing).
    */
   previousChanged(sync: number): number | undefined {
-    const row = this.db.prepare(`SELECT MAX(s.sync) AS prev FROM snapshot s, snapshot h WHERE h.sync = ? AND s.sync < h.sync
-      AND (s.commit_sha IS NOT h.commit_sha OR s.digest IS NOT h.digest)`).get(sync) as { prev: number | null } | undefined;
+    const row = this.db
+      .prepare(
+        `SELECT MAX(s.sync) AS prev FROM snapshot s, snapshot h WHERE h.sync = ? AND s.sync < h.sync
+      AND (s.commit_sha IS NOT h.commit_sha OR s.digest IS NOT h.digest)`,
+      )
+      .get(sync) as { prev: number | null } | undefined;
     return row?.prev ?? undefined;
   }
 
   /** Mark a sync as pinned — retention keeps it (set when a pinned link is generated). */
   pin(sync: number): void {
     const result = this.db.prepare('UPDATE snapshot SET pinned = 1 WHERE sync = ?').run(sync);
-    if (result.changes === 0) throw new Error(`cannot pin sync:${sync} — no such snapshot (see \`farsight snapshots\`)`);
+    if (result.changes === 0)
+      throw new Error(`cannot pin sync:${sync} — no such snapshot (see \`farsight snapshots\`)`);
   }
 
   /**
@@ -488,7 +539,10 @@ export class SnapshotDb {
    * snapshot can read. Returns the number of snapshots pruned.
    */
   prune(policy: { keep: number; keepPinned: boolean }): number {
-    const all = (this.db.prepare('SELECT sync, pinned FROM snapshot ORDER BY sync DESC').all() as { sync: number; pinned: number }[]);
+    const all = this.db.prepare('SELECT sync, pinned FROM snapshot ORDER BY sync DESC').all() as {
+      sync: number;
+      pinned: number;
+    }[];
     const kept = new Set<number>();
     for (const [i, row] of all.entries()) {
       if (i < policy.keep || (policy.keepPinned && row.pinned === 1)) kept.add(row.sync);
@@ -556,13 +610,25 @@ export class SnapshotDb {
         'INSERT INTO commit_file (repo, sha, path, status, old_path, added, deleted, similarity) VALUES (?,?,?,?,?,?,?,?)',
       );
       const clearKeys = this.db.prepare('DELETE FROM commit_key WHERE repo = ? AND sha = ?');
-      const keyStmt = this.db.prepare('INSERT OR REPLACE INTO commit_key (repo, sha, key, provider, via, ref) VALUES (?,?,?,?,?,?)');
+      const keyStmt = this.db.prepare(
+        'INSERT OR REPLACE INTO commit_key (repo, sha, key, provider, via, ref) VALUES (?,?,?,?,?,?)',
+      );
       const clearBranches = this.db.prepare('DELETE FROM commit_branch WHERE repo = ? AND sha = ?');
       const branchStmt = this.db.prepare('INSERT OR IGNORE INTO commit_branch (repo, sha, ref) VALUES (?,?,?)');
       for (const c of commits) {
         const parents = c.parents ?? [];
         const merge = c.merge ?? parents.length > 1;
-        commitStmt.run(repo, c.sha, c.at, c.author ?? '', c.email ?? '', c.subject ?? '', parents.join(' '), merge ? 1 : 0, c.agent ?? null);
+        commitStmt.run(
+          repo,
+          c.sha,
+          c.at,
+          c.author ?? '',
+          c.email ?? '',
+          c.subject ?? '',
+          parents.join(' '),
+          merge ? 1 : 0,
+          c.agent ?? null,
+        );
         clearStmt.run(repo, c.sha);
         // keys and branches are rewritten only when the reader read them: absent is "not read", never "none"
         if (c.keys) {
@@ -575,8 +641,14 @@ export class SnapshotDb {
         }
         for (const f of c.files ?? []) {
           fileStmt.run(
-            repo, c.sha, f.path, f.status, f.oldPath ?? null,
-            f.added ?? null, f.deleted ?? null, f.similarity ?? null,
+            repo,
+            c.sha,
+            f.path,
+            f.status,
+            f.oldPath ?? null,
+            f.added ?? null,
+            f.deleted ?? null,
+            f.similarity ?? null,
           );
           files += 1;
         }
@@ -593,7 +665,8 @@ export class SnapshotDb {
 
   /** The newest commit recorded for a repository — where an incremental read starts. */
   newestCommit(repo: string): { sha: string; at: string } | undefined {
-    const r = this.db.prepare('SELECT sha, at FROM "commit" WHERE repo = ? ORDER BY at DESC, sha LIMIT 1').get(repo) as { sha: string; at: string } | undefined;
+    const r = this.db.prepare('SELECT sha, at FROM "commit" WHERE repo = ? ORDER BY at DESC, sha LIMIT 1').get(repo) as
+      { sha: string; at: string } | undefined;
     return r ?? undefined;
   }
 
@@ -606,20 +679,37 @@ export class SnapshotDb {
   commitsForKey(key: string, opts: { repo?: string; provider?: string } = {}): CommitKeyRow[] {
     const where = ['k.key = ?'];
     const args: string[] = [key];
-    if (opts.repo) { where.push('k.repo = ?'); args.push(opts.repo); }
-    if (opts.provider) { where.push('k.provider = ?'); args.push(opts.provider); }
-    return this.db.prepare(
-      `SELECT k.repo, k.sha, k.key, k.provider, k.via, k.ref, c.at, c.author, c.email, c.subject, c.merge
+    if (opts.repo) {
+      where.push('k.repo = ?');
+      args.push(opts.repo);
+    }
+    if (opts.provider) {
+      where.push('k.provider = ?');
+      args.push(opts.provider);
+    }
+    return this.db
+      .prepare(
+        `SELECT k.repo, k.sha, k.key, k.provider, k.via, k.ref, c.at, c.author, c.email, c.subject, c.merge
          FROM commit_key k JOIN "commit" c ON c.repo = k.repo AND c.sha = k.sha
         WHERE ${where.join(' AND ')} ORDER BY c.at DESC, k.sha, k.via`,
-    ).all(...args).map((r) => {
-      const row = r as Record<string, string | number | null>;
-      return {
-        repo: row.repo as string, sha: row.sha as string, key: row.key as string, provider: row.provider as string,
-        via: row.via as string, ...(row.ref ? { ref: row.ref as string } : {}),
-        at: row.at as string, author: row.author as string, email: row.email as string, subject: row.subject as string, merge: row.merge === 1,
-      };
-    });
+      )
+      .all(...args)
+      .map((r) => {
+        const row = r as Record<string, string | number | null>;
+        return {
+          repo: row.repo as string,
+          sha: row.sha as string,
+          key: row.key as string,
+          provider: row.provider as string,
+          via: row.via as string,
+          ...(row.ref ? { ref: row.ref as string } : {}),
+          at: row.at as string,
+          author: row.author as string,
+          email: row.email as string,
+          subject: row.subject as string,
+          merge: row.merge === 1,
+        };
+      });
   }
 
   /**
@@ -629,7 +719,9 @@ export class SnapshotDb {
    */
   keyCommitCounts(): Map<string, number> {
     const out = new Map<string, number>();
-    for (const r of this.db.prepare('SELECT provider, key, COUNT(DISTINCT sha) AS n FROM commit_key GROUP BY provider, key').all() as { provider: string; key: string; n: number }[]) {
+    for (const r of this.db
+      .prepare('SELECT provider, key, COUNT(DISTINCT sha) AS n FROM commit_key GROUP BY provider, key')
+      .all() as { provider: string; key: string; n: number }[]) {
       out.set(`${r.provider}|${r.key}`, r.n);
     }
     return out;
@@ -637,31 +729,83 @@ export class SnapshotDb {
 
   /** The keys one commit names. */
   keysForCommit(repo: string, sha: string): { key: string; provider: string; via: string; ref?: string }[] {
-    return (this.db.prepare('SELECT key, provider, via, ref FROM commit_key WHERE repo = ? AND sha = ? ORDER BY key, via').all(repo, sha) as {
-      key: string; provider: string; via: string; ref: string | null;
-    }[]).map((r) => ({ key: r.key, provider: r.provider, via: r.via, ...(r.ref ? { ref: r.ref } : {}) }));
+    return (
+      this.db
+        .prepare('SELECT key, provider, via, ref FROM commit_key WHERE repo = ? AND sha = ? ORDER BY key, via')
+        .all(repo, sha) as {
+        key: string;
+        provider: string;
+        via: string;
+        ref: string | null;
+      }[]
+    ).map((r) => ({ key: r.key, provider: r.provider, via: r.via, ...(r.ref ? { ref: r.ref } : {}) }));
   }
 
   /** The key-bearing branches recorded for one commit. */
   branchesForCommit(repo: string, sha: string): string[] {
-    return (this.db.prepare('SELECT ref FROM commit_branch WHERE repo = ? AND sha = ? ORDER BY ref').all(repo, sha) as { ref: string }[]).map((r) => r.ref);
+    return (
+      this.db.prepare('SELECT ref FROM commit_branch WHERE repo = ? AND sha = ? ORDER BY ref').all(repo, sha) as {
+        ref: string;
+      }[]
+    ).map((r) => r.ref);
   }
 
   /** One commit's row, or undefined. */
-  commitRow(repo: string, sha: string): { sha: string; at: string; author: string; email: string; subject: string; parents: string[]; merge: boolean } | undefined {
-    const r = this.db.prepare('SELECT sha, at, author, email, subject, parents, merge FROM "commit" WHERE repo = ? AND sha = ?').get(repo, sha) as {
-      sha: string; at: string; author: string; email: string; subject: string; parents: string; merge: number;
-    } | undefined;
-    return r ? { sha: r.sha, at: r.at, author: r.author, email: r.email, subject: r.subject, parents: r.parents ? r.parents.split(' ') : [], merge: r.merge === 1 } : undefined;
+  commitRow(
+    repo: string,
+    sha: string,
+  ):
+    | { sha: string; at: string; author: string; email: string; subject: string; parents: string[]; merge: boolean }
+    | undefined {
+    const r = this.db
+      .prepare('SELECT sha, at, author, email, subject, parents, merge FROM "commit" WHERE repo = ? AND sha = ?')
+      .get(repo, sha) as
+      | {
+          sha: string;
+          at: string;
+          author: string;
+          email: string;
+          subject: string;
+          parents: string;
+          merge: number;
+        }
+      | undefined;
+    return r
+      ? {
+          sha: r.sha,
+          at: r.at,
+          author: r.author,
+          email: r.email,
+          subject: r.subject,
+          parents: r.parents ? r.parents.split(' ') : [],
+          merge: r.merge === 1,
+        }
+      : undefined;
   }
 
   /** The files one commit touched, as recorded. */
-  filesForCommit(repo: string, sha: string): { path: string; status: string; oldPath?: string; added?: number; deleted?: number }[] {
-    return (this.db.prepare('SELECT path, status, old_path, added, deleted FROM commit_file WHERE repo = ? AND sha = ? ORDER BY path').all(repo, sha) as {
-      path: string; status: string; old_path: string | null; added: number | null; deleted: number | null;
-    }[]).map((r) => ({
-      path: r.path, status: r.status, ...(r.old_path ? { oldPath: r.old_path } : {}),
-      ...(r.added == null ? {} : { added: r.added }), ...(r.deleted == null ? {} : { deleted: r.deleted }),
+  filesForCommit(
+    repo: string,
+    sha: string,
+  ): { path: string; status: string; oldPath?: string; added?: number; deleted?: number }[] {
+    return (
+      this.db
+        .prepare(
+          'SELECT path, status, old_path, added, deleted FROM commit_file WHERE repo = ? AND sha = ? ORDER BY path',
+        )
+        .all(repo, sha) as {
+        path: string;
+        status: string;
+        old_path: string | null;
+        added: number | null;
+        deleted: number | null;
+      }[]
+    ).map((r) => ({
+      path: r.path,
+      status: r.status,
+      ...(r.old_path ? { oldPath: r.old_path } : {}),
+      ...(r.added == null ? {} : { added: r.added }),
+      ...(r.deleted == null ? {} : { deleted: r.deleted }),
     }));
   }
 
@@ -670,13 +814,22 @@ export class SnapshotDb {
    * `graph` (a digest). Replaces what the commit had, so a recomputation after
    * the graph moved leaves no stale node behind.
    */
-  writeCommitNodes(repo: string, sha: string, graph: string, rows: readonly { node: string; path: string; fileOnly: boolean }[]): void {
+  writeCommitNodes(
+    repo: string,
+    sha: string,
+    graph: string,
+    rows: readonly { node: string; path: string; fileOnly: boolean }[],
+  ): void {
     this.db.exec('BEGIN');
     try {
       this.db.prepare('DELETE FROM commit_node WHERE repo = ? AND sha = ?').run(repo, sha);
-      const st = this.db.prepare('INSERT OR REPLACE INTO commit_node (repo, sha, node, path, file_only, graph) VALUES (?,?,?,?,?,?)');
+      const st = this.db.prepare(
+        'INSERT OR REPLACE INTO commit_node (repo, sha, node, path, file_only, graph) VALUES (?,?,?,?,?,?)',
+      );
       for (const r of rows) st.run(repo, sha, r.node, r.path, r.fileOnly ? 1 : 0, graph);
-      this.db.prepare('INSERT OR REPLACE INTO commit_node_done (repo, sha, graph) VALUES (?,?,?)').run(repo, sha, graph);
+      this.db
+        .prepare('INSERT OR REPLACE INTO commit_node_done (repo, sha, graph) VALUES (?,?,?)')
+        .run(repo, sha, graph);
       this.db.exec('COMMIT');
     } catch (err) {
       this.db.exec('ROLLBACK');
@@ -688,12 +841,25 @@ export class SnapshotDb {
    * The commits whose sha starts with `prefix` (at least 4 hex characters), in any repository —
    * how a link that names a commit by its short sha finds it (the Map's Affected mode). Newest first.
    */
-  commitsByPrefix(prefix: string): { repo: string; sha: string; at: string; author: string; subject: string; agent?: string }[] {
+  commitsByPrefix(
+    prefix: string,
+  ): { repo: string; sha: string; at: string; author: string; subject: string; agent?: string }[] {
     const p = String(prefix || '').toLowerCase();
     if (!/^[0-9a-f]{4,40}$/.test(p)) return [];
-    return (this.db.prepare('SELECT repo, sha, at, author, subject, agent FROM "commit" WHERE substr(sha, 1, ?) = ? ORDER BY at DESC, repo')
-      .all(p.length, p) as { repo: string; sha: string; at: string; author: string; subject: string; agent: string | null }[])
-      .map(({ agent, ...r }) => (agent ? { ...r, agent } : r));
+    return (
+      this.db
+        .prepare(
+          'SELECT repo, sha, at, author, subject, agent FROM "commit" WHERE substr(sha, 1, ?) = ? ORDER BY at DESC, repo',
+        )
+        .all(p.length, p) as {
+        repo: string;
+        sha: string;
+        at: string;
+        author: string;
+        subject: string;
+        agent: string | null;
+      }[]
+    ).map(({ agent, ...r }) => (agent ? { ...r, agent } : r));
   }
 
   /**
@@ -701,9 +867,13 @@ export class SnapshotDb {
    * unless `repo`. The names sum to the commits whose `agent` is set (round 2026-10-10, proposal 9).
    */
   agentCounts(repo?: string): Record<string, number> {
-    const rows = (repo
-      ? this.db.prepare('SELECT agent, COUNT(*) AS n FROM "commit" WHERE repo = ? AND agent IS NOT NULL GROUP BY agent').all(repo)
-      : this.db.prepare('SELECT agent, COUNT(*) AS n FROM "commit" WHERE agent IS NOT NULL GROUP BY agent').all()) as { agent: string; n: number }[];
+    const rows = (
+      repo
+        ? this.db
+            .prepare('SELECT agent, COUNT(*) AS n FROM "commit" WHERE repo = ? AND agent IS NOT NULL GROUP BY agent')
+            .all(repo)
+        : this.db.prepare('SELECT agent, COUNT(*) AS n FROM "commit" WHERE agent IS NOT NULL GROUP BY agent').all()
+    ) as { agent: string; n: number }[];
     return Object.fromEntries(rows.map((r) => [r.agent, r.n]));
   }
 
@@ -714,11 +884,18 @@ export class SnapshotDb {
 
   /** The nodes a commit changed, or `null` when they were never computed against `graph` (then compute, never assume none). */
   commitNodes(repo: string, sha: string, graph?: string): { node: string; path: string; fileOnly: boolean }[] | null {
-    const done = this.db.prepare('SELECT graph FROM commit_node_done WHERE repo = ? AND sha = ?').get(repo, sha) as { graph: string } | undefined;
+    const done = this.db.prepare('SELECT graph FROM commit_node_done WHERE repo = ? AND sha = ?').get(repo, sha) as
+      { graph: string } | undefined;
     if (!done || (graph && done.graph !== graph)) return null;
-    return (this.db.prepare('SELECT node, path, file_only FROM commit_node WHERE repo = ? AND sha = ? ORDER BY path, node').all(repo, sha) as {
-      node: string; path: string; file_only: number;
-    }[]).map((r) => ({ node: r.node, path: r.path, fileOnly: r.file_only === 1 }));
+    return (
+      this.db
+        .prepare('SELECT node, path, file_only FROM commit_node WHERE repo = ? AND sha = ? ORDER BY path, node')
+        .all(repo, sha) as {
+        node: string;
+        path: string;
+        file_only: number;
+      }[]
+    ).map((r) => ({ node: r.node, path: r.path, fileOnly: r.file_only === 1 }));
   }
 
   /**
@@ -728,8 +905,15 @@ export class SnapshotDb {
    * A part is credited `lines` when the commit's hunks were resolved to it (`commit_node`, done for
    * keyed commits), else `file`. Newest first; each commit once, every part it touched listed.
    */
-  commitsTouching(repo: string, parts: readonly { node: string; path?: string }[]): {
-    sha: string; at: string; author: string; subject: string; parts: { node: string; how: 'lines' | 'file' }[];
+  commitsTouching(
+    repo: string,
+    parts: readonly { node: string; path?: string }[],
+  ): {
+    sha: string;
+    at: string;
+    author: string;
+    subject: string;
+    parts: { node: string; how: 'lines' | 'file' }[];
   }[] {
     const by = new Map<string, Map<string, 'lines' | 'file'>>();
     const credit = (sha: string, node: string, how: 'lines' | 'file') => {
@@ -738,27 +922,46 @@ export class SnapshotDb {
       by.set(sha, m);
     };
     const nodeQ = this.db.prepare('SELECT sha, file_only FROM commit_node WHERE repo = ? AND node = ?');
-    const fileQ = this.db.prepare('SELECT DISTINCT sha FROM commit_file WHERE repo = ? AND (path = ? OR substr(path, ?) = ?)');
+    const fileQ = this.db.prepare(
+      'SELECT DISTINCT sha FROM commit_file WHERE repo = ? AND (path = ? OR substr(path, ?) = ?)',
+    );
     for (const p of parts) {
-      for (const r of nodeQ.all(repo, p.node) as { sha: string; file_only: number }[]) credit(r.sha, p.node, r.file_only === 1 ? 'file' : 'lines');
+      for (const r of nodeQ.all(repo, p.node) as { sha: string; file_only: number }[])
+        credit(r.sha, p.node, r.file_only === 1 ? 'file' : 'lines');
       if (!p.path) continue;
       const tail = '/' + p.path;
       for (const r of fileQ.all(repo, p.path, -tail.length, tail) as { sha: string }[]) credit(r.sha, p.node, 'file');
     }
     if (!by.size) return [];
     const rowQ = this.db.prepare('SELECT sha, at, author, subject, agent FROM "commit" WHERE repo = ? AND sha = ?');
-    const out: { sha: string; at: string; author: string; subject: string; agent?: string; parts: { node: string; how: 'lines' | 'file' }[] }[] = [];
+    const out: {
+      sha: string;
+      at: string;
+      author: string;
+      subject: string;
+      agent?: string;
+      parts: { node: string; how: 'lines' | 'file' }[];
+    }[] = [];
     for (const [sha, m] of by) {
-      const r = rowQ.get(repo, sha) as { sha: string; at: string; author: string; subject: string; agent: string | null } | undefined;
+      const r = rowQ.get(repo, sha) as
+        { sha: string; at: string; author: string; subject: string; agent: string | null } | undefined;
       if (!r) continue;
-      out.push({ sha: r.sha, at: r.at, author: r.author, subject: r.subject, ...(r.agent ? { agent: r.agent } : {}), parts: [...m].map(([node, how]) => ({ node, how })) });
+      out.push({
+        sha: r.sha,
+        at: r.at,
+        author: r.author,
+        subject: r.subject,
+        ...(r.agent ? { agent: r.agent } : {}),
+        parts: [...m].map(([node, how]) => ({ node, how })),
+      });
     }
     return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.sha.localeCompare(b.sha)));
   }
 
   /** The key rules the last spine read of `repo` applied, or undefined when none was recorded. */
   spineReadSig(repo: string): string | undefined {
-    const r = this.db.prepare('SELECT keysig FROM spine_read WHERE repo = ?').get(repo) as { keysig: string } | undefined;
+    const r = this.db.prepare('SELECT keysig FROM spine_read WHERE repo = ?').get(repo) as
+      { keysig: string } | undefined;
     return r?.keysig;
   }
 
@@ -777,8 +980,12 @@ export class SnapshotDb {
     try {
       let n = 0;
       for (const sha of shas) {
-        n += Number(this.db.prepare('DELETE FROM commit_key WHERE repo = ? AND sha = ?').run(repo, sha).changes) > 0 ? 1 : 0;
-        for (const t of ['commit_branch', 'commit_node', 'commit_node_done']) this.db.prepare(`DELETE FROM ${t} WHERE repo = ? AND sha = ?`).run(repo, sha);
+        n +=
+          Number(this.db.prepare('DELETE FROM commit_key WHERE repo = ? AND sha = ?').run(repo, sha).changes) > 0
+            ? 1
+            : 0;
+        for (const t of ['commit_branch', 'commit_node', 'commit_node_done'])
+          this.db.prepare(`DELETE FROM ${t} WHERE repo = ? AND sha = ?`).run(repo, sha);
       }
       this.db.exec('COMMIT');
       return n;
@@ -790,7 +997,10 @@ export class SnapshotDb {
 
   /** Every commit carrying at least one key, per repository — the set a work join walks. */
   keyedCommits(): { repo: string; sha: string }[] {
-    return this.db.prepare('SELECT DISTINCT repo, sha FROM commit_key ORDER BY repo, sha').all() as { repo: string; sha: string }[];
+    return this.db.prepare('SELECT DISTINCT repo, sha FROM commit_key ORDER BY repo, sha').all() as {
+      repo: string;
+      sha: string;
+    }[];
   }
 
   /**
@@ -842,7 +1052,9 @@ export class SnapshotDb {
   /** Every shot retained for one node, newest sync first — the point-in-time strip. */
   shotsOf(node: string): ShotRow[] {
     return this.db
-      .prepare('SELECT sync, node, repo, digest, ext, kind, source, bytes FROM sync_shot WHERE node = ? ORDER BY sync DESC')
+      .prepare(
+        'SELECT sync, node, repo, digest, ext, kind, source, bytes FROM sync_shot WHERE node = ? ORDER BY sync DESC',
+      )
       .all(node) as unknown as ShotRow[];
   }
 
@@ -889,14 +1101,24 @@ export class SnapshotDb {
    */
   private commitRows(repo: string, limit?: number): CommitRow[] {
     const rows = this.db
-      .prepare('SELECT sha, at, author, email, subject, parents, merge, agent FROM "commit" WHERE repo = ? ORDER BY at DESC, sha LIMIT ?')
+      .prepare(
+        'SELECT sha, at, author, email, subject, parents, merge, agent FROM "commit" WHERE repo = ? ORDER BY at DESC, sha LIMIT ?',
+      )
       .all(repo, limit ?? Number.MAX_SAFE_INTEGER) as {
-      sha: string; at: string; author: string; email: string; subject: string; parents: string; merge: number; agent: string | null;
+      sha: string;
+      at: string;
+      author: string;
+      email: string;
+      subject: string;
+      parents: string;
+      merge: number;
+      agent: string | null;
     }[];
     const syncs = new Map<string, number[]>();
-    for (const r of this.db
-      .prepare('SELECT sha, sync FROM commit_sync WHERE repo = ? ORDER BY sync')
-      .all(repo) as { sha: string; sync: number }[]) {
+    for (const r of this.db.prepare('SELECT sha, sync FROM commit_sync WHERE repo = ? ORDER BY sync').all(repo) as {
+      sha: string;
+      sync: number;
+    }[]) {
       const list = syncs.get(r.sha);
       if (list) list.push(r.sync);
       else syncs.set(r.sha, [r.sync]);
@@ -970,7 +1192,15 @@ export class SnapshotDb {
           '(SELECT COUNT(*) FROM snapshot_source x WHERE x.sync = s.sync) AS anySource ' +
           'FROM snapshot s ORDER BY s.sync',
       )
-      .all(repo, repo, repo) as { sync: number; at: string; workspace: string | null; own: string | null; mine: number; digest: string | null; anySource: number }[];
+      .all(repo, repo, repo) as {
+      sync: number;
+      at: string;
+      workspace: string | null;
+      own: string | null;
+      mine: number;
+      digest: string | null;
+      anySource: number;
+    }[];
     // Does a history exist for this repository at all? Without one, the containment
     // test below has nothing to run against: every workspace sha would be ruled out
     // and the row would read *this sync recorded no commit*, which is a finding
@@ -988,7 +1218,8 @@ export class SnapshotDb {
       // absent, not false, when the sync recorded no source rows at all
       const took = { ...(anySource ? { inSync: mine > 0 } : {}), ...(digest ? { sourceDigest: digest } : {}) };
       if (own) return { sync, at, commit: own, commitFrom: 'source', ...took };
-      if (workspace && anyHistory && oursByIdentity(workspace)) return { sync, at, commit: workspace, commitFrom: 'workspace', ...took };
+      if (workspace && anyHistory && oursByIdentity(workspace))
+        return { sync, at, commit: workspace, commitFrom: 'workspace', ...took };
       // unreadable rather than absent — but only where the sync did not demonstrably
       // exclude this source: a sync that never walked it cannot have recorded its commit
       if (workspace && !anyHistory && took.inSync !== false) return { sync, at, commitUnverified: workspace, ...took };
@@ -1072,8 +1303,13 @@ export class SnapshotDb {
     const files: FileChange[] = [];
     const read = (sql: string, params: unknown[]) => {
       for (const r of this.db.prepare(sql).all(...(params as never[])) as {
-        sha: string; path: string; status: string; old_path: string | null;
-        added: number | null; deleted: number | null; similarity: number | null;
+        sha: string;
+        path: string;
+        status: string;
+        old_path: string | null;
+        added: number | null;
+        deleted: number | null;
+        similarity: number | null;
       }[]) {
         files.push({
           repo,
@@ -1107,7 +1343,8 @@ export class SnapshotDb {
           'WHERE first_sync <= ? AND (last_sync IS NULL OR last_sync >= ?)',
       )
       .all(head, base) as unknown as AliveRow[];
-    const aliveAt = (r: AliveRow, sync: number) => r.first_sync <= sync && (r.last_sync === null || r.last_sync >= sync);
+    const aliveAt = (r: AliveRow, sync: number) =>
+      r.first_sync <= sync && (r.last_sync === null || r.last_sync >= sync);
     const atBase = new Map<string, AliveRow>();
     const atHead = new Map<string, AliveRow>();
     for (const r of rows) {
@@ -1118,7 +1355,8 @@ export class SnapshotDb {
     for (const [key, b] of atBase) {
       const h = atHead.get(key);
       if (!h) changes.push({ key, change: 'removed', before: JSON.parse(b.json) });
-      else if (h.hash !== b.hash) changes.push({ key, change: 'changed', before: JSON.parse(b.json), after: JSON.parse(h.json) });
+      else if (h.hash !== b.hash)
+        changes.push({ key, change: 'changed', before: JSON.parse(b.json), after: JSON.parse(h.json) });
     }
     for (const [key, h] of atHead) {
       if (!atBase.has(key)) changes.push({ key, change: 'added', after: JSON.parse(h.json) });
@@ -1129,18 +1367,25 @@ export class SnapshotDb {
 
   /** Resolve a sync ref to its snapshot row, distinguishing "pruned" from "not yet". */
   private snapshotRow(ref: 'latest' | number): {
-    sync: number; at: string; tz: string; commit: string | null; digest: string; files: number;
+    sync: number;
+    at: string;
+    tz: string;
+    commit: string | null;
+    digest: string;
+    files: number;
   } {
     if (ref === 'latest') {
       const row = this.db
         .prepare('SELECT sync, at, tz, commit_sha AS "commit", digest, files FROM snapshot ORDER BY sync DESC LIMIT 1')
-        .get() as { sync: number; at: string; tz: string; commit: string | null; digest: string; files: number } | undefined;
+        .get() as
+        { sync: number; at: string; tz: string; commit: string | null; digest: string; files: number } | undefined;
       if (!row) throw new Error(`no snapshots recorded yet in ${this.dbPath} — run \`farsight ingest\` first`);
       return row;
     }
     const row = this.db
       .prepare('SELECT sync, at, tz, commit_sha AS "commit", digest, files FROM snapshot WHERE sync = ?')
-      .get(ref) as { sync: number; at: string; tz: string; commit: string | null; digest: string; files: number } | undefined;
+      .get(ref) as
+      { sync: number; at: string; tz: string; commit: string | null; digest: string; files: number } | undefined;
     if (row) return row;
     const bounds = this.db.prepare('SELECT MIN(sync) AS min, MAX(sync) AS max FROM snapshot').get() as {
       min: number | null;

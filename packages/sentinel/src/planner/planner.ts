@@ -27,7 +27,6 @@ import {
   type CheckState,
   type PlanPins,
   type PlanRevision,
-  type PlanStage,
   type PlannedCheck,
   type PlannedWork,
   type PlannerAnalysis,

@@ -24,10 +24,15 @@ function tempRepo(files: Record<string, string>): string {
 /** every edge of a kind whose endpoints' names match, with the resolution as a flat string */
 function edgesOf(g: GraphFragment, kind: GraphEdge['kind']) {
   const name = (id: string) => g.nodes.find((n) => n.id === id)?.name ?? id;
-  return g.edges.filter((e) => e.kind === kind).map((e) => ({
-    from: name(e.from), to: name(e.to), via: e.meta?.via, deferred: e.meta?.deferred,
-    res: e.resolution ? `${e.resolution.technique}/${e.resolution.confidence}` : null,
-  }));
+  return g.edges
+    .filter((e) => e.kind === kind)
+    .map((e) => ({
+      from: name(e.from),
+      to: name(e.to),
+      via: e.meta?.via,
+      deferred: e.meta?.deferred,
+      res: e.resolution ? `${e.resolution.technique}/${e.resolution.confidence}` : null,
+    }));
 }
 
 test('raw SQL reads and writes are stamped raw-sql; a builder chain is db-builder', async () => {
@@ -74,7 +79,10 @@ export class InvoiceService {
   const g = await ingestRepo(dir, { repo: 'r' });
   const calls = edgesOf(g, 'calls');
   assert.equal(calls.find((e) => e.from === 'InvoiceService.submit' && e.to === 'local')?.res, 'same-file/HIGH');
-  assert.equal(calls.find((e) => e.from === 'InvoiceService.submit' && e.to === 'InvoiceService.check')?.res, 'same-file/HIGH');
+  assert.equal(
+    calls.find((e) => e.from === 'InvoiceService.submit' && e.to === 'InvoiceService.check')?.res,
+    'same-file/HIGH',
+  );
   assert.equal(calls.find((e) => e.from === 'InvoiceService.submit' && e.to === 'sanitize')?.res, 'static-import/HIGH');
 });
 
@@ -157,7 +165,8 @@ export function buildContainer() {
 }
 export async function notify() { return 1; }
 `,
-    'src/guards.ts': '/** @guard signed in */\nexport function requireUser(x: number) { if (!x) throw new Error("no"); return x; }\n',
+    'src/guards.ts':
+      '/** @guard signed in */\nexport function requireUser(x: number) { if (!x) throw new Error("no"); return x; }\n',
     'src/handler.ts': `
 import { requireUser } from './guards.js';
 export function createInvoice(x: number) { return requireUser(x); }
@@ -225,7 +234,10 @@ public class InvoiceController {
   const g = await ingestRepo(dir, { repo: 'r' });
   const calls = edgesOf(g, 'calls');
   // a method of this very type
-  assert.equal(calls.find((e) => e.from === 'InvoiceController.submit' && e.to === 'InvoiceController.audit')?.res, 'same-file/HIGH');
+  assert.equal(
+    calls.find((e) => e.from === 'InvoiceController.submit' && e.to === 'InvoiceController.audit')?.res,
+    'same-file/HIGH',
+  );
   // the mapping annotation is why the route reaches the handler at all
   assert.equal(calls.find((e) => e.to === 'InvoiceController.submit')?.res, 'annotation-scan/HIGH');
   // @PreAuthorize is the gate

@@ -122,12 +122,18 @@ function reasonFrom(text: string, status: number): string {
     // an HTML error page or empty body — say only the status
   }
   if (!words) {
-    words = status === 401 ? 'the credential was refused'
-      : status === 403 ? 'not permitted'
-      : status === 404 ? 'not found, or not visible to this account'
-      : status === 429 ? 'rate limited'
-      : status >= 500 ? 'Jira had a server error'
-      : 'the request was refused';
+    words =
+      status === 401
+        ? 'the credential was refused'
+        : status === 403
+          ? 'not permitted'
+          : status === 404
+            ? 'not found, or not visible to this account'
+            : status === 429
+              ? 'rate limited'
+              : status >= 500
+                ? 'Jira had a server error'
+                : 'the request was refused';
   }
   return words.slice(0, 400);
 }
@@ -172,7 +178,12 @@ export function createJiraClient(opts: ClientOptions): JiraClient {
       } catch (err) {
         const e = err as { name?: string; code?: string; cause?: { code?: string } };
         const code = e.cause?.code ?? e.code;
-        const why = e.name === 'TimeoutError' || e.name === 'AbortError' ? 'timeout' : code ? `unreachable (${code})` : 'unreachable';
+        const why =
+          e.name === 'TimeoutError' || e.name === 'AbortError'
+            ? 'timeout'
+            : code
+              ? `unreachable (${code})`
+              : 'unreachable';
         if (idempotent && attempt < maxRetries && why !== 'timeout') {
           await sleep(Math.min(MAX_WAIT_MS, 500 * 2 ** attempt + Math.floor(random() * 250)));
           continue;
@@ -193,7 +204,11 @@ export function createJiraClient(opts: ClientOptions): JiraClient {
       if (res.ok || o.allow?.includes(res.status)) {
         let body: unknown = undefined;
         if (text) {
-          try { body = JSON.parse(text); } catch { body = text; }
+          try {
+            body = JSON.parse(text);
+          } catch {
+            body = text;
+          }
         }
         return { status: res.status, body: body as T };
       }
@@ -205,8 +220,10 @@ export function createJiraClient(opts: ClientOptions): JiraClient {
     site,
     request,
     get: async <T>(path: string, o?: RequestOptions) => (await request<T>('GET', path, o)).body,
-    post: async <T>(path: string, body: unknown, o?: RequestOptions) => (await request<T>('POST', path, { ...o, body })).body,
-    put: async <T>(path: string, body: unknown, o?: RequestOptions) => (await request<T>('PUT', path, { ...o, body })).body,
+    post: async <T>(path: string, body: unknown, o?: RequestOptions) =>
+      (await request<T>('POST', path, { ...o, body })).body,
+    put: async <T>(path: string, body: unknown, o?: RequestOptions) =>
+      (await request<T>('PUT', path, { ...o, body })).body,
     rateLimit: () => ({ ...lastRate }),
   };
 }

@@ -7,19 +7,11 @@ import { needsStore } from './snapshot-helpers.ts';
 import { preparationClock } from '../dist/service/preparation-clock.js';
 import {
   resolvePreparationInputs,
-  preparationInputBytes,
   preparationResolvedBytes,
-  restorePreparationInputs,
-  checkPreparationProfile,
   preparationTerms,
-  resolvePreparationRun,
 } from '../dist/service/preparation-inputs.js';
 import { discoverPreparationProfile } from '../dist/service/preparation-discovery.js';
 import { openScratchLease, releaseScratchLease } from '../dist/service/scratch-lease.js';
-import { captureWithBudget } from '../dist/snapshot/capture.js';
-import { GitReadBudget } from '../dist/snapshot/git.js';
-import { planPreparedWorkspaceCanonical } from '../dist/service/canonical.js';
-import { loadPlan } from '../dist/execution/plans.js';
 const code = (s: string) => (e: any) => e?.code === s;
 function clockFor(store: any) {
   const now = Date.now();

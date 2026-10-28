@@ -45,8 +45,22 @@ export function runPartsHtml(verdict, api) {
   const v = verdict || {};
   const scope = (v.runs && v.runs.scope) || '';
   // each part is a number with its own tip: what it counts, over the scope the chip names, where from
-  return ['failed', 'skipped', 'flaky'].filter((k) => v[k] > 0).map((k) => SEP
-    + '<span data-run-part="' + k + '" class="tc-run ' + k + '"' + plainTip(v[k], 'count.part.' + k, scope, api || '/api/journey') + '>' + esc(countWords('count.part.' + k, v[k])) + '</span>').join('');
+  return ['failed', 'skipped', 'flaky']
+    .filter((k) => v[k] > 0)
+    .map(
+      (k) =>
+        SEP +
+        '<span data-run-part="' +
+        k +
+        '" class="tc-run ' +
+        k +
+        '"' +
+        plainTip(v[k], 'count.part.' + k, scope, api || '/api/journey') +
+        '>' +
+        esc(countWords('count.part.' + k, v[k])) +
+        '</span>',
+    )
+    .join('');
 }
 
 /**
@@ -59,8 +73,22 @@ export function builtOnlyHtml(ev) {
   const held = heldHtml(ev);
   if (!b) return { before: '', after: held, cls: held ? ' held' : '' };
   return {
-    before: '<span class="tc-pb"' + defAttrs('tests.builtOnly.before', null, { n: b.built, m: b.of }) + '>' + sym('warning') + esc(countWords('tests.builtOnly.before', b.built, b.of)) + '</span>' + SEP,
-    after: SEP + '<span class="tc-pba"' + defAttrs('tests.builtOnly.after', null, { n: b.built }) + '>' + esc(countWords('tests.builtOnly.after', b.built)) + '</span>' + held,
+    before:
+      '<span class="tc-pb"' +
+      defAttrs('tests.builtOnly.before', null, { n: b.built, m: b.of }) +
+      '>' +
+      sym('warning') +
+      esc(countWords('tests.builtOnly.before', b.built, b.of)) +
+      '</span>' +
+      SEP,
+    after:
+      SEP +
+      '<span class="tc-pba"' +
+      defAttrs('tests.builtOnly.after', null, { n: b.built }) +
+      '>' +
+      esc(countWords('tests.builtOnly.after', b.built)) +
+      '</span>' +
+      held,
     cls: ' builtonly' + (held ? ' held' : ''),
   };
 }
@@ -76,9 +104,19 @@ export function heldHtml(ev) {
   if (!h) return '';
   const biz = currentLens() === 'business';
   // the line is the brief's reason; the tip names every case and where it skipped (an older server sends no `full`)
-  return SEP + '<span class="tc-held" data-held' + tipAttrs({ text: (biz ? h.fullBiz : h.full) || (biz ? h.biz : h.text) }) + '>' + sym('warning')
+  return (
+    SEP +
+    '<span class="tc-held" data-held' +
+    tipAttrs({ text: (biz ? h.fullBiz : h.full) || (biz ? h.biz : h.text) }) +
+    '>' +
+    sym('warning') +
     // the Map head's line 1 is a budget: it prints the short word (`readiness.held.short`), every other row the line
-    + '<span class="tc-held-long">' + esc(biz ? h.biz : h.text) + '</span><span class="tc-held-short">' + esc(t('readiness.held.short')) + '</span></span>';
+    '<span class="tc-held-long">' +
+    esc(biz ? h.biz : h.text) +
+    '</span><span class="tc-held-short">' +
+    esc(t('readiness.held.short')) +
+    '</span></span>'
+  );
 }
 
 /**
@@ -89,10 +127,30 @@ export function projectSplitHtml(verdict) {
   const p = verdict && verdict.projectSplit;
   if (!p || !p.words) return '';
   const biz = currentLens() === 'business';
-  const key = biz ? (p.n === 1 ? 'tests.biz.projectSplit' : 'tests.biz.projectSplitMany') : (p.n === 1 ? 'tests.projectSplit' : 'tests.projectSplitMany');
+  const key = biz
+    ? p.n === 1
+      ? 'tests.biz.projectSplit'
+      : 'tests.biz.projectSplitMany'
+    : p.n === 1
+      ? 'tests.projectSplit'
+      : 'tests.projectSplitMany';
   // the chip row names the projects; the tip fills the sentence with each project's quoted reason (an older server sends no `short`)
-  const vars = { n: p.n, passed: (p.passedOn || []).join(', '), skipped: p.words.skipped || (p.skippedOn || []).map((k) => k.project).join(', ') };
-  return '<span class="tc-split-w">' + SEP + '<span class="tc-split" data-project-split="' + esc(String(p.n)) + '"' + defAttrs(key, null, vars) + '>' + esc((biz ? p.words.shortBiz : p.words.short) || (biz ? p.words.biz : p.words.text)) + '</span></span>';
+  const vars = {
+    n: p.n,
+    passed: (p.passedOn || []).join(', '),
+    skipped: p.words.skipped || (p.skippedOn || []).map((k) => k.project).join(', '),
+  };
+  return (
+    '<span class="tc-split-w">' +
+    SEP +
+    '<span class="tc-split" data-project-split="' +
+    esc(String(p.n)) +
+    '"' +
+    defAttrs(key, null, vars) +
+    '>' +
+    esc((biz ? p.words.shortBiz : p.words.short) || (biz ? p.words.biz : p.words.text)) +
+    '</span></span>'
+  );
 }
 
 /** The evidence word as a chip, with the journey's evidence tip (registered by the journey surface). */
@@ -100,12 +158,34 @@ export function testEvidenceHtml(facts, opts = {}) {
   const f = facts || {};
   const ev = f.evidenceWord || (f.verdict && f.verdict.word) || null;
   if (!ev || !ev.key || ev.cls === 'none') return '';
-  const glyph = ev.cls === 'observed' ? sym('live') : ev.cls === 'stale' ? sym('stale') : ev.cls === 'reached' ? sym('step') : '';
+  const glyph =
+    ev.cls === 'observed' ? sym('live') : ev.cls === 'stale' ? sym('stale') : ev.cls === 'reached' ? sym('step') : '';
   const pb = builtOnlyHtml(ev);
   // a head that prints *n of m screens built* beside the chip keeps the scope after the word and drops the repeat before it
   if (opts.builtShown) pb.before = '';
-  return pb.before + EV_OPEN + esc(ev.cls) + pb.cls + ' ' + esc(opts.evCls || '') + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: f.observation || null, verdict: f.verdict ? { status: f.verdict.status } : null, fresh: f.freshness || null } }) + '>'
-    + glyph + esc(t(ev.key)) + '</span>' + pb.after;
+  return (
+    pb.before +
+    EV_OPEN +
+    esc(ev.cls) +
+    pb.cls +
+    ' ' +
+    esc(opts.evCls || '') +
+    '"' +
+    tipAttrs({
+      id: 'jrnEvidence',
+      args: {
+        ev,
+        obs: f.observation || null,
+        verdict: f.verdict ? { status: f.verdict.status } : null,
+        fresh: f.freshness || null,
+      },
+    }) +
+    '>' +
+    glyph +
+    esc(t(ev.key)) +
+    '</span>' +
+    pb.after
+  );
 }
 
 /**
@@ -115,7 +195,14 @@ export function testEvidenceHtml(facts, opts = {}) {
 export function testBasisHtml(facts) {
   const o = facts && facts.observation;
   if (!o || o.by !== 'declaration' || !o.cases) return '';
-  return SEP + '<span class="tc-basis"' + defAttrs(o.cases === 1 ? 'journey.obs.passedOne' : 'journey.obs.passed', null, { n: o.cases }) + '>' + esc(countWords('journey.obs.passed', o.cases)) + '</span>';
+  return (
+    SEP +
+    '<span class="tc-basis"' +
+    defAttrs(o.cases === 1 ? 'journey.obs.passedOne' : 'journey.obs.passed', null, { n: o.cases }) +
+    '>' +
+    esc(countWords('journey.obs.passed', o.cases)) +
+    '</span>'
+  );
 }
 
 /**
@@ -129,11 +216,27 @@ export function runsSentenceHtml(verdict, api) {
   const parts = ((runs && runs.breakdown) || []).filter((p) => p.n > 0);
   if (!parts.length || parts.every((p) => p.key === 'count.part.passed')) return runPartsHtml(verdict, api);
   const scope = (runs && runs.scope) || '';
-  return SEP + '<span class="tc-runs">'
-    + parts.map((p) => {
-      const k = p.key.replace('count.part.', '');
-      return '<span data-run-part="' + esc(k) + '" class="tc-run ' + esc(k) + '"' + plainTip(p.n, p.key, scope, api || '/api/journey') + '>' + esc(countWords(p.key, p.n)) + '</span>';
-    }).join('<span class="tc-sep"> · </span>') + '</span>';
+  return (
+    SEP +
+    '<span class="tc-runs">' +
+    parts
+      .map((p) => {
+        const k = p.key.replace('count.part.', '');
+        return (
+          '<span data-run-part="' +
+          esc(k) +
+          '" class="tc-run ' +
+          esc(k) +
+          '"' +
+          plainTip(p.n, p.key, scope, api || '/api/journey') +
+          '>' +
+          esc(countWords(p.key, p.n)) +
+          '</span>'
+        );
+      })
+      .join('<span class="tc-sep"> · </span>') +
+    '</span>'
+  );
 }
 
 /**
@@ -154,8 +257,18 @@ export function testChipHtml(facts, opts = {}) {
   if (!k) return '';
   // nothing reaches it: the caller says so in words — or, asked for `zero`, the 0 with its scope
   if (!k.n && !(f.counted.runReports && f.counted.runReports.n)) {
-    return opts.zero ? CHIP_OPEN + 'zero ' + esc(opts.cls || '') + '" data-scope="' + esc(k.scope || '') + '">'
-      + countedHtml(k, opts.api || '/api/journey', { cls: 'cnt-n tc-n' }) + SEP + scopeWordHtml(scope) + '</span>' : '';
+    return opts.zero
+      ? CHIP_OPEN +
+          'zero ' +
+          esc(opts.cls || '') +
+          '" data-scope="' +
+          esc(k.scope || '') +
+          '">' +
+          countedHtml(k, opts.api || '/api/journey', { cls: 'cnt-n tc-n' }) +
+          SEP +
+          scopeWordHtml(scope) +
+          '</span>'
+      : '';
   }
   // the number's tip is its cases by their own last runs (`verdict.runs`, the same cases, a breakdown that sums) — the
   // chip's word and skips are about runs, and the level split is printed on its own line beside the chip
@@ -163,14 +276,29 @@ export function testChipHtml(facts, opts = {}) {
   const num = countedHtml(runs, opts.api || '/api/journey', { cls: 'cnt-n tc-n' });
   if (!num) return '';
   const distinct = opts.distinct
-    ? SEP + '<span class="tc-distinct"' + tipAttrs({ id: 'tchipDistinct', args: opts.distinct }) + '>' + esc(t('tests.distinct')) + '</span>' : '';
+    ? SEP +
+      '<span class="tc-distinct"' +
+      tipAttrs({ id: 'tchipDistinct', args: opts.distinct }) +
+      '>' +
+      esc(t('tests.distinct')) +
+      '</span>'
+    : '';
   const word = opts.word === false ? '' : testEvidenceHtml(f, opts);
-  return CHIP_OPEN + esc(opts.cls || '') + '" data-scope="' + esc(k.scope || '') + '">'
-    + num + SEP + scopeWordHtml(scope) + distinct
-    + (word ? SEP + word + (opts.basis === false ? '' : testBasisHtml(f)) : '')
-    + (opts.runs === false ? runPartsHtml(f.verdict, opts.api) : runsSentenceHtml(f.verdict, opts.api))
-    + (opts.runs === false ? '' : projectSplitHtml(f.verdict))
-    + '</span>';
+  return (
+    CHIP_OPEN +
+    esc(opts.cls || '') +
+    '" data-scope="' +
+    esc(k.scope || '') +
+    '">' +
+    num +
+    SEP +
+    scopeWordHtml(scope) +
+    distinct +
+    (word ? SEP + word + (opts.basis === false ? '' : testBasisHtml(f)) : '') +
+    (opts.runs === false ? runPartsHtml(f.verdict, opts.api) : runsSentenceHtml(f.verdict, opts.api)) +
+    (opts.runs === false ? '' : projectSplitHtml(f.verdict)) +
+    '</span>'
+  );
 }
 
 /**
@@ -181,13 +309,36 @@ export function testChipHtml(facts, opts = {}) {
 export function notBuiltChipHtml(facts, opts = {}) {
   const f = facts || {};
   const k = f.counted && f.counted.tests;
-  const reach = k && k.n
-    ? SEP + countedHtml(k, opts.api || '/api/journey', { cls: 'cnt-n tc-n' }) + SEP + scopeWordHtml(testScopeWordKey(f)) + runPartsHtml(f.verdict, opts.api)
-    : '';
-  return CHIP_OPEN + 'nb ' + esc(opts.cls || '') + '" data-not-built data-scope="' + esc((k && k.scope) || '') + '">'
-    + '<span class="tc-nb"' + defAttrs('tests.notBuilt.word') + '>' + sym('warning') + esc(t('tests.notBuilt.word')) + '</span>'
-    + SEP + '<span class="tc-nbs"' + defAttrs('tests.notBuilt.sentence') + '>' + esc(t('tests.notBuilt.sentence')) + '</span>'
-    + reach + '</span>';
+  const reach =
+    k && k.n
+      ? SEP +
+        countedHtml(k, opts.api || '/api/journey', { cls: 'cnt-n tc-n' }) +
+        SEP +
+        scopeWordHtml(testScopeWordKey(f)) +
+        runPartsHtml(f.verdict, opts.api)
+      : '';
+  return (
+    CHIP_OPEN +
+    'nb ' +
+    esc(opts.cls || '') +
+    '" data-not-built data-scope="' +
+    esc((k && k.scope) || '') +
+    '">' +
+    '<span class="tc-nb"' +
+    defAttrs('tests.notBuilt.word') +
+    '>' +
+    sym('warning') +
+    esc(t('tests.notBuilt.word')) +
+    '</span>' +
+    SEP +
+    '<span class="tc-nbs"' +
+    defAttrs('tests.notBuilt.sentence') +
+    '>' +
+    esc(t('tests.notBuilt.sentence')) +
+    '</span>' +
+    reach +
+    '</span>'
+  );
 }
 
 /**
@@ -211,8 +362,14 @@ export function distinctArgs(sum) {
     row('tests.distinct.actions', (sg) => n(sg.counted && sg.counted.actions), n(total.actions)),
     row('tests.distinct.gates', (sg) => n(sg.counted && sg.counted.gates), n(total.gates)),
     // a not-built screen's cases are the route's, not the screen's: no case reaches a screen with no code
-    row('tests.distinct.cases', (_, i) => (cov.segments && cov.segments[i] && cov.segments[i].notBuilt ? 0 : n(cov.segments && cov.segments[i] && cov.segments[i].counted && cov.segments[i].counted.tests)),
-      n(cov.journey && cov.journey.counted && cov.journey.counted.tests)),
+    row(
+      'tests.distinct.cases',
+      (_, i) =>
+        cov.segments && cov.segments[i] && cov.segments[i].notBuilt
+          ? 0
+          : n(cov.segments && cov.segments[i] && cov.segments[i].counted && cov.segments[i].counted.tests),
+      n(cov.journey && cov.journey.counted && cov.journey.counted.tests),
+    ),
   ].filter(Boolean);
   if (!rows.length) return null;
   return { screens: segs.map((sg, i) => (sg.screen && sg.screen.name) || String(i + 1)), rows };
@@ -220,8 +377,18 @@ export function distinctArgs(sum) {
 
 registerTip('tchipDistinct', (el, a) => {
   if (!a || !a.rows) return '';
-  const columns = [''].concat(a.screens, ['tests.distinct.perScreen', 'tests.distinct.total']).map((c, i) => (i ? { label: c, num: true } : c));
-  return '<div class="tip-h">' + esc(t('tests.distinct.head')) + '</div>'
-    + '<p class="tip-p">' + esc(t('tests.distinct')) + ' — ' + esc(def('tests.distinct') || '') + '</p>'
-    + tableTip({ columns, rows: a.rows });
+  const columns = ['']
+    .concat(a.screens, ['tests.distinct.perScreen', 'tests.distinct.total'])
+    .map((c, i) => (i ? { label: c, num: true } : c));
+  return (
+    '<div class="tip-h">' +
+    esc(t('tests.distinct.head')) +
+    '</div>' +
+    '<p class="tip-p">' +
+    esc(t('tests.distinct')) +
+    ' — ' +
+    esc(def('tests.distinct') || '') +
+    '</p>' +
+    tableTip({ columns, rows: a.rows })
+  );
 });

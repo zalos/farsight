@@ -44,7 +44,11 @@ function fixture() {
   write(dir, 'src/a.ts', 'export function one() {\n  return 11;\n}\n\nexport function two() {\n  return 2;\n}\n');
   sha.subject = commit(dir, 'KAN-1: add two', '2026-01-02T00:00:00Z');
   write(dir, 'src/b.ts', 'export const b = 1;\n');
-  sha.url = commit(dir, 'tidy b\n\nRefs https://example.atlassian.net/browse/KAN-5 for context', '2026-01-03T00:00:00Z');
+  sha.url = commit(
+    dir,
+    'tidy b\n\nRefs https://example.atlassian.net/browse/KAN-5 for context',
+    '2026-01-03T00:00:00Z',
+  );
   write(dir, 'src/c.ts', 'export const c = 1;\n');
   sha.negatives = commit(dir, 'bump SHA-256 helper, fix #12, screen INV-01', '2026-01-04T00:00:00Z');
 
@@ -96,10 +100,18 @@ test('a local main ahead of its remote keeps its own commits: a branch cut from 
   assert.ok(log.available);
   if (!log.available) return;
   const by = new Map(log.commits.map((c) => [c.sha, c]));
-  assert.equal(by.get(local)!.branches, undefined, 'local main is a default branch too — its commit is not the branch\'s');
+  assert.equal(
+    by.get(local)!.branches,
+    undefined,
+    "local main is a default branch too — its commit is not the branch's",
+  );
   assert.deepEqual(by.get(own)!.branches, [{ ref: 'feature/KAN-8-x', via: 'branch' }]);
   assert.ok(sha.root);
-  assert.equal(by.get(sha.merge!)!.files.length, 0, 'the merge commit itself carries no files — which is why its branch commits are attributed');
+  assert.equal(
+    by.get(sha.merge!)!.files.length,
+    0,
+    'the merge commit itself carries no files — which is why its branch commits are attributed',
+  );
 });
 
 test('commitInputsOf: every key with how it was found — and SHA-256, #12 and a screen name are not keys', () => {
@@ -118,8 +130,15 @@ test('commitInputsOf: every key with how it was found — and SHA-256, #12 and a
   assert.deepEqual(inputs.get(sha.open!)!.branches, ['feature/kan-2-open']);
   // with an Azure DevOps source configured, #12 becomes a key; without keys asked for, none are claimed
   const ado = commitInputsOf(log.commits, { opts: { ...opts, ado: true } }).find((c) => c.sha === sha.negatives)!;
-  assert.deepEqual(ado.keys!.map((k) => k.key), ['12']);
-  assert.equal(commitInputsOf(log.commits).find((c) => c.sha === sha.subject)!.keys, undefined, 'a plain read claims nothing about keys');
+  assert.deepEqual(
+    ado.keys!.map((k) => k.key),
+    ['12'],
+  );
+  assert.equal(
+    commitInputsOf(log.commits).find((c) => c.sha === sha.subject)!.keys,
+    undefined,
+    'a plain read claims nothing about keys',
+  );
 });
 
 test('gitLog after: an incremental read walks only what is new', () => {

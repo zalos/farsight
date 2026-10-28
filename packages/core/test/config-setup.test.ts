@@ -10,15 +10,34 @@
 // `pnpm build` first.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyConfig, applyRouteGuards, scopeOfDir, applySetupOrigin, globToRegExp, applyTooling, glossaryEntryFor, buildIndex, journey, configCounts, configFilesText, configOverviewLines, countedProblems } from '../dist/index.js';
+import {
+  applyConfig,
+  applyRouteGuards,
+  scopeOfDir,
+  applySetupOrigin,
+  globToRegExp,
+  applyTooling,
+  glossaryEntryFor,
+  buildIndex,
+  journey,
+  configCounts,
+  configFilesText,
+  configOverviewLines,
+  countedProblems,
+} from '../dist/index.js';
 import type { GraphNode, GraphEdge, FarsightConfig, ConfigMeta } from '../dist/index.js';
 
 const R = 'app';
 const id = (path: string, name: string): string => `${R}::${path}::${name}`;
 const fn = (name: string, path: string, line: number, extra: Partial<GraphNode> = {}): GraphNode =>
   ({ id: id(path, name), kind: 'function', name, tags: [], loc: { repo: R, path, line }, ...extra }) as GraphNode;
-const edge = (kind: GraphEdge['kind'], from: string, to: string, line: number): GraphEdge =>
-  ({ id: `${kind}|${from}|${to}`, kind, from, to, meta: { line } });
+const edge = (kind: GraphEdge['kind'], from: string, to: string, line: number): GraphEdge => ({
+  id: `${kind}|${from}|${to}`,
+  kind,
+  from,
+  to,
+  meta: { line },
+});
 
 const CONTAINER = 'libs/runtime/container.ts';
 const BUILD = id(CONTAINER, 'build');
@@ -57,7 +76,10 @@ const originOf = (edges: GraphEdge[], kind: GraphEdge['kind'], from: string, to:
 test('a setup root declared by exact node id: boot-only callees join the closure, a shared callee stays out', () => {
   const { nodes, edges } = container();
   applyConfig(nodes, { setup: [BUILD] } as FarsightConfig, edges);
-  assert.deepEqual(nodes.filter((n) => n.tags.includes('setup')).map((n) => n.name), ['build']);
+  assert.deepEqual(
+    nodes.filter((n) => n.tags.includes('setup')).map((n) => n.name),
+    ['build'],
+  );
 
   const stamped = applySetupOrigin(nodes, edges);
   assert.equal(stamped, 4);
@@ -65,24 +87,42 @@ test('a setup root declared by exact node id: boot-only callees join the closure
   // out-edges of a closure member, whatever the target: runMigrations joined (only build calls it)
   assert.equal(originOf(edges, 'calls', BUILD, id('libs/db/migrate.ts', 'runMigrations')), 'setup');
   assert.equal(originOf(edges, 'calls', BUILD, id('libs/config/env.ts', 'loadEnv')), 'setup');
-  assert.equal(originOf(edges, 'writes', id('libs/db/migrate.ts', 'runMigrations'), `${R}::table::schema_migrations`), 'setup');
+  assert.equal(
+    originOf(edges, 'writes', id('libs/db/migrate.ts', 'runMigrations'), `${R}::table::schema_migrations`),
+    'setup',
+  );
   // the calls in-edge into a setup root — the memo that hands the container out
   assert.equal(originOf(edges, 'calls', id(CONTAINER, 'getContainer'), BUILD), 'setup');
 
   // loadEnv has a second caller, so it is not boot-only: its own call is ordinary work,
   // and the request path into it is never dimmed
-  assert.equal(originOf(edges, 'calls', id('libs/config/env.ts', 'loadEnv'), id('libs/config/env.ts', 'parseEnv')), undefined);
-  assert.equal(originOf(edges, 'calls', id('apps/web/routes.ts', 'handler'), id('libs/config/env.ts', 'loadEnv')), undefined);
+  assert.equal(
+    originOf(edges, 'calls', id('libs/config/env.ts', 'loadEnv'), id('libs/config/env.ts', 'parseEnv')),
+    undefined,
+  );
+  assert.equal(
+    originOf(edges, 'calls', id('apps/web/routes.ts', 'handler'), id('libs/config/env.ts', 'loadEnv')),
+    undefined,
+  );
 });
 
 test('a setup root declared by name matcher reaches the same closure, and only functions match', () => {
   const { nodes, edges } = container();
   applyConfig(nodes, { setup: ['container.ts::build', 'build'] } as FarsightConfig, edges);
-  assert.deepEqual(nodes.filter((n) => n.tags.includes('setup')).map((n) => n.name), ['build']);
+  assert.deepEqual(
+    nodes.filter((n) => n.tags.includes('setup')).map((n) => n.name),
+    ['build'],
+  );
 
   applySetupOrigin(nodes, edges);
-  assert.equal(originOf(edges, 'writes', id('libs/db/migrate.ts', 'runMigrations'), `${R}::table::schema_migrations`), 'setup');
-  assert.equal(originOf(edges, 'calls', id('apps/web/routes.ts', 'handler'), id('libs/config/env.ts', 'loadEnv')), undefined);
+  assert.equal(
+    originOf(edges, 'writes', id('libs/db/migrate.ts', 'runMigrations'), `${R}::table::schema_migrations`),
+    'setup',
+  );
+  assert.equal(
+    originOf(edges, 'calls', id('apps/web/routes.ts', 'handler'), id('libs/config/env.ts', 'loadEnv')),
+    undefined,
+  );
 });
 
 test('applySetupOrigin is idempotent and additive on meta', () => {
@@ -107,9 +147,16 @@ test('no setup tag, no stamping — the graph is untouched', () => {
 // ── plumbing ─────────────────────────────────────────────────────────────
 
 test('a plumbing glob tags the directory it names and nothing beside it', () => {
-  const nodes: GraphNode[] = [fn('format', 'src/plumbing/format.ts', 3), fn('format', 'src/format.ts', 3), fn('readJson', 'src/plumbing/http/json.ts', 8)];
+  const nodes: GraphNode[] = [
+    fn('format', 'src/plumbing/format.ts', 3),
+    fn('format', 'src/format.ts', 3),
+    fn('readJson', 'src/plumbing/http/json.ts', 8),
+  ];
   applyConfig(nodes, { plumbing: ['src/plumbing/**'] } as FarsightConfig, []);
-  assert.deepEqual(nodes.map((n) => n.tags.includes('plumbing')), [true, false, true]);
+  assert.deepEqual(
+    nodes.map((n) => n.tags.includes('plumbing')),
+    [true, false, true],
+  );
 
   applyConfig(nodes, { plumbing: ['src/plumbing/**'] } as FarsightConfig, []);
   assert.deepEqual(nodes[0]!.tags, ['plumbing']); // idempotent — never a second copy
@@ -148,11 +195,25 @@ test('glossary: exact name, then the member part, then the class part', () => {
   const label = (name: string) => nodes.find((n) => n.name === name)!.facets?.business?.label;
   assert.equal(label('assertSameOrigin'), 'Same-origin check', 'exact');
   assert.equal(label('PgBcOutboxRepository.claimNext'), 'Claim the next outbox row', 'member part');
-  assert.equal(nodes.find((n) => n.name === 'PgBcOutboxRepository.claimNext')!.facets?.business?.description, 'Takes one pending write.');
-  assert.equal(label('BcClient.request'), 'Send a request to Business Central', 'an exact Class.method entry beats the class');
-  assert.equal(label('BcClient.createVendor'), 'Business Central client: create vendor', 'class part: its words plus the member');
-  assert.equal(nodes.find((n) => n.name === 'BcClient.createVendor')!.facets?.business?.description, undefined,
-    'the class’s description does not describe a member');
+  assert.equal(
+    nodes.find((n) => n.name === 'PgBcOutboxRepository.claimNext')!.facets?.business?.description,
+    'Takes one pending write.',
+  );
+  assert.equal(
+    label('BcClient.request'),
+    'Send a request to Business Central',
+    'an exact Class.method entry beats the class',
+  );
+  assert.equal(
+    label('BcClient.createVendor'),
+    'Business Central client: create vendor',
+    'class part: its words plus the member',
+  );
+  assert.equal(
+    nodes.find((n) => n.name === 'BcClient.createVendor')!.facets?.business?.description,
+    undefined,
+    'the class’s description does not describe a member',
+  );
   assert.equal(label('BcOutboxWorker.drainOnce'), 'Business Central outbox worker: drain once');
   assert.equal(label('BcOutboxWorker.claimNext'), 'Claim the next outbox row', 'member beats class');
   assert.equal(label('Unrelated.method'), undefined);
@@ -165,10 +226,18 @@ test('glossary: exact name, then the member part, then the class part', () => {
   assert.equal(g[0]!.kind, 'guard');
   // a guard the adapter already renamed (`name: label`) matches on the identifier before the colon,
   // and keeps the description its code wrote when the glossary gives none
-  const found = [{ ...fn('assertSameOrigin: same-origin on mutating routes', 'libs/http/origin.ts', 5), kind: 'guard',
-    facets: { business: { description: 'Blocks cross-site writes.' } } } as GraphNode];
+  const found = [
+    {
+      ...fn('assertSameOrigin: same-origin on mutating routes', 'libs/http/origin.ts', 5),
+      kind: 'guard',
+      facets: { business: { description: 'Blocks cross-site writes.' } },
+    } as GraphNode,
+  ];
   applyConfig(found, { glossary });
-  assert.deepEqual(found[0]!.facets?.business, { label: 'Same-origin check', description: 'Blocks cross-site writes.' });
+  assert.deepEqual(found[0]!.facets?.business, {
+    label: 'Same-origin check',
+    description: 'Blocks cross-site writes.',
+  });
 });
 
 // ── tooling (config `tooling`, default scripts/**) ──────────────────────
@@ -182,13 +251,23 @@ test('tooling: tagged, the app’s edges into it demoted to LOW, and a journey f
   ];
   const edges: GraphEdge[] = [
     edge('calls', id('src/worker.ts', 'Worker.drain'), id('src/container.ts', 'build.log'), 3),
-    { ...edge('calls', id('src/worker.ts', 'Worker.drain'), id('scripts/pilot.ts', 'main.log'), 3),
-      resolution: { status: 'heuristic', technique: 'hook-binding', confidence: 'MEDIUM', note: 'bound at scripts/pilot.ts:3' } },
+    {
+      ...edge('calls', id('src/worker.ts', 'Worker.drain'), id('scripts/pilot.ts', 'main.log'), 3),
+      resolution: {
+        status: 'heuristic',
+        technique: 'hook-binding',
+        confidence: 'MEDIUM',
+        note: 'bound at scripts/pilot.ts:3',
+      },
+    },
     edge('calls', id('scripts/pilot.ts', 'main'), id('src/worker.ts', 'Worker.drain'), 4),
   ];
   assert.equal(applyTooling(nodes, edges), 1, 'one edge from the app into a script');
   assert.equal(applyTooling(nodes, edges), 0, 'idempotent');
-  assert.deepEqual(nodes.filter((n) => n.tags.includes('tooling')).map((n) => n.name), ['main', 'main.log']);
+  assert.deepEqual(
+    nodes.filter((n) => n.tags.includes('tooling')).map((n) => n.name),
+    ['main', 'main.log'],
+  );
   const into = edges[1]!;
   assert.equal(into.resolution?.confidence, 'LOW');
   assert.equal(into.resolution?.technique, 'hook-binding');
@@ -198,7 +277,10 @@ test('tooling: tagged, the app’s edges into it demoted to LOW, and a journey f
   const fromApp = journey(index, id('src/worker.ts', 'Worker.drain')).steps.map((s) => s.nodeId);
   assert.deepEqual(fromApp, [id('src/worker.ts', 'Worker.drain'), id('src/container.ts', 'build.log')]);
   const fromScript = journey(index, id('scripts/pilot.ts', 'main')).steps.map((s) => s.nodeId);
-  assert.ok(fromScript.includes(id('scripts/pilot.ts', 'main.log')), 'a journey that starts in a script walks as it always did');
+  assert.ok(
+    fromScript.includes(id('scripts/pilot.ts', 'main.log')),
+    'a journey that starts in a script walks as it always did',
+  );
 });
 
 // ── a nested farsight.config.json speaks only for its folder (journey-organisation-and-config-files.md §5.2) ──
@@ -207,22 +289,36 @@ test('scopeOfDir: the nodes under a folder, never a sibling that shares its pref
   const scope = scopeOfDir('apps/a')!;
   assert.equal(scope(fn('x', 'apps/a/src/x.ts', 1)), true);
   assert.equal(scope(fn('x', 'apps/ab/src/x.ts', 1)), false, 'apps/ab is not under apps/a');
-  assert.equal(scope({ id: 'app::table::t', kind: 'table', name: 't', tags: [] } as GraphNode), false, 'a node with no file is under no folder');
+  assert.equal(
+    scope({ id: 'app::table::t', kind: 'table', name: 't', tags: [] } as GraphNode),
+    false,
+    'a node with no file is under no folder',
+  );
   assert.equal(scopeOfDir('.'), undefined);
   assert.equal(scopeOfDir(''), undefined);
   assert.equal(scopeOfDir('.storybook')!(fn('x', '.storybook/main.ts', 1)), true, 'a dot folder keeps its dot');
 });
 
 test('applyConfig with a scope tags, glosses and guards only the nodes in it; a function an earlier file guarded is reported, not renamed', () => {
-  const nodes = [fn('helper', 'apps/a/src/h.ts', 1), fn('helper', 'src/h.ts', 1), fn('withTenant', 'apps/a/src/t.ts', 1)];
+  const nodes = [
+    fn('helper', 'apps/a/src/h.ts', 1),
+    fn('helper', 'src/h.ts', 1),
+    fn('withTenant', 'apps/a/src/t.ts', 1),
+  ];
   const edges: GraphEdge[] = [];
   const root: FarsightConfig = { guards: { tenant: ['withTenant'] } };
   const first = applyConfig(nodes, root, edges);
   assert.deepEqual(first.guarded, [id('apps/a/src/t.ts', 'withTenant')]);
   const heard: string[] = [];
-  const nested: FarsightConfig = { tags: { mine: ['helper'] }, glossary: { helper: { label: 'Mine' } }, guards: { session: ['withTenant'] } };
+  const nested: FarsightConfig = {
+    tags: { mine: ['helper'] },
+    glossary: { helper: { label: 'Mine' } },
+    guards: { session: ['withTenant'] },
+  };
   const second = applyConfig(nodes, nested, edges, {
-    scope: scopeOfDir('apps/a'), guarded: new Set(first.guarded), onGuardConflict: (n, label) => heard.push(`${n.id}:${label}`),
+    scope: scopeOfDir('apps/a'),
+    guarded: new Set(first.guarded),
+    onGuardConflict: (n, label) => heard.push(`${n.id}:${label}`),
   });
   assert.deepEqual(second.guarded, []);
   assert.deepEqual(heard, [`${id('apps/a/src/t.ts', 'withTenant')}:session`]);
@@ -234,12 +330,22 @@ test('applyConfig with a scope tags, glosses and guards only the nodes in it; a 
 });
 
 test('applyRouteGuards with a scope gates only the routes under the folder', () => {
-  const route = (path: string): GraphNode => ({ id: `${R}::${path}::GET /x`, kind: 'route', name: 'GET /x', tags: [], loc: { repo: R, path, line: 1 } }) as GraphNode;
+  const route = (path: string): GraphNode =>
+    ({
+      id: `${R}::${path}::GET /x`,
+      kind: 'route',
+      name: 'GET /x',
+      tags: [],
+      loc: { repo: R, path, line: 1 },
+    }) as GraphNode;
   const nodes = [route('apps/a/src/routes.ts'), route('apps/b/src/routes.ts')];
   const edges: GraphEdge[] = [];
   const added = applyRouteGuards(nodes, { guards: { token: ['GET /x'] } }, edges, scopeOfDir('apps/a'));
   assert.equal(added, 1);
-  assert.deepEqual(edges.map((e) => e.to), [nodes[0]!.id]);
+  assert.deepEqual(
+    edges.map((e) => e.to),
+    [nodes[0]!.id],
+  );
 });
 
 test('config counts: files split root · scoped, conflicts beside them, every count sound; the overview is silent for a root-only source', () => {
@@ -248,18 +354,33 @@ test('config counts: files split root · scoped, conflicts beside them, every co
       { path: 'farsight.config.json', dir: '.', root: true, fields: ['glossary'], ignored: [] },
       { path: 'apps/a/farsight.config.json', dir: 'apps/a', root: false, fields: ['glossary'], ignored: ['tooling'] },
     ],
-    conflicts: [{ kind: 'glossary', key: 'helper', files: ['farsight.config.json', 'apps/a/farsight.config.json'], kept: 'apps/a/farsight.config.json' }],
+    conflicts: [
+      {
+        kind: 'glossary',
+        key: 'helper',
+        files: ['farsight.config.json', 'apps/a/farsight.config.json'],
+        kept: 'apps/a/farsight.config.json',
+      },
+    ],
     notes: ["tooling is root-only; apps/a/farsight.config.json's was ignored."],
   };
   const c = configCounts(meta);
   assert.equal(c.files.n, 2);
   assert.equal(c.files.scope, 'count.scope.source');
-  assert.deepEqual(c.files.breakdown!.map((p) => p.n), [1, 1]);
+  assert.deepEqual(
+    c.files.breakdown!.map((p) => p.n),
+    [1, 1],
+  );
   assert.deepEqual(countedProblems(c.files), []);
   assert.deepEqual(countedProblems(c.conflicts), []);
-  assert.deepEqual(configOverviewLines({ app: meta }), ['config: app — 2 config files (1 for the whole source · 1 for one folder) · 1 conflict · 1 note(s) — config_files lists them']);
+  assert.deepEqual(configOverviewLines({ app: meta }), [
+    'config: app — 2 config files (1 for the whole source · 1 for one folder) · 1 conflict · 1 note(s) — config_files lists them',
+  ]);
   assert.deepEqual(configOverviewLines({ app: { files: [meta.files[0]!], conflicts: [], notes: [] } }), []);
   const text = configFilesText({ app: meta });
-  assert.equal(text[0], '## app — 2 config files in this source (1 for the whole source · 1 for one folder) · 1 conflict');
+  assert.equal(
+    text[0],
+    '## app — 2 config files in this source (1 for the whole source · 1 for one folder) · 1 conflict',
+  );
   assert.equal(text[2], 'apps/a/farsight.config.json — scoped to apps/a/ · glossary · ignored: tooling');
 });

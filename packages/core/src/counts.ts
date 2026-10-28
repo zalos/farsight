@@ -61,43 +61,43 @@ export interface Counted {
  * someone typed.
  */
 export const COUNT_SCOPES = [
-  'surf.scope.api',        // declared and implemented operations on one reconciled API surface
-  'echo.portal.scope',     // only the bounded page of scoped memory records returned by Echo
+  'surf.scope.api', // declared and implemented operations on one reconciled API surface
+  'echo.portal.scope', // only the bounded page of scoped memory records returned by Echo
   'sentinel.scope.inspection', // one immutable sanitized service inspection view
   'sentinel.evidence.countScope', // one accepted imported report, no scanner or coverage credit
   'sentinel.decision.pageScope', // only returned owner-decision metadata, not all history
   'sentinel.evidence.pageScope', // only returned import-operation metadata, not full history
-  'sentinel.scope.report',    // one saved Sentinel report at its pinned ledger sequence and evaluation time
-  'sentinel.scope.finding',   // the placement of one Sentinel finding: its screens, journeys and personas, each once
+  'sentinel.scope.report', // one saved Sentinel report at its pinned ledger sequence and evaluation time
+  'sentinel.scope.finding', // the placement of one Sentinel finding: its screens, journeys and personas, each once
   'sentinel.scope.inventory', // a Sentinel snapshot's captured inventory, before any check ran
 
-  'journey.scopeAll',       // the whole journey, each thing once however many screens meet it
-  'journey.scopeHere',      // one screen of a journey
-  'count.scope.action',     // one action of one screen
-  'count.scope.node',       // one node, alone
-  'count.scope.source',     // one source × one test level (a Tests source card)
-  'count.scope.selection',  // the sources and the level the Tests page has selected
-  'count.scope.workspace',  // every source in scope
-  'count.scope.component',  // a component's own stories
-  'count.scope.parts',      // the parts a screen or component renders
-  'count.scope.storybook',  // one running Storybook's index
+  'journey.scopeAll', // the whole journey, each thing once however many screens meet it
+  'journey.scopeHere', // one screen of a journey
+  'count.scope.action', // one action of one screen
+  'count.scope.node', // one node, alone
+  'count.scope.source', // one source × one test level (a Tests source card)
+  'count.scope.selection', // the sources and the level the Tests page has selected
+  'count.scope.workspace', // every source in scope
+  'count.scope.component', // a component's own stories
+  'count.scope.parts', // the parts a screen or component renders
+  'count.scope.storybook', // one running Storybook's index
   'count.scope.workSource', // the items one tracker source holds, as of its last sync
-  'count.scope.workSources',// every tracker source a command read, each item once
-  'count.scope.workSync',   // one sync of one tracker source
-  'count.scope.workItem',   // one work item
-  'count.scope.project',    // one workspace project (core projects.ts), and the projects it depends on
-  'count.scope.package',    // one package of one source: every file of it that imports the package
-  'count.scope.affected',   // one impact answer placed on the journeys (core affected.ts): the seed, what uses it as far out as asked
-  'count.scope.persona',    // the journeys shown under one persona (core journeys.ts) — a journey for two personas is in each
-  'count.scope.group',      // the journeys of one group under one persona (core journeys.ts)
-  'count.scope.storyline',  // the journeys one storyline chains, each once (core journeys.ts)
-  'count.scope.gate',       // one gate: the gate itself and the calls a request goes through to meet it (core gates.ts)
-  'count.scope.compare',    // one storyline between two syncs (core storyline-diff.ts): its journeys and branches as either sync declares them, and what their walks reach
-  'count.scope.route',      // the routes a designed, not-built screen will call (core coverage.ts `notBuilt`): the screen has no code a test can reach
-  'count.scope.path',       // one chain from one part to another (core ask.ts `pathBetween`): its links, each once
-  'count.scope.question',   // the parts one question's words match as well as the one Ask read them as (core ask.ts `resolveTermAll`)
+  'count.scope.workSources', // every tracker source a command read, each item once
+  'count.scope.workSync', // one sync of one tracker source
+  'count.scope.workItem', // one work item
+  'count.scope.project', // one workspace project (core projects.ts), and the projects it depends on
+  'count.scope.package', // one package of one source: every file of it that imports the package
+  'count.scope.affected', // one impact answer placed on the journeys (core affected.ts): the seed, what uses it as far out as asked
+  'count.scope.persona', // the journeys shown under one persona (core journeys.ts) — a journey for two personas is in each
+  'count.scope.group', // the journeys of one group under one persona (core journeys.ts)
+  'count.scope.storyline', // the journeys one storyline chains, each once (core journeys.ts)
+  'count.scope.gate', // one gate: the gate itself and the calls a request goes through to meet it (core gates.ts)
+  'count.scope.compare', // one storyline between two syncs (core storyline-diff.ts): its journeys and branches as either sync declares them, and what their walks reach
+  'count.scope.route', // the routes a designed, not-built screen will call (core coverage.ts `notBuilt`): the screen has no code a test can reach
+  'count.scope.path', // one chain from one part to another (core ask.ts `pathBetween`): its links, each once
+  'count.scope.question', // the parts one question's words match as well as the one Ask read them as (core ask.ts `resolveTermAll`)
 ] as const;
-export type CountScope = typeof COUNT_SCOPES[number];
+export type CountScope = (typeof COUNT_SCOPES)[number];
 
 /**
  * The short words a test number prints **on its chip** for the scope it counts
@@ -135,7 +135,10 @@ export function counted(
   extra: { of?: number; bizUnit?: string; breakdown?: CountPart[]; recheck?: { cli: string; mcp?: string } } = {},
 ): Counted {
   return {
-    n, unit, scope, source,
+    n,
+    unit,
+    scope,
+    source,
     ...(extra.of != null ? { of: extra.of } : {}),
     ...(extra.bizUnit ? { bizUnit: extra.bizUnit } : {}),
     ...(extra.breakdown ? { breakdown: extra.breakdown } : {}),
@@ -154,11 +157,16 @@ export function countKey(key: string, n: number): string {
  * uses `bizUnit` and returns `''` when the number has none (the business lens
  * does not print it).
  */
-export function countedText(c: Counted, opts: { lens?: 'business' | 'hybrid' | 'code'; register?: Register; scope?: boolean } = {}): string {
+export function countedText(
+  c: Counted,
+  opts: { lens?: 'business' | 'hybrid' | 'code'; register?: Register; scope?: boolean } = {},
+): string {
   const register = opts.register ?? 'professional';
   const key = opts.lens === 'business' ? c.bizUnit : c.unit;
   if (!key) return '';
-  const words = t(countKey(key, c.n), register).replace('{n}', String(c.n)).replace('{m}', String(c.of ?? ''));
+  const words = t(countKey(key, c.n), register)
+    .replace('{n}', String(c.n))
+    .replace('{m}', String(c.of ?? ''));
   return opts.scope === false ? words : `${words} ${t(c.scope, register)}`;
 }
 
@@ -180,17 +188,26 @@ export function countedProblems(c: Counted, where = 'count'): string[] {
   const need = (key: string | undefined, what: string, placeholder = true) => {
     if (!key) return;
     const e = STRINGS[key];
-    if (!e) { out.push(`${where}: ${what} \`${key}\` is not in the catalog`); return; }
-    if (!e.define && !STRINGS[key.replace(/One$/, '')]?.define) out.push(`${where}: ${what} \`${key}\` has no define — a number whose words nobody defined cannot say what it counts`);
-    if (placeholder && !/\{n\}/.test(e.hud) && !/\{n\}/.test(e.professional)) out.push(`${where}: ${what} \`${key}\` has no {n}`);
+    if (!e) {
+      out.push(`${where}: ${what} \`${key}\` is not in the catalog`);
+      return;
+    }
+    if (!e.define && !STRINGS[key.replace(/One$/, '')]?.define)
+      out.push(
+        `${where}: ${what} \`${key}\` has no define — a number whose words nobody defined cannot say what it counts`,
+      );
+    if (placeholder && !/\{n\}/.test(e.hud) && !/\{n\}/.test(e.professional))
+      out.push(`${where}: ${what} \`${key}\` has no {n}`);
   };
   if (!Number.isInteger(c.n) || c.n < 0) out.push(`${where}: n is ${c.n}`);
   need(c.unit, 'unit');
   need(c.bizUnit, 'bizUnit');
   need(c.scope, 'scope', false);
-  if (!(COUNT_SCOPES as readonly string[]).includes(c.scope)) out.push(`${where}: scope \`${c.scope}\` is not one of COUNT_SCOPES`);
+  if (!(COUNT_SCOPES as readonly string[]).includes(c.scope))
+    out.push(`${where}: scope \`${c.scope}\` is not one of COUNT_SCOPES`);
   if (c.of != null && c.of < c.n) out.push(`${where}: ${c.n} of ${c.of}`);
-  if (c.of != null && !/\{m\}/.test(STRINGS[c.unit]?.professional ?? '')) out.push(`${where}: unit \`${c.unit}\` prints no {m} but the count carries \`of\``);
+  if (c.of != null && !/\{m\}/.test(STRINGS[c.unit]?.professional ?? ''))
+    out.push(`${where}: unit \`${c.unit}\` prints no {m} but the count carries \`of\``);
   if (!c.source) out.push(`${where}: no source`);
   if (c.breakdown) {
     for (const p of c.breakdown) need(p.key, 'breakdown part');
@@ -207,14 +224,20 @@ export function countedProblems(c: Counted, where = 'count'): string[] {
  * Zeroes are left out unless `zeroes` is set; a count the lens does not print
  * (no `bizUnit` under `lens: 'business'`) is left out.
  */
-export function countedLine(list: (Counted | undefined)[], opts: { lens?: 'business' | 'hybrid' | 'code'; register?: Register; zeroes?: boolean; breakdown?: boolean } = {}): string {
+export function countedLine(
+  list: (Counted | undefined)[],
+  opts: { lens?: 'business' | 'hybrid' | 'code'; register?: Register; zeroes?: boolean; breakdown?: boolean } = {},
+): string {
   const register = opts.register ?? 'professional';
   const groups: { scope: string; items: string[] }[] = [];
   for (const c of list) {
     if (!c || (!c.n && !opts.zeroes)) continue;
     const words = countedText(c, { ...opts, scope: false });
     if (!words) continue;
-    const parts = opts.breakdown !== false && c.breakdown?.some((p) => p.n && p.n !== c.n) ? ` (${breakdownText({ ...c, breakdown: c.breakdown.filter((p) => p.n) }, register)})` : '';
+    const parts =
+      opts.breakdown !== false && c.breakdown?.some((p) => p.n && p.n !== c.n)
+        ? ` (${breakdownText({ ...c, breakdown: c.breakdown.filter((p) => p.n) }, register)})`
+        : '';
     const last = groups[groups.length - 1];
     if (last && last.scope === c.scope) last.items.push(words + parts);
     else groups.push({ scope: c.scope, items: [words + parts] });

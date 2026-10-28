@@ -525,6 +525,7 @@ try {
     renameSync(driverHeld, driverPath);
   }
   const workerOriginal = readFileSync(workerPath),
+    // eslint-disable-next-line no-regex-spaces -- Match the emitted worker export's exact two-space indentation.
     withoutExport = workerOriginal.toString().replace(/^  runFrameworkControlsWorker\n/m, '');
   assert.notEqual(withoutExport, workerOriginal.toString(), 'the real emitted fixed export was removed');
   const changedManifest = JSON.parse(manifestBytes);

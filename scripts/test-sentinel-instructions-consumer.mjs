@@ -1,5 +1,4 @@
 // Actual npm public APIs and genuine capture, with a mock model only. Not public stage/CLI inference qualification.
-import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';

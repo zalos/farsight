@@ -1,5 +1,5 @@
 /**
- * Doc-comment parsing shared by every language adapter. `/** … *​/` blocks are
+ * Doc-comment parsing shared by every language adapter. Documentation blocks are
  * the same shape in JSDoc/TSDoc/Javadoc; the six Farsight tags plus the
  * vanilla-tag harvest are language-agnostic (see docs/ANNOTATIONS.md).
  */
@@ -43,8 +43,18 @@ export function parseDesignTag(value: string): DesignRef | undefined {
   const name = rest.join(' ').trim();
   if (URL_RE.test(target)) {
     let nodeId: string | undefined;
-    try { nodeId = new URL(target).searchParams.get('node-id')?.replace(':', '-') ?? undefined; } catch { /* keep url only */ }
-    return { status: 'both', origin: 'annotation', url: target, ...(nodeId ? { nodeId } : {}), ...(name ? { name } : {}) };
+    try {
+      nodeId = new URL(target).searchParams.get('node-id')?.replace(':', '-') ?? undefined;
+    } catch {
+      /* keep url only */
+    }
+    return {
+      status: 'both',
+      origin: 'annotation',
+      url: target,
+      ...(nodeId ? { nodeId } : {}),
+      ...(name ? { name } : {}),
+    };
   }
   return { status: 'both', origin: 'annotation', id: target, ...(name ? { name } : {}) };
 }
@@ -67,21 +77,24 @@ export function stripInlineTags(text: string): string {
     if (!inner) return '';
     if (tag === 'code' || tag === 'literal') return inner; // no target/label semantics — keep the whole body
     const pipe = inner.indexOf('|');
-    if (pipe >= 0) return inner.slice(pipe + 1).trim();     // {@link target|label}
+    if (pipe >= 0) return inner.slice(pipe + 1).trim(); // {@link target|label}
     // target = up to the first whitespace OUTSIDE parens — `#m(String, long)` is one target
     const m = inner.match(/^([^\s(]+(?:\([^)]*\))?)\s*([\s\S]*)$/);
-    if (m && m[2]) return m[2].trim();                       // {@link target label}
-    return (m?.[1] ?? inner).replace(/^#/, '');              // bare target, no label
+    if (m && m[2]) return m[2].trim(); // {@link target label}
+    return (m?.[1] ?? inner).replace(/^#/, ''); // bare target, no label
   });
 }
 
 /** Prose cleanup: inline tags → text, strip simple HTML tags (Javadoc habit), collapse whitespace. */
 export function cleanProse(text: string): string {
-  return stripInlineTags(text).replace(/<\/?[a-z][^>]*>/gi, '').replace(/\s+/g, ' ').trim();
+  return stripInlineTags(text)
+    .replace(/<\/?[a-z][^>]*>/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
- * Doc block (`/** … *​/`) immediately above the declaration starting at `start`,
+ * Documentation block immediately above the declaration starting at `start`,
  * with `*`-gutter stripped — or null. `between` is the language's idea of what
  * may sit between the comment and `start` (TS: export/async/const keywords;
  * Java: whitespace only, because tree-sitter declaration nodes include their
@@ -107,10 +120,10 @@ export function docCommentAbove(source: string, start: number, between: RegExp):
 export function parseDoc(raw: string | null): ParsedDoc {
   if (!raw) return { tags: [] };
   const out: ParsedDoc = { tags: [] };
-  const summary: string[] = [];   // @summary — prepended (becomes the summary sentence)
-  const prose: string[] = [];     // untagged comment text
-  const appended: string[] = [];  // @description / @remarks — appended in encounter order
-  const sees: string[] = [];      // @see targets — collected into one line
+  const summary: string[] = []; // @summary — prepended (becomes the summary sentence)
+  const prose: string[] = []; // untagged comment text
+  const appended: string[] = []; // @description / @remarks — appended in encounter order
+  const sees: string[] = []; // @see targets — collected into one line
   let deprecatedLine: string | undefined;
   let sinceLine: string | undefined;
   // tag content runs until the next @tag or end of block
@@ -126,23 +139,35 @@ export function parseDoc(raw: string | null): ParsedDoc {
     const value = body!.trim().replace(/\s+/g, ' ');
     switch (tag) {
       // ── the five Farsight custom tags (unchanged meaning) ──
-      case 'business': out.business = cleanProse(value); break;
-      case 'group': out.group = cleanProse(value); break;
-      case 'tag': case 'tags': out.tags.push(...value.split(/[,\s]+/).filter(Boolean)); break;
+      case 'business':
+        out.business = cleanProse(value);
+        break;
+      case 'group':
+        out.group = cleanProse(value);
+        break;
+      case 'tag':
+      case 'tags':
+        out.tags.push(...value.split(/[,\s]+/).filter(Boolean));
+        break;
       case 'guard': {
         // `@guard[policy] four eyes` — the bracket is the tier, the rest the label ('' = named after the function)
         const m = value.match(/^\[(business|policy|technical)\]\s*([\s\S]*)$/i);
-        if (m) { out.guardTier = m[1]!.toLowerCase() as ParsedDoc['guardTier']; out.guard = m[2]!.trim(); }
-        else out.guard = value;
+        if (m) {
+          out.guardTier = m[1]!.toLowerCase() as ParsedDoc['guardTier'];
+          out.guard = m[2]!.trim();
+        } else out.guard = value;
         break;
       }
-      case 'entrypoint': out.entrypoint = value.split(/[:\s]+/).filter(Boolean); break;
+      case 'entrypoint':
+        out.entrypoint = value.split(/[:\s]+/).filter(Boolean);
+        break;
       // @covers is a CLAIM by the test author — resolved against the graph by the tests adapter,
       // kept verbatim on the node when nothing matches (docs/proposals/tests-surface.md §3.2)
       case 'covers': {
         // one target per line or comma — never split on spaces: `@covers POST /orders`
         // is a single route, not two targets
-        const targets = body!.split(/[\n,]/)
+        const targets = body!
+          .split(/[\n,]/)
           .map((v) => cleanProse(v).trim())
           .filter((v) => v && v.length <= 120 && !/[(){};=]|^\*|^\/\*/.test(v));
         if (targets.length) (out.covers ??= []).push(...targets);
@@ -152,7 +177,10 @@ export function parseDoc(raw: string | null): ParsedDoc {
       // code to a tracker's work item. Kept verbatim as a `work:<KEY>` tag; the server joins
       // it to an item only when a configured work source holds that key
       case 'work': {
-        const keys = value.split(/[,\s]+/).map((k) => k.replace(/^#/, '').trim()).filter((k) => /^(?:[A-Za-z][A-Za-z0-9_]+-\d+|\d+)$/.test(k));
+        const keys = value
+          .split(/[,\s]+/)
+          .map((k) => k.replace(/^#/, '').trim())
+          .filter((k) => /^(?:[A-Za-z][A-Za-z0-9_]+-\d+|\d+)$/.test(k));
         for (const k of keys) {
           (out.work ??= []).push(k);
           if (!out.tags.includes(`work:${k}`)) out.tags.push(`work:${k}`);
@@ -160,8 +188,17 @@ export function parseDoc(raw: string | null): ParsedDoc {
         break;
       }
       // ── vanilla prose-composing tags ──
-      case 'summary': { const t = cleanProse(value); if (t) summary.push(t); break; }
-      case 'description': case 'remarks': { const t = cleanProse(value); if (t) appended.push(t); break; }
+      case 'summary': {
+        const t = cleanProse(value);
+        if (t) summary.push(t);
+        break;
+      }
+      case 'description':
+      case 'remarks': {
+        const t = cleanProse(value);
+        if (t) appended.push(t);
+        break;
+      }
       // ── vanilla graph-relevant tags ──
       case 'deprecated': {
         out.tags.push('deprecated');
@@ -170,7 +207,12 @@ export function parseDoc(raw: string | null): ParsedDoc {
         break;
       }
       // TSDoc release-stage modifiers — value text (if any) is ignored
-      case 'internal': case 'alpha': case 'beta': case 'experimental': out.tags.push(tag); break;
+      case 'internal':
+      case 'alpha':
+      case 'beta':
+      case 'experimental':
+        out.tags.push(tag);
+        break;
       case 'see': {
         // a URL is a link (rendered as an anchor, never repeated as prose); anything else stays a "See:" ref
         const t = cleanProse(value);
@@ -187,7 +229,11 @@ export function parseDoc(raw: string | null): ParsedDoc {
         if (d.id) out.tags.push(`design:${d.id.toLowerCase()}`);
         break;
       }
-      case 'since': { const t = cleanProse(value); if (t) sinceLine = `Since ${t.replace(/[.!?]\s*$/, '')}.`; break; }
+      case 'since': {
+        const t = cleanProse(value);
+        if (t) sinceLine = `Since ${t.replace(/[.!?]\s*$/, '')}.`;
+        break;
+      }
       // everything else (@param @returns @throws @example @author…) is code detail — dropped
     }
   }

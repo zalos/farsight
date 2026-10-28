@@ -43,7 +43,8 @@ export interface ParseRepositoryOptions extends Omit<AdapterOptions, 'repoName' 
 }
 
 export interface Diagnostic {
-  code: 'parse-error' | 'read-error' | 'read-boundary' | 'resource-limit' | 'cancelled' | 'unsupported' | 'adapter-error';
+  code:
+    'parse-error' | 'read-error' | 'read-boundary' | 'resource-limit' | 'cancelled' | 'unsupported' | 'adapter-error';
   severity: 'error' | 'warning';
   message: string;
   path?: string;

@@ -30,12 +30,21 @@
 
 /** The kinds a caller may name, folded onto the rows of the door table. */
 const KIND = {
-  gate: 'gate', guard: 'gate', rule: 'gate',
-  call: 'call', route: 'call',
-  record: 'data', table: 'data', message: 'data', queue: 'data', external: 'data',
+  gate: 'gate',
+  guard: 'gate',
+  rule: 'gate',
+  call: 'call',
+  route: 'call',
+  record: 'data',
+  table: 'data',
+  message: 'data',
+  queue: 'data',
+  external: 'data',
   test: 'test',
   work: 'work',
-  screen: 'screen', page: 'screen', component: 'screen',
+  screen: 'screen',
+  page: 'screen',
+  component: 'screen',
   package: 'package',
 };
 
@@ -57,7 +66,9 @@ function edgesOf(ctx, id) {
   return (typeof e.get === 'function' ? e.get(id) : e[id]) || [];
 }
 
-function codemap(id) { return '#/codemap?node=' + encodeURIComponent(id); }
+function codemap(id) {
+  return '#/codemap?node=' + encodeURIComponent(id);
+}
 
 /** The function a route hands its request to: the marker's own word for it, else the route's first `calls` edge. */
 function handlerOf(route, ctx) {
@@ -94,7 +105,9 @@ function webLink(n) {
 export function detailLinks(kind, node, ctx = {}) {
   if (!node || !node.id) return [];
   const out = [];
-  const add = (word, href, extra) => { if (href) out.push({ word, href, ...(extra || {}) }); };
+  const add = (word, href, extra) => {
+    if (href) out.push({ word, href, ...(extra || {}) });
+  };
   const roots = ctx.roots || {};
   const loc = node.loc;
   const atLoc = loc ? editorHref(roots, repoOf(node), loc.path, loc.line) : null;
@@ -106,7 +119,8 @@ export function detailLinks(kind, node, ctx = {}) {
     if (inGraph) add('door.codemap', codemap(node.id), { code: true });
   } else if (row === 'call') {
     const c = node.contract || {};
-    if (c.apiId && inGraph) add('door.contract', '#/apis/' + encodeURIComponent(c.apiId) + '?op=' + encodeURIComponent(node.id));
+    if (c.apiId && inGraph)
+      add('door.contract', '#/apis/' + encodeURIComponent(c.apiId) + '?op=' + encodeURIComponent(node.id));
     if (c.apiId && c.spec && c.spec.path && c.spec.line && !/^https?:/.test(c.spec.path)) {
       add('door.spec', '#/apis/' + encodeURIComponent(c.apiId) + '?view=spec&line=' + c.spec.line, { code: true });
     }
@@ -126,7 +140,10 @@ export function detailLinks(kind, node, ctx = {}) {
     if (inGraph && node.kind !== 'flow') add('door.page', codemap(node.id), { code: true });
     const d = node.design || {};
     const dn = d.designId && ctx.byId ? ctx.byId[d.designId] : null;
-    add('door.design', dn && dn.loc ? editorHref(roots, repoOf(dn), dn.loc.path, dn.loc.line) : null, { code: true, editor: true });
+    add('door.design', dn && dn.loc ? editorHref(roots, repoOf(dn), dn.loc.path, dn.loc.line) : null, {
+      code: true,
+      editor: true,
+    });
     add('door.figma', d.url && /^https?:\/\/([\w-]+\.)*figma\.com\//.test(d.url) ? d.url : null, { external: true });
   } else if (row === 'package') {
     add('door.included', '#/codemap?view=package&package=' + encodeURIComponent(node.id));

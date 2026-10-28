@@ -22,7 +22,9 @@ export function shellQuote(value: string): string {
 }
 
 async function save(path: string, value: string | object, executable = false): Promise<void> {
-  await writeFile(path, typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`, { mode: executable ? 0o700 : 0o600 });
+  await writeFile(path, typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`, {
+    mode: executable ? 0o700 : 0o600,
+  });
   await chmod(path, executable ? 0o700 : 0o600);
 }
 
@@ -30,19 +32,49 @@ async function save(path: string, value: string | object, executable = false): P
  * Prepare local reviewable files only. The caller owns the explicit opt-in;
  * this helper never edits host settings or invokes host installation commands.
  */
-export async function prepareHooks(ctx: EchoContext, host: HookHost, executable: string): Promise<{ directory: string; instructions: string }> {
+export async function prepareHooks(
+  ctx: EchoContext,
+  host: HookHost,
+  executable: string,
+): Promise<{ directory: string; instructions: string }> {
   if (!['claude', 'codex', 'vscode'].includes(host)) throw new Error(words('echo.hooks.invalidHost'));
   if (process.platform === 'win32') throw new Error(words('echo.hooks.platform'));
   if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(ctx.profileId)) throw new Error(words('echo.hooks.invalidProfile'));
-  if (![ctx.configPath, ctx.directory, executable].every(isAbsolute)) throw new Error(words('echo.hooks.absolutePaths'));
-  if (!(await stat(executable).catch(() => undefined))?.isFile()) throw new Error(words('echo.hooks.missingExecutable'));
+  if (![ctx.configPath, ctx.directory, executable].every(isAbsolute))
+    throw new Error(words('echo.hooks.absolutePaths'));
+  if (!(await stat(executable).catch(() => undefined))?.isFile())
+    throw new Error(words('echo.hooks.missingExecutable'));
 
   const directory = join(ctx.directory, 'plugins', ctx.profileId, host);
   if (host === 'vscode') {
     await mkdir(directory, { recursive: true, mode: 0o700 });
-    const command = [process.execPath, executable, 'hook', '--config', ctx.configPath, '--profile', ctx.profileId, '--host', host, '--hook-timeout-ms', String(HOOK_TIMEOUT_MS)].map(shellQuote).join(' ');
-    await save(join(directory, 'echo.json'), { hooks: Object.fromEntries(HOOK_EVENTS.map(event => [event, [{ type: 'command', command, timeout: HOOK_TIMEOUT_MS / 1000 }]])) });
-    const instructions = [words('echo.hooks.prepared'), words('echo.hooks.vscode'), words('echo.hooks.behavior'), words('echo.hooks.singleProfile'), words('echo.hooks.keepPaths')].join('\n\n');
+    const command = [
+      process.execPath,
+      executable,
+      'hook',
+      '--config',
+      ctx.configPath,
+      '--profile',
+      ctx.profileId,
+      '--host',
+      host,
+      '--hook-timeout-ms',
+      String(HOOK_TIMEOUT_MS),
+    ]
+      .map(shellQuote)
+      .join(' ');
+    await save(join(directory, 'echo.json'), {
+      hooks: Object.fromEntries(
+        HOOK_EVENTS.map((event) => [event, [{ type: 'command', command, timeout: HOOK_TIMEOUT_MS / 1000 }]]),
+      ),
+    });
+    const instructions = [
+      words('echo.hooks.prepared'),
+      words('echo.hooks.vscode'),
+      words('echo.hooks.behavior'),
+      words('echo.hooks.singleProfile'),
+      words('echo.hooks.keepPaths'),
+    ].join('\n\n');
     await save(join(directory, 'README.txt'), `${instructions}\n`);
     return { directory, instructions };
   }
@@ -56,35 +88,63 @@ export async function prepareHooks(ctx: EchoContext, host: HookHost, executable:
   const rootVariable = host === 'claude' ? 'CLAUDE_PLUGIN_ROOT' : 'PLUGIN_ROOT';
   const launcher = `const root=process.env.${rootVariable};if(!root)process.exit(1);import(require('node:url').pathToFileURL(require('node:path').join(root,'scripts','echo-hook.mjs')).href).catch(()=>process.exit(1));`;
   const command = `${shellQuote(process.execPath)} -e ${shellQuote(launcher)}`;
-  const hooks = Object.fromEntries(HOOK_EVENTS.map(event => [event, [{ hooks: [{ type: 'command', command, timeout: HOOK_TIMEOUT_MS / 1000 }] }]]));
+  const hooks = Object.fromEntries(
+    HOOK_EVENTS.map((event) => [event, [{ hooks: [{ type: 'command', command, timeout: HOOK_TIMEOUT_MS / 1000 }] }]]),
+  );
   const name = `echo-${ctx.profileId.toLowerCase().replaceAll('_', '-')}-${createHash('sha256').update(ctx.profileId).digest('hex').slice(0, 8)}`;
   await save(join(manifestDirectory, 'plugin.json'), {
-    name, version: '0.0.1', description: words('echo.hooks.description'), author: { name: 'Farsight' },
+    name,
+    version: '0.0.1',
+    description: words('echo.hooks.description'),
+    author: { name: 'Farsight' },
     // Claude adds explicit hook files to default discovery. Omitting this field
     // avoids registering hooks/hooks.json twice. Codex replaces the default.
     ...(host === 'codex' ? { hooks: './hooks/hooks.json' } : {}),
   });
   await save(join(directory, 'hooks', 'hooks.json'), { hooks });
-  const args = [executable, 'hook', '--config', ctx.configPath, '--profile', ctx.profileId, '--host', host, '--hook-timeout-ms', String(PREPARED_HOOK_TIMEOUT_MS)];
-  await save(join(directory, 'scripts', 'echo-hook.mjs'), `#!/usr/bin/env node\nimport { spawnSync } from 'node:child_process';\nconst result = spawnSync(process.execPath, ${JSON.stringify(args)}, { stdio: 'inherit', timeout: ${PREPARED_HOOK_TIMEOUT_MS}, windowsHide: true });\nprocess.exit(result.status ?? 1);\n`, true);
+  const args = [
+    executable,
+    'hook',
+    '--config',
+    ctx.configPath,
+    '--profile',
+    ctx.profileId,
+    '--host',
+    host,
+    '--hook-timeout-ms',
+    String(PREPARED_HOOK_TIMEOUT_MS),
+  ];
+  await save(
+    join(directory, 'scripts', 'echo-hook.mjs'),
+    `#!/usr/bin/env node\nimport { spawnSync } from 'node:child_process';\nconst result = spawnSync(process.execPath, ${JSON.stringify(args)}, { stdio: 'inherit', timeout: ${PREPARED_HOOK_TIMEOUT_MS}, windowsHide: true });\nprocess.exit(result.status ?? 1);\n`,
+    true,
+  );
 
   if (host === 'codex') {
     const catalogDirectory = join(directory, '.agents', 'plugins');
     await mkdir(catalogDirectory, { recursive: true, mode: 0o700 });
     await save(join(catalogDirectory, 'marketplace.json'), {
-      name: `${name}-local`, plugins: [{
-        name, source: { source: 'local', path: './' },
-        policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' },
-      }],
+      name: `${name}-local`,
+      plugins: [
+        {
+          name,
+          source: { source: 'local', path: './' },
+          policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' },
+        },
+      ],
     });
   }
 
-  const loadCommand = host === 'claude'
-    ? `claude --plugin-dir ${shellQuote(directory)}`
-    : `codex plugin marketplace add ${shellQuote(directory)}`;
+  const loadCommand =
+    host === 'claude'
+      ? `claude --plugin-dir ${shellQuote(directory)}`
+      : `codex plugin marketplace add ${shellQuote(directory)}`;
   const instructions = [
-    words('echo.hooks.prepared'), words(`echo.hooks.${host}`, { command: loadCommand }),
-    words('echo.hooks.behavior'), words('echo.hooks.singleProfile'), words('echo.hooks.keepPaths'),
+    words('echo.hooks.prepared'),
+    words(`echo.hooks.${host}`, { command: loadCommand }),
+    words('echo.hooks.behavior'),
+    words('echo.hooks.singleProfile'),
+    words('echo.hooks.keepPaths'),
   ].join('\n\n');
   await save(join(directory, 'README.txt'), `${instructions}\n`);
   return { directory, instructions };

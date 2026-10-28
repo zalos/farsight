@@ -449,12 +449,12 @@ test(
       read = RetainedBudget.prototype.read,
       before = s.store.ledger.currentSequence(),
       files = objectNames(s.store);
-    let readBudget: any,
+    let readCount = () => 0,
       expired = false;
     const now = performance.now.bind(performance);
     const clock = t.mock.method(performance, 'now', () => (expired ? s.timing.deadlineAt + 1 : now()));
     const reader = t.mock.method(RetainedBudget.prototype, 'read', async function (id: any, kind: any) {
-      readBudget = this;
+      readCount = () => this.reads;
       const bytes = await read.call(this, id, kind);
       expired = true;
       return bytes;
@@ -470,7 +470,7 @@ test(
         }),
         (e: any) => e.code === 'sentinel.execution.deadlineExceeded',
       );
-      assert.equal(readBudget.reads, 1, 'the original fence prevents starting another actual revalidation read');
+      assert.equal(readCount(), 1, 'the original fence prevents starting another actual revalidation read');
       assert.equal(s.store.ledger.currentSequence(), before);
       assert.deepEqual(objectNames(s.store), files);
     } finally {

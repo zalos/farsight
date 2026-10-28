@@ -10,7 +10,20 @@
  * location, drift is computed ONCE here and stored. Pure — reading files and
  * talking to Figma lives in parsers/server.
  */
-import type { GraphNode, GraphEdge, GraphFragment, DesignRef, DesignDriftKind, Loc, NodeLink, JourneyPersonaDecl, JourneyGroupDecl, JourneyStorylineDecl, JourneysMeta, DesignStep, DecisionDecl } from './graph.js';
+import type {
+  GraphNode,
+  GraphEdge,
+  GraphFragment,
+  DesignRef,
+  DesignDriftKind,
+  Loc,
+  NodeLink,
+  JourneyPersonaDecl,
+  JourneyGroupDecl,
+  JourneyStorylineDecl,
+  DesignStep,
+  DecisionDecl,
+} from './graph.js';
 import { t } from './strings.js';
 import { buildIndex, type GraphIndex } from './query.js';
 
@@ -112,7 +125,11 @@ export interface DesignManifest {
 export function isDesignManifest(x: unknown): x is DesignManifest {
   if (!x || typeof x !== 'object') return false;
   const m = x as DesignManifest;
-  return Array.isArray(m.screens) && m.screens.length > 0 && m.screens.every((s) => s && typeof s === 'object' && typeof s.id === 'string');
+  return (
+    Array.isArray(m.screens) &&
+    m.screens.length > 0 &&
+    m.screens.every((s) => s && typeof s === 'object' && typeof s.id === 'string')
+  );
 }
 
 export interface DesignSource {
@@ -134,7 +151,11 @@ export function figmaFileKey(url: string | undefined): string | undefined {
 /** Figma node id from a URL's `node-id` (URL form `26-9`), normalized to `26-9`. */
 export function figmaNodeId(url: string | undefined): string | undefined {
   if (!url) return undefined;
-  try { return new URL(url).searchParams.get('node-id')?.replace(':', '-') ?? undefined; } catch { return undefined; }
+  try {
+    return new URL(url).searchParams.get('node-id')?.replace(':', '-') ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function designNodeId(repo: string, manifestPath: string): string {
@@ -151,7 +172,13 @@ export function designNodeOf(manifest: DesignManifest, source: DesignSource): Gr
     kind: 'design',
     name,
     tags: ['design'],
-    signature: [`${manifest.screens.length} screen${manifest.screens.length === 1 ? '' : 's'}`, file ? `figma ${figmaFileKey(file) ?? file}` : '', source.lastModified ? `modified ${source.lastModified} (${source.freshness ?? 'manifest'})` : ''].filter(Boolean).join(' · '),
+    signature: [
+      `${manifest.screens.length} screen${manifest.screens.length === 1 ? '' : 's'}`,
+      file ? `figma ${figmaFileKey(file) ?? file}` : '',
+      source.lastModified ? `modified ${source.lastModified} (${source.freshness ?? 'manifest'})` : '',
+    ]
+      .filter(Boolean)
+      .join(' · '),
     ...(isUrl ? {} : { loc: { repo: source.repo, path: source.path, line: 1 } as Loc }),
     ...(file ? { links: [{ kind: 'design' as const, url: file }] } : {}),
     // the manifest's own scope travels with the design node: a surface nobody has
@@ -177,9 +204,12 @@ export function designNodeOf(manifest: DesignManifest, source: DesignSource): Gr
  * words, and the professional rendering for the ones that print text.
  */
 export function flowStatusWord(built: number, total: number): { key: string; text: string } {
-  const key = total > 0 && built >= total ? 'journey.status.built'
-    : built > 0 ? 'journey.status.partly'
-    : 'journey.status.designedNotBuilt';
+  const key =
+    total > 0 && built >= total
+      ? 'journey.status.built'
+      : built > 0
+        ? 'journey.status.partly'
+        : 'journey.status.designedNotBuilt';
   const text = t(key, 'professional').replace('{n}', String(built)).replace('{m}', String(total));
   return { key, text };
 }
@@ -187,11 +217,18 @@ export function flowStatusWord(built: number, total: number): { key: string; tex
 export function screenRouteKey(route: string): string {
   let p = route.trim();
   if (!p.startsWith('/')) p = '/' + p;
-  p = p.split('/').filter((s) => s !== '' && !(s.startsWith('(') && s.endsWith(')'))).map((s) => (/^(\[.*\]|\{.*\}|:.+|\$\{.*\})$/.test(s) ? ':param' : s)).join('/');
+  p = p
+    .split('/')
+    .filter((s) => s !== '' && !(s.startsWith('(') && s.endsWith(')')))
+    .map((s) => (/^(\[.*\]|\{.*\}|:.+|\$\{.*\})$/.test(s) ? ':param' : s))
+    .join('/');
   return '/' + p;
 }
 
-export interface DesignDrift { kind: DesignDriftKind; message: string }
+export interface DesignDrift {
+  kind: DesignDriftKind;
+  message: string;
+}
 
 export interface FlowRow {
   nodeId: string;
@@ -228,7 +265,14 @@ export interface FlowRow {
 export interface DesignReconcile {
   design: { id: string; name: string; path: string };
   /** named flows: screens in order, how many are built, drift (unknown screen ids, operations no contract declares) */
-  flows: { flow: DesignFlow; nodeId: string; screenNodeIds: string[]; built: number; drift: DesignDrift[]; position?: number }[];
+  flows: {
+    flow: DesignFlow;
+    nodeId: string;
+    screenNodeIds: string[];
+    built: number;
+    drift: DesignDrift[];
+    position?: number;
+  }[];
   /** designed and built: the screen resolved to a page/component in the code */
   matched: { screen: DesignScreen; nodeId: string; drift: DesignDrift[] }[];
   /** designed, not built: no page/component at that route/name */
@@ -248,7 +292,9 @@ export interface DesignReconcileOptions {
   designId?: string;
 }
 
-function repoOfNode(n: GraphNode): string { return n.loc?.repo ?? n.id.split('::')[0]!; }
+function repoOfNode(n: GraphNode): string {
+  return n.loc?.repo ?? n.id.split('::')[0]!;
+}
 
 /** operationId → route node, over every contract in the graph. */
 export function operationIndex(index: GraphIndex): Map<string, GraphNode> {
@@ -289,15 +335,22 @@ export function routesReachedFrom(index: GraphIndex, fromId: string, maxDepth = 
  * mutation — `applyDesignToFragment` writes the result into a fragment at
  * ingest; the server/CLI/MCP call this directly for a proposed manifest.
  */
-export function reconcileDesign(manifest: DesignManifest, index: GraphIndex, source: DesignSource, opts: DesignReconcileOptions = {}): DesignReconcile {
+export function reconcileDesign(
+  manifest: DesignManifest,
+  index: GraphIndex,
+  source: DesignSource,
+  opts: DesignReconcileOptions = {},
+): DesignReconcile {
   const repo = opts.repo ?? source.repo;
   const designId = opts.designId ?? designNodeId(source.repo, source.path);
   const pagesByRoute = new Map<string, GraphNode>();
   const componentsByName = new Map<string, GraphNode>();
   for (const n of index.byId.values()) {
     if (repoOfNode(n) !== repo || !n.loc) continue; // built = has a source location; a design-only page from an earlier pass is not built
-    if (n.kind === 'page') { const k = screenRouteKey(n.name); if (!pagesByRoute.has(k)) pagesByRoute.set(k, n); }
-    else if (n.kind === 'component' && !componentsByName.has(n.name)) componentsByName.set(n.name, n);
+    if (n.kind === 'page') {
+      const k = screenRouteKey(n.name);
+      if (!pagesByRoute.has(k)) pagesByRoute.set(k, n);
+    } else if (n.kind === 'component' && !componentsByName.has(n.name)) componentsByName.set(n.name, n);
   }
   const ops = operationIndex(index);
   const matched: DesignReconcile['matched'] = [];
@@ -310,12 +363,20 @@ export function reconcileDesign(manifest: DesignManifest, index: GraphIndex, sou
     const drift: DesignDrift[] = [];
     // operations the design names must exist in some contract
     for (const op of screen.operations ?? []) {
-      if (!ops.has(op)) drift.push({ kind: 'operation-not-in-spec', message: `the design lists operation ${op}; no API contract declares it` });
+      if (!ops.has(op))
+        drift.push({
+          kind: 'operation-not-in-spec',
+          message: `the design lists operation ${op}; no API contract declares it`,
+        });
     }
     let node: GraphNode | undefined;
     if (screen.route) node = pagesByRoute.get(screenRouteKey(screen.route));
     else if (screen.component) node = componentsByName.get(screen.component);
-    else { unmatched.push(screen); driftTotal += drift.length; continue; }
+    else {
+      unmatched.push(screen);
+      driftTotal += drift.length;
+      continue;
+    }
 
     if (node && !claimed.has(node.id)) {
       claimed.add(node.id);
@@ -326,16 +387,28 @@ export function reconcileDesign(manifest: DesignManifest, index: GraphIndex, sou
         for (const op of screen.operations) {
           if (!ops.has(op) || reachedOps.has(op)) continue;
           const route = ops.get(op)!;
-          drift.push({ kind: 'operation-unreached', message: `the design says this screen uses ${op} (${route.name}); the built page never reaches it${route.loc ? '' : ' — the operation itself is not implemented yet'}` });
+          drift.push({
+            kind: 'operation-unreached',
+            message: `the design says this screen uses ${op} (${route.name}); the built page never reaches it${route.loc ? '' : ' — the operation itself is not implemented yet'}`,
+          });
         }
         for (const op of reachedOps) {
-          if (!screen.operations.includes(op)) drift.push({ kind: 'operation-undeclared', message: `the built page calls ${op}; the design does not list it` });
+          if (!screen.operations.includes(op))
+            drift.push({
+              kind: 'operation-undeclared',
+              message: `the built page calls ${op}; the design does not list it`,
+            });
         }
       }
       matched.push({ screen, nodeId: node.id, drift });
     } else {
-      drift.unshift({ kind: 'design-only', message: 'designed; no page or component at this route in the indexed code' });
-      const nodeId = screen.route ? `${repo}::page::${screenRouteKey(screen.route).replace(/:param/g, ':param')}` : `${repo}::component::${screen.component}`;
+      drift.unshift({
+        kind: 'design-only',
+        message: 'designed; no page or component at this route in the indexed code',
+      });
+      const nodeId = screen.route
+        ? `${repo}::page::${screenRouteKey(screen.route).replace(/:param/g, ':param')}`
+        : `${repo}::component::${screen.component}`;
       designOnly.push({ screen, nodeId, drift });
     }
     driftTotal += drift.length;
@@ -364,16 +437,34 @@ export function reconcileDesign(manifest: DesignManifest, index: GraphIndex, sou
     let built = 0;
     for (const sid of flow.screens ?? []) {
       const hit = nodeIdOfScreen.get(sid);
-      if (!hit) { drift.push({ kind: 'screen-unknown', message: `flow ${flow.id} names screen ${sid}; the manifest defines no such screen (or it has no route/component)` }); continue; }
+      if (!hit) {
+        drift.push({
+          kind: 'screen-unknown',
+          message: `flow ${flow.id} names screen ${sid}; the manifest defines no such screen (or it has no route/component)`,
+        });
+        continue;
+      }
       screenNodeIds.push(hit.nodeId);
       if (hit.built) built++;
     }
     for (const op of flow.operations ?? []) {
-      if (!ops.has(op)) drift.push({ kind: 'operation-not-in-spec', message: `flow ${flow.id} lists operation ${op}; no API contract declares it` });
+      if (!ops.has(op))
+        drift.push({
+          kind: 'operation-not-in-spec',
+          message: `flow ${flow.id} lists operation ${op}; no API contract declares it`,
+        });
     }
     const flowIds = new Set((manifest.flows ?? []).map((f) => f.id.toLowerCase()));
-    for (const [field, ids] of [['requires', flow.requires], ['leadsTo', flow.leadsTo]] as const) {
-      for (const fid of ids ?? []) if (!flowIds.has(fid.toLowerCase())) drift.push({ kind: 'flow-unknown', message: `flow ${flow.id} ${field} ${fid}; the manifest defines no such flow` });
+    for (const [field, ids] of [
+      ['requires', flow.requires],
+      ['leadsTo', flow.leadsTo],
+    ] as const) {
+      for (const fid of ids ?? [])
+        if (!flowIds.has(fid.toLowerCase()))
+          drift.push({
+            kind: 'flow-unknown',
+            message: `flow ${flow.id} ${field} ${fid}; the manifest defines no such flow`,
+          });
     }
     driftTotal += drift.length;
     flows.push({ flow, nodeId: `${repo}::flow::${flow.id}`, screenNodeIds, built, drift, position: flows.length });
@@ -381,8 +472,20 @@ export function reconcileDesign(manifest: DesignManifest, index: GraphIndex, sou
 
   return {
     design: { id: designId, name: source.name ?? manifest.name ?? source.path, path: source.path },
-    flows, matched, designOnly, unmatched, codeOnly, fallbacks,
-    counts: { screens: manifest.screens.length, built: matched.length, designOnly: designOnly.length, codeOnly: codeOnly.length, unmatched: unmatched.length, drift: driftTotal },
+    flows,
+    matched,
+    designOnly,
+    unmatched,
+    codeOnly,
+    fallbacks,
+    counts: {
+      screens: manifest.screens.length,
+      built: matched.length,
+      designOnly: designOnly.length,
+      codeOnly: codeOnly.length,
+      unmatched: unmatched.length,
+      drift: driftTotal,
+    },
   };
 }
 
@@ -405,15 +508,28 @@ export function personaValue(v: unknown): string | string[] | undefined {
 export function flowNodeOf(f: DesignReconcile['flows'][number], source: DesignSource, designId: string): GraphNode {
   const { flow } = f;
   const total = flow.screens?.length ?? 0;
-  const links = (flow.docs ?? []).map((d) => (URL_RE.test(d) ? { kind: 'see' as const, url: d } : { kind: 'doc' as const, ref: d }));
+  const links = (flow.docs ?? []).map((d) =>
+    URL_RE.test(d) ? { kind: 'see' as const, url: d } : { kind: 'doc' as const, ref: d },
+  );
   return {
-    id: f.nodeId, kind: 'flow', name: flow.name,
-    tags: ['entrypoint', 'flow', `design:${flow.id.toLowerCase()}`, ...(flow.phase ? [`phase:${String(flow.phase).toLowerCase()}`] : []), ...workTags(flow.work)],
+    id: f.nodeId,
+    kind: 'flow',
+    name: flow.name,
+    tags: [
+      'entrypoint',
+      'flow',
+      `design:${flow.id.toLowerCase()}`,
+      ...(flow.phase ? [`phase:${String(flow.phase).toLowerCase()}`] : []),
+      ...workTags(flow.work),
+    ],
     ...(flow.description ? { docs: flow.description } : {}),
     ...(links.length ? { links } : {}),
     design: {
-      status: total > 0 && f.built === total ? 'both' : 'design-only', origin: 'manifest', designId,
-      id: flow.id, name: flow.name,
+      status: total > 0 && f.built === total ? 'both' : 'design-only',
+      origin: 'manifest',
+      designId,
+      id: flow.id,
+      name: flow.name,
       ...(flow.operations?.length ? { operations: flow.operations } : {}),
       ...(flow.phase ? { phase: String(flow.phase) } : {}),
       ...(flow.requires?.length ? { requires: flow.requires } : {}),
@@ -430,17 +546,30 @@ export function flowNodeOf(f: DesignReconcile['flows'][number], source: DesignSo
   };
 }
 
-function refOf(screen: DesignScreen, manifest: DesignManifest, source: DesignSource, designId: string, status: DesignRef['status'], drift: DesignDrift[]): DesignRef {
+function refOf(
+  screen: DesignScreen,
+  manifest: DesignManifest,
+  source: DesignSource,
+  designId: string,
+  status: DesignRef['status'],
+  drift: DesignDrift[],
+): DesignRef {
   const nodeId = screen.nodeId?.replace(':', '-') ?? figmaNodeId(screen.url);
   const file = manifest.figma?.file;
   const url = screen.url ?? (file && nodeId ? `${file.split('?')[0]}?node-id=${nodeId}` : file);
   return {
-    status, origin: 'manifest', designId,
+    status,
+    origin: 'manifest',
+    designId,
     id: screen.id,
     ...(screen.name ? { name: screen.name } : {}),
     ...(nodeId ? { nodeId } : {}),
     ...(url ? { url } : {}),
-    ...(screen.image ? { image: { kind: 'file' as const, path: screen.image } } : nodeId && file ? { image: { kind: 'figma' as const } } : {}),
+    ...(screen.image
+      ? { image: { kind: 'file' as const, path: screen.image } }
+      : nodeId && file
+        ? { image: { kind: 'figma' as const } }
+        : {}),
     ...(source.lastModified ? { lastModified: source.lastModified, freshness: source.freshness ?? 'manifest' } : {}),
     ...(screen.operations?.length ? { operations: screen.operations } : {}),
     ...(screen.phase ? { phase: String(screen.phase) } : {}),
@@ -456,16 +585,30 @@ function refOf(screen: DesignScreen, manifest: DesignManifest, source: DesignSou
  * nodes with no `loc`, code-only pages are stamped, and the `design` node
  * with its `contains` edges is added. Mutates in place.
  */
-export function applyDesignToFragment(fragment: GraphFragment, manifest: DesignManifest, source: DesignSource): DesignReconcile {
+export function applyDesignToFragment(
+  fragment: GraphFragment,
+  manifest: DesignManifest,
+  source: DesignSource,
+): DesignReconcile {
   const index = buildIndex(fragment.nodes, fragment.edges);
   const result = reconcileDesign(manifest, index, source, { repo: fragment.repo });
   const design = designNodeOf(manifest, source);
   const byId = new Map(fragment.nodes.map((n) => [n.id, n]));
-  if (!byId.has(design.id)) { fragment.nodes.push(design); byId.set(design.id, design); }
+  if (!byId.has(design.id)) {
+    fragment.nodes.push(design);
+    byId.set(design.id, design);
+  }
   let seq = fragment.edges.length;
   const contains = (to: string, undesigned = false) => {
     if (fragment.edges.some((e) => e.kind === 'contains' && e.from === design.id && e.to === to)) return;
-    fragment.edges.push({ id: `d${seq++}`, kind: 'contains', from: design.id, to, ...(undesigned ? { meta: { undesigned: true } } : {}), resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' } } as GraphEdge);
+    fragment.edges.push({
+      id: `d${seq++}`,
+      kind: 'contains',
+      from: design.id,
+      to,
+      ...(undesigned ? { meta: { undesigned: true } } : {}),
+      resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' },
+    } as GraphEdge);
   };
   for (const m of result.matched) {
     const node = byId.get(m.nodeId)!;
@@ -475,24 +618,29 @@ export function applyDesignToFragment(fragment: GraphFragment, manifest: DesignM
     if (node.design?.origin === 'manifest' && node.design.status === 'code-only') {
       for (let i = fragment.edges.length - 1; i >= 0; i--) {
         const e = fragment.edges[i]!;
-        if (e.kind === 'contains' && e.to === node.id && e.from !== design.id && e.meta?.undesigned) fragment.edges.splice(i, 1);
+        if (e.kind === 'contains' && e.to === node.id && e.from !== design.id && e.meta?.undesigned)
+          fragment.edges.splice(i, 1);
       }
       node.tags = node.tags.filter((t) => t !== 'undesigned');
     }
     node.design = refOf(m.screen, manifest, source, design.id, 'both', m.drift);
-    for (const t of [`design:${m.screen.id.toLowerCase()}`, ...workTags(m.screen.work)]) if (!node.tags.includes(t)) node.tags.push(t);
+    for (const t of [`design:${m.screen.id.toLowerCase()}`, ...workTags(m.screen.work)])
+      if (!node.tags.includes(t)) node.tags.push(t);
     // the design's name and sentence are the business words for a built screen (a glossary entry or @business still wins)
     const biz = { ...node.facets?.business };
     if (m.screen.name && !biz.label) biz.label = m.screen.name;
     if (m.screen.description && !biz.description) biz.description = m.screen.description;
-    if (biz.label || biz.description) node.facets = { ...node.facets, business: biz as { label: string; description?: string } };
+    if (biz.label || biz.description)
+      node.facets = { ...node.facets, business: biz as { label: string; description?: string } };
     contains(node.id);
   }
   for (const d of result.designOnly) {
     if (byId.has(d.nodeId)) continue;
     const s = d.screen;
     const node: GraphNode = {
-      id: d.nodeId, kind: s.route ? 'page' : 'component', name: s.route ? screenRouteKey(s.route) : s.component!,
+      id: d.nodeId,
+      kind: s.route ? 'page' : 'component',
+      name: s.route ? screenRouteKey(s.route) : s.component!,
       tags: ['design-only', `design:${s.id.toLowerCase()}`, ...workTags(s.work)],
       ...(s.description ? { docs: s.description } : {}),
       design: refOf(s, manifest, source, design.id, 'design-only', d.drift),
@@ -506,18 +654,40 @@ export function applyDesignToFragment(fragment: GraphFragment, manifest: DesignM
     const node = byId.get(c.nodeId)!;
     if (node.design && node.design.origin === 'annotation') continue; // an @design annotation is a design row of its own
     // another manifest of this source designs this page: it is not *undesigned*, only not this manifest's
-    if (node.design && node.design.origin === 'manifest' && node.design.status !== 'code-only' && node.design.designId !== design.id) continue;
-    node.design = { status: 'code-only', origin: 'manifest', designId: design.id, drift: [{ kind: 'code-only', message: 'built; no screen in the design manifest describes this page' }] };
+    if (
+      node.design &&
+      node.design.origin === 'manifest' &&
+      node.design.status !== 'code-only' &&
+      node.design.designId !== design.id
+    )
+      continue;
+    node.design = {
+      status: 'code-only',
+      origin: 'manifest',
+      designId: design.id,
+      drift: [{ kind: 'code-only', message: 'built; no screen in the design manifest describes this page' }],
+    };
     if (!node.tags.includes('undesigned')) node.tags.push('undesigned');
     contains(node.id, true);
   }
   // flows: a node per flow, rendering its screens in order (meta.line carries the order for journey())
   for (const f of result.flows) {
-    if (!byId.has(f.nodeId)) { const n = flowNodeOf(f, source, design.id); fragment.nodes.push(n); byId.set(n.id, n); }
+    if (!byId.has(f.nodeId)) {
+      const n = flowNodeOf(f, source, design.id);
+      fragment.nodes.push(n);
+      byId.set(n.id, n);
+    }
     contains(f.nodeId);
     f.screenNodeIds.forEach((sid, i) => {
       if (fragment.edges.some((e) => e.kind === 'renders' && e.from === f.nodeId && e.to === sid)) return;
-      fragment.edges.push({ id: `d${seq++}`, kind: 'renders', from: f.nodeId, to: sid, meta: { line: i + 1 }, resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' } } as GraphEdge);
+      fragment.edges.push({
+        id: `d${seq++}`,
+        kind: 'renders',
+        from: f.nodeId,
+        to: sid,
+        meta: { line: i + 1 },
+        resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' },
+      } as GraphEdge);
     });
   }
   return result;
@@ -564,7 +734,15 @@ export interface DesignSurface {
   flows: FlowRow[];
   /** product surfaces the manifest scopes, with or without screens (a "not started" one is still a row) */
   surfaces: NonNullable<DesignManifest['surfaces']>;
-  counts: { screens: number; designed: number; built: number; designOnly: number; codeOnly: number; drift: number; flows: number };
+  counts: {
+    screens: number;
+    designed: number;
+    built: number;
+    designOnly: number;
+    codeOnly: number;
+    drift: number;
+    flows: number;
+  };
 }
 
 function flowRow(index: GraphIndex, n: GraphNode): FlowRow {
@@ -576,7 +754,9 @@ function flowRow(index: GraphIndex, n: GraphNode): FlowRow {
     .filter((s): s is GraphNode => !!s);
   const built = screens.filter((s) => !!s.loc).length;
   return {
-    nodeId: n.id, id: d.id ?? n.name, name: n.name,
+    nodeId: n.id,
+    id: d.id ?? n.name,
+    name: n.name,
     ...(n.docs ? { description: n.docs } : {}),
     screens: screens.map((s) => s.design?.id ?? s.name),
     docs: (n.links ?? []).map((l) => l.url ?? l.ref ?? '').filter(Boolean),
@@ -584,7 +764,8 @@ function flowRow(index: GraphIndex, n: GraphNode): FlowRow {
     operations: d.operations ?? [],
     ...(d.phase ? { phase: d.phase } : {}),
     status: screens.length > 0 && built === screens.length ? 'both' : 'design-only',
-    built, total: screens.length,
+    built,
+    total: screens.length,
     ...(d.persona ? { persona: d.persona } : {}),
     ...(d.owner ? { owner: d.owner } : {}),
     ...(d.group ? { group: d.group } : {}),
@@ -629,15 +810,24 @@ export function designSurface(index: GraphIndex, scope?: Set<string> | null): De
       .filter((e) => e.kind === 'contains')
       .map((e) => index.byId.get(e.to))
       .filter((s): s is GraphNode => !!s && !!s.design);
-    const screens = members.filter((s) => s.kind !== 'flow').map(screenRow)
+    const screens = members
+      .filter((s) => s.kind !== 'flow')
+      .map(screenRow)
       .sort((a, b) => (a.designId ?? '~').localeCompare(b.designId ?? '~') || a.name.localeCompare(b.name));
-    const flows = members.filter((s) => s.kind === 'flow').map((f) => flowRow(index, f)).sort((a, b) => a.name.localeCompare(b.name));
+    const flows = members
+      .filter((s) => s.kind === 'flow')
+      .map((f) => flowRow(index, f))
+      .sort((a, b) => a.name.localeCompare(b.name));
     const figmaFile = n.links?.find((l) => l.kind === 'design')?.url;
     out.push({
-      id: n.id, name: n.name, repo, manifestPath: n.id.slice(`${repo}::design::`.length),
+      id: n.id,
+      name: n.name,
+      repo,
+      manifestPath: n.id.slice(`${repo}::design::`.length),
       ...(figmaFile ? { figmaFile } : {}),
       ...(n.signature ? { signature: n.signature } : {}),
-      screens, flows,
+      screens,
+      flows,
       surfaces: n.design?.surfaces ?? [],
       counts: {
         screens: screens.length,
@@ -681,7 +871,10 @@ export function screensFor(index: GraphIndex, entryId: string, cap = 6): GraphNo
         seen.add(e.from);
         const n = index.byId.get(e.from);
         if (!n) continue;
-        if (n.kind === 'page' || n.kind === 'component') { screens.push(n); if (screens.length >= cap) break; }
+        if (n.kind === 'page' || n.kind === 'component') {
+          screens.push(n);
+          if (screens.length >= cap) break;
+        }
         next.push(e.from);
       }
     }
@@ -702,14 +895,19 @@ export function designDriftMarkdown(r: DesignReconcile): string {
   if (r.flows.length) {
     lines.push('## flows');
     for (const f of r.flows) {
-      lines.push(`- ${f.flow.id} ${f.flow.name} — ${f.built} of ${f.flow.screens?.length ?? 0} screens built: ${(f.flow.screens ?? []).join(' → ')}`);
+      lines.push(
+        `- ${f.flow.id} ${f.flow.name} — ${f.built} of ${f.flow.screens?.length ?? 0} screens built: ${(f.flow.screens ?? []).join(' → ')}`,
+      );
       for (const d of f.drift) lines.push(`    ${d.kind}: ${d.message}`);
     }
     lines.push('');
   }
   if (r.designOnly.length) {
     lines.push('## designed, not built');
-    for (const d of r.designOnly) lines.push(`- ${d.screen.id}${d.screen.name ? ` ${d.screen.name}` : ''} — ${d.screen.route ?? d.screen.component}${d.screen.operations?.length ? ` · uses ${d.screen.operations.join(', ')}` : ''}`);
+    for (const d of r.designOnly)
+      lines.push(
+        `- ${d.screen.id}${d.screen.name ? ` ${d.screen.name}` : ''} — ${d.screen.route ?? d.screen.component}${d.screen.operations?.length ? ` · uses ${d.screen.operations.join(', ')}` : ''}`,
+      );
     lines.push('');
   }
   if (r.fallbacks.length) {
@@ -736,7 +934,8 @@ export function designDriftMarkdown(r: DesignReconcile): string {
     for (const s of r.unmatched) lines.push(`- ${s.id}${s.name ? ` ${s.name}` : ''}`);
     lines.push('');
   }
-  if (!r.designOnly.length && !r.codeOnly.length && !withDrift.length && !r.unmatched.length) lines.push('no drift — the design and the code agree.');
+  if (!r.designOnly.length && !r.codeOnly.length && !withDrift.length && !r.unmatched.length)
+    lines.push('no drift — the design and the code agree.');
   return lines.join('\n');
 }
 

@@ -347,7 +347,7 @@ test('all six cross-file labels cite their own caller; safe traces cannot borrow
       const sourceLine = corpus.texts[label.sourcePath].split('\n')[line - 1];
       assert.ok(
         sourceLine.includes(
-          kind === 'positive' ? 'request.value() +' : '\"SELECT id FROM customer WHERE name = ?\", request.value()',
+          kind === 'positive' ? 'request.value() +' : '"SELECT id FROM customer WHERE name = ?", request.value()',
         ),
       );
       const f = finding(label.id);
