@@ -159,12 +159,12 @@ export class OwnerUiScans {
     this.#held(proof);
     const answer = stageAnswer(this.#workspace, record, stage);
     if (!answer) throw new OwnerUiError('sentinel.viewer.stageUnknown');
-    let steps = answer.steps.length;
+    let units = answer.units.length;
     for (let shaped = answer; ;) {
       if (Buffer.byteLength(JSON.stringify(shaped)) <= ANSWER_BYTES) return shaped;
-      if (steps <= 1) throw new OwnerUiError('sentinel.service.projectionLimit');
-      steps = Math.ceil(steps / 2);
-      shaped = { ...answer, steps: answer.steps.slice(0, steps), more: true };
+      if (units <= 1) throw new OwnerUiError('sentinel.service.projectionLimit');
+      units = Math.ceil(units / 2);
+      shaped = { ...answer, units: answer.units.slice(0, units), more: true };
     }
   }
 

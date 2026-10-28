@@ -28,7 +28,7 @@ export const SENTINEL_LAYOUTS = Object.freeze({
     { id: 'table', key: 'sentinel.viewer.layout.table', built: true },
   ],
   stage: [
-    { id: 'tasks', key: 'sentinel.viewer.layout.tasks', built: true },
+    { id: 'detail', key: 'sentinel.viewer.layout.detail', built: true },
     { id: 'table', key: 'sentinel.viewer.layout.table', built: true },
   ],
 });

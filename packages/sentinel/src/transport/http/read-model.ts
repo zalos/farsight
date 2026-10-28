@@ -22,7 +22,7 @@ export const READ_MODEL_SCHEMAS = Object.freeze({
 export const READ_MODEL_LIMITS = Object.freeze({
   scans: 64,
   stages: 256,
-  stepsPerStage: 256,
+  unitsPerStage: 256,
   attemptsPerStep: 16,
   turnsPerStep: 64,
   observationsPerStep: 16,
@@ -258,7 +258,8 @@ export interface StageCard {
   readonly duration: Duration | null;
   readonly provenance: Provenance;
   readonly counts: {
-    readonly steps: Counted;
+    /** The stage's units: *checks* for a tool or built-in stage, *reviews* for an agent stage. */
+    readonly units: Counted;
     readonly attempts: Counted;
     readonly inputs: Counted;
     readonly findings: Counted | null;
@@ -372,7 +373,7 @@ export interface TurnRow {
   readonly inputBytes: number;
 }
 
-export interface StepRow {
+export interface UnitRow {
   readonly number: number;
   /** The file it covered, or the first of its files; null when withheld or when it covers a whole source. */
   readonly label: string | null;
@@ -414,7 +415,7 @@ export interface StageAnswer {
   readonly workspace: string;
   readonly scan: ScanRow;
   readonly stage: StageCard;
-  readonly steps: readonly StepRow[];
+  readonly units: readonly UnitRow[];
   readonly more: boolean;
   /** The prompt the stage's model was given, when it is readable and nothing is withheld. */
   readonly prompt: {
@@ -440,7 +441,8 @@ const SCOPE = Object.freeze({
   scans: 'sentinel.viewer.scope.scans',
   scan: 'sentinel.viewer.scope.scan',
   stage: 'sentinel.viewer.scope.stage',
-  step: 'sentinel.viewer.scope.task',
+  check: 'sentinel.viewer.scope.check',
+  review: 'sentinel.viewer.scope.review',
   turn: 'sentinel.viewer.scope.turn',
 });
 
@@ -690,6 +692,8 @@ function stageCard(
   const first = stage.units[0]!;
   const adapter = first.adapterId ? scan.adapters[first.adapterId] : undefined;
   const kind = kindOf(first, adapter);
+  // inside a stage, a tool's (or Sentinel's own) unit is a check and an agent's a review — never *step* or *task*
+  const unitWord = kind === 'agent' ? 'sentinel.viewer.count.reviews' : 'sentinel.viewer.count.checks';
   const statuses = stage.units.map((u) => unitStatus(u, final));
   const attempts = stage.units.flatMap((u) => u.attempts);
   const starts = attempts.map((a) => a.startedAt).sort();
@@ -775,8 +779,8 @@ function stageCard(
       deadlineMs: first.work?.deadlineMs ?? null,
     },
     counts: {
-      steps: count(stage.units.length, 'sentinel.viewer.count.tasks', SCOPE.stage, 'plan units by stage', {
-        bizUnit: 'sentinel.viewer.count.tasks',
+      units: count(stage.units.length, unitWord, SCOPE.stage, 'plan units by stage', {
+        bizUnit: unitWord,
         breakdown: statusBreakdown(statuses),
       }),
       attempts: count(attempts.length, 'sentinel.viewer.count.attempts', SCOPE.stage, 'ledger attempts', {
@@ -1032,8 +1036,9 @@ export function replyOf(text: string | null, withheld: boolean): TurnRow['reply'
   return { key: 'sentinel.viewer.turn.unreadable' };
 }
 
-function stepRow(scan: ScanRecord, unit: UnitRecord, number: number, review: ReviewRecord | undefined): StepRow {
+function unitRow(scan: ScanRecord, unit: UnitRecord, number: number, review: ReviewRecord | undefined): UnitRow {
   const final = FINAL.has(scan.state);
+  const scope = unit.review || unit.work?.kind === 'agentic' ? SCOPE.review : SCOPE.check;
   const status = unitStatus(unit, final);
   const attempts = unit.attempts.slice(-READ_MODEL_LIMITS.attemptsPerStep);
   const ends = unit.attempts.map((a) => a.endedAt);
@@ -1056,29 +1061,29 @@ function stepRow(scan: ScanRecord, unit: UnitRecord, number: number, review: Rev
     duration:
       status === 'running' || status === 'waiting'
         ? null
-        : duration(ms(unit.attempts[0]?.startedAt ?? null, lastEnd), SCOPE.step, 'attempts, first start to last end'),
+        : duration(ms(unit.attempts[0]?.startedAt ?? null, lastEnd), scope, 'attempts, first start to last end'),
     attempts: attempts.map((a) => ({
       ordinal: a.ordinal,
       state: a.state,
       startedAt: a.startedAt,
       endedAt: a.endedAt,
-      duration: duration(ms(a.startedAt, a.endedAt), SCOPE.step, 'attempt, start to end'),
+      duration: duration(ms(a.startedAt, a.endedAt), scope, 'attempt, start to end'),
       where: a.worker,
       accepted: a.accepted,
       error: a.error,
       usage: a.usage.certainty,
     })),
     counts: {
-      attempts: count(unit.attempts.length, 'sentinel.viewer.count.attempts', SCOPE.step, 'ledger attempts', {
+      attempts: count(unit.attempts.length, 'sentinel.viewer.count.attempts', scope, 'ledger attempts', {
         bizUnit: 'sentinel.viewer.count.tries',
       }),
-      inputs: count(unit.inputs, 'sentinel.viewer.count.inputs', SCOPE.step, 'plan unit, inputs', {
+      inputs: count(unit.inputs, 'sentinel.viewer.count.inputs', scope, 'plan unit, inputs', {
         bizUnit: 'sentinel.viewer.count.inputs',
       }),
-      tokensIn: tIn === null ? null : count(tIn, 'sentinel.viewer.count.tokensIn', SCOPE.step, 'attempt usage'),
-      tokensOut: tOut === null ? null : count(tOut, 'sentinel.viewer.count.tokensOut', SCOPE.step, 'attempt usage'),
+      tokensIn: tIn === null ? null : count(tIn, 'sentinel.viewer.count.tokensIn', scope, 'attempt usage'),
+      tokensOut: tOut === null ? null : count(tOut, 'sentinel.viewer.count.tokensOut', scope, 'attempt usage'),
       turns: review
-        ? count(review.turns.length, 'sentinel.viewer.count.turns', SCOPE.step, 'review record, operations', {
+        ? count(review.turns.length, 'sentinel.viewer.count.turns', scope, 'review record, operations', {
             bizUnit: 'sentinel.viewer.count.exchanges',
           })
         : null,
@@ -1086,7 +1091,7 @@ function stepRow(scan: ScanRecord, unit: UnitRecord, number: number, review: Rev
         ? count(
             review.observations.length,
             'sentinel.viewer.count.modelObservations',
-            SCOPE.step,
+            scope,
             'review record, observations',
             {
               bizUnit: 'sentinel.viewer.count.modelNotes',
@@ -1094,7 +1099,7 @@ function stepRow(scan: ScanRecord, unit: UnitRecord, number: number, review: Rev
           )
         : null,
     },
-    cost: costOf(unit.attempts, SCOPE.step, 'attempt usage'),
+    cost: costOf(unit.attempts, scope, 'attempt usage'),
     review: review
       ? {
           model: review.model,
@@ -1150,12 +1155,7 @@ function stepRow(scan: ScanRecord, unit: UnitRecord, number: number, review: Rev
               severity: bounded(o.severity, 32),
               citations,
               counts: {
-                citations: count(
-                  o.citations.length,
-                  'sentinel.viewer.count.citations',
-                  SCOPE.step,
-                  'observation evidence',
-                ),
+                citations: count(o.citations.length, 'sentinel.viewer.count.citations', scope, 'observation evidence'),
               },
             };
           }),
@@ -1174,7 +1174,7 @@ export function stageAnswer(workspace: string, scan: ScanRecord, stageId: string
   const group = f.groups.get(stageId);
   if (!card || !group) return null;
   const reviews = reviewsOf(scan);
-  const units = group.units.slice(0, READ_MODEL_LIMITS.stepsPerStage);
+  const units = group.units.slice(0, READ_MODEL_LIMITS.unitsPerStage);
   const traces = units.map((u) => reviews.get(u.key)).filter((r): r is ReviewRecord => !!r);
   const prompt = traces[0]?.prompt ?? null;
   return {
@@ -1182,7 +1182,7 @@ export function stageAnswer(workspace: string, scan: ScanRecord, stageId: string
     workspace,
     scan: f.row,
     stage: card,
-    steps: units.map((u, i) => stepRow(scan, u, i + 1, reviews.get(u.key))),
+    units: units.map((u, i) => unitRow(scan, u, i + 1, reviews.get(u.key))),
     more: group.units.length > units.length,
     prompt:
       prompt && new Set(traces.map((t) => t.prompt.digest)).size === 1

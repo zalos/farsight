@@ -823,17 +823,18 @@ function attemptsHtml(step) {
 function taskLabel(st) {
   return st.label && !biz()
     ? '<span class="mono">' + esc(st.label) + '</span>'
-    : esc(fillN('sentinel.viewer.task.files', st.files));
+    : esc(fillN('sentinel.viewer.unit.files', st.files));
 }
 
 function stageStopHtml() {
   const s = SN.stage;
   if (!s) return '';
-  const steps = s.steps;
+  const steps = s.units;
+  const unitKey = s.stage.kind === 'agent' ? 'sentinel.viewer.unit.review' : 'sentinel.viewer.unit.check';
   if (SN.place.layout === 'table')
     return (
       '<table class="snt-table"><thead><tr>' +
-      ['task', 'status', 'took', 'tries', 'cost']
+      [s.stage.kind === 'agent' ? 'review' : 'check', 'status', 'took', 'tries', 'cost']
         .map((c) => '<th>' + word('sentinel.viewer.col.' + c) + '</th>')
         .join('') +
       '</tr></thead><tbody>' +
@@ -841,7 +842,7 @@ function stageStopHtml() {
         .map(
           (st) =>
             '<tr><td>' +
-            esc(fill('sentinel.viewer.task.n', { n: st.number })) +
+            esc(fill(unitKey, { n: st.number })) +
             ' · ' +
             taskLabel(st) +
             '</td><td>' +
@@ -866,7 +867,7 @@ function stageStopHtml() {
         '" data-step="' +
         st.number +
         '"><span class="snt-ent-m">' +
-        esc(fill('sentinel.viewer.task.n', { n: st.number })) +
+        esc(fill(unitKey, { n: st.number })) +
         '</span><span class="snt-ent-p">' +
         taskLabel(st) +
         '</span><span class="snt-ent-c">' +
@@ -879,10 +880,10 @@ function stageStopHtml() {
   const step = steps.find((x) => x.number === at);
   return (
     '<div class="snt-cols"><div class="snt-list"><div class="snt-label">' +
-    cnt(s.stage.counts.steps) +
+    cnt(s.stage.counts.units) +
     '</div>' +
     list +
-    (s.more ? '<p class="snt-sub">' + word('sentinel.viewer.task.more') + '</p>' : '') +
+    (s.more ? '<p class="snt-sub">' + word('sentinel.viewer.unit.more') + '</p>' : '') +
     '</div><div class="snt-turns">' +
     (s.review === 'withheld'
       ? '<div class="snt-note warn">' + word('sentinel.viewer.absent.withheld') + '</div>'

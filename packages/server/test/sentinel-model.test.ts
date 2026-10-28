@@ -41,7 +41,7 @@ test('the address names the stop, the scan, the stage, the layout and the picked
     stop: 'stage',
     scan: 3,
     stage: 'sentinel.stage.review.general',
-    layout: 'tasks',
+    layout: 'detail',
     pick: null,
     act: null,
   });
