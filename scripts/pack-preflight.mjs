@@ -25,9 +25,9 @@ export function workspacePackages(root) {
 
 /**
  * The entry package and every workspace package it depends on, transitively, by its
- * `workspace:` specifiers. The entry's own devDependencies count (it is the package being
+ * dependency names. The entry's own devDependencies count (it is the package being
  * bundled, and its type-only imports still resolve through them); the closure's do not.
- * A `workspace:` dependency with no manifest is reported, never skipped.
+ * An internal @farsight dependency (or legacy `workspace:` specifier) with no manifest is reported, never skipped.
  */
 export function buildClosure(root, entry) {
   const packages = workspacePackages(root);
@@ -45,7 +45,8 @@ export function buildClosure(root, entry) {
     closure.push({ name, ...pkg });
     for (const field of fields) {
       for (const [dep, spec] of Object.entries(pkg.manifest[field] ?? {})) {
-        if (typeof spec === 'string' && spec.startsWith('workspace:')) visit(dep, DEPENDENCY_FIELDS);
+        if (packages.has(dep) || dep.startsWith('@farsight/') || String(spec).startsWith('workspace:'))
+          visit(dep, DEPENDENCY_FIELDS);
       }
     }
   };

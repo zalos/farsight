@@ -48,7 +48,7 @@
     }
   },
   "dependencies": {
-    "@farsight/graph": "workspace:^",
+    "@farsight/graph": "^0.3.1",
     "@types/node": "26.1.0",
     "@vscode/tree-sitter-wasm": "0.3.1",
     "ignore": "7.0.5",

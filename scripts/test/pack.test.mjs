@@ -56,13 +56,13 @@ function silentNpm(root) {
 function builtCli(root) {
   manifest(root, 'cli', {
     name: '@farsight/cli',
-    dependencies: { '@farsight/core': 'workspace:*' },
-    devDependencies: { '@farsight/graph': 'workspace:*' },
+    dependencies: { '@farsight/core': '*' },
+    devDependencies: { '@farsight/graph': '^0.3.1' },
   });
   manifest(root, 'core', {
     name: '@farsight/core',
     main: 'dist/index.js',
-    dependencies: { '@farsight/graph': 'workspace:*' },
+    dependencies: { '@farsight/graph': '*' },
   });
   manifest(root, 'graph', { name: '@farsight/graph', main: './dist/index.js' });
   write(root, 'packages/core/dist/index.js', '');

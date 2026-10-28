@@ -32,7 +32,7 @@ npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsig
 farsight --version   # farsight X.Y.Z · built … · commit …
 ```
 
-Node 24 and npm are sufficient to install and run a release; pnpm is only needed to develop Farsight. How releases are cut: [docs/RELEASING.md](docs/RELEASING.md); what changed:
+Node 24 and npm are sufficient to install and run a release; building a checkout supports pnpm 9 or npm 10. How releases are cut: [docs/RELEASING.md](docs/RELEASING.md); what changed:
 [CHANGELOG.md](CHANGELOG.md).
 
 ## Quickstart
@@ -46,7 +46,18 @@ farsight serve           # explore it at http://localhost:4477
 farsight mcp             # feed it to LLM agents over MCP
 ```
 
-To build Farsight from a checkout, use Node 24 and pnpm 9: `pnpm install && pnpm build && node scripts/pack.mjs`, then `npm install -g ./build/farsight-cli-*.tgz`.
+To build Farsight from a checkout, use Node 24 with pnpm 9 (the contributor/CI path) or npm 10. Each npm line below is an alternative to the pnpm line above it; choose one manager per checkout.
+
+```sh
+pnpm install --frozen-lockfile
+# or: npm install
+pnpm build
+# or: npm run build
+node scripts/pack.mjs
+npm install -g ./build/farsight-cli-*.tgz
+```
+
+Only `pnpm-lock.yaml` is committed. npm creates an ignored `package-lock.json`; use `npm install`, not `npm ci`.
 
 Full walkthrough (config, MCP setup, multi-repo): **[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)**.
 
@@ -58,7 +69,7 @@ Click any node for docs, tags, rules, and connections; toggle **Business / Hybri
 
 [Farsight Echo](docs/ECHO.md) is an optional memory companion with its own package, local settings view,
 and isolated personal/work profiles. Its current foundation prepares agentmemory and model connections;
-automatic memory capture and briefing come later. Build its separate artifact with `pnpm pack:echo`.
+automatic memory capture and briefing come later. Build its separate artifact with `pnpm pack:echo` (or `npm run pack:echo`).
 
 ```
 docs/            Vision, architecture, roadmap, getting started, contracts, proposals

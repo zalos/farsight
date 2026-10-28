@@ -8,16 +8,16 @@
     "url": "git+https://github.com/zalos/farsight.git"
   },
   "scripts": {
-    "pack:echo": "pnpm --filter @farsight/echo... build && node scripts/pack-echo.mjs",
-    "test:echo:package": "pnpm pack:echo && node scripts/test-echo-package.mjs",
-    "pack:cli": "pnpm --filter @farsight/cli... build && node scripts/pack.mjs",
-    "test:cli:package": "pnpm pack:cli && node scripts/test-farsight-package.mjs",
+    "pack:echo": "node scripts/workspace-run.mjs build @farsight/echo && node scripts/pack-echo.mjs",
+    "test:echo:package": "npm run pack:echo && node scripts/test-echo-package.mjs",
+    "pack:cli": "node scripts/workspace-run.mjs build @farsight/cli && node scripts/pack.mjs",
+    "test:cli:package": "npm run pack:cli && node scripts/test-farsight-package.mjs",
     "test:cli:package:absent": "node scripts/test-farsight-package-absent.mjs",
-    "pack:sentinel": "pnpm --filter @farsight/sentinel... build && node scripts/pack-sentinel.mjs",
-    "test:sentinel:package": "pnpm pack:sentinel && node scripts/test-sentinel-consumers.mjs",
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck && pnpm e2e:typecheck",
-    "test": "pnpm -r test && pnpm test:scripts",
+    "pack:sentinel": "node scripts/workspace-run.mjs build @farsight/sentinel && node scripts/pack-sentinel.mjs",
+    "test:sentinel:package": "npm run pack:sentinel && node scripts/test-sentinel-consumers.mjs",
+    "build": "node scripts/workspace-run.mjs build",
+    "typecheck": "node scripts/workspace-run.mjs typecheck && tsc -p e2e/tsconfig.json",
+    "test": "node scripts/workspace-run.mjs test && node --test \"scripts/test/*.test.mjs\"",
     "test:scripts": "node --test \"scripts/test/*.test.mjs\"",
     "lint:strings": "node scripts/lint-strings.mjs",
     "e2e": "node scripts/e2e.mjs",
@@ -25,8 +25,8 @@
     "e2e:typecheck": "tsc -p e2e/tsconfig.json",
     "lint:commits": "node scripts/lint-commits.mjs",
     "prepare": "node scripts/install-hooks.mjs",
-    "pack:parser": "pnpm --filter @farsight/code-parser... build && node scripts/pack-parser.mjs",
-    "test:parser:package": "pnpm pack:parser && node scripts/test-parser-package.mjs",
+    "pack:parser": "node scripts/workspace-run.mjs build @farsight/code-parser && node scripts/pack-parser.mjs",
+    "test:parser:package": "npm run pack:parser && node scripts/test-parser-package.mjs",
     "format": "prettier --write --cache .",
     "format:check": "prettier --check --cache .",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint/ --quiet .",
@@ -58,5 +58,8 @@
   },
   "engines": {
     "node": ">=24"
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }

@@ -14,7 +14,10 @@ the packed CLI. Continue with **1. Parse a repo** below, from your application f
 
 ```sh
 git clone <this-repo> && cd farsight
-pnpm install && pnpm build
+pnpm install --frozen-lockfile
+# or: npm install
+pnpm build
+# or: npm run build
 node scripts/pack.mjs
 npm install -g ./build/farsight-cli-*.tgz
 ```
@@ -26,11 +29,14 @@ Keep the `./` prefix (or use an absolute path): a bare `build/...` argument that
 **Run from the workspace (development):**
 
 ```sh
-pnpm install && pnpm build
+pnpm install --frozen-lockfile
+# or: npm install
+pnpm build
+# or: npm run build
 alias farsight="node $PWD/packages/cli/dist/cli.js"
 ```
 
-Building the workspace requires Node 24 or newer and pnpm 9.0.0. The packed CLI requires Node 24 or newer; parsing uses prebuilt native bindings.
+Building the workspace requires Node 24 or newer and pnpm 9.0.0 or npm 10. Each npm line is an alternative to the pnpm line above it; choose one manager per checkout. pnpm remains the contributor/CI path and `pnpm-lock.yaml` the only committed lockfile. npm’s generated lockfile is ignored, so use `npm install`, not `npm ci`. The packed CLI requires Node 24 or newer; parsing uses prebuilt native bindings.
 
 npm can install a GitHub Release tarball directly, even without an npm registry publication. See [Using Farsight in another app](#using-farsight-in-another-app) for global and project-local installations.
 

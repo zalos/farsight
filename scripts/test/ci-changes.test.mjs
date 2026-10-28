@@ -9,6 +9,7 @@ import {
   changedPaths,
   detectChecks,
   selectChecks,
+  selectNpmBuild,
   pnpmTestArgs,
   selectorOutput,
   selectTests,
@@ -42,6 +43,25 @@ const full = {
 const every = { scope: 'all', packages: [], also: [] };
 const some = (packages, also = []) => ({ scope: 'packages', packages, also });
 const repoRoot = new URL('../../', import.meta.url).pathname;
+
+test('npm-build selects manifests, lockfiles, scripts, workflow and install config, leaving runtime selection alone', () => {
+  for (const path of [
+    'package.json',
+    'packages/core/package.json',
+    'pnpm-lock.yaml',
+    'package-lock.json',
+    'scripts/pack.mjs',
+    'scripts/test/x.test.mjs',
+    '.github/workflows/ci.yml',
+    '.npmrc',
+    '.nvmrc',
+    'pnpm-workspace.yaml',
+  ])
+    assert.equal(selectNpmBuild([path]), true, path);
+  for (const path of ['README.md', 'packages/core/src/graph.ts', 'e2e/tests/map.pw.spec.ts'])
+    assert.equal(selectNpmBuild([path]), false, path);
+  assert.equal(detectChecks({}).npmBuild, true, 'an unavailable range fails closed');
+});
 
 test('ordinary docs skip runtime checks; packaged docs still check their tarball', () => {
   assert.deepEqual(
@@ -378,7 +398,7 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
     assert.equal(
       readFileSync(output, 'utf8'),
       'validate=false\ne2e=false\necho=false\nsentinel=false\nisolation=false\nrecovery=false\nservice=false\n' +
-        'scannerCli=false\ntestScope=all\ntestPackages=\n',
+        'scannerCli=false\ntestScope=all\ntestPackages=\nnpmBuild=false\n',
     );
     assert.match(readFileSync(summary, 'utf8'), /e2e: skip/);
     assert.match(readFileSync(summary, 'utf8'), /sentinel-package: skip/);

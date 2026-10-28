@@ -21,6 +21,7 @@ export function libraryVersion(root, version, { dryRun = false } = {}) {
   const first = next.findIndex((n, i) => n !== old[i]);
   if (first < 0 || next[first] < old[first]) throw new Error('The library version must increase');
   if (!dryRun) {
+    packages[1].dependencies = { ...packages[1].dependencies, '@farsight/graph': `^${version}` };
     packages.forEach((pkg, i) => writeFileSync(files[i], JSON.stringify({ ...pkg, version }, null, 2) + '\n'));
     writeFileSync(stamp, source.replace(`'${packages[0].version}'`, `'${version}'`));
   }

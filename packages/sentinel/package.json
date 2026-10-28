@@ -101,9 +101,9 @@
     "schemas:check": "node scripts/generate-schemas.mjs --check"
   },
   "dependencies": {
-    "@farsight/code-parser": "workspace:*",
-    "@farsight/core": "workspace:*",
-    "@farsight/graph": "workspace:*",
+    "@farsight/code-parser": "*",
+    "@farsight/core": "*",
+    "@farsight/graph": "*",
     "@types/node": "26.1.0",
     "ajv": "8.20.0",
     "oxc-parser": "0.138.0",

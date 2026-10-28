@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Installs this clone's Git hooks with lefthook (lefthook.yml) and the commit template. Run by `pnpm install`
+// Installs this clone's Git hooks with lefthook (lefthook.yml) and the commit template. Run by either manager's install
 // (root `prepare`); a no-op in CI and outside a Git checkout. Linked worktrees share the main clone's hooks
 // directory. lefthook writes only the hooks lefthook.yml names, so the Git LFS hooks there stay as they are.
 import { execFileSync } from 'node:child_process';

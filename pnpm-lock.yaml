@@ -54,44 +54,44 @@ importers:
   packages/app:
     dependencies:
       '@farsight/core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../core
 
   packages/cli:
     dependencies:
       '@farsight/core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../core
       '@farsight/mcp':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../mcp
       '@farsight/parsers':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../parsers
       '@farsight/server':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../server
       '@farsight/work':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work
       '@farsight/work-azdo':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work-azdo
       '@farsight/work-fixture':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work-fixture
       '@farsight/work-jira':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work-jira
     devDependencies:
       '@farsight/graph':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../graph
 
   packages/code-parser:
     dependencies:
       '@farsight/graph':
-        specifier: workspace:^
+        specifier: ^0.3.1
         version: link:../graph
       '@types/node':
         specifier: 26.1.0
@@ -109,7 +109,7 @@ importers:
   packages/core:
     dependencies:
       '@farsight/graph':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../graph
 
   packages/echo:
@@ -118,7 +118,7 @@ importers:
         specifier: 0.9.30
         version: 0.9.30(@modelcontextprotocol/sdk@1.32.0(zod@4.6.5))(@types/node@26.1.0)
       '@farsight/core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../core
 
   packages/graph:
@@ -130,22 +130,22 @@ importers:
   packages/mcp:
     dependencies:
       '@farsight/core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../core
       '@farsight/parsers':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../parsers
       '@farsight/work':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work
       '@farsight/work-azdo':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work-azdo
       '@farsight/work-fixture':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work-fixture
       '@farsight/work-jira':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work-jira
       '@modelcontextprotocol/sdk':
         specifier: ^1.32.0
@@ -157,13 +157,13 @@ importers:
   packages/parsers:
     dependencies:
       '@farsight/code-parser':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../code-parser
       '@farsight/core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../core
       '@farsight/graph':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../graph
       oxc-parser:
         specifier: ^0.138.0
@@ -175,13 +175,13 @@ importers:
   packages/sentinel:
     dependencies:
       '@farsight/code-parser':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../code-parser
       '@farsight/core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../core
       '@farsight/graph':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../graph
       '@modelcontextprotocol/sdk':
         specifier: 1.32.0
@@ -205,52 +205,52 @@ importers:
   packages/server:
     dependencies:
       '@farsight/core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../core
       '@farsight/parsers':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../parsers
       '@farsight/work':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work
       '@farsight/work-azdo':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work-azdo
       '@farsight/work-fixture':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work-fixture
       '@farsight/work-jira':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work-jira
 
   packages/work:
     dependencies:
       '@farsight/core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../core
 
   packages/work-azdo:
     dependencies:
       '@farsight/core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../core
       '@farsight/work':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work
 
   packages/work-fixture:
     dependencies:
       '@farsight/work':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work
 
   packages/work-jira:
     dependencies:
       '@farsight/core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../core
       '@farsight/work':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../work
 
 packages:

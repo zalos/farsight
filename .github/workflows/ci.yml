@@ -31,6 +31,7 @@ jobs:
       isolation: ${{ steps.select.outputs.isolation }}
       recovery: ${{ steps.select.outputs.recovery }}
       service: ${{ steps.select.outputs.service }}
+      npmBuild: ${{ steps.select.outputs.npmBuild }}
       # validate's unit tests: `packages` with the names to test, `none` (only the skills trees changed), or
       # anything else, a missing scope or a missing list under `packages` included, for every package
       testScope: ${{ steps.select.outputs.testScope }}
@@ -50,6 +51,44 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node scripts/ci-changes.mjs
+
+  # Optional: npm-only checkout build and both installable tarballs.
+  npm-build:
+    name: npm-build
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.npmBuild != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Use npm 10 with pnpm absent from PATH
+        shell: bash
+        run: |
+          npm install --global npm@10
+          bin="$RUNNER_TEMP/npm-only-bin"
+          mkdir -p "$bin"
+          ln -s "$(command -v node)" "$bin/node"
+          ln -s "$(command -v npm)" "$bin/npm"
+          export PATH="$bin:/usr/bin:/bin"
+          if command -v pnpm; then echo 'pnpm must be absent from this job' >&2; exit 1; fi
+          node --version
+          npm --version
+          echo "PATH=$PATH" >> "$GITHUB_ENV"
+      - run: npm install
+      - run: npm run build
+      - run: node scripts/pack.mjs
+      - run: npm run pack:sentinel
+      - name: Install both tarballs and print their versions
+        shell: bash
+        run: |
+          prefix="$(mktemp -d)"
+          trap 'rm -rf "$prefix"' EXIT
+          npm install --prefix "$prefix" "$PWD"/build/farsight-cli-*.tgz "$PWD"/build/sentinel/farsight-sentinel-*.tgz
+          "$prefix/node_modules/.bin/farsight" --version
+          "$prefix/node_modules/.bin/farsight-sentinel" --version
 
   secrets:
     name: secrets

@@ -5,8 +5,17 @@ Thanks for helping. This page is the short version; the project contract (princi
 
 ## Setup
 
-- Node 24+ (`.nvmrc` — `nvm use`) and pnpm 9 (`packageManager` in `package.json`).
-- `pnpm install --frozen-lockfile && pnpm build`. **Build before tests**: every test imports compiled `dist/`.
+- Node 24+ (`.nvmrc` — `nvm use`) and pnpm 9 (`packageManager` in `package.json`) for contributor/CI parity; npm 10 also builds and packs a fresh clone.
+- Install and build with one manager. **Build before tests**: every test imports compiled `dist/`.
+
+  ```sh
+  pnpm install --frozen-lockfile
+  # or: npm install
+  pnpm build
+  # or: npm run build
+  ```
+
+- Only `pnpm-lock.yaml` is committed; npm’s lockfile is ignored. Use `npm install`, not `npm ci`, and a fresh clone when changing managers. Root `build`, `typecheck`, `test` and `pack:cli|sentinel|echo|parser` work with `npm run` too. npm orders workspace scripts by dependencies; pnpm keeps its native recursive scheduler.
 - Workspace dependency install scripts are allowlisted with `pnpm.onlyBuiltDependencies: ["esbuild"]`. Echo's
   dependency tree is still resolved by the workspace install, but other dependencies' build scripts are not
   approved. Echo's pinned engine is installed only by its explicit `install-runtime` command.
@@ -67,7 +76,7 @@ Per-PR checklist:
 
 Linked worktrees share one hooks directory: never add Git LFS hook names (`pre-push`, `post-checkout`, `post-commit`,
 `post-merge`) to `lefthook.yml`; keep `no_auto_install: true` so a commit cannot rewrite everyone's hooks.
-Never pop a `lefthook auto backup` stash entry. Run `pnpm install` in a new worktree before committing.
+Never pop a `lefthook auto backup` stash entry. In linked worktrees, install dependencies with `pnpm install --ignore-scripts`; install hooks only from the lasting primary checkout. Both managers’ normal install runs the same hook installer in a fresh clone.
 
 ## Where things live
 

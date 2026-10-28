@@ -23,6 +23,7 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 | job | steps | timeout |
 |---|---|---|
 | **affected checks** | test `scripts/ci-changes.mjs` and select suites from the changed paths | 2 min |
+| **npm-build** (non-required) | Node 24, npm 10 with pnpm absent from PATH: `npm install` → `npm run build` → `node scripts/pack.mjs` → `npm run pack:sentinel` → install both tarballs in a temporary prefix and print both versions | 6 min |
 | **lint** | `pnpm install --frozen-lockfile` → `pnpm format:check` → `pnpm lint`; a PR whose title starts with `style` also compares JS/TS ASTs against its merge base | 3 min |
 | **validate** | `pnpm install --frozen-lockfile` → `pnpm build` (`tsc -p` type-checks each package with the config `typecheck` uses, so there is no separate typecheck step) → the graph contract check → the unit tests of the packages the change reaches (below; every package when the selector says so), Sentinel's unit suite only (`SENTINEL_TEST_SUITE=unit`, its no-skip files with zero skips and the launch rule, `SENTINEL_TEST_LAUNCHES=1`; its process suite is sentinel-service's) → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests when Echo is reached | 9 min |
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm e2e:typecheck` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → the Sentinel browser steps (the paired owner UI journey, the installed owner browser workflow, offline report and retained structural HTML delivery and print, each exactly one case with zero skips) when sentinel-package runs or validate tests Sentinel, else skipped → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`; the table is the `e2e-perf-results` artifact) | 11 min |
@@ -48,6 +49,7 @@ Measured times are the job's own run time, not queueing; the run ids are GitHub 
 |---|---|---:|---:|
 | affected checks | 9 to 24 s (main 40628220866, 40629680573, 40635638060, 40639064981, 40649483163) | 1 | 2 |
 | secrets | 9 to 13 s (main 40628220866–40649483163); its job is left as it was by ruling, budget unchanged | — | 10 |
+| npm-build | New job, first CI measurement pending; provisional budget from local fresh-clone install/build/pack, compared with build steps in 40649483163 | 4 | 6 |
 | lint | 64 to 96 s (main 40628220866–40649483163) | 2 | 3 |
 | validate | 265 to 292 s testing every package after the process split (#225: 40635438642, 40649566118); 632 to 974 s before it (main 40628220866–40649483163) | 6 | 9 |
 | echo-package | 46 to 60 s (main 40628220866–40649483163); it downloads the iii engine, so the target leaves room | 3 | 5 |
@@ -157,6 +159,8 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 | Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; graph, core and Echo changes also select `echo-package`; changes to a package in `farsight-cli`'s workspace dependency closure (cli, server, mcp, parsers, code-parser, core, graph, work and the work providers today, read from the manifests by `scripts/ci-changes.mjs`), Sentinel's own closure, or `examples/invoice-app/` also select `sentinel-package`; Sentinel's own closure (read from the manifests) also selects `sentinel-isolation` and `sentinel-recovery`; unreadable manifests select all |
 | Everything else, including dependencies, build config, workflows, the selector itself and the shared packaging scripts (`pack.mjs`, `pack-preflight.mjs`, `npm-consumer.mjs`, `test-farsight-package.mjs`, `test-farsight-package-absent.mjs`) | all |
 
+The optional `npm-build` selection is independent: package manifests, lockfiles, `scripts/`, `ci.yml`, `.npmrc`, `.nvmrc` or `pnpm-workspace.yaml` select it. Missing range or selector output runs it. It does not change the seven required checks or the runtime selection above.
+
 ### Which packages validate tests
 
 `validate` runs the unit tests of the packages the change reaches, not of every package. The selector works the set
@@ -242,7 +246,7 @@ outside the pnpm workspace. Clean means none of the caller's npm configuration: 
 variables are dropped and npm's user and global config files, cache and XDG config/state are task-local
 (`scripts/npm-consumer.mjs`; `HOME` is untouched, and `FARSIGHT_NPM_REGISTRY` names a mirror explicitly). The
 scratch directory is removed on success and on any npm failure. First `pnpm pack:cli` builds only `@farsight/cli...` and packs `farsight-cli`; the
-pack preflight (`scripts/pack-preflight.mjs`) requires only the CLI's `workspace:` dependency closure and refuses
+pack preflight (`scripts/pack-preflight.mjs`) requires only the CLI's workspace dependency closure and refuses
 before removing any prior artifact. `scripts/test-farsight-package.mjs` installs that tarball, checks that the
 bundle names no Sentinel module, that no Sentinel package is installed and that the tarball's `engines.node` equals
 the workspace's, prints `--version`, ingests the

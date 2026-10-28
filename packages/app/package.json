@@ -7,6 +7,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@farsight/core": "workspace:*"
+    "@farsight/core": "*"
   }
 }
