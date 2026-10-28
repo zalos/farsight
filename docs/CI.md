@@ -71,7 +71,9 @@ Gitleaks and the remaining plan gates remain separate.
 it too); a documentation-only change skips it. Prettier checks JS/TS only, with existing areas temporarily listed in
 `.prettierignore`. ESLint freezes existing error counts per file and rule in `eslint-suppressions.json`; it rejects
 new errors, while `pnpm lint:report` also shows structure warnings. After deliberately fixing old errors, run
-`pnpm lint --prune-suppressions`. A formatting-only PR uses `pnpm verify:format -- <merge-base> <head>` and the
+`pnpm lint --prune-suppressions`. Sentinel's layer rule (`boundaries/dependencies`, imports point down only) is one
+of those errors: its known upward imports are frozen there too, so `pnpm lint:boundaries` prints them without the
+suppressions, and `packages/sentinel/test/import-matrix.test.ts` holds their exact set. A formatting-only PR uses `pnpm verify:format -- <merge-base> <head>` and the
 per-PR checklist in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 These are deliberately broad suite boundaries, not an inferred per-test dependency graph. Mixed changes take the

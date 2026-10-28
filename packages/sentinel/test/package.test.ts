@@ -279,7 +279,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'evidence/import-operation.js': ['node:crypto'],
   'evidence/owner-context.js': ['node:fs', 'node:path'],
   'evidence/audit.js': ['node:fs', 'node:path'],
-  'store/ledger-json.js': ['node:crypto'],
+  // The kernel: one canonical JSON form and one SHA-256 helper; nothing else imported, nothing started.
+  'kernel/digest.js': ['node:crypto'],
   // Scope-local counters and a monotonic clock; neither performs I/O or starts work on import.
   'store/admission-fence.js': ['node:async_hooks'],
   'store/read-budget.js': ['node:async_hooks', 'node:perf_hooks', 'node:timers/promises'],
