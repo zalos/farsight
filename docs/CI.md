@@ -13,9 +13,7 @@ in the explicit zero-skip test list. Ordinary package acceptance runs the framew
 
 ## What runs
 
-The six required check names are **affected checks · validate · e2e · echo-package · secrets · commits**.
-The new **lint** check runs alongside selected runtime checks. After its first green run, the lead adds it to branch
-protection, making seven required checks; that protection change is separate from this tooling PR.
+The seven required check names are **affected checks · lint · validate · e2e · echo-package · secrets · commits**.
 Branch protection requires them from GitHub Actions, requires the branch to be up to date, and applies to admins.
 A small `changes` job (displayed as **affected checks**) tests and runs
 `scripts/ci-changes.mjs`, then the affected runtime jobs run in parallel on `ubuntu-latest`. No dependency install
@@ -25,8 +23,8 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 | job | steps | timeout |
 |---|---|---|
 | **affected checks** | test `scripts/ci-changes.mjs` and select suites from the changed paths | 5 min |
-| **lint** (required after its first green run) | `pnpm install --frozen-lockfile` → `pnpm format:check` → `pnpm lint`; a PR whose title starts with `style` also compares JS/TS ASTs against its merge base | 10 min |
-| **validate** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm -r typecheck` → `pnpm -r test` → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests | 20 min |
+| **lint** | `pnpm install --frozen-lockfile` → `pnpm format:check` → `pnpm lint`; a PR whose title starts with `style` also compares JS/TS ASTs against its merge base | 10 min |
+| **validate** | `pnpm install --frozen-lockfile` → `pnpm build` (`tsc -p` type-checks each package with the config `typecheck` uses, so there is no separate typecheck step) → the graph contract check → the unit tests of the packages the change reaches (below; every package when the selector says so) → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests when Echo is reached | 20 min |
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm e2e:typecheck` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `SENTINEL_REPORT_BROWSER=1` offline report delivery and print (exactly one case, zero skips) → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`; the table is the `e2e-perf-results` artifact) | 30 min |
 | **secrets** | gitleaks over the pushed or PR commits (below) | 10 min |
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
@@ -83,14 +81,43 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 |---|---|
 | Root Markdown, Markdown under `docs/`, `.github/`, `.claude/`, `.agents/`, or `LICENSE` | none, except the packaged Echo docs below |
 | `docs/ECHO.md`, `packages/echo/README.md`, Echo packaging scripts or example connection/settings | `echo-package` |
-| `packages/sentinel/README.md`, `scripts/pack-sentinel.mjs`, `scripts/test-sentinel-package.mjs` | `sentinel-package` |
+| `packages/sentinel/README.md`, `scripts/test-sentinel-package.mjs` | `sentinel-package` |
+| `scripts/pack-sentinel.mjs` | `sentinel-package` + `validate` (Sentinel's review-package unit test packs the tarball) |
 | `scripts/npm-acceptance.mjs` | `validate` (script tests) + `sentinel-package` (packed tarball acceptance) |
 | `packages/sentinel/` outside `test/` | `validate` + `sentinel-package` + `sentinel-isolation` + `sentinel-recovery` + `e2e` (the e2e job also runs the offline report browser gate) |
 | `packages/sentinel/test/` | `validate` + `sentinel-isolation` + `sentinel-recovery` + `e2e` (offline report browser gate) |
-| `e2e/`, `scripts/e2e.mjs`, `scripts/e2e-perf.mjs`, `scripts/synth-graph.mjs` | `e2e` (including its typecheck and small perf suite) |
+| `e2e/`, `scripts/e2e.mjs`, `scripts/e2e-perf.mjs` | `e2e` (including its typecheck and small perf suite) |
+| `scripts/synth-graph.mjs` | `e2e` + `validate` (the server's search and fold tests import the synthetic workspace) |
 | Package `test/` folders, `scripts/test/`, changelog/release/release-manifest/verify-release/hook-install/commit-lint scripts | `validate` |
 | Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; graph, core and Echo changes also select `echo-package`; changes to a package in `farsight-cli`'s workspace dependency closure (cli, server, mcp, parsers, code-parser, core, graph, work and the work providers today, read from the manifests by `scripts/ci-changes.mjs`), Sentinel's own closure, or `examples/invoice-app/` also select `sentinel-package`; Sentinel's own closure (read from the manifests) also selects `sentinel-isolation` and `sentinel-recovery`; unreadable manifests select all |
 | Everything else, including dependencies, build config, workflows, the selector itself and the shared packaging scripts (`pack.mjs`, `pack-preflight.mjs`, `npm-consumer.mjs`, `test-farsight-package.mjs`, `test-farsight-package-absent.mjs`) | all |
+
+### Which packages validate tests
+
+`validate` runs the unit tests of the packages the change reaches, not of every package. The selector emits
+`testBase`, the commit the change is compared from (a PR's merge base, a push's previous head), and validate runs
+`pnpm -r --filter "...[<testBase>]" test`: pnpm 9's changed-since filter selects every package with a file changed
+since that commit and every package that depends on one, read from the manifests (all four dependency fields). A
+viewer change tests the server and the CLI; a Sentinel change tests Sentinel alone; a core change tests core and
+the eleven packages built on it.
+
+pnpm cannot see a test that reads another package's files without depending on it: core's ask corpus and
+Sentinel's report tests ingest through `packages/parsers/dist`, and the MCP and server tests spawn the CLI. The
+selector reads every package's `test/` folder for such references (`packages/<dir>/dist`, `../../<dir>/dist`,
+`join(here, '..', '..', '<dir>', 'dist')`, for `dist`, `src`, `test`, `public` and `bin`; whole-line comments do not
+count) and emits `testAlso`, the readers of a selected package, which validate adds with one `--filter <name>` each:
+alone, because their own code did not change. A reference that runs only outside validate is listed in
+`OUTSIDE_VALIDATE` in `scripts/ci-changes.mjs` with the gate that keeps it out (the owner UI browser journey reads
+the CLI only under `SENTINEL_OWNER_UI_BROWSER=1`, which the e2e job sets); the selector test fails if the file loses
+that gate. The run summary lists the packages the selector expects; validate's log prints pnpm's own
+`Scope: n of 15 workspace projects`.
+
+Every package is tested when a path that selects validate lies outside a workspace package (root files, the
+lockfile, `scripts/`, `schemas/`, `examples/`, workflows and the selector itself), when a path is under `packages/`
+without a manifest, when the manifests or a test folder cannot be read, and when `testBase` is missing, empty or not
+in the checkout (validate fetches the full history so it is). The required check names do not change. pnpm diffs
+`testBase` against the checkout, so on a PR whose branch is behind its base the set also covers the base branch's
+newer changes: more packages, never fewer.
 
 Markdown inside fixtures is test input, not automatically documentation. Graph and core are Echo build dependencies, so its
 whole package is watched, not just a few currently imported helpers. PRs compare merge-base → head, excluding
@@ -178,6 +205,12 @@ how to allowlist a value you have checked: [SECURITY.md](SECURITY.md#the-scan-in
 Choose checks from the table above for local work too: ordinary Markdown edits do not need a build, unit tests or
 e2e. For changes to CI selection, run `pnpm test:scripts` and `actionlint`; the workflow change itself selects all
 checks on GitHub. Keep local validation focused on the affected behavior instead of rerunning unrelated suites.
+
+To run what validate runs for your branch, `pnpm -r --filter "...[$(git merge-base origin/main HEAD)]" test` plus a
+`--filter` for each package the selector would add (`BASE_SHA=$(git merge-base origin/main HEAD) HEAD_SHA=$(git
+rev-parse HEAD) GITHUB_EVENT_NAME=push node scripts/ci-changes.mjs` prints `testAlso`). **Not in a linked
+worktree:** pnpm 9.0.0 finds the repository root by a `.git` directory, and a worktree's `.git` is a file, so the
+filter matches no package and exits 0 having tested nothing. Run it in an ordinary clone; CI's checkout is one.
 
 The offline report browser test is explicitly selected with `SENTINEL_REPORT_BROWSER=1`; `CI=true` alone does not require a browser in the unit-test job. The e2e job runs it after provisioning Chromium whenever application e2e or Sentinel isolation checks are selected, and fails on a missing browser, failure, or skipped case.
 
