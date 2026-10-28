@@ -1,0 +1,82 @@
+<!-- {"title":"Sentinel · Configure","level":"Pipeline","layout":["ladder","lanes","table"],"layoutOn":0,"tools":["Validate","Preview run","?"],"crumb":"<b>invoice-app</b> <span class=sep>›</span> pipeline <b>rev 8 · draft</b> <span class=sep>·</span> <span class=mono>.farsight/sentinel.config.json</span> <span class=sep>·</span> editing stage <b>6</b>","verdicts":"<span class='chip cyan'>draft · not yet admitted</span><span class='chip'>5 stages reuse rev 7 · 2 change</span>"} -->
+<style>
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:16px;height:100%}
+.ladder{display:flex;flex-direction:column;gap:4px}
+.sc{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:0 10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:6px;padding:7px 12px}
+.sc.s{border-left-color:var(--k-script)} .sc.t{border-left-color:var(--k-tool);border-left-style:double;border-left-width:4px} .sc.a{border-left-color:var(--k-agent)}
+.sc.sel{outline:1px solid var(--cyan);box-shadow:0 0 0 3px var(--accent-dim)}
+.sc .n{font:11px var(--hud);color:var(--dim)}
+.sc .nm{font:600 12.5px var(--body);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sc .io{grid-column:2/4;display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:11px}
+.sc .reuse{font:11px var(--hud);letter-spacing:.08em;text-transform:uppercase;color:var(--ok)}
+.sc .chg{font:11px var(--hud);letter-spacing:.08em;text-transform:uppercase;color:var(--cyan)}
+.add{font:11px var(--hud);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);border:1px dashed var(--line);border-radius:4px;padding:4px 10px}
+.ed{background:var(--panel);border:1px solid var(--line);border-radius:6px;display:flex;flex-direction:column;overflow:hidden;height:100%}
+.ed .hd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.ed .hd h2{margin:0;font:600 14px var(--body)}
+.ed .bd{flex:1;padding:12px 14px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.f{display:grid;grid-template-columns:96px minmax(0,1fr);gap:3px 10px;align-items:start;font-size:12px}
+.f label{font:11px var(--hud);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);padding-top:5px}
+.in{background:var(--ground);border:1px solid var(--line);border-radius:4px;padding:5px 8px;font:12px var(--body);color:var(--ink);min-height:28px}
+.in.mono{font:11.5px var(--mono)}
+.in.ta{min-height:72px;white-space:pre-wrap;line-height:1.45}
+.opts{display:flex;gap:6px;flex-wrap:wrap}
+.opt{border:1px solid var(--line);border-radius:4px;padding:4px 9px;font-size:11.5px;color:var(--muted)}
+.opt.on{border-color:var(--cyan);color:var(--ink);background:var(--accent-dim)}
+.opt.off{opacity:.5;text-decoration:line-through}
+.wire{display:flex;flex-direction:column;gap:4px}
+.wire .w{display:grid;grid-template-columns:1fr 18px 1fr;gap:6px;align-items:center;font:11.5px var(--mono)}
+.wire .w .from{color:var(--muted)} .wire .w .to{color:var(--ink)} .wire .w .arr{color:var(--cyan);text-align:center}
+.jsonv{font:11px var(--mono);color:var(--muted);background:var(--ground);border:1px solid var(--line-soft);border-radius:4px;padding:8px 10px;line-height:1.45;white-space:pre}
+.jsonv b{color:var(--ink);font-weight:500} .jsonv i{color:var(--ok);font-style:normal}
+</style>
+<div class="stage">
+ <div class="cols">
+  <div>
+   <div class="ladder">
+    <div class="sc s"><span class="n">1</span><span class="nm">Capture the source <span class="chip k-script">script · host</span></span><span class="reuse">reuse</span></div>
+    <div class="sc s"><span class="n">2</span><span class="nm">Parse and inventory <span class="chip k-script">script · host</span></span><span class="reuse">reuse</span></div>
+    <div class="sc t"><span class="n">3</span><span class="nm">Secrets · Dependencies · Patterns · CI &amp; infra <span class="chip k-tool">4 tools · containers</span></span><span class="reuse">reuse</span></div>
+    <div class="sc s"><span class="n">4</span><span class="nm">Walk each entry point end to end <span class="chip k-script">script · host</span></span><span class="reuse">reuse</span></div>
+    <div class="sc a"><span class="n">5</span><span class="nm">Review each entry point <span class="chip k-agent">agent · copilot cli</span></span><span class="reuse">reuse</span></div>
+    <div class="sc a sel"><span class="n">6</span><span class="nm">Triage findings against the journeys <span class="chip k-agent">agent · claude cli</span><span class="chip cyan">new</span></span><span class="chg">added</span>
+     <div class="io"><span class="label">in</span><span class="chip plain">findings</span><span class="chip plain">observations</span><span class="chip plain">journeys</span><span class="label">out</span><span class="chip plain">triage · sentinel.triage/v1</span></div></div>
+    <span class="add">+ add a stage here · script · tool · agent</span>
+    <div class="sc s"><span class="n">7</span><span class="nm">Report <span class="chip k-script">script · host</span></span><span class="chg">reruns · reads triage</span></div>
+   </div>
+   <div style="margin-top:14px" class="jsonv"><b>// what this writes · .farsight/sentinel.config.json</b>
+{ <b>"id"</b>: <i>"triage"</i>, <b>"kind"</b>: <i>"agent"</i>, <b>"runner"</b>: <i>"claude-cli"</i>, <b>"model"</b>: <i>"claude-sonnet-5-5"</i>,
+  <b>"instructions"</b>: <i>"./sentinel/triage.md"</i>, <b>"skills"</b>: [<i>"farsight-journeys@1"</i>],
+  <b>"inputs"</b>: { <b>"findings"</b>: <i>"patterns.findings"</i>, <b>"observations"</b>: <i>"review.observations"</i>, <b>"journeys"</b>: <i>"farsight.journeys"</i> },
+  <b>"outputs"</b>: { <b>"triage"</b>: <i>"sentinel.triage/v1"</i> },
+  <b>"budget"</b>: { <b>"turns"</b>: 4, <b>"tokens"</b>: 60000, <b>"usd"</b>: 0.50, <b>"seconds"</b>: 180 }, <b>"after"</b>: [<i>"review"</i>] }</div>
+   <div class="foot" style="position:static;margin-top:12px"><span>a stage is one JSON object · the ladder is the same file drawn · nothing runs until you preview and confirm</span></div>
+  </div>
+  <div class="ed">
+   <div class="hd"><h2>Stage 6 · Triage findings against the journeys</h2><span class="chip k-agent" style="margin-left:auto">agent</span></div>
+   <div class="bd">
+    <div class="f">
+     <label>kind</label><div class="opts"><span class="opt">script · host</span><span class="opt">tool · container</span><span class="opt on">agent · cli</span></div>
+     <label>runner</label><div class="opts"><span class="opt">copilot cli <span class="dim">1.0.103 ✓</span></span><span class="opt on">claude cli <span class="dim">2.1.40</span></span><span class="opt off">hosted api · flag off</span><span class="opt off">local model · policy</span></div>
+     <label>model</label><div class="in mono">claude-sonnet-5-5</div>
+     <label>instructions</label><div class="in ta mono">You are triaging security findings for a billing application.
+For each finding, read the journey it sits on and say who is
+affected and whether a gate on the path already limits it.
+Cite the finding id and the walkthrough line. Output
+sentinel.triage/v1 JSON only.</div>
+     <label>skills</label><div class="opts"><span class="opt on">farsight-journeys @1</span><span class="opt">owasp-top10 @2</span><span class="opt">+ add</span></div>
+     <label>inputs</label><div class="wire">
+       <div class="w"><span class="from">stage 3 · patterns → findings</span><span class="arr">→</span><span class="to">findings</span></div>
+       <div class="w"><span class="from">stage 5 · review → observations</span><span class="arr">→</span><span class="to">observations</span></div>
+       <div class="w"><span class="from">farsight graph → journeys</span><span class="arr">→</span><span class="to">journeys</span></div>
+       <div class="w"><span class="from dim">+ wire another output</span><span></span><span></span></div></div>
+     <label>outputs</label><div class="in mono">triage · schema sentinel.triage/v1 · consumed by stage 7</div>
+     <label>budget</label><div class="in mono">4 turns · 60,000 tokens · $0.50 · 180 s</div>
+     <label>runs where</label><div class="opts"><span class="opt on">host · agent cli · network via child proxy</span></div>
+    </div>
+    <div class="note warn">Claude CLI 2.1.40 is not yet qualified on this machine. The stage runs; the report says so.</div>
+    <div class="row" style="margin-top:auto"><span class="btn primary">validate</span><span class="btn">preview the run</span><span class="btn ghost">discard</span></div>
+   </div>
+  </div>
+ </div>
+</div>
