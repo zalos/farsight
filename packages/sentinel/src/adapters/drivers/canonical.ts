@@ -10,18 +10,37 @@ import type {
 } from '../../execution/check-drivers.js';
 import { createAdapterRegistry, type ExternalAdapterDefinition } from '../../execution/registry.js';
 import { canonicalJsonBytes } from '../../store/objects.js';
-import { deepFreeze } from '../../policy/immutable.js';
+import { deepFreeze } from '../../kernel/freeze.js';
 import { gitleaksDriver, GITLEAKS_DRIVER_DEFINITION } from './gitleaks.js';
 import type { SecretsSnapshot } from '../gitleaks/job.js';
 import { scannerKernels } from './kernels.js';
 import { DriverError, fileScope, sha256 } from './common.js';
 import type { CheckDriver as ScannerKernel, DriverPrepare } from './types.js';
 
+/**
+ * The five shipped scanner adapters, in a fixed order: the four whose kernels run behind the canonical driver
+ * (pattern, advisories, infrastructure, CI workflows), then the secrets scanner. Service and report code read this
+ * one list; productionDrivers registers exactly these ids, which test/scanner-adapter-ids.test.ts pins.
+ */
+export const SCANNER_ADAPTER_IDS = Object.freeze([
+  'pattern-semgrep',
+  'advisories-osv',
+  'iac-trivy',
+  'ci-zizmor',
+  'secrets-gitleaks',
+] as const);
+/** One of {@link SCANNER_ADAPTER_IDS}. */
+export type ScannerAdapterId = (typeof SCANNER_ADAPTER_IDS)[number];
+/** The secrets scanner: the one adapter whose matched values are withheld before any stage or report reads them. */
+export const SECRETS_ADAPTER_ID = 'secrets-gitleaks' satisfies ScannerAdapterId;
+
+/** An owner-held acquisition record for one database snapshot, matched to the plan's pin by id and digest. */
 export interface DatabaseRecord {
   readonly databaseId: string;
   readonly snapshotDigest: string;
   readonly record: unknown;
 }
+/** What productionDrivers binds: the advisory freshness bound, the held secrets snapshot and acquisition records. */
 export interface ProductionDriverOptions {
   readonly maxAdvisoryAgeMs: number;
   readonly secretsSnapshot?: SecretsSnapshot;

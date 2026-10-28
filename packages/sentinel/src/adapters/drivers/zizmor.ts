@@ -9,6 +9,7 @@ import { bindRules, DriverError, fileScope, nothingToRun, ruleFileBytes, ResultF
 import { assertToolPin } from './pattern.js';
 import type { CheckDriver, DriverNormalize, DriverRecord, SupportedRule } from './types.js';
 
+/** The one rule the CI workflow driver runs: the shipped workflow-audit rule at its exact definition digest. */
 export const ZIZMOR_SUPPORTED_RULES: readonly SupportedRule[] = Object.freeze([
   Object.freeze({
     familyId: 'sentinel.ci.workflow-audit',
@@ -32,6 +33,11 @@ const UNSENT_REASON: Record<string, string> = {
   'too-many': 'sentinel.zizmor.coverage.tooMany',
 };
 
+/**
+ * The CI workflow check driver. Refuses, with a DriverError, a context whose tool pin is not the pinned engine image or
+ * whose rule bytes are not the shipped ones. A rule it does not support and a scope that is not a CI configuration
+ * are reported not run with their reason, never covered.
+ */
 export function zizmorDriver(): CheckDriver {
   return {
     adapterId: ZIZMOR_ADAPTER.id,

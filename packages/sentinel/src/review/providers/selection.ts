@@ -11,23 +11,12 @@ import { canonicalDigest } from '../../policy/digest.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
 import { bindProvider, type ProviderBinding, type ProviderSelection } from './profile.js';
 import { fail } from './errors.js';
+import { cliKind, providerKind } from './registry.js';
+import { featureEnabled } from '../../policy/features.js';
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-// Closed dispatch classification: adding a provider kind requires an explicit hosted-pause decision.
-function isApiKind(kind: ProviderSettings['kind']): boolean {
-  switch (kind) {
-    case 'ollama':
-    case 'openai-compatible':
-      return true;
-    case 'claude-cli':
-    case 'copilot-cli':
-      return false;
-    default: {
-      const _unhandled: never = kind;
-      return fail('sentinel.provider.invalidProfile', 'unsupported provider kind');
-    }
-  }
-}
+// Closed dispatch classification from the registry: an unregistered kind is refused, never treated as a CLI.
+const isApiKind = (kind: ProviderSettings['kind']): boolean => providerKind(kind).apiKind;
 const stageIs = (v: unknown): v is ReviewModelStage => v === 'guided' || v === 'general';
 
 export interface ResolvedReviewModel {
@@ -81,15 +70,9 @@ function check(config: ReviewModelsSettings) {
 export function assertNativeClaudeReviewEnabled(policy: EffectivePolicy, providerId: string): void {
   if (!isEffectivePolicy(policy))
     fail('sentinel.provider.notTrusted', 'review execution needs the genuine current policy');
-  if (
-    policy.settings.providers.find((p) => p.id === providerId)?.kind === 'claude-cli' &&
-    policy.settings.nativeClaudeReviewEnabled !== true
-  ) {
-    fail(
-      'sentinel.provider.nativeClaudeDisabled',
-      'native Claude execution is deferred until separately enabled and qualified',
-    );
-  }
+  const kind = policy.settings.providers.find((p) => p.id === providerId)?.kind;
+  const gate = kind === undefined ? undefined : cliKind(kind)?.releaseGate;
+  if (gate && !gate.open(policy.settings)) fail(gate.code, gate.detail);
 }
 
 /** Deterministic execution never chooses or probes a model. Agentic resolution alone makes no call or receipt. */
@@ -125,7 +108,7 @@ export function resolveReviewModel(
   if (
     provider?.disclosure === 'hosted' &&
     isApiKind(provider.kind) &&
-    policy.settings.hostedApiReviewEnabled !== true
+    !featureEnabled(policy.settings, 'review.hosted-api')
   ) {
     fail('sentinel.provider.featureDisabled', 'the adopted hosted review feature is off');
   }

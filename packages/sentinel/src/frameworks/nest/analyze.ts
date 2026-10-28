@@ -8,12 +8,12 @@
 // from @nestjs/common over a DTO whose class-validator rules are visible is validation, a multipart interceptor only
 // parses, and a guard's effect is never inferred. Anything the pack cannot follow is a frontier with its reason, and
 // a frontier that could change a verdict leaves it unknown.
-import { createHash } from 'node:crypto';
+import { sha256Hex, sha256Id as sha256 } from '../../kernel/digest.js';
 import type { ArtifactId, ScopedReason, SourceEvidence } from '../../contracts/common.js';
 import type { ControlFact, ControlFactsEnvelope } from '../../contracts/controls.js';
 import type { SnapshotEnvelope } from '../../contracts/snapshot.js';
 import { canonicalDigest } from '../../policy/digest.js';
-import { deepFreeze } from '../../policy/immutable.js';
+import { deepFreeze } from '../../kernel/freeze.js';
 import { validateEnvelope } from '../../validate.js';
 import { NEST_PACK } from './support.js';
 import { NestPackError, type NestReason, type NestReasonCode } from './errors.js';
@@ -36,11 +36,14 @@ import {
   type Span,
 } from './syntax.js';
 
+/** A stage of Nest's request pipeline a binding takes part in. */
 export type NestStage = 'guard' | 'interceptor' | 'pipe';
+/** Where a binding is registered: globally, on a controller, on a method or on one parameter. */
 export type NestScope = 'global' | 'controller' | 'method' | 'parameter';
 /** What a binding does. `access-control-unresolved`: a guard, whose effect is never inferred. */
 export type NestEffect = 'validation' | 'parsing' | 'transformation' | 'access-control-unresolved' | 'unknown';
 
+/** One guard, interceptor or pipe on a surface's chain: where it comes from, how it was registered and what it does. */
 export interface NestBinding {
   readonly stage: NestStage;
   readonly scope: NestScope;
@@ -55,6 +58,7 @@ export interface NestBinding {
   readonly evidence: SourceEvidence;
 }
 
+/** One handler parameter that carries request input, with the validation class the pack resolved for it, if any. */
 export interface NestInput {
   readonly index: number;
   readonly decorator: string;
@@ -70,6 +74,7 @@ export interface NestInput {
   readonly evidence: SourceEvidence;
 }
 
+/** One route handler: its controller, its chain in Nest's evaluation order, its inputs and its own frontiers. */
 export interface NestSurface {
   readonly surfaceId: string;
   readonly controller: string;
@@ -82,6 +87,7 @@ export interface NestSurface {
   readonly frontiers: readonly string[];
 }
 
+/** What the pack read for one source: the framework versions, the global chain, each surface and every frontier. */
 export interface NestScopeReport {
   readonly schema: 'sentinel-nest-scope/draft-1';
   readonly snapshotId: string;
@@ -96,6 +102,7 @@ export interface NestScopeReport {
   readonly frontiers: readonly ScopedReason[];
 }
 
+/** The pack's two outputs: the control facts envelope and the scope report behind it. */
 export interface NestAnalysis {
   readonly controls: ControlFactsEnvelope;
   readonly scope: NestScopeReport;
@@ -109,6 +116,7 @@ export interface ParserGraph {
   readonly edges: readonly { readonly kind: string; readonly from: string; readonly to: string }[];
 }
 
+/** What analyzeNest reads: the snapshot, the source id, the parser graph, a reader of captured bytes and bounds. */
 export interface NestAnalysisInput {
   readonly snapshot: SnapshotEnvelope;
   readonly sourceId: string;
@@ -119,7 +127,6 @@ export interface NestAnalysisInput {
 }
 
 const R = (code: NestReason): NestReasonCode => `sentinel.nest.${code}` as NestReasonCode;
-const sha256 = (b: Uint8Array | string) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 const VERBS = new Set(['Get', 'Post', 'Put', 'Patch', 'Delete', 'Head', 'Options', 'All']);
 const KNOWN_DECORATORS = new Set([
   'Controller',
@@ -1084,6 +1091,11 @@ async function versions(
   };
 }
 
+/**
+ * Control facts for one source's Nest handlers, from captured bytes only: nothing is executed or imported. A guard's
+ * effect is never inferred and anything outside the supported forms is a frontier, never a protection. Refuses, with a
+ * NestPackError, only an envelope of its own that does not validate.
+ */
 export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysis> {
   const maxFiles = input.limits?.maxFiles ?? 2000;
   const maxFileBytes = input.limits?.maxFileBytes ?? 1024 * 1024;
@@ -1585,7 +1597,7 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
       evidence = [];
     }
     facts.push({
-      id: `nest-${createHash('sha256').update(`${s.surfaceId}\u0000${property}\u0000${order}`).digest('hex').slice(0, 32)}`,
+      id: `nest-${sha256Hex(`${s.surfaceId}\u0000${property}\u0000${order}`).slice(0, 32)}`,
       property,
       surfaceId: s.surfaceId,
       order,

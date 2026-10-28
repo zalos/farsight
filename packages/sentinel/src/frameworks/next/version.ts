@@ -8,9 +8,12 @@
 // disagrees with an exact pin, and any lockfile whose JSON or YAML is not the expected shape. The lockfile is
 // untrusted input: every value is shape- and size-checked before it is read. Nothing runs a package manager.
 
+/** A package whose exact version the pack requires. */
 export type PackageName = 'next' | 'react' | 'react-dom';
+/** Every package of {@link PackageName}, in a fixed order. */
 export const PACKAGES: readonly PackageName[] = Object.freeze(['next', 'react', 'react-dom']);
 
+/** Why a package's version is not resolved: no or an unsupported lockfile, a disagreeing pin, a substitute package. */
 export type VersionReason =
   | 'no-lockfile'
   | 'lockfile-unsupported'
@@ -25,11 +28,13 @@ export type VersionReason =
   | 'identity-mismatch'
   | 'declared-nonregistry';
 
+/** The lockfile a version was read from: its source-relative path and content id. */
 export interface LockfileRef {
   readonly relativePath: string;
   readonly content: string;
 }
 
+/** One package's version: resolved exactly from a lockfile with its integrity, or unresolved with the reason. */
 export type ResolvedVersion =
   | {
       readonly state: 'resolved';
@@ -60,6 +65,7 @@ export interface CapturedFile {
   readonly bytes: number;
 }
 
+/** What resolveVersions reads: the project folder, the captured files and recorded paths, and the package.json. */
 export interface VersionInputs {
   /** The project folder ('' for the source root). */
   readonly projectDir: string;

@@ -64,6 +64,11 @@
       "count": 2
     }
   },
+  "packages/sentinel/src/execution/stage-inputs.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
   "packages/sentinel/src/findings/decision-basis.ts": {
     "boundaries/dependencies": {
       "count": 6
@@ -104,6 +109,11 @@
       "count": 1
     }
   },
+  "packages/sentinel/src/planner/pipeline.ts": {
+    "boundaries/dependencies": {
+      "count": 1
+    }
+  },
   "packages/sentinel/src/planner/types.ts": {
     "boundaries/dependencies": {
       "count": 1
@@ -131,7 +141,7 @@
   },
   "packages/sentinel/src/review/caller.ts": {
     "boundaries/dependencies": {
-      "count": 3
+      "count": 4
     }
   },
   "packages/sentinel/src/review/checkpoints.ts": {
@@ -151,7 +161,12 @@
   },
   "packages/sentinel/src/review/plan.ts": {
     "boundaries/dependencies": {
-      "count": 1
+      "count": 2
+    }
+  },
+  "packages/sentinel/src/review/runner.ts": {
+    "boundaries/dependencies": {
+      "count": 7
     }
   },
   "packages/sentinel/src/review/session.ts": {
