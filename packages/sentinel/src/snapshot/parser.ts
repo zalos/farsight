@@ -7,7 +7,6 @@
 import { canonicalJson } from '@farsight/graph';
 import { sentinelParserWord } from '@farsight/core/dist/strings-sentinel-parser.js';
 import type { AnalysisArtifact, InputFingerprint, ParserLimits } from '@farsight/code-parser';
-import { createHash } from 'node:crypto';
 import { chmodSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type { ArtifactId, CaptureEntry, SnapshotEnvelope, WorkRef } from '../contracts/index.js';
@@ -15,18 +14,24 @@ import type { ArtifactPrivacy, PublicationReceipt, SentinelStore, StagedArtifact
 import { MAX_ARTIFACT_BYTES } from '../store/index.js';
 import { openSnapshot, restoreSnapshot, type RestoreStore } from './materialize.js';
 import type { Materialization } from './materialization.js';
+import { sha256Hex as sha256hex } from '../kernel/digest.js';
+import { SentinelError } from '../kernel/errors.js';
 
+/** The schema of the parser stage's result record. */
 export const PARSER_RESULT_SCHEMA = 'sentinel-parser-result/draft-1';
+/** The schema of the parser stage's index of captured spans. */
 export const PARSER_INDEX_SCHEMA = 'sentinel-parser-index/draft-1';
 /** The parser stage's identity, for the work unit that publishes this evidence. */
 export const PARSER_STAGE_CONTRACT = 'sentinel.stage.parse';
 
+/** Why the parser stage refused: each is a catalog key in core strings-sentinel-parser.ts. */
 export const PARSER_ERROR_CODES = Object.freeze([
   'sentinel.parse.invalidRequest',
   'sentinel.parse.sourceUnsupported',
   'sentinel.parse.integrity',
   'sentinel.parse.artifactTooLarge',
 ] as const);
+/** One of {@link PARSER_ERROR_CODES}. */
 export type ParserErrorCode = (typeof PARSER_ERROR_CODES)[number];
 
 /** At most this many integrity problems are carried on an error; the count is always exact. */
@@ -36,8 +41,8 @@ const MAX_INDEX_ENTRIES = 100_000;
 /** At most this many unplaced locations are listed per source; the remainder is counted. */
 const MAX_LISTED = 100;
 
-export class ParserError extends Error {
-  readonly code: ParserErrorCode;
+/** The parser stage refused; the message is the catalog's sentence with the first problems found. */
+export class ParserError extends SentinelError<ParserErrorCode> {
   /** Bounded detail: the first problems found (paths and reasons), never file contents. */
   readonly problems: readonly string[];
   readonly problemCount: number;
@@ -47,9 +52,8 @@ export class ParserError extends Error {
     const listed = shown.length
       ? ` (${problems.length} found, ${shown.length} kept; first: ${shown.slice(0, 3).join('; ')})`
       : '';
-    super(sentinelParserWord(code, { detail: `${detail}${listed}` }));
+    super(code, sentinelParserWord(code, { detail: `${detail}${listed}` }));
     this.name = 'ParserError';
-    this.code = code;
     this.problemCount = problems.length;
     this.problems = Object.freeze(shown);
   }
@@ -67,6 +71,7 @@ export interface ParserSelection {
   readonly testGlobs?: { readonly include?: readonly string[]; readonly exclude?: readonly string[] };
 }
 
+/** One parse: the snapshot, a private work folder, the sources, the selection and every limit, stated explicitly. */
 export interface ParseSnapshotRequest {
   readonly snapshotId: string;
   /** A canonical private folder this call may create its materialization in; removed afterwards. */
@@ -93,6 +98,7 @@ export type InputOutcome =
   /** Inside a submodule this snapshot holds only as a link. */
   | 'missing-in-gitlink';
 
+/** One configuration input the parser read, reconciled with the capture: what it was, and what the capture says. */
 export interface ReconciledInput {
   readonly path: string;
   readonly kind: InputFingerprint['kind'];
@@ -139,6 +145,7 @@ export const INPUT_OUTCOME_KEYS: Readonly<Record<InputOutcome, string>> = Object
   'missing-in-gitlink': 'sentinel.parseInput.missingInGitlink',
 });
 
+/** One captured entry joined with the parser's outcome for it. */
 export interface JoinedEntry {
   readonly path: string;
   readonly captureKind: CaptureEntry['kind'];
@@ -151,6 +158,7 @@ export interface JoinedEntry {
   readonly diagnostics: number;
 }
 
+/** A place in a captured file: its content id, lines and, when it can be computed exactly, its byte span. */
 export interface IndexedLocation {
   readonly path: string;
   /** The captured file's artifact id, so evidence cites immutable bytes. */
@@ -170,6 +178,9 @@ export interface IndexedLocation {
  */
 export type SpanUnavailableReason = 'invalidUtf8' | 'invalidLine' | 'invalidSpan' | 'splitSurrogate';
 
+/**
+ * Every graph node and edge occurrence of one source, placed in the captured bytes, with the counts it could not place.
+ */
 export interface ParserIndex {
   readonly schema: typeof PARSER_INDEX_SCHEMA;
   readonly snapshotId: string;
@@ -185,6 +196,7 @@ export interface ParserIndex {
   readonly spanUnavailable: Readonly<Record<SpanUnavailableReason, number>>;
 }
 
+/** The parser stage's result for one source: the parser, the selection, the counts and the reconciled inputs. */
 export interface ParserResult {
   readonly schema: typeof PARSER_RESULT_SCHEMA;
   readonly snapshotId: string;
@@ -216,6 +228,7 @@ export interface ParserResult {
   readonly clearsChecks: false;
 }
 
+/** One source's parser evidence: the portable analysis artifact, its result and its index. */
 export interface SourceAnalysis {
   readonly sourceId: string;
   readonly artifact: AnalysisArtifact;
@@ -223,6 +236,7 @@ export interface SourceAnalysis {
   readonly index: ParserIndex;
 }
 
+/** Every source's parser evidence for one snapshot. */
 export interface SnapshotAnalysis {
   readonly snapshotId: string;
   readonly sources: readonly SourceAnalysis[];
@@ -233,7 +247,6 @@ export interface SnapshotAnalysis {
 // publishable libraries), so a typed consumer sees the full graph, resolution and occurrence fields.
 export type { AnalysisArtifact, InputFingerprint, ParserLimits };
 
-const sha256hex = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const UNAVAILABLE = sha256hex('unavailable');
 
 // ---- request checks ----
@@ -315,6 +328,7 @@ export const parserAcceptsSourceId = (id: string): boolean =>
 
 // ---- the materialized tree ----
 
+/** One row of a materialized tree: a file's or folder's path, digest and mode. */
 export interface TreeRow {
   readonly path: string;
   readonly kind: 'file' | 'directory';
@@ -349,6 +363,7 @@ export function fingerprintTree(root: string): TreeRow[] {
   return rows.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
+/** The digest of a materialized tree's rows (hex over their canonical JSON), the parser's own encoding. */
 export const treeDigest = (rows: readonly TreeRow[]): string => sha256hex(canonicalJson(rows));
 
 /** The parser reads only non-executable, read-only files: the snapshot's sidecar keeps the original modes. */
@@ -507,6 +522,7 @@ const emptyCounts = (): Record<FileClass, number> => ({
   'unknown-scope': 0,
 });
 
+/** Joins every captured entry of a source with the parser's per-file outcome, and counts each class. */
 export function joinFileOutcomes(
   artifact: AnalysisArtifact,
   sourceId: string,
@@ -895,6 +911,7 @@ export async function parseSnapshot(store: RestoreStore, request: ParseSnapshotR
 
 // ---- retention ----
 
+/** The attempt a retained analysis is published by: its work, attempt, stage and end time. */
 export interface RetainTarget {
   readonly work: WorkRef;
   readonly attemptId: string;
@@ -902,6 +919,7 @@ export interface RetainTarget {
   readonly endedAt: string;
 }
 
+/** One source's retained parser evidence: the artifact ids of its analysis, index and result. */
 export interface RetainedSource {
   readonly sourceId: string;
   readonly artifact: ArtifactId;

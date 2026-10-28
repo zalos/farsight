@@ -38,6 +38,7 @@ export type CredentialAnswer =
   | { basis: 'keychain-scope'; allowed: boolean; detail: string }
   | { basis: 'unknown'; detail: string };
 
+/** One action to admit: its intent, who asked on which channel, the effective policy and the two lazy checks. */
 export interface AdmissionRequest {
   intent: ActionIntent;
   /** Set by the transport the request arrived on, never by the request body. */
@@ -54,6 +55,7 @@ export interface AdmissionRequest {
   now: Date;
 }
 
+/** An admission decision: the recorded envelope with its three verdicts, and the receipt it spent, if any. */
 export interface AdmissionResult {
   readonly record: AdmissionEnvelope;
   /** The spent receipt when one admitted the action. */
@@ -144,6 +146,11 @@ function grantMiss(g: SentinelGrant, intent: ActionIntent): string | null {
   return null;
 }
 
+/**
+ * Decides one action: the policy verdict first, then, only when it allows, the capability and credential checks.
+ * Admitted only when all three allow; otherwise the record says `denied` or `awaiting-confirmation` with every
+ * verdict and its reason. Throws (PolicyError `settingsInvalid`) only for a policy effectivePolicy did not produce.
+ */
 export function admit(req: AdmissionRequest): AdmissionResult {
   return decideAdmission(req, false);
 }

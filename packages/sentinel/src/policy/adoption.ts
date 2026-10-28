@@ -47,6 +47,7 @@ export function trustDirectory(
   return join(home, '.local', 'state', 'farsight', 'sentinel', 'trust');
 }
 
+/** A workspace as Sentinel identifies it: its canonical path and a digest that also covers the folder's identity. */
 export interface WorkspaceIdentity {
   /** The canonical path, as given (it must already be canonical). */
   readonly path: string;
@@ -54,6 +55,10 @@ export interface WorkspaceIdentity {
   readonly digest: string;
 }
 
+/**
+ * The identity of a workspace folder. Refuses, with a PolicyError `workspaceNotCanonical`, a path that is not
+ * absolute and normalised, cannot be resolved, passes through a link or is not a folder.
+ */
 export function workspaceIdentity(workspace: string): WorkspaceIdentity {
   if (!isAbsolute(workspace) || normalize(workspace) !== workspace)
     policyFail('sentinel.policy.workspaceNotCanonical', 'the workspace path is absolute and normalised');

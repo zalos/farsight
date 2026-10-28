@@ -7,7 +7,9 @@
 // does any reachable or recorded object that is missing or does not verify: the plan then lists no candidate.
 import { type ObjectRef, type ObjectStore, type PhysicalObject, artifactIdOf } from './objects.js';
 
+/** The kinds of root that keep an object: referenced, retained, active, staged, report and pinned. */
 export const GC_ROOT_KINDS = ['referenced', 'retained', 'active', 'staged', 'report', 'pinned'] as const;
+/** One of {@link GC_ROOT_KINDS}. */
 export type GcRootKind = (typeof GC_ROOT_KINDS)[number];
 
 /** The minimal seam this module needs from the ledger (PR 03 lane B): one committed snapshot of roots and links. */
@@ -24,6 +26,7 @@ export interface ReachabilitySnapshot {
   readonly recorded?: readonly ObjectRef[];
 }
 
+/** Why reachability inspection could not vouch for the store: each is a catalog key. */
 export type GcErrorCode =
   | 'sentinel.gc.incompleteSnapshot'
   | 'sentinel.gc.wrongStore'
@@ -35,11 +38,13 @@ export type GcErrorCode =
   | 'sentinel.gc.sequenceUnverified'
   | 'sentinel.gc.unreadableStore';
 
+/** One inspection failure: its code and safe detail. */
 export interface GcError {
   readonly code: GcErrorCode;
   readonly detail: string;
 }
 
+/** What reachability inspection found: every protected artifact, every unprotected one and every failure. */
 export interface ReachabilityReport {
   readonly ok: boolean;
   readonly storeId: string;
@@ -59,6 +64,7 @@ export interface ReachabilityReport {
   };
 }
 
+/** A dry-run prune plan: what could be removed, valid only for one store at one ledger sequence; nothing is deleted. */
 export interface PrunePlan {
   readonly dryRun: true;
   /** Always zero: nothing in PR 03 removes an object. */
@@ -75,6 +81,7 @@ export interface PrunePlan {
   readonly report: ReachabilityReport;
 }
 
+/** What inspection needs besides the snapshot: a re-read of the ledger's committed sequence. */
 export interface InspectOptions {
   /**
    * Required. Re-reads the ledger's committed sequence after the store was listed. Every staging registration

@@ -24,7 +24,7 @@
 // therefore never stands alone: the receipt is issued only after the bytes at the final name are read, sized and
 // hashed against what was written (or against the verified winner), with the owner-only mode and single-name rule
 // checked on the same open file.
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import {
   closeSync,
   constants as FS,
@@ -39,7 +39,8 @@ import * as fsp from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import * as zlib from 'node:zlib';
-import { canonicalJson as kernelCanonicalJson, type CanonicalRefuse } from '../kernel/digest.js';
+import { canonicalJson as kernelCanonicalJson, sha256Hex as sha256, type CanonicalRefuse } from '../kernel/digest.js';
+import { SentinelError } from '../kernel/errors.js';
 
 const gzipAsync = promisify(zlib.gzip);
 const gunzipAsync = promisify(zlib.gunzip);
@@ -50,11 +51,14 @@ export const MAX_OBJECT_BYTES = 16 * 1024 * 1024;
 export const MAX_ENCODED_BYTES = MAX_OBJECT_BYTES + 64 * 1024;
 /** The level new gzip files are written at. A winner written at another level is still a valid gzip file. */
 export const GZIP_LEVEL = 6;
+/** How an object file stores its bytes: raw, or one verified gzip member. */
 export const OBJECT_CODECS = ['raw', 'gzip'] as const;
+/** One of {@link OBJECT_CODECS}. */
 export type ObjectCodec = (typeof OBJECT_CODECS)[number];
 /** How the raw bytes were produced: preserved verbatim (source), or `canonicalJson()` of a structured value. */
 export type ObjectCanonicalization = 'bytes' | 'canonical-json/1';
 
+/** Why the object store refused: each is a catalog key in core strings-sentinel-storage-errors.ts. */
 export type ObjectStoreErrorCode =
   | 'sentinel.object.invalidInput'
   | 'sentinel.object.tooLarge'
@@ -67,13 +71,10 @@ export type ObjectStoreErrorCode =
   | 'sentinel.object.notCanonical'
   | 'sentinel.object.io';
 
-export class ObjectStoreError extends Error {
-  constructor(
-    readonly code: ObjectStoreErrorCode,
-    message: string,
-    options?: { cause?: unknown },
-  ) {
-    super(message, options);
+/** A refusal by the object store; `code` is a catalog key and the message safe context. */
+export class ObjectStoreError extends SentinelError<ObjectStoreErrorCode> {
+  constructor(code: ObjectStoreErrorCode, message: string, options?: { cause?: unknown }) {
+    super(code, message, { cause: options?.cause });
     this.name = 'ObjectStoreError';
   }
 }
@@ -129,10 +130,12 @@ export interface ObjectMeasurement {
   readonly encodedSize: number;
 }
 
+/** The answer of a physical check: the object is intact, or missing, corrupt or unsafe, with why. */
 export type ObjectCheck =
   | { readonly status: 'ok' }
   | { readonly status: 'missing' | 'corrupt' | 'unsafe'; readonly code: ObjectStoreErrorCode; readonly detail: string };
 
+/** One object file found on disk: its digest, codec, path and encoded size. */
 export interface PhysicalObject {
   readonly rawDigest: string;
   readonly codec: ObjectCodec;
@@ -140,6 +143,7 @@ export interface PhysicalObject {
   readonly encodedSize: number;
 }
 
+/** What a listing of `objects/` found: object files, interrupted partial writes and anything else, never touched. */
 export interface ObjectListing {
   readonly objects: readonly PhysicalObject[];
   /** Partial files left in `objects/tmp/` by an interrupted write. Never objects, never pruned here. */
@@ -150,6 +154,7 @@ export interface ObjectListing {
 
 // ---- filesystem seam (tests inject failures through it) ----
 
+/** The file handle the object store writes and reads through; tests inject failures through it. */
 export interface ObjectFileHandle {
   write(buffer: Uint8Array, offset: number, length: number, position: number): Promise<{ bytesWritten: number }>;
   read(buffer: Uint8Array, offset: number, length: number, position: number): Promise<{ bytesRead: number }>;
@@ -157,6 +162,7 @@ export interface ObjectFileHandle {
   sync(): Promise<void>;
   close(): Promise<void>;
 }
+/** The stat fields the object store reads. */
 export interface ObjectStat {
   isFile(): boolean;
   isDirectory(): boolean;
@@ -168,6 +174,7 @@ export interface ObjectStat {
   uid: number;
   mode: number;
 }
+/** The file system operations the object store uses; tests inject failures through them. */
 export interface ObjectStoreIo {
   open(path: string, flags: number, mode?: number): Promise<ObjectFileHandle>;
   mkdir(path: string, mode: number): Promise<void>;
@@ -178,6 +185,7 @@ export interface ObjectStoreIo {
   realpath(path: string): Promise<string>;
 }
 
+/** The real file system operations, through node:fs/promises. */
 export const NODE_OBJECT_IO: ObjectStoreIo = {
   open: (path, flags, mode) => fsp.open(path, flags, mode) as Promise<ObjectFileHandle>,
   mkdir: async (path, mode) => {
@@ -198,7 +206,6 @@ const SHARD = /^[0-9a-f]{2}$/;
 
 const UID = typeof process.getuid === 'function' ? process.getuid() : undefined;
 
-const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const errno = (e: unknown) => (e as NodeJS.ErrnoException | undefined)?.code;
 const fail = (code: ObjectStoreErrorCode, message: string, cause?: unknown): never => {
   throw new ObjectStoreError(code, message, cause === undefined ? undefined : { cause });
@@ -215,11 +222,13 @@ export function identify(bytes: Uint8Array): ObjectIdentity {
   return Object.freeze({ artifactId: `sha256:${rawDigest}`, rawDigest, rawSize: bytes.byteLength });
 }
 
+/** The artifact id of a raw digest; refuses (`invalidInput`) anything that is not 64 lower-case hex characters. */
 export function artifactIdOf(rawDigest: string): string {
   if (!HEX64.test(rawDigest)) fail('sentinel.object.invalidInput', 'a raw digest is 64 lower-case hex characters');
   return `sha256:${rawDigest}`;
 }
 
+/** The raw digest of an artifact id; refuses (`invalidInput`) anything that is not `sha256:<64 lower-case hex>`. */
 export function rawDigestOf(artifactId: string): string {
   const m = /^sha256:([0-9a-f]{64})$/.exec(artifactId);
   if (!m) fail('sentinel.object.invalidInput', 'an artifact id is sha256:<64 lower-case hex>');
@@ -310,10 +319,12 @@ function checkDecoded(decoded: Buffer, rawDigest: string, rawSize: number | unde
   return decoded;
 }
 
+/** How an object store is built: the file system operations to use, for tests. */
 export interface ObjectStoreOptions {
   readonly io?: Partial<ObjectStoreIo>;
 }
 
+/** How one object is written: its codec, and the staging identity it must match. */
 export interface PutOptions {
   readonly codec?: ObjectCodec;
   /** The identity registered as a staging root before the write; a mismatch refuses the put. */
@@ -349,6 +360,10 @@ interface Verified {
   readonly ident: Ident;
 }
 
+/**
+ * Content-addressed objects under the held store: each written once, through a private temporary file linked to its
+ * final name, and re-hashed on every read. It refuses, with an ObjectStoreError, bytes that do not match their id.
+ */
 export class ObjectStore {
   readonly #owner: ObjectStoreOwner;
   readonly #io: ObjectStoreIo;

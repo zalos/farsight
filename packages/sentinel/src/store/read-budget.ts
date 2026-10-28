@@ -14,12 +14,14 @@ import { StoreError } from './errors.js';
 import { LedgerError } from './store-types.js';
 import { ExecutionError } from '../execution/errors.js';
 
+/** The default bounds of one budgeted read scope: decoded and encoded bytes, reads and duration. */
 export const READ_BUDGET_LIMITS = Object.freeze({
   decodedBytes: 128 * 1024 * 1024,
   encodedBytes: 128 * 1024 * 1024,
   reads: 10_000,
   durationMs: 20_000,
 });
+/** Bounds for one read scope, each at most its {@link READ_BUDGET_LIMITS} default, and a cancellation signal. */
 export interface ReadBudgetOptions {
   readonly decodedBytes?: number;
   readonly encodedBytes?: number;
@@ -27,6 +29,7 @@ export interface ReadBudgetOptions {
   readonly durationMs?: number;
   readonly signal?: AbortSignal;
 }
+/** What one read scope used: bytes decoded and read, object reads and elapsed time. */
 export interface ReadBudgetUsage {
   readonly decodedBytes: number;
   readonly encodedBytes: number;

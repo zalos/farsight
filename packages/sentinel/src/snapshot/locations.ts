@@ -11,12 +11,17 @@ import type {
 } from '../contracts/index.js';
 import type { SnapshotErrorCode } from './errors.js';
 
+/** A withheld location resolved to its captured entry, or the one reason it could not be. */
 export type ResolvedLocation =
   | { readonly ok: true; readonly entry: IncludedFileEntry }
   | { readonly ok: false; readonly reasonCode: Extract<SnapshotErrorCode, 'sentinel.capture.locationUnresolved'> };
 
 const refused = { ok: false, reasonCode: 'sentinel.capture.locationUnresolved' } as const;
 
+/**
+ * The included file a withheld location names in this snapshot. Refused (`locationUnresolved`) for another snapshot,
+ * an entry out of range, or an entry that is not an included file; it never falls back to a path.
+ */
 export function resolveWithheldLocation(
   snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>,
   evidence: WithheldLocationEvidence,

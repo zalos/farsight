@@ -21,6 +21,7 @@ import { SnapshotError, type CaptureReasonCode } from './errors.js';
 import type { HeldStoreRoot } from '../store/owner-binding.js';
 import { identityOf } from '../store/paths.js';
 
+/** One working-copy source: its id, root, the held store to leave out and an optional LFS object folder. */
 export interface WorktreeSource {
   readonly sourceId: string;
   readonly root: string;
@@ -119,6 +120,11 @@ function isHeldStore(store: HeldStoreRoot, abs: Buffer): boolean {
   return true;
 }
 
+/**
+ * Lists a working copy into the inventory, never following a link and leaving out only the held store at its exact
+ * path and identity. Refuses, with a SnapshotError, an unreadable root and a store reachable under another name;
+ * a folder that changes or disappears raises CaptureChanged so the capture retries.
+ */
 export function enumerateWorktree(inv: Inventory, src: WorktreeSource): void {
   const rootStat = lstatOrUndefined(src.root);
   if (!rootStat || rootStat.isSymbolicLink() || !rootStat.isDirectory())

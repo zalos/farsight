@@ -5,6 +5,7 @@ import { CaptureChanged, Inventory, lfsPointer, resolveLfs } from './inventory.j
 import { beyondPathBounds, checkName, folderExclusion, joinPath, symlinkVerdict } from './policy.js';
 import type { CaptureReasonCode } from './errors.js';
 
+/** A submodule to capture beside its parent: its path in the parent, its own source id and a local clone. */
 export interface SubmoduleRequest {
   /** The submodule's path in the parent's tree. */
   readonly path: string;
@@ -18,6 +19,7 @@ export interface SubmoduleRequest {
   readonly commonDir?: string;
 }
 
+/** One source as the committed-tree reader takes it: an opened repository at a resolved commit. */
 export interface CommittedSource {
   readonly sourceId: string;
   readonly repo: GitRepository;

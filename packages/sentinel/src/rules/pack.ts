@@ -17,7 +17,7 @@ import type { LockedPack, LockedRule, PackFile, RuleDefinition, RulePackManifest
 import { isSafeRelativePath, validateEnvelope } from '../validate.js';
 import { canonicalDigest, sha256Digest } from '../policy/digest.js';
 import { policyFail } from '../policy/errors.js';
-import { deepFreeze } from '../policy/immutable.js';
+import { deepFreeze } from '../kernel/freeze.js';
 
 /** The manifest's name at a pack's root. */
 export const PACK_MANIFEST = 'sentinel-pack.json';
@@ -36,6 +36,7 @@ export interface PackLimits {
   readonly totalBytes: number;
 }
 
+/** The bounds a pack is read within: files, entries, depth, path length, one file's bytes and all bytes together. */
 export const PACK_LIMITS: PackLimits = Object.freeze({
   files: 4096,
   entries: 8192,
@@ -44,8 +45,11 @@ export const PACK_LIMITS: PackLimits = Object.freeze({
   fileBytes: 1024 * 1024,
   totalBytes: 32 * 1024 * 1024,
 });
+/** The most files a pack may hold ({@link PACK_LIMITS}). */
 export const MAX_PACK_FILES = PACK_LIMITS.files;
+/** The largest file a pack may hold ({@link PACK_LIMITS}). */
 export const MAX_PACK_FILE_BYTES = PACK_LIMITS.fileBytes;
+/** The most bytes a pack may hold in all ({@link PACK_LIMITS}). */
 export const MAX_PACK_BYTES = PACK_LIMITS.totalBytes;
 
 function limitsOf(given: Partial<PackLimits> = {}): PackLimits {
@@ -102,6 +106,9 @@ export interface PackReadHooks {
   readonly beforeRead?: (rel: string) => void;
 }
 
+/**
+ * {@link readPackDirectory} with test hooks between each entry's check and its read; refuses exactly what it refuses.
+ */
 export function readPackDirectoryWith(
   root: string,
   limits: Partial<PackLimits>,
