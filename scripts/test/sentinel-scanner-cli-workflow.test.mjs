@@ -308,6 +308,9 @@ test('a computed load whose target is one literal is followed, not given an area
       [BOUND, 'const { installed: other } = paths;', LOAD],
       [BOUND, 'const { installed } = paths;', LOAD],
       [BOUND, 'console.log(installed);', LOAD],
+      // a load written in a comment opens no span: the parameter it would have covered still shadows the base
+      [BOUND, '// import(', 'async function load(installed) {', `  ${LOAD}`, '}', '// )'],
+      [BOUND, '// new URL(', 'async function load(installed) {', `  ${LOAD}`, '}', '// )'],
       [LOAD, BOUND],
       ['{', `  ${BOUND}`, '}', LOAD],
     ]) {

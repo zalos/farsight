@@ -370,10 +370,11 @@ export function scannerCliClosure(root = repoRoot) {
     const allowed = new Set([at + declared[0][0].indexOf(base, 'const'.length)]);
     for (const m of code.matchAll(new RegExp(String.raw`\bjoin\(\s*(${word})\s*,`, 'g')))
       allowed.add(m.index + m[0].indexOf(base, 'join('.length));
-    // occurrences inside an import(…) or new URL(…) argument, read over the original text (generated code included)
+    // occurrences inside an import(…) or new URL(…) argument, read over the same code view, so a load written in a
+    // comment or a string opens no span
     const spans = [];
-    for (const m of text.matchAll(/\b(?:import\s*\(|new\s+URL\s*\()/g)) {
-      const inner = balanced(text, m.index + m[0].length);
+    for (const m of code.matchAll(/\b(?:import\s*\(|new\s+URL\s*\()/g)) {
+      const inner = balanced(code, m.index + m[0].length);
       if (inner !== null) spans.push([m.index + m[0].length, m.index + m[0].length + inner.length]);
     }
     // a binding or an assignment is never one, even inside a load's argument
