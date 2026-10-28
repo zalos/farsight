@@ -76,6 +76,11 @@ function expectedJob(ctx: DriverContext): PathsJob {
     analysis: { artifact: a.artifact.id, result: a.result.id, index: a.index.id },
   };
 }
+/**
+ * The bounded-paths built-in adapter: its generated closure entry in `entryDir`, its definition, and a driver that
+ * seals the job, runs the child and accepts its output only when the attempt, invocation and binding are this unit's
+ * and the output matches the request; the digest pins the worker's whole compiled import closure.
+ */
 export function boundedPathsAdapter(options: { entryDir: string; limits?: Partial<AdapterLimits> }) {
   const entry = writeBuiltinClosureEntry(options.entryDir, PATHS_ADAPTER_ID);
   const definition: BuiltInAdapterDefinition = Object.freeze({

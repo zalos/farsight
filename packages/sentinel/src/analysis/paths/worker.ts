@@ -1,16 +1,56 @@
 // Sentinel's fixed supervised structural-query child. Reads only start.job and named sealed IDs. No target imports,
 // checkout, network, deep engine or security coverage. Supervisor owns hard process cancellation/deadline/output;
 // cooperative checks share the remaining original unit deadline through reading, all queries and output writing.
-import { createHash } from 'node:crypto';
 import { constants as FS, openSync, fstatSync, readFileSync, closeSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { inspectPathInputs, PATHS_OUTPUT_MEDIA } from './protocol.js';
 import { PATHS_ADAPTER_ID, PATHS_PROTOCOL_INPUT_LIMIT } from './request.js';
 import { PathExecutionBudget, PathBudgetError } from './budget.js';
 import type { ArtifactId } from '../../contracts/common.js';
+import { sha256Hex } from '../../kernel/digest.js';
 
 const P = 'sentinel-worker/draft-1',
   ID = /^sha256:([0-9a-f]{64})$/;
+/**
+ * True when a start message is this adapter's: every field the worker reads has its primitive type, checked before any
+ * of them is coerced (a string `attemptId`, `coordinatorEpoch`, `inputFingerprint` and `deadlineAt`, a `work` object
+ * with a string `id` and an integer `revision`, at most 1,024 string `inputs`), and `job` is a sealed digest among the
+ * inputs. Fields the worker never reads are not looked at.
+ */
+function isValidStart(start: Record<string, unknown>): boolean {
+  const work = start.work,
+    inputs = start.inputs;
+  return (
+    start.type === 'start' &&
+    typeof start.attemptId === 'string' &&
+    typeof start.coordinatorEpoch === 'string' &&
+    typeof start.inputFingerprint === 'string' &&
+    typeof start.deadlineAt === 'string' &&
+    typeof work === 'object' &&
+    work !== null &&
+    !Array.isArray(work) &&
+    typeof (work as Record<string, unknown>).id === 'string' &&
+    Number.isSafeInteger((work as Record<string, unknown>).revision) &&
+    Array.isArray(inputs) &&
+    inputs.length <= PATHS_PROTOCOL_INPUT_LIMIT &&
+    inputs.every((id) => typeof id === 'string') &&
+    typeof start.job === 'string' &&
+    ID.test(start.job) &&
+    inputs.includes(start.job)
+  );
+}
+/**
+ * The bounded-paths child process: answers its hello's welcome and start, then reads only the sealed ids it was given,
+ * answers every query under one shared budget and the unit's remaining deadline, writes one output named by its digest
+ * and reports it. Its exit codes:
+ * - 0 after a cancel (before the welcome, before the start, or after it with a cancel acknowledgement) or when its
+ *   input ends;
+ * - 9 when the object after its hello is not a welcome;
+ * - 3 for input past 1 MiB or more than four queued messages, a line that is not a JSON object (bad JSON, or null, a
+ *   number, a string or an array), a start `isValidStart` refuses, a deadline that is not a date, and a refusal,
+ *   which it first reports as a diagnostic with `sentinel.paths.budgetExceeded` (a budget, its deadline or a cancel)
+ *   or `sentinel.paths.unbound` (any other failure, such as a read the job did not seal).
+ */
 export async function runBoundedPathsWorker(): Promise<void> {
   const input = process.env.SENTINEL_INPUT!,
     output = process.env.SENTINEL_OUTPUT!;
@@ -30,6 +70,8 @@ export async function runBoundedPathsWorker(): Promise<void> {
       } catch {
         process.exit(3);
       }
+      // A protocol message is a JSON object; null, a number, a string or an array is malformed input like bad JSON.
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) process.exit(3);
       pending = pending.slice(nl + 1);
       if (started && value.type === 'cancel') {
         canceled.abort();
@@ -64,15 +106,7 @@ export async function runBoundedPathsWorker(): Promise<void> {
   if (welcome.type !== 'welcome') process.exit(9);
   const start = await next();
   if (start.type === 'cancel') process.exit(0);
-  if (
-    start.type !== 'start' ||
-    process.env.SENTINEL_ADAPTER_ID !== PATHS_ADAPTER_ID ||
-    !Array.isArray(start.inputs) ||
-    start.inputs.length > PATHS_PROTOCOL_INPUT_LIMIT ||
-    !ID.test(start.job) ||
-    !start.inputs.includes(start.job)
-  )
-    process.exit(3);
+  if (process.env.SENTINEL_ADAPTER_ID !== PATHS_ADAPTER_ID || !isValidStart(start)) process.exit(3);
   const binding = { attemptId: start.attemptId, work: start.work, coordinatorEpoch: start.coordinatorEpoch };
   let sequence = 0;
   started = true;
@@ -118,7 +152,7 @@ export async function runBoundedPathsWorker(): Promise<void> {
     const bytes = Buffer.from(JSON.stringify(doc));
     budget.output(bytes.length);
     budget.boundary();
-    const hash = createHash('sha256').update(bytes).digest('hex');
+    const hash = sha256Hex(bytes);
     writeFileSync(`${output}/${hash}`, bytes, { flag: 'wx', mode: 0o600 });
     budget.boundary();
     send({

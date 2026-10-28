@@ -27,11 +27,19 @@ const outcomes = new Set([
   'unavailable',
   'refused',
 ]);
+/**
+ * A service's preparation capabilities, checked against their contract; anything else is
+ * `sentinel.preparation.invalid`.
+ */
 export function preparationCapabilities(value: unknown): PreparationCapabilities {
   const checked = validateEnvelope('preparationcapabilities', value);
   if (!checked.ok) return invalid();
   return checked.value;
 }
+/**
+ * A configuration preview, checked against its contract with Counted totals of its rules; its confirmation binding is
+ * kept only with `ownerData`. Anything else is `sentinel.preparation.invalid`.
+ */
 export function configurationPreview(value: unknown, ownerData = false): ConfigurationPreview {
   // Socket bytes are ordinary JSON data, never an authority token. Unexpected fields still fail the schema.
   if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid();
@@ -58,6 +66,10 @@ export function configurationPreview(value: unknown, ownerData = false): Configu
   if (checked.value.confirmation?.intent.action !== 'capture.source' && checked.value.confirmation) return invalid();
   return checked.value;
 }
+/**
+ * A preparation status, checked against its contract with catalog reason codes; its confirmations are kept only with
+ * `ownerData`. Anything else is `sentinel.preparation.invalid`.
+ */
 export function preparationStatus(value: unknown, ownerData = false): PreparationStatus {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid();
   const safe = { ...(value as Record<string, unknown>) };
@@ -107,6 +119,7 @@ export function preparationOutcome(value: any, ownerData = false): PreparationOu
   return checked.value;
 }
 
+/** The preparation operations a service offers. */
 export const PREPARATION_OPERATIONS = Object.freeze([
   'configuration.preview',
   'prepare.accept',
@@ -114,24 +127,26 @@ export const PREPARATION_OPERATIONS = Object.freeze([
   'prepare.resume',
   'prepare.cancel',
 ] as const);
+/** The preparation operations that change state and need the owner's receipt. */
 export const PREPARATION_WRITES = Object.freeze(['prepare.accept', 'prepare.resume', 'prepare.cancel'] as const);
+/** The argument names an operation takes: a request key, and a parent for a preview or a preview for an accept. */
+function allowedArguments(op: string): string[] {
+  if (op === 'configuration.preview') return ['requestKey', 'parentId'];
+  if (op === 'prepare.accept') return ['requestKey', 'previewId'];
+  return ['requestKey'];
+}
 /** Advertised SDK schemas do not enforce runtime arguments. No actor, receipt, path or arbitrary recipe passes. */
 export function checkPreparationArguments(op: string, value: unknown): void {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw Object.assign(new Error('sentinel.service.requestInvalid'), { code: 'sentinel.service.requestInvalid' });
   const v = value as Record<string, unknown>,
     keys = Object.keys(v),
-    allowed =
-      op === 'configuration.preview'
-        ? ['requestKey', 'parentId']
-        : op === 'prepare.accept'
-          ? ['requestKey', 'previewId']
-          : ['requestKey'];
+    allowed = allowedArguments(op);
   const bad = () => {
     throw Object.assign(new Error('sentinel.service.requestInvalid'), { code: 'sentinel.service.requestInvalid' });
   };
   if (
-    !PREPARATION_OPERATIONS.includes(op as any) ||
+    !(PREPARATION_OPERATIONS as readonly string[]).includes(op) ||
     keys.some((k) => !allowed.includes(k)) ||
     typeof v.requestKey !== 'string' ||
     !/^[A-Za-z0-9_-]{16,128}$/.test(v.requestKey)

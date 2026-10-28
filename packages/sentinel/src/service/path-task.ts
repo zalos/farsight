@@ -38,6 +38,7 @@ const invalid = (reason: string): never => {
   throw new ExecutionError('sentinel.execution.planInvalid', { reason });
 };
 const ended = (state: string | undefined) => state === 'completed' || state === 'canceled';
+/** What a path task is prepared and accepted under: the trust directory, the effective policy and the time. */
 export interface PathTaskTerms {
   readonly trustDir: string;
   readonly policy: EffectivePolicy;
@@ -216,6 +217,7 @@ export async function preparePathTask(
     boundary,
   };
 }
+/** A prepared path task, as `acceptPathTask` takes it. */
 export type PathTaskCandidate = Awaited<ReturnType<typeof preparePathTask>>;
 
 /** Recheck the exact disclosed active generation before its first write. A waiting receipt never reaches this. */

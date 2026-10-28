@@ -1,5 +1,5 @@
 // /2 is source-only owner adjudication. It has NO qualified cookie basis consumer and cannot say mitigated.
-import type { DecisionViewEnvelope, OwnerDecisionProjection } from '../contracts/index.js';
+import type { DecisionViewEnvelope, OwnerDecisionInput, OwnerDecisionProjection } from '../contracts/index.js';
 import { compareTimestamps, validateEnvelope } from '../validate.js';
 import { deepFreeze } from '../policy/immutable.js';
 import { stamp } from '../policy/receipts.js';
@@ -69,25 +69,12 @@ export async function decisionProjection(
       compareTimestamps(actual.approved.get(x.id)!.admission.decidedAt, at) <= 0,
   );
   const effective = !!approval && compareTimestamps(approval.admission.decidedAt, at) <= 0 && !superseded;
-  let reason = 'proposed',
-    state: OwnerDecisionProjection['state'] = 'open',
-    validity: OwnerDecisionProjection['validity'] = 'none';
-  if (effective) {
-    validity = expired ? 'expired' : sameSource ? 'valid' : 'invalidated';
-    reason = expired
-      ? 'expired'
-      : !sameSource
-        ? 'sourceChanged'
-        : p.input.decision === 'mitigated'
-          ? 'assertionUnverified'
-          : p.input.decision;
-    if (validity === 'valid' && p.input.decision === 'accepted-risk') state = 'accepted-risk';
-    if (validity === 'valid' && p.input.decision === 'false-positive') state = 'false-positive';
-    if (p.input.decision === 'mitigated' && validity === 'valid') validity = 'invalidated';
-  } else if (superseded) {
-    reason = 'superseded';
-    validity = 'invalidated';
-  }
+  const { reason, state, validity } = decisionStanding(p.input.decision, {
+    effective,
+    expired,
+    sameSource,
+    superseded,
+  });
   const privacy =
     (await findingSecretPrivacy(basis, ws, baselineRunId, session)) ||
     (canonicalJson(p.basis.ancestor) !== canonicalJson(s.record.ancestor) &&
@@ -121,6 +108,52 @@ export async function decisionProjection(
   };
   if (!validateEnvelope('decisionview', view).ok) fail('sentinel.decision.invalidInput', 'invalid decision projection');
   return deepFreeze(view);
+}
+/** What decides an owner decision's standing at one time. */
+interface StandingFacts {
+  /** Approved by then, and not superseded by a later approval. */
+  readonly effective: boolean;
+  readonly expired: boolean;
+  /** The finding's source evidence is the same as when the decision was proposed. */
+  readonly sameSource: boolean;
+  readonly superseded: boolean;
+}
+/**
+ * An owner decision's state, validity and reason. An effective approval is valid while unexpired and over the same
+ * source evidence, and only then sets an accepted risk or a false positive; a mitigation is never valid, since this is
+ * source-only adjudication. A superseded decision is invalidated; anything else is an open proposal.
+ */
+function decisionStanding(
+  decision: OwnerDecisionInput['decision'],
+  f: StandingFacts,
+): { reason: string; state: OwnerDecisionProjection['state']; validity: OwnerDecisionProjection['validity'] } {
+  let reason: string = 'proposed',
+    state: OwnerDecisionProjection['state'] = 'open',
+    validity: OwnerDecisionProjection['validity'] = 'none';
+  if (f.effective) {
+    validity = effectiveValidity(f.expired, f.sameSource);
+    reason = effectiveReason(decision, f.expired, f.sameSource);
+    if (validity === 'valid' && decision === 'accepted-risk') state = 'accepted-risk';
+    if (validity === 'valid' && decision === 'false-positive') state = 'false-positive';
+    if (decision === 'mitigated' && validity === 'valid') validity = 'invalidated';
+  } else if (f.superseded) {
+    reason = 'superseded';
+    validity = 'invalidated';
+  }
+  return { reason, state, validity };
+}
+/** An effective approval's validity: `expired` past its expiry, else `valid` over the same source, else `invalidated`. */
+function effectiveValidity(expired: boolean, sameSource: boolean): OwnerDecisionProjection['validity'] {
+  if (expired) return 'expired';
+  if (sameSource) return 'valid';
+  return 'invalidated';
+}
+/** An effective approval's reason: its expiry, a source change, an unverified mitigation, or the decision itself. */
+function effectiveReason(decision: OwnerDecisionInput['decision'], expired: boolean, sameSource: boolean): string {
+  if (expired) return 'expired';
+  if (!sameSource) return 'sourceChanged';
+  if (decision === 'mitigated') return 'assertionUnverified';
+  return decision;
 }
 function dependency(p: OwnerProposal) {
   return dependencyOf(p.basis);
