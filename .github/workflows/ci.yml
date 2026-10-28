@@ -30,7 +30,8 @@ jobs:
       sentinel: ${{ steps.select.outputs.sentinel }}
       isolation: ${{ steps.select.outputs.isolation }}
       recovery: ${{ steps.select.outputs.recovery }}
-      # validate's unit tests: `packages` and the names to test, or anything else (a missing output too) for all
+      # validate's unit tests: `packages` with the names to test, `none` (only the skills trees changed), or
+      # anything else, a missing scope or a missing list under `packages` included, for every package
       testScope: ${{ steps.select.outputs.testScope }}
       testPackages: ${{ steps.select.outputs.testPackages }}
     steps:
@@ -125,7 +126,8 @@ jobs:
       - name: Verify the generated graph contract
         run: node scripts/graph-schema.mjs --check
       # The changed packages, their dependents and the packages whose tests read them, as the selector worked them
-      # out: one `pnpm --filter <name>` each. Any other scope (a missing selector output too) tests every package.
+      # out: one `pnpm --filter <name>` each, every name checked against the workspace first. A missing scope or a
+      # missing or empty list under `packages` tests every package.
       - name: Test the packages the change reaches
         env:
           TEST_SCOPE: ${{ needs.changes.outputs.testScope }}

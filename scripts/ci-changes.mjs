@@ -8,8 +8,12 @@ import { buildClosure, workspacePackages } from './pack-preflight.mjs';
 
 const all = () => ({ validate: true, e2e: true, echo: true, sentinel: true, isolation: true, recovery: true });
 
-/** validate's unit tests over every package. */
+/** validate's unit tests over every package, and over none (only the skills trees changed). */
 const EVERY = Object.freeze({ scope: 'all', packages: Object.freeze([]), also: Object.freeze([]) });
+const NONE = Object.freeze({ scope: 'none', packages: Object.freeze([]), also: Object.freeze([]) });
+
+/** The only package names the selector emits or the test step hands to pnpm: one output word, no separators. */
+const PACKAGE_NAME = /^@farsight\/[a-z0-9-]+$/;
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -139,6 +143,9 @@ const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependenc
 export function workspaceGraph(root = repoRoot) {
   const packages = workspacePackages(root);
   if (!packages.size) throw new Error('No workspace packages');
+  // A name is written into the step outputs and onto pnpm's command line; anything else selects every check.
+  for (const name of packages.keys())
+    if (!PACKAGE_NAME.test(name)) throw new Error(`Unexpected workspace package name: ${JSON.stringify(name)}`);
   const dirOf = new Map([...packages].map(([name, { dir }]) => [name, basename(dir)]));
   const graph = new Map([...packages].map(([name, { dir }]) => [basename(dir), { name, dependents: new Set() }]));
   for (const [name, { manifest }] of packages)
@@ -224,7 +231,7 @@ export function testReach(root = repoRoot, graph = workspaceGraph(root)) {
  * dependents need nothing). validate passes the names to pnpm, one `--filter` each; the selector is the only place
  * the set is worked out. A path that selects validate from outside a workspace package (root files, the lockfile,
  * `scripts/`, `schemas/`, `examples/`, workflows) or an unreadable workspace tests every package: `scope` is `all`.
- * An empty set (only the skills trees changed) runs no package's tests; validate's script tests still run.
+ * An empty set (only the skills trees changed) is `scope: 'none'`: no package's tests; the script tests still run.
  */
 export function selectTests(paths, { root = repoRoot, graph, reach, packageInputs, isolationInputs } = {}) {
   let inputs, isolation;
@@ -253,22 +260,49 @@ export function selectTests(paths, { root = repoRoot, graph, reach, packageInput
     (consumer) => !selected.has(consumer) && [...reach.get(consumer)].some((provider) => selected.has(provider)),
   );
   const names = (dirs) => dirs.map((dir) => graph.get(dir).name).sort();
-  return { scope: 'packages', packages: names([...selected, ...also]), also: names(also) };
+  const packages = names([...selected, ...also]);
+  if (!packages.every((name) => PACKAGE_NAME.test(name))) return EVERY;
+  return packages.length ? { scope: 'packages', packages, also: names(also) } : NONE;
 }
 
-const PACKAGE_NAME = /^@farsight\/[a-z0-9-]+$/;
+/**
+ * The selector's step outputs. Each check is `true` or `false`; `testScope` is `packages` with at least one name,
+ * or `all` or `none` with none, and every name has the strict package shape, so no value can carry a separator
+ * into another output record. Anything else is written as every check and every package.
+ */
+export function selectorOutput(checks, tests) {
+  const safe =
+    Object.values(checks).every((run) => typeof run === 'boolean') &&
+    ['all', 'packages', 'none'].includes(tests?.scope) &&
+    Array.isArray(tests.packages) &&
+    tests.packages.every((name) => typeof name === 'string' && PACKAGE_NAME.test(name)) &&
+    (tests.scope === 'packages') === tests.packages.length > 0;
+  const [emitted, scope] = safe ? [checks, tests] : [all(), EVERY];
+  return (
+    Object.entries(emitted)
+      .map(([name, run]) => `${name}=${run}`)
+      .join('\n') + `\ntestScope=${scope.scope}\ntestPackages=${scope.packages.join(' ')}\n`
+  );
+}
 
 /**
  * The pnpm arguments validate's test step runs, from the selector's two outputs as the workflow hands them over:
- * one `--filter <name>` per package when `scope` is exactly `packages`, `null` when that set is empty, and every
- * package for anything else, a missing or empty output included. A name that is not a workspace package's shape
- * throws rather than reaching pnpm.
+ * one `--filter <name>` per package when `scope` is `packages`; `null` (no package tests) only for `none` with no
+ * names; every package for anything else, including `packages` with a missing or empty list and a missing scope.
+ * A name without the package shape, or (given `members`, the workspace's names) not a workspace package, throws
+ * rather than reaching pnpm, where it would match nothing.
  */
-export function pnpmTestArgs(scope, packages = '') {
-  if (scope !== 'packages') return ['-r', 'test'];
-  const names = packages.split(/\s+/).filter(Boolean);
-  for (const name of names) if (!PACKAGE_NAME.test(name)) throw new Error(`Unexpected package name: ${name}`);
-  return names.length ? ['-r', ...names.flatMap((name) => ['--filter', name]), 'test'] : null;
+export function pnpmTestArgs(scope, packages = '', members) {
+  const names = String(packages ?? '')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (scope === 'none' && !names.length) return null;
+  if (scope !== 'packages' || !names.length) return ['-r', 'test'];
+  for (const name of names) {
+    if (!PACKAGE_NAME.test(name)) throw new Error(`Unexpected package name: ${JSON.stringify(name)}`);
+    if (members && !members.has(name)) throw new Error(`Not a workspace package: ${name}`);
+  }
+  return ['-r', ...names.flatMap((name) => ['--filter', name]), 'test'];
 }
 
 /** The changed paths: a PR's from its merge base, a push's across every pushed commit. */
@@ -292,19 +326,27 @@ export function changedPaths({ base, head, event, cwd = process.cwd() }) {
   return git(['diff', '--name-only', '--no-renames', '-z', from, head, '--']).split('\0').filter(Boolean);
 }
 
-export function detectChecks(options) {
+export function detectChecks({ root = repoRoot, ...range } = {}) {
   try {
-    const paths = changedPaths(options);
-    const checks = selectChecks(paths);
-    return { checks, tests: checks.validate ? selectTests(paths) : EVERY, reason: `${paths.length} changed paths` };
+    const paths = changedPaths(range);
+    workspaceGraph(root); // an unreadable workspace, or a package name unsafe to emit, selects every check
+    const checks = selectChecks(paths, {
+      packageInputs: sentinelPackageInputs(root),
+      isolationInputs: sentinelIsolationInputs(root),
+    });
+    return {
+      checks,
+      tests: checks.validate ? selectTests(paths, { root }) : EVERY,
+      reason: `${paths.length} changed paths`,
+    };
   } catch {
-    return { checks: all(), tests: EVERY, reason: 'Change range unavailable; running every check' };
+    return { checks: all(), tests: EVERY, reason: 'Change range or workspace unavailable; running every check' };
   }
 }
 
 function testsLine({ scope, packages, also }) {
+  if (scope === 'none') return '- validate tests: no package (the script tests still run)';
   if (scope !== 'packages') return '- validate tests: every package';
-  if (!packages.length) return '- validate tests: no package (the script tests still run)';
   const extra = also.length ? `, with ${also.join(', ')}, whose tests read a reached package's files` : '';
   return `- validate tests: ${packages.join(', ')} (the changed packages and their dependents${extra})`;
 }
@@ -316,7 +358,7 @@ function testsLine({ scope, packages, also }) {
 function runTests() {
   let tests;
   if (process.env.TEST_SCOPE !== undefined) {
-    tests = { scope: process.env.TEST_SCOPE, packages: (process.env.TEST_PACKAGES ?? '').split(/\s+/).filter(Boolean) };
+    tests = { scope: process.env.TEST_SCOPE, packages: [process.env.TEST_PACKAGES ?? ''] };
   } else {
     const local = detectChecks({
       base: process.env.BASE_SHA,
@@ -330,7 +372,13 @@ function runTests() {
     }
     tests = local.tests;
   }
-  const args = pnpmTestArgs(tests.scope, tests.packages.join(' '));
+  let members = null;
+  try {
+    members = new Set([...workspaceGraph().values()].map(({ name }) => name));
+  } catch {
+    // the workspace cannot be read, so membership cannot be checked: every package
+  }
+  const args = members ? pnpmTestArgs(tests.scope, tests.packages.join(' '), members) : ['-r', 'test'];
   if (!args) {
     console.log('No package is reached; no package tests to run.');
     return 0;
@@ -348,10 +396,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     head: process.env.HEAD_SHA,
     event: process.env.GITHUB_EVENT_NAME,
   });
-  const output =
-    Object.entries(checks)
-      .map(([name, run]) => `${name}=${run}`)
-      .join('\n') + `\ntestScope=${tests.scope}\ntestPackages=${tests.packages.join(' ')}\n`;
+  const output = selectorOutput(checks, tests);
   console.log(`${reason}\n${output}`);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, output);
   if (process.env.GITHUB_STEP_SUMMARY) {

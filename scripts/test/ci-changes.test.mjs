@@ -10,6 +10,7 @@ import {
   detectChecks,
   selectChecks,
   pnpmTestArgs,
+  selectorOutput,
   selectTests,
   sentinelIsolationInputs,
   sentinelPackageInputs,
@@ -379,7 +380,7 @@ test('the reference scan reads the three path forms, skips comments and its own 
   const dir = mkdtempSync(join(tmpdir(), 'farsight-ci-reach-'));
   const pkg = (name, files = {}) => {
     mkdirSync(join(dir, 'packages', name), { recursive: true });
-    writeFileSync(join(dir, 'packages', name, 'package.json'), JSON.stringify({ name: `@x/${name}` }));
+    writeFileSync(join(dir, 'packages', name, 'package.json'), JSON.stringify({ name: `@farsight/${name}` }));
     for (const [path, text] of Object.entries(files)) {
       mkdirSync(dirname(join(dir, 'packages', name, path)), { recursive: true });
       writeFileSync(join(dir, 'packages', name, path), text);
@@ -430,8 +431,8 @@ test("validate tests the packages a change reaches: pnpm's changed-since set plu
   );
   assert.deepEqual(
     selectTests(['.claude/skills/git-pr-flow/SKILL.md', '.agents/skills/git-pr-flow/SKILL.md']),
-    some([]),
-    'the skills trees select validate for its script tests only',
+    { scope: 'none', packages: [], also: [] },
+    'the skills trees select validate for its script tests only, and say so',
   );
 });
 
@@ -469,8 +470,9 @@ test('a change outside the packages or an unreadable workspace tests every packa
   assert.deepEqual(detectChecks({}).tests, every, 'an unavailable range tests every package');
 });
 
-test('the pnpm arguments: one filter per selected package, every package for any other scope, nothing for none', () => {
-  assert.deepEqual(pnpmTestArgs('packages', '@farsight/server @farsight/cli'), [
+test('the pnpm arguments: one filter per selected package, nothing only for an explicit none, else every package', () => {
+  const members = new Set(['@farsight/server', '@farsight/cli', '@farsight/core']);
+  assert.deepEqual(pnpmTestArgs('packages', '@farsight/server @farsight/cli', members), [
     '-r',
     '--filter',
     '@farsight/server',
@@ -478,10 +480,14 @@ test('the pnpm arguments: one filter per selected package, every package for any
     '@farsight/cli',
     'test',
   ]);
-  assert.equal(pnpmTestArgs('packages', ''), null, 'only the skills trees changed');
-  assert.equal(pnpmTestArgs('packages', '  '), null);
-  for (const scope of ['all', '', undefined, 'Packages', 'packages '])
-    assert.deepEqual(pnpmTestArgs(scope, '@farsight/server'), ['-r', 'test'], `missing or other scope: ${scope}`);
+  assert.equal(pnpmTestArgs('none', ''), null, 'only the skills trees changed');
+  assert.equal(pnpmTestArgs('none', undefined), null);
+  // a lost or emptied package list never reads as "no packages": a core change whose list is lost tests everything
+  for (const packages of ['', '   ', '\n', undefined, null])
+    assert.deepEqual(pnpmTestArgs('packages', packages, members), ['-r', 'test'], JSON.stringify(packages));
+  assert.deepEqual(pnpmTestArgs('none', '@farsight/core', members), ['-r', 'test'], 'none with names is not none');
+  for (const scope of ['all', '', undefined, 'Packages', 'packages ', 'NONE'])
+    assert.deepEqual(pnpmTestArgs(scope, '@farsight/server', members), ['-r', 'test'], `missing or other: ${scope}`);
   for (const name of [
     '--filter=...',
     '@farsight/x;rm',
@@ -490,7 +496,57 @@ test('the pnpm arguments: one filter per selected package, every package for any
     '../core',
     '@other/x',
   ])
-    assert.throws(() => pnpmTestArgs('packages', `@farsight/server ${name}`), /Unexpected package name/, name);
+    assert.throws(() => pnpmTestArgs('packages', `@farsight/server ${name}`, members), /Unexpected package name/, name);
+  assert.throws(
+    () => pnpmTestArgs('packages', '@farsight/server @farsight/not-a-workspace-package', members),
+    /Not a workspace package: @farsight\/not-a-workspace-package/,
+  );
+});
+
+test('the outputs carry only strict values; a package name that could add a record selects every check', () => {
+  const checks = { ...none, validate: true };
+  assert.equal(
+    selectorOutput(checks, { scope: 'packages', packages: ['@farsight/cli', '@farsight/server'], also: [] }),
+    'validate=true\ne2e=false\necho=false\nsentinel=false\nisolation=false\nrecovery=false\n' +
+      'testScope=packages\ntestPackages=@farsight/cli @farsight/server\n',
+  );
+  assert.match(selectorOutput(checks, { scope: 'none', packages: [], also: [] }), /\ntestScope=none\ntestPackages=\n$/);
+  const everything =
+    'validate=true\ne2e=true\necho=true\nsentinel=true\nisolation=true\nrecovery=true\ntestScope=all\ntestPackages=\n';
+  for (const tests of [
+    { scope: 'packages', packages: ['@farsight/x\nvalidate=false\ne2e=false'], also: [] },
+    { scope: 'packages', packages: ['@farsight/cli', '@farsight/x testScope=none'], also: [] },
+    { scope: 'packages', packages: [], also: [] },
+    { scope: 'none', packages: ['@farsight/cli'], also: [] },
+    { scope: 'all\nvalidate=false', packages: [], also: [] },
+    { scope: 'packages', packages: '@farsight/cli', also: [] },
+    undefined,
+  ])
+    assert.equal(selectorOutput(checks, tests), everything, JSON.stringify(tests));
+  assert.equal(
+    selectorOutput({ ...checks, validate: 'false\ninjected=true' }, { scope: 'all', packages: [] }),
+    everything,
+  );
+
+  // a workspace package named with an embedded newline: refused when the graph is read, so every check runs
+  const dir = mkdtempSync(join(tmpdir(), 'farsight-ci-names-'));
+  try {
+    for (const [folder, name] of [
+      ['cli', '@farsight/cli'],
+      ['evil', '@farsight/evil\nvalidate=false'],
+    ]) {
+      mkdirSync(join(dir, 'packages', folder), { recursive: true });
+      writeFileSync(join(dir, 'packages', folder, 'package.json'), JSON.stringify({ name }));
+    }
+    assert.throws(() => workspaceGraph(dir), /Unexpected workspace package name: "@farsight\/evil\\nvalidate=false"/);
+    assert.deepEqual(selectTests(['packages/evil/src/x.ts'], { root: dir }), every);
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+    const detected = detectChecks({ base: head, head, event: 'push', cwd: repoRoot, root: dir });
+    assert.deepEqual(detected.checks, full);
+    assert.deepEqual(detected.tests, every);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // pnpm 9's own changed-since filter diffs with git's rename detection on and sees only a rename's destination; the
@@ -559,15 +615,26 @@ test('a file renamed out of a package still tests it: the pnpm arguments validat
       assert.deepEqual(pnpmArgs(), ['-r', ...core.flatMap((name) => ['--filter', name]), 'test'], event);
     }
 
-    // the workflow's handover: the selector's outputs, a missing one, an empty set, and pnpm's exit status
+    // the workflow's handover: the selector's outputs, missing ones, an explicit none, and pnpm's exit status
     rmSync(recorded, { force: true });
     runTests({ TEST_SCOPE: 'packages', TEST_PACKAGES: '@farsight/sentinel' });
     assert.deepEqual(pnpmArgs(), ['-r', '--filter', '@farsight/sentinel', 'test']);
     runTests({ TEST_SCOPE: '', TEST_PACKAGES: '' });
     assert.deepEqual(pnpmArgs(), ['-r', 'test'], 'a missing selector output tests every package');
+    for (const lost of [{ TEST_PACKAGES: undefined }, { TEST_PACKAGES: '' }, { TEST_PACKAGES: ' \t ' }]) {
+      rmSync(recorded, { force: true });
+      runTests({ TEST_SCOPE: 'packages', ...lost });
+      assert.deepEqual(pnpmArgs(), ['-r', 'test'], `only testPackages missing: ${JSON.stringify(lost)}`);
+    }
     rmSync(recorded, { force: true });
-    assert.match(runTests({ TEST_SCOPE: 'packages', TEST_PACKAGES: '' }), /No package is reached/);
-    assert.throws(() => readFileSync(recorded), /ENOENT/, 'pnpm is not started for an empty set');
+    assert.match(runTests({ TEST_SCOPE: 'none', TEST_PACKAGES: '' }), /No package is reached/);
+    assert.throws(() => readFileSync(recorded), /ENOENT/, 'pnpm is not started for an explicit none');
+    assert.throws(
+      () => runTests({ TEST_SCOPE: 'packages', TEST_PACKAGES: '@farsight/core @farsight/not-a-workspace-package' }),
+      (error) => error.status !== 0 && /Not a workspace package/.test(error.stderr),
+      'a well-formed name that is not a workspace package is refused',
+    );
+    assert.throws(() => readFileSync(recorded), /ENOENT/, 'and pnpm is not started for it');
     assert.throws(
       () => runTests({ TEST_SCOPE: 'packages', TEST_PACKAGES: '@farsight/core', STUB_EXIT: '3' }),
       (error) => error.status === 3,

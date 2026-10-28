@@ -119,9 +119,16 @@ exact pnpm command.
 
 Every package is tested (`testScope=all`) when a path that selects validate lies outside a workspace package (root
 files, the lockfile, `scripts/`, `schemas/`, `examples/`, workflows and the selector itself), when a path is under
-`packages/` without a manifest, when the manifests or a test folder cannot be read, and when `testScope` is missing
-or anything but `packages`. The skills trees, which only the script tests read, select no package: the step then
-runs no package's tests and `pnpm test:scripts` still runs. The required check names do not change.
+`packages/` without a manifest, and when the manifests or a test folder cannot be read. The test step also tests
+every package when `testScope` is missing or unknown, or is `packages` with a missing or empty `testPackages`. The
+skills trees, which only the script tests read, select no package: the selector says so explicitly with
+`testScope=none`, the step runs no package's tests and `pnpm test:scripts` still runs. The required check names do
+not change.
+
+The outputs carry only strict values: each check `true` or `false`, a scope from `all`, `packages` and `none`, and
+names of the shape `@farsight/<lowercase-name>`. A workspace package named otherwise selects every check, and an
+output that fails these rules is written as every check and every package, so no value can add an output record.
+The test step refuses a name that is not a workspace package rather than pass pnpm a filter that matches nothing.
 
 Markdown inside fixtures is test input, not automatically documentation. Graph and core are Echo build dependencies, so its
 whole package is watched, not just a few currently imported helpers. PRs compare merge-base → head, excluding
