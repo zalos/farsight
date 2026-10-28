@@ -21,8 +21,10 @@
 // exits, its group and every descendant that left it (a `detached` child in a group of its own) are frozen and killed,
 // each process only after its identity is verified again while it is stopped (reapTree), so a descendant can neither
 // outlive the attempt nor hold it open, and a reused pid is never signalled but to stop it and continue it at once.
-// The limit of that guarantee: a descendant that leaves the tree before a listing sees it (within TREE_POLL_MS), or is
-// spawned between the last listing and the kill; on macOS a process's start time resolves to the second. The supervisor's memory and process limits are not
+// A process is the script's only by recorded ancestry (a listing saw it descend from the live interpreter), never by
+// process group membership once the interpreter has exited. The limit of that guarantee: a descendant that leaves the
+// tree before a listing sees it (within TREE_POLL_MS), or is spawned between the last listing and the kill, is left
+// running; on macOS a process's start time resolves to the second. The supervisor's memory and process limits are not
 // applied to it; only the deadline and the output bound are.
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -291,6 +293,8 @@ export interface ProcessReader {
 
 /** How often a running script's descendants are listed, so one that leaves the tree is still known at the end. */
 const TREE_POLL_MS = 100;
+/** The extra listings while a script starts. */
+const EARLY_POLLS_MS = [10, 25, 40, 60, 80] as const;
 /** How long one listing of the process table may take before the attempt settles without it. */
 const PS_TIMEOUT_MS = 2_000;
 /** How many times the tree is listed and frozen again for what was started before it stopped. */
@@ -384,17 +388,24 @@ const sameProcess = (a: ProcessRow, b: ProcessRow) =>
  * Ends every process of a script: the interpreter's group, and every descendant that left it (a `detached` child in a
  * group or session of its own), one verified process at a time.
  *
+ * A process is the script's only by recorded ancestry: the interpreter while it is alive, an identity (pid and start)
+ * a listing saw as the interpreter's descendant through the parent chain (`known`: the listings while it runs only
+ * ever start from the live interpreter or from such an identity), and the descendants of those. Membership of a
+ * process group is never evidence: once the interpreter has exited, its group's id can be reused.
+ *
  * While the interpreter has not exited (`alive()`, read synchronously, so its pid is not yet reaped and cannot be
  * reused) its group, which Sentinel created, is stopped wholesale. Then, each round: the table is read and the tree
- * taken from it, with the members of the interpreter's group while that group is still Sentinel's; each process of the tree is stopped (SIGSTOP), its row read again, and kept only when pid, parent,
+ * taken from it; each process of the tree is stopped (SIGSTOP), its row read again, and kept only when pid, parent,
  * group and start are unchanged and it is stopped; any other is continued (SIGCONT) at once and left alone. A stopped
  * process cannot exit, so its pid cannot be reused before it is killed. Rounds repeat for what was started before its
  * parent stopped. Then every kept process is killed (SIGKILL), and the interpreter's group is killed wholesale only
- * while the interpreter is alive or a kept, stopped member still holds that group. No other group is signalled.
+ * while the interpreter is alive or a kept (recorded, verified, stopped) member still holds it. No other group is
+ * signalled.
  *
- * Its limit: a descendant that left the tree (its parent exited) before any listing saw it, or that was started
- * between the last listing and the kill, is not known; on macOS a start resolves to the second, so a process that
- * reused a pid within the same second with the same parent and group would be taken for the script's.
+ * Its limit: a descendant that left the tree (its parent exited) before any listing saw it, which includes one the
+ * interpreter started and outlived by less than the first listings' interval, or one started between the last listing
+ * and the kill, is not known and is left running; on macOS a start resolves to the second, so a process that reused a
+ * recorded pid within the same second with the same parent and group would be taken for the script's.
  */
 export async function reapTree(
   group: number | undefined,
@@ -403,24 +414,12 @@ export async function reapTree(
   reader: ProcessReader = SYSTEM_PROCESSES,
 ): Promise<void> {
   const live = () => (alive() ? group : undefined);
-  // The members of the interpreter's group, while that group is still the one Sentinel created: the interpreter is
-  // alive, or no process now has its pid (members keep a group's id from being reused), or the one that has it is the
-  // interpreter as first listed. A pid taken by another process's group gives no members.
-  const groupOf = (table: readonly ProcessRow[]) => {
-    if (group === undefined) return [];
-    const leader = table.find((r) => r.pid === group);
-    if (!alive() && leader && known.get(group) !== leader.started) return [];
-    return table.filter((r) => r.pgid === group);
-  };
   if (group !== undefined && alive()) send(-group, 'SIGSTOP');
   const kept = new Map<number, ProcessRow>();
   const stopped = new Set<number>();
   try {
     for (let round = 0; round < FREEZE_ROUNDS; round++) {
-      const table = await reader.table();
-      const listed = new Map(treeOf(table, known, live()).map((r) => [r.pid, r]));
-      for (const r of groupOf(table)) if (!listed.has(r.pid)) listed.set(r.pid, r);
-      const candidates = [...listed.values()].filter((r) => !kept.has(r.pid));
+      const candidates = treeOf(await reader.table(), known, live()).filter((r) => !kept.has(r.pid));
       if (!candidates.length) break;
       for (const r of candidates) {
         known.set(r.pid, r.started);
@@ -483,11 +482,14 @@ export function spawnBounded(
       });
     };
     const ticker = setInterval(poll, TREE_POLL_MS);
+    // Listed often while a script starts, so a descendant a short script starts and leaves is likelier to be seen.
+    const early = EARLY_POLLS_MS.map((ms) => setTimeout(poll, ms));
     poll();
     const settle = () => {
       if (settling) return;
       settling = true;
       clearInterval(ticker);
+      for (const e of early) clearTimeout(e);
       clearTimeout(timer);
       clearTimeout(grace);
       request.signal.removeEventListener('abort', onAbort);
