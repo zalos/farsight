@@ -9,6 +9,17 @@ import { COPILOT_CODE_MANIFEST } from './cli-copilot-manifest.js';
 import { canonicalDigest } from '../../policy/digest.js';
 import { fail, ProviderError } from './errors.js';
 import type { NativeTiming } from './cli-native-profile.js';
+import {
+  seatbelt,
+  seatbeltHead,
+  seatbeltBaseReads,
+  seatbeltProxyOnly,
+  SEATBELT_PROCESS_INFO,
+  SEATBELT_DIRECTORY_METADATA,
+  SEATBELT_TASK_PORT,
+  SEATBELT_SYSTEM_SERVICES,
+  SEATBELT_DEVICE_IOCTL,
+} from './sandboxed-cli.js';
 export const COPILOT_NATIVE_PROFILE = Object.freeze({
   id: 'copilot-1.0.103-darwin-arm64-seatbelt-v6',
   version: '1.0.103',
@@ -244,6 +255,55 @@ export async function qualifyInstalledNativeCopilot(t: NativeTiming): Promise<Na
   }
   return fail('sentinel.provider.capabilityUntested', 'Copilot is not installed');
 }
+/** Where one Copilot process runs: the pinned executable, its private owned root, the owner's HOME and the proxy. */
+export interface CopilotLayout {
+  readonly executable: string;
+  readonly ownedRoot: string;
+  readonly ownerHome: string;
+  readonly proxyPort: number;
+}
+/**
+ * The v6 seatbelt profile, built on the shared runner's rows. Exact text: the retained-wire control pins it.
+ * Only the owned root is writable (home, state, tmp); vendor skills, builtin and plugins in the private runtime copy
+ * stay unreadable; the native User keychain and trustd store are readable for the vendor's own authentication.
+ */
+export function copilotSeatbeltPolicy(l: CopilotLayout): string {
+  return seatbelt([
+    ...seatbeltHead(l.executable),
+    SEATBELT_PROCESS_INFO,
+    seatbeltBaseReads(l.executable, l.ownedRoot),
+    `(deny file-read* (subpath ${q(join(l.ownedRoot, 'runtime/builtin-skills'))}) (subpath ${q(join(l.ownedRoot, 'runtime/builtin'))}) (subpath ${q(join(l.ownedRoot, 'runtime/plugins'))}))`,
+    SEATBELT_DIRECTORY_METADATA,
+    `(allow file-write* (subpath ${q(join(l.ownedRoot, 'home'))}) (subpath ${q(join(l.ownedRoot, 'state'))}) (subpath ${q(join(l.ownedRoot, 'tmp'))}) (literal "/dev/null"))`,
+    SEATBELT_TASK_PORT,
+    // Native User-keychain lookup requires real HOME identity, not general HOME access.
+    `(allow file-read* (subpath ${q(join(l.ownerHome, 'Library/Keychains'))}) (subpath "/private/var/protected/trustd"))`,
+    // Shared OS APIs trust pinned vendor use; trustd may fetch trust data outside our application proxy.
+    '(allow mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.trustd") (global-name "com.apple.trustd.agent"))',
+    `(allow mach-lookup (global-name "com.apple.securityd") (global-name "com.apple.securityd.xpc") ${SEATBELT_SYSTEM_SERVICES})`,
+    SEATBELT_DEVICE_IOCTL,
+    seatbeltProxyOnly(l.proxyPort),
+  ]);
+}
+/** Constructed, never merged: no token variable, no alternate provider, only the owned proxy for egress. */
+export function copilotEnvironment(l: Omit<CopilotLayout, 'executable'>): Readonly<Record<string, string>> {
+  return Object.freeze({
+    PATH: '/usr/bin:/bin',
+    HOME: l.ownerHome,
+    COPILOT_HOME: join(l.ownedRoot, 'state'),
+    COPILOT_CLI_DIST_DIR: join(l.ownedRoot, 'runtime'),
+    TMPDIR: join(l.ownedRoot, 'tmp'),
+    XDG_CACHE_HOME: join(l.ownedRoot, 'state'),
+    CI: '1',
+    TERM: 'dumb',
+    NO_COLOR: '1',
+    COPILOT_AUTO_UPDATE: 'false',
+    USE_TGREP: 'false',
+    HTTPS_PROXY: `http://127.0.0.1:${l.proxyPort}`,
+    HTTP_PROXY: `http://127.0.0.1:${l.proxyPort}`,
+    NO_PROXY: '',
+  });
+}
 export async function nativeCopilotSetup(runtime: NativeCopilotRuntime, proxyPort: number, t: NativeTiming) {
   const held = runtimes.get(runtime);
   if (!held || !Number.isSafeInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535)
@@ -258,40 +318,8 @@ export async function nativeCopilotSetup(runtime: NativeCopilotRuntime, proxyPor
   try {
     for (const d of ['runtime', 'home', 'state', 'tmp']) await mkdir(join(ownedRoot, d), { mode: 0o700 });
     await runtimeMembers(held.runtimeDir, t, join(ownedRoot, 'runtime'));
-    const policy = [
-      '(version 1)(deny default)',
-      '(allow process-fork)',
-      `(allow process-exec (literal ${q(held.executable)}))`,
-      '(allow process-info* (target same-sandbox))(allow signal (target same-sandbox))(allow sysctl-read)',
-      `(allow file-read* (literal "/") (subpath "/System") (subpath "/usr/lib") (subpath "/Library/Apple") (literal ${q(held.executable)}) (subpath ${q(ownedRoot)}) (literal "/dev/null") (literal "/dev/urandom") (literal "/dev/random"))`,
-      `(deny file-read* (subpath ${q(join(ownedRoot, 'runtime/builtin-skills'))}) (subpath ${q(join(ownedRoot, 'runtime/builtin'))}) (subpath ${q(join(ownedRoot, 'runtime/plugins'))}))`,
-      '(allow file-read-metadata (vnode-type DIRECTORY))',
-      `(allow file-write* (subpath ${q(join(ownedRoot, 'home'))}) (subpath ${q(join(ownedRoot, 'state'))}) (subpath ${q(join(ownedRoot, 'tmp'))}) (literal "/dev/null"))`,
-      '(allow mach-priv-task-port (target same-sandbox))',
-      // Native User-keychain lookup requires real HOME identity, not general HOME access.
-      `(allow file-read* (subpath ${q(join(ownerHome, 'Library/Keychains'))}) (subpath "/private/var/protected/trustd"))`,
-      // Shared OS APIs trust pinned vendor use; trustd may fetch trust data outside our application proxy.
-      '(allow mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.trustd") (global-name "com.apple.trustd.agent"))',
-      '(allow mach-lookup (global-name "com.apple.securityd") (global-name "com.apple.securityd.xpc") (global-name "com.apple.logd") (global-name "com.apple.system.logger") (global-name "com.apple.system.opendirectoryd.libinfo") (global-name "com.apple.system.opendirectoryd.membership"))',
-      '(allow file-ioctl (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom"))',
-      `(allow network-outbound (remote ip "localhost:${proxyPort}"))`,
-    ].join('\n');
-    const env = Object.freeze({
-      PATH: '/usr/bin:/bin',
-      HOME: ownerHome,
-      COPILOT_HOME: join(ownedRoot, 'state'),
-      COPILOT_CLI_DIST_DIR: join(ownedRoot, 'runtime'),
-      TMPDIR: join(ownedRoot, 'tmp'),
-      XDG_CACHE_HOME: join(ownedRoot, 'state'),
-      CI: '1',
-      TERM: 'dumb',
-      NO_COLOR: '1',
-      COPILOT_AUTO_UPDATE: 'false',
-      USE_TGREP: 'false',
-      HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
-      HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
-      NO_PROXY: '',
-    });
+    const policy = copilotSeatbeltPolicy({ executable: held.executable, ownedRoot, ownerHome, proxyPort });
+    const env = copilotEnvironment({ ownedRoot, ownerHome, proxyPort });
     const setup = Object.freeze({ executable: held.executable, policy, env, ownedRoot });
     setups.set(setup, ownedRoot);
     return setup;

@@ -7,6 +7,17 @@ import { isAbsolute, join } from 'node:path';
 import { fail } from './errors.js';
 import { qualifyNativeHelper, type NativeHelper } from './cli-native-helper.js';
 import { canonicalDigest } from '../../policy/digest.js';
+import {
+  seatbelt,
+  seatbeltHead,
+  seatbeltBaseReads,
+  seatbeltProxyOnly,
+  SEATBELT_PROCESS_INFO,
+  SEATBELT_DIRECTORY_METADATA,
+  SEATBELT_TASK_PORT,
+  SEATBELT_SYSTEM_SERVICES,
+  SEATBELT_DEVICE_IOCTL,
+} from './sandboxed-cli.js';
 
 export const CLAUDE_NATIVE_PROFILE = Object.freeze({
   id: 'claude-code-2.1.282-darwin-arm64-seatbelt-v1',
@@ -33,7 +44,6 @@ function boundary(t: NativeTiming) {
   if (!Number.isSafeInteger(t.deadlineAt) || t.deadlineAt <= Date.now())
     fail('sentinel.provider.timeout', 'original native setup deadline elapsed');
 }
-const q = (v: string) => JSON.stringify(v);
 
 export async function qualifyNativeClaude(
   executablePath: string,
@@ -102,6 +112,44 @@ export async function qualifyNativeClaude(
   }
 }
 
+/**
+ * The Claude seatbelt profile on the shared runner's rows: reads of the system, the executable and the owned root,
+ * writes only to /dev/null, preferences readable, egress only to the owned proxy. No HOME and no keychain access: the
+ * access token crosses an anonymous descriptor from the fixed helper.
+ */
+export function claudeSeatbeltPolicy(l: { executable: string; ownedRoot: string; proxyPort: number }): string {
+  return seatbelt([
+    ...seatbeltHead(l.executable),
+    SEATBELT_PROCESS_INFO,
+    seatbeltBaseReads(l.executable, l.ownedRoot),
+    `${SEATBELT_DIRECTORY_METADATA}(allow file-write* (literal "/dev/null"))`,
+    `${SEATBELT_TASK_PORT}(allow user-preference-read)`,
+    `(allow mach-lookup ${SEATBELT_SYSTEM_SERVICES})`,
+    SEATBELT_DEVICE_IOCTL,
+    seatbeltProxyOnly(l.proxyPort),
+  ]);
+}
+
+/** Construct, never merge, the environment. No native keychain/home/config/env credential or alternate provider. */
+export function claudeEnvironment(l: { ownedRoot: string; proxyPort: number }): Readonly<Record<string, string>> {
+  return Object.freeze({
+    PATH: '/usr/bin:/bin',
+    HOME: l.ownedRoot,
+    CLAUDE_CONFIG_DIR: `${l.ownedRoot}/config`,
+    TMPDIR: l.ownedRoot,
+    TERM: 'dumb',
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    DISABLE_TELEMETRY: '1',
+    DISABLE_ERROR_REPORTING: '1',
+    DISABLE_AUTOUPDATER: '1',
+    CLAUDE_CODE_MAX_RETRIES: '0',
+    CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR: '3',
+    HTTPS_PROXY: `http://127.0.0.1:${l.proxyPort}`,
+    HTTP_PROXY: `http://127.0.0.1:${l.proxyPort}`,
+    NO_PROXY: '',
+  });
+}
+
 /** Internal process setup only; the returned data grants no admission, receipt, budget or model authority. */
 export async function nativeClaudeSetup(runtime: NativeClaudeRuntime, proxyPort: number, timing: NativeTiming) {
   boundary(timing);
@@ -115,35 +163,8 @@ export async function nativeClaudeSetup(runtime: NativeClaudeRuntime, proxyPort:
   try {
     await mkdir(`${ownedRoot}/config`, { mode: 0o700 });
     boundary(timing);
-    const policy = [
-      '(version 1)(deny default)',
-      '(allow process-fork)',
-      `(allow process-exec (literal ${q(held.executable)}))`,
-      '(allow process-info* (target same-sandbox))(allow signal (target same-sandbox))(allow sysctl-read)',
-      `(allow file-read* (literal "/") (subpath "/System") (subpath "/usr/lib") (subpath "/Library/Apple") (literal ${q(held.executable)}) (subpath ${q(ownedRoot)}) (literal "/dev/null") (literal "/dev/urandom") (literal "/dev/random"))`,
-      '(allow file-read-metadata (vnode-type DIRECTORY))(allow file-write* (literal "/dev/null"))',
-      '(allow mach-priv-task-port (target same-sandbox))(allow user-preference-read)',
-      '(allow mach-lookup (global-name "com.apple.logd") (global-name "com.apple.system.logger") (global-name "com.apple.system.opendirectoryd.libinfo") (global-name "com.apple.system.opendirectoryd.membership"))',
-      '(allow file-ioctl (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom"))',
-      `(allow network-outbound (remote ip "localhost:${proxyPort}"))`,
-    ].join('\n');
-    // Construct, never merge, the environment. No native keychain/home/config/env credential or alternate provider.
-    const env = Object.freeze({
-      PATH: '/usr/bin:/bin',
-      HOME: ownedRoot,
-      CLAUDE_CONFIG_DIR: `${ownedRoot}/config`,
-      TMPDIR: ownedRoot,
-      TERM: 'dumb',
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-      DISABLE_TELEMETRY: '1',
-      DISABLE_ERROR_REPORTING: '1',
-      DISABLE_AUTOUPDATER: '1',
-      CLAUDE_CODE_MAX_RETRIES: '0',
-      CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR: '3',
-      HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
-      HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
-      NO_PROXY: '',
-    });
+    const policy = claudeSeatbeltPolicy({ executable: held.executable, ownedRoot, proxyPort });
+    const env = claudeEnvironment({ ownedRoot, proxyPort });
     const setup = Object.freeze({ executable: held.executable, policy, env, ownedRoot });
     setups.set(setup, ownedRoot);
     return setup;
