@@ -94,7 +94,23 @@ test('arguments: each command takes only its own flags; typos and repeats are re
   );
   assert.equal(ok(['rerun', 'r']).command, 'rerun');
   no(['rerun'], 'sentinel.args.missingArgument');
-  no(['wait'], 'sentinel.args.missingArgument');
+  // Without a run id, wait, status and report read the newest scan; scan and scans take no argument.
+  assert.deepEqual(ok(['wait']).args, {});
+  assert.deepEqual(ok(['status']).args, {});
+  assert.deepEqual(ok(['report']).args, {});
+  no(['report', '--instructions', '--json'], 'sentinel.args.missingArgument');
+  assert.deepEqual(ok(['scan', '--confirm', '--detach']).flags, { '--confirm': true, '--detach': true });
+  no(['scan', 'run-a'], 'sentinel.args.unexpectedArgument');
+  assert.deepEqual(ok(['scans', '--limit', '5']).flags, { '--limit': '5' });
+  assert.deepEqual(ok(['stage', 'show', 'review', '--run', 'run-a']).args, { action: 'show', target: 'review' });
+  no(['stage', 'show', 'review', '--confirm'], 'sentinel.args.unknownFlag');
+  no(['stage', 'promote', 'dir', '--run', 'r'], 'sentinel.args.unknownFlag');
+  // A detached start of a plan with model stages takes --confirm-models, as a foreground one does.
+  assert.deepEqual(ok(['run', 'p', '--detach', '--confirm', '--confirm-models']).flags, {
+    '--detach': true,
+    '--confirm': true,
+    '--confirm-models': true,
+  });
   no(['serve', '--idle-ms'], 'sentinel.args.missingValue');
   no(['pause', 'r', '--detach'], 'sentinel.args.unknownFlag');
   assert.equal(ok(['cancel', 'r', '--confirm']).flags['--confirm'], true);
@@ -280,7 +296,7 @@ test('init, as an owner reads it: both files, which profile a kept file holds, a
   assert.doesNotMatch(human.stdout, /profile: scanners/);
   assert.match(
     human.stdout,
-    /rules promote builtin:secrets --confirm; rules promote builtin:pattern --confirm\), then/,
+    /rules promote builtin:secrets --confirm; rules promote builtin:pattern --confirm\) and what it would run; scan --confirm/,
   );
   assert.doesNotMatch(human.stdout, /builtin:advisories/);
   // The pipeline commands read and check what init wrote; nothing runs.

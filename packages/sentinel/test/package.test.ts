@@ -74,6 +74,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // The declared pipeline (app/): the credential-shape check, and the pipeline file read beside the settings.
   'app/pipeline.js': ['@farsight/core/dist/credential-shapes.js', '@farsight/core/dist/strings-sentinel-plan.js'],
   'app/pipeline-adoption.js': ['node:fs', 'node:path'],
+  'app/service.js': ['node:crypto', 'node:fs', 'node:path'],
   'service/preparation-key-lock.js': ['node:path'],
   'service/preparation-client.js': ['node:crypto', 'node:path'],
   'service/preparation-projection.js': ['@farsight/core/dist/strings.js'],
@@ -218,6 +219,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
     '@farsight/core/dist/strings-sentinel-owner-ui.js',
     '@farsight/core/dist/strings-sentinel-service.js',
     '@farsight/core/dist/strings.js',
+    'node:crypto',
     'node:fs',
     'node:path',
   ],
@@ -532,9 +534,11 @@ test('planned commands refuse with exit 3 and start nothing', () => {
     assert.match(
       r.stderr,
       new RegExp(
-        `^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`,
+        `^unavailable: ${command} is not implemented in this draft build \\(planned in a later release\\)\\. Nothing was started\\.`,
       ),
     );
+    // No printed word names an implementation-plan PR.
+    assert.doesNotMatch(r.stderr + r.stdout, /\bPR \d/);
     // JSON says unavailable, with every verdict not asked: never a scan result.
     const body = JSON.parse(r.stdout);
     assert.equal(body.outcome, 'unavailable', command);

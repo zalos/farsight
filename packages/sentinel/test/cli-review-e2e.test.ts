@@ -98,8 +98,12 @@ test(
     assert.equal(planned.status, 0, JSON.stringify(planned));
     assert.equal(planned.body.facts.reviews.length, 2);
     const id = planned.body.facts.planId;
+    // A detached start of a plan with model stages waits for the composite confirmation (--confirm-models): nothing
+    // is issued, no service is asked and no model is called.
     const detached = await cli('run', id, '--confirm', '--detach');
-    assert.equal(detached.body.reasonCode, 'sentinel.review.foregroundRequired');
+    assert.equal(detached.status, 4, JSON.stringify(detached));
+    assert.equal(detached.body.reasonCode, 'sentinel.service.needsOwnerConfirm');
+    assert.equal(detached.body.facts.requiredFlag, '--confirm-models');
     assert.equal(ep.seen.length, 0);
     const waiting = await cli('run', id, '--confirm');
     assert.equal(waiting.status, 4, JSON.stringify(waiting));

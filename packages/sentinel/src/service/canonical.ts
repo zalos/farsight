@@ -26,7 +26,7 @@ import type { DockerRunner } from '../execution/isolation.js';
 /** A scratch lease's container client wrapper (scratch-lease.ts), so the lease knows when its clients exited. */
 export type WrapRunner = (runner: DockerRunner) => DockerRunner;
 import { checkProfileRegistry, withPipeline } from '../execution/profile.js';
-import { defaultPipelineFor } from '../execution/stage-inputs.js';
+import { defaultPipelineFor, runStages } from '../execution/stage-inputs.js';
 import type { PipelineDefinition } from '../contracts/pipeline.js';
 import {
   planPipelineAnalysis,
@@ -35,6 +35,7 @@ import {
   plannerLockFrom,
   plannerPolicyFrom,
   plannerSnapshotFrom,
+  planShapeOf,
 } from '../planner/index.js';
 import type { EffectivePolicy } from '../policy/index.js';
 import { captureSnapshot } from '../snapshot/capture.js';
@@ -101,12 +102,22 @@ export interface CanonicalDisclosure {
     vendorInstructions: 'unobserved';
   }[];
   readonly label: 'foundation-preview' | 'deterministic';
+  /** What the revision runs: checks, checks and review, review only (planner/pipeline.ts planShapeOf). */
+  readonly shape: import('../planner/pipeline.js').PlanShape;
 }
 
 /** The identity a write on a run is decided against: its current admitted revision. */
 export interface CurrentPlan {
-  readonly model?: { providerId: string; bindingDigest: string; budget: import('../contracts/policy.js').Budget };
+  readonly model?: {
+    providerId: string;
+    /** The model's id in the adopted settings: with the provider, what the binding resolves again. */
+    modelId?: string;
+    bindingDigest: string;
+    budget: import('../contracts/policy.js').Budget;
+  };
   readonly modelConflict?: true;
+  /** The stages whose units this revision runs (a selected rerun: only the selected ones), sorted. */
+  readonly stages?: readonly string[];
   readonly runId: string;
   readonly revision: number;
   readonly planDigest: string;
@@ -175,6 +186,7 @@ function disclose(plan: PlanRevision): CanonicalDisclosure {
         }
       : {}),
     label: isPreview(plan) ? ('foundation-preview' as const) : ('deterministic' as const),
+    shape: planShapeOf(plan),
   });
 }
 
@@ -197,11 +209,13 @@ export async function currentPlan(store: SentinelStore, runId: string): Promise<
         ? {
             model: {
               providerId: first.selection.providerId,
+              modelId: first.selection.modelId,
               bindingDigest: first.selection.bindingDigest,
               budget: first.terms.budget,
             },
           }
         : {}),
+    stages: stagesOf(admitted, runs),
     runId,
     revision,
     planDigest: admitted.plan.digest,
@@ -209,6 +223,21 @@ export async function currentPlan(store: SentinelStore, runId: string): Promise<
     kind: admitted.plan.kind,
     effects,
   });
+}
+
+/**
+ * The declared stages whose units a revision runs (a selected rerun: only those it selects), sorted: each unit by the
+ * stage of the recorded pipeline that owns it (execution/stage-inputs.ts runStages), or by its own stage when none does.
+ */
+function stagesOf(admitted: Awaited<ReturnType<typeof loadPlan>>, runs: ReadonlySet<string> | null): readonly string[] {
+  let owner: ReadonlyMap<string, string> = new Map();
+  try {
+    owner = runStages(admitted).owner;
+  } catch {
+    /* a revision whose pipeline no longer derives: its units name their own stages */
+  }
+  const units = runs ? admitted.plan.units.filter((u) => runs.has(u.id)) : admitted.plan.units;
+  return Object.freeze([...new Set(units.map((u) => owner.get(u.id) ?? String(u.stage)))].sort());
 }
 
 const backendOf = (wrapRunner: WrapRunner | undefined) => (wrapRunner ? { backendOptions: { wrapRunner } } : {});
