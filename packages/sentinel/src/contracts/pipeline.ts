@@ -363,7 +363,10 @@ export interface ScriptProvenance extends ProvenanceBase {
   interpreter: { name: 'node' | 'sh'; version: ShortText; digest: Digest | null; path?: ShortText };
   /**
    * `none`: a host script is unconfined by design. It runs as the owner, with the owner's file system and network,
-   * like any script the owner runs, and only while the adopted settings turn `stage.host-scripts` on.
+   * like any script the owner runs, and only while the adopted settings turn `stage.host-scripts` on. At its deadline,
+   * its output bound and the interpreter's exit, its process group and every descendant listed while it ran are frozen
+   * and killed; the limit of that guarantee is a descendant that left the tree before a listing saw it, or one spawned
+   * between the last listing and the kill.
    */
   confinement?: 'none';
   /** The schema its output document was validated against before publication, by digest. */

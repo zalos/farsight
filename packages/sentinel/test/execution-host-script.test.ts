@@ -84,6 +84,38 @@ const FORKING = Buffer.from(
     '',
   ].join('\n'),
 );
+/**
+ * The coded step, and beside it a descendant in a session of its own (`detached: true`, so not in the interpreter's
+ * group) that outlives the interpreter; the interpreter lingers long enough for its tree to be listed, then exits.
+ */
+const DETACHING = Buffer.from(
+  [
+    "import { spawn } from 'node:child_process';",
+    "const sleeper = spawn('/bin/sleep', ['30'], { detached: true, stdio: 'ignore' });",
+    'sleeper.unref();',
+    "process.stdout.write(JSON.stringify({ schema: 'sentinel.notes/v1', documents: 0, findings: 0, folder: [], environment: [], sleeper: sleeper.pid }));",
+    'setTimeout(() => process.exit(0), 600);',
+    '',
+  ].join('\n'),
+);
+/** Waits until `pid` no longer exists (killed and reaped), or fails after a few seconds. */
+async function gone(pid: number, what: string) {
+  for (let i = 0; i < 60; i++) {
+    try {
+      process.kill(pid, 0);
+    } catch (e: any) {
+      if (e.code === 'ESRCH') return;
+      throw e;
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    /* ended between the last probe and this one */
+  }
+  assert.fail(`${what} (pid ${pid}) was still running`);
+}
 /** A document that names its schema and nothing else the schema requires. */
 const BARE = Buffer.from("process.stdout.write(JSON.stringify({ schema: 'sentinel.notes/v1' }));\n");
 const SERVER_FILES = [
@@ -354,6 +386,86 @@ test(
     assert.ok(elapsed < 25_000, `the attempt settled in ${Math.round(elapsed)} ms, not after the sleeper's 30 s`);
   },
 );
+
+test(
+  'a descendant in a group of its own cannot outlive the attempt: the tree listed while it ran is killed at the exit',
+  needsStore,
+  async (t) => {
+    const s = await scripted(t, { hostScripts: true, entry: DETACHING });
+    const summary = await s.run(s.supplied());
+    assert.equal(summary.state, 'completed', JSON.stringify(summary.failures));
+    const publication = s.store.ledger.getPublication({ id: s.unit.id, revision: 1 })!;
+    assert.ok(publication, 'the script published once its interpreter exited');
+    const o = publication.outputs.find((x: any) => x.schema === 'sentinel.notes/v1')!;
+    const notes = JSON.parse((await s.store.readArtifact(o.id)).toString('utf8'));
+    assert.ok(Number.isSafeInteger(notes.sleeper) && notes.sleeper > 0);
+    await gone(notes.sleeper, 'the detached sleeper');
+  },
+);
+
+test('at the deadline every descendant is killed, one whose parent exited and one in a session of its own', async (t) => {
+  const { spawnBounded } = await import('../dist/execution/script-runner.js');
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-host-tree-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  // The interpreter starts a detached child; the child starts a detached grandchild and exits, so the grandchild's
+  // parent is no longer in the tree when the deadline comes. The interpreter itself never exits.
+  writeFileSync(
+    join(dir, 'child.mjs'),
+    [
+      "import { spawn } from 'node:child_process';",
+      "import { writeFileSync } from 'node:fs';",
+      "const grandchild = spawn('/bin/sleep', ['30'], { detached: true, stdio: 'ignore' });",
+      'grandchild.unref();',
+      "writeFileSync('grandchild.pid', String(grandchild.pid));",
+      'setTimeout(() => process.exit(0), 500);',
+      '',
+    ].join('\n'),
+  );
+  writeFileSync(
+    join(dir, 'entry.mjs'),
+    [
+      "import { spawn } from 'node:child_process';",
+      "import { writeFileSync } from 'node:fs';",
+      "const child = spawn(process.execPath, ['child.mjs'], { detached: true, stdio: 'ignore' });",
+      'child.unref();',
+      "writeFileSync('child.pid', String(child.pid));",
+      'setInterval(() => {}, 1000);',
+      '',
+    ].join('\n'),
+  );
+  const t0 = performance.now();
+  await assert.rejects(
+    spawnBounded(process.execPath, ['entry.mjs'], dir, {
+      signal: new AbortController().signal,
+      deadlineMs: 2_000,
+      maxOutputBytes: 1_024,
+    }),
+    (e: any) => e.code === 'sentinel.execution.deadlineExceeded',
+  );
+  assert.ok(performance.now() - t0 < 10_000, 'the attempt settled after its deadline, not after its descendants');
+  await gone(Number(readFileSync(join(dir, 'grandchild.pid'), 'utf8')), 'the grandchild whose parent exited');
+});
+
+test('a script tree is its known processes by start time and their descendants, never a reused pid', async () => {
+  const { treeOf } = await import('../dist/execution/script-runner.js');
+  const table = [
+    { pid: 10, ppid: 1, pgid: 10, started: 'a' },
+    { pid: 11, ppid: 10, pgid: 10, started: 'b' },
+    { pid: 12, ppid: 1, pgid: 12, started: 'c' },
+    { pid: 13, ppid: 12, pgid: 12, started: 'd' },
+    { pid: 14, ppid: 1, pgid: 14, started: 'reused' },
+    { pid: 15, ppid: 14, pgid: 14, started: 'e' },
+  ];
+  const pids = (rows: any[]) => rows.map((r) => r.pid).sort((a, b) => a - b);
+  // The live interpreter (10) and its child; 12 is known by its start, with its child; 14 reuses a known pid.
+  const known = new Map([
+    [12, 'c'],
+    [14, 'old'],
+  ]);
+  assert.deepEqual(pids(treeOf(table, known, 10)), [10, 11, 12, 13]);
+  assert.deepEqual(pids(treeOf(table, known)), [12, 13], 'without the live interpreter, only the known identities');
+  assert.deepEqual(pids(treeOf([], known, 10)), []);
+});
 
 test('an interpreter is measured before a script runs: its path, its digest and its version', async () => {
   const { interpreterOf, SH_UNVERSIONED } = await import('../dist/execution/script-runner.js');
