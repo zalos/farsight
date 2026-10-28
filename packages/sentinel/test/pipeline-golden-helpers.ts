@@ -1,8 +1,7 @@
 // The invoice-app example as planner inputs, for the declared-pipeline golden suite: the example copied into a
 // hermetic Git repository, captured into a real store at a fixed clock, parsed with the public parser, and planned
 // under the shipped rule packs, an adopted policy and the shipped (or a machine-independent) trusted profile. The
-// same inputs plan today's way (planBootstrap, planAnalysis, withReviewUnits through reviewsFor, exactly as
-// service/canonical.ts calls them) and through a declared pipeline; the suite compares the two byte for byte.
+// suite plans these inputs through a declared pipeline and compares the revisions with the recorded golden files.
 //
 // Two values are normalised so a recorded golden plan is the same on every host: the snapshot's environment profile
 // digest (it hashes the Node version, platform and architecture) and the bootstrap operations, which the
@@ -214,6 +213,19 @@ export function portableRegistry() {
     ...SCANNER_ADAPTERS.map((id) => drivers.get(id)!.definition),
   ]);
 }
+
+/**
+ * The registry the review seeds read their adapter digests from, for the recorded reviewed scenario: the portable
+ * registry, with each review operation's digest a fixed stand-in. An operation's real digest covers its module's
+ * built bytes, so a recorded review unit would otherwise change with any build.
+ */
+export const portableReviewRegistry = (base = portableRegistry()) => ({
+  ...base,
+  get: (id: string) =>
+    id === 'sentinel.review.guided' || id === 'sentinel.review.general'
+      ? { id, digest: D(`golden review adapter ${id}`) }
+      : base.get(id),
+});
 
 /** The shipped registry the CLI plans with (foundation operations, review adapters and the scanner adapters). */
 export const shippedRegistry = () => reviewRegistry(publicRegistry());
