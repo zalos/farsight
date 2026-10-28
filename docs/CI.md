@@ -62,15 +62,26 @@ Measured times are the job's own run time, not queueing; the run ids are GitHub 
 ### Native installed scanner CLI acceptance
 
 The separate `sentinel-scanner-cli` workflow runs on pull requests and pushes to `main`, with manual dispatch too.
-Its inexpensive selection job runs the selector's `scannerCli` output: the scanner closure, which is Sentinel and
-the parsers with their workspace closures (read from the manifests: code-parser, core, graph, parsers, sentinel),
-the scripts the workflow runs, and every path that selects every check. Inside Sentinel it leaves out what no step of
-the workflow exercises: agent review and its providers (`src/review/`, `service/review-adapter.ts`), the owner UI
-(`src/owner-ui/`), their test files, fixtures and core string catalogs. A viewer, server, CLI, Echo or work change
-does not start it; documentation-only changes skip the acceptance job; an unavailable range, failed selector or missing
-output cannot silently skip it. The closure is wider than the five folders the plan named because this workflow is the
-only place the native secret-privacy tests of reports, findings, evidence, decisions, paths, preparation and frameworks
-run.
+Its inexpensive selection job runs the selector's `scannerCli` output, the scanner closure, derived from what the
+workflow's steps execute rather than listed (`scannerCliClosure()` in `scripts/ci-changes.mjs`). Its entries are the
+files the steps name: the test files the native job runs, the scripts (the consumers, the browser check, the Trivy
+checks acquisition), the packer behind `pnpm pack:sentinel`, and the package's command, which the installed consumers
+run. From those it follows every import, export, dynamic import, `require` and `import.meta` file reference,
+workspace packages and the published `farsight-sentinel` name through their `exports`, and compiled `dist/` paths
+named as strings (the workers, launch gate and drivers), each mapped to its source: about 580 files today. A change
+reaches the workflow when it is one of those files or lies in a folder a reached test reads whole (the example
+application the full-report tests ingest, the advisory and IaC fixtures); when it is test data a reached test or script
+names; when it is another build input of a package the build step builds (its manifest or tsconfig, Sentinel's rules,
+assets and scripts); or when it is a source path that no longer exists, deleted or renamed away, which the closure of
+the tree as it is now cannot rule out. Agent review's dispatch, the review adapter and the owner UI operations are in
+the closure: the scanner tests read the review adapters through `review/dispatch`, and the installed consumer starts
+the owner service, which builds the owner UI operations. What no step runs or imports stays out: agent review's
+evaluation and owner provider, test files the workflow does not run and the fixtures only they read, another package's
+tests, the viewer, server, CLI, Echo and work. Documentation-only changes skip the acceptance job; every path that
+selects every check selects it; an unavailable range, unreadable workflow, failed selector or missing output cannot
+silently skip it. The closure is wider than the five folders the plan named (and reaches `examples/invoice-app`)
+because this workflow is the only place the native secret-privacy tests of reports, findings, evidence, decisions,
+paths, preparation and frameworks run.
 
 The selected `scanner-cli-linux-amd64` job requires a native non-root Ubuntu amd64 host, a Linux amd64 Docker daemon,
 Node 24 and the exact measured adapter pins. An explicit provisioning step verifies each index's amd64 manifest and
@@ -301,7 +312,7 @@ BASE_SHA=$(git merge-base origin/main HEAD) HEAD_SHA=$(git rev-parse HEAD) GITHU
 
 It prints the set and the pnpm command before running it, and counts committed changes only.
 
-The offline report browser test is explicitly selected with `SENTINEL_REPORT_BROWSER=1`; `CI=true` alone does not require a browser in the unit-test job. The e2e job runs it after provisioning Chromium whenever application e2e or Sentinel isolation checks are selected, and fails on a missing browser, failure, or skipped case.
+The offline report browser test is explicitly selected with `SENTINEL_REPORT_BROWSER=1`; `CI=true` alone does not require a browser in the unit-test job. The e2e job runs it after provisioning Chromium when the job runs and sentinel-package runs or validate tests Sentinel (the selector's `sentinel` or `service` output), as it does the other three Sentinel browser steps; an application e2e change alone, outside both, skips them. It fails on a missing browser, failure, or skipped case.
 
 When runtime checks are needed, build before tests. The tests import `dist/`, and e2e drives
 `packages/cli/dist/cli.js`. The full set is:

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Coarse CI boundaries, not a per-test dependency graph. Unknown inputs run everything.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { appendFileSync, readFileSync, readdirSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { appendFileSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildClosure, workspacePackages } from './pack-preflight.mjs';
 
@@ -54,44 +54,140 @@ export function sentinelIsolationInputs(root = repoRoot) {
   return dirs;
 }
 
-/**
- * The package directories the sentinel-scanner-cli workflow builds and runs over: Sentinel's workspace closure and
- * the parsers' (its full-report tests ingest an application through `packages/parsers/dist`), read from the manifests.
- */
-export function scannerCliInputs(root = repoRoot) {
-  const dirs = new Set(['sentinel']);
-  for (const entry of ['@farsight/sentinel', '@farsight/parsers']) {
-    const { closure, missing } = buildClosure(root, entry);
-    if (!closure.length || missing.length) throw new Error(`${entry} closure unreadable`);
-    for (const pkg of closure) dirs.add(basename(pkg.dir));
+const SCANNER_WORKFLOW = '.github/workflows/sentinel-scanner-cli.yml';
+const CODE = /\.(?:[cm]?[jt]s|tsx)$/;
+// import and export specifiers, dynamic imports, requires and import.meta-relative file references
+const SPECIFIERS = [
+  /\bfrom\s*['"]([^'"\n]+)['"]/g,
+  /\bimport\s*\(\s*['"]([^'"\n]+)['"]\s*\)/g,
+  /\bimport\s+['"]([^'"\n]+)['"]/g,
+  /\brequire(?:\.resolve)?\(\s*['"]([^'"\n]+)['"]\s*\)/g,
+  /\bnew URL\(\s*['"]([^'"\n]+)['"]\s*,\s*import\.meta\.url/g,
+];
+// a compiled file named by its path under a package's dist/, as workers, gates and drivers are ('execution/launch-gate')
+const DIST_PATH = /['"`](?:dist\/)?([a-z][\w-]*(?:\/[\w.-]+)+)['"`]/g;
+// the published name the consumers import the installed tarball by
+const PUBLISHED = new Map([['farsight-sentinel', '@farsight/sentinel']]);
+
+/** A compiled file's source: `packages/<p>/dist/x.js` is `packages/<p>/src/x.ts` (or .tsx, .js, .mjs). */
+function sourceOf(root, path) {
+  const dist = /^(packages\/[^/]+)\/dist\/(.+?)\.(?:js|mjs|d\.ts)$/.exec(path);
+  const candidates = dist
+    ? ['ts', 'tsx', 'js', 'mjs'].map((ext) => `${dist[1]}/src/${dist[2]}.${ext}`)
+    : [path, ...(path.endsWith('.js') ? [path.replace(/\.js$/, '.ts')] : [])];
+  return candidates.find((candidate) => existsSync(join(root, candidate))) ?? null;
+}
+
+/** The file a package subpath (`.` or `./x`) names, by its manifest's `exports` (patterns included), else its `main`. */
+function exportTarget(manifest, sub) {
+  const { exports } = manifest;
+  if (exports === undefined) return sub === '.' ? (manifest.main ?? 'index.js') : sub;
+  const map =
+    typeof exports === 'string' || !Object.keys(exports).some((k) => k.startsWith('.')) ? { '.': exports } : exports;
+  const pick = (entry) => (typeof entry === 'string' ? entry : (entry?.import ?? entry?.default ?? null));
+  if (map[sub] !== undefined) return pick(map[sub]);
+  for (const [key, entry] of Object.entries(map)) {
+    const star = key.indexOf('*');
+    const [head, tail] = [key.slice(0, star), key.slice(star + 1)];
+    if (star >= 0 && sub.startsWith(head) && sub.endsWith(tail) && sub.length >= head.length + tail.length)
+      return pick(entry)?.replace('*', sub.slice(head.length, sub.length - tail.length)) ?? null;
   }
-  return dirs;
+  return null;
+}
+
+/** The files the sentinel-scanner-cli workflow's steps name: tests, scripts, the packer, the package's command. */
+function scannerCliEntries(workflow, sentinel) {
+  const entries = new Set();
+  for (const [file] of workflow.matchAll(/\btest\/[\w.-]+\.test\.ts\b/g)) entries.add(`packages/sentinel/${file}`);
+  for (const [, file] of workflow.matchAll(/(?<![\w/.-])((?:packages\/sentinel\/)?scripts\/[\w.-]+\.mjs)\b/g))
+    entries.add(file);
+  if (/\bpnpm pack:sentinel\b/.test(workflow)) entries.add('scripts/pack-sentinel.mjs');
+  for (const bin of Object.values(sentinel.bin ?? {})) entries.add(join('packages/sentinel', bin).split(sep).join('/'));
+  return entries;
 }
 
 /**
- * What that workflow does not exercise, though it lies inside those packages: agent review and its providers, the
- * owner UI, their tests and fixtures, and their string catalogs. None of its tests or installed consumers imports them.
+ * Every file the sentinel-scanner-cli workflow executes, from the files its steps name: the test files it runs, the
+ * scripts it runs (`pnpm pack:sentinel` is the packer), and, because its consumers install the tarball and run it, the
+ * package's command. Followed through every import, export, dynamic import, require and import.meta file reference,
+ * workspace packages (and the published name) through their `exports`, and through compiled `dist/` paths named as
+ * strings (workers, gates, drivers), each mapped to its source. Returns the root, the files (repository paths), the
+ * folders read whole (the example application the full-report tests ingest), the packages its build step builds
+ * (both closures, read from the manifests) and the text of the test and script files reached, which names the
+ * fixtures they read. Unreadable inputs throw, and the caller then selects every check.
  */
-const SCANNER_CLI_SKIPS = [
-  /^packages\/sentinel\/src\/(?:review|owner-ui)\//,
-  /^packages\/sentinel\/src\/service\/review-adapter\.ts$/,
-  /^packages\/sentinel\/test\/(?:review[-.]|providers\.|provider-helpers\.|cli-copilot|cli-native|cli-review|model-budget|agentic-only|retained-wire|owner-ui-)/,
-  /^packages\/sentinel\/test\/fixtures\/(?:model-budget|model-review|retained-wire|stage-packs)\//,
-  /^packages\/sentinel\/test\/fixtures\/review-instructions-runner\.mjs$/,
-  /^packages\/core\/src\/(?:strings-sentinel-(?:providers|review|instructions|owner-ui|viewer)|sentinel-companion)\.ts$/,
-];
+export function scannerCliClosure(root = repoRoot) {
+  const workflow = readFileSync(join(root, SCANNER_WORKFLOW), 'utf8');
+  const packages = workspacePackages(root);
+  const dirOf = new Map([...packages].map(([name, { dir }]) => [name, `packages/${basename(dir)}`]));
+  const sentinel = packages.get('@farsight/sentinel')?.manifest;
+  if (!sentinel) throw new Error('@farsight/sentinel has no manifest');
+  const resolveFrom = (from, spec) => {
+    let target = null;
+    if (spec.startsWith('.')) target = relative(root, resolve(root, dirname(from), spec));
+    else {
+      const [, bare, rest] = /^((?:@[\w.-]+\/)?[\w.-]+)(?:\/(.*))?$/.exec(spec) ?? [];
+      const name = PUBLISHED.get(bare) ?? bare;
+      const file = packages.has(name) ? exportTarget(packages.get(name).manifest, rest ? `./${rest}` : '.') : null;
+      if (file) target = join(dirOf.get(name), file);
+    }
+    return target && !target.startsWith('..') ? sourceOf(root, target.split(sep).join('/')) : null;
+  };
+  const files = new Set(),
+    dirs = new Set();
+  let mentions = '';
+  for (const queue = [...scannerCliEntries(workflow, sentinel)]; queue.length;) {
+    const next = queue.pop();
+    const source = next && sourceOf(root, next);
+    if (!source || files.has(source)) continue;
+    if (statSync(join(root, source)).isDirectory()) {
+      // a folder a test reads whole (the example application it ingests, a fixture tree), not a base path to resolve from
+      if (!/^(?:|packages\/[^/]+(?:\/(?:src|test|dist))?)$/.test(source)) dirs.add(source);
+      continue;
+    }
+    files.add(source);
+    if (!CODE.test(source)) continue;
+    const text = readFileSync(join(root, source), 'utf8');
+    if (/^(?:scripts|packages\/[^/]+\/(?:test|scripts))\//.test(source)) mentions += `\n${text}`;
+    for (const pattern of SPECIFIERS)
+      for (const [, spec] of text.matchAll(pattern)) queue.push(resolveFrom(source, spec));
+    // a package's own dist/ paths; a script's are the installed Sentinel tarball's
+    const own = /^(packages\/[^/]+)\//.exec(source)?.[1] ?? 'packages/sentinel';
+    for (const [, stem] of text.matchAll(DIST_PATH))
+      queue.push(`${own}/dist/${stem.replace(/\.(?:m?js|d\.ts)$/, '')}.js`);
+  }
+  const built = new Set();
+  for (const entry of ['@farsight/sentinel', '@farsight/parsers']) {
+    const { closure, missing } = buildClosure(root, entry);
+    if (!closure.length || missing.length) throw new Error(`${entry} closure unreadable`);
+    for (const pkg of closure) built.add(basename(pkg.dir));
+  }
+  if (!files.size) throw new Error('The scanner workflow names no files');
+  return { root, files, dirs, packages: built, mentions };
+}
 
-/** The scripts the scanner workflow runs, besides the selector and the workflow (which select every check). */
-const SCANNER_CLI_SCRIPTS =
-  /^scripts\/(?:pack-sentinel|sentinel-evidence-provenance|test-sentinel-report-browser|test-sentinel-(?:scanner|framework|mcp|evidence|decisions|paths)-consumer)\.mjs$/;
-
-/** Whether one changed path reaches the sentinel-scanner-cli workflow. */
+/**
+ * Whether one changed path reaches the sentinel-scanner-cli workflow, by that closure: a file it executes, or one in
+ * a folder it reads whole; a fixture or other test data a reached test or script names; a built package's other build
+ * inputs (its manifest, its tsconfig, Sentinel's rules, assets and scripts), outside `src/` and `test/`; and a source
+ * path that no longer exists (deleted, or renamed away), which the closure of the tree as it is now cannot rule out.
+ */
 function reachesScannerCli(path, scanner) {
-  if (SCANNER_CLI_SKIPS.some((skip) => skip.test(path))) return false;
-  if (SCANNER_CLI_SCRIPTS.test(path) || path.startsWith('packages/sentinel/')) return true;
-  // the other packages' code, not their own tests
-  const dir = /^packages\/([^/]+)\/(?!test\/)/.exec(path)?.[1];
-  return Boolean(dir && scanner.has(dir));
+  if (scanner.files.has(path) || [...scanner.dirs].some((dir) => path.startsWith(`${dir}/`))) return true;
+  const inPackage = /^packages\/([^/]+)\/([^/]+)(?:\/(.*))?$/.exec(path);
+  if (!inPackage) return false;
+  const [, pkg, top, rest = ''] = inPackage;
+  if (!scanner.packages.has(pkg)) return false;
+  if (top === 'src') return !existsSync(join(scanner.root, path)); // a source it executes is in `files` already
+  if (top !== 'test') return true; // build inputs
+  if (pkg !== 'sentinel') return false; // another package's own tests
+  const parts = rest.split('/');
+  if (parts[0] !== 'fixtures' && CODE.test(path)) return false; // a test file or helper no step runs or imports
+  // test data, fixtures included: reached when a reached test or script names its folder or file
+  const name = (parts[0] === 'fixtures' ? parts[1] : parts[0])?.replace(/\.[^.]+$/, '');
+  if (!name) return false;
+  const quoted = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:fixtures/|['"/])${quoted}\\b`).test(scanner.mentions);
 }
 
 /** The skills trees: read only by the script tests (scripts/check-skills-mirror.mjs), never by a package's tests. */
@@ -170,7 +266,7 @@ export function selectChecks(paths, { root = repoRoot, packageInputs, isolationI
   try {
     inputs = packageInputs ?? sentinelPackageInputs(root);
     isolation = isolationInputs ?? sentinelIsolationInputs(root);
-    scanner = scannerInputs ?? scannerCliInputs(root);
+    scanner = scannerInputs ?? scannerCliClosure(root);
   } catch {
     return all();
   } // unreadable manifests: everything

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { selectChecks, detectChecks } from '../ci-changes.mjs';
+import { scannerCliClosure, selectChecks, detectChecks } from '../ci-changes.mjs';
 import { suiteFiles } from '../sentinel-tests.mjs';
 import { CONSUMERS } from '../test-sentinel-consumers.mjs';
 // pnpm test:sentinel:package packs once and runs every installed consumer through the parallel runner.
@@ -66,39 +66,85 @@ test('scanner CLI acceptance selects source, captured inputs, owner gates, packs
   );
 });
 
-test('the scanner workflow skips what it does not exercise: agent review, the owner UI, the viewer and the CLI', () => {
+test('the scanner workflow runs for what its steps execute: review dispatch and the owner service included', () => {
+  // the scanner tests call publicRegistry(), which reads the review adapters through review/dispatch; the installed
+  // consumer starts the owner service, which builds the owner UI operations
   for (const path of [
+    'packages/sentinel/src/review/dispatch.ts',
+    'packages/sentinel/src/service/review-adapter.ts',
+    'packages/sentinel/src/owner-ui/operations.ts',
     'packages/sentinel/src/execution/coordinator.ts',
     'packages/sentinel/src/reports/html.ts',
     'packages/sentinel/src/findings/compare.ts',
     'packages/sentinel/src/kernel/digest.ts',
     'packages/sentinel/test/evidence-privacy.test.ts',
     'packages/sentinel/test/fixtures/workers/hostile-worker.mjs',
+    'packages/sentinel/test/fixtures/advisories/README.md',
     'packages/core/src/counts.ts',
+    'packages/code-parser/src/tsjs.ts',
+    'packages/code-parser/src/java/index.ts',
     'packages/parsers/src/tsjs.ts',
+    'examples/invoice-app/screens.json',
     'scripts/test-sentinel-evidence-consumer.mjs',
+    'scripts/sentinel-evidence-provenance.mjs',
   ])
     assert.equal(selected([path]), true, path);
+  // what no step runs or imports: agent review's evaluation and owner provider, test files the workflow does not run
+  // and the fixtures only they read, another package's tests, and the viewer, the server, the CLI and Echo
   for (const path of [
-    'packages/sentinel/src/review/dispatch.ts',
-    'packages/sentinel/src/review/providers/broker.ts',
-    'packages/sentinel/src/service/review-adapter.ts',
-    'packages/sentinel/src/owner-ui/host.ts',
+    'packages/sentinel/src/review/evaluation.ts',
+    'packages/sentinel/src/review/providers/owner.ts',
     'packages/sentinel/test/review-packs.test.ts',
     'packages/sentinel/test/cli-copilot-native.test.ts',
     'packages/sentinel/test/owner-ui-browser.test.ts',
     'packages/sentinel/test/fixtures/model-review/a.json',
-    'packages/core/src/strings-sentinel-review.ts',
-    'packages/core/src/sentinel-companion.ts',
     'packages/parsers/test/tsjs.test.ts',
     'packages/server/public/app/surfaces/sentinel.js',
     'packages/server/src/index.ts',
     'packages/cli/src/cli.ts',
     'packages/echo/src/cli.ts',
+    'examples/nx-workspace/package.json',
     'scripts/test-sentinel-package.mjs',
   ])
     assert.equal(selected([path]), false, path);
-  assert.equal(selected(['packages/sentinel/src/review/dispatch.ts', 'packages/sentinel/src/execution/x.ts']), true);
+  assert.equal(selected(['packages/sentinel/src/review/evaluation.ts', 'packages/sentinel/src/execution/x.ts']), true);
+});
+
+test("the scanner closure is derived from the workflow's steps and their imports, not a list of folders", () => {
+  const closure = scannerCliClosure();
+  // the entries the steps name: the tests they run, the scripts, the packer and the package's command
+  for (const file of [
+    'packages/sentinel/test/cli-scanners-e2e.test.ts',
+    'scripts/test-sentinel-scanner-consumer.mjs',
+    'scripts/pack-sentinel.mjs',
+    'packages/sentinel/src/cli.ts',
+  ])
+    assert.ok(closure.files.has(file), file);
+  // reached through workspace exports, the published name, and dist paths named as strings (workers and gates)
+  for (const file of [
+    'packages/code-parser/src/support.ts',
+    'packages/sentinel/src/reports/index.ts',
+    'packages/sentinel/src/execution/launch-gate.ts',
+  ])
+    assert.ok(closure.files.has(file), file);
+  assert.ok(closure.dirs.has('examples/invoice-app'), 'the example application the full-report tests ingest');
+  assert.ok(![...closure.dirs].some((dir) => /^packages\/[^/]+$/.test(dir)), 'a package root is a base path, not data');
+  assert.deepEqual([...closure.packages].sort(), ['code-parser', 'core', 'graph', 'parsers', 'sentinel']);
+  // more than the five folders the build step names: the closure is files, so it is wider in places and narrower
+  assert.ok(closure.files.size > 400 && closure.files.size < 700, String(closure.files.size));
+
+  const empty = mkdtempSync(join(tmpdir(), 'farsight-scanner-closure-'));
+  try {
+    assert.throws(() => scannerCliClosure(empty), /ENOENT/);
+    const checks = selectChecks(['docs/VISION.md'], {
+      root: empty,
+      packageInputs: new Set(),
+      isolationInputs: new Set(),
+    });
+    assert.equal(checks.scannerCli, true, 'an unreadable workflow selects every check');
+  } finally {
+    rmSync(empty, { recursive: true, force: true });
+  }
 });
 test('workflow image indexes and native manifests exactly match all five adapter source pins', () => {
   const engines = [

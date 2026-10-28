@@ -41,8 +41,8 @@ jobs:
           import { appendFileSync } from 'node:fs';
           import { detectChecks } from './scripts/ci-changes.mjs';
           const { checks, reason } = detectChecks({ base: process.env.BASE_SHA, head: process.env.HEAD_SHA, event: process.env.GITHUB_EVENT_NAME });
-          // Sentinel and the parsers with their workspace closure, minus agent review, the owner UI and their
-          // tests and catalogs, which no step here exercises; an unavailable range selects it (scripts/ci-changes.mjs)
+          // Every file this workflow's steps execute, followed from the tests, scripts and command they name through
+          // their imports (scannerCliClosure in scripts/ci-changes.mjs); an unavailable range selects it
           const run = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || checks.scannerCli;
           appendFileSync(process.env.GITHUB_OUTPUT, `run=${run}\n`);
           console.log(`${reason}; scanner CLI: ${run ? 'run' : 'skip'}`);

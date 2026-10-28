@@ -101,8 +101,9 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
     // validate tests Sentinel (so sentinel-service runs) for the parsers, whose dist its report tests ingest through,
     // and for examples/ (every package)
     const service = /^(?:packages\/parsers|examples)\//.test(path);
-    // the scanner workflow ingests through the parsers' dist, so their code (not the CLI's) reaches it too
-    const scannerCli = path.startsWith('packages/parsers/');
+    // the scanner workflow ingests the example application through the parsers' dist, so their code and the
+    // example (not the CLI's code) reach it too
+    const scannerCli = /^(?:packages\/parsers|examples\/invoice-app)\//.test(path);
     assert.deepEqual(
       selectChecks([path]),
       { ...none, validate: true, e2e: true, sentinel: true, service, scannerCli },
@@ -258,13 +259,19 @@ test('Sentinel code and tests select offline report delivery in the browser job;
       path,
     );
   }
+  // the scanner workflow runs neither test file nor reads that fixture: no step executes them
   assert.deepEqual(
     selectChecks([
       'packages/sentinel/test/reports.test.ts',
       'packages/sentinel/test/contracts.test.ts',
       'packages/sentinel/test/fixtures/feasibility/a.ts',
     ]),
+    { ...none, validate: true, e2e: true, isolation: true, recovery: true, service: true },
+  );
+  assert.deepEqual(
+    selectChecks(['packages/sentinel/test/cli-scanners-e2e.test.ts']),
     { ...none, validate: true, e2e: true, isolation: true, recovery: true, service: true, scannerCli: true },
+    'a test file the scanner workflow runs',
   );
   assert.deepEqual(selectChecks(['packages/sentinel/README.md']), { ...none, sentinel: true, scannerCli: true });
   assert.deepEqual(selectChecks(['scripts/test-sentinel-package.mjs']), { ...none, sentinel: true });
@@ -395,6 +402,66 @@ test('real git ranges handle PR branch points, multiple push commits, deletion a
       readFileSync(summary, 'utf8'),
       /validate tests: @farsight\/cli, @farsight\/mcp, @farsight\/server \(the changed packages and their dependents, with @farsight\/mcp, whose tests read a reached package's files\)/,
     );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a deleted or renamed scanner dependency still starts the scanner workflow, from a real range', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'farsight-ci-scanner-'));
+  const git = (args) =>
+    execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const write = (path) => {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), 'export {};\n');
+  };
+  const commit = (message) => {
+    git(['add', '-A']);
+    git([
+      '-c',
+      'user.name=Test',
+      '-c',
+      'user.email=dev@example.com',
+      '-c',
+      'core.hooksPath=/dev/null',
+      'commit',
+      '-m',
+      message,
+    ]);
+    return git(['rev-parse', 'HEAD']);
+  };
+  // the range comes from this repository; the closure from the real tree, as on CI (the PR head is checked out)
+  const scanner = (base, head) => detectChecks({ base, head, event: 'pull_request', cwd: dir }).checks.scannerCli;
+  try {
+    git(['init', '-b', 'main']);
+    // a file the workflow executes (the coordinator), one it does not (agent review's evaluation), and a source this
+    // tree no longer has, so a deletion cannot be checked against the closure of the tree as it is now
+    const reached = 'packages/sentinel/src/execution/coordinator.ts';
+    const unreached = 'packages/sentinel/src/review/evaluation.ts';
+    const retired = 'packages/sentinel/src/execution/retired-driver.ts';
+    for (const path of [reached, unreached, retired, 'docs/README.md']) write(path);
+    const base = commit('chore: initial');
+
+    rmSync(join(dir, retired));
+    const deleted = commit('refactor(sentinel): retire a driver');
+    assert.deepEqual(changedPaths({ base, head: deleted, event: 'pull_request', cwd: dir }), [retired]);
+    assert.equal(scanner(base, deleted), true, 'a deleted source selects the scanner workflow');
+
+    git(['switch', '-c', 'rename', base]);
+    renameSync(join(dir, reached), join(dir, 'packages/sentinel/src/execution/coordinator-moved.ts'));
+    const renamed = commit('refactor(sentinel): rename the coordinator');
+    assert.ok(changedPaths({ base, head: renamed, event: 'pull_request', cwd: dir }).includes(reached));
+    assert.equal(scanner(base, renamed), true, 'a scanner dependency renamed away selects the scanner workflow');
+
+    git(['switch', '-c', 'docs', base]);
+    renameSync(join(dir, reached), join(dir, 'docs/coordinator.md'));
+    const intoDocs = commit('docs: move the coordinator');
+    assert.equal(scanner(base, intoDocs), true, 'renamed into docs, its old path still counts');
+
+    git(['switch', '-c', 'review', base]);
+    renameSync(join(dir, unreached), join(dir, 'docs/evaluation.md'));
+    const review = commit('docs: move the evaluation');
+    assert.equal(scanner(base, review), false, 'a file no scanner step executes, moved away, does not');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
