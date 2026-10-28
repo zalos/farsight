@@ -11,6 +11,7 @@ import type { ServiceClient } from '../transport/ipc.js';
 import { validateEnvelope } from '../validate.js';
 import { OUTCOME_EXIT_CODES } from '../cli/outcome.js';
 import { RUN_STATES } from '../contracts/index.js';
+import { ID_PATTERN } from '../kernel/ids.js';
 import { CONTROL_OPERATIONS, controlOutcome } from './controls.js';
 import {
   PREPARATION_OPERATIONS,
@@ -115,6 +116,18 @@ function legacyProjection(op: string, value: any): unknown {
         : null,
   };
 }
+/**
+ * The MCP server over stdio for this workspace: a read-and-control channel to the running owner service, never the
+ * owner. At startup it connects to that service and reads its capabilities; when no service runs or its capabilities do
+ * not validate, it refuses with `sentinel.service.operationUnavailable` before any tool exists. It then lists one tool
+ * per operation the service offers, plus the control and preparation tools when the service negotiates them for the
+ * same store and epoch, and returns 0 when its input ends. A tool call answers the operation's projection, or an
+ * error result with its code: `sentinel.service.operationUnavailable` for a tool or operation the service no longer
+ * offers or a connection that cannot be made again, `sentinel.service.requestInvalid` for arguments outside the tool's
+ * schema, `sentinel.ipc.canceled` when the caller cancels, `sentinel.service.controlOutcomeUnknown` or
+ * `sentinel.preparation.outcomeUnknown` once a control or preparation was sent and its answer was lost, and otherwise
+ * the failure's own code when the catalog has it, else `sentinel.service.operationUnavailable`.
+ */
 export async function runMcp(ws: Workspace): Promise<number> {
   let client: ServiceClient | undefined;
   const connection = async () => {
@@ -197,7 +210,7 @@ export async function runMcp(ws: Workspace): Promise<number> {
           Object.keys(args).length !== 1 ||
           !Object.hasOwn(args, required) ||
           typeof args[required] !== 'string' ||
-          !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(args[required] as string)
+          !ID_PATTERN.test(args[required] as string)
         )
           throw fail('sentinel.service.requestInvalid');
       }

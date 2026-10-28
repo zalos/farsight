@@ -12,6 +12,10 @@ import type { RuleLockEnvelope } from '../contracts/rules.js';
 import { builtinPackDir } from './package-paths.js';
 export { PATHS_ADAPTER_ID };
 const adapters = new Map<string, ReturnType<typeof boundedPathsAdapter>>();
+/**
+ * The bounded-paths adapter registered under the trust directory, created once per directory with its private entry
+ * folder.
+ */
 export function pathAdapter(trustDir: string) {
   assertCanonicalStorePath(trustDir);
   const dir = join(trustDir, 'adapters', PATHS_ADAPTER_ID);
@@ -24,9 +28,14 @@ export function pathAdapter(trustDir: string) {
   }
   return adapter;
 }
+/** True when `pack` is the shipped bounded-paths rule pack, by pack digest. */
 export function shippedPathPack(pack: ValidatedPack): boolean {
   return pack.entry.packDigest === validatePack(readPackDirectory(builtinPackDir('bounded-paths')!)).entry.packDigest;
 }
+/**
+ * True when the owner promoted exactly the shipped bounded-paths pack: held, in the rule lock, and holding only the
+ * supported rules, each implemented by this adapter.
+ */
 export function pathsAvailable(lock: RuleLockEnvelope, packs: readonly ValidatedPack[]): boolean {
   const held = packs.find(shippedPathPack);
   return Boolean(

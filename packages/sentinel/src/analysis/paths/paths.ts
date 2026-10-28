@@ -6,7 +6,6 @@
 // outgoing edges than the fan-out bound, the depth or visit bound and an incomplete parser analysis are frontiers, so
 // absence is never claimed past them. A path is call reachability only: it never establishes data flow, taint,
 // sanitization or protection, and guard, validation and test edges are not traversed at all.
-import { createHash } from 'node:crypto';
 import { canonicalJson, type GraphEdge, type GraphNode } from '@farsight/graph';
 import type { AnalysisArtifact } from '@farsight/code-parser';
 import type {
@@ -24,10 +23,16 @@ import type {
 } from '../../contracts/index.js';
 import { validateEnvelope } from '../../validate.js';
 import { digestOf } from '../../store/ledger-json.js';
+import { sha256Id } from '../../kernel/digest.js';
+import { SentinelError } from '../../kernel/errors.js';
 import { localNames, scanBody } from './body.js';
 
+/** The implementation every path evidence document names. */
 export const PATHS_IMPLEMENTATION = 'sentinel-bounded-paths/draft-1';
 
+/**
+ * Why a path query stopped short or a step is only partly known: the closed set of `sentinel.paths.*` frontier codes.
+ */
 export const PATH_REASON_CODES = Object.freeze([
   'sentinel.paths.unresolvedCall',
   'sentinel.paths.fanoutLimit',
@@ -46,8 +51,13 @@ export const PATH_REASON_CODES = Object.freeze([
   'sentinel.paths.shadowedCall',
   'sentinel.paths.escapedIdentifier',
 ] as const);
+/** One of `PATH_REASON_CODES`. */
 export type PathReason = (typeof PATH_REASON_CODES)[number];
 
+/**
+ * The bounds a query runs under unless the request narrows them: call edges only, depth 12, fan-out 256, 50,000 nodes
+ * visited.
+ */
 export const DEFAULT_PATH_BOUNDS: Readonly<PathBounds> = Object.freeze({
   edgeKinds: ['calls'] as PathEdgeKind[],
   maxDepth: 12,
@@ -59,12 +69,13 @@ const MAX_QUERIES = 10_000;
 const MAX_CYCLES = 1_000;
 const MAX_SITES = 16;
 
-export class PathError extends Error {
-  constructor(
-    readonly code: 'sentinel.paths.invalidInput' | 'sentinel.paths.unbound',
-    message: string,
-  ) {
-    super(message);
+/**
+ * A path query refused: `sentinel.paths.invalidInput` for a request or bound out of range, `sentinel.paths.unbound`
+ * for evidence that does not bind to its capture.
+ */
+export class PathError extends SentinelError<'sentinel.paths.invalidInput' | 'sentinel.paths.unbound'> {
+  constructor(code: PathError['code'], message: string) {
+    super(code, message);
     this.name = 'PathError';
   }
 }
@@ -94,15 +105,13 @@ export interface PathAnalysis {
   };
 }
 
+/** One query: the node a path starts from and the node it should reach. */
 export interface PathQuery {
   readonly from: string;
   readonly to: string;
 }
 
-const sha = (v: unknown): Digest =>
-  `sha256:${createHash('sha256')
-    .update(typeof v === 'string' ? v : canonicalJson(v))
-    .digest('hex')}`;
+const sha = (v: unknown): Digest => sha256Id(typeof v === 'string' ? v : canonicalJson(v));
 
 interface GraphIndex {
   readonly nodes: ReadonlyMap<string, GraphNode>;
@@ -476,6 +485,10 @@ async function search(
   };
 }
 
+/**
+ * What a path search reads: one snapshot, a reader of its captured bytes, one source's parser evidence, the queries and
+ * optional narrower bounds.
+ */
 export interface PathRequest {
   /** The snapshot the parser evidence is for: every location the index cites must be one of its captured files. */
   readonly snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>;
@@ -498,6 +511,10 @@ export interface PathTraversalControl {
   visit(): void;
   result(value: unknown): void;
 }
+/**
+ * `boundedCallPaths` under a worker's `control`, which is told every boundary, step, visit and result so the shared
+ * budget can refuse the invocation.
+ */
 export async function controlledCallPaths(
   request: PathRequest,
   control: PathTraversalControl,
@@ -545,7 +562,7 @@ async function callPaths(request: PathRequest, control?: PathTraversalControl): 
       cache.set(
         content,
         (p = request.readContent(content).then((bytes) => {
-          if (`sha256:${createHash('sha256').update(bytes).digest('hex')}` !== content)
+          if (sha256Id(bytes) !== content)
             throw new PathError('sentinel.paths.unbound', 'the reader returned bytes that are not the cited content');
           return bytes;
         })),

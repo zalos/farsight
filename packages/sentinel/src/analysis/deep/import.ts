@@ -9,7 +9,6 @@
 // (1) is refused; failing (2) yields nothing; a flow failing (3) is unknown, never an observation. Accepted flows become `imported` observations
 // that carry the tool's claim and its stated scope only: they never count as a check Sentinel executed, and the
 // analyzer's mode name is recorded, never read as a capability.
-import { createHash } from 'node:crypto';
 import { canonicalJson } from '@farsight/graph';
 import type {
   ArtifactId,
@@ -23,7 +22,12 @@ import type {
 import { parseEnvelope, validateEnvelope } from '../../validate.js';
 import { intentDigest, receiptAuthority } from '../../policy/receipts.js';
 import type { ActionIntent } from '../../contracts/index.js';
+import { sha256Id } from '../../kernel/digest.js';
 
+/**
+ * Why a deep import, a file it read or one of its flows was refused or left unknown, and the limitations every imported
+ * flow carries: the closed set of `sentinel.deep.*` catalog codes.
+ */
 export const DEEP_REASON_CODES = Object.freeze([
   'sentinel.deep.malformed',
   'sentinel.deep.notOwnerConfirmed',
@@ -37,6 +41,7 @@ export const DEEP_REASON_CODES = Object.freeze([
   'sentinel.deep.toolScopeOnly',
   'sentinel.deep.buildStated',
 ] as const);
+/** One of `DEEP_REASON_CODES`. */
 export type DeepReason = (typeof DEEP_REASON_CODES)[number];
 
 /** What this build supports for deep analysis: no engine. Deep checks stay unsupported; import is the only path. */
@@ -67,6 +72,10 @@ export function deepImportIntent(document: string | Uint8Array, snapshotId: stri
   };
 }
 
+/**
+ * What `importDeepAnalysis` checks: the untrusted document, the snapshot it claims to describe, the owner's spent
+ * receipt for it, and a reader of captured bytes.
+ */
 export interface DeepImportRequest {
   /** The raw document bytes or text: untrusted, parsed and validated here. */
   readonly document: string | Uint8Array;
@@ -78,6 +87,11 @@ export interface DeepImportRequest {
   readonly importedAt: string;
 }
 
+/**
+ * The outcome of a deep import: `refused` (the document is malformed), `untrusted` (no matching owner receipt),
+ * `unbound` (its files are not this capture's), or `imported` with its accepted flows as imported observations, its
+ * unknown flows and the scope the tool's claim holds over.
+ */
 export type DeepImportResult =
   | { readonly status: 'refused'; readonly reasonCode: DeepReason; readonly detail: string }
   | { readonly status: 'untrusted'; readonly reasonCode: DeepReason; readonly documentDigest: Digest }
@@ -104,9 +118,17 @@ export type DeepImportResult =
       readonly limitationKeys: readonly DeepReason[];
     };
 
-const sha = (b: string | Uint8Array): Digest => `sha256:${createHash('sha256').update(b).digest('hex')}`;
+const sha = (b: string | Uint8Array): Digest => sha256Id(b);
 const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024;
 
+/**
+ * Imports a customer's deep-analysis document. A document over 64 MiB, not UTF-8 or not a valid
+ * `sentinel-deep-import/draft-1` is `refused` (`sentinel.deep.malformed`); without the owner's spent `evidence.import`
+ * receipt for exactly this document and snapshot it is `untrusted` (`sentinel.deep.notOwnerConfirmed`); a source or
+ * file that is not this capture's, or bytes that differ, make it `unbound`. Otherwise each flow whose locations sit
+ * inside the files it read becomes an `imported` observation; any other flow is unknown with its reason. Nothing is
+ * executed or downloaded, and no imported flow counts as a check Sentinel ran.
+ */
 export async function importDeepAnalysis(request: DeepImportRequest): Promise<DeepImportResult> {
   const bytes =
     typeof request.document === 'string' ? Buffer.from(request.document, 'utf8') : Buffer.from(request.document);
