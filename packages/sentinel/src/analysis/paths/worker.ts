@@ -17,11 +17,12 @@ const P = 'sentinel-worker/draft-1',
  * and reports it. Its exit codes:
  * - 0 after a cancel (before the welcome, before the start, or after it with a cancel acknowledgement) or when its
  *   input ends;
- * - 9 when the message after its hello is not a welcome;
- * - 3 for input past 1 MiB or more than four queued messages, a line that is not JSON, a start that is not this
- *   adapter's valid start (its job a sealed digest among at most 1,024 inputs), a deadline that is not finite, and a
- *   refusal, which it first reports as a diagnostic with `sentinel.paths.budgetExceeded` (a budget, its deadline or a
- *   cancel) or `sentinel.paths.unbound` (any other failure, such as a read the job did not seal).
+ * - 9 when the object after its hello is not a welcome;
+ * - 3 for input past 1 MiB or more than four queued messages, a line that is not a JSON object (bad JSON, or null, a
+ *   number, a string or an array), a start that is not this adapter's valid start (its job a sealed digest among at
+ *   most 1,024 inputs), a deadline that is not finite, and a refusal, which it first reports as a diagnostic with
+ *   `sentinel.paths.budgetExceeded` (a budget, its deadline or a cancel) or `sentinel.paths.unbound` (any other
+ *   failure, such as a read the job did not seal).
  */
 export async function runBoundedPathsWorker(): Promise<void> {
   const input = process.env.SENTINEL_INPUT!,
@@ -42,6 +43,8 @@ export async function runBoundedPathsWorker(): Promise<void> {
       } catch {
         process.exit(3);
       }
+      // A protocol message is a JSON object; null, a number, a string or an array is malformed input like bad JSON.
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) process.exit(3);
       pending = pending.slice(nl + 1);
       if (started && value.type === 'cancel') {
         canceled.abort();

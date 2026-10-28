@@ -474,3 +474,36 @@ test('genuine fixed child cancellation before start accepts no result or output'
   assert.deepEqual(outcome.outputs, []);
   assert.ok(outcome.exit);
 });
+
+// A protocol message is a JSON object. Any other JSON value at the welcome or start position (null, a number, a
+// string, an array) is malformed input: the worker exits 3, as for a line that is not JSON, and never crashes with 1.
+test('a message that is not a JSON object exits 3 at the welcome and start positions, with no stack trace', async (t) => {
+  const worker = new URL('../dist/analysis/paths/worker.js', import.meta.url).pathname;
+  const dir = scratch(t);
+  const run = (lines: readonly string[]) =>
+    new Promise<{ code: number | null; signal: NodeJS.Signals | null; stderr: string }>((resolve) => {
+      const child = childProcess.spawn(process.execPath, [worker], {
+        env: {
+          SENTINEL_ADAPTER_ID: 'bounded-paths',
+          SENTINEL_ADAPTER_DIGEST: `sha256:${'0'.repeat(64)}`,
+          SENTINEL_INPUT: join(dir, 'in'),
+          SENTINEL_OUTPUT: join(dir, 'out'),
+        },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr.on('data', (b) => (stderr += b));
+      child.stdout.resume();
+      child.once('exit', (code, signal) => resolve({ code, signal, stderr }));
+      child.stdin.on('error', () => {});
+      child.stdin.write(lines.map((l) => l + '\n').join(''));
+    });
+  const welcome = JSON.stringify({ protocol: 'sentinel-worker/draft-1', type: 'welcome' });
+  for (const value of ['null', '0', '"start"', '[]'])
+    for (const lines of [[value], [welcome, value]]) {
+      const r = await run(lines);
+      assert.equal(r.signal, null, lines.join(' · '));
+      assert.equal(r.code, 3, `${lines.join(' · ')}: ${r.stderr}`);
+      assert.doesNotMatch(r.stderr, /TypeError|\n\s+at /, lines.join(' · '));
+    }
+});
