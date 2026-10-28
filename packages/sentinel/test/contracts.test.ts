@@ -934,6 +934,12 @@ test('the pipeline enums are pinned to an explicit list and to the generated sch
       ['subscription', 'usage-unknown', 'no-rates'],
       pipelineEnum('StageRun', 'CostUnobservedReason'),
     ],
+    [
+      'a model stage cost',
+      ['rates', 'unobserved'],
+      ['rates', 'unobserved'],
+      pipelineSchemaOf('StageRun').definitions.StageCost.properties.basis.enum,
+    ],
     ['stage run states', WORK_STATES, [...WORK_STATES], pipelineEnum('StageRun', 'StageRun', 'state')],
     [
       'feature flags',
@@ -1016,6 +1022,11 @@ test('the example pipeline and stage runs validate, and each bound refuses one p
   const run = runs.find((r: any) => r.kind === 'agent');
   const runCases: Array<[string, (v: any) => void]> = [
     ['a zero cost that is really unobserved', (v) => (v.provenance[0].cost = { basis: 'unobserved', amount: '0' })],
+    [
+      'an agent cost that is neither a price nor unobserved',
+      (v) => (v.provenance[0].cost = { basis: 'not-applicable' }),
+    ],
+    ['an agent run with no cost at all', (v) => delete v.provenance[0].cost],
     ['an unknown unobserved reason', (v) => (v.provenance[0].cost = { basis: 'unobserved', reason: 'free' })],
     ['rates without a currency', (v) => (v.provenance[0].cost = { basis: 'rates', amount: '0.09' })],
     ['an environment value instead of a name', (v) => (v.provenance[0].environmentNames = ['PATH=/bin'])],

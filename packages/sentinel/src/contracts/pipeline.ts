@@ -328,14 +328,14 @@ export interface ProvenanceImage {
 export type CostUnobservedReason = 'subscription' | 'usage-unknown' | 'no-rates';
 
 /**
- * What a model stage cost. `rates`: the provider has owner-entered rates and the usage was confirmed (list price,
- * not a bill). `unobserved`: the cost is not known, and is never printed as a zero amount.
+ * What a model stage cost: always one of two answers, never nothing. `rates`: the provider has owner-entered rates and
+ * the usage was confirmed (list price, not a bill). `unobserved`: the cost is not known, with its reason, and is never
+ * printed as a zero amount. Only a model stage has a cost; Sentinel's own stages, scanners and scripts have none.
  * @discriminator basis
  */
 export type StageCost =
   | { basis: 'rates'; amount: DecimalAmount; currency: CurrencyCode }
-  | { basis: 'unobserved'; reason: CostUnobservedReason }
-  | { basis: 'not-applicable' };
+  | { basis: 'unobserved'; reason: CostUnobservedReason };
 
 /** What every provenance record carries. */
 interface ProvenanceBase {
