@@ -51,10 +51,10 @@ Measured times are the job's own run time, not queueing; the run ids are GitHub 
 | lint | 64 to 96 s (main 40628220866–40649483163) | 2 | 3 |
 | validate | 265 to 292 s testing every package after the process split (#225: 40635438642, 40649566118); 632 to 974 s before it (main 40628220866–40649483163) | 6 | 9 |
 | echo-package | 46 to 60 s (main 40628220866–40649483163); it downloads the iii engine, so the target leaves room | 3 | 5 |
-| sentinel-package | 432 to 680 s with the consumers in one chain (main 40628220866–40649483163); this budget assumes them three at a time | 6 | 9 |
+| sentinel-package | 432 to 680 s with the consumers in one chain (main 40628220866–40649483163); 261 and 376 s three at a time (#234: 40658062284, 40662139505) | 6 | 9 |
 | sentinel-isolation | 105 to 137 s (main 40628220866–40649483163) | 3 | 5 |
 | sentinel-recovery | 45 to 77 s (main 40628220866–40649483163) | 2 | 3 |
-| sentinel-service | 249 to 313 s with 32 files (main 40628220866–40649483163); 436 s with 83 (40635438642); **824 s with 86 and the serial files (40649566118), over its target**: the serial group alone took 114 s, and L-CLEAN-B's deterministic-checkpoint fix returns those files to the parallel run | 12 | 18 |
+| sentinel-service | 249 to 313 s with 32 files (main 40628220866–40649483163); 436 s with 83 (40635438642); **824 s with 86 and the serial files (40649566118), over its target**: the serial group alone took 114 s, and L-CLEAN-B's deterministic-checkpoint fix returns those files to the parallel run; 684 s with 88 (#234: 40662139505) | 12 | 18 |
 | e2e | 291 to 418 s (main 40628220866–40649483163) | 7 | 11 |
 | scanner CLI affected checks | 9 to 14 s (40649966640, 40649979787, 40650194599, 40651233871, 40651344718) | 1 | 2 |
 | scanner-cli-linux-amd64 | 1,011 to 1,252 s (40649966640–40651344718) | 20 | 30 |
