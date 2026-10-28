@@ -1,37 +1,45 @@
-// Actual browser → paired Farsight host → companion → production socket → genuine admitted work.
+// Actual browser → paired Farsight host → companion → production socket → genuine admitted work, read and driven
+// from the Sentinel view (ADR 48, the owner-panel retirement): the view asks, the paired owner frame previews and the
+// owner confirms there, and the view reads every scan, stage and report. One journey:
+//
+//   a spent pairing link explains recovery in a second tab; a scan the policy refuses is refused in the frame and does
+//   not poison the owner CLI; a scan from the view prepares, and its start is confirmed in the frame with the source
+//   removed; a lost connection disables the frame's confirmation until it recovers; the view reads the completed scan,
+//   its stages and its report after the source is gone; the CLI's prepared run starts from the view's Start; the
+//   pipeline is edited in the view, refused, withdrawn by a later edit and then written through the frame (never
+//   adopted); a restarted read-only host refuses the frame's pending confirmation. Zero page errors, console errors
+//   and unexpected HTTP errors.
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, execFileSync, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, rmSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
-import { loadPlan } from '../dist/execution/plans.js';
 import { adoptWorkspaceSettings } from '../dist/service/local.js';
 import { loadPipeline } from '../dist/app/pipeline-adoption.js';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { PreparationJournal } from '../dist/service/preparation-journal.js';
 import { OwnerService } from '../dist/service/owner-service.js';
 import { listenOwnerSocket, runtimeAddress, newOwnerNonce } from '../dist/transport/ipc.js';
 import { writePrivateFileAtomic } from '../dist/policy/user-state.js';
 import { startOwnerUi } from '../dist/owner-ui/server.js';
+import { PreparationJournal } from '../dist/service/preparation-journal.js';
 import { preparationFixture } from './helpers/preparation-fixture.ts';
 import { needsStore } from './snapshot-helpers.ts';
 const cli = fileURLToPath(new URL('../../cli/dist/cli.js', import.meta.url)),
   port = Number(process.env.SENTINEL_OWNER_UI_PORT ?? 4583),
   wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 test(
-  'actual owner iframe prepares/confirms, reads retained stages after source removal, separately starts and delivers report',
+  'the Sentinel view scans, starts, reads and edits through the paired owner frame, which alone confirms',
   {
     ...needsStore,
     skip:
       process.env.SENTINEL_OWNER_UI_BROWSER !== '1'
         ? 'explicit SENTINEL_OWNER_UI_BROWSER=1 browser gate'
         : needsStore.skip,
-    timeout: 90000,
+    timeout: 150000,
   },
   async (t) => {
     try {
@@ -71,10 +79,12 @@ test(
       'sentinel.receipt.storeUnsafe',
     );
     const evidence =
-      process.env.SENTINEL_OWNER_UI_EVIDENCE ?? join(tmpdir(), 'sol-owner-ui-' + process.pid + '-' + Date.now());
+      process.env.SENTINEL_OWNER_UI_EVIDENCE ?? join(tmpdir(), 'owner-ui-surface-' + process.pid + '-' + Date.now());
     const errors: string[] = [],
       consoleErrors: string[] = [],
       http: any[] = [];
+    let logs = '';
+    const pipelinePath = join(f.ws.path, '.farsight', 'sentinel', 'pipeline.json');
     try {
       mkdirSync(evidence, { recursive: true });
       const graph = join(f.dir, 'graph.json');
@@ -83,14 +93,17 @@ test(
         env: process.env,
         timeout: 30000,
       });
-      child = spawn(process.execPath, [cli, 'serve', graph, '--port', String(port)], {
-        cwd: f.ws.path,
-        env: process.env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      let logs = '';
-      child.stderr?.on('data', (b) => (logs += b));
-      child.stdout?.on('data', (b) => (logs += b));
+      const serve = (readOnly: boolean) => {
+        const c = spawn(
+          process.execPath,
+          [cli, 'serve', graph, '--port', String(port), ...(readOnly ? ['--read-only'] : [])],
+          { cwd: f.ws.path, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] },
+        );
+        c.stderr?.on('data', (b) => (logs += b));
+        c.stdout?.on('data', (b) => (logs += b));
+        return c;
+      };
+      child = serve(false);
       for (let i = 0; i < 200; i++) {
         try {
           const v: any = await (await fetch(`http://127.0.0.1:${port}/api/version`)).json();
@@ -108,21 +121,37 @@ test(
         if (m.type() === 'error') consoleErrors.push(m.text());
       });
       page.on('response', (r) => {
-        if (r.status() >= 400) {
-          const row: any = { status: r.status(), url: r.url() };
-          http.push(row);
-          void r.text().then((body) => (row.body = body));
-        }
+        if (r.status() >= 400) http.push({ status: r.status(), url: r.url() });
       });
+      const frame = page.frameLocator('iframe[title="Sentinel"]'),
+        scanButton = page.locator('.snt-tools .snt-scan'),
+        ownerTab = page.locator('.snt-tabs [data-tab="owner"]'),
+        confirmPrepare = frame.getByRole('button', { name: 'Confirm preparation', exact: true }),
+        confirmControl = frame.getByRole('button', { name: 'Confirm this run action', exact: true }),
+        accepted = frame.getByText('Action accepted. Retained status is shown below.', { exact: true });
+      const scanAllowed = async () => {
+        for (let i = 0; i < 100 && (await scanButton.getAttribute('aria-disabled')) === 'true'; i++) await wait(100);
+        assert.equal(await scanButton.getAttribute('aria-disabled'), null, 'the view may start a scan');
+      };
       await page.goto(`http://127.0.0.1:${port}/#/sentinel`);
-      const frame = page.frameLocator('iframe[title="Sentinel"]');
-      await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).waitFor({ timeout: 15000 });
-      // A second browser context has no owner-origin reload token. Its spent pairing link is a
-      // friendly refusal, while the genuine original paired tab remains usable and authorizes nothing.
+      // The frame is the owner panel and nothing else: it pairs, hands the view its read pass, and waits to be asked.
+      await ownerTab.click();
+      await frame.getByText('Confirm here what you start from Sentinel.', { exact: true }).waitFor({ timeout: 15000 });
+      for (const gone of [
+        'Preview fresh capture',
+        'Refresh retained state',
+        'Read shareable report',
+        'Stages and work',
+      ])
+        assert.equal(await frame.getByRole('button', { name: gone, exact: true }).count(), 0, gone);
+      await scanAllowed();
+      // A second browser context has no owner-origin reload token: its spent pairing link is a friendly refusal,
+      // while the original paired tab stays usable and the duplicate authorizes nothing.
       const beforeDuplicate = f.store.ledger.currentSequence(),
         duplicateContext = await browser.newContext(),
         duplicate = await duplicateContext.newPage();
       await duplicate.goto(`http://127.0.0.1:${port}/#/sentinel`);
+      await duplicate.locator('.snt-tabs [data-tab="owner"]').click();
       await duplicate
         .frameLocator('iframe[title="Sentinel"]')
         .getByRole('heading', {
@@ -130,10 +159,10 @@ test(
           exact: true,
         })
         .waitFor();
-      await duplicate.screenshot({ path: join(evidence, 'used-pairing-link.png'), fullPage: true });
       await duplicateContext.close();
       assert.equal(f.store.ledger.currentSequence(), beforeDuplicate);
-      assert.equal(await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).isEnabled(), true);
+
+      // A scan the policy refuses: refused in the frame, and the owner CLI is not pinned by it.
       const settingsPath = join(f.ws.path, '.farsight/sentinel/settings.json'),
         settingsBytes = readFileSync(settingsPath),
         settings = JSON.parse(settingsBytes.toString());
@@ -141,17 +170,17 @@ test(
         writeFileSync(settingsPath, deny ? JSON.stringify({ ...settings, grants: [] }) : settingsBytes);
         assert.equal(adoptWorkspaceSettings(f.ws, { confirm: true, now: new Date() }).outcome, 'prepared');
       };
-      async function refuseUi() {
+      async function refuseScan() {
         policy(true);
-        await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).click();
+        await scanButton.click();
         const [answer] = await Promise.all([
           page.waitForResponse((r) => r.url().endsWith('/confirm')),
-          frame.getByRole('button', { name: 'Confirm preparation', exact: true }).click(),
+          confirmPrepare.click(),
         ]);
         assert.equal((await answer.json()).outcome, 'configuration-failure');
         policy(false);
       }
-      await refuseUi();
+      await refuseScan();
       const cliResult = await promisify(execFile)(
         process.execPath,
         [
@@ -164,230 +193,95 @@ test(
         ],
         { env: process.env, timeout: 30000 },
       );
-      assert.equal(
-        JSON.parse(cliResult.stdout).outcome,
-        'submitted',
-        'definitively refused UI request must not poison the actual owner CLI',
-      );
+      const cliAnswer = JSON.parse(cliResult.stdout);
+      assert.equal(cliAnswer.outcome, 'submitted', 'a refused UI request does not poison the CLI');
       for (let i = 0; i < 600 && service.busy; i++) await wait(10);
-      await refuseUi();
-      await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).click();
-      await frame.getByRole('button', { name: 'Confirm preparation', exact: true }).click();
-      await frame.locator('#status').getByText('prepared', { exact: true }).waitFor({ timeout: 20000 });
-      await frame.getByText('Prepared; analysis has not started.', { exact: true }).waitFor();
-      const beforeReadFailure = f.store.ledger.currentSequence();
-      await page.route('**/status', (r) => r.abort());
-      await frame.getByRole('button', { name: 'Refresh retained state', exact: true }).click();
+      const preparedRuns = () =>
+        new PreparationJournal(f.store)
+          .list()
+          .filter((r: any) => r.phase === 'prepared' && r.runId)
+          .map((r: any) => r.runId as string);
+      await refuseScan();
+
+      // The view's Scan: the frame confirms the preparation, waits for it, and previews the start.
+      await scanButton.click();
+      await confirmPrepare.click();
+      await confirmControl.waitFor({ timeout: 30000 });
+      await page.screenshot({ path: join(evidence, 'start-preview-1440.png') });
+      // A lost connection disables the frame's confirmation; it recovers by itself, and nothing is written meanwhile.
+      const beforeLoss = f.store.ledger.currentSequence();
+      await page.route('**/events', (r) => r.abort());
       await frame
-        .locator('#message')
         .getByText(
           'The owner connection could not be verified. Actions are disabled; refresh retained state to reconnect.',
           { exact: true },
         )
-        .waitFor();
-      assert.equal(
-        await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isDisabled(),
-        true,
-      );
-      assert.equal(f.store.ledger.currentSequence(), beforeReadFailure);
-      const expectedReadFailureConsole = consoleErrors.splice(0);
-      await page.unroute('**/status');
-      await frame.getByRole('button', { name: 'Refresh retained state', exact: true }).click();
-      await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).waitFor();
-      for (
-        let i = 0;
-        i < 50 && (await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isDisabled());
-        i++
-      )
-        await wait(20);
-      assert.equal(await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isEnabled(), true);
-      // Advance only the browser's display clock; the genuine retained deadline and owner remain unchanged.
-      const deadline = Date.parse((await frame.locator('#status time').getAttribute('datetime'))!);
-      await page.clock.setFixedTime(new Date(deadline + 1));
-      await frame.getByRole('button', { name: 'Refresh retained state', exact: true }).click();
-      await frame
-        .getByText('The original run deadline has passed. Prepare a new run to continue.', { exact: true })
-        .waitFor();
-      assert.equal(
-        await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isDisabled(),
-        true,
-      );
-      await page.clock.setFixedTime(new Date());
-      await frame.getByRole('button', { name: 'Refresh retained state', exact: true }).click();
-      await frame.getByText('Prepared; analysis has not started.', { exact: true }).waitFor();
-      assert.equal(f.store.ledger.currentSequence(), beforeReadFailure);
-      const above = await frame
-        .locator('#run-controls')
-        .evaluate(
-          (e) => e.getBoundingClientRect().top < document.getElementById('process-graph')!.getBoundingClientRect().top,
-        );
-      assert.equal(above, true, 'run status and controls precede the graph');
-      await page.screenshot({ path: join(evidence, 'prepared-dark.png'), fullPage: true });
+        .waitFor({ timeout: 10000 });
+      assert.equal(await confirmControl.isDisabled(), true);
+      assert.equal(f.store.ledger.currentSequence(), beforeLoss);
+      const expectedLossConsole = consoleErrors.splice(0);
+      await page.unroute('**/events');
+      for (let i = 0; i < 100 && (await confirmControl.isDisabled()); i++) await wait(50);
+      assert.equal(await confirmControl.isEnabled(), true, 'the confirmation comes back with the connection');
+      // The source goes before the start: the run reads what the preparation captured.
       rmSync(join(f.ws.path, 'src'), { recursive: true });
-      await frame.getByRole('button', { name: 'Retained inputs', exact: true }).click();
-      await frame.locator('#rows tbody tr').first().waitFor();
-      await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).click();
-      await frame.getByRole('button', { name: 'Confirm this run action', exact: true }).click();
-      await frame.locator('#status').getByText('completed', { exact: true }).waitFor({ timeout: 25000 });
-      await frame.getByRole('button', { name: 'Read shareable report', exact: true }).click();
-      await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 25000 });
-      assert.ok((await frame.locator('#report-text').textContent())!.length > 100);
-      await page.evaluate(() => {
-        (window as any).applyTheme('dark');
-      });
-      await frame.locator('body[data-theme=dark]').waitFor();
-      await page.screenshot({ path: join(evidence, 'completed-report-dark.png'), fullPage: true });
-      assert.equal(
-        await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isDisabled(),
-        true,
-      );
-      await frame.getByRole('button', { name: 'Retained outputs', exact: true }).click();
-      assert.ok((await frame.locator('#rows tbody tr').count()) > 0);
-      const original = new PreparationJournal(f.store).list().find((r) => r.phase === 'prepared')!,
-        originalRun = f.store.ledger.getRun(original.runId!)!,
-        oldPlan = await loadPlan(f.store, original.runId!),
-        oldPublications = oldPlan.plan.units.map((u) => f.store.ledger.getPublication(u));
-      assert.ok(oldPublications.some((p) => p?.outputs.length));
-      await frame.getByRole('button', { name: 'Preview linked rerun', exact: true }).click();
-      await frame.getByRole('button', { name: 'Confirm preparation', exact: true }).click();
-      for (
-        let i = 0;
-        i < 600 && !new PreparationJournal(f.store).list().some((r) => r.parentId === original.runId);
-        i++
-      )
-        await wait(10);
-      for (let i = 0; i < 600 && service.busy; i++) await wait(10);
-      const linked = new PreparationJournal(f.store).list().find((r) => r.parentId === original.runId)!;
-      assert.equal(linked.phase, 'prepared');
-      assert.equal(linked.parentId, original.runId);
-      assert.notEqual(linked.runId, original.runId);
-      assert.equal(f.store.ledger.getRun(linked.runId!)!.envelope.parentId, original.runId);
-      assert.deepEqual(f.store.ledger.getRun(original.runId!), originalRun);
-      assert.deepEqual(
-        oldPlan.plan.units.map((u) => f.store.ledger.getPublication(u)),
-        oldPublications,
-      );
-      await frame.getByRole('button', { name: 'Refresh retained state', exact: true }).click();
-      await frame.locator('#report-text:not([data-format-digest])').waitFor({ state: 'attached' });
-      assert.equal(await frame.locator('#report-text').textContent(), '');
-      assert.equal(await frame.locator('#report-text').getAttribute('data-format-digest'), null);
-      await frame.getByRole('button', { name: 'Capture and parse evidence', exact: true }).click();
-      await frame.getByRole('button', { name: 'Stages and work', exact: true }).click();
-      await frame.locator('#rows tbody tr').nth(1).waitFor({ timeout: 15000 });
-      await page.screenshot({ path: join(evidence, 'linked-bootstrap-dark.png'), fullPage: true });
-      // Inspect genuine retained child and parent through opaque list handles; reports are explicit and selection-bound.
-      await frame.getByRole('button', { name: 'Refresh run list', exact: true }).click();
-      await frame.locator('#run-choice option').nth(2).waitFor({ state: 'attached' });
-      const runOptions = await frame
-        .locator('#run-choice option')
-        .evaluateAll((options) => options.map((o) => (o as HTMLOptionElement).value));
-      assert.ok(runOptions.length >= 3);
-      assert.ok(runOptions.slice(1).every((k) => /^h[a-f0-9]{32}$/.test(k)));
-      await frame.locator('#run-choice').selectOption(runOptions[2]);
-      await frame.locator('#status').getByText('completed', { exact: true }).waitFor();
-      await frame.getByRole('button', { name: 'Refresh process graph', exact: true }).click();
-      await frame.locator('#process-graph .process-card').first().waitFor();
-      await frame.locator('#process-graph .process-links path').first().waitFor({ state: 'attached' });
-      await frame.locator('#process-graph .process-card summary').last().click();
-      await frame
-        .locator('#process-graph .process-card[open] details summary')
-        .filter({ hasText: 'Retained inputs' })
-        .first()
-        .click();
-      await frame.locator('#process-graph .process-card[open] table tbody tr').first().waitFor();
-      await frame.locator('#process-graph .process-card[open]').getByText('120 seconds', { exact: true }).waitFor();
-      await frame.locator('#process-graph .process-card[open]').getByText('2 GiB', { exact: true }).waitFor();
-      await frame.locator('#process-graph .process-card[open]').getByText('4 MiB', { exact: true }).waitFor();
-      await page.screenshot({ path: join(evidence, 'process-expanded-dark.png'), fullPage: true });
-      await frame.locator('#run-choice').selectOption(runOptions[1]);
-      await frame.locator('#status').getByText(f.store.ledger.getRun(linked.runId!)!.state, { exact: true }).waitFor();
-      assert.equal(await frame.getByRole('button', { name: 'Read shareable report', exact: true }).isDisabled(), true);
-      await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).click();
-      await frame.getByRole('button', { name: 'Confirm this run action', exact: true }).click();
-      await frame.locator('#status').getByText('completed', { exact: true }).waitFor({ timeout: 25000 });
-      await frame.locator('#baseline-choice').selectOption(runOptions[2]);
-      const [comparisonResponse] = await Promise.all([
-        page.waitForResponse((r) => r.url().endsWith('/report')),
-        frame.getByRole('button', { name: 'Regenerate differential report', exact: true }).click(),
+      await confirmControl.click();
+      await accepted.waitFor();
+      // the same captured bytes prepare the same run: the view's scan and the CLI's preparation name one run
+      const runId = preparedRuns().at(-1)!;
+      assert.ok(runId, 'the scan prepared a run');
+      for (let i = 0; i < 300 && f.store.ledger.getRun(runId)?.state !== 'completed'; i++) await wait(100);
+      assert.equal(f.store.ledger.getRun(runId)?.state, 'completed');
+      // The view reads it: the list, the ladder, a stage and the report, with the source gone.
+      await page.goto(`http://127.0.0.1:${port}/#/sentinel`);
+      await page.locator(`.snt-scan-row[href="#/sentinel/${encodeURIComponent(runId)}"]`).click();
+      await page.locator('.snt-card').first().waitFor({ timeout: 15000 });
+      assert.ok((await page.locator('.snt-card').count()) >= 4);
+      await page.locator('.snt-tabs [data-tab="stage"]').click();
+      await page.screenshot({ path: join(evidence, 'pipeline-1440.png') });
+      await page.locator('.snt-dock').getByRole('link', { name: 'Open the stage' }).click();
+      await page.locator('.snt[data-stop="stage"] .snt-turn, .snt[data-stop="stage"] .snt-list').first().waitFor();
+      assert.equal(await page.locator('.snt-stage .snt-empty.err').count(), 0);
+      await page.locator('.snt-dock').getByRole('link', { name: 'Back to the pipeline' }).click();
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.locator('.snt-tools').getByRole('button', { name: 'Report · HTML' }).click(),
       ]);
-      const comparisonDelivery = await comparisonResponse.json();
-      assert.equal(comparisonDelivery.current.runId, linked.runId);
-      assert.equal(comparisonDelivery.baseline.runId, original.runId);
-      await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 25000 });
-      const comparison = await frame.locator('#report-text').textContent();
-      assert.ok(comparison!.length > 100);
-      assert.equal(
-        await frame.locator('#report-text').getAttribute('data-format-digest'),
-        'sha256:' + createHash('sha256').update(comparison!).digest('hex'),
-      );
-      await page.screenshot({ path: join(evidence, 'process-comparison-dark.png'), fullPage: true });
-      assert.deepEqual(
-        oldPlan.plan.units.map((u) => f.store.ledger.getPublication(u)),
-        oldPublications,
-      );
-      // Hold a real delivered canonical report at the network, change the baseline, then let the old read finish.
-      let releaseDelivery!: () => void,
-        deliveryReached!: () => void,
-        hold = true;
-      const released = new Promise<void>((r) => (releaseDelivery = r)),
-        reached = new Promise<void>((r) => (deliveryReached = r)),
-        route = async (r: any) => {
-          if (hold) {
-            hold = false;
-            deliveryReached();
-            await released;
-          }
-          await r.continue();
-        };
-      await page.route('**/delivery', route);
-      await frame.getByRole('button', { name: 'Regenerate differential report', exact: true }).click();
-      await reached;
-      await frame.locator('#baseline-choice').selectOption('');
-      const lastChunk = page.waitForResponse(
-        async (r) => r.url().endsWith('/delivery') && (await r.json()).nextOffset === null,
-      );
-      releaseDelivery();
-      await lastChunk;
-      const stale = await frame.locator('#report-text').evaluate(async (e) => {
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        return { text: e.textContent, digest: e.getAttribute('data-format-digest') };
-      });
-      assert.deepEqual(stale, { text: '', digest: null });
-      await page.unroute('**/delivery', route);
-      await frame.locator('#baseline-choice').selectOption(runOptions[2]);
-      await frame.getByRole('button', { name: 'Regenerate differential report', exact: true }).click();
-      await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 25000 });
+      assert.match(download.suggestedFilename(), /^sentinel-scan-\d+\.html$/);
+      assert.ok(readFileSync((await download.path())!, 'utf8').length > 100);
 
-      await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).click();
-      await frame.getByRole('button', { name: 'Confirm preparation', exact: true }).waitFor();
-      const beforeHistory = f.store.ledger.currentSequence();
-      await page.evaluate(() => {
-        location.hash = '#/sentinel@sync:1';
-      });
-      await frame.locator('#readonly').waitFor({ state: 'visible' });
-      await wait(100);
-      assert.equal(f.store.ledger.currentSequence(), beforeHistory);
-      assert.equal(await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).isDisabled(), true);
-      await page.screenshot({ path: join(evidence, 'historical-veto-dark.png'), fullPage: true });
-      await page.evaluate(() => {
-        location.hash = '#/sentinel';
-      });
-      await frame.locator('#readonly').waitFor({ state: 'hidden' });
-      await page.evaluate(() => {
-        (window as any).applyTheme('light');
-      });
-      await frame.locator('body[data-theme=light]').waitFor();
-      await page.screenshot({ path: join(evidence, 'linked-light.png'), fullPage: true });
-      await page.reload();
-      await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).waitFor({ timeout: 15000 });
-      await frame.locator('#status').getByText('completed', { exact: true }).waitFor({ timeout: 15000 });
-      await page.screenshot({ path: join(evidence, 'reconnected.png'), fullPage: true });
-      // The PIPELINE stop's edit mode (U-3): the view edits a copy of the pipeline file; an empty model stage is refused
-      // through the real frame with the service's reason; then an edit is checked and written by the frame's own
-      // confirmation — exactly the edited bytes, and not adopted.
-      const pipelinePath = join(f.ws.path, '.farsight', 'sentinel', 'pipeline.json'),
-        before = JSON.parse(readFileSync(pipelinePath, 'utf8')),
-        adoptedBefore = loadPipeline({ workspace: f.ws.path, trustDir: f.ws.trustDir, readOnly: true });
+      // A run the CLI prepares over a changed source starts from the view: Start, previewed and confirmed in the frame.
+      writeFileSync(join(f.ws.path, 'src.ts'), 'export const two = 2;\n');
+      const cliPrepared = await promisify(execFile)(
+        process.execPath,
+        [
+          fileURLToPath(new URL('../dist/cli.js', import.meta.url)),
+          'prepare',
+          '--confirm',
+          '--workspace',
+          f.ws.path,
+          '--json',
+        ],
+        { env: process.env, timeout: 30000 },
+      );
+      assert.equal(JSON.parse(cliPrepared.stdout).outcome, 'submitted');
+      for (let i = 0; i < 300 && !preparedRuns().some((id) => id !== runId); i++) await wait(50);
+      const cliRun = preparedRuns().find((id) => id !== runId)!;
+      assert.ok(cliRun, 'the CLI prepared a second run');
+      {
+        await page.goto(`http://127.0.0.1:${port}/#/sentinel/${encodeURIComponent(cliRun)}`);
+        const start = page.locator('.snt-tools [data-act="control"][data-action="start"]');
+        await start.waitFor({ timeout: 15000 });
+        await start.click();
+        await confirmControl.click();
+        await accepted.waitFor();
+        for (let i = 0; i < 300 && f.store.ledger.getRun(cliRun)?.state !== 'completed'; i++) await wait(100);
+        assert.equal(f.store.ledger.getRun(cliRun)?.state, 'completed');
+      }
+
+      // The pipeline, edited in the view and written by the frame on its own confirmation, never adopted.
+      const before = JSON.parse(readFileSync(pipelinePath, 'utf8')),
+        adopted = loadPipeline({ workspace: f.ws.path, trustDir: f.ws.trustDir, readOnly: true });
       await page.goto(`http://127.0.0.1:${port}/#/sentinel?edit=1&pick=report`);
       await page
         .locator('.snt-erow:not(.gone)')
@@ -401,9 +295,8 @@ test(
         .waitFor({ timeout: 15000 });
       const confirmWrite = frame.getByRole('button', { name: 'Confirm writing the pipeline', exact: true });
       assert.equal(await confirmWrite.count(), 0);
-      assert.deepEqual(JSON.parse(readFileSync(pipelinePath, 'utf8')), before);
       await page.locator('.snt-tools [data-act="ediscard"]').click();
-      await page.locator('.snt-erow:not(.gone)', { hasText: 'report' }).click();
+      await page.locator('.snt-erow[data-estage="report"]').click();
       const seconds = page.locator('.snt-dock [data-ebudget="seconds"]');
       await seconds.fill('120');
       await seconds.press('Tab');
@@ -413,7 +306,7 @@ test(
       await page.locator('.snt-tabs [data-tab="stage"]').click();
       await seconds.fill('121');
       await seconds.press('Tab');
-      await page.locator('.snt-tabs [data-tab="owner"]').click();
+      await ownerTab.click();
       await frame
         .getByText('The page changed the pipeline after it was checked: nothing was written. Check it again.', {
           exact: true,
@@ -485,7 +378,6 @@ test(
       await confirmWrite.waitFor({ timeout: 15000 });
       await page.unroute('**/pipeline-preview');
       assert.deepEqual(JSON.parse(readFileSync(pipelinePath, 'utf8')), before, 'checking writes nothing');
-      await page.screenshot({ path: join(evidence, 'pipeline-checked.png') });
       await confirmWrite.click();
       await page
         .locator('.snt-verdicts')
@@ -493,41 +385,33 @@ test(
         .waitFor({ timeout: 15000 });
       const edited = structuredClone(before);
       edited.stages[edited.stages.length - 1].budget = { seconds: 120 };
-      assert.equal(
-        readFileSync(pipelinePath, 'utf8'),
-        JSON.stringify(edited, null, 2) + '\n',
-        'exactly the edited bytes',
-      );
-      const uiReceipts = join(f.ws.trustDir, 'receipts'),
-        writes = readdirSync(uiReceipts)
+      assert.equal(readFileSync(pipelinePath, 'utf8'), JSON.stringify(edited, null, 2) + '\n');
+      const receipts = join(f.ws.trustDir, 'receipts'),
+        writes = readdirSync(receipts)
           .filter((n) => n.endsWith('.json'))
-          .map((n) => JSON.parse(readFileSync(join(uiReceipts, n), 'utf8')))
+          .map((n) => JSON.parse(readFileSync(join(receipts, n), 'utf8')))
           .filter((r) => r.schema === 'sentinel-owneruireceipt/draft-1' && r.action === 'settings.adopt');
       assert.equal(writes.length, 1);
-      assert.ok(existsSync(join(uiReceipts, `${writes[0].id}.spent`)));
-      assert.equal(adoptedBefore.trust, 'adopted');
-      assert.equal(
-        loadPipeline({ workspace: f.ws.path, trustDir: f.ws.trustDir, readOnly: true }).trust,
-        'changed',
-        'written, not adopted',
-      );
-      await page.screenshot({ path: join(evidence, 'pipeline-written.png') });
-      await page.locator('.snt-tabs [data-tab="owner"]').click();
+      assert.ok(existsSync(join(receipts, `${writes[0].id}.spent`)));
+      assert.equal(adopted.trust, 'adopted');
+      assert.equal(loadPipeline({ workspace: f.ws.path, trustDir: f.ws.trustDir, readOnly: true }).trust, 'changed');
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.screenshot({ path: join(evidence, 'pipeline-written-1280.png') });
       assert.deepEqual(errors, []);
       assert.deepEqual(consoleErrors, [], JSON.stringify({ http, consoleErrors }));
       assert.deepEqual(http, []);
-      // Keep the old actual parent page but replace only our own host process at the same origin. The immediate
-      // host-instance fence must refuse its pending confirmation before issuing/spending another UI receipt.
+
+      // Our own host restarted read-only at the same origin: the frame's pending confirmation is refused at the
+      // immediate host fence before any receipt is issued or spent.
+      await page.goto(`http://127.0.0.1:${port}/#/sentinel`);
+      await scanAllowed();
+      await scanButton.click();
+      await confirmPrepare.waitFor({ timeout: 15000 });
       const beforeRestart = f.store.ledger.currentSequence(),
-        receiptNames = readdirSync(join(f.ws.trustDir, 'receipts')).sort();
+        receiptNames = readdirSync(receipts).sort();
       child.kill('SIGTERM');
       await new Promise((r) => child!.once('exit', r));
-      child = spawn(process.execPath, [cli, 'serve', graph, '--port', String(port), '--read-only'], {
-        cwd: f.ws.path,
-        env: process.env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      child.stderr?.on('data', (b) => (logs += b));
+      child = serve(true);
       for (let i = 0; i < 200; i++) {
         try {
           const v: any = await (await fetch(`http://127.0.0.1:${port}/api/version`)).json();
@@ -535,51 +419,36 @@ test(
         } catch {}
         await wait(20);
       }
-      await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).click();
-      await frame.getByRole('button', { name: 'Confirm preparation', exact: true }).click();
+      await confirmPrepare.click();
       await frame
         .locator('#message')
         .getByText('The paired application is unavailable or changed.', { exact: true })
         .waitFor();
       assert.equal(f.store.ledger.currentSequence(), beforeRestart);
-      assert.deepEqual(readdirSync(join(f.ws.trustDir, 'receipts')).sort(), receiptNames);
+      assert.deepEqual(readdirSync(receipts).sort(), receiptNames);
       assert.deepEqual(errors, []);
       assert.equal(http.length, 1);
       assert.equal(http[0].status, 400);
       assert.ok(http[0].url.endsWith('/confirm'));
       const expectedGuardHttp = http.splice(0),
         expectedGuardConsole = consoleErrors.splice(0);
-      await page.screenshot({ path: join(evidence, 'host-restart-refused.png'), fullPage: true });
       writeFileSync(
         join(evidence, 'result.json'),
         JSON.stringify(
           {
             genuineOwner: true,
             browser: 'chromium',
-            sourceRemoved: true,
-            prepare: true,
+            frameIsConfirmationOnly: true,
             usedPairingLinkRecovery: true,
-            connectionFailureDisablesActions: true,
-            browserDeadlineDisplayRefusesLateStart: true,
-            expectedReadFailureConsole,
-            controlsBeforeGraph: true,
-            preparedNotAnalysis: true,
             policyRefusalThenUiAndCliRecovery: true,
-            separateStart: true,
-            report: true,
-            reload: true,
-            linkedRerun: true,
-            pipelineRefusedThenWrittenNotAdopted: true,
-            originalOutputsRetained: true,
-            bootstrapEvidence: true,
-            historicalVeto: true,
+            scanFromTheView: true,
+            connectionLossDisablesConfirmation: true,
+            expectedLossConsole,
+            sourceRemovedBeforeStart: true,
+            viewReadsScanStageAndReport: true,
+            viewStartsThePreparedCliRun: true,
+            pipelineRefusedWithdrawnThenWrittenNotAdopted: true,
             hostRestartRefused: true,
-            bothThemes: true,
-            processDag: true,
-            expandedWorkIo: true,
-            retainedParentChildSelection: true,
-            manualComparison: true,
-            staleBaselineDeliveryRefused: true,
             expectedGuardHttp,
             expectedGuardConsole,
             errors,

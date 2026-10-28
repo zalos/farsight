@@ -45,13 +45,39 @@ const digestId = (v: unknown) => {
   if (typeof v !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(v)) throw new OwnerUiError();
   return v;
 };
-export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
+/** How long the companion polls for a service that is not answering yet, and how often. */
+export const SERVICE_WAIT = Object.freeze({ defaultMs: 30_000, everyMs: 250 });
+
+/**
+ * The workspace's service, waiting up to `waitMs` for one that is still starting (its descriptor not yet written, or
+ * its socket not yet listening): `onWaiting` is told once, before the first wait. Never starts a service. After the
+ * wait, still no service refuses as before (`sentinel.service.operationUnavailable`).
+ */
+async function serviceFor(ws: Workspace, waitMs: number, onWaiting?: (waitMs: number) => void) {
+  const until = Date.now() + waitMs;
+  let told = false;
+  for (;;) {
+    const client = await connectService(ws, 'owner-ui');
+    if (client) return client;
+    if (Date.now() + SERVICE_WAIT.everyMs > until) throw new OwnerUiError('sentinel.service.operationUnavailable');
+    if (!told) onWaiting?.(waitMs);
+    told = true;
+    await new Promise((r) => setTimeout(r, SERVICE_WAIT.everyMs));
+  }
+}
+
+export interface StartOwnerUiOptions {
+  /** Wait this long for a service that is still starting; 0 (the default) refuses at once when none answers. */
+  readonly waitForServiceMs?: number;
+  /** Told once when the companion starts waiting for the service. */
+  readonly onWaiting?: (waitMs: number) => void;
+}
+
+export async function startOwnerUi(ws: Workspace, farsightOrigin: string, options: StartOwnerUiOptions = {}) {
   companionOrigin(farsightOrigin);
   const host = await ownerHost(farsightOrigin),
     session = new OwnerUiSession(host.instance),
-    client = await connectService(ws, 'owner-ui');
-  if (!client) throw new OwnerUiError('sentinel.service.operationUnavailable');
-  let processSupported = false;
+    client = await serviceFor(ws, Math.max(0, options.waitForServiceMs ?? 0), options.onWaiting);
   try {
     preparationCapabilities(await client.request('service.preparation-capabilities', {}));
     const caps: any = await client.request('service.owner-ui-capabilities', {});
@@ -62,7 +88,6 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
       caps.modelAdmission !== false
     )
       throw new OwnerUiError();
-    processSupported = caps.processInspection === true;
   } catch (error) {
     client.close();
     throw error;
@@ -81,18 +106,10 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
     client.close();
     throw error;
   }
-  let manualRun: string | null = null,
-    selection: { key: string; runId: string; origin: 'retained' | 'preparation' } | null = null,
-    baseline: { key: string; runId: string } | null = null;
-  const choose = (runId: string | null, kind: 'retained' | 'preparation') => {
+  /** The run the last preparation made: the Scan flow previews its start once it is prepared. */
+  const choose = (runId: string | null) => {
     lastRun = runId;
-    if (!runId) {
-      selection = null;
-      return;
-    }
-    if (selection?.runId !== runId) selection = { key: 'h' + randomBytes(16).toString('hex'), runId, origin: kind };
   };
-  const publicSelection = () => (selection ? { key: selection.key, origin: selection.origin } : null);
   let challenge: {
     id: string;
     resolve: () => void;
@@ -263,14 +280,6 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
         return;
       }
       if (req.method === 'GET') {
-        if (req.url === '/capabilities') {
-          const header = req.headers.authorization;
-          if (typeof header !== 'string' || !/^Bearer [a-f0-9]{64}$/.test(header)) throw new OwnerUiError();
-          const cap = header.slice(7);
-          auth(cap);
-          send(res, 200, await ui('service.review-capabilities', {}, cap, abort.signal));
-          return;
-        }
         if (req.url === '/bootstrap') {
           const code = session.bootstrap();
           res.writeHead(303, { location: '/frame#launch=' + code, 'content-security-policy': csp });
@@ -334,7 +343,7 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
           proof = pair.proof;
           await ask('owner-ui.context', { proof, view: session.authenticate(active.capability) }, abort.signal);
           if (abort.signal.aborted) throw new OwnerUiError();
-          send(res, 200, { ...active, readOnly: host.readOnly, processInspection: processSupported });
+          send(res, 200, { ...active, readOnly: host.readOnly });
         } catch (error) {
           session.revoke();
           throw error;
@@ -392,41 +401,35 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
         return;
       }
       if (req.url === '/preview') {
-        const f = fields(body, ['linked']);
-        if (f.linked !== undefined && typeof f.linked !== 'boolean') throw new OwnerUiError();
-        if (f.linked && !lastRun) throw new OwnerUiError();
+        fields(body, []);
         const requestKey = 'request-' + randomBytes(16).toString('hex'),
-          preview = configurationPreview(
-            await ui('owner-ui.preview', { requestKey, ...(f.linked ? { parentId: lastRun } : {}) }, cap, abort.signal),
-          );
+          preview = configurationPreview(await ui('owner-ui.preview', { requestKey }, cap, abort.signal));
         const confirm = session.challenge(cap, 'prepare');
         pendingPreview = {
           kind: 'prepare',
           requestKey,
           previewId: preview.id,
-          parentId: f.linked ? lastRun : null,
+          parentId: null,
           challenge: confirm,
         };
         send(res, 200, { preview, confirmation: confirm });
         return;
       }
       if (req.url === '/control-preview') {
-        const f = fields(body, ['action']);
-        if (!lastRun || typeof f.action !== 'string' || !['start', 'pause', 'cancel'].includes(f.action))
+        // A run's start, pause or cancel: the run the viewer names (by its run id, as the read model addresses it), or
+        // the run the Scan flow just prepared.
+        const f = fields(body, ['action', 'runId']);
+        const runId = f.runId === undefined ? lastRun : digestId(f.runId);
+        if (!runId || typeof f.action !== 'string' || !['start', 'pause', 'cancel'].includes(f.action))
           throw new OwnerUiError();
-        const preview: any = await ui(
-          'owner-ui.control-preview',
-          { runId: lastRun, action: f.action },
-          cap,
-          abort.signal,
-        );
+        const preview: any = await ui('owner-ui.control-preview', { runId, action: f.action }, cap, abort.signal);
         if (preview.unavailable) {
           send(res, 200, preview);
           return;
         }
         const confirm = session.challenge(cap, 'control');
         pendingPreview = { kind: 'control', previewId: preview.id, challenge: confirm };
-        send(res, 200, { preview: { ...preview, runId: selection?.key }, confirmation: confirm });
+        send(res, 200, { preview: { ...preview, runId }, confirmation: confirm });
         return;
       }
       if (req.url === '/pipeline-preview') {
@@ -494,10 +497,7 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
                 lock!.assertHeld();
                 savePreparationClientKey(ws, client.storeId, pending.requestKey, 'refused');
               }
-              if (answer.status?.found) {
-                manualRun = null;
-                choose(answer.status.runId, 'preparation');
-              }
+              if (answer.status?.found) choose(answer.status.runId);
               send(res, 200, answer);
             } else if (pending.kind === 'pipeline')
               send(res, 200, await ui('owner-ui.pipeline-write', { previewId: pending.previewId }, cap, abort.signal));
@@ -510,127 +510,18 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
         }
         return;
       }
-      if (req.url === '/runs') {
-        fields(body, []);
-        if (!processSupported) throw new OwnerUiError('sentinel.service.operationUnavailable');
-        send(res, 200, await ui('owner-ui.runs', {}, cap, abort.signal));
-        return;
-      }
-      if (req.url === '/select' || req.url === '/baseline') {
-        const f = fields(body, ['key']);
-        if (req.url === '/select' && f.key === null) {
-          manualRun = null;
-          pendingPreview = null;
-          choose(null, 'preparation');
-          send(res, 200, { selection: null });
-          return;
-        }
-        if (!processSupported) throw new OwnerUiError('sentinel.service.operationUnavailable');
-        if (req.url === '/baseline' && f.key === null) {
-          baseline = null;
-          send(res, 200, { baseline: null });
-          return;
-        }
-        const chosen: any = await ui('owner-ui.select', { key: digestId(f.key) }, cap, abort.signal);
-        const run = digestId(chosen.runId);
-        pendingPreview = null;
-        if (req.url === '/select') {
-          manualRun = run;
-          choose(run, 'retained');
-          send(res, 200, { selection: publicSelection() });
-        } else {
-          baseline = { key: f.key, runId: run };
-          send(res, 200, { baseline: { key: f.key } });
-        }
-        return;
-      }
       if (req.url === '/status') {
+        // The Scan flow's wait for its preparation: the phase the service records, and the run it made.
         fields(body, []);
-        if (manualRun) {
-          choose(manualRun, 'retained');
-          send(res, 200, { status: null, selection: publicSelection() });
-          return;
-        }
         lastKey = readPreparationClientKey(ws, client.storeId);
         if (!lastKey) {
-          choose(null, 'preparation');
-          send(res, 200, { status: null, selection: null });
+          choose(null);
+          send(res, 200, { status: null });
           return;
         }
         const status = preparationOutcome(await ask('prepare.status', { requestKey: lastKey }, abort.signal));
-        choose(status.status?.found ? status.status.runId : null, 'preparation');
-        send(res, 200, { ...status, selection: publicSelection() });
-        return;
-      }
-      if (req.url === '/process') {
-        const f = fields(body, ['selectionId']);
-        if (!processSupported || !selection || f.selectionId !== selection.key)
-          throw new OwnerUiError('sentinel.ownerUi.changed');
-        send(res, 200, await ui('owner-ui.process', { runId: selection.runId }, cap, abort.signal));
-        return;
-      }
-      if (req.url === '/inspect') {
-        const f = fields(body, ['phase', 'selectionId']);
-        if (!selection || f.selectionId !== selection.key) throw new OwnerUiError('sentinel.ownerUi.changed');
-        if (f.phase !== undefined && !['bootstrap', 'analysis'].includes(f.phase)) throw new OwnerUiError();
-        if (!lastRun) throw new OwnerUiError();
-        send(
-          res,
-          200,
-          await ask(
-            'run.inspect',
-            { runId: lastRun, ...(f.phase === 'bootstrap' ? { planRevision: 1 } : {}) },
-            abort.signal,
-          ),
-        );
-        return;
-      }
-      if (req.url === '/page') {
-        const f = fields(body, ['viewId', 'collection', 'cursor', 'workKey', 'attemptKey']);
-        if (!['works', 'attempts', 'inputs', 'outputs'].includes(f.collection)) throw new OwnerUiError();
-        send(
-          res,
-          200,
-          await ask(
-            'view.page',
-            {
-              viewId: digestId(f.viewId),
-              collection: f.collection,
-              limit: 32,
-              ...(f.cursor ? { cursor: digestId(f.cursor) } : {}),
-              ...(f.workKey ? { workKey: digestId(f.workKey) } : {}),
-              ...(f.attemptKey ? { attemptKey: digestId(f.attemptKey) } : {}),
-            },
-            abort.signal,
-          ),
-        );
-        return;
-      }
-      if (req.url === '/report') {
-        const f = fields(body, ['runId', 'comparison', 'baselineKey']);
-        if (f.comparison !== undefined && typeof f.comparison !== 'boolean') throw new OwnerUiError();
-        if (f.comparison && (!baseline || f.baselineKey !== baseline.key))
-          throw new OwnerUiError('sentinel.ownerUi.changed');
-        if (!lastRun || !selection || f.runId !== selection.key) throw new OwnerUiError('sentinel.ownerUi.changed');
-        send(
-          res,
-          200,
-          await ask(
-            'report.open',
-            { runId: lastRun, format: 'md', ...(f.comparison ? { baselineRunId: baseline!.runId } : {}) },
-            abort.signal,
-          ),
-        );
-        return;
-      }
-      if (req.url === '/delivery') {
-        const f = fields(body, ['deliveryId', 'offset']);
-        if (!Number.isSafeInteger(f.offset) || f.offset < 0) throw new OwnerUiError();
-        send(
-          res,
-          200,
-          await ask('delivery.read', { deliveryId: digestId(f.deliveryId), offset: f.offset }, abort.signal),
-        );
+        choose(status.status?.found ? status.status.runId : null);
+        send(res, 200, status);
         return;
       }
       throw new OwnerUiError();
@@ -728,8 +619,18 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
   return controller;
 }
 export async function runOwnerUi(ws: Workspace, origin: string) {
-  const running = await startOwnerUi(ws, origin);
-  process.stdout.write(`${STRINGS['sentinel.ownerUi.launch']!.professional}\n`);
+  // Started beside a service that is still opening, the companion waits for it and says so, instead of exiting.
+  const running = await startOwnerUi(ws, origin, {
+    waitForServiceMs: SERVICE_WAIT.defaultMs,
+    onWaiting: (ms) =>
+      process.stdout.write(
+        `${STRINGS['sentinel.ownerUi.waitingForService']!.professional.split('{s}').join(String(Math.round(ms / 1000)))}\n`,
+      ),
+  });
+  // The door: the Sentinel view in the paired Farsight, where the owner panel lives now (no page of its own).
+  process.stdout.write(
+    `${STRINGS['sentinel.ownerUi.openSentinel']!.professional.split('{url}').join(origin + '/#/sentinel')}\n`,
+  );
   const stop = new AbortController(),
     onSignal = () => stop.abort();
   process.once('SIGINT', onSignal);

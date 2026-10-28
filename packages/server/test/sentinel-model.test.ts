@@ -228,6 +228,13 @@ test('the business register prints no provenance; code and hybrid print what ran
     'prompt sentinel.review.general/1 (44444444…)',
     'skills owasp-top10/2',
   ]);
+  // with a runner, what ran is the runner and how it was driven, as the report names it; the provider is the dock's
+  const ran = {
+    ...agent,
+    provenance: { ...agent.provenance, runner: { id: 'copilot-cli', mode: 'brokered', local: false } },
+  };
+  assert.deepEqual(m.provenanceParts(ran, 'code').slice(0, 2), ['copilot-cli brokered', 'review-model:1']);
+  assert.ok(!m.provenanceParts(ran, 'hybrid').includes('local-review'));
   assert.equal(m.shortDigest('sha256:' + 'f'.repeat(64)), 'ffffffff');
   assert.equal(m.shortDigest('not a digest'), '');
 });
@@ -294,4 +301,14 @@ test('every word the model names is a catalog key the surface can print', async 
     'sentinel.viewer.scan.door',
   ];
   for (const k of keys) assert.ok(Object.hasOwn(STRINGS, k), k);
+});
+
+test('a review the record calls unfinished is never shown as done; a stage whose reviews disagree says mixed', () => {
+  assert.equal(m.reviewState('done', 'unfinished'), 'unfinished');
+  assert.equal(m.reviewState('done', 'mixed'), 'mixed');
+  assert.equal(m.reviewState('done', 'completed'), null, 'a completed review: the status speaks');
+  assert.equal(m.reviewState('done', undefined), null, 'a check, or a record not read: the status speaks');
+  // work that did not finish says so itself: failed, running and held keep their own word
+  for (const s of ['failed', 'running', 'held', 'waiting', 'reused', 'not-run'])
+    assert.equal(m.reviewState(s, 'unfinished'), null, s);
 });

@@ -532,7 +532,7 @@ test('owner decisions retain installed command and native privacy acceptance', (
 test('owner UI service and installed browser acceptance stay explicitly selected with no skips', () => {
   const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
   serviceJob();
-  for (const name of ['session', 'host', 'descriptor', 'service', 'model-start', 'lifecycle', 'process'])
+  for (const name of ['session', 'host', 'descriptor', 'service', 'model-start', 'lifecycle'])
     assert.ok(neverSkips(`test/owner-ui-${name}.test.ts`), name);
   for (const name of ['service', 'lifecycle']) assert.ok(processSuite.includes(`test/owner-ui-${name}.test.ts`), name);
   assert.ok(ci.includes("SENTINEL_OWNER_UI_BROWSER: '1'"));
@@ -560,12 +560,11 @@ test("Sentinel's two suites partition its test files; validate runs the unit sui
   assert.ok(!serialSuite().includes('test/preparation-publication-crash.test.ts'));
   assert.ok(processSuite.includes('test/preparation-publication-crash.test.ts'), 'still with zero skips');
   for (const file of serialSuite()) assert.ok(every.includes(file), file);
-  // the twelve in-process files that left sentinel-service's zero-skip list keep the guarantee in validate
+  // the eleven in-process files that left sentinel-service's zero-skip list keep the guarantee in validate
   for (const name of [
     'owner-ui-descriptor',
     'owner-ui-host',
     'owner-ui-model-start',
-    'owner-ui-process',
     'owner-ui-session',
     'preparation-admission',
     'preparation-journal',

@@ -435,7 +435,7 @@ function serveConnection(socket: Socket, identity: ServiceIdentity, handler: Ser
       const granted = by;
       inflight.add(id);
       const read =
-        f.op === 'run.inspect' || f.op === 'report.open' || f.op === 'prepare.resume' || f.op === 'owner-ui.process'
+        f.op === 'run.inspect' || f.op === 'report.open' || f.op === 'prepare.resume'
           ? new AbortController()
           : undefined;
       if (read) reads.set(id, read);

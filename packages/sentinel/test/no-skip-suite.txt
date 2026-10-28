@@ -9,7 +9,6 @@ test/owner-ui-descriptor.test.ts
 test/owner-ui-envelope-receipts.test.ts
 test/owner-ui-host.test.ts
 test/owner-ui-model-start.test.ts
-test/owner-ui-process.test.ts
 test/owner-ui-session.test.ts
 test/owner-ui-stage-config.test.ts
 test/preparation-admission.test.ts

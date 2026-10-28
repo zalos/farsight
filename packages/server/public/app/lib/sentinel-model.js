@@ -199,6 +199,16 @@ export function statusClass(status) {
   );
 }
 
+/**
+ * What a review's own record says over its work's status: work that finished with a review the record calls
+ * unfinished is `unfinished` (never *done*), and a stage whose reviews disagree is `mixed`; otherwise null and the
+ * status speaks. `outcome` is a unit review's `completed`/`unfinished` or a stage's `completed`/`unfinished`/`mixed`.
+ */
+export function reviewState(status, outcome) {
+  if (status !== 'done' || !outcome || outcome === 'completed') return null;
+  return outcome === 'mixed' ? 'mixed' : 'unfinished';
+}
+
 /** The status word's catalog key, for a stage or a scan. */
 export function statusKey(status, scan = false) {
   if (scan) return 'sentinel.viewer.scanState.' + (status === 'awaiting' ? 'awaiting' : status);
@@ -256,7 +266,9 @@ export function provenanceParts(stage, lens) {
   const impl = p.implementation || {};
   const parts = [];
   if (p.kind === 'agent') {
-    if (p.provider) parts.push(p.provider.id);
+    // what ran is the runner (`copilot-cli brokered`), as the report names it; the provider entry is the dock's
+    if (p.runner) parts.push(p.runner.id + ' ' + p.runner.mode);
+    else if (p.provider) parts.push(p.provider.id);
     if (p.model) parts.push(p.model.reported || p.model.requested || '');
     else if (p.provider) parts.push(p.provider.model);
     if (p.prompt)

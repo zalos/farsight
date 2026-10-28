@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-// Genuine installed public executables and browser. Playwright is only this verifier's browser dependency.
+// The installed surface consumer: genuine npm-installed public executables (farsight serve, farsight-sentinel serve and
+// owner-ui) and a browser driving the Sentinel view — Scan there, confirmed in the paired owner frame, the scan, a
+// stage and both report downloads read there, after the source is gone. Playwright is only this verifier's browser
+// dependency.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -120,43 +123,67 @@ try {
         globalThis.__sentinelRead = { pass: e.data.pass, origin: e.origin };
     });
   });
+  // The Sentinel view: Scan there, confirmed in the paired owner frame (the only place that confirms), read there.
   await page.goto(origin + '/#/sentinel');
-  const frame = page.frameLocator('iframe[title="Sentinel"]');
-  await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).waitFor({ timeout: 15000 });
-  await frame.getByRole('button', { name: 'Preview fresh capture', exact: true }).click();
+  const frame = page.frameLocator('iframe[title="Sentinel"]'),
+    scanButton = page.locator('.snt-tools .snt-scan'),
+    confirmControl = frame.getByRole('button', { name: 'Confirm this run action', exact: true });
+  await page.locator('.snt-tabs [data-tab="owner"]').click();
+  await frame.getByText('Confirm here what you start from Sentinel.', { exact: true }).waitFor({ timeout: 15000 });
+  for (const gone of ['Preview fresh capture', 'Refresh retained state', 'Read shareable report'])
+    assert.equal(await frame.getByRole('button', { name: gone, exact: true }).count(), 0, gone);
+  for (let i = 0; i < 150 && (await scanButton.getAttribute('aria-disabled')) === 'true'; i++) await wait(100);
+  assert.equal(await scanButton.getAttribute('aria-disabled'), null, 'the installed view may start a scan');
+  await scanButton.click();
   await frame.getByRole('button', { name: 'Confirm preparation', exact: true }).click();
-  await frame.locator('#status').getByText('prepared', { exact: true }).waitFor({ timeout: 30000 });
+  await confirmControl.waitFor({ timeout: 30000 });
   rmSync(source, { recursive: true });
-  await frame.getByRole('button', { name: 'Retained inputs', exact: true }).click();
-  await frame.locator('#rows tbody tr').first().waitFor();
-  await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).click();
-  await frame.getByRole('button', { name: 'Confirm this run action', exact: true }).click();
-  await frame.locator('#status').getByText('completed', { exact: true }).waitFor({ timeout: 30000 });
-  await frame.getByRole('button', { name: 'Read shareable report', exact: true }).click();
-  await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 30000 });
-  const report = await frame.locator('#report-text').textContent(),
-    digest = await frame.locator('#report-text').getAttribute('data-format-digest');
-  assert.ok(report.length > 100);
-  assert.equal(digest, 'sha256:' + createHash('sha256').update(report).digest('hex'));
-  assert.equal(await frame.getByRole('button', { name: 'Preview start or resume', exact: true }).isDisabled(), true);
-  await frame.getByRole('button', { name: 'Refresh run list', exact: true }).click();
-  await frame.locator('#run-choice option').nth(1).waitFor({ state: 'attached' });
-  const runKeys = await frame.locator('#run-choice option').evaluateAll((options) => options.map((o) => o.value));
-  assert.ok(runKeys.length > 1);
-  assert.ok(runKeys.slice(1).every((key) => /^h[a-f0-9]{32}$/.test(key)));
-  await frame.locator('#run-choice').selectOption(runKeys[1]);
-  await frame.getByRole('button', { name: 'Refresh process graph', exact: true }).click();
-  await frame.locator('#process-graph .process-card').last().waitFor();
-  await frame.locator('#process-graph .process-links path').first().waitFor({ state: 'attached' });
-  await frame.locator('#process-graph .process-card summary').last().click();
-  await frame
-    .locator('#process-graph .process-card[open] details summary')
-    .filter({ hasText: 'Retained inputs' })
-    .first()
-    .click();
-  await frame.locator('#process-graph .process-card[open] table tbody tr').first().waitFor();
-  await frame.getByRole('button', { name: 'Read shareable report', exact: true }).click();
-  await frame.locator('#report-text[data-format-digest]').waitFor({ timeout: 30000 });
+  await confirmControl.click();
+  await frame.getByText('Action accepted. Retained status is shown below.', { exact: true }).waitFor();
+  // The view's ladder, a stage and the report, with the source gone.
+  const scanId = await page.evaluate(async () => {
+    const read = globalThis.__sentinelRead;
+    for (let i = 0; i < 300; i++) {
+      const r = await fetch(read.origin + '/api/sentinel/scans', { headers: { authorization: 'Bearer ' + read.pass } });
+      const done = (await r.json()).scans?.find((s) => s.state === 'completed');
+      if (done) return done.id;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return null;
+  });
+  assert.ok(scanId, 'the scan completed');
+  await page.goto(origin + '/#/sentinel/' + encodeURIComponent(scanId));
+  await page.locator('.snt-card').first().waitFor({ timeout: 15000 });
+  assert.ok((await page.locator('.snt-card').count()) >= 4);
+  await page.locator('.snt-tabs [data-tab="stage"]').click();
+  await page.locator('.snt-dock').getByRole('link', { name: 'Open the stage' }).click();
+  await page.locator('.snt[data-stop="stage"] .snt-stage').waitFor();
+  assert.equal(await page.locator('.snt-stage .snt-empty.err').count(), 0);
+  await page.locator('.snt-dock').getByRole('link', { name: 'Back to the pipeline' }).click();
+  const downloads = {};
+  for (const [format, label] of [
+    ['html', 'Report · HTML'],
+    ['md', 'Report · Markdown'],
+  ]) {
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('.snt-tools').getByRole('button', { name: label }).click(),
+    ]);
+    assert.match(download.suggestedFilename(), new RegExp('^sentinel-scan-\\d+\\.' + format + '$'));
+    downloads[format] = readFileSync(await download.path(), 'utf8');
+  }
+  const report = downloads.md;
+  assert.ok(report.length > 100 && downloads.html.length > 100);
+  // A delivery is checked against the digest the companion sends with it (each reading is its own delivery).
+  const delivered = await page.evaluate(async (id) => {
+    const read = globalThis.__sentinelRead;
+    const r = await fetch(read.origin + '/api/sentinel/scans/' + encodeURIComponent(id) + '/report/md', {
+      headers: { authorization: 'Bearer ' + read.pass },
+    });
+    return { text: await r.text(), digest: r.headers.get('x-sentinel-format-digest') };
+  }, scanId);
+  const digest = delivered.digest;
+  assert.equal(digest, 'sha256:' + createHash('sha256').update(delivered.text).digest('hex'));
   // The read model, read cross-origin from the Farsight page with that pass: the installed companion's own answers.
   const model = await page.evaluate(async () => {
     const read = globalThis.__sentinelRead;
@@ -192,21 +219,23 @@ try {
     writeFileSync(join(evidence, 'report.md'), report);
     await page.screenshot({ path: join(evidence, 'installed-completed.png'), fullPage: true });
   }
+  // Reconnect: a reload re-pairs the frame from its owner-origin reload token, and the view reads again.
   await page.reload();
-  await frame.locator('#status').getByText('completed', { exact: true }).waitFor({ timeout: 15000 });
+  await page.locator('.snt-tabs [data-tab="owner"]').click();
+  await frame.getByText('Confirm here what you start from Sentinel.', { exact: true }).waitFor({ timeout: 15000 });
+  await page.locator('.snt-card').first().waitFor({ timeout: 15000 });
   assert.deepEqual(errors, []);
   assert.deepEqual(requests, []);
   const result = {
     installedNpmOnly: true,
     noCheckoutRuntimeImports: true,
     sourceGone: true,
-    prepare: true,
-    separateUiConfirmation: true,
+    scanFromTheView: true,
+    confirmedInTheFrame: true,
     checksStartedSeparately: true,
+    viewReadsScanAndStage: true,
+    reportDownloads: ['html', 'md'],
     reportFormatDigest: digest,
-    retainedRunSelection: true,
-    processDag: true,
-    expandedWorkIo: true,
     reconnect: true,
     readModel: true,
     errors,
