@@ -492,11 +492,17 @@ test('a listed pid that another process took before it was stopped is continued 
   // the pid belongs to another process (the real one, which started later). The reap re-reads it from the system.
   const listed = { ...real, started: `${real.started} (earlier)` };
   const known = new Map([[pid, listed.started]]);
+  // The reader waits (up to 2 s) to see the real process stopped before answering, so the test proves the reap sent
+  // SIGSTOP before it read the row again: a stop takes effect when the process next runs, not when it is sent.
   const signalled: string[] = [];
   const reader = {
     table: async () => [listed],
     rows: async (pids: readonly number[]) => {
-      const rows = await SYSTEM_PROCESSES.rows(pids);
+      let rows = await SYSTEM_PROCESSES.rows(pids);
+      for (let i = 0; i < 100 && !rows.every((r: any) => r.state.includes('T')); i++) {
+        await new Promise((r) => setTimeout(r, 20));
+        rows = await SYSTEM_PROCESSES.rows(pids);
+      }
       signalled.push(...rows.map((r: any) => r.state));
       return rows;
     },

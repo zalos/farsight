@@ -299,6 +299,8 @@ const EARLY_POLLS_MS = [10, 25, 40, 60, 80] as const;
 const PS_TIMEOUT_MS = 2_000;
 /** How many times the tree is listed and frozen again for what was started before it stopped. */
 const FREEZE_ROUNDS = 3;
+/** How long a stopped process's row is read again, waiting for the stop to take effect. */
+const STOP_WAIT_MS = 1_000;
 
 /** One `/proc/<pid>/stat` line as a row: the fields after the command name (which may hold spaces and parentheses). */
 export function procRow(pid: number, line: string): ProcessRow | undefined {
@@ -396,7 +398,9 @@ const sameProcess = (a: ProcessRow, b: ProcessRow) =>
  * While the interpreter has not exited (`alive()`, read synchronously, so its pid is not yet reaped and cannot be
  * reused) its group, which Sentinel created, is stopped wholesale. Then, each round: the table is read and the tree
  * taken from it; each process of the tree is stopped (SIGSTOP), its row read again, and kept only when pid, parent,
- * group and start are unchanged and it is stopped; any other is continued (SIGCONT) at once and left alone. A stopped
+ * group and start are unchanged and it is seen stopped (the row is read again until the stop takes effect, which on
+ * Linux can be after the signal returns, up to STOP_WAIT_MS); any other is continued (SIGCONT) at once and left
+ * alone. A stopped
  * process cannot exit, so its pid cannot be reused before it is killed. Rounds repeat for what was started before its
  * parent stopped. Then every kept process is killed (SIGKILL), and the interpreter's group is killed wholesale only
  * while the interpreter is alive or a kept (recorded, verified, stopped) member still holds it. No other group is
@@ -426,14 +430,35 @@ export async function reapTree(
         send(r.pid, 'SIGSTOP');
         stopped.add(r.pid);
       }
-      const now = new Map((await reader.rows(candidates.map((r) => r.pid))).map((r) => [r.pid, r]));
-      for (const r of candidates) {
-        const again = now.get(r.pid);
-        if (again && sameProcess(r, again) && again.state.includes('T')) kept.set(r.pid, again);
-        else {
-          stopped.delete(r.pid);
-          if (again && !again.state.includes('Z')) send(r.pid, 'SIGCONT');
+      // A stop takes effect when the process next runs, not when the signal is sent (on Linux, /proc can still say
+      // it is sleeping right after), so each row is read again until it is stopped, or is no longer the same
+      // process, or STOP_WAIT_MS passes. Only a stopped process with an unchanged row is kept.
+      const pending = new Map(candidates.map((r) => [r.pid, r]));
+      const until = Date.now() + STOP_WAIT_MS;
+      for (let delay = 2; pending.size; delay = Math.min(delay * 2, 50)) {
+        const now = new Map((await reader.rows([...pending.keys()])).map((r) => [r.pid, r]));
+        for (const [pid, r] of pending) {
+          const again = now.get(pid);
+          if (!again || again.state.includes('Z')) {
+            // It has exited: nothing to verify, nothing to signal.
+            pending.delete(pid);
+            stopped.delete(pid);
+          } else if (!sameProcess(r, again)) {
+            pending.delete(pid);
+            stopped.delete(pid);
+            send(pid, 'SIGCONT');
+          } else if (again.state.includes('T')) {
+            pending.delete(pid);
+            kept.set(pid, again);
+          }
         }
+        if (!pending.size || Date.now() >= until) break;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      // Not seen stopped in time: never killed, continued and left to a later round.
+      for (const pid of pending.keys()) {
+        stopped.delete(pid);
+        send(pid, 'SIGCONT');
       }
     }
   } finally {
