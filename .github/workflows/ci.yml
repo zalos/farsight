@@ -133,7 +133,7 @@ jobs:
           TEST_BASE: ${{ needs.changes.outputs.testBase }}
           TEST_ALSO: ${{ needs.changes.outputs.testAlso }}
         run: |
-          set -euo pipefail
+          set -eo pipefail # no -u: an empty also array under bash 3.2, when this block is run on a Mac
           if [[ "$TEST_BASE" =~ ^[0-9a-f]{40,64}$ ]] && git cat-file -e "$TEST_BASE^{commit}" 2>/dev/null; then
             filters=(--filter "...[$TEST_BASE]")
             read -ra also <<< "$TEST_ALSO"
