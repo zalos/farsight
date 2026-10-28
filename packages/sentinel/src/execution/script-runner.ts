@@ -19,12 +19,14 @@
 // folder and nothing it writes outside stdout is kept, but nothing confines it to that. It runs in its own process
 // group, and its descendants are listed while it runs: at its deadline, at its output bound and when the interpreter
 // exits, its group and every descendant that left it (a `detached` child in a group of its own) are frozen and killed,
-// so a descendant can neither outlive the attempt nor hold it open. The limit of that guarantee: a descendant that
-// leaves the tree before a listing sees it (within TREE_POLL_MS), or is spawned between the last listing and the kill. The supervisor's memory and process limits are not
+// each process only after its identity is verified again while it is stopped (reapTree), so a descendant can neither
+// outlive the attempt nor hold it open, and a reused pid is never signalled but to stop it and continue it at once.
+// The limit of that guarantee: a descendant that leaves the tree before a listing sees it (within TREE_POLL_MS), or is
+// spawned between the last listing and the kill; on macOS a process's start time resolves to the second. The supervisor's memory and process limits are not
 // applied to it; only the deadline and the output bound are.
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { Ajv } from 'ajv';
 import { join } from 'node:path';
 import type { ArtifactId, Digest, Id, Timestamp, WorkRef } from '../contracts/common.js';
@@ -266,38 +268,87 @@ export async function runHostScript(request: HostScriptRequest): Promise<Prepare
   }
 }
 
-/** One process as `ps` lists it: its id, its parent, its group, and when it started (its identity across pid reuse). */
+/**
+ * One process as the system lists it: its id, its parent, its group, its state, and when it started. A process is the
+ * script's by pid and start together, so a pid the system reused for another process is never taken for it. The start
+ * is the kernel's start time in clock ticks on Linux (`/proc/<pid>/stat`), and `ps`'s `lstart` elsewhere, which
+ * resolves to the second.
+ */
 export interface ProcessRow {
   readonly pid: number;
   readonly ppid: number;
   readonly pgid: number;
+  /** The state letters (`T`: stopped; `Z`: exited, not yet reaped). */
+  readonly state: string;
   readonly started: string;
+}
+
+/** Reads the process table, and the current rows of named pids: injectable so a test can replace a pid's identity. */
+export interface ProcessReader {
+  table(): Promise<ProcessRow[]>;
+  rows(pids: readonly number[]): Promise<ProcessRow[]>;
 }
 
 /** How often a running script's descendants are listed, so one that leaves the tree is still known at the end. */
 const TREE_POLL_MS = 100;
 /** How long one listing of the process table may take before the attempt settles without it. */
 const PS_TIMEOUT_MS = 2_000;
+/** How many times the tree is listed and frozen again for what was started before it stopped. */
+const FREEZE_ROUNDS = 3;
 
-/** The process table, from `ps` with a fixed environment; empty when it cannot be listed. */
-export function processTable(): Promise<ProcessRow[]> {
+/** One `/proc/<pid>/stat` line as a row: the fields after the command name (which may hold spaces and parentheses). */
+export function procRow(pid: number, line: string): ProcessRow | undefined {
+  const rest = line.slice(line.lastIndexOf(')') + 2).split(' ');
+  if (rest.length < 20) return undefined;
+  return { pid, state: rest[0]!, ppid: Number(rest[1]), pgid: Number(rest[2]), started: `ticks:${rest[19]}` };
+}
+function procRows(pids: Iterable<number>): ProcessRow[] {
+  const rows: ProcessRow[] = [];
+  for (const pid of pids)
+    try {
+      const row = procRow(pid, readFileSync(`/proc/${pid}/stat`, 'utf8'));
+      if (row) rows.push(row);
+    } catch {
+      /* it has ended */
+    }
+  return rows;
+}
+/** `ps` with a fixed environment; an exit status (a named pid that has ended) still yields the rows it printed. */
+function psRows(args: readonly string[]): Promise<ProcessRow[]> {
   return new Promise((resolve) => {
     execFile(
       'ps',
-      ['-A', '-o', 'pid=,ppid=,pgid=,lstart='],
+      [...args, '-o', 'pid=,ppid=,pgid=,stat=,lstart='],
       { env: { PATH: '/bin:/usr/bin', LC_ALL: 'C' }, timeout: PS_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 },
       (error, stdout) => {
-        if (error) return resolve([]);
+        if (error && typeof (error as { code?: unknown }).code !== 'number') return resolve([]);
         const rows: ProcessRow[] = [];
         for (const line of String(stdout).split('\n')) {
-          const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
-          if (m) rows.push({ pid: Number(m[1]), ppid: Number(m[2]), pgid: Number(m[3]), started: m[4]! });
+          const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(line);
+          if (m) rows.push({ pid: Number(m[1]), ppid: Number(m[2]), pgid: Number(m[3]), state: m[4]!, started: m[5]! });
         }
         resolve(rows);
       },
     );
   });
 }
+/** This computer's processes: `/proc` on Linux, `ps` elsewhere. A table that cannot be read is empty. */
+export const SYSTEM_PROCESSES: ProcessReader = Object.freeze({
+  table: async () => {
+    if (process.platform !== 'linux') return psRows(['-A']);
+    try {
+      return procRows(
+        readdirSync('/proc')
+          .filter((n) => /^\d+$/.test(n))
+          .map(Number),
+      );
+    } catch {
+      return [];
+    }
+  },
+  rows: async (pids: readonly number[]) =>
+    !pids.length ? [] : process.platform === 'linux' ? procRows(pids) : psRows(['-p', pids.join(',')]),
+});
 
 /**
  * The processes of `table` that are the script's: every row whose identity (pid and start) is already `known`, every
@@ -326,32 +377,72 @@ const send = (pid: number, sig: NodeJS.Signals) => {
     /* it has ended */
   }
 };
+const sameProcess = (a: ProcessRow, b: ProcessRow) =>
+  a.pid === b.pid && a.ppid === b.ppid && a.pgid === b.pgid && a.started === b.started;
 
 /**
- * Ends every process of a script: the interpreter's group, and every descendant that left it (a `detached` child in
- * a group or session of its own). The tree is listed and frozen (SIGSTOP, so nothing in it forks again), listed once
- * more for what was spawned before it stopped, then every process and every group one of them leads is killed, and
- * the table is read once more to kill whatever survived. Its limit: a descendant that left the tree (its parent
- * exited) before any listing saw it, or that was spawned between the last listing and the kill, is not known.
+ * Ends every process of a script: the interpreter's group, and every descendant that left it (a `detached` child in a
+ * group or session of its own), one verified process at a time.
+ *
+ * While the interpreter has not exited (`alive()`, read synchronously, so its pid is not yet reaped and cannot be
+ * reused) its group, which Sentinel created, is stopped wholesale. Then, each round: the table is read and the tree
+ * taken from it, with the members of the interpreter's group while that group is still Sentinel's; each process of the tree is stopped (SIGSTOP), its row read again, and kept only when pid, parent,
+ * group and start are unchanged and it is stopped; any other is continued (SIGCONT) at once and left alone. A stopped
+ * process cannot exit, so its pid cannot be reused before it is killed. Rounds repeat for what was started before its
+ * parent stopped. Then every kept process is killed (SIGKILL), and the interpreter's group is killed wholesale only
+ * while the interpreter is alive or a kept, stopped member still holds that group. No other group is signalled.
+ *
+ * Its limit: a descendant that left the tree (its parent exited) before any listing saw it, or that was started
+ * between the last listing and the kill, is not known; on macOS a start resolves to the second, so a process that
+ * reused a pid within the same second with the same parent and group would be taken for the script's.
  */
-async function reapTree(group: number | undefined, known: Map<number, string>, live: number | undefined) {
-  if (group !== undefined) send(-group, 'SIGSTOP');
-  const first = treeOf(await processTable(), known, live);
-  for (const r of first) {
-    known.set(r.pid, r.started);
-    send(r.pid, 'SIGSTOP');
-  }
-  const tree = treeOf(await processTable(), known, live);
-  for (const r of tree) known.set(r.pid, r.started);
-  const kill = (rows: readonly ProcessRow[]) => {
-    if (group !== undefined) send(-group, 'SIGKILL');
-    for (const r of rows) {
-      if (r.pgid === r.pid) send(-r.pgid, 'SIGKILL');
-      send(r.pid, 'SIGKILL');
-    }
+export async function reapTree(
+  group: number | undefined,
+  known: Map<number, string>,
+  alive: () => boolean,
+  reader: ProcessReader = SYSTEM_PROCESSES,
+): Promise<void> {
+  const live = () => (alive() ? group : undefined);
+  // The members of the interpreter's group, while that group is still the one Sentinel created: the interpreter is
+  // alive, or no process now has its pid (members keep a group's id from being reused), or the one that has it is the
+  // interpreter as first listed. A pid taken by another process's group gives no members.
+  const groupOf = (table: readonly ProcessRow[]) => {
+    if (group === undefined) return [];
+    const leader = table.find((r) => r.pid === group);
+    if (!alive() && leader && known.get(group) !== leader.started) return [];
+    return table.filter((r) => r.pgid === group);
   };
-  kill(tree);
-  kill(treeOf(await processTable(), known));
+  if (group !== undefined && alive()) send(-group, 'SIGSTOP');
+  const kept = new Map<number, ProcessRow>();
+  const stopped = new Set<number>();
+  try {
+    for (let round = 0; round < FREEZE_ROUNDS; round++) {
+      const table = await reader.table();
+      const listed = new Map(treeOf(table, known, live()).map((r) => [r.pid, r]));
+      for (const r of groupOf(table)) if (!listed.has(r.pid)) listed.set(r.pid, r);
+      const candidates = [...listed.values()].filter((r) => !kept.has(r.pid));
+      if (!candidates.length) break;
+      for (const r of candidates) {
+        known.set(r.pid, r.started);
+        send(r.pid, 'SIGSTOP');
+        stopped.add(r.pid);
+      }
+      const now = new Map((await reader.rows(candidates.map((r) => r.pid))).map((r) => [r.pid, r]));
+      for (const r of candidates) {
+        const again = now.get(r.pid);
+        if (again && sameProcess(r, again) && again.state.includes('T')) kept.set(r.pid, again);
+        else {
+          stopped.delete(r.pid);
+          if (again && !again.state.includes('Z')) send(r.pid, 'SIGCONT');
+        }
+      }
+    }
+  } finally {
+    // A stopped process the reap could not verify is never left stopped.
+    for (const pid of stopped) if (!kept.has(pid)) send(pid, 'SIGCONT');
+    if (group !== undefined && (alive() || [...kept.values()].some((r) => r.pgid === group))) send(-group, 'SIGKILL');
+    for (const pid of kept.keys()) send(pid, 'SIGKILL');
+  }
 }
 
 /**
@@ -386,7 +477,7 @@ export function spawnBounded(
     let polling: Promise<void> | undefined;
     const poll = () => {
       if (settling || exited || polling) return;
-      polling = processTable().then((table) => {
+      polling = SYSTEM_PROCESSES.table().then((table) => {
         for (const r of treeOf(table, known, exited ? undefined : child.pid)) known.set(r.pid, r.started);
         polling = undefined;
       });
@@ -400,10 +491,9 @@ export function spawnBounded(
       clearTimeout(timer);
       clearTimeout(grace);
       request.signal.removeEventListener('abort', onAbort);
-      const live = exited ? undefined : child.pid;
       // The attempt settles whatever the reap finds: a listing that fails or times out leaves only the group kill.
       void (polling ?? Promise.resolve())
-        .then(() => reapTree(child.pid, known, live))
+        .then(() => reapTree(child.pid, known, () => !exited))
         .catch(() => undefined)
         .then(() => {
           child.stdout.destroy();
