@@ -6,3 +6,6 @@ b14394571c21ee6014b25d01f697ab68cb6eb2cd
 
 # style: format the remaining packages with Prettier (#206)
 b32b70e578619bb710c77ce194d02fa1ae961b6e
+
+# style: format code-parser and mcp with Prettier (#208)
+cdf7ab9ea7e4fd438895e878093d80986db11826

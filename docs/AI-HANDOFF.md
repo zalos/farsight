@@ -1,5 +1,24 @@
 # Farsight — shared Codex / Claude memory
 
+## Phase 0 complete — 2026-10-27
+
+#208 `cdf7ab9e`: formatted code-parser and mcp (37 JS/TS files); AST-identical, with identical real-ingest node and edge sets.
+#209 `49951fc7`: cleared Sentinel's suppressions — 129 fixed, 17 reasoned disables.
+#210 `00683efa`: cleared non-Sentinel suppressions — 142 fixed, 24 reasoned disables.
+Seven suppressions remain in five sha256-pinned feasibility files; their measured bytes stay unchanged to preserve retained evidence.
+`eslint-suppressions.json` now holds only those seven; #210's ingest delta is two unused viewer helpers, two call edges and 17 inferred coverage edges from an unused `preview` import (both builds agree on the same source).
+Every eligible JS/TS area is formatted; permanent exclusions are listed in `.prettierignore`.
+PR #121 must be reapplied onto the formatted main rather than merged, with `prettier --write` on its files.
+Intermittent CI tests seen in phase 0:
+
+- `sentinel-service`: snapshot-rollback clock test on main's `b32b70e5` run.
+- `e2e`: Map lanes sizing with a NaN font / zoom ×0.97 on #208's first run.
+- `e2e`: pinch zoom at `map-zoom.pw.spec.ts:149`; failed on main in all three isolated runs.
+- `e2e`: owner-UI browser gate `/confirm` timed out after 30 s on #210's rebased run.
+- `sentinel-isolation`: OOM witness (#184).
+- MCP-controls package consumer: local timeout / `controlOutcomeUnknown` on #209; not reproduced.
+- `validate`: `packages/sentinel/test/preparation-publication-crash.test.ts:57` service-readiness retry limit (`i < 200`) before the SIGKILL checkpoint, seen on #211's first run.
+
 ## Phase 0 hygiene landed — 2026-10-27
 
 #199 tooling `b1bca9f9`, #202 gitleaks allowlist `136600b9` and #201 Sentinel formatting `b1439457` landed;
