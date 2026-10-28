@@ -2060,21 +2060,18 @@ host-instance/readOnly probe and a fresh exact-parent context challenge occur im
 this is a sampled boundary, not an atomic transaction across processes. Already accepted work may finish later.
 
 A separate closed owner-UI receipt honestly names `owner-ui`/`human` and its workspace, store, epoch, host, session
-and context revision. It can confirm capture, the existing start/pause/cancel actions, a model start as one composite
-(the start receipt plus one `paid.admit` receipt per model envelope) and the write of the pipeline file
-(`settings.adopt`, bound to exactly the bytes written over exactly the file the page read; writing only, adoption
-stays the CLI owner's act) — the last two since U-3, below. Ordinary owner-UI socket handshakes remain agents;
-private descriptor proof plus the live scoped controller authority is required to issue or spend that receipt. It
-cannot confirm settings or pipeline adoption, import, acquisition or disclosure, and never qualifies as a consumed
-CLI receipt. Legacy CLI receipt/capability schemas remain unchanged. A genuinely paired
+and context revision. It can confirm only capture and existing start/pause/cancel actions. Ordinary owner-UI socket
+handshakes remain agents; private descriptor proof plus the live scoped controller authority is required to issue
+or spend that receipt. It cannot confirm settings, import, acquisition, disclosure, or model spending, and never
+qualifies as a consumed CLI receipt. Legacy CLI receipt/capability schemas remain unchanged. A genuinely paired
 unexpired session retains the owner past detached idle; sockets and reload do not renew it, and revoke/expiry
 release retention. Restart loses browser authority and requires another explicit owner launch.
 
 The panel consumes the canonical service inspection/report projections, with view-local evidence references,
 explicit historical bootstrap versus current checks, separate preview/confirmation/start, source-gone linked
 reruns, and verified Markdown format bytes. Selecting another run clears the prior report. Settings saving is
-unavailable pending shared adoption/CAS. A model stage runs only under the composite the owner confirmed in the panel
-(U-3), never under a plain run start. Hosted API review is paused by default.
+unavailable pending shared adoption/CAS; model execution stays unavailable until its own capability and admission
+are qualified. Hosted API review is paused by default. The panel does not infer model authority from run start.
 
 ADR48 saved-key correction: private lookup version2 records only `unsent`, `unknown`, or `refused` dispatch data,
 under the same existing cross-process mutex. Legacy version1 is conservatively unknown. A durable unsent save is
@@ -2119,22 +2116,6 @@ instruction text, hidden model authority or provider call is added. Endpoint/cod
 where the qualified inspection does not supply them. Full and baseline comparison reports are explicitly
 regenerated through the existing canonical renderer for the exact selected runs. Linked whole-run preparation
 keeps its existing owner receipt; per-work browser rerun, settings editing and custom stages remain unavailable.
-
-ADR48 viewer read-model extension (2026-10-28): the owner companion also serves a read-only model of retained scans
-to Farsight's own Sentinel surface, cross-origin, without Farsight's server importing Sentinel (ADR 18). The paired
-owner frame mints a separate **read pass** (`POST /viewer-pass` under its session capability) and hands it to its
-exact parent with a message bound to the frame nonce, document and host instance; the parent never holds the owner
-capability, a reload token, a receipt or a nonce. The pass authorizes only `GET /api/sentinel/scans`,
-`/scans/before/<n>`, `/scans/<run id>`, `/scans/<run id>/stages/<stage>`, `.../units/<k>` and
-`/scans/<run id>/report[/<format>]`, answered by closed `owner-ui.*` read operations under the session's own proof
-and view revision; the CORS grant names only the paired Farsight origin, never credentials; every other method on
-those routes is 405; a new pass replaces the old one and the session's end ends both. A scan is addressed by its run
-id; its number is a display ordinal from the ledger's run-created order. What a try ran is read from its retained
-invocation record, authenticated against its attempt, work, epoch and pinned adapter, with host paths and token
-arguments scrubbed. An opened check or review carries bounded retained text (outputs, exchanges) as owner-private
-data to the paired page only; a secret match in the accepted evidence withholds every name and text, and the source
-itself is never streamed. A browser Scan press only asks the owner frame, which keeps its own preview and separate
-confirmation; the viewer greys Scan with the frame's reason when a browser cannot start one.
 
 ADR48 release qualification gate: optional owner-adopted `nativeClaudeReviewEnabled` defaults false when
 absent. Public native-Claude stage resolution and existing admitted review selections at foreground start
@@ -2200,34 +2181,6 @@ and opens no envelope; the command line asks for `--confirm-models` before it is
 rerun with changed bindings needs its own confirmation, since no receipt outlives its plan. *Why:* the
 owner reads the whole composite in the preview (every stage, where it runs and what it does, every model with its
 budget) before confirming it, so one confirmation over exactly those bindings is the same consent the foreground pair
-gave, and the run no longer depends on the confirming terminal staying open. The browser half is the owner-panel
-amendment below (U-3).
-
-ADR48 owner-panel amendment (lane L-UX U-3, 2026-10-28). *What changed:* the paired panel confirms two more things,
-and nothing else. (1) A model start as one composite: its preview is the service's own `start.preview` (the stages the
-revision runs, each model with its runner and budget); its confirmation issues one owner-UI `run.start` receipt and
-one `paid.admit` receipt per model envelope (`envelopeBinding`, the same binding the CLI's composite uses), and sends
-`run.start` with `envelopeReceipts`. The service checks every envelope receipt before it spends the start receipt, as
-for the CLI. A preview the policy would refuse (no `paid.admit` grant, a changed binding) answers its reason and issues
-nothing. (2) A pipeline file write: the page edits a copy and hands it to the paired frame; `pipeline.write` without a
-receipt checks and previews it and writes nothing; the frame's confirmation issues one `settings.adopt` receipt bound
-to `pipelineWriteBinding` (those bytes over the file digest the page read), which the service spends once on the live
-proof and writes the file. Adoption, and a rerun of one stage from the page, stay the owner command line's
-(`pipeline adopt --confirm`, `rerun <run> --stage <stage> --confirm`); the page greys Rerun with those lines until the
-service's rerun takes the panel's receipt (P-4b). *The closed-scope rule:* every owner-UI receipt is issued inside one
-confirming request's scope, which closes when that request returns. A `paid.admit` receipt is issued only inside a
-`run.start` scope (no other scope admits it) and is the one owner-UI receipt spent after its scope has closed, because
-an envelope opens later in the run: the book the run holds was made under the live proof, and the receipt is spent
-only when its issuer (workspace, store, epoch, host, session and context revision) equals that book's — another
-session's book, or the same session after pairing again, refuses it. Every other owner-UI receipt still needs its
-scope live when spent. *Lifetime:* a `paid.admit` receipt lives ten minutes from its confirmation, like the CLI's
-envelope receipts; every other owner-UI receipt thirty seconds. *Broker (granted by the lead on 2026-10-28):*
-openEnvelope, the native run path and the CLI-runner call path accept an owner-UI book's consumed receipt through one
-`spentForIntent(receipt, intentDigest, envelopeId)` predicate: a book's `consume` returned it (the private authority
-record `receiptAuthority` reads; a copy or an unspent receipt has none), it authorizes exactly this envelope's admitted
-intent, and this is the envelope it opened — a spent receipt is bound to the first envelope it opens, so one handed
-back again feeds no second envelope. The CLI call authorities (`review/providers/authority.ts`) hold either book's
-spent receipt and re-check at each start that a book's consume returned it; the broker compared the intent before
-issue. *Why:* the owner reads the same composite in the panel that the command line prints, so one confirmation there
-is the same consent; the pipeline write is bound to exact bytes and leaves adoption, the act that changes what a scan
-runs, with the owner command line.
+gave, and the run no longer depends on the confirming terminal staying open. The owner-panel clause above (the
+paired browser "cannot confirm … model spending") is unchanged until the browser half lands (U-3: its own receipt for
+the start and for each envelope, through the same facade).

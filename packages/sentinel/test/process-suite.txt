@@ -57,7 +57,6 @@ test/kernel-digest.test.ts
 test/next-package.test.ts
 test/owner-decision-report.test.ts
 test/owner-decisions.test.ts
-test/owner-ui-composite-start.test.ts
 test/owner-ui-lifecycle.test.ts
 test/owner-ui-read-http.test.ts
 test/owner-ui-read-model.test.ts

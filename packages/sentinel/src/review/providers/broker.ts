@@ -15,9 +15,8 @@ import { randomUUID } from 'node:crypto';
 import type { ActionEffect, ActionIntent, Budget, DecisionChannel, Principal } from '../../contracts/index.js';
 import { admit, type AdmissionResult } from '../../policy/admission.js';
 import { canonicalDigest } from '../../policy/digest.js';
-import { receiptAuthority, type ReceiptBook, type ReceiptBinding } from '../../policy/receipts.js';
+import { isConsumedReceipt, receiptAuthority, type ReceiptBook, type ConsumedReceipt } from '../../policy/receipts.js';
 import { snapshot } from '../../policy/immutable.js';
-import type { SpentReceipt } from './authority.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../../policy/settings.js';
 import type { BudgetLedger, Reservation } from './budget.js';
 import { resolveCredential, type CredentialSource, type Secret } from './credentials.js';
@@ -58,14 +57,6 @@ export interface BrokerDeps {
   readonly nativeClaude?: NativeClaudeRuntime;
 }
 
-/**
- * A book that spends one receipt for exactly one binding: the owner CLI's `ReceiptBook`, or (U-3) the paired browser's
- * owner-UI book, which spends an envelope receipt its owner confirmed with the start. Admission calls only `consume`.
- */
-export interface EnvelopeReceiptBook {
-  consume(receiptId: string, given: ReceiptBinding, now: Date): SpentReceipt;
-}
-
 export interface OpenEnvelopeRequest {
   readonly binding: ProviderBinding;
   readonly policy: EffectivePolicy;
@@ -75,7 +66,7 @@ export interface OpenEnvelopeRequest {
   /** Set by the transport the request arrived on, never by a request body. */
   readonly requestedBy: { principal: Principal; channel: DecisionChannel };
   readonly stateDigest: string;
-  readonly receipt?: { book: EnvelopeReceiptBook; id: string };
+  readonly receipt?: { book: ReceiptBook; id: string };
 }
 
 /** An admitted budget. Only `openEnvelope` makes one; its credential is held privately, never on the object. */
@@ -174,24 +165,10 @@ const envelopes = new WeakMap<
     cliRuntime?: object;
     /** Whether the kind's release gate was open under the policy this envelope was admitted with. */
     released: boolean;
-    receipt?: SpentReceipt;
+    receipt?: ConsumedReceipt;
   }
 >();
 const stamp = (d: Date) => d.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z');
-
-/** The one envelope each spent receipt opened. A receipt is spent once, so it opens one envelope and serves only it. */
-const opened = new WeakMap<object, string>();
-
-/**
- * The one rule for a spent receipt, at every site that needs one (opening a paid or disclosing envelope, a native run,
- * a brokered CLI-runner call): a book's `consume` returned it — the owner CLI's book or the paired browser's owner-UI
- * book — what it authorizes is exactly this envelope's admitted intent, and this is the envelope it opened.
- * `receiptAuthority` answers only for an object `consume` returned and recorded, so an unspent receipt or a copy of a
- * spent one fails; one spent for another intent fails; one already holding another envelope fails.
- */
-function spentForIntent(receipt: unknown, intentDigest: string, envelopeId: string): receipt is SpentReceipt {
-  return receiptAuthority(receipt)?.intentDigest === intentDigest && opened.get(receipt as object) === envelopeId;
-}
 const ROLES = new Set(['system', 'user', 'assistant']);
 
 export class ModelBroker {
@@ -247,8 +224,7 @@ export class ModelBroker {
         credential,
         stateDigest: req.stateDigest,
         now: this.#now(),
-        // Type only: admission spends the receipt through `consume`, which every envelope book has.
-        ...(receipt ? { receipt: receipt as { book: ReceiptBook; id: string } } : {}),
+        ...(receipt ? { receipt } : {}),
       });
     // The policy first, with no credential read: a denial reads nothing and contacts nothing.
     const preview = decide(() => ({ basis: 'unknown', detail: 'not read yet' }));
@@ -286,7 +262,7 @@ export class ModelBroker {
       );
     // Paid or disclosing use needs the owner's receipt even when the grants ask for no confirmation: spend it here
     // when admission did not, against exactly this intent, state and policy revision.
-    let spent: SpentReceipt | null = result.receipt;
+    let spent = result.receipt;
     if ((hosted || priced) && !spent && req.receipt) {
       spent = req.receipt.book.consume(
         req.receipt.id,
@@ -294,23 +270,15 @@ export class ModelBroker {
         this.#now(),
       );
     }
-    // Only the digest a book's consume recorded is the receipt's; any other object a book hands back records none.
-    const receiptDigest = receiptAuthority(spent)?.digest ?? null;
-    const admissionDigest = canonicalDigest(result.record);
-    const id = `menv-${admissionDigest.slice(7, 39)}`;
-    // The receipt is bound to the first envelope it opens; a second envelope never takes it over.
-    if (spent && !opened.has(spent)) opened.set(spent, id);
-    if ((hosted || priced) && !spentForIntent(spent, result.record.intentDigest, id)) {
+    if (
+      (hosted || priced) &&
+      !(spent && isConsumedReceipt(spent) && receiptAuthority(spent)?.intentDigest === result.record.intentDigest)
+    ) {
       fail('sentinel.provider.receiptRequired', hosted ? 'hosted disclosure' : 'priced inference');
     }
-    // Who confirmed it is who the admission names (admitOwnerUi's provenance, kept when the broker spends the
-    // receipt): a panel receipt admits only the panel's human requester, and a CLI receipt never the panel's channel.
-    if (spent && receiptAuthority(spent)) {
-      const panel = spent.receipt.schema === 'sentinel-owneruireceipt/draft-1';
-      const by = req.requestedBy;
-      if (panel ? !(by.principal === 'human' && by.channel === 'owner-ui') : by.channel === 'owner-ui')
-        fail('sentinel.provider.notAdmitted', 'the receipt was confirmed through another channel than the one named');
-    }
+    const receiptDigest = spent?.digest ?? null;
+    const admissionDigest = canonicalDigest(result.record);
+    const id = `menv-${admissionDigest.slice(7, 39)}`;
     this.#deps.ledger.createEnvelope({
       id,
       runId: req.runId,
@@ -442,7 +410,9 @@ export class ModelBroker {
       fail('sentinel.provider.reservationState', `operation ${req.operationId} is already ${res.state}`);
     if (
       !held.cliRuntime ||
-      !spentForIntent(held.receipt, env.admission.intentDigest, env.id) ||
+      !held.receipt ||
+      !isConsumedReceipt(held.receipt) ||
+      receiptAuthority(held.receipt)?.intentDigest !== env.admission.intentDigest ||
       res.envelopeId !== env.id
     )
       return fail('sentinel.provider.notAdmitted', 'a native run requires its exact admitted receipt and reservation');
@@ -601,7 +571,9 @@ export class ModelBroker {
     if (wire && cli) {
       if (
         !held.cliRuntime ||
-        !spentForIntent(held.receipt, env.admission.intentDigest, env.id) ||
+        !held.receipt ||
+        !isConsumedReceipt(held.receipt) ||
+        receiptAuthority(held.receipt)?.intentDigest !== env.admission.intentDigest ||
         res.envelopeId !== env.id
       )
         return fail(

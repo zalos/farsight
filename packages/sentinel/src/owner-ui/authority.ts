@@ -10,24 +10,7 @@ import type { Workspace } from '../service/local.js';
 import type { OwnerUiIssuer } from '../contracts/ownerui.js';
 import { canonicalDigest } from '../policy/digest.js';
 import { OwnerUiError, readOwnerContext, type OwnerViewContext } from './session.js';
-/**
- * What the paired owner panel may confirm (ADR 48 as amended by U-3): a capture, a run's start, pause or cancel, the
- * model envelopes a start opens (`paid.admit`, only under that start's own confirmation) and a pipeline file write
- * (`settings.adopt` bound to exactly the bytes written; it never adopts).
- */
-export type OwnerUiAction =
-  'capture.source' | 'run.start' | 'run.pause' | 'run.cancel' | 'paid.admit' | 'settings.adopt';
-/** The actions a receipt from the panel may carry, in the order the contract lists them. */
-export const OWNER_UI_ACTIONS: readonly OwnerUiAction[] = Object.freeze([
-  'capture.source',
-  'run.start',
-  'run.pause',
-  'run.cancel',
-  'paid.admit',
-  'settings.adopt',
-]);
-/** An action confirmed together with another: a start's model envelopes, confirmed once as its composite. */
-const COMPOSITE: Readonly<Partial<Record<OwnerUiAction, OwnerUiAction>>> = { 'paid.admit': 'run.start' };
+export type OwnerUiAction = 'capture.source' | 'run.start' | 'run.pause' | 'run.cancel';
 interface Pair {
   readonly store: SentinelStore;
   readonly descriptor: OwnerCompanionDescriptor;
@@ -74,8 +57,7 @@ export function assertOwnerUiProof(proof: OwnerUiProof, action?: string) {
     throw new OwnerUiError('sentinel.ownerUi.readOnly');
   if (
     action !== undefined &&
-    (!(OWNER_UI_ACTIONS as readonly string[]).includes(action) ||
-      (scope.action !== action && (scope.action === null || COMPOSITE[action as OwnerUiAction] !== scope.action)))
+    (scope.action !== action || !['capture.source', 'run.start', 'run.pause', 'run.cancel'].includes(action))
   )
     throw new OwnerUiError();
 }

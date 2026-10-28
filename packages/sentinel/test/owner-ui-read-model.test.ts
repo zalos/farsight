@@ -644,8 +644,6 @@ test('the route table answers GET reads only, from the paired origin only', () =
   });
   assert.deepEqual(readRoute(`/api/sentinel/scans/${run}/report`), { kind: 'report', runId: run, format: 'md' });
   assert.deepEqual(readRoute(`/api/sentinel/scans/${run}/report/html`), { kind: 'report', runId: run, format: 'html' });
-  assert.deepEqual(readRoute('/api/sentinel/pipeline'), { kind: 'pipeline' });
-  assert.deepEqual(routeOperation({ kind: 'pipeline' }), { op: 'owner-ui.pipeline', body: {} });
   for (const bad of [
     '/api/sentinel/scans/before',
     '/api/sentinel/scans/before/0',
@@ -660,8 +658,6 @@ test('the route table answers GET reads only, from the paired origin only', () =
     `/api/sentinel/scans/${run}/stages/x/other/1`,
     `/api/sentinel/scans/${run}/report/exe`,
     '/api/sentinel/runs',
-    '/api/sentinel/pipeline/x',
-    '/api/sentinel/pipeline?x=1',
     '/api/other',
   ])
     assert.equal(readRoute(bad), null, bad);

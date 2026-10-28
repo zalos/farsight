@@ -1,7 +1,7 @@
 import type{StringEntry}from'./strings.js';
 const same=(text:string,define:string):StringEntry=>({hud:text,professional:text,define});
 export const SENTINEL_OWNER_UI_STRINGS:Record<string,StringEntry>={
- 'sentinel.capability.draftHostBridge':same('Paired local owner panel','Explicit local companion, exact host/context pairing, separate browser receipts and canonical retained inspection/reports. It confirms a run, a model start as one composite and a pipeline file write; it adopts no settings or pipeline.'),
+ 'sentinel.capability.draftHostBridge':same('Paired local owner panel','Explicit local companion, exact host/context pairing, separate deterministic browser receipts and canonical retained inspection/reports. Settings editing and model-call authority are not included.'),
  'nav.sentinel':same('Sentinel','Prepare and inspect a scan through the separately launched local owner companion. The application host cannot confirm an action.'),
  'sentinel.ownerUi.title':same('Sentinel','Local scan preparation, retained work and shareable reports through the running owner service.'),
  'sentinel.ownerUi.usage':same('farsight-sentinel owner-ui --workspace <folder> --farsight-origin <origin>    launch the paired owner panel','Foreground companion for an already running owner service and exact loopback Farsight origin. The browser confirms only implemented deterministic actions; no terminal confirmation is required after launch.'),
@@ -31,7 +31,7 @@ export const SENTINEL_OWNER_UI_STRINGS:Record<string,StringEntry>={
  'sentinel.ownerUi.preview':same('Preview fresh capture','Resolve the current configuration without capturing source or checking scanner readiness.'),
  'sentinel.ownerUi.linked':same('Preview linked rerun','Prepare a new child from the selected completed or canceled run’s pinned snapshot. Original outputs remain retained.'),
  'sentinel.ownerUi.confirmPrepare':same('Confirm preparation','Issue a distinct owner UI receipt for this exact visible preparation. Capture, parse and inventory run; checks start separately.'),
- 'sentinel.ownerUi.confirmControl':same('Confirm this run action','Confirm only the displayed exact run action and effects. A start that calls models also confirms each displayed model and its budget, and nothing more.'),
+ 'sentinel.ownerUi.confirmControl':same('Confirm this run action','Confirm only the displayed exact run action and effects. It does not authorize model calls.'),
  'sentinel.ownerUi.prepareSeparate':same('Preparation captures, parses and inventories; checks start separately.','The same original preparation deadline includes inspection delay and later run start. Delaying start can expire it.'),
  'sentinel.ownerUi.effects':same('Permitted effects','The exact effects in the current preview. Configuration or navigation changes invalidate confirmation.'),
  'sentinel.ownerUi.deadline':same('Original run deadline','The absolute retained execution deadline. Reading or resuming does not restart it.'),
@@ -123,18 +123,4 @@ export const SENTINEL_OWNER_UI_STRINGS:Record<string,StringEntry>={
  'sentinel.ownerUi.graphSnapshot':same('This graph is a retained read snapshot. Refresh it to see later work; expanded evidence is never a live verdict.','Read-only presentation of the exact recorded process and its supported owner controls; no extra execution or disclosure authority.'),
  'sentinel.ownerUi.evidenceMore':same('More evidence remains; use Show more in this work group.','Read-only presentation of the exact recorded process and its supported owner controls; no extra execution or disclosure authority.'),
  'sentinel.ownerUi.configurationUnavailable':same('This control is not available in the browser.','Read-only presentation of the exact recorded process and its supported owner controls; no extra execution or disclosure authority.'),
- 'sentinel.ownerUi.compositeStart':same('This start calls models: you confirm it once, with each model and its budget.','One owner confirmation issues a receipt for the start and one for each model budget shown; each model budget opens once, for this run, and lives ten minutes. No other model or budget is admitted.'),
- 'sentinel.ownerUi.budgetTokens':same('up to {n} tokens','The most tokens this model may use across this run, reserved before each call and settled from what the model reports.'),
- 'sentinel.ownerUi.pipelineChecking':same('Checking the edited pipeline…','The owner service validates the edited pipeline and previews what running it would do. Nothing is written by checking.'),
- 'sentinel.ownerUi.pipelineReady':same('Review what the edited pipeline would run, then confirm to write it.','Confirming writes exactly these bytes over exactly the file the page read. Adopting it stays the owner CLI’s act.'),
- 'sentinel.ownerUi.pipelineRefused':same('The edited pipeline cannot be written as it is.','The owner service found a problem that refuses it; each problem names its stage. Nothing was written.'),
- 'sentinel.ownerUi.pipelineWriteOnly':same('Writing changes the pipeline file only; adopt it from the owner CLI before a scan uses it.','The browser receipt confirms this one write. A scan runs the adopted pipeline: farsight-sentinel pipeline adopt --confirm, then rerun.'),
- 'sentinel.ownerUi.confirmPipeline':same('Confirm writing the pipeline','Issue one owner UI receipt for writing exactly the displayed pipeline over the file the page read; the service spends it once.'),
- 'sentinel.ownerUi.pipelineWithdrawn':same('The page changed the pipeline after it was checked: nothing was written. Check it again.','A confirmation is for exactly the bytes that were checked; a later edit in the page withdraws it.'),
- 'sentinel.ownerUi.pipelineWritten':same('Pipeline written. Adopt it from the owner CLI before a scan uses it.','The file holds the confirmed bytes and is not yet adopted: farsight-sentinel pipeline adopt --confirm.'),
- 'sentinel.ownerUi.change.added':same('added','A stage the adopted pipeline does not have: it runs.'),
- 'sentinel.ownerUi.change.changed':same('changed','The stage’s declaration differs from the adopted one: it runs again.'),
- 'sentinel.ownerUi.change.downstream':same('runs again','Unchanged, but a stage it reads or waits for is added or changed, so it runs again.'),
- 'sentinel.ownerUi.change.unchanged':same('reuses','Unchanged with unchanged inputs: a retained result can serve.'),
- 'sentinel.ownerUi.change.removed':same('removed','A stage the adopted pipeline has and this one drops.'),
 };

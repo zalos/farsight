@@ -47,13 +47,6 @@ function browserMain(layout: typeof processLayout) {
     const key = name.startsWith('sentinel.') ? name : 'sentinel.ownerUi.' + name;
     return words[key]?.[register] ?? words['sentinel.ownerUi.failed']?.[register] ?? key;
   };
-  /** A word with its `{detail}` filled from the service's safe detail, or the parenthesis dropped when there is none. */
-  const detailed = (name: string, detail: unknown) => {
-    const w = text(name);
-    if (!w.includes('{detail}')) return w;
-    const d = typeof detail === 'string' ? detail.slice(0, 240) : '';
-    return d ? w.split('{detail}').join(d) : w.replace(/\s*\(\{detail\}\)/, '').replace('{detail}', '');
-  };
   const element = (tag: string, word?: string, parent?: HTMLElement) => {
     const e = document.createElement(tag);
     if (word) {
@@ -179,83 +172,13 @@ function browserMain(layout: typeof processLayout) {
       event.source !== parent ||
       event.origin !== parentOrigin ||
       !event.data ||
-      ![
-        'sentinel-owner-read-request',
-        'sentinel-owner-scan',
-        'sentinel-owner-pipeline',
-        'sentinel-owner-pipeline-withdraw',
-      ].includes(event.data.type) ||
+      event.data.type !== 'sentinel-owner-read-request' ||
       event.data.frameNonce !== frameNonce ||
       event.data.documentId !== documentId
     )
       return;
-    if (event.data.type === 'sentinel-owner-read-request') void handPass().catch(() => {});
-    else if (event.data.type === 'sentinel-owner-pipeline-withdraw') withdrawPipeline();
-    else if (event.data.type === 'sentinel-owner-pipeline') {
-      // The parent's edited pipeline: this panel has the service check it and preview it, and the owner confirms the
-      // write here. What comes back to the parent is the service's answer, never a capability or a receipt.
-      const { pipeline, expectDigest, draftDigest } = event.data;
-      if (
-        !cap ||
-        sessionLost ||
-        !pipeline ||
-        typeof pipeline !== 'object' ||
-        Array.isArray(pipeline) ||
-        !(expectDigest === null || (typeof expectDigest === 'string' && /^sha256:[a-f0-9]{64}$/.test(expectDigest))) ||
-        typeof draftDigest !== 'string' ||
-        !/^sha256:[a-f0-9]{64}$/.test(draftDigest)
-      )
-        return;
-      void run(async () => {
-        notice(text('pipelineChecking'));
-        withdrawPipeline(false);
-        // this check's own token: a withdrawal or any newer check — even of the same bytes — drops its answer
-        const token = ++checkSeq;
-        pendingCheck = token;
-        try {
-          // The page names the draft by the digest of the bytes it would write; the panel confirms exactly those.
-          if ((await textDigest(JSON.stringify(pipeline, null, 2) + '\n')) !== draftDigest)
-            throw Object.assign(Error('changed'), { code: 'sentinel.ownerUi.changed' });
-          const answer = await call('/pipeline-preview', { pipeline, expectDigest });
-          if (pendingCheck !== token) return;
-          pendingCheck = 0;
-          showPipeline(answer, draftDigest);
-        } catch (error: any) {
-          if (pendingCheck !== token) return;
-          pendingCheck = 0;
-          tellPipeline({ state: 'failed', reasonCode: error?.code ?? 'sentinel.ownerUi.failed', draftDigest });
-          throw error;
-        }
-      });
-    }
-    // The parent's Scan button: this panel previews a fresh capture and waits for the owner's confirmation here, then
-    // previews the start for a second confirmation (the facade's one composite receipt replaces the two later).
-    else if (cap && !sessionLost)
-      void run(async () => {
-        scanFlow = true;
-        notice(text('previewPending'));
-        showPreview(await call('/preview'));
-        document.getElementById('preview')?.scrollIntoView({ block: 'nearest' });
-      });
+    void handPass().catch(() => {});
   });
-  let scanFlow = false;
-  /** After a Scan's preparation is confirmed: wait for it to be prepared, then preview its start. */
-  async function continueScan() {
-    for (let i = 0; scanFlow && i < 240; i++) {
-      const response = await call('/status');
-      const phase = response.status?.found ? response.status.phase : null;
-      if (phase === 'prepared') {
-        scanFlow = false;
-        await refresh();
-        showPreview(await call('/control-preview', { action: 'start' }));
-        document.getElementById('preview')?.scrollIntoView({ block: 'nearest' });
-        return;
-      }
-      if (['interrupted', 'failed', 'canceled'].includes(phase)) break;
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    scanFlow = false;
-  }
   function button(parent: HTMLElement, name: string, action: () => Promise<void>, effect = false) {
     const b = element('button', name, parent) as HTMLButtonElement;
     if (effect) b.dataset.effect = 'true';
@@ -706,130 +629,6 @@ function browserMain(layout: typeof processLayout) {
     }
     (document.getElementById('more') as HTMLButtonElement).disabled = !nextCursor;
   }
-  /** The sha256 of a text, as the page names a draft by the bytes it would write. */
-  async function textDigest(value: string) {
-    const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
-    return 'sha256:' + Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
-  }
-  /** The draft a pipeline confirmation here is for; the page's later edit withdraws it. */
-  let pipelineDraft: string | null = null,
-    /** The check still out with the service, by its own token (0: none); its answer counts only while it is current. */
-    pendingCheck = 0,
-    checkSeq = 0;
-  /** The page withdrew its check (an edit, a discard): a pending check is dropped and an offered confirmation goes. */
-  function withdrawPipeline(say = true) {
-    const had = pipelineDraft !== null || pendingCheck !== 0;
-    pendingCheck = 0;
-    if (pipelineDraft !== null) {
-      pipelineDraft = null;
-      confirmation = null;
-      document.getElementById('preview')?.replaceChildren();
-    }
-    if (had && say) notice(text('pipelineWithdrawn'));
-  }
-  /** What the parent page may know of a pipeline check or write: the service's own answer, in its own words. */
-  function tellPipeline(answer: {
-    state: 'checked' | 'refused' | 'written' | 'failed';
-    draftDigest: string;
-    reasonCode?: string | null;
-    detail?: unknown;
-    problems?: unknown;
-    preview?: unknown;
-    written?: unknown;
-  }) {
-    parent.postMessage(
-      {
-        type: 'sentinel-owner-pipeline-result',
-        frameNonce,
-        documentId,
-        hostInstance,
-        state: answer.state,
-        draftDigest: answer.draftDigest,
-        reasonCode: typeof answer.reasonCode === 'string' ? answer.reasonCode : null,
-        detail: typeof answer.detail === 'string' ? answer.detail.slice(0, 240) : null,
-        problems: Array.isArray(answer.problems) ? answer.problems : [],
-        preview: answer.preview && typeof answer.preview === 'object' ? answer.preview : null,
-        written: answer.written && typeof answer.written === 'object' ? answer.written : null,
-      },
-      parentOrigin,
-    );
-  }
-  function showPipeline(answer: any, draft: string) {
-    const e = document.getElementById('preview')!;
-    e.replaceChildren();
-    // offered a confirmation, the answer is { preview: <the service's answer>, confirmation }; refused, it is the answer
-    const checked = answer.confirmation ? answer.preview : answer;
-    if (answer.unavailable || !answer.confirmation) {
-      notice(detailed(checked.reasonCode || 'pipelineRefused', checked.detail), true);
-      tellPipeline({
-        state: 'refused',
-        draftDigest: draft,
-        reasonCode: checked.reasonCode,
-        detail: checked.detail,
-        problems: checked.problems,
-        preview: checked.preview,
-      });
-      return;
-    }
-    tellPipeline({ state: 'checked', draftDigest: draft, problems: checked.problems, preview: checked.preview });
-    notice(text('pipelineReady'));
-    confirmation = answer.confirmation;
-    pipelineDraft = draft;
-    const p = element('p', 'pipelineWriteOnly', e);
-    p.className = 'notice';
-    const list = element('ul', undefined, e);
-    for (const stage of checked.preview?.stages ?? []) {
-      const li = element('li', undefined, list);
-      li.textContent = String(stage.id) + ' · ' + text('change.' + stage.change);
-    }
-    for (const id of checked.preview?.removed ?? []) {
-      const li = element('li', undefined, list);
-      li.textContent = String(id) + ' · ' + text('change.removed');
-    }
-    for (const problem of checked.problems ?? []) {
-      const li = element('li', undefined, list);
-      li.className = 'warn';
-      li.textContent = (problem.stage ? String(problem.stage) + ' · ' : '') + detailed(problem.code, problem.detail);
-    }
-    const confirm = button(
-      e,
-      'confirmPipeline',
-      async () => {
-        const current = confirmation;
-        // a confirmation for exactly the draft the page checked; an edit there since withdrew it
-        if (!current || pipelineDraft !== draft) return;
-        confirmation = null;
-        pipelineDraft = null;
-        confirm.remove();
-        notice(text('actionPending'));
-        const done = await call('/confirm', { id: current.id, revision: current.revision });
-        if (done.outcome === 'prepared' && done.facts?.written) {
-          notice(text('pipelineWritten'));
-          tellPipeline({
-            state: 'written',
-            draftDigest: draft,
-            problems: done.facts.problems,
-            preview: done.facts.preview,
-            written: { fileDigest: done.facts.fileDigest, digest: done.facts.digest, trust: done.facts.trust },
-          });
-        } else {
-          notice(detailed(done.reasonCode || 'failed', done.facts?.detail), true);
-          tellPipeline({
-            state: 'refused',
-            draftDigest: draft,
-            reasonCode: done.reasonCode,
-            detail: done.facts?.detail,
-            problems: done.facts?.problems,
-          });
-        }
-      },
-      true,
-    );
-    confirm.id = 'confirm';
-    confirm.className = 'primary';
-    writes();
-    e.scrollIntoView({ block: 'nearest' });
-  }
   function showPreview(answer: any) {
     const e = document.getElementById('preview')!;
     e.replaceChildren();
@@ -857,30 +656,6 @@ function browserMain(layout: typeof processLayout) {
         chip.className = 'pill';
         chip.textContent = String(stage.stage);
       }
-    // A start that calls models is one composite: the stages it runs and each model with its budget, confirmed once
-    // here with one receipt for the start and one for each model's budget (ADR 48 as amended by U-3).
-    if (answer.preview.composite) {
-      const c = answer.preview.composite;
-      element('p', 'compositeStart', e).className = 'notice';
-      for (const stage of c.stages ?? []) {
-        const chip = element('span', undefined, e);
-        chip.className = 'pill';
-        chip.textContent = String(stage);
-      }
-      const models = element('ul', undefined, e);
-      for (const m of c.models ?? []) {
-        const li = element('li', undefined, models);
-        const b = m.budget ?? {};
-        li.textContent =
-          String(m.model ?? m.modelId) +
-          ' · ' +
-          String(m.runner ?? '') +
-          ' · ' +
-          text('budgetTokens').replace('{n}', String(b.maxTokens ?? '')) +
-          (b.maxCost ? ' · ' + String(b.maxCost) + ' ' + String(b.currency ?? '') : '');
-      }
-    }
-    const preparing = !!answer.preview.mode;
     const confirm = button(
       e,
       answer.preview.mode ? 'confirmPrepare' : 'confirmControl',
@@ -891,12 +666,10 @@ function browserMain(layout: typeof processLayout) {
         confirm.remove();
         notice(text('actionPending'));
         const answer = await call('/confirm', { id: current.id, revision: current.revision });
-        const accepted = ['submitted', 'requested', 'kept'].includes(answer.outcome);
-        if (!accepted) notice(text(answer.reasonCode || 'failed'), true);
+        if (!['submitted', 'requested', 'kept'].includes(answer.outcome))
+          notice(text(answer.reasonCode || 'failed'), true);
         else notice(text('actionAccepted'));
         await refresh();
-        if (scanFlow && accepted && preparing) await continueScan();
-        else scanFlow = false;
       },
       true,
     );
