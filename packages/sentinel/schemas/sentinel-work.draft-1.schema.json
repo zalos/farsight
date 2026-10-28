@@ -219,9 +219,10 @@
       "enum": [
         "coded",
         "agentic",
-        "external-tool"
+        "external-tool",
+        "script"
       ],
-      "description": "Who implements a stage. An agentic stage never inherits a deterministic stage's provenance."
+      "description": "Who implements a stage. An agentic stage never inherits a deterministic stage's provenance. A `script` is an owner-promoted entry file run on the host or in a pinned script-runner container (a pipeline's `script` kind)."
     },
     "Digest": {
       "type": "string",

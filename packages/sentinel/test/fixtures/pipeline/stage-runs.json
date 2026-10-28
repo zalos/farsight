@@ -1,0 +1,315 @@
+[
+  {
+    "runId": "run-1",
+    "stage": "walk",
+    "kind": "builtin",
+    "state": "published",
+    "units": [
+      {
+        "id": "unit-walk",
+        "revision": 1
+      }
+    ],
+    "io": {
+      "inputs": [
+        {
+          "decl": "parse",
+          "state": "resolved",
+          "artifacts": [
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          "producers": [
+            {
+              "id": "unit-parse",
+              "revision": 1
+            }
+          ],
+          "secretFold": "not-applicable"
+        }
+      ],
+      "outputs": [
+        {
+          "decl": "walkthrough-md",
+          "artifacts": [
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          "publishedBy": [
+            {
+              "id": "unit-walk",
+              "revision": 1
+            }
+          ]
+        }
+      ]
+    },
+    "provenance": [
+      {
+        "kind": "builtin",
+        "stage": "walk",
+        "unit": {
+          "id": "unit-walk",
+          "revision": 1
+        },
+        "attempt": "attempt-1",
+        "where": "child",
+        "startedAt": "2026-10-27T20:00:00Z",
+        "endedAt": "2026-10-27T20:00:01.25Z",
+        "durationMs": 1250,
+        "read": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "wrote": [
+          "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ],
+        "invocation": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "operation": "walkthrough",
+        "moduleDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "sentinelVersion": "0.0.0-draft.1"
+      }
+    ],
+    "reusedFrom": null
+  },
+  {
+    "runId": "run-1",
+    "stage": "secrets",
+    "kind": "tool",
+    "state": "published",
+    "units": [
+      {
+        "id": "unit-secrets",
+        "revision": 1
+      }
+    ],
+    "io": {
+      "inputs": [
+        {
+          "decl": "capture",
+          "state": "resolved",
+          "artifacts": [
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          "producers": [],
+          "secretFold": "not-applicable"
+        }
+      ],
+      "outputs": [
+        {
+          "decl": "findings",
+          "artifacts": [
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          "publishedBy": [
+            {
+              "id": "unit-secrets",
+              "revision": 1
+            }
+          ]
+        }
+      ]
+    },
+    "provenance": [
+      {
+        "kind": "tool",
+        "stage": "secrets",
+        "unit": {
+          "id": "unit-secrets",
+          "revision": 1
+        },
+        "attempt": "attempt-2",
+        "where": "container",
+        "startedAt": "2026-10-27T20:00:00Z",
+        "endedAt": "2026-10-27T20:00:04.5Z",
+        "durationMs": 4500,
+        "read": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "wrote": [
+          "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ],
+        "invocation": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "adapterId": "gitleaks",
+        "adapterVersion": "8.30.0",
+        "image": {
+          "reference": "zricethezav/gitleaks:v8.30.0",
+          "id": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "workerDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "rules": [
+          {
+            "familyId": "sentinel.secrets.current-tree",
+            "revision": 1,
+            "definitionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "databases": []
+      }
+    ],
+    "reusedFrom": null
+  },
+  {
+    "runId": "run-1",
+    "stage": "lint-notes",
+    "kind": "script",
+    "state": "failed",
+    "units": [
+      {
+        "id": "unit-notes",
+        "revision": 1
+      }
+    ],
+    "io": {
+      "inputs": [
+        {
+          "decl": "parse",
+          "state": "resolved",
+          "artifacts": [
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          "producers": [
+            {
+              "id": "unit-parse",
+              "revision": 1
+            }
+          ],
+          "secretFold": "applied"
+        }
+      ],
+      "outputs": [
+        {
+          "decl": {
+            "name": "notes",
+            "schema": "sentinel.notes/v1"
+          },
+          "artifacts": [],
+          "publishedBy": []
+        }
+      ]
+    },
+    "provenance": [
+      {
+        "kind": "script",
+        "stage": "lint-notes",
+        "unit": {
+          "id": "unit-notes",
+          "revision": 1
+        },
+        "attempt": "attempt-3",
+        "where": "host",
+        "startedAt": "2026-10-27T20:02:00Z",
+        "endedAt": "2026-10-27T20:02:01Z",
+        "durationMs": 1000,
+        "read": [
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "wrote": [],
+        "invocation": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "entryDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter": {
+          "name": "node",
+          "version": "24.21.0",
+          "digest": null
+        },
+        "argv": [
+          "--format",
+          "json"
+        ],
+        "environmentNames": [
+          "PATH"
+        ],
+        "image": null
+      }
+    ],
+    "reusedFrom": null
+  },
+  {
+    "runId": "run-2",
+    "stage": "review",
+    "kind": "agent",
+    "state": "running",
+    "units": [
+      {
+        "id": "unit-review",
+        "revision": 2
+      }
+    ],
+    "io": {
+      "inputs": [
+        {
+          "decl": {
+            "stage": "patterns",
+            "output": "findings"
+          },
+          "state": "resolved",
+          "artifacts": [
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          "producers": [
+            {
+              "id": "unit-patterns",
+              "revision": 1
+            }
+          ],
+          "secretFold": "applied"
+        },
+        {
+          "decl": "farsight.journeys",
+          "state": "waiting",
+          "artifacts": [],
+          "producers": [],
+          "secretFold": "not-applicable"
+        }
+      ],
+      "outputs": []
+    },
+    "provenance": [
+      {
+        "kind": "agent",
+        "stage": "review",
+        "unit": {
+          "id": "unit-review",
+          "revision": 2
+        },
+        "attempt": "attempt-4",
+        "where": "sandboxed-cli",
+        "startedAt": "2026-10-27T20:01:00Z",
+        "endedAt": null,
+        "durationMs": null,
+        "read": [
+          "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ],
+        "wrote": [],
+        "invocation": null,
+        "mode": "native",
+        "runner": "copilot-cli",
+        "runnerVersion": "1.0.105",
+        "executableDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "model": {
+          "requested": "gpt-6-luna",
+          "reported": null,
+          "identitySource": "unknown"
+        },
+        "promptDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "skillDigests": [
+          "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        ],
+        "wires": [],
+        "transcript": null,
+        "turns": 1,
+        "tokens": {
+          "input": 1200,
+          "output": null,
+          "certainty": "unknown"
+        },
+        "cost": {
+          "basis": "unobserved",
+          "reason": "subscription"
+        },
+        "deadline": {
+          "grantedMs": 120000,
+          "usedMs": null
+        }
+      }
+    ],
+    "reusedFrom": "run-1"
+  }
+]

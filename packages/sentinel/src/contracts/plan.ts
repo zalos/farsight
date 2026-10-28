@@ -6,15 +6,22 @@
 import type { ArtifactId, CatalogKey, Count, Digest, Id, Ordinal, RelativePath, ScopeId, WorkRef } from './common.js';
 import type { Budget } from './policy.js';
 import type { ReviewProviderSelection } from './instructions.js';
+import type { StageId } from './pipeline.js';
 import type { RuleFamilyId, RuleScopeKind } from './rules.js';
 
 /** A check's planning state. Only `planned` is assigned to work; every other state carries its reason. */
 export type PlanCheckState =
   'planned' | 'unsupported' | 'applicability-unknown' | 'scope-unavailable' | 'scope-unknown';
 
-/** What a work unit does: the bootstrap stages, or running checks. */
-export type PlanStage = 'capture' | 'parse' | 'inventory' | 'check';
+/** The built-in ids a unit carried before declared pipelines: the bootstrap stages, or running checks. */
+export type BuiltinPlanStage = 'capture' | 'parse' | 'inventory' | 'check';
+/** The two built-in review stage ids. */
 export type ReviewPlanStage = 'review-guided' | 'review-general';
+/**
+ * What a work unit does: a built-in stage id (the bootstrap stages, `check`, the two review stages) or the id of a
+ * stage a pipeline declares. The built-in ids are kept as they were, so every retained plan's units still validate.
+ */
+export type PlanStage = BuiltinPlanStage | ReviewPlanStage | StageId;
 export interface PlannedReview {
   spec: ArtifactId;
   specDigest: Digest;
@@ -56,7 +63,7 @@ export interface PlanInput {
 export interface PlanWork {
   id: Id;
   revision: Ordinal;
-  stage: PlanStage | ReviewPlanStage;
+  stage: PlanStage;
   /** Exact retained model request inputs; present only on the two closed review stages. */
   review?: PlannedReview;
   /** @maxLength 128 */

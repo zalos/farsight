@@ -1,0 +1,74 @@
+{
+  "schema": "sentinel-pipeline/draft-1",
+  "id": "default",
+  "revision": 8,
+  "stages": [
+    { "id": "capture", "kind": "builtin", "operation": "capture" },
+    { "id": "parse", "kind": "builtin", "operation": "parse", "needs": ["capture"] },
+    {
+      "id": "secrets",
+      "kind": "tool",
+      "adapter": "gitleaks",
+      "rules": ["sentinel.secrets.current-tree"],
+      "needs": ["capture"],
+      "required": true
+    },
+    {
+      "id": "patterns",
+      "kind": "tool",
+      "adapter": "semgrep",
+      "rules": "pack:builtin:pattern",
+      "needs": ["capture", "parse"]
+    },
+    { "id": "walk", "kind": "builtin", "operation": "walkthrough", "needs": ["parse"], "fanOut": "per-entry" },
+    {
+      "id": "review",
+      "kind": "agent",
+      "mode": "brokered",
+      "runner": "copilot-cli",
+      "model": "gpt-6-luna",
+      "prompt": "stages/review@3#prompt.md",
+      "skills": ["skills/owasp-top10@2", "skills/express-auth@1"],
+      "needs": [
+        { "stage": "walk", "output": "walkthrough" },
+        { "stage": "patterns", "output": "findings" }
+      ],
+      "after": ["secrets"],
+      "fanOut": "per-entry",
+      "budget": { "turns": 3, "tokens": 20000, "seconds": 120 }
+    },
+    {
+      "id": "triage",
+      "kind": "agent",
+      "mode": "native",
+      "runner": "claude-cli",
+      "model": "claude-sonnet-5-5",
+      "instructions": "stages/triage@1#triage.md",
+      "skills": ["skills/farsight-journeys@1"],
+      "needs": [
+        { "stage": "patterns", "output": "findings" },
+        { "stage": "review", "output": "observations" },
+        "farsight.journeys"
+      ],
+      "produces": [{ "name": "triage", "schema": "sentinel.triage/v1" }],
+      "budget": { "turns": 4, "tokens": 60000, "usd": "0.50", "seconds": 180 }
+    },
+    {
+      "id": "lint-notes",
+      "kind": "script",
+      "runner": "host",
+      "interpreter": "node",
+      "entry": "stages/lint-notes@1#run.mjs",
+      "args": ["--format", "json"],
+      "needs": ["parse"],
+      "produces": [{ "name": "notes", "schema": "sentinel.notes/v1" }]
+    },
+    {
+      "id": "report",
+      "kind": "builtin",
+      "operation": "report",
+      "needs": ["secrets", "patterns", "review", "triage", "walk", "lint-notes"]
+    }
+  ],
+  "flags": { "review.hosted-api": false, "stage.host-scripts": true }
+}
