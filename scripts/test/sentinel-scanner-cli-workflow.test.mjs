@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scannerCliClosure, scannerLoadsText, selectChecks, detectChecks } from '../ci-changes.mjs';
+import { computedLoadSites, scannerCliClosure, scannerLoadsText, selectChecks, detectChecks } from '../ci-changes.mjs';
 import { suiteFiles } from '../sentinel-tests.mjs';
 import { CONSUMERS } from '../test-sentinel-consumers.mjs';
 // pnpm test:sentinel:package packs once and runs every installed consumer through the parallel runner.
@@ -150,6 +150,95 @@ test("the scanner closure is derived from the workflow's steps and their imports
     rmSync(empty, { recursive: true, force: true });
   }
 });
+test('the load detector reads a computed load across lines, generated code included, and nothing else', () => {
+  const sites = (text) => computedLoadSites(text).map(({ line, expression }) => [line, expression]);
+  // computed, each on one line or split over several
+  assert.deepEqual(sites('const u = new URL(`../dist/${p}`, import.meta.url);'), [[1, '`../dist/${p}`']]);
+  assert.deepEqual(sites('const a = 1;\nconst u = new URL(\n  `../dist/${p}`,\n  import.meta.url,\n);\n'), [
+    [2, '`../dist/${p}`'],
+  ]);
+  assert.deepEqual(sites('await import(\n  join(dir, name),\n);'), [[1, 'join(dir, name)']]);
+  assert.deepEqual(sites('const m = require(\n  name\n);'), [[1, 'name']]);
+  assert.deepEqual(sites('require.resolve(spec)'), [[1, 'spec']]);
+  // generated in a template: a dynamic import, a static import and a bare one, wrappers taken off
+  assert.deepEqual(
+    sites(
+      'const code = `import {a} from ${JSON.stringify(first)};\\nimport ${JSON.stringify(second)};\\nawait import(${JSON.stringify("file://" + third)});`;',
+    ),
+    [
+      [1, 'first'],
+      [1, 'second'],
+      [1, 'third'],
+    ],
+  );
+  // a brace that does not close is still a load, with no expression to resolve
+  assert.deepEqual(sites('await import(join(a, b'), [[1, null]]);
+  // not loads: literals the walk follows (one line or several), a URL with another base, prose, comments
+  for (const text of [
+    "await import('./x.js');",
+    "new URL(\n  '../dist/x.js',\n  import.meta.url\n);",
+    'new URL(path, base);',
+    'const words = `accepted report import ${digest}`;',
+    'const words = `an integer from ${min} to ${max}`;',
+    'a lazy `import()` in a description',
+    '// await import(name)',
+    ' * await import(name)',
+  ])
+    assert.deepEqual(sites(text), [], text);
+});
+
+test('a computed load whose target is one literal is followed, not given an area', () => {
+  const fake = mkdtempSync(join(tmpdir(), 'farsight-scanner-literal-'));
+  const write = (path, text) => {
+    mkdirSync(join(fake, path, '..'), { recursive: true });
+    writeFileSync(join(fake, path), text);
+  };
+  const manifest = (name) => JSON.stringify({ name, version: '0.0.0', main: './dist/index.js' });
+  try {
+    write('.github/workflows/sentinel-scanner-cli.yml', 'run: node scripts/consumer.mjs\n');
+    write('packages/sentinel/package.json', manifest('@farsight/sentinel'));
+    write('packages/parsers/package.json', manifest('@farsight/parsers'));
+    for (const name of ['index', 'url-target', 'driver', 'unreached'])
+      write(`packages/sentinel/src/${name}.ts`, 'export {};\n');
+    write(
+      'scripts/consumer.mjs',
+      [
+        // a URL against the module, wrapped
+        "await import(pathToFileURL(fileURLToPath(new URL('../packages/sentinel/dist/url-target.js', import.meta.url))).href);",
+        "await import(new URL('../packages/sentinel/dist/index.js', import.meta.url).href);",
+        // a resolved specifier (a third party: nothing in the repository)
+        "await import(pathToFileURL(require.resolve('some-sdk/client.js')).href);",
+        // a file of the installed tarball by its dist/ path, in generated code
+        'const code = `await import(${JSON.stringify("file://" + join(installed, "dist/driver.mjs"))});`;',
+        // a module this script writes from a literal
+        "writeFileSync(join(c.dir, 'public.mjs'), \"export * from 'farsight-sentinel';\\n\");",
+        "await import(pathToFileURL(join(c.dir, 'public.mjs')).href);",
+      ].join('\n'),
+    );
+    const closure = scannerCliClosure(fake);
+    assert.deepEqual(closure.unresolved, [], 'every load names its target');
+    for (const file of ['url-target', 'index', 'driver'])
+      assert.ok(closure.files.has(`packages/sentinel/src/${file}.ts`), file);
+    assert.ok(!closure.files.has('packages/sentinel/src/unreached.ts'));
+    const reaches = (path) =>
+      selectChecks([path], { root: fake, packageInputs: new Set(), isolationInputs: new Set(), scannerInputs: closure })
+        .scannerCli;
+    assert.equal(reaches('packages/sentinel/src/unreached.ts'), false, 'no area: an unreached source stays out');
+
+    // the same script writing a different module than it loads, or loading a dist/ file no package has, gets an area
+    write(
+      'scripts/consumer.mjs',
+      "writeFileSync(join(c.dir, 'other.mjs'), '');\nawait import(pathToFileURL(join(c.dir, 'public.mjs')).href);\nawait import(pathToFileURL(join(installed, 'dist/chunks/x.mjs')).href);\n",
+    );
+    assert.deepEqual(
+      scannerCliClosure(fake).unresolved.map(({ site }) => site),
+      ['scripts/consumer.mjs:2', 'scripts/consumer.mjs:3'],
+    );
+  } finally {
+    rmSync(fake, { recursive: true, force: true });
+  }
+});
+
 test('a load the walk cannot follow selects its whole area and is listed with its importer', () => {
   const fake = mkdtempSync(join(tmpdir(), 'farsight-scanner-computed-'));
   const write = (path, text) => {
