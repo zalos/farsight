@@ -24,7 +24,7 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 |---|---|---|
 | **affected checks** | test `scripts/ci-changes.mjs` and select suites from the changed paths | 5 min |
 | **lint** | `pnpm install --frozen-lockfile` → `pnpm format:check` → `pnpm lint`; a PR whose title starts with `style` also compares JS/TS ASTs against its merge base | 10 min |
-| **validate** | `pnpm install --frozen-lockfile` → `pnpm build` (`tsc -p` type-checks each package with the config `typecheck` uses, so there is no separate typecheck step) → the graph contract check → the unit tests of the packages the change reaches (below; every package when the selector says so), Sentinel's unit suite only (`SENTINEL_TEST_SUITE=unit`; its process suite is sentinel-service's) → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests when Echo is reached | 20 min |
+| **validate** | `pnpm install --frozen-lockfile` → `pnpm build` (`tsc -p` type-checks each package with the config `typecheck` uses, so there is no separate typecheck step) → the graph contract check → the unit tests of the packages the change reaches (below; every package when the selector says so), Sentinel's unit suite only (`SENTINEL_TEST_SUITE=unit`, its no-skip files with zero skips; its process suite is sentinel-service's) → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests when Echo is reached | 20 min |
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm e2e:typecheck` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `SENTINEL_REPORT_BROWSER=1` offline report delivery and print (exactly one case, zero skips) → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`; the table is the `e2e-perf-results` artifact) | 30 min |
 | **secrets** | gitleaks over the pushed or PR commits (below) | 10 min |
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
@@ -206,6 +206,14 @@ container cases skip without `SENTINEL_ISOLATION=1`), and four files that start 
 skip on CI by design, which the zero-skip service job cannot hold (named in the list's header). Both suites run at
 `--test-concurrency` equal to the machine's available parallelism. A listed file that does not exist, a duplicate or
 a malformed line fails both suites before anything runs.
+
+Inside the unit suite, the files `packages/sentinel/test/no-skip-suite.txt` lists must not skip either: the twelve
+in-process files that were in sentinel-service's zero-skip list before the process suite was measured (the owner UI
+session, host, descriptor, model-start and process files, the preparation admission, receipt admission, journal and
+profile files, service policy, store read budget and the trusted profile). `--suite unit` runs them first as their
+own group with a TAP report beside the spec output and fails if its summary shows a skipped or todo test, the same
+check the service job makes with `grep -qx '# skipped 0'`; then it runs the rest, where Docker, browser and opt-in
+skips are normal. `--suite no-skip` runs that group alone. A file cannot be on both lists.
 
 The list is measured, not guessed: `node scripts/sentinel-tests.mjs --suite unit --launches` (or `--suite process`)
 runs the suite with a preload that records every child process each test file's process starts, then names the unit

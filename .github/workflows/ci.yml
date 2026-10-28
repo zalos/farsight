@@ -130,7 +130,8 @@ jobs:
       # out: one `pnpm --filter <name>` each, every name checked against the workspace first. A missing scope or a
       # missing or empty list under `packages` tests every package.
       # Sentinel's unit suite only: its process suite (packages/sentinel/test/process-suite.txt) runs in
-      # sentinel-service, which the selector starts whenever validate tests Sentinel.
+      # sentinel-service, which the selector starts whenever validate tests Sentinel. The unit suite runs the files
+      # packages/sentinel/test/no-skip-suite.txt lists first and fails if any of their tests was skipped.
       - name: Test the packages the change reaches
         env:
           TEST_SCOPE: ${{ needs.changes.outputs.testScope }}

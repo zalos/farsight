@@ -38,8 +38,10 @@ test/execution-launch-gate.test.ts
 test/execution-memory-start.test.ts
 test/execution-plans.test.ts
 test/execution-protocol.test.ts
+test/execution-refused-review.test.ts
 test/execution-retained-analysis.test.ts
 test/execution-scratch.test.ts
+test/execution-stage-inputs.test.ts
 test/framework-canonical.test.ts
 test/framework-capture-boundary.test.ts
 test/framework-controls-closure.test.ts
