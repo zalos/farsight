@@ -215,6 +215,19 @@ export function portableRegistry() {
   ]);
 }
 
+/**
+ * The registry the review seeds read their adapter digests from, for the recorded reviewed scenario: the portable
+ * registry, with each review operation's digest a fixed stand-in. An operation's real digest covers its module's
+ * built bytes, so a recorded review unit would otherwise change with any build.
+ */
+export const portableReviewRegistry = (base = portableRegistry()) => ({
+  ...base,
+  get: (id: string) =>
+    id === 'sentinel.review.guided' || id === 'sentinel.review.general'
+      ? { id, digest: D(`golden review adapter ${id}`) }
+      : base.get(id),
+});
+
 /** The shipped registry the CLI plans with (foundation operations, review adapters and the scanner adapters). */
 export const shippedRegistry = () => reviewRegistry(publicRegistry());
 

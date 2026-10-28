@@ -4,7 +4,6 @@ import { createHash } from 'node:crypto';
 import { validateEnvelope } from '../validate.js';
 import type { ArtifactId, PlanEnvelope, PlanWork, PlannedReview } from '../contracts/index.js';
 import { canonicalDigest } from '../policy/digest.js';
-import { snapshot } from '../policy/immutable.js';
 import type { EffectivePolicy } from '../policy/settings.js';
 import { reviewUnitIdOf } from '../planner/identity.js';
 import type { SentinelStore } from '../store/index.js';
@@ -22,123 +21,13 @@ import { guidedSpec } from './guided.js';
 import { generalSpec } from './general.js';
 import { partitionInventory } from './evidence.js';
 import { cliKind } from './providers/registry.js';
+import { reviewInstructionsFor, type ReviewStagePacks } from './packs.js';
 const digest = (v: unknown) => canonicalDigest(v) as ArtifactId;
 const bad = (): never => reviewFail('sentinel.review.integrity', 'the admitted review inputs differ');
 export const MAX_REVIEW_UNITS = 32;
 export interface ReviewPlanInputs {
   readonly plan: PlanEnvelope;
   readonly artifacts: readonly InstructionArtifact[];
-}
-export function withReviewUnits(
-  given: PlanEnvelope,
-  specs: readonly SessionSpec[],
-  terms: ReadonlyMap<string, PlannedReview['terms']>,
-): ReviewPlanInputs {
-  if (specs.length > MAX_REVIEW_UNITS)
-    reviewFail('sentinel.review.planLimit', String(specs.length) + ' requested, maximum ' + MAX_REVIEW_UNITS);
-  if (given.kind !== 'analysis' || given.units.some((u) => u.review)) return bad();
-  const plan = structuredClone(given),
-    artifacts = new Map<ArtifactId, InstructionArtifact>();
-  const put = (value: unknown, schema: string, links: readonly ArtifactId[]) => {
-    const bytes = canonicalJsonBytes(value),
-      id = digest(value);
-    if (bytes.length > 4194304) return bad();
-    artifacts.set(id, { id, bytes, schema, links });
-    return id;
-  };
-  for (const s of specs) {
-    if (
-      !s.instructions ||
-      !s.segmentId ||
-      !s.requestedSelection ||
-      s.runId !== plan.runId ||
-      s.scope.snapshotId !== plan.pins.snapshotId
-    )
-      return bad();
-    const manifest = instructionManifest(s.instructions);
-    for (const a of instructionArtifacts(s.instructions)) artifacts.set(a.id, a);
-    const instructions = put(manifest, manifest.schema, [
-        manifest.prompt.content,
-        manifest.assembled.content,
-        ...manifest.skills.flatMap((k) => [k.content, ...k.resources.map((r) => r.content)]),
-      ]),
-      sourcePacket = put(
-        s.scope,
-        'application/json',
-        s.scope.files.map((f) => f.content as ArtifactId),
-      );
-    const { instructions: opaque, ...plain } = s;
-    void opaque;
-    const spec = put(
-      { schema: 'sentinel-admitted-review/draft-1', spec: plain, instructions },
-      'sentinel-admitted-review/draft-1',
-      [instructions, sourcePacket],
-    );
-    const review: PlannedReview = {
-        spec,
-        specDigest: specDigest(s),
-        instructions,
-        instructionDigest: manifest.digest,
-        sourcePacket,
-        segmentId: s.segmentId,
-        selection: { ...s.requestedSelection },
-        terms: structuredClone(terms.get(s.requestedSelection.bindingDigest) ?? bad()),
-      },
-      stage = `review-${s.kind}` as const;
-    const unit: PlanWork = {
-      id: reviewUnitIdOf({
-        runId: plan.runId,
-        revision: plan.revision,
-        stage,
-        sourceId: s.scope.sourceId,
-        segmentId: s.segmentId,
-        specDigest: review.specDigest,
-      }),
-      revision: 1,
-      stage,
-      contract: `sentinel.stage.review.${s.kind}`,
-      implementationDigest: s.adapterDigest,
-      sourceId: s.scope.sourceId,
-      adapterId: s.adapterId,
-      dependencies: [
-        ...plan.reused.map((r) => ({ ...r })),
-        ...plan.units.filter((u) => !u.review).map((u) => ({ id: u.id, revision: u.revision })),
-      ],
-      inputFingerprint: review.specDigest,
-      checks: [],
-      scopes: [s.scope.sourceId],
-      inputs: s.scope.files.map((f) => ({
-        sourceId: s.scope.sourceId,
-        relativePath: f.relativePath,
-        content: f.content as ArtifactId,
-      })),
-      inputSetDigest: digest(
-        s.scope.files.map((f) => ({ sourceId: s.scope.sourceId, relativePath: f.relativePath, content: f.content })),
-      ),
-      review,
-    };
-    if (plan.units.some((u) => u.id === unit.id)) return bad();
-    plan.units.push(unit);
-    if (!plan.pins.adapters.some((a) => a.adapterId === s.adapterId))
-      plan.pins.adapters.push({ adapterId: s.adapterId, digest: s.adapterDigest });
-  }
-  plan.units.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  plan.pins.adapters.sort((a, b) => (a.adapterId < b.adapterId ? -1 : a.adapterId > b.adapterId ? 1 : 0));
-  plan.tallies.units = plan.units.length;
-  const { digest: old, ...body } = plan;
-  void old;
-  plan.digest = digest(body);
-  const checked = validateEnvelope('plan', plan);
-  if (!checked.ok)
-    reviewFail(
-      'sentinel.review.integrity',
-      'closed review plan does not validate: ' +
-        checked.errors
-          .map((e) => e.path)
-          .slice(0, 4)
-          .join(','),
-    );
-  return { plan: snapshot(plan), artifacts: Object.freeze([...artifacts.values()]) };
 }
 export async function readReviewSpec(
   store: SentinelStore,
@@ -274,13 +163,16 @@ export async function verifyReviewInputs(
       )
         return bad();
   }
-  const skeleton = {
-    ...plan,
-    units: plan.units.filter((u) => !u.review),
-    pins: { ...plan.pins, adapters: plan.pins.adapters.filter((a) => !units.some((u) => u.adapterId === a.adapterId)) },
-  };
-  const expected = withReviewUnits(skeleton, specs, terms);
-  if (digest(expected.plan) !== digest(plan) || expected.artifacts.length !== artifacts.length) return bad();
+  // Re-derived the way planning made them: the same seed builder, then the planner's unit for each seed. Every
+  // review unit, its adapter pin and the exact artifact set must match.
+  const expected = reviewSeedsOfSpecs(plan, specs, terms);
+  for (const [i, unit] of units.entries()) {
+    const seed = expected.seeds[i]!;
+    if (digest(reviewUnitOf(plan, seed)) !== digest(unit)) return bad();
+    if (!plan.pins.adapters.some((a) => a.adapterId === seed.adapterId && a.digest === seed.adapterDigest))
+      return bad();
+  }
+  if (expected.artifacts.length !== artifacts.length) return bad();
   for (const a of expected.artifacts) {
     const actual = supplied.get(a.id);
     if (
@@ -295,11 +187,11 @@ export async function verifyReviewInputs(
 }
 
 /**
- * The review units' sealed model inputs as seeds for the planner, without touching any plan (Sentinel v2 P-3): the
- * same specs `service/review-adapter.ts reviewsFor` builds from the accepted inventory and the planned checks of a
- * deterministic revision, under the adopted selection, each with its admitted-review, instruction and source-packet
- * artifacts. The planner places each seed under the agent stage declaring its fan-out and seals the revision once;
- * `withReviewUnits` stays for admission's re-derivation until it is retired.
+ * The review units' sealed model inputs as seeds for the planner, without touching any plan (Sentinel v2 P-3): one
+ * spec per planned check (guided) and per source partition (general) of a deterministic revision, under the adopted
+ * selection, each with its admitted-review, instruction and source-packet artifacts. The planner places each seed
+ * under the agent stage declaring its fan-out and seals the revision once. When the pipeline's agent stages name
+ * promoted packs, `stagePacks` binds each review to its stage's prompt and skills (`review/packs.ts`).
  */
 export function reviewSeedsFor(
   plan: PlanEnvelope,
@@ -307,7 +199,8 @@ export function reviewSeedsFor(
   policy: EffectivePolicy,
   registry: import('../execution/registry.js').AdapterRegistry,
   packs: readonly import('../rules/pack.js').ValidatedPack[] = [],
-): { seeds: import('../planner/pipeline.js').AgentUnitSeed[]; artifacts: readonly InstructionArtifact[] } {
+  stagePacks?: ReviewStagePacks,
+): ReviewSeeds {
   const configured = policy.settings.reviewModels;
   if (!configured) return { seeds: [], artifacts: [] };
   const limits = { maxSliceLines: 200, maxSliceBytes: 65536, maxToolCalls: 20, maxServedBytes: 262144 },
@@ -334,7 +227,7 @@ export function reviewSeedsFor(
         maxOutputTokens: Math.min(s.budget.maxOutputTokens, resolved.binding.limits.maxOutputTokens),
       },
       adapterDigest: adapter.digest,
-      instructions: prepareInstructions({ prompt: s.prompt, skills: [] }),
+      ...reviewInstructionsFor(s, stagePacks),
       segmentId,
       requestedSelection: resolved.selection,
     });
@@ -402,8 +295,26 @@ export function reviewSeedsFor(
         'general-' + part.id,
       );
   }
-  // The same sealed bytes withReviewUnits stores for each spec: the instruction manifest, the source packet and the
-  // admitted-review record linking them.
+  return reviewSeedsOfSpecs(plan, specs, terms);
+}
+
+type AgentUnitSeed = import('../planner/pipeline.js').AgentUnitSeed;
+/** Seeds and the exact artifacts they seal. */
+export interface ReviewSeeds {
+  readonly seeds: AgentUnitSeed[];
+  readonly artifacts: readonly InstructionArtifact[];
+}
+/**
+ * The one seed builder, for planning and for admission's re-derivation: each spec's sealed bytes (the instruction
+ * manifest, the source packet and the admitted-review record linking them) and the seed the planner places.
+ */
+export function reviewSeedsOfSpecs(
+  plan: Pick<PlanEnvelope, 'runId' | 'pins'>,
+  specs: readonly SessionSpec[],
+  terms: ReadonlyMap<string, PlannedReview['terms']>,
+): ReviewSeeds {
+  if (specs.length > MAX_REVIEW_UNITS)
+    reviewFail('sentinel.review.planLimit', String(specs.length) + ' requested, maximum ' + MAX_REVIEW_UNITS);
   const artifacts = new Map<ArtifactId, InstructionArtifact>();
   const put = (value: unknown, schema: string, links: readonly ArtifactId[]) => {
     const bytes = canonicalJsonBytes(value),
@@ -412,8 +323,14 @@ export function reviewSeedsFor(
     artifacts.set(id, { id, bytes, schema, links });
     return id;
   };
-  const seeds = specs.map((s) => {
-    if (!s.instructions || !s.segmentId || !s.requestedSelection || s.scope.snapshotId !== plan.pins.snapshotId)
+  const seeds = specs.map((s): AgentUnitSeed => {
+    if (
+      !s.instructions ||
+      !s.segmentId ||
+      !s.requestedSelection ||
+      s.runId !== plan.runId ||
+      s.scope.snapshotId !== plan.pins.snapshotId
+    )
       return bad();
     const manifest = instructionManifest(s.instructions);
     for (const a of instructionArtifacts(s.instructions)) artifacts.set(a.id, a);
@@ -458,4 +375,42 @@ export function reviewSeedsFor(
     };
   });
   return { seeds, artifacts: Object.freeze([...artifacts.values()]) };
+}
+/**
+ * The unit the planner places for a seed (`planner/planner.ts`, the declared agent stages): its identity, contract,
+ * adapter, inputs and sealed review, depending on the reused bootstrap and every deterministic unit. Admission compares
+ * each planned review unit with this, so a unit whose seed or placement differs is refused.
+ */
+export function reviewUnitOf(
+  plan: Pick<PlanEnvelope, 'runId' | 'revision' | 'reused' | 'units'>,
+  seed: AgentUnitSeed,
+): PlanWork {
+  const stage = `review-${seed.kind}` as const;
+  const inputs = seed.inputs.map((i) => ({ sourceId: i.sourceId, relativePath: i.relativePath, content: i.content }));
+  return {
+    id: reviewUnitIdOf({
+      runId: plan.runId,
+      revision: plan.revision,
+      stage,
+      sourceId: seed.sourceId,
+      segmentId: seed.segmentId,
+      specDigest: seed.review.specDigest,
+    }),
+    revision: 1,
+    stage,
+    contract: `sentinel.stage.review.${seed.kind}`,
+    implementationDigest: seed.adapterDigest,
+    sourceId: seed.sourceId,
+    adapterId: seed.adapterId,
+    dependencies: [
+      ...plan.reused.map((r) => ({ ...r })),
+      ...plan.units.filter((u) => !u.review).map((u) => ({ id: u.id, revision: u.revision })),
+    ],
+    inputFingerprint: seed.review.specDigest,
+    checks: [],
+    scopes: [seed.sourceId],
+    inputs,
+    inputSetDigest: digest(inputs),
+    review: structuredClone(seed.review),
+  };
 }
