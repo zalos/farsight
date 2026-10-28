@@ -19,7 +19,16 @@ import { validateEnvelope } from '../validate.js';
 import type { NodeKind } from '@farsight/graph';
 import { PlanError, type PlanReasonCode } from './errors.js';
 import { capabilityOf, isCapabilityTable } from './capabilities.js';
-import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf, deepFreeze, isTrustedView } from './identity.js';
+import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf, deepFreeze, isTrustedView, reviewUnitIdOf } from './identity.js';
+import {
+  crossStageDependencies,
+  declaredAnalysis,
+  requireBootstrap,
+  stageModel,
+  type AgentUnitSeed,
+  type DeclaredAnalysis,
+} from './pipeline.js';
+import type { PipelineDefinition } from '../contracts/pipeline.js';
 import {
   CHECK_STATES,
   DEFAULT_PLANNER_LIMITS,
@@ -366,6 +375,40 @@ interface Candidate {
 
 /** Every check the policy's locked rules imply over the snapshot, in a frozen analysis revision. */
 export function planAnalysis(request: AnalysisRequest): PlanRevision {
+  return planAnalysisOf(request, null);
+}
+
+/** The bootstrap revision of a declared pipeline: its capture, parse and inventory stages, planned as planBootstrap does. */
+export function planPipelineBootstrap(
+  request: BootstrapRequest & { readonly pipeline: PipelineDefinition },
+): PlanRevision {
+  const { pipeline, ...rest } = request;
+  requireBootstrap(stageModel(pipeline));
+  return planBootstrap(rest);
+}
+
+/**
+ * The analysis revision of a declared pipeline (pipeline.ts): its check stages select rules from the same matrix
+ * planAnalysis builds, a rule no stage selects stays as `unsupported` with sentinel.plan.stageNotDeclared, stage
+ * ordering becomes unit dependencies, and each review seed is placed as a unit of the agent stage declaring its
+ * fan-out. The revision is sealed once.
+ */
+export function planPipelineAnalysis(
+  request: AnalysisRequest & { readonly pipeline: PipelineDefinition; readonly agents?: readonly AgentUnitSeed[] },
+): PlanRevision {
+  const { pipeline, agents, ...rest } = request;
+  const model = stageModel(pipeline);
+  requireBootstrap(model);
+  return planAnalysisOf(rest, { analysis: declaredAnalysis(model), agents: agents ?? [] });
+}
+
+/** At most this many review units in one revision (the review side's bound, review/plan.ts). */
+const MAX_AGENT_UNITS = 32;
+
+function planAnalysisOf(
+  request: AnalysisRequest,
+  declared: { readonly analysis: DeclaredAnalysis; readonly agents: readonly AgentUnitSeed[] } | null,
+): PlanRevision {
   const runId = checkId(request.runId, 'run id');
   const revision = request.revision ?? 1;
   const previous = chainFrom(request.previous ?? null, runId, revision);
@@ -482,6 +525,8 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const requiredCaps = new Set(policy.requiredCapabilities);
   const ruleGaps: RuleGap[] = [];
   const selected: Array<{ rule: PlannerRule; mandatory: boolean }> = [];
+  /** The declared stage selecting each rule family; null when the pipeline declares none (planned derived). */
+  const stageOf = new Map<string, string | null>();
   for (const p of [...policy.rules].sort(byKey((r) => r.familyId))) {
     const rule = locked.get(p.familyId);
     const mandatory = p.source !== 'requested';
@@ -494,6 +539,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
       continue;
     }
     selected.push({ rule, mandatory });
+    if (declared) stageOf.set(rule.familyId, declared.analysis.stageOfRule(rule));
   }
 
   // Framework resolution per source: resolved where a lockfile in that source names it; unknown where any entry is.
@@ -699,6 +745,10 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
         state('scope-unavailable', c.entry.reasonCode);
         continue;
       }
+      if (declared && stageOf.get(rule.familyId) === null) {
+        state('unsupported', 'sentinel.plan.stageNotDeclared' satisfies PlanReasonCode);
+        continue;
+      }
       if ('reasonCode' in adapter) {
         state('unsupported', adapter.reasonCode);
         continue;
@@ -742,13 +792,17 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const groups = new Map<string, PlannedCheck[]>();
   for (const c of checks) {
     if (c.state !== 'planned') continue;
-    const k = `${rulePin.get(c.familyId)!.adapterId}\u0000${c.sourceId}\u0000${c.scopeKind === 'repository' ? 'repository' : 'scoped'}`;
+    // A declared pipeline batches within a stage: two stages over one adapter never share a unit.
+    const k = `${declared ? `${stageOf.get(c.familyId)}\u0000` : ''}${rulePin.get(c.familyId)!.adapterId}\u0000${c.sourceId}\u0000${c.scopeKind === 'repository' ? 'repository' : 'scoped'}`;
     (groups.get(k) ?? groups.set(k, []).get(k)!).push(c);
   }
   const work: PlannedWork[] = [];
   const assigned = new Map<string, string>();
+  const unitsByStage = new Map<string, WorkRef[]>();
   for (const k of [...groups.keys()].sort()) {
-    const [adapterId, sourceId, shape] = k.split('\u0000') as [string, string, string];
+    const parts = k.split('\u0000');
+    const stage = declared ? parts.shift()! : null;
+    const [adapterId, sourceId, shape] = parts as [string, string, string];
     const wholeRepository = shape === 'repository';
     const members = groups.get(k)!.sort(byKey((c) => `${c.scopeId}\u0000${c.familyId}`));
     let batch: PlannedCheck[] = [];
@@ -784,6 +838,8 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
         databases: needsDatabases ? lock.databases.map((d) => [d.databaseId, d.snapshotDigest]).sort() : [],
       });
       const id = checkUnitIdOf({ runId, revision, adapterId, sourceId, checks: ids });
+      if (stage !== null)
+        (unitsByStage.get(stage) ?? unitsByStage.set(stage, []).get(stage)!).push({ id, revision: 1 });
       work.push({
         id,
         revision: 1,
@@ -823,7 +879,77 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const finalChecks = checks.map((c) =>
     c.state === 'planned' ? { ...c, unit: { id: assigned.get(c.id)!, revision: 1 } } : c,
   );
+  // Declared ordering between analysis stages: a unit also depends on every unit of the check stages its stage needs
+  // or runs after. The derived plan has none, so its dependencies are the published bootstrap alone, as always.
+  if (declared) {
+    const familyOfCheck = new Map(checks.map((c) => [c.id, c.familyId]));
+    for (const w of work) {
+      const stage = stageOf.get(familyOfCheck.get(w.checks[0]!)!)!;
+      const extra = crossStageDependencies(declared.analysis, stage, unitsByStage);
+      if (!extra.length) continue;
+      const all = new Map([...w.dependencies, ...extra].map((r) => [`${r.id}@${r.revision}`, r]));
+      w.dependencies = [...all.values()].sort(byKey((r) => `${r.id}@${r.revision}`));
+    }
+  }
   work.sort(byKey((w) => w.id));
+  const reused = [...request.bootstrap]
+    .map((r) => ({ id: r.id, revision: r.revision }))
+    .sort(byKey((r) => `${r.id}@${r.revision}`));
+  const adapterPins = [...usedAdapters].map(([adapterId, digest]) => ({ adapterId, digest }));
+  // Review units of the declared agent stages: each seed's sealed model inputs as the review side built them, depending
+  // on the published bootstrap and every deterministic unit, so a model never runs before the evidence it may cite.
+  const units: PlannedWork[] = [...work];
+  if (declared?.agents.length) {
+    if (declared.agents.length > MAX_AGENT_UNITS)
+      throw new PlanError(
+        'sentinel.plan.tooMuchWork',
+        `${declared.agents.length} review units, at most ${MAX_AGENT_UNITS}`,
+      );
+    const deterministic = work.map((w) => ({ id: w.id, revision: w.revision }));
+    for (const seed of declared.agents) {
+      declared.analysis.stageOfSeed(seed);
+      if (
+        seed.review.segmentId !== seed.segmentId ||
+        !snapshot.sources.some((s) => s.sourceId === seed.sourceId) ||
+        seed.inputs.some((i) => i.sourceId !== seed.sourceId)
+      )
+        throw invalid('a review seed names another source or segment than its inputs');
+      const stage = `review-${seed.kind}` as const;
+      const inputs = seed.inputs.map((i) => ({
+        sourceId: i.sourceId,
+        relativePath: i.relativePath,
+        content: i.content,
+      }));
+      const unit: PlannedWork = {
+        id: reviewUnitIdOf({
+          runId,
+          revision,
+          stage,
+          sourceId: seed.sourceId,
+          segmentId: seed.segmentId,
+          specDigest: seed.review.specDigest,
+        }),
+        revision: 1,
+        stage,
+        contract: `sentinel.stage.review.${seed.kind}`,
+        implementationDigest: checkDigest(seed.adapterDigest, 'review adapter digest'),
+        sourceId: seed.sourceId,
+        adapterId: checkId(seed.adapterId, 'review adapter'),
+        dependencies: [...reused.map((r) => ({ ...r })), ...deterministic.map((r) => ({ ...r }))],
+        inputFingerprint: seed.review.specDigest,
+        checks: [],
+        scopes: [seed.sourceId],
+        inputs,
+        inputSetDigest: digestOf(inputs),
+        review: structuredClone(seed.review),
+      };
+      if (units.some((u) => u.id === unit.id)) throw invalid(`review unit ${unit.id} is planned twice`);
+      units.push(unit);
+      if (!adapterPins.some((a) => a.adapterId === seed.adapterId))
+        adapterPins.push({ adapterId: seed.adapterId, digest: seed.adapterDigest });
+    }
+    units.sort(byKey((w) => w.id));
+  }
 
   const pins: PlanPins = {
     snapshotId: snapshot.id,
@@ -850,7 +976,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
       .map((a) => ({ sourceId: a.sourceId, analysisFingerprint: a.analysisFingerprint }))
       .sort(byKey((a) => a.sourceId)),
     operations,
-    adapters: [...usedAdapters].map(([adapterId, digest]) => ({ adapterId, digest })).sort(byKey((a) => a.adapterId)),
+    adapters: adapterPins.sort(byKey((a) => a.adapterId)),
     capabilities: [...usedFacts.values()].sort(byKey((f) => `${f.capability}\u0000${f.adapterId}`)),
   };
   return seal({
@@ -860,10 +986,8 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
     kind: 'analysis',
     previous,
     pins,
-    reused: [...request.bootstrap]
-      .map((r) => ({ id: r.id, revision: r.revision }))
-      .sort(byKey((r) => `${r.id}@${r.revision}`)),
-    units: work,
+    reused,
+    units,
     checks: finalChecks,
     ruleGaps,
   });
