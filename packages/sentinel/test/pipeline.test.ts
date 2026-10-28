@@ -36,7 +36,11 @@ import {
 import { promoteStagePack } from '../dist/review/packs.js';
 import { profilePipeline } from '../dist/app/pipeline-profiles.js';
 import { requireBootstrap, stageModel } from '../dist/planner/pipeline.js';
-import { initWorkspace, PROFILES } from '../dist/cli/init.js';
+import { initialSettings, initWorkspace, PROFILE_PACKS, PROFILES } from '../dist/cli/init.js';
+import { PATHS_SUPPORTED_RULES } from '../dist/analysis/paths/definitions.js';
+import { builtinPackDir } from '../dist/service/package-paths.js';
+import { builtinRulePack } from '../dist/service/trusted-profile.js';
+import { readPackDirectory, validatePack } from '../dist/rules/index.js';
 import { DEFAULT_SETTINGS, ReceiptBook, validateEnvelope } from '../dist/index.js';
 import type { PipelineDefinition, SettingsEnvelope, StageDefinition } from '../dist/index.js';
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
@@ -69,6 +73,39 @@ const refused = (problems: readonly { class: string; code: string }[]) =>
   problems.filter((p) => p.class === 'refused').map((p) => p.code);
 const unavailable = (problems: readonly { class: string; code: string }[]) =>
   problems.filter((p) => p.class === 'unavailable').map((p) => p.code);
+/**
+ * The agentic profile as the plan's README example has it (§3.3): packs on its review and a native Claude triage
+ * after it. The shipped profile names neither (no pack ships yet, and the Claude runner is off by default).
+ */
+function packedAgentic(): PipelineDefinition {
+  const p = structuredClone(profilePipeline('agentic'));
+  const review = p.stages.find((x) => x.id === 'review') as { prompt?: string; skills?: string[] };
+  review.prompt = 'stages/review@3#prompt.md';
+  review.skills = ['skills/owasp-top10@2', 'skills/express-auth@1'];
+  const triage: StageDefinition = {
+    id: 'triage',
+    kind: 'agent',
+    mode: 'native',
+    runner: 'claude-cli',
+    model: 'claude-sonnet-5-5',
+    instructions: 'stages/triage@1#triage.md',
+    skills: ['skills/farsight-journeys@1'],
+    needs: [
+      { stage: 'patterns', output: 'findings' },
+      { stage: 'review', output: 'observations' },
+      'farsight.journeys',
+    ],
+    produces: [{ name: 'triage', schema: 'sentinel.triage/v1' }],
+    budget: { turns: 4, tokens: 60000, usd: '0.50', seconds: 180 },
+  } as StageDefinition;
+  p.stages.splice(
+    p.stages.findIndex((x) => x.id === 'report'),
+    0,
+    triage,
+  );
+  return p;
+}
+
 const pipelineOf = (stages: StageDefinition[], extra: Partial<PipelineDefinition> = {}): PipelineDefinition => ({
   schema: 'sentinel-pipeline/draft-1',
   id: 'p',
@@ -536,20 +573,89 @@ test('what the workspace has not made available is reported, not refused', () =>
   );
 });
 
+test('a stage reading what no planned work can publish is refused before anything runs', () => {
+  const walk: StageDefinition = { id: 'walk', kind: 'builtin', operation: 'walkthrough', needs: ['parse'] };
+  const reader: StageDefinition = {
+    id: 'review',
+    kind: 'agent',
+    mode: 'brokered',
+    runner: 'ollama',
+    model: 'qwen3:4b',
+    needs: [{ stage: 'walk', output: 'walkthrough' }],
+  };
+  const pipeline = pipelineOf([...BOOT, walk, reader]);
+  const unproduced = (env: PipelineEnvironment) =>
+    checkPipeline(pipeline, env).filter((x) => x.code === 'sentinel.pipeline.inputUnproduced');
+  // No path rule selected and locked: the walkthrough plans nothing, so the review would wait for nothing.
+  const none = unproduced({ locked: new Map(), rules: new Set() });
+  assert.deepEqual(
+    none.map((x) => [x.class, x.stage]),
+    [['refused', 'review']],
+  );
+  assert.match(none[0]!.detail, /reads walk, which plans no work/);
+  // Selected and locked under the walkthrough's adapter: it plans work, and the review may read it.
+  const family = PATHS_SUPPORTED_RULES[0]!.familyId;
+  assert.deepEqual(unproduced({ locked: new Map([[family, 'bounded-paths']]), rules: new Set([family]) }), []);
+  // Locked but not selected, or selected but not locked: still nothing planned.
+  assert.equal(unproduced({ locked: new Map([[family, 'bounded-paths']]), rules: new Set() }).length, 1);
+  assert.equal(unproduced({ locked: new Map(), rules: new Set([family]) }).length, 1);
+  // Without the selection (validate of a file alone) nothing is decided on.
+  assert.deepEqual(unproduced({ locked: new Map() }), []);
+  // The framework controls plan work the same way: only under a selected, locked rule.
+  const controls = pipelineOf([
+    ...BOOT,
+    { id: 'controls', kind: 'builtin', operation: 'framework-controls', needs: ['parse'] },
+    { ...reader, needs: [{ stage: 'controls', output: 'findings' }] },
+  ]);
+  assert.deepEqual(
+    checkPipeline(controls, { locked: new Map(), rules: new Set() })
+      .filter((x) => x.code === 'sentinel.pipeline.inputUnproduced')
+      .map((x) => x.stage),
+    ['review'],
+  );
+  // A report plans no unit, so a stage reading it is refused whatever the settings, the lock or none at all.
+  const readsReport = pipelineOf([
+    ...BOOT,
+    { id: 'report', kind: 'builtin', operation: 'report', needs: ['inventory'] },
+    { ...reader, needs: [{ stage: 'report', output: 'report' }] },
+  ]);
+  for (const env of [{}, { locked: new Map(), rules: new Set<string>() }]) {
+    const refusedReport = checkPipeline(readsReport, env).filter((x) => x.code === 'sentinel.pipeline.inputUnproduced');
+    assert.deepEqual(
+      refusedReport.map((x) => [x.class, x.stage]),
+      [['refused', 'review']],
+    );
+    assert.match(refusedReport[0]!.detail, /reads report, a report, which publishes nothing/);
+  }
+  // The shipped profiles read only what they plan, under the settings init writes and the packs it promotes.
+  for (const profile of PROFILES) {
+    const settings = initialSettings(profile);
+    const locked = new Map<string, string>();
+    for (const name of PROFILE_PACKS[profile])
+      for (const r of validatePack(readPackDirectory(realpathSync.native(builtinPackDir(name)!))).manifest.rules)
+        locked.set(r.familyId, r.implementation.adapterId);
+    assert.deepEqual(
+      checkPipeline(profilePipeline(profile), {
+        locked,
+        rules: new Set(settings.mandatoryRules),
+        rulePack: builtinRulePack,
+      }).filter((x) => x.code === 'sentinel.pipeline.inputUnproduced'),
+      [],
+      profile,
+    );
+  }
+});
+
 test('the profiles init writes are sound pipelines; the agentic one names what this build does not have yet', () => {
   for (const profile of PROFILES) {
     const pipeline = profilePipeline(profile);
     assert.ok(validateEnvelope('pipeline', pipeline).ok, profile);
     assert.deepEqual(refused(checkPipeline(pipeline)), [], `${profile}: its own meaning`);
     const here = checkPipeline(pipeline, { settings: DEFAULT_SETTINGS, pack: NO_PACKS });
-    if (profile === 'agentic')
-      assert.deepEqual([...new Set(refused(here))].sort(), [
-        'sentinel.pipeline.flagDisabled',
-        'sentinel.pipeline.unknownPack',
-      ]);
-    else assert.deepEqual(refused(here), [], `${profile}: under the defaults`);
+    // Every shipped profile plans under the defaults: none names a pack that does not ship, nor a runner that is off.
+    assert.deepEqual(refused(here), [], `${profile}: under the defaults`);
   }
-  // The agentic profile is the plan's example with this build's adapter ids.
+  // The agentic profile is the plan's example as this build can plan it: no pack, no native Claude triage.
   const agentic = profilePipeline('agentic');
   assert.deepEqual(
     agentic.stages.map((s) => `${s.id}:${s.kind}`),
@@ -559,20 +665,23 @@ test('the profiles init writes are sound pipelines; the agentic one names what t
       'inventory:builtin',
       'secrets:tool',
       'patterns:tool',
-      'walk:builtin',
       'review:agent',
-      'triage:agent',
       'report:builtin',
     ],
   );
-  const runners = agentic.stages.flatMap((s) => (s.kind === 'agent' ? [`${s.mode}:${s.runner}`] : []));
-  assert.deepEqual(runners, ['brokered:copilot-cli', 'native:claude-cli']);
-  // Under settings that turn the Claude runner on and packs that resolve, it is sound.
+  const runners = agentic.stages.flatMap((s) => (s.kind === 'agent' ? [`${s.mode}:${s.runner}:${s.fanOut}`] : []));
+  assert.deepEqual(runners, ['brokered:copilot-cli:per-run'], 'a general review the planner places');
+  assert.ok(agentic.stages.every((s) => !('prompt' in s) && !('skills' in s) && !('instructions' in s)));
+  // The README's fuller example (packs and a native triage) names exactly what this build does not have yet, and is
+  // sound once the Claude runner is on and its packs resolve.
+  const packed = packedAgentic();
+  assert.deepEqual(
+    [...new Set(refused(checkPipeline(packed, { settings: DEFAULT_SETTINGS, pack: NO_PACKS })))].sort(),
+    ['sentinel.pipeline.flagDisabled', 'sentinel.pipeline.unknownPack'],
+  );
   const digest = 'sha256:' + 'a'.repeat(64);
   assert.deepEqual(
-    refused(
-      checkPipeline(agentic, { settings: settingsWith({ nativeClaudeReviewEnabled: true }), pack: () => digest }),
-    ),
+    refused(checkPipeline(packed, { settings: settingsWith({ nativeClaudeReviewEnabled: true }), pack: () => digest })),
     [],
   );
   // The shipped example twin is the agentic profile.
@@ -647,8 +756,7 @@ test('adoption pins the pipeline digest; a changed byte or an unpromoted pack is
   assert.equal(again.outcome, 'prepared', JSON.stringify(again));
   assert.equal(loadPipeline({ workspace: ws.path, trustDir: ws.trustDir }).trust, 'adopted');
   // The digest covers the bytes of every pack the pipeline names.
-  const agentic = profilePipeline('agentic');
-  writeFileSync(p, bytes(agentic));
+  writeFileSync(p, bytes(packedAgentic()));
   const a = readWorkspacePipeline(ws.path, () => 'sha256:' + 'a'.repeat(64))!;
   const b = readWorkspacePipeline(ws.path, () => 'sha256:' + 'b'.repeat(64))!;
   assert.equal(a.fileDigest, b.fileDigest);
@@ -999,7 +1107,7 @@ test("pipeline.write validates and previews; it writes only on the owner's recei
 });
 
 test('a change previews what it reruns: the stage, everything downstream of it, nothing upstream', () => {
-  const adopted = profilePipeline('agentic');
+  const adopted = packedAgentic();
   const next = structuredClone(adopted);
   const review = next.stages.find((x) => x.id === 'review') as { model: string };
   review.model = 'claude-sonnet-5-5';
@@ -1010,7 +1118,6 @@ test('a change previews what it reruns: the stage, everything downstream of it, 
     inventory: 'unchanged',
     secrets: 'unchanged',
     patterns: 'unchanged',
-    walk: 'unchanged',
     review: 'changed',
     triage: 'downstream',
     report: 'downstream',

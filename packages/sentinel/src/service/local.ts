@@ -81,6 +81,7 @@ import {
 import { RuleLockBook } from './rule-locks.js';
 import { loadPlan } from '../execution/plans.js';
 import { expandStageTokens, unitsToRun } from '../execution/selection.js';
+import { runStages } from '../execution/stage-inputs.js';
 import type { StageSelection } from '../planner/pipeline.js';
 import { PlanError } from '../planner/errors.js';
 import { ServiceError } from './owner-service.js';
@@ -463,8 +464,17 @@ export function pipelineEnvironment(ws: Workspace, policy: EffectivePolicy | nul
     adapters: new Map([...shipped].map(([id, a]) => [id, a.families])),
     locked,
     installed: new Set([...shipped].filter(([id, a]) => !a.container || tools.has(id)).map(([id]) => id)),
+    // What the adopted policy selects; before adoption nothing is decided on, so no stage is held to plan work.
+    ...(policy ? { rules: new Set(policy.rules) } : {}),
   });
 }
+
+/**
+ * What `pipeline validate` checks a file against: this workspace's adopted settings (or none), its promoted stage and
+ * skill packs, its rule lock and the tools the owner adopted, exactly as `pipeline show` and `plan` do.
+ */
+export const workspacePipelineEnvironment = (ws: Workspace): PipelineEnvironment =>
+  pipelineEnvironment(ws, adoptedOrNull(ws));
 
 /** Every problem with the workspace's pipeline here, or [] when there is no readable pipeline file. */
 function pipelineProblems(ws: Workspace, policy: EffectivePolicy | null): readonly PipelineProblem[] {
@@ -1030,10 +1040,18 @@ export async function runPlan(
     const admittedReview = await loadPlan(store, plan.runId, plan.revision),
       reviews = admittedReview.plan.units
         .filter((u) => u.review)
-        .map((u) => ({
+        .map((u) => {
+          // The runner and the model as the adopted provider names them, beside the binding's ids: what is called.
+          const provider = policy.settings.providers.find((x) => x.id === u.review!.selection.providerId);
+          const model = provider?.models?.find((x) => x.id === u.review!.selection.modelId);
+          return { u, runner: provider?.kind ?? null, model: model?.model ?? null };
+        })
+        .map(({ u, runner, model }) => ({
           kind: u.stage,
           segmentId: u.review!.segmentId,
           selection: u.review!.selection,
+          runner,
+          model,
           terms: u.review!.terms,
           instructions: u.review!.instructionDigest,
           skills: 'none-selected',
@@ -1622,17 +1640,31 @@ export async function heldUnitsIn(
   store: SentinelStore,
   runId: string,
 ): Promise<{
-  held: readonly { unit: string; stage: string; state: string; reasonCode: string }[];
+  held: readonly HeldUnit[];
   pipeline?: RunPipeline;
 }> {
   const plan = await currentPlan(store, runId);
   if (!plan) return { held: [] };
   const admitted = await loadPlan(store, runId, plan.revision);
-  const held: { unit: string; stage: string; state: string; reasonCode: string }[] = [];
+  const held: HeldUnit[] = [];
+  const words = heldWordsOf(admitted);
   for (const u of admitted.plan.units) {
     const work = store.ledger.getWork({ id: u.id, revision: u.revision });
     if (work && (work.state === 'blocked' || work.state === 'disabled-by-policy') && work.reason)
-      held.push(Object.freeze({ unit: u.id, stage: String(u.stage), state: work.state, reasonCode: work.reason }));
+      held.push(
+        Object.freeze({
+          unit: u.id,
+          stage: String(u.stage),
+          state: work.state,
+          reasonCode: work.reason,
+          // What the reason is about: the model a review asked for, or the adapter a check runs. The ledger keeps the
+          // reason's code only, so its words are filled from the plan.
+          detail: u.review
+            ? `${u.review.selection.providerId} ${u.review.selection.modelId}`
+            : String(u.adapterId ?? u.stage),
+          ...words(u.id),
+        }),
+      );
   }
   const recorded = admitted.profile.pipeline;
   const source = pipelineSourceOf(admitted.profile);
@@ -1645,6 +1677,44 @@ export async function heldUnitsIn(
       : source
         ? { path: 'default-of', profile: source.profile }
         : { path: 'default' },
+  };
+}
+
+/** A unit of a run that is held: blocked or disabled by policy, with the reason the ledger recorded. */
+export interface HeldUnit {
+  readonly unit: string;
+  readonly stage: string;
+  readonly state: string;
+  readonly reasonCode: string;
+  /** What the reason is about, for its words: the provider and model a review asked for, or a check's adapter. */
+  readonly detail: string;
+  /** The declared stage the unit belongs to and the outputs it reads (a stage-input reason's words), when known. */
+  readonly declaredStage?: string;
+  readonly inputs?: string;
+}
+
+/**
+ * For each unit, the declared stage it belongs to and the stage outputs that stage reads, in words (`patterns.findings`),
+ * from the run's recorded or implied pipeline: what a held stage-input reason names. Empty when the plan has no stage
+ * model this build can read.
+ */
+export function heldWordsOf(
+  admitted: Awaited<ReturnType<typeof loadPlan>>,
+): (unit: string) => { declaredStage?: string; inputs?: string } {
+  let stages: ReturnType<typeof runStages>;
+  try {
+    stages = runStages(admitted);
+  } catch {
+    return () => ({});
+  }
+  return (unit) => {
+    const stage = stages.owner.get(unit);
+    if (!stage) return {};
+    const inputs = stages.model.inputs.get(stage) ?? [];
+    return {
+      declaredStage: stage,
+      ...(inputs.length ? { inputs: inputs.map((i) => `${i.stage}.${i.output}`).join(', ') } : {}),
+    };
   };
 }
 
@@ -2081,6 +2151,18 @@ export async function privateReviewTrace(ws: Workspace, runId: string): Promise<
     const units = plan.plan.units.filter((u) => u.review);
     if (units.length > 32) throw new ExecutionError('sentinel.execution.planInvalid', {});
     for (const unit of units) {
+      // A review that never published (refused, held or not run yet) has no instruction record to read: it is listed
+      // with the state and reason the ledger holds, never as an integrity failure of a record that does not exist.
+      if (!store.ledger.getPublication({ id: unit.id, revision: unit.revision })) {
+        const work = store.ledger.getWork({ id: unit.id, revision: unit.revision });
+        traces.push({
+          work: { id: unit.id, revision: unit.revision },
+          published: false,
+          state: work?.state ?? 'not-created',
+          reasonCode: work?.reason ?? null,
+        });
+        continue;
+      }
       const trace = await readPublishedInstructions(store, unit, { signal, deadlineAt });
       const value = {
         work: { id: unit.id, revision: unit.revision },

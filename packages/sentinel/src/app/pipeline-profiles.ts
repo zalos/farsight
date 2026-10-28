@@ -1,7 +1,7 @@
 // The pipeline each init profile writes. `static`, `scanners` and `secrets` declare exactly the stages those
 // profiles plan today (capture, a parse per source, the inventory, the checks their rules select, the report), so
-// declared planning reproduces today's units; `agentic` is the plan's example (README §3.3) with this build's
-// registered adapter ids.
+// declared planning reproduces today's units; `agentic` is the plan's example (README §3.3) as this build can plan
+// it, and `review` is its model half alone: a Copilot review of the capture, with no scanner and no container.
 import type { PipelineDefinition, StageDefinition } from '../contracts/index.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import {
@@ -35,18 +35,35 @@ const pipeline = (stages: StageDefinition[], flags?: PipelineDefinition['flags']
 });
 
 /**
- * The scan profiles init describes: the foundation preview, the five pinned scanners, the secret scan alone, and the
- * plan's agentic example (the secret and pattern scanners, the walkthrough, a brokered Copilot review and a native
- * Claude triage).
+ * The scan profiles init describes: the foundation preview, the five pinned scanners, the secret scan alone, the
+ * plan's agentic example (the secret and pattern scanners and a brokered Copilot review), and that review alone over
+ * the capture, which needs no container and runs no secret scan first.
  */
-export const PROFILES = ['static', 'scanners', 'secrets', 'agentic'] as const;
+export const PROFILES = ['static', 'scanners', 'secrets', 'agentic', 'review'] as const;
+export type Profile = (typeof PROFILES)[number];
 
 /** The rule packs a profile's owner promotes before planning: the packs this package ships, by name. */
-export const PROFILE_PACKS: Readonly<Record<(typeof PROFILES)[number], readonly string[]>> = Object.freeze({
+export const PROFILE_PACKS: Readonly<Record<Profile, readonly string[]>> = Object.freeze({
   static: ['foundation-preview'],
   scanners: ['pattern', 'advisories', 'infrastructure', 'ci', 'secrets'],
   secrets: ['secrets'],
   agentic: ['secrets', 'pattern'],
+  // A plan rests on a promoted rule lock; this profile selects none of its rules, so no check is planned from it.
+  review: ['foundation-preview'],
+});
+
+/** The Copilot general review both model profiles declare, over the stage outputs it reads. */
+const copilotReview = (needs: { stage: string; output: string }[], after?: string[]): StageDefinition => ({
+  id: 'review',
+  kind: 'agent',
+  mode: 'brokered',
+  runner: 'copilot-cli',
+  model: 'gpt-6-luna',
+  needs,
+  ...(after ? { after } : {}),
+  // One general review of the run (planner/pipeline.ts maps per-run to the general review).
+  fanOut: 'per-run',
+  budget: { turns: 3, tokens: 20000, seconds: 120 },
 });
 
 /** The pipeline `init --profile <profile>` writes. */
@@ -65,6 +82,9 @@ export function profilePipeline(profile: string): PipelineDefinition {
     case 'secrets':
       return pipeline([tool('secrets', 'secrets-gitleaks', families(GITLEAKS_SUPPORTED_RULES)), report(['secrets'])]);
     case 'agentic':
+      // The plan's example, as this build can plan it: the secret and pattern scanners, a brokered Copilot general
+      // review of the pattern findings, and the report. No stage or skill pack is named (none ships yet),
+      // and the native Claude triage waits until the runner is turned on (a later profile adds it).
       return pipeline(
         [
           { ...tool('secrets', 'secrets-gitleaks', families(GITLEAKS_SUPPORTED_RULES)), required: true },
@@ -75,43 +95,19 @@ export function profilePipeline(profile: string): PipelineDefinition {
             rules: 'pack:builtin:pattern',
             needs: ['capture', 'parse'],
           },
-          { id: 'walk', kind: 'builtin', operation: 'walkthrough', needs: ['parse'], fanOut: 'per-entry' },
-          {
-            id: 'review',
-            kind: 'agent',
-            mode: 'brokered',
-            runner: 'copilot-cli',
-            model: 'gpt-6-luna',
-            prompt: 'stages/review@3#prompt.md',
-            skills: ['skills/owasp-top10@2', 'skills/express-auth@1'],
-            needs: [
-              { stage: 'walk', output: 'walkthrough' },
-              { stage: 'patterns', output: 'findings' },
-            ],
-            after: ['secrets'],
-            fanOut: 'per-entry',
-            budget: { turns: 3, tokens: 20000, seconds: 120 },
-          },
-          {
-            id: 'triage',
-            kind: 'agent',
-            mode: 'native',
-            runner: 'claude-cli',
-            model: 'claude-sonnet-5-5',
-            instructions: 'stages/triage@1#triage.md',
-            skills: ['skills/farsight-journeys@1'],
-            needs: [
-              { stage: 'patterns', output: 'findings' },
-              { stage: 'review', output: 'observations' },
-              'farsight.journeys',
-            ],
-            produces: [{ name: 'triage', schema: 'sentinel.triage/v1' }],
-            budget: { turns: 4, tokens: 60000, usd: '0.50', seconds: 180 },
-          },
-          report(['secrets', 'patterns', 'review', 'triage', 'walk']),
+          // No walkthrough stage: it would plan nothing (no path rule is in this lock), and never publish its input.
+          copilotReview([{ stage: 'patterns', output: 'findings' }], ['secrets']),
+          report(['secrets', 'patterns', 'review']),
         ],
         { 'review.hosted-api': false },
       );
+    case 'review':
+      // The review alone: no scanner, so no container. Its settings choose to review without a secret scan first. It
+      // reads the capture: a walkthrough stage would plan nothing here (the lock holds no path rule), so it would
+      // never publish the input a review waiting on it needs.
+      return pipeline([copilotReview([{ stage: 'capture', output: 'source' }]), report(['review'])], {
+        'review.hosted-api': false,
+      });
     default:
       return pipeline([tool('preview', PREVIEW_DETECTOR_ID, [PREVIEW_RULE]), report(['preview'])]);
   }

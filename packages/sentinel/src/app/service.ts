@@ -25,13 +25,17 @@ import type { ScannerReport } from '../reports/scanner.js';
 import { loadPipeline, promotedPacks, type WorkspacePipeline } from './pipeline-adoption.js';
 import { profilePipeline, PROFILES, PROFILE_PACKS } from './pipeline-profiles.js';
 import { builtinPackDir } from '../service/package-paths.js';
-import { loadPolicyInputs, parseSettings, SETTINGS_PATH } from '../policy/index.js';
+import { effectivePolicy, loadPolicyInputs, parseSettings, SETTINGS_PATH } from '../policy/index.js';
+import { canonicalDigest } from '../policy/digest.js';
 import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { readCheckoutFile } from '../policy/user-state.js';
 import { MAX_SETTINGS_BYTES } from '../policy/settings.js';
 import { join } from 'node:path';
-import { previewPipeline } from './pipeline.js';
+import { checkPipeline, previewPipeline, type PipelineProblem } from './pipeline.js';
+import { stageModel } from '../planner/pipeline.js';
+import { readPackDirectory, validatePack } from '../rules/index.js';
+import type { PipelineDefinition, SettingsEnvelope } from '../contracts/index.js';
 import { isOwner, principalOf, type Principal } from './principal.js';
 import {
   adoptedPolicy,
@@ -40,7 +44,9 @@ import {
   pipelineBytesOf,
   promoteRulePack,
   confirmPlanForService,
+  heldWordsOf,
   pipelinePathOf,
+  pipelineEnvironment,
   followWorkspaceRun,
   planWorkspace,
   planWorkspaceHeld,
@@ -128,6 +134,7 @@ export async function stageIn(store: SentinelStore, runId: string, stageId: stri
     });
   const ids = new Set(expanded.units);
   const units = admitted.plan.units.filter((u) => ids.has(u.id));
+  const words = heldWordsOf(admitted);
   return result('stage', 'answered', {
     facts: {
       runId,
@@ -136,6 +143,7 @@ export async function stageIn(store: SentinelStore, runId: string, stageId: stri
       downstream: (expanded.stages?.downstream ?? []).map((d) => d.stage),
       units: units.map((u) => {
         const work = store.ledger.getWork({ id: u.id, revision: u.revision });
+        const named = words(u.id);
         const published = store.ledger.getPublication({ id: u.id, revision: u.revision }) !== null;
         return Object.freeze({
           id: u.id,
@@ -143,7 +151,16 @@ export async function stageIn(store: SentinelStore, runId: string, stageId: stri
           state: runs && !runs.has(u.id) ? 'held-by-selection' : (work?.state ?? 'not-created'),
           published,
           attempts: work ? store.ledger.countAttempts({ id: u.id, revision: u.revision }) : 0,
-          ...(work?.reason ? { reasonCode: work.reason } : {}),
+          ...(work?.reason
+            ? {
+                reasonCode: work.reason,
+                // What the reason is about, for its words: the model a review asked for, or the check's adapter.
+                detail: u.review
+                  ? `${u.review.selection.providerId} ${u.review.selection.modelId}`
+                  : String(u.adapterId ?? u.stage),
+                ...named,
+              }
+            : {}),
         });
       }),
     },
@@ -246,8 +263,24 @@ export function scanPreviewOf(ws: Workspace, by: Principal, now: Date = new Date
     } catch {
       return { ...adopted.refusal, command: 'scan' };
     }
+  // A pipeline file the setup cannot adopt: the scan cannot run it, so the preview says why and offers nothing.
+  const refusedPipeline = setup.find((x) => x.kind === 'adopt')?.detail.pipeline as
+    { adopted?: boolean; reasonCode?: string; detail?: string } | undefined;
+  if (refusedPipeline?.adopted === false && refusedPipeline.reasonCode)
+    return result('scan', 'configuration-failure', {
+      reasonCode: refusedPipeline.reasonCode,
+      facts: { setup: setup.map((x) => ({ kind: x.kind, ...x.detail })), detail: refusedPipeline.detail ?? '' },
+    });
   const loaded = loadPipeline({ workspace: ws.path, trustDir: ws.trustDir, resolve: promotedPacks(ws.trustDir) });
   const pipeline = loaded.read?.pipeline;
+  const path = loaded.read ? pipelinePathOf(loaded.read) : null;
+  // Every problem with the pipeline under these settings, as plan will see it once the setup is done: the rule packs
+  // the setup promotes count as promoted. A refused one means plan stops, so the scan is refused here.
+  // The rules planning would select under these settings: the adopted policy's (the owner's mandatory rules and what
+  // the repository requests), or, for settings the setup adopts first, the same merge over the file as it reads now.
+  const rules = new Set('policy' in adopted ? adopted.policy.rules : effectiveRulesOf(ws, settings));
+  const problems = pipeline ? previewProblems(ws, pipeline, settings, rules, setup) : [];
+  const refused = problems.find((x) => x.class === 'refused');
   const stages = pipeline
     ? previewPipeline(pipeline, pipeline).stages.map((s) => ({
         id: s.id,
@@ -257,29 +290,10 @@ export function scanPreviewOf(ws: Workspace, by: Principal, now: Date = new Date
         effects: [...s.effects],
       }))
     : null;
-  // Every binding the plan can use for review, exactly as review/plan.ts resolves one (a segment's own selection, else
-  // its stage's): each stage-wide selection and each segment selection, with its runner (the provider's kind), the
-  // model as the provider spells it and the provider's budget. What confirming the scan confirms.
-  const configured = settings.reviewModels;
-  const models = [
-    ...(configured?.stages ?? []).map((x) => ({ ...x, segmentId: null as string | null })),
-    ...(configured?.segments ?? []).map((x) => ({ ...x, segmentId: x.segmentId as string | null })),
-  ].map((x) => {
-    const provider = settings.providers.find((p) => p.id === x.providerId);
-    const model = provider?.models?.find((m) => m.id === x.modelId);
-    return {
-      stage: x.stage,
-      segmentId: x.segmentId,
-      providerId: x.providerId,
-      modelId: x.modelId,
-      runner: provider?.kind ?? null,
-      model: model?.model ?? null,
-      budget: provider?.budget ?? null,
-    };
-  });
+  const models = path?.kind === 'declared' ? declaredModels(pipeline!, settings) : configuredModels(settings);
   const effects = [...new Set(stages ? stages.flatMap((s) => s.effects) : ['local-artifacts'])].sort();
-  return result('scan', 'awaiting-confirmation', {
-    reasonCode: 'sentinel.service.scanWaits',
+  return result('scan', refused ? 'configuration-failure' : 'awaiting-confirmation', {
+    reasonCode: refused ? refused.code : 'sentinel.service.scanWaits',
     facts: {
       setup: setup.map((x) => ({ kind: x.kind, ...x.detail })),
       pipeline: pipeline
@@ -289,16 +303,164 @@ export function scanPreviewOf(ws: Workspace, by: Principal, now: Date = new Date
             digest: loaded.read!.digest,
             trust: loaded.trust,
             // A profile's own pipeline plans as the default for the settings (service/local.ts pipelinePathOf).
-            path: pipelinePathOf(loaded.read),
+            path: path!,
+            // Each problem as plan will see it under these settings (refused: the scan is refused above).
+            problems,
           }
         : null,
       stages,
       effects,
       models,
-      // An agent sees what would run; only the owner's command line can confirm it.
-      ...(isOwner(by) ? { confirmWith: 'scan --confirm' } : { ownerOnly: true }),
+      // An agent sees what would run; only the owner's command line can confirm it (and nothing, when it is refused).
+      ...(refused ? {} : isOwner(by) ? { confirmWith: 'scan --confirm' } : { ownerOnly: true }),
     },
   });
+}
+
+/** A model the scan calls: the stage, the runner and model, and the provider binding with its budget (null: none). */
+interface PreviewModel {
+  readonly stage: string;
+  /** The review the stage plans (a declared agent stage: `general` or `guided`); absent for a settings stage. */
+  readonly review?: string;
+  readonly segmentId: string | null;
+  readonly providerId: string | null;
+  readonly modelId: string | null;
+  readonly runner: string | null;
+  readonly model: string | null;
+  readonly budget: unknown;
+  /** What the pipeline declares when the binding that runs names another runner or model. */
+  readonly declared?: { readonly runner: string; readonly model: string };
+}
+
+/**
+ * Every binding the plan can use for review, exactly as review/plan.ts resolves one (a segment's own selection, else
+ * its stage's): each stage-wide selection and each segment selection, with its runner (the provider's kind), the
+ * model as the provider spells it and the provider's budget. What confirming the scan confirms.
+ */
+function configuredModels(settings: Readonly<SettingsEnvelope>): PreviewModel[] {
+  const configured = settings.reviewModels;
+  return [
+    ...(configured?.stages ?? []).map((x) => ({ ...x, segmentId: null as string | null })),
+    ...(configured?.segments ?? []).map((x) => ({ ...x, segmentId: x.segmentId as string | null })),
+  ].map((x) => boundModel(settings, x.stage, x.segmentId, x.providerId, x.modelId));
+}
+
+function boundModel(
+  settings: Readonly<SettingsEnvelope>,
+  stage: string,
+  segmentId: string | null,
+  providerId: string,
+  modelId: string,
+): PreviewModel {
+  const provider = settings.providers.find((p) => p.id === providerId);
+  const model = provider?.models?.find((m) => m.id === modelId);
+  return {
+    stage,
+    segmentId,
+    providerId,
+    modelId,
+    runner: provider?.kind ?? null,
+    model: model?.model ?? null,
+    budget: provider?.budget ?? null,
+  };
+}
+
+/**
+ * The models a declared pipeline's agent stages call: each stage by its own id, the review it plans (its fan-out), and
+ * the settings' binding for that review (its stage-wide selection and each segment selection), which is what runs. A
+ * stage no binding serves is listed with its declared runner and model and no provider; one whose binding names another
+ * runner or model says what it declared.
+ */
+function declaredModels(pipeline: PipelineDefinition, settings: Readonly<SettingsEnvelope>): PreviewModel[] {
+  let roles: ReturnType<typeof stageModel>['roles'];
+  try {
+    roles = stageModel(pipeline).roles;
+  } catch {
+    return configuredModels(settings);
+  }
+  const out: PreviewModel[] = [];
+  for (const s of pipeline.stages) {
+    const role = roles.get(s.id);
+    if (s.kind !== 'agent' || role?.role !== 'agent' || role.review === null) continue;
+    const review = role.review;
+    const bound = [
+      ...(settings.reviewModels?.stages ?? [])
+        .filter((x) => x.stage === review)
+        .map((x) => ({ ...x, segmentId: null as string | null })),
+      ...(settings.reviewModels?.segments ?? [])
+        .filter((x) => x.stage === review)
+        .map((x) => ({ ...x, segmentId: x.segmentId as string | null })),
+    ];
+    if (!bound.length)
+      out.push({
+        stage: s.id,
+        review,
+        segmentId: null,
+        providerId: null,
+        modelId: null,
+        runner: s.runner,
+        model: s.model,
+        budget: null,
+      });
+    for (const b of bound) {
+      const m = boundModel(settings, s.id, b.segmentId, b.providerId, b.modelId);
+      const provider = settings.providers.find((p) => p.id === b.providerId);
+      const differs = runnerServing(provider) !== s.runner || m.model !== s.model;
+      out.push({ ...m, review, ...(differs ? { declared: { runner: s.runner, model: s.model } } : {}) });
+    }
+  }
+  return out;
+}
+
+/**
+ * The pipeline runner an adopted provider serves (app/pipeline.ts runnerConfigured reads the same): a CLI kind its own
+ * runner, an Ollama provider that keeps the source here the local model server, any other HTTP provider the hosted
+ * APIs.
+ */
+function runnerServing(p: Readonly<SettingsEnvelope>['providers'][number] | undefined): string | null {
+  if (!p) return null;
+  if (p.kind === 'claude-cli' || p.kind === 'copilot-cli') return p.kind;
+  return p.kind === 'ollama' && p.disclosure === 'local-only' ? 'ollama' : 'hosted-api';
+}
+
+/**
+ * The rule families the effective policy would select for these settings once adopted: the owner's mandatory rules
+ * and the repository's requested ones, less what it disables (policy/settings.ts effectivePolicy, the one merge). A
+ * repository file that does not read leaves the owner's rules alone.
+ */
+function effectiveRulesOf(ws: Workspace, settings: Readonly<SettingsEnvelope>): readonly string[] {
+  try {
+    const inputs = loadPolicyInputs({ workspace: ws.path, trustDir: ws.trustDir });
+    return effectivePolicy({
+      trust: 'adopted',
+      settings: settings as SettingsEnvelope,
+      settingsDigest: canonicalDigest(settings),
+      repoConfig: inputs.repoConfig,
+      repoConfigDigest: inputs.repoConfigDigest,
+    }).rules;
+  } catch {
+    return settings.mandatoryRules;
+  }
+}
+
+/** The pipeline's problems under these settings once the setup is done: the packs it promotes count as locked. */
+function previewProblems(
+  ws: Workspace,
+  pipeline: PipelineDefinition,
+  settings: Readonly<SettingsEnvelope>,
+  rules: ReadonlySet<string>,
+  setup: readonly SetupStep[],
+): readonly PipelineProblem[] {
+  const env = pipelineEnvironment(ws, null);
+  const locked = new Map(env.locked ?? []);
+  for (const step of setup) {
+    if (step.kind !== 'promote') continue;
+    const dir = builtinPackDir(String(step.detail.pack));
+    if (!dir) continue;
+    for (const r of validatePack(readPackDirectory(realpathSync.native(dir))).manifest.rules)
+      locked.set(r.familyId, r.implementation.adapterId);
+  }
+  return checkPipeline(pipeline, { ...env, settings, locked, rules });
 }
 
 /** The composite a start confirms, read from the run's current revision (no receipt is issued). */
