@@ -69,6 +69,39 @@ const refused = (problems: readonly { class: string; code: string }[]) =>
   problems.filter((p) => p.class === 'refused').map((p) => p.code);
 const unavailable = (problems: readonly { class: string; code: string }[]) =>
   problems.filter((p) => p.class === 'unavailable').map((p) => p.code);
+/**
+ * The agentic profile as the plan's README example has it (§3.3): packs on its review and a native Claude triage
+ * after it. The shipped profile names neither (no pack ships yet, and the Claude runner is off by default).
+ */
+function packedAgentic(): PipelineDefinition {
+  const p = structuredClone(profilePipeline('agentic'));
+  const review = p.stages.find((x) => x.id === 'review') as { prompt?: string; skills?: string[] };
+  review.prompt = 'stages/review@3#prompt.md';
+  review.skills = ['skills/owasp-top10@2', 'skills/express-auth@1'];
+  const triage: StageDefinition = {
+    id: 'triage',
+    kind: 'agent',
+    mode: 'native',
+    runner: 'claude-cli',
+    model: 'claude-sonnet-5-5',
+    instructions: 'stages/triage@1#triage.md',
+    skills: ['skills/farsight-journeys@1'],
+    needs: [
+      { stage: 'patterns', output: 'findings' },
+      { stage: 'review', output: 'observations' },
+      'farsight.journeys',
+    ],
+    produces: [{ name: 'triage', schema: 'sentinel.triage/v1' }],
+    budget: { turns: 4, tokens: 60000, usd: '0.50', seconds: 180 },
+  } as StageDefinition;
+  p.stages.splice(
+    p.stages.findIndex((x) => x.id === 'report'),
+    0,
+    triage,
+  );
+  return p;
+}
+
 const pipelineOf = (stages: StageDefinition[], extra: Partial<PipelineDefinition> = {}): PipelineDefinition => ({
   schema: 'sentinel-pipeline/draft-1',
   id: 'p',
@@ -542,14 +575,10 @@ test('the profiles init writes are sound pipelines; the agentic one names what t
     assert.ok(validateEnvelope('pipeline', pipeline).ok, profile);
     assert.deepEqual(refused(checkPipeline(pipeline)), [], `${profile}: its own meaning`);
     const here = checkPipeline(pipeline, { settings: DEFAULT_SETTINGS, pack: NO_PACKS });
-    if (profile === 'agentic')
-      assert.deepEqual([...new Set(refused(here))].sort(), [
-        'sentinel.pipeline.flagDisabled',
-        'sentinel.pipeline.unknownPack',
-      ]);
-    else assert.deepEqual(refused(here), [], `${profile}: under the defaults`);
+    // Every shipped profile plans under the defaults: none names a pack that does not ship, nor a runner that is off.
+    assert.deepEqual(refused(here), [], `${profile}: under the defaults`);
   }
-  // The agentic profile is the plan's example with this build's adapter ids.
+  // The agentic profile is the plan's example as this build can plan it: no pack, no native Claude triage.
   const agentic = profilePipeline('agentic');
   assert.deepEqual(
     agentic.stages.map((s) => `${s.id}:${s.kind}`),
@@ -561,18 +590,22 @@ test('the profiles init writes are sound pipelines; the agentic one names what t
       'patterns:tool',
       'walk:builtin',
       'review:agent',
-      'triage:agent',
       'report:builtin',
     ],
   );
-  const runners = agentic.stages.flatMap((s) => (s.kind === 'agent' ? [`${s.mode}:${s.runner}`] : []));
-  assert.deepEqual(runners, ['brokered:copilot-cli', 'native:claude-cli']);
-  // Under settings that turn the Claude runner on and packs that resolve, it is sound.
+  const runners = agentic.stages.flatMap((s) => (s.kind === 'agent' ? [`${s.mode}:${s.runner}:${s.fanOut}`] : []));
+  assert.deepEqual(runners, ['brokered:copilot-cli:per-run'], 'a general review the planner places');
+  assert.ok(agentic.stages.every((s) => !('prompt' in s) && !('skills' in s) && !('instructions' in s)));
+  // The README's fuller example (packs and a native triage) names exactly what this build does not have yet, and is
+  // sound once the Claude runner is on and its packs resolve.
+  const packed = packedAgentic();
+  assert.deepEqual(
+    [...new Set(refused(checkPipeline(packed, { settings: DEFAULT_SETTINGS, pack: NO_PACKS })))].sort(),
+    ['sentinel.pipeline.flagDisabled', 'sentinel.pipeline.unknownPack'],
+  );
   const digest = 'sha256:' + 'a'.repeat(64);
   assert.deepEqual(
-    refused(
-      checkPipeline(agentic, { settings: settingsWith({ nativeClaudeReviewEnabled: true }), pack: () => digest }),
-    ),
+    refused(checkPipeline(packed, { settings: settingsWith({ nativeClaudeReviewEnabled: true }), pack: () => digest })),
     [],
   );
   // The shipped example twin is the agentic profile.
@@ -647,8 +680,7 @@ test('adoption pins the pipeline digest; a changed byte or an unpromoted pack is
   assert.equal(again.outcome, 'prepared', JSON.stringify(again));
   assert.equal(loadPipeline({ workspace: ws.path, trustDir: ws.trustDir }).trust, 'adopted');
   // The digest covers the bytes of every pack the pipeline names.
-  const agentic = profilePipeline('agentic');
-  writeFileSync(p, bytes(agentic));
+  writeFileSync(p, bytes(packedAgentic()));
   const a = readWorkspacePipeline(ws.path, () => 'sha256:' + 'a'.repeat(64))!;
   const b = readWorkspacePipeline(ws.path, () => 'sha256:' + 'b'.repeat(64))!;
   assert.equal(a.fileDigest, b.fileDigest);
@@ -999,7 +1031,7 @@ test("pipeline.write validates and previews; it writes only on the owner's recei
 });
 
 test('a change previews what it reruns: the stage, everything downstream of it, nothing upstream', () => {
-  const adopted = profilePipeline('agentic');
+  const adopted = packedAgentic();
   const next = structuredClone(adopted);
   const review = next.stages.find((x) => x.id === 'review') as { model: string };
   review.model = 'claude-sonnet-5-5';

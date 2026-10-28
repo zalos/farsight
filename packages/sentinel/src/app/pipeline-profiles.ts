@@ -65,6 +65,9 @@ export function profilePipeline(profile: string): PipelineDefinition {
     case 'secrets':
       return pipeline([tool('secrets', 'secrets-gitleaks', families(GITLEAKS_SUPPORTED_RULES)), report(['secrets'])]);
     case 'agentic':
+      // The plan's example, as this build can plan it: the secret and pattern scanners, the walkthrough, a brokered
+      // Copilot general review over their outputs, and the report. No stage or skill pack is named (none ships yet),
+      // and the native Claude triage waits until the runner is turned on (a later profile adds it).
       return pipeline(
         [
           { ...tool('secrets', 'secrets-gitleaks', families(GITLEAKS_SUPPORTED_RULES)), required: true },
@@ -82,33 +85,16 @@ export function profilePipeline(profile: string): PipelineDefinition {
             mode: 'brokered',
             runner: 'copilot-cli',
             model: 'gpt-6-luna',
-            prompt: 'stages/review@3#prompt.md',
-            skills: ['skills/owasp-top10@2', 'skills/express-auth@1'],
             needs: [
               { stage: 'walk', output: 'walkthrough' },
               { stage: 'patterns', output: 'findings' },
             ],
             after: ['secrets'],
-            fanOut: 'per-entry',
+            // One general review of the run (planner/pipeline.ts maps per-run to the general review).
+            fanOut: 'per-run',
             budget: { turns: 3, tokens: 20000, seconds: 120 },
           },
-          {
-            id: 'triage',
-            kind: 'agent',
-            mode: 'native',
-            runner: 'claude-cli',
-            model: 'claude-sonnet-5-5',
-            instructions: 'stages/triage@1#triage.md',
-            skills: ['skills/farsight-journeys@1'],
-            needs: [
-              { stage: 'patterns', output: 'findings' },
-              { stage: 'review', output: 'observations' },
-              'farsight.journeys',
-            ],
-            produces: [{ name: 'triage', schema: 'sentinel.triage/v1' }],
-            budget: { turns: 4, tokens: 60000, usd: '0.50', seconds: 180 },
-          },
-          report(['secrets', 'patterns', 'review', 'triage', 'walk']),
+          report(['secrets', 'patterns', 'review', 'walk']),
         ],
         { 'review.hosted-api': false },
       );

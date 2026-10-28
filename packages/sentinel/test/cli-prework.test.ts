@@ -303,9 +303,15 @@ test('init, as an owner reads it: both files, which profile a kept file holds, a
   const shown = run(['pipeline', 'show', '--json']);
   assert.equal(shown.status, 0, shown.stderr);
   const view = JSON.parse(shown.stdout).facts;
-  assert.deepEqual([view.trust, view.id, view.stages], ['not-adopted', 'default', 9]);
-  assert.ok(view.problems.some((p: { code: string }) => p.code === 'sentinel.pipeline.unknownPack'));
+  assert.deepEqual([view.trust, view.id, view.stages], ['not-adopted', 'default', 8]);
+  assert.ok(!view.problems.some((p: { class: string }) => p.class === 'refused'), 'the shipped profile plans');
   assert.equal(run(['pipeline', 'validate']).status, 0, 'its own meaning is sound');
+  assert.equal(run(['pipeline', 'adopt']).status, 4, 'adoption waits for the owner');
+  // A pipeline naming packs that are not promoted is not adopted, and says why in words.
+  const file = join(ws, '.farsight/sentinel/pipeline.json');
+  const pipeline = JSON.parse(readFileSync(file, 'utf8'));
+  pipeline.stages.find((s: { id: string }) => s.id === 'review').prompt = 'stages/review@3#prompt.md';
+  writeFileSync(file, JSON.stringify(pipeline, null, 2) + '\n');
   const adopt = run(['pipeline', 'adopt']);
   assert.equal(adopt.status, 3, 'a pipeline naming packs that are not promoted is not adopted');
   assert.match(adopt.stderr, /names a pack that is not there/);
