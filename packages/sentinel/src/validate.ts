@@ -8,6 +8,7 @@ import type {
   OwnerUiReceiptEnvelope,
   OwnerUiCapabilities,
   AttemptEnvelope,
+  AttemptRetainedEnvelope,
   CoverageEnvelope,
   DispositionEnvelope,
   ObservationEnvelope,
@@ -70,6 +71,7 @@ export interface EnvelopeTypes {
   run: RunEnvelope;
   work: WorkEnvelope;
   attempt: AttemptEnvelope;
+  attemptretained: AttemptRetainedEnvelope;
   observation: ObservationEnvelope;
   coverage: CoverageEnvelope;
   disposition: DispositionEnvelope;
@@ -1351,6 +1353,11 @@ const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   run,
   work,
   attempt,
+  attemptretained: (v, out) => {
+    const expected = [v.transcript, ...(v.share ? [v.share] : []), v.instructions];
+    if (JSON.stringify(v.links) !== JSON.stringify(expected))
+      out.add(err('/links', 'retained links must name exactly the three private artifacts in order'));
+  },
   observation,
   coverage,
   disposition,

@@ -38,6 +38,8 @@ import { admitsMode, prepareAdmittedReview } from '../dist/review/dispatch.js';
 import { bindProvider } from '../dist/review/providers/index.js';
 import { executablePlan } from '../dist/execution/plan.js';
 import { readPublishedInstructions } from '../dist/review/instructions.js';
+import { NativeRunFailure } from '../dist/review/runner.js';
+import { validateEnvelope } from '../dist/validate.js';
 import {
   COPILOT_1_0_105_PROFILE,
   COPILOT_AGENT_PROFILE,
@@ -564,6 +566,77 @@ const stubRunner = (cite: (inputs: readonly { relativePath: string }[]) => strin
     };
   },
 });
+
+test(
+  'a refused native dispatch hands its complete private record and handle-linked artifacts to the caller',
+  needsStore,
+  async (t) => {
+    const w = await workspace(t, copilotProvider(D('synthetic-copilot-profile')));
+    const lease = scratchUnder(w.store);
+    try {
+      const planned = await plan(w, lease);
+      const { plan: admitted } = await loadPlan(w.store, planned.disclosure.runId, planned.disclosure.revision);
+      const unit = admitted.units.find((u: any) => u.review)!;
+      const spec = await readReviewSpec(w.store, unit);
+      const base = stubRunner(() => 'src/auth.ts');
+      const runner = {
+        ...base,
+        async run(...args: Parameters<typeof base.run>) {
+          const result = await base.run(...args);
+          throw new NativeRunFailure(
+            'sentinel.review.outputSchema',
+            {
+              ...result,
+              disclosure: 'private-only',
+              withholding: 'accepted-secret-fold-before-read',
+              failure: 'sentinel.review.outputSchema',
+              completed: true,
+              finalAnswer: 'An original answer.',
+              provenance: {
+                ...result.provenance,
+                installation: { source: 'path', executablePath: '/example/bin/copilot' },
+              },
+            } as any,
+            new Error('mock schema refusal'),
+          );
+        },
+      };
+      const failure = await runNativeReview({
+        store: w.store,
+        unit,
+        attemptId: 'attempt-original',
+        spec,
+        runtime: { broker: {}, ledger: { reservationOf: () => null } } as any,
+        envelope: { id: 'menv-original' } as any,
+        binding: () => ({ model: 'gpt-6-luna' }) as any,
+        runner: runner as any,
+        signal: new AbortController().signal,
+        deadlineAt: Date.now() + 60000,
+      }).then(
+        () => assert.fail('a refused run cannot publish'),
+        (error: unknown) => error as NativeRunFailure,
+      );
+      assert(failure instanceof NativeRunFailure);
+      const delivery = failure.attemptRetained!;
+      assert.ok(delivery);
+      assert.equal(delivery.record.privacy, 'source');
+      assert.equal(delivery.record.failure, 'sentinel.review.outputSchema');
+      assert.equal(delivery.record.finalAnswer, 'An original answer.');
+      assert.deepEqual(delivery.record.filesRead, ['src/auth.ts']);
+      assert.equal(delivery.record.provenance.installation?.executablePath, '/example/bin/copilot');
+      assert.equal(delivery.record.instructionRecord.task.text, 't');
+      assert.deepEqual(
+        delivery.record.links,
+        delivery.artifacts.map((a) => a.id),
+      );
+      assert.ok(delivery.artifacts.every((a) => a.privacy === 'source'));
+      assert.equal(Buffer.from(delivery.artifacts[0]!.bytes).toString(), '{}\n');
+      assert.ok(validateEnvelope('attemptretained', delivery.record).ok);
+    } finally {
+      removeScratch(lease);
+    }
+  },
+);
 
 test(
   'a claim on an upstream input has no captured location to cite, so it is refused and nothing publishes',

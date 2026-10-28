@@ -5,6 +5,7 @@
 // review record, one agent provenance record and the retained transcript and instruction record.
 import { createHash } from 'node:crypto';
 import type { ArtifactId, Digest, WorkRef } from '../contracts/common.js';
+import type { AttemptRetainedDelivery, AttemptRetainedEnvelope } from '../contracts/attempt-retained.js';
 import type { ObservationEnvelope } from '../contracts/observation.js';
 import type { ObservationEvidence } from '../contracts/common.js';
 import type { AgentProvenance, StageInputBinding } from '../contracts/pipeline.js';
@@ -17,7 +18,13 @@ import { validateEnvelope } from '../validate.js';
 import { reviewFail } from './errors.js';
 import type { InstructionArtifact } from './instructions.js';
 import type { NativeReviewOutput } from './native.js';
-import type { AgentRunner, NativeInstructionRecord, NativeRunContext, NativeRunResult } from './runner.js';
+import {
+  NativeRunFailure,
+  type AgentRunner,
+  type NativeInstructionRecord,
+  type NativeRunContext,
+  type NativeRunResult,
+} from './runner.js';
 import type { SessionSpec } from './session.js';
 import type { ReviewRuntime } from './dispatch.js';
 
@@ -45,6 +52,73 @@ const json = (value: unknown, schema: string, links: readonly ArtifactId[] = [])
     links: Object.freeze([...links]),
   });
 const b64 = (b: Uint8Array) => Buffer.from(b).toString('base64');
+const instructionArtifact = (record: NativeInstructionRecord): InstructionArtifact =>
+  json(
+    {
+      schema: NATIVE_INSTRUCTIONS_SCHEMA,
+      disclosure: record.disclosure,
+      withholding: record.withholding,
+      stage: record.stage,
+      instructions: {
+        ref: record.instructions.ref,
+        digest: record.instructions.digest,
+        bytes: b64(record.instructions.bytes),
+      },
+      inputs: record.inputs,
+      task: record.task,
+      skills: record.skills.map((k) => ({
+        ref: k.ref,
+        digest: k.digest,
+        files: k.files.map((f) => ({ path: f.path, digest: f.digest, bytes: b64(f.bytes) })),
+      })),
+      packs: record.packs,
+    },
+    NATIVE_INSTRUCTIONS_SCHEMA,
+  );
+
+function retainedFailure(failed: NativeRunFailure): AttemptRetainedDelivery {
+  const r = failed.retained;
+  const transcript = raw(r.transcript, TRANSCRIPT_SCHEMA);
+  const share = r.share.byteLength ? raw(r.share, SHARE_SCHEMA) : null;
+  const instructions = instructionArtifact(r.instructionRecord);
+  const artifacts = [transcript, ...(share ? [share] : []), instructions].map((a) => ({
+    ...a,
+    privacy: 'source' as const,
+  }));
+  const record: AttemptRetainedEnvelope = {
+    schema: 'sentinel-attempt-retained/draft-1',
+    privacy: 'source',
+    disclosure: r.disclosure,
+    withholding: r.withholding,
+    failure: r.failure as AttemptRetainedEnvelope['failure'],
+    completed: r.completed,
+    finalAnswer: r.finalAnswer,
+    filesRead: [...r.filesRead],
+    tools: r.tools.map((tool) => ({ ...tool })),
+    task: r.task,
+    provenance: { ...r.provenance, mode: 'native', skillDigests: [...r.provenance.skillDigests] },
+    instructionRecord: {
+      schema: r.instructionRecord.schema,
+      disclosure: r.instructionRecord.disclosure,
+      withholding: r.instructionRecord.withholding,
+      stage: r.instructionRecord.stage,
+      instructions: { ref: r.instructionRecord.instructions.ref, digest: r.instructionRecord.instructions.digest },
+      inputs: r.instructionRecord.inputs.map((input) => ({ ...input })),
+      task: { ...r.instructionRecord.task },
+      skills: r.instructionRecord.skills.map((skill) => ({
+        ref: skill.ref,
+        digest: skill.digest as Digest,
+        files: skill.files.map((file) => ({ path: file.path, digest: file.digest })),
+      })),
+      packs: r.instructionRecord.packs.map((pack) => ({ ref: pack.ref, digest: pack.digest as Digest })),
+    },
+    transcript: transcript.id,
+    share: share?.id ?? null,
+    instructions: instructions.id,
+    links: artifacts.map((a) => a.id),
+  };
+  return { record, artifacts };
+}
 
 /** The byte span of one 1-based line (its text without the line break), or of the whole file when no line is named. */
 export function lineSpan(bytes: Uint8Array, line: number | null): { startByte: number; endByte: number } {
@@ -122,34 +196,40 @@ export async function runNativeReview(r: NativeReviewRun): Promise<PreparedOutpu
   if (remaining < 1) return reviewFail('sentinel.review.invalidInput', 'the unit deadline leaves no time to run');
   let sealed: NativeInstructionRecord | undefined;
   const operationId = `${spec.sessionId}:native`;
-  const ran = await runner.run(
-    {
-      id: native.stage,
-      kind: 'agent',
-      mode: 'native',
-      runner: native.runner,
-      model: r.binding().model,
-      ...(native.instructions !== undefined ? { instructions: native.instructions } : {}),
-      ...(native.skills?.length ? { skills: native.skills } : {}),
-      produces: native.produces,
-      budget: { ...native.budget, seconds: Math.min(native.budget.seconds, remaining) },
-    },
-    inputs,
-    {
-      native: {
-        broker: r.runtime.broker,
-        envelope,
-        binding: r.binding(),
-        operationId,
-        signal: r.signal,
-        ...(r.runtime.trustDir !== undefined ? { trustDir: r.runtime.trustDir } : {}),
-        // The packs the admitted spec sealed: the runner's own resolution must give exactly these, before any call.
-        packs: spec.packs ?? [],
-        // Sealed before anything is sent; the publication retains these exact bytes.
-        retain: async (record) => void (sealed = record),
+  let ran: Awaited<ReturnType<AgentRunner['run']>>;
+  try {
+    ran = await runner.run(
+      {
+        id: native.stage,
+        kind: 'agent',
+        mode: 'native',
+        runner: native.runner,
+        model: r.binding().model,
+        ...(native.instructions !== undefined ? { instructions: native.instructions } : {}),
+        ...(native.skills?.length ? { skills: native.skills } : {}),
+        produces: native.produces,
+        budget: { ...native.budget, seconds: Math.min(native.budget.seconds, remaining) },
       },
-    },
-  );
+      inputs,
+      {
+        native: {
+          broker: r.runtime.broker,
+          envelope,
+          binding: r.binding(),
+          operationId,
+          signal: r.signal,
+          ...(r.runtime.trustDir !== undefined ? { trustDir: r.runtime.trustDir } : {}),
+          // The packs the admitted spec sealed: the runner's own resolution must give exactly these, before any call.
+          packs: spec.packs ?? [],
+          // Sealed before anything is sent; the publication retains these exact bytes.
+          retain: async (record) => void (sealed = record),
+        },
+      },
+    );
+  } catch (error) {
+    if (error instanceof NativeRunFailure) error.attemptRetained = retainedFailure(error);
+    throw error;
+  }
   store.assertHeld();
   r.binding();
   if (ran.mode !== 'native' || !sealed || sealed !== ran.instructionRecord)
@@ -173,28 +253,7 @@ function publishNative(
   // The retained private bytes: the CLI's stream, its own session export, and the instruction record it was sent.
   const transcript = raw(ran.transcript, TRANSCRIPT_SCHEMA);
   const share = ran.share.byteLength ? raw(ran.share, SHARE_SCHEMA) : null;
-  const instructions = json(
-    {
-      schema: NATIVE_INSTRUCTIONS_SCHEMA,
-      disclosure: record.disclosure,
-      withholding: record.withholding,
-      stage: record.stage,
-      instructions: {
-        ref: record.instructions.ref,
-        digest: record.instructions.digest,
-        bytes: b64(record.instructions.bytes),
-      },
-      inputs: record.inputs,
-      task: record.task,
-      skills: record.skills.map((k) => ({
-        ref: k.ref,
-        digest: k.digest,
-        files: k.files.map((f) => ({ path: f.path, digest: f.digest, bytes: b64(f.bytes) })),
-      })),
-      packs: record.packs,
-    },
-    NATIVE_INSTRUCTIONS_SCHEMA,
-  );
+  const instructions = instructionArtifact(record);
   const artifacts = [transcript, ...(share ? [share] : []), instructions];
   // Cited observations, one per answer item, each citation re-derived from the unit's captured bytes.
   const output = ran.output.value as NativeReviewOutput;

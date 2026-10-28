@@ -1,0 +1,47 @@
+{
+  "schema": "sentinel-attempt-retained/draft-1",
+  "privacy": "source",
+  "disclosure": "private-only",
+  "withholding": "accepted-secret-fold-before-read",
+  "failure": "sentinel.review.outputSchema",
+  "completed": true,
+  "finalAnswer": "No valid observation was produced.",
+  "filesRead": ["src/auth.ts"],
+  "tools": [{ "tool": "view", "path": "src/auth.ts" }],
+  "task": "Review the captured source.",
+  "provenance": {
+    "mode": "native",
+    "runner": "copilot-cli",
+    "runnerVersion": "1.0.105",
+    "profileId": "copilot-native-v1",
+    "executableDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "installation": { "source": "path", "executablePath": "/example/bin/copilot" },
+    "model": { "requested": "gpt-6-luna", "reported": "gpt-6-luna", "identitySource": "host-reported" },
+    "promptDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "skillDigests": [],
+    "turns": 1,
+    "tokens": { "input": 30, "output": 10, "certainty": "confirmed" },
+    "cost": { "basis": "unobserved", "reason": "subscription" },
+    "deadline": { "grantedMs": 30000, "usedMs": 1200 },
+    "where": "sandboxed-cli"
+  },
+  "instructionRecord": {
+    "schema": "sentinel-native-instructions/draft-1",
+    "disclosure": "private-only",
+    "withholding": "accepted-secret-fold-before-read",
+    "stage": "review-general",
+    "instructions": { "ref": null, "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" },
+    "inputs": [{ "relativePath": "src/auth.ts", "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" }],
+    "task": { "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "text": "Review the captured source." },
+    "skills": [],
+    "packs": []
+  },
+  "transcript": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "share": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "instructions": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "links": [
+    "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+  ]
+}

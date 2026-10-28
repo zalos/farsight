@@ -1,0 +1,572 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/AttemptRetainedEnvelope",
+  "definitions": {
+    "AttemptRetainedEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-attempt-retained/draft-1"
+        },
+        "privacy": {
+          "type": "string",
+          "const": "source"
+        },
+        "disclosure": {
+          "type": "string",
+          "const": "private-only"
+        },
+        "withholding": {
+          "type": "string",
+          "const": "accepted-secret-fold-before-read"
+        },
+        "failure": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "finalAnswer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "filesRead": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RelativePath"
+          },
+          "maxItems": 1024
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tool": {
+                "type": "string"
+              },
+              "path": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/RelativePath"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "tool",
+              "path"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4096
+        },
+        "task": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/definitions/RetainedNativeProvenance"
+        },
+        "instructionRecord": {
+          "$ref": "#/definitions/RetainedNativeInstructions"
+        },
+        "transcript": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "share": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "instructions": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ArtifactId"
+          },
+          "description": "The artifact handles, in transcript, optional share, instructions order."
+        }
+      },
+      "required": [
+        "schema",
+        "privacy",
+        "disclosure",
+        "withholding",
+        "failure",
+        "completed",
+        "finalAnswer",
+        "filesRead",
+        "tools",
+        "task",
+        "provenance",
+        "instructionRecord",
+        "transcript",
+        "share",
+        "instructions",
+        "links"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-attempt-retained/draft-1: a failed native attempt, private source evidence, never stage output."
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "RelativePath": {
+      "type": "string",
+      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL. A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use `[\\s\\S]`, never `.`, so a line break cannot hide a `..` segment from them.",
+      "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
+      "maxLength": 4096
+    },
+    "RetainedNativeProvenance": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "native"
+        },
+        "runner": {
+          "$ref": "#/definitions/AgentRunnerId"
+        },
+        "runnerVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "executableDigest": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "installation": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string"
+                },
+                "executablePath": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "source",
+                "executablePath"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Private owner evidence: the installation category and resolved executable path that actually ran."
+        },
+        "model": {
+          "type": "object",
+          "properties": {
+            "requested": {
+              "type": "string"
+            },
+            "reported": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "identitySource": {
+              "type": "string",
+              "const": "host-reported"
+            }
+          },
+          "required": [
+            "requested",
+            "reported",
+            "identitySource"
+          ],
+          "additionalProperties": false
+        },
+        "promptDigest": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skillDigests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Digest"
+          },
+          "maxItems": 16
+        },
+        "turns": {
+          "type": "number"
+        },
+        "tokens": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "output": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "certainty": {
+              "type": "string",
+              "enum": [
+                "confirmed",
+                "uncertain"
+              ]
+            }
+          },
+          "required": [
+            "input",
+            "output",
+            "certainty"
+          ],
+          "additionalProperties": false
+        },
+        "cost": {
+          "$ref": "#/definitions/StageCost"
+        },
+        "deadline": {
+          "type": "object",
+          "properties": {
+            "grantedMs": {
+              "type": "number"
+            },
+            "usedMs": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "grantedMs",
+            "usedMs"
+          ],
+          "additionalProperties": false
+        },
+        "where": {
+          "type": "string",
+          "const": "sandboxed-cli"
+        }
+      },
+      "required": [
+        "mode",
+        "runner",
+        "runnerVersion",
+        "profileId",
+        "executableDigest",
+        "installation",
+        "model",
+        "promptDigest",
+        "skillDigests",
+        "turns",
+        "tokens",
+        "cost",
+        "deadline",
+        "where"
+      ],
+      "additionalProperties": false
+    },
+    "AgentRunnerId": {
+      "type": "string",
+      "enum": [
+        "claude-cli",
+        "copilot-cli",
+        "hosted-api",
+        "ollama"
+      ],
+      "description": "The agent runners a stage may name: the two CLIs, a hosted model API (off unless `review.hosted-api` is on), and a local model server (an adopted `ollama` provider that keeps the source on this machine)."
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "StageCost": {
+      "type": "object",
+      "properties": {
+        "basis": {
+          "enum": [
+            "rates",
+            "unobserved"
+          ]
+        }
+      },
+      "required": [
+        "basis"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "rates"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "rates"
+              },
+              "amount": {
+                "$ref": "#/definitions/DecimalAmount"
+              },
+              "currency": {
+                "$ref": "#/definitions/CurrencyCode"
+              }
+            },
+            "required": [
+              "basis",
+              "amount",
+              "currency"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "unobserved"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "unobserved"
+              },
+              "reason": {
+                "$ref": "#/definitions/CostUnobservedReason"
+              }
+            },
+            "required": [
+              "basis",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "description": "What a model stage cost: always one of two answers, never nothing. `rates`: the provider has owner-entered rates and the usage was confirmed (list price, not a bill). `unobserved`: the cost is not known, with its reason, and is never printed as a zero amount. Only a model stage has a cost; Sentinel's own stages, scanners and scripts have none."
+    },
+    "DecimalAmount": {
+      "type": "string",
+      "description": "A non-negative decimal amount written as a string, so money is never a binary float.",
+      "pattern": "^(0|[1-9][0-9]{0,15})(\\.[0-9]{1,9})?$"
+    },
+    "CurrencyCode": {
+      "type": "string",
+      "description": "An ISO 4217 currency code.",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "CostUnobservedReason": {
+      "type": "string",
+      "enum": [
+        "subscription",
+        "usage-unknown",
+        "no-rates"
+      ],
+      "description": "Why a model stage's cost is not known: a subscription CLI reports no price, the usage itself was not confirmed, or the provider has no owner-entered rates."
+    },
+    "RetainedNativeInstructions": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-native-instructions/draft-1"
+        },
+        "disclosure": {
+          "type": "string",
+          "const": "private-only"
+        },
+        "withholding": {
+          "type": "string",
+          "const": "accepted-secret-fold-before-read"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": "object",
+          "properties": {
+            "ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "digest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "ref",
+            "digest"
+          ],
+          "additionalProperties": false
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "$ref": "#/definitions/RelativePath"
+              },
+              "digest": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "relativePath",
+              "digest"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 1024
+        },
+        "task": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "$ref": "#/definitions/Digest"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "digest",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "string"
+              },
+              "digest": {
+                "$ref": "#/definitions/Digest"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "#/definitions/RelativePath"
+                    },
+                    "digest": {
+                      "$ref": "#/definitions/Digest"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "digest"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "ref",
+              "digest",
+              "files"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 16
+        },
+        "packs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "string"
+              },
+              "digest": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "ref",
+              "digest"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 256
+        }
+      },
+      "required": [
+        "schema",
+        "disclosure",
+        "withholding",
+        "stage",
+        "instructions",
+        "inputs",
+        "task",
+        "skills",
+        "packs"
+      ],
+      "additionalProperties": false,
+      "description": "The sealed instruction record's identity and manifest; its exact instruction bytes are linked separately."
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-attempt-retained.draft-1.schema.json",
+  "title": "sentinel-attempt-retained/draft-1"
+}

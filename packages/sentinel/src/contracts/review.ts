@@ -13,6 +13,7 @@ import type {
 } from './common.js';
 import type { ReviewInstructionsEnvelope, ReviewInstructionBinding, ReviewRequestEnvelope } from './instructions.js';
 import type { CweId, ModelIdentity } from './observation.js';
+import type { StageCost } from './pipeline.js';
 
 /**
  * @asType integer
@@ -211,6 +212,8 @@ export interface ReviewRecordEnvelope {
     outputTokens: Count;
     usage: 'confirmed' | 'unknown';
   };
+  /** The cost basis of a brokered CLI review. Subscription usage never implies a zero price. */
+  cost?: StageCost;
   refusals: Count;
   rejectedReplies: Count;
   /** @maxItems 16 */

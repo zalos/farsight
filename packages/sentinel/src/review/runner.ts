@@ -9,6 +9,7 @@
 // wrapper → the sandboxed runner) is unchanged byte for byte. Both modes record the same provenance shape. The stage
 // input and provenance use the pipeline contract's agent field names.
 import type { Digest } from '../contracts/index.js';
+import type { AttemptRetainedDelivery } from '../contracts/attempt-retained.js';
 import type { AgentMode, AgentRunnerId as DeclaredRunnerId } from '../contracts/pipeline.js';
 import { createHash } from 'node:crypto';
 import { canonicalDigest } from '../policy/digest.js';
@@ -568,6 +569,7 @@ export interface NativeFailedAttempt {
 export class NativeRunFailure extends Error {
   readonly code: string;
   readonly retained: NativeFailedAttempt;
+  attemptRetained?: AttemptRetainedDelivery;
   constructor(code: string, retained: NativeFailedAttempt, cause: unknown) {
     super((cause as Error)?.message ?? code);
     this.name = 'NativeRunFailure';

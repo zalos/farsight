@@ -67,6 +67,22 @@ test('every valid fixture validates as its kind, and every kind has one', () => 
   assert.deepEqual([...new Set(validFiles.map(kindOf))].sort(), [...ENVELOPE_KINDS].sort());
 });
 
+test('retained native attempt contract pins privacy, installation and artifact handles', () => {
+  const fixture = load('attemptretained-failed');
+  assert.equal(ENVELOPES.attemptretained.schema, 'sentinel-attempt-retained/draft-1');
+  assert.ok(validateEnvelope('attemptretained', fixture).ok);
+  const generated = schemaOf('attemptretained') as any;
+  const contract = generated.definitions.AttemptRetainedEnvelope;
+  assert.deepEqual(contract.properties.privacy.const, 'source');
+  assert.ok(contract.required.includes('instructionRecord'));
+  assert.ok(contract.required.includes('provenance'));
+  assert.ok(contract.required.includes('transcript'));
+  assert.ok(contract.required.includes('share'));
+  assert.ok(contract.required.includes('instructions'));
+  assert.equal(validateEnvelope('attemptretained', { ...fixture, privacy: 'metadata' }).ok, false);
+  assert.equal(validateEnvelope('attemptretained', { ...fixture, links: [fixture.transcript] }).ok, false);
+});
+
 test('valid fixtures reach every union branch', () => {
   const all = validFiles.map((f) => [kindOf(f), JSON.parse(readFileSync(VALID + f, 'utf8'))] as const);
   const seen = (kind: string, pick: (v: any) => unknown[]) =>

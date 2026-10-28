@@ -13,6 +13,7 @@ export type * from './snapshot.js';
 export type * from './run.js';
 export type * from './work.js';
 export type * from './attempt.js';
+export type * from './attempt-retained.js';
 export type * from './observation.js';
 export type * from './coverage.js';
 export type * from './disposition.js';
@@ -58,6 +59,7 @@ export const ENVELOPES = {
   run: { schema: 'sentinel-run/draft-1', type: 'RunEnvelope' },
   work: { schema: 'sentinel-work/draft-1', type: 'WorkEnvelope' },
   attempt: { schema: 'sentinel-attempt/draft-1', type: 'AttemptEnvelope' },
+  attemptretained: { schema: 'sentinel-attempt-retained/draft-1', type: 'AttemptRetainedEnvelope' },
   observation: { schema: 'sentinel-observation/draft-1', type: 'ObservationEnvelope' },
   coverage: { schema: 'sentinel-coverage/draft-1', type: 'CoverageEnvelope' },
   disposition: { schema: 'sentinel-disposition/draft-1', type: 'DispositionEnvelope' },

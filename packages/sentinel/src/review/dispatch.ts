@@ -1,5 +1,7 @@
 // Two fixed coordinator operations, over a genuine admitted plan. No repository code or generic worker is called.
 import type { WorkRef } from '../contracts/common.js';
+import type { AttemptUsage } from '../contracts/attempt.js';
+import type { ReviewRecordEnvelope } from '../contracts/review.js';
 import type { StageInputBinding } from '../contracts/pipeline.js';
 import type { Principal } from '../contracts/policy.js';
 import type { DecisionChannel } from '../contracts/disposition.js';
@@ -55,6 +57,24 @@ const bad = (): never => {
     reason: 'review requires its exact admitted coordinator unit and current model binding',
   });
 };
+/** Stamp the subscription cost basis into a brokered review's retained record after the ledger confirms usage. */
+export function brokeredCostRecord(
+  record: ReviewRecordEnvelope,
+  pricingKind: string,
+  usage: AttemptUsage,
+): ReviewRecordEnvelope {
+  if (pricingKind !== 'subscription-quota') return record;
+  const { digest: _digest, ...body } = record;
+  void _digest;
+  const withCost = {
+    ...body,
+    cost: {
+      basis: 'unobserved' as const,
+      reason: usage.certainty === 'confirmed' ? ('subscription' as const) : ('usage-unknown' as const),
+    },
+  };
+  return { ...withCost, digest: canonicalDigest(withCost) };
+}
 /**
  * Whether a sealed review spec may run on a pin: a native spec only on a pin that runs its own loop and names the
  * spec's runner, a brokered spec only on a pin that does not. Checked before the envelope opens.
@@ -244,10 +264,12 @@ export async function runAdmittedReview(
   const result = ran.session;
   store.assertHeld();
   current();
+  const usage = usageOf(runtime.ledger, envelope.id, result.record, prepared.resolved.binding.settingsBudget.currency);
+  const record = brokeredCostRecord(result.record, prepared.resolved.binding.pricing.kind, usage);
   const artifacts = result.privateArtifacts ?? [],
     records = [
       {
-        value: result.record,
+        value: record,
         schema: 'sentinel-review-record/draft-1',
         privacy: 'source-derived' as const,
         links: artifacts.map((a) => a.id),
@@ -266,7 +288,7 @@ export async function runAdmittedReview(
     bytes:
       artifacts.reduce((n, a) => n + a.bytes.byteLength, 0) +
       records.reduce((n, r) => n + Buffer.byteLength(JSON.stringify(r.value)), 0),
-    usage: usageOf(runtime.ledger, envelope.id, result.record, prepared.resolved.binding.settingsBudget.currency),
+    usage,
   };
 }
 

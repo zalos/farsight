@@ -139,6 +139,10 @@
           ],
           "additionalProperties": false
         },
+        "cost": {
+          "$ref": "#/definitions/StageCost",
+          "description": "The cost basis of a brokered CLI review. Subscription usage never implies a zero price."
+        },
         "refusals": {
           "$ref": "#/definitions/Count"
         },
@@ -465,6 +469,100 @@
       "description": "A non-negative integer.",
       "minimum": 0,
       "maximum": 9007199254740991
+    },
+    "StageCost": {
+      "type": "object",
+      "properties": {
+        "basis": {
+          "enum": [
+            "rates",
+            "unobserved"
+          ]
+        }
+      },
+      "required": [
+        "basis"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "rates"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "rates"
+              },
+              "amount": {
+                "$ref": "#/definitions/DecimalAmount"
+              },
+              "currency": {
+                "$ref": "#/definitions/CurrencyCode"
+              }
+            },
+            "required": [
+              "basis",
+              "amount",
+              "currency"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "unobserved"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "unobserved"
+              },
+              "reason": {
+                "$ref": "#/definitions/CostUnobservedReason"
+              }
+            },
+            "required": [
+              "basis",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "description": "What a model stage cost: always one of two answers, never nothing. `rates`: the provider has owner-entered rates and the usage was confirmed (list price, not a bill). `unobserved`: the cost is not known, with its reason, and is never printed as a zero amount. Only a model stage has a cost; Sentinel's own stages, scanners and scripts have none."
+    },
+    "DecimalAmount": {
+      "type": "string",
+      "description": "A non-negative decimal amount written as a string, so money is never a binary float.",
+      "pattern": "^(0|[1-9][0-9]{0,15})(\\.[0-9]{1,9})?$"
+    },
+    "CurrencyCode": {
+      "type": "string",
+      "description": "An ISO 4217 currency code.",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "CostUnobservedReason": {
+      "type": "string",
+      "enum": [
+        "subscription",
+        "usage-unknown",
+        "no-rates"
+      ],
+      "description": "Why a model stage's cost is not known: a subscription CLI reports no price, the usage itself was not confirmed, or the provider has no owner-entered rates."
     }
   },
   "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-review-record.draft-1.schema.json",

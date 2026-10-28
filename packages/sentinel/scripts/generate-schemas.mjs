@@ -10,6 +10,7 @@ const ENVELOPES = {
   run: ['sentinel-run/draft-1', 'RunEnvelope'],
   work: ['sentinel-work/draft-1', 'WorkEnvelope'],
   attempt: ['sentinel-attempt/draft-1', 'AttemptEnvelope'],
+  attemptretained: ['sentinel-attempt-retained/draft-1', 'AttemptRetainedEnvelope'],
   observation: ['sentinel-observation/draft-1', 'ObservationEnvelope'],
   coverage: ['sentinel-coverage/draft-1', 'CoverageEnvelope'],
   disposition: ['sentinel-disposition/draft-1', 'DispositionEnvelope'],

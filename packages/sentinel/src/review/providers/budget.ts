@@ -10,6 +10,7 @@
 // a restart never forgets a call that may have been billed. A settlement above its reservation is recorded in full and
 // marks the envelope overdrawn, which refuses every further reservation; nothing is clamped.
 import { createHash } from 'node:crypto';
+import { chmodSync, closeSync, lstatSync, openSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { checkSqliteRuntime } from '../../store/runtime.js';
 import { fail } from './errors.js';
@@ -245,6 +246,19 @@ export class BudgetLedger {
     const { sqlite } = await checkSqliteRuntime();
     let db: Db;
     try {
+      // SQLite creates WAL, SHM and rollback journals with the database file's permissions. Repair an older
+      // world-readable ledger and its siblings before opening it; never follow a link or reuse a hard link.
+      for (const file of [path, `${path}-wal`, `${path}-shm`, `${path}-journal`]) {
+        try {
+          const stat = lstatSync(file);
+          if (!stat.isFile() || stat.nlink !== 1 || (process.getuid && stat.uid !== process.getuid()))
+            return fail('sentinel.provider.ledgerInvalid', 'the ledger file is not a private regular file');
+          chmodSync(file, 0o600);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          if (file === path) closeSync(openSync(path, 'wx', 0o600));
+        }
+      }
       db = new sqlite.DatabaseSync(path, {
         enableForeignKeyConstraints: true,
         timeout: options.busyTimeoutMs ?? 10_000,
