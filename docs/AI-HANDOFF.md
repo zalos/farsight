@@ -20,9 +20,10 @@ preview names each declared stage's model or says *not configured*; only `scan -
 
 #250 added DEMO.md §4b and verified that profile live from a fresh clone: `scan` exited 4, `scan --confirm` exited 2
 in about 35 s, and the report named `copilot-cli brokered · model gpt-6-luna · 3 turns · … · cost unobserved ·
-subscription`. The review remains unfinished at its three-turn cap with zero observations on every run; the report
-says so. The owner paused the Docker agentic route (V-3). The demo is the CLI and this no-Docker review path on
-another Mac, following DEMO.md with Node 24, pnpm 9 or npm 10, git-lfs and a logged-in Copilot CLI 1.0.105.
+subscription`. In #250's observed live demo runs, the review ended unfinished at the 3-turn cap with zero
+observations; the report says so. The owner paused the Docker agentic route (V-3). The demo is the CLI and this
+no-Docker review path on another Mac, following DEMO.md with Node 24, pnpm 9 or npm 10, git-lfs and a logged-in
+Copilot CLI 1.0.105.
 
 #251 made build and pack work with npm as well as pnpm: root `workspaces`, 37 internal dependencies on
 npm-compatible ranges, `link-workspace-packages=true`, `scripts/workspace-run.mjs` and the `npm-build` CI job.
