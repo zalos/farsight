@@ -434,6 +434,9 @@ function plannerProblem(pipeline: PipelineDefinition, refuse: Refuse): void {
 
 type Refuse = (code: PipelineErrorCode, stage: StageId | null, detail: string) => void;
 
+/** The shipped preview detector's adapter id (adapters/preview-detector.ts), named here to keep this module pure. */
+const FOUNDATION_PREVIEW_ADAPTER = 'sentinel.preview.detector';
+
 /** The runners that can run a stage natively: a CLI with its own loop and read tools. */
 const NATIVE_RUNNERS: ReadonlySet<string> = new Set(['claude-cli', 'copilot-cli']);
 
@@ -612,7 +615,11 @@ function placeOf(s: StageDefinition): { where: ExecutionSite; effects: StageEffe
         effects: ['local-artifacts'],
       };
     case 'tool':
-      return { where: 'container', effects: ['tool-execution', 'local-artifacts'] };
+      // The shipped foundation-preview detector is Sentinel's own child process, not a container tool (canonical.ts
+      // planEffects counts it as a local artifact operation); every other scanner runs in its pinned container.
+      return s.adapter === FOUNDATION_PREVIEW_ADAPTER
+        ? { where: 'child', effects: ['local-artifacts'] }
+        : { where: 'container', effects: ['tool-execution', 'local-artifacts'] };
     case 'script':
       return s.runner === 'host'
         ? { where: 'host', effects: ['host-execution', 'local-artifacts'] }

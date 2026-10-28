@@ -34,6 +34,21 @@ const pipeline = (stages: StageDefinition[], flags?: PipelineDefinition['flags']
   ...(flags ? { flags } : {}),
 });
 
+/**
+ * The scan profiles init describes: the foundation preview, the five pinned scanners, the secret scan alone, and the
+ * plan's agentic example (the secret and pattern scanners, the walkthrough, a brokered Copilot review and a native
+ * Claude triage).
+ */
+export const PROFILES = ['static', 'scanners', 'secrets', 'agentic'] as const;
+
+/** The rule packs a profile's owner promotes before planning: the packs this package ships, by name. */
+export const PROFILE_PACKS: Readonly<Record<(typeof PROFILES)[number], readonly string[]>> = Object.freeze({
+  static: ['foundation-preview'],
+  scanners: ['pattern', 'advisories', 'infrastructure', 'ci', 'secrets'],
+  secrets: ['secrets'],
+  agentic: ['secrets', 'pattern'],
+});
+
 /** The pipeline `init --profile <profile>` writes. */
 export function profilePipeline(profile: string): PipelineDefinition {
   switch (profile) {

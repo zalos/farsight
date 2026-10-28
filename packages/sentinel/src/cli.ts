@@ -6,7 +6,8 @@ import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ownerDecisionCommand, decisionWire } from './findings/owner-cli.js';
 import { ownerEvidenceCommand, evidenceWire } from './evidence/owner-cli.js';
-import { REPORT_FORMATS, type ReportFormat } from './service/full-report.js';
+import { REPORT_FORMATS, writeNewFile, type ReportFormat } from './service/full-report.js';
+import { createHash } from 'node:crypto';
 import {
   privateReviewTrace,
   adoptWorkspaceSettings,
@@ -16,12 +17,9 @@ import {
   currentRules,
   followWorkspaceRun,
   promoteRulePack,
-  planWorkspace,
   prepareWorkspacePaths,
-  previewReport,
   runPlan,
   describeRun,
-  runStatus,
   workspaceOf,
   checkWorkspaceLayout,
   PolicyError,
@@ -29,6 +27,9 @@ import {
   type Workspace,
 } from './service/local.js';
 import { connectService, readServiceDescriptor, serveWorkspace } from './service/owner-service.js';
+import { LocalSentinelService, RemoteSentinelService, type SentinelService } from './app/service.js';
+import { claimOwnerMint, entryIsOwnerCli, type OwnerPrincipal } from './app/principal.js';
+import { ActorError } from './app/actor.js';
 import { canonicalResult, type CurrentPlan } from './service/canonical.js';
 import { launchService } from './service/launch.js';
 import { builtinPackDir } from './service/package-paths.js';
@@ -44,6 +45,7 @@ import { parseArgs, plannedIn, COMMANDS, type ParsedCommand } from './cli/args.j
 import { initWorkspace, InitError, PROFILE_PACKS } from './cli/init.js';
 import { checkPipeline, parsePipeline, PipelineError, PIPELINE_PATH, type PipelineProblem } from './app/pipeline.js';
 import { featureOf } from './policy/features.js';
+import { PLAN_SHAPE_KEYS } from './planner/pipeline.js';
 import { promoteStagePack, validateStagePack, STAGE_PACK_LIMITS } from './review/packs.js';
 import { ReviewError } from './review/errors.js';
 import { readPackDirectory } from './rules/pack.js';
@@ -96,6 +98,8 @@ function help(): string {
     `  ${word('sentinel.cli.usageSettings')}`,
     `  ${word('sentinel.cli.usagePipeline')}`,
     `  ${word('sentinel.cli.usageStage')}`,
+    `  ${word('sentinel.cli.usageScan')}`,
+    `  ${word('sentinel.cli.usageScans')}`,
     `  ${word('sentinel.cli.usagePlan')}`,
     `  ${word('sentinel.cli.usagePaths')}`,
     `  ${word('sentinel.cli.usageRun')}`,
@@ -455,6 +459,183 @@ function pipelineCommand(p: ParsedCommand, ws: Workspace, confirm: boolean, now:
   return serviceOut(r, lines, refusedDetail(r));
 }
 
+/**
+ * The owner mint, claimed by this entry as it loads (once per process; no other module can claim it after), and the
+ * owner of this command, minted only on the owner's own command path (never in `serve`, `mcp` or `owner-ui`).
+ */
+const mintOwner = entryIsOwnerCli() ? claimOwnerMint() : undefined;
+let ownerOfCommand: OwnerPrincipal | undefined;
+const me = (): OwnerPrincipal => {
+  if (!mintOwner) throw new ActorError('sentinel.actor.ownerMintNotEntry');
+  return (ownerOfCommand ??= mintOwner());
+};
+
+/** Each model a start would call, in words: provider, model, runner and budget. */
+function modelLines(models: unknown): string[] {
+  if (!Array.isArray(models)) return [];
+  // One line per stage and model: a review stage of many units names its model once.
+  return [
+    ...new Set(
+      models.map((m: Record<string, unknown>) =>
+        word('sentinel.cli.scanModel', {
+          stage: m.segmentId ? `${String(m.stage ?? 'review')} ${String(m.segmentId)}` : String(m.stage ?? 'review'),
+          runner: String(m.runner ?? m.providerId),
+          model: String(m.model ?? m.modelId),
+          provider: String(m.providerId),
+          budget: budgetWords(m.budget),
+        }),
+      ),
+    ),
+  ];
+}
+
+const budgetWords = (b: unknown): string => {
+  const x = (b ?? {}) as { maxTokens?: unknown; maxCost?: unknown; currency?: unknown };
+  const parts = [
+    x.maxTokens === null || x.maxTokens === undefined ? null : `${String(x.maxTokens)} tokens`,
+    x.maxCost === null || x.maxCost === undefined ? null : `${String(x.maxCost)} ${String(x.currency ?? '')}`.trim(),
+  ].filter(Boolean);
+  return parts.length ? parts.join(', ') : word('sentinel.cli.budgetNone');
+};
+
+/**
+ * Which stages a plan runs, in words: a profile's own pipeline plans as that profile's defaults (with the reviews the
+ * settings configure); any other adopted file as declared. `status` reads it from the run's recorded profile.
+ */
+function stagesLine(path: unknown): string[] {
+  const p = path as { kind?: string; profile?: string; digest?: string; path?: string; id?: string; revision?: number };
+  if (!p) return [];
+  if (p.kind === 'default-of') return [word('sentinel.cli.stagesDefault', { profile: String(p.profile) })];
+  if (p.kind === 'declared') return [word('sentinel.cli.stagesDeclared', { digest: String(p.digest) })];
+  if (p.path === 'default-of') return [word('sentinel.cli.stagesDefault', { profile: String(p.profile) })];
+  if (p.path === 'default') return [word('sentinel.cli.stagesDefaultRun')];
+  if (p.path === 'declared')
+    return [
+      word('sentinel.cli.stagesDeclaredRun', {
+        id: String(p.id),
+        revision: Number(p.revision),
+        digest: String(p.digest),
+      }),
+    ];
+  return [];
+}
+
+/** The units a run holds, each with why. */
+function heldLines(held: unknown): string[] {
+  if (!Array.isArray(held)) return [];
+  return held.map((h: Record<string, unknown>) =>
+    word('sentinel.cli.held', { unit: String(h.unit), stage: String(h.stage), reason: word(String(h.reasonCode)) }),
+  );
+}
+
+/** What a foreground run printed: its state when it ran, or the exact command that confirms what it waits for. */
+function runLines(r: CommandResult, command: string): string[] {
+  const f = r.facts as Record<string, unknown>;
+  if (r.outcome === 'awaiting-confirmation')
+    return [
+      ...modelLines(
+        Array.isArray(f.modelReviews)
+          ? (
+              f.modelReviews as {
+                kind: string;
+                selection: { providerId: string; modelId: string };
+                terms?: { budget?: unknown };
+              }[]
+            ).map((m) => ({
+              stage: m.kind,
+              providerId: m.selection.providerId,
+              modelId: m.selection.modelId,
+              budget: m.terms?.budget,
+            }))
+          : f.models,
+      ),
+      word('sentinel.cli.confirmWith', {
+        command: `${command} --confirm${f.requiredFlag === '--confirm-models' ? ' --confirm-models' : ''}`,
+      }),
+    ];
+  if (!f.runId || f.state === undefined) return [];
+  return [
+    `run ${String(f.runId)} · ${String(f.state)}${f.previewFindings === undefined ? '' : ` · preview findings: ${String(f.previewFindings)}`}`,
+  ];
+}
+
+/**
+ * `scan [--confirm] [--detach]`: plan, then start, through the facade. Without --confirm it previews every stage and
+ * model and waits; with it the one confirmation plans and starts (in this process, or through the service when one
+ * runs or --detach starts it), and the next command is printed with no id to retype.
+ */
+async function scanCommand(
+  p: ParsedCommand,
+  ws: Workspace,
+  facade: SentinelService,
+  confirm: boolean,
+  now: Date,
+): Promise<number> {
+  let svc = facade;
+  if (confirm && p.flags['--detach'] === true && facade instanceof LocalSentinelService) {
+    const client = await ensureService(ws);
+    if (!client)
+      return serviceOut(result('scan', 'configuration-failure', { reasonCode: 'sentinel.service.startFailed' }));
+    client.close();
+    svc = new RemoteSentinelService(ws, () => connectService(ws));
+  }
+  const r = await svc.scan(me(), { confirm, now });
+  const f = r.facts as Record<string, unknown>;
+  if (!confirm || r.outcome === 'awaiting-confirmation') {
+    const stages =
+      (f.stages as { id: string; kind: string; order: number; where: string; effects: string[] }[] | null) ?? null;
+    const setup = (f.setup as Record<string, unknown>[] | undefined) ?? [];
+    return serviceOut(
+      r,
+      [
+        ...setup.map((x) =>
+          x.kind === 'adopt'
+            ? word('sentinel.cli.setupAdopt', {
+                settings: String(x.settingsDigest),
+                pipeline: String(
+                  (x.pipeline as { digest?: string } | undefined)?.digest ?? word('sentinel.cli.noPipelineFile'),
+                ),
+              })
+            : x.candidate
+              ? word('sentinel.cli.setupPromote', { pack: String(x.pack), candidate: String(x.candidate) })
+              : word('sentinel.cli.setupPromoteAfter', { pack: String(x.pack) }),
+        ),
+        ...(stages
+          ? stages
+              .slice()
+              .sort((a, b) => a.order - b.order)
+              .map((s) =>
+                word('sentinel.cli.scanStage', {
+                  order: s.order + 1,
+                  stage: s.id,
+                  kind: s.kind,
+                  where: s.where,
+                  effects: s.effects.join(', ') || word('sentinel.cli.effectsNone'),
+                }),
+              )
+          : f.effects
+            ? [word('sentinel.cli.scanDefaultStages')]
+            : []),
+        ...stagesLine((f.pipeline as { path?: unknown } | null)?.path),
+        ...modelLines(f.models),
+        ...(r.outcome === 'awaiting-confirmation'
+          ? [
+              word('sentinel.cli.confirmWith', {
+                command: `scan --confirm${p.flags['--detach'] === true ? ' --detach' : ''}`,
+              }),
+            ]
+          : []),
+      ],
+      refusedDetail(r),
+    );
+  }
+  const lines: string[] = [];
+  if (f.planId) lines.push(`plan ${String(f.planId)} · ${String(f.planDigest)}`);
+  if (f.runId) lines.push(`run ${String(f.runId)} · ${String(f.state)}${f.joined === true ? ' · joined' : ''}`);
+  if (f.runId) lines.push(word('sentinel.cli.nextReport', { command: r.outcome === 'submitted' ? 'wait' : 'report' }));
+  return serviceOut(r, lines, refusedDetail(r));
+}
+
 const SERVICE_START_MS = 15_000;
 const DETACHED_IDLE_MS = 15_000;
 const DEFAULT_WAIT_MS = 600_000;
@@ -613,10 +794,9 @@ async function owner(p: ParsedCommand): Promise<number> {
         }
       };
       const planNow = await describeNow();
-      if (action === 'run.start' && planNow?.effects.includes('paid-inference'))
-        return serviceOut(
-          result(p.command, 'configuration-failure', { reasonCode: 'sentinel.review.foregroundRequired' }),
-        );
+      // A plan with model stages starts as one composite the owner confirms with --confirm-models: the start and
+      // every model envelope it opens (ADR 48 as amended). Without it the start waits and nothing is issued.
+      const models = p.flags['--confirm-models'] === true;
       const shown = confirmForService(ws, {
         command: p.command,
         action,
@@ -624,9 +804,17 @@ async function owner(p: ParsedCommand): Promise<number> {
         planId: runId,
         confirm: false,
         now,
+        models,
       });
-      if (!confirm || ('result' in shown && shown.result.outcome !== 'awaiting-confirmation'))
-        return serviceOut('result' in shown ? shown.result : result(p.command, 'refused'));
+      const needsModels = 'result' in shown && shown.result.facts.requiredFlag === '--confirm-models';
+      if (!confirm || needsModels || ('result' in shown && shown.result.outcome !== 'awaiting-confirmation')) {
+        const waiting = 'result' in shown && shown.result.outcome === 'awaiting-confirmation';
+        const again = `${p.command} ${runId}${p.command === 'run' ? ' --detach' : ''} --confirm${needsModels || models ? ' --confirm-models' : ''}`;
+        return serviceOut('result' in shown ? shown.result : result(p.command, 'refused'), [
+          ...modelLines(('result' in shown ? shown.result.facts.models : undefined) as unknown),
+          ...(waiting ? [word('sentinel.cli.confirmWith', { command: again })] : []),
+        ]);
+      }
       const client = p.command === 'pause' ? await connectService(ws) : await ensureService(ws);
       if (!client) {
         return serviceOut(
@@ -644,6 +832,7 @@ async function owner(p: ParsedCommand): Promise<number> {
         confirm: true,
         now,
         storeId: client.storeId,
+        models,
       });
       if ('result' in confirmed) {
         client.close();
@@ -651,7 +840,11 @@ async function owner(p: ParsedCommand): Promise<number> {
       }
       const r =
         action === 'run.start'
-          ? await ask(client, 'run.start', { planId: runId, receiptId: confirmed.receiptId })
+          ? await ask(client, 'run.start', {
+              planId: runId,
+              receiptId: confirmed.receiptId,
+              ...(confirmed.envelopeReceipts.length ? { envelopeReceipts: [...confirmed.envelopeReceipts] } : {}),
+            })
           : await ask(client, action, { runId, receiptId: confirmed.receiptId });
       return serviceOut(
         r,
@@ -660,22 +853,63 @@ async function owner(p: ParsedCommand): Promise<number> {
           : [],
       );
     }
-    // While the service runs it alone holds the store: reads go through it, and nothing new is planned or run here.
+    // While the service runs it alone holds the store: reads and plans go through it (the facade's remote side), and
+    // nothing is run or rerun in this process.
     const live = await connectService(ws);
-    if (
-      live &&
-      (p.command === 'plan' ||
-        p.command === 'paths' ||
-        p.command === 'run' ||
-        p.command === 'retry' ||
-        p.command === 'rerun')
-    ) {
+    if (live && (p.command === 'paths' || p.command === 'run' || p.command === 'retry' || p.command === 'rerun')) {
       live.close();
       return serviceOut(
         result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.ownerServiceRunning' }),
       );
     }
-    if (live && p.command === 'status') {
+    live?.close();
+    const facade: SentinelService = live
+      ? new RemoteSentinelService(ws, () => connectService(ws))
+      : new LocalSentinelService(ws);
+    if (p.command === 'scan') return await scanCommand(p, ws, facade, confirm, now);
+    if (p.command === 'scans') {
+      const limit = typeof p.flags['--limit'] === 'string' ? Number(p.flags['--limit']) : undefined;
+      if (limit !== undefined && !(Number.isSafeInteger(limit) && limit >= 1 && limit <= 128)) {
+        errOut(word('sentinel.args.missingValue', { detail: '--limit (1 to 128)' }));
+        return finish(result('scans', 'refused', { reasonCode: 'sentinel.args.missingValue' }));
+      }
+      const r = await facade.scans(me(), limit === undefined ? {} : { limit });
+      const rows = (r.facts.scans as { id: string; state: string; planRevision: number; createdAt: string }[]) ?? [];
+      return serviceOut(
+        r,
+        rows.length
+          ? rows.map((x) =>
+              word('sentinel.cli.scanRow', {
+                id: x.id,
+                state: x.state,
+                revision: x.planRevision,
+                created: x.createdAt,
+              }),
+            )
+          : [word('sentinel.service.noScans')],
+      );
+    }
+    if (p.command === 'stage' && p.args.action === 'show') {
+      const r = await facade.stage(me(), {
+        stageId: p.args.target!,
+        ...(typeof p.flags['--run'] === 'string' ? { runId: p.flags['--run'] as string } : {}),
+      });
+      const units = (r.facts.units as Record<string, unknown>[] | undefined) ?? [];
+      return serviceOut(
+        r,
+        units.map(
+          (u) =>
+            word('sentinel.cli.stageUnit', {
+              unit: String(u.id),
+              adapter: String(u.adapterId),
+              state: String(u.state),
+              attempts: Number(u.attempts),
+            }) + (u.reasonCode ? ` · ${word(String(u.reasonCode))}` : ''),
+        ),
+        refusedDetail(r),
+      );
+    }
+    if (p.command === 'status') {
       const num = (f: string) => (typeof p.flags[f] === 'string' ? Number(p.flags[f]) : undefined);
       const after = num('--after');
       const limit = num('--limit');
@@ -683,23 +917,46 @@ async function owner(p: ParsedCommand): Promise<number> {
         (after !== undefined && !(Number.isSafeInteger(after) && after >= 0)) ||
         (limit !== undefined && !(Number.isSafeInteger(limit) && limit >= 0))
       ) {
-        live.close();
         errOut(word('sentinel.args.missingValue', { detail: '--after/--limit' }));
         return finish(result('status', 'refused', { reasonCode: 'sentinel.args.missingValue' }));
       }
-      const r = await ask(live, 'run.status', {
-        runId: p.args.runId!,
+      const r = await facade.status(me(), {
+        ...(p.args.runId === undefined ? {} : { runId: p.args.runId }),
         ...(after === undefined ? {} : { after }),
         ...(limit === undefined ? {} : { limit }),
       });
-      return serviceOut(r, r.facts.state ? [`run ${p.args.runId} · ${String(r.facts.state)}`] : []);
+      return serviceOut(r, [
+        ...(r.facts.state ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)}`] : []),
+        ...stagesLine(r.facts.pipeline),
+        ...heldLines(r.facts.held),
+      ]);
     }
-    if (live && p.command === 'report') {
-      const doc = (await ask(live, 'report', { runId: p.args.runId! })) as unknown as
-        PreviewReport | ScannerReport | CommandResult;
-      return printReport(p, doc);
+    if (p.command === 'report') {
+      return printReport(
+        p,
+        await facade.report(me(), { ...(p.args.runId === undefined ? {} : { runId: p.args.runId }), now }),
+      );
     }
-    live?.close();
+    if (p.command === 'plan') {
+      const r = await facade.plan(me(), { confirm, now });
+      const pipeline = r.facts.pipeline as { problems?: unknown } | undefined;
+      const disclosure = r.disclosure ?? (r.facts.planDigest ? (r.facts as unknown as typeof r.disclosure) : undefined);
+      if (!disclosure)
+        return serviceOut(
+          r,
+          [
+            ...problemLines(pipeline?.problems),
+            ...(r.outcome === 'awaiting-confirmation'
+              ? [word('sentinel.cli.confirmWith', { command: 'plan --confirm' })]
+              : []),
+          ],
+          refusedDetail(r),
+        );
+      return serviceOut(r, [
+        `plan ${disclosure.planId} · ${disclosure.planDigest} · ${disclosure.shape ? `${word(PLAN_SHAPE_KEYS[disclosure.shape])} · ` : ''}effects: ${disclosure.effects.join(', ')} · ${word(disclosure.label === 'foundation-preview' ? 'sentinel.report.previewOnly' : 'sentinel.report.scannerSlice')}`,
+        ...stagesLine((pipeline as { path?: unknown } | undefined)?.path),
+      ]);
+    }
     if (p.command === 'settings') {
       if (p.args.action !== 'adopt') {
         errOut(word('sentinel.args.unexpectedArgument', { detail: String(p.args.action) }));
@@ -725,7 +982,7 @@ async function owner(p: ParsedCommand): Promise<number> {
       // a pipeline's prompts, instructions and skills are read from (review/packs.ts). Without --confirm it shows the
       // pack it would promote and waits.
       live?.close();
-      return stagePromote(ws, p.args.folder!, confirm);
+      return stagePromote(ws, p.args.target!, confirm);
     }
     if (p.command === 'rules') {
       // The owner's rule lock lives in the owner's private state, not the store: it works with or without a service.
@@ -777,19 +1034,6 @@ async function owner(p: ParsedCommand): Promise<number> {
           : [],
       );
     }
-    if (p.command === 'plan') {
-      const r = await planWorkspace(ws, { confirm, now });
-      const pipeline = r.facts.pipeline as { problems?: unknown } | undefined;
-      if (!r.disclosure) return serviceOut(r, problemLines(pipeline?.problems), refusedDetail(r));
-      return serviceOut(
-        r,
-        r.disclosure
-          ? [
-              `plan ${r.disclosure.planId} · ${r.disclosure.planDigest} · effects: ${r.disclosure.effects.join(', ')} · ${word(r.disclosure.label === 'foundation-preview' ? 'sentinel.report.previewOnly' : 'sentinel.report.scannerSlice')}`,
-            ]
-          : [],
-      );
-    }
     if (p.command === 'run') {
       const r = await runPlan(ws, {
         planId: p.args.planId!,
@@ -797,35 +1041,9 @@ async function owner(p: ParsedCommand): Promise<number> {
         confirmModels: p.flags['--confirm-models'] === true,
         now,
       });
-      return serviceOut(
-        r,
-        r.facts.runId
-          ? [
-              `run ${String(r.facts.runId)} · ${String(r.facts.state)} · preview findings: ${String(r.facts.previewFindings)}`,
-            ]
-          : [],
-      );
+      return serviceOut(r, runLines(r, `run ${p.args.planId}`));
     }
-    if (p.command === 'status') {
-      const num = (f: string) => (typeof p.flags[f] === 'string' ? Number(p.flags[f]) : undefined);
-      const after = num('--after');
-      const limit = num('--limit');
-      if (
-        (after !== undefined && !Number.isSafeInteger(after)) ||
-        (limit !== undefined && !Number.isSafeInteger(limit))
-      ) {
-        errOut(word('sentinel.args.missingValue', { detail: '--after/--limit' }));
-        return finish(result('status', 'refused', { reasonCode: 'sentinel.args.missingValue' }));
-      }
-      const r = await runStatus(ws, {
-        runId: p.args.runId!,
-        ...(after === undefined ? {} : { after }),
-        ...(limit === undefined ? {} : { limit }),
-      });
-      return serviceOut(r, r.facts.state ? [`run ${p.args.runId} · ${String(r.facts.state)}`] : []);
-    }
-    // report
-    return printReport(p, await previewReport(ws, { runId: p.args.runId!, now }));
+    return finish(result(p.command, 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
   } catch (e) {
     const code = (e as { code?: string }).code;
     if (e instanceof PolicyError || (typeof code === 'string' && code.startsWith('sentinel.'))) {
@@ -871,19 +1089,28 @@ async function fullReportCommand(
     errOut(word('sentinel.args.unexpectedArgument', { detail: '--repo (with --context)' }));
     return finish(result(p.command, 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
   }
-  const live = await connectService(ws);
-  if (live) {
-    live.close();
-    return serviceOut(
-      result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.ownerServiceRunning' }),
-    );
-  }
   const path = (flag: string) =>
     typeof p.flags[flag] === 'string' ? resolve(process.cwd(), p.flags[flag] as string) : undefined;
   const contextFile = path('--context');
   const outFile = path('--out');
+  const live = await connectService(ws);
+  // Without a run id: the newest scan's report, through whichever side holds the store.
+  let runId = p.args.runId;
+  if (runId === undefined) {
+    live?.close();
+    const facade: SentinelService = live
+      ? new RemoteSentinelService(ws, () => connectService(ws))
+      : new LocalSentinelService(ws);
+    runId = ((await facade.scans(me(), { limit: 1 })).facts.scans as { id: string }[] | undefined)?.[0]?.id;
+    if (!runId)
+      return serviceOut(result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.noScans' }));
+    if (live) return await fullReportThroughService(p, ws, runId, format, outFile, contextFile, disclosure);
+  } else if (live) {
+    live.close();
+    return await fullReportThroughService(p, ws, runId, format, outFile, contextFile, disclosure);
+  }
   const r = await fullReportIn(ws, {
-    runId: p.args.runId!,
+    runId,
     ...(p.args.baselineRunId ? { baselineRunId: p.args.baselineRunId } : {}),
     disclosure: disclosure as 'private' | 'shareable',
     format: format as ReportFormat,
@@ -906,6 +1133,93 @@ async function fullReportCommand(
   }
   out(r.text.endsWith('\n') ? r.text.slice(0, -1) : r.text);
   return r.result.exitCode;
+}
+
+/**
+ * `report --full` (and `compare`) while the service holds the store: the shareable report the service builds from the
+ * accepted evidence (`report.open`), read back in bounded chunks (`delivery.read`) and checked against the digest it
+ * names. A private disclosure or an owner graph needs the owner's own process and store: refused while it runs.
+ */
+async function fullReportThroughService(
+  p: ParsedCommand,
+  ws: Workspace,
+  runId: string,
+  format: string,
+  outFile: string | undefined,
+  contextFile: string | undefined,
+  disclosure: string,
+): Promise<number> {
+  if (contextFile || disclosure !== 'shareable' || p.flags['--confirm'] === true)
+    return serviceOut(
+      result(p.command, 'configuration-failure', {
+        reasonCode: 'sentinel.service.ownerServiceRunning',
+        facts: { runId, through: 'service', shareableOnly: true },
+      }),
+    );
+  const client = await connectService(ws);
+  if (!client)
+    return serviceOut(result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.notRunning' }));
+  let manifest: {
+    deliveryId: string;
+    reportId: string;
+    formatDigest: string;
+    formatBytes: number;
+    disclosure: { profile: string };
+  };
+  const chunks: Buffer[] = [];
+  try {
+    manifest = (await client.request('report.open', {
+      runId,
+      format,
+      ...(p.args.baselineRunId ? { baselineRunId: p.args.baselineRunId } : {}),
+    })) as typeof manifest;
+    for (let offset: number | null = 0; offset !== null;) {
+      const chunk = (await client.request('delivery.read', {
+        deliveryId: manifest.deliveryId,
+        offset,
+        maxBytes: 64 * 1024,
+      })) as { base64: string; nextOffset: number | null };
+      chunks.push(Buffer.from(chunk.base64, 'base64'));
+      offset = chunk.nextOffset;
+    }
+  } catch (e) {
+    const code = (e as { code?: unknown }).code;
+    return serviceOut(
+      result(p.command, 'configuration-failure', {
+        reasonCode: typeof code === 'string' && code.startsWith('sentinel.') ? code : 'sentinel.service.notRunning',
+        facts: { runId },
+      }),
+    );
+  } finally {
+    client.close();
+  }
+  const bytes = Buffer.concat(chunks);
+  const digest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+  if (bytes.length !== manifest.formatBytes || digest !== manifest.formatDigest)
+    return serviceOut(
+      result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.deliveryInvalid', facts: { runId } }),
+    );
+  const text = bytes.toString('utf8');
+  if (outFile) writeNewFile(outFile, text);
+  const r = result(p.command, 'answered', {
+    facts: {
+      runId,
+      reportId: manifest.reportId,
+      disclosure: manifest.disclosure.profile,
+      format,
+      formatDigest: manifest.formatDigest,
+      bytes: bytes.length,
+      through: 'service',
+      ...(outFile ? { written: outFile } : {}),
+      ...(p.args.baselineRunId ? { baselineRunId: p.args.baselineRunId } : {}),
+    },
+  });
+  if (jsonOut || outFile)
+    return serviceOut(r, [
+      `report ${manifest.reportId} · ${format} · ${bytes.length} bytes${outFile ? ` · written ${outFile}` : ''}`,
+    ]);
+  out(text.endsWith('\n') ? text.slice(0, -1) : text);
+  return r.exitCode;
 }
 
 function printReport(p: ParsedCommand, doc: PreviewReport | ScannerReport | CommandResult): number {
@@ -955,7 +1269,17 @@ async function serve(p: ParsedCommand, ws: Workspace): Promise<number> {
 
 /** `wait`: the run's result once it ends, or `submitted` (still running) when the wait does. */
 async function waitFor(p: ParsedCommand, ws: Workspace): Promise<number> {
-  const runId = p.args.runId!;
+  // Without a run id: the newest scan, through whichever side holds the store.
+  let runId = p.args.runId;
+  if (runId === undefined) {
+    const live = await connectService(ws);
+    live?.close();
+    const facade: SentinelService = live
+      ? new RemoteSentinelService(ws, () => connectService(ws))
+      : new LocalSentinelService(ws);
+    runId = ((await facade.scans(me(), { limit: 1 })).facts.scans as { id: string }[] | undefined)?.[0]?.id;
+    if (!runId) return serviceOut(result('wait', 'configuration-failure', { reasonCode: 'sentinel.service.noScans' }));
+  }
   const total = typeof p.flags['--timeout'] === 'string' ? Number(p.flags['--timeout']) : DEFAULT_WAIT_MS;
   if (!Number.isSafeInteger(total) || total < 0) {
     errOut(word('sentinel.args.missingValue', { detail: '--timeout' }));
@@ -1080,6 +1404,8 @@ async function dispatch(p: ParsedCommand): Promise<number> {
     case 'pipeline':
     case 'stage':
     case 'plan':
+    case 'scan':
+    case 'scans':
     case 'paths':
     case 'run':
     case 'status':
