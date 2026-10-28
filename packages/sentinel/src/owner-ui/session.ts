@@ -60,6 +60,8 @@ export class OwnerUiSession {
   #bootstrapServed = false;
   #capability: string | null = null;
   #reload: string | null = null;
+  /** The read pass the paired frame hands its parent page: reads of retained scans only, never an action. */
+  #read: string | null = null;
   #used = new Set<string>();
   #context: OwnerViewContext | null = null;
   #challenges = new Map<string, { revision: number; action: string; expiresAt: number }>();
@@ -100,6 +102,7 @@ export class OwnerUiSession {
     this.#revoked = true;
     this.#capability = null;
     this.#reload = null;
+    this.#read = null;
     this.#context = null;
     this.#challenges.clear();
   }
@@ -131,6 +134,7 @@ export class OwnerUiSession {
     }
     this.#capability = token();
     this.#reload = token();
+    this.#read = null;
     this.#context = current;
     this.#challenges.clear();
     return {
@@ -138,6 +142,21 @@ export class OwnerUiSession {
       reloadToken: this.#reload,
       expiresAt: new Date(this.expiresAt).toISOString(),
     };
+  }
+  /**
+   * A new read pass for the parent page, replacing the last one. It answers the read model's GET routes and nothing
+   * else: it is not the capability, cannot preview, confirm or write, and ends with this session.
+   */
+  readPass(capability: unknown) {
+    this.authenticate(capability);
+    this.#read = token();
+    return { pass: this.#read, expiresAt: new Date(this.expiresAt).toISOString() };
+  }
+  /** The view context a read pass reads under, or a refusal. */
+  authenticateRead(pass: unknown): OwnerViewContext {
+    this.#time();
+    if (!same(pass, this.#read) || !this.#context) throw new OwnerUiError('sentinel.viewer.notPaired');
+    return this.#context;
   }
   authenticate(capability: unknown) {
     this.#time();

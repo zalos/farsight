@@ -6,7 +6,15 @@ import { basename, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildClosure, workspacePackages } from './pack-preflight.mjs';
 
-const all = () => ({ validate: true, e2e: true, echo: true, sentinel: true, isolation: true, recovery: true });
+const all = () => ({
+  validate: true,
+  e2e: true,
+  echo: true,
+  sentinel: true,
+  isolation: true,
+  recovery: true,
+  service: true,
+});
 
 /** validate's unit tests over every package, and over none (only the skills trees changed). */
 const EVERY = Object.freeze({ scope: 'all', packages: Object.freeze([]), also: Object.freeze([]) });
@@ -115,15 +123,23 @@ function pathChecks(path, inputs, isolation) {
   return checks;
 }
 
-export function selectChecks(paths, { packageInputs, isolationInputs } = {}) {
+export function selectChecks(paths, { root = repoRoot, packageInputs, isolationInputs } = {}) {
   let inputs, isolation;
   try {
-    inputs = packageInputs ?? sentinelPackageInputs();
-    isolation = isolationInputs ?? sentinelIsolationInputs();
+    inputs = packageInputs ?? sentinelPackageInputs(root);
+    isolation = isolationInputs ?? sentinelIsolationInputs(root);
   } catch {
     return all();
   } // unreadable manifests: everything
-  const checks = { validate: false, e2e: false, echo: false, sentinel: false, isolation: false, recovery: false };
+  const checks = {
+    validate: false,
+    e2e: false,
+    echo: false,
+    sentinel: false,
+    isolation: false,
+    recovery: false,
+    service: false,
+  };
   for (const path of paths) {
     const selected = pathChecks(path, inputs, isolation);
     if (!selected) return all();
@@ -131,6 +147,12 @@ export function selectChecks(paths, { packageInputs, isolationInputs } = {}) {
   }
   // The recovery smoke runs the coordinator over the same execution and store code as the isolation canaries.
   checks.recovery = checks.isolation;
+  // Sentinel's process suite (packages/sentinel/test/process-suite.txt) runs only in sentinel-service and validate
+  // runs the rest, so that job runs exactly when validate tests Sentinel.
+  if (checks.validate) {
+    const tests = selectTests(paths, { root, packageInputs: inputs, isolationInputs: isolation });
+    checks.service = tests.scope === 'all' || tests.packages.includes('@farsight/sentinel');
+  }
   return checks;
 }
 
@@ -331,6 +353,7 @@ export function detectChecks({ root = repoRoot, ...range } = {}) {
     const paths = changedPaths(range);
     workspaceGraph(root); // an unreadable workspace, or a package name unsafe to emit, selects every check
     const checks = selectChecks(paths, {
+      root,
       packageInputs: sentinelPackageInputs(root),
       isolationInputs: sentinelIsolationInputs(root),
     });
@@ -406,7 +429,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         Object.entries(checks)
           .map(
             ([name, run]) =>
-              `- ${{ echo: 'echo-package', sentinel: 'sentinel-package', isolation: 'sentinel-isolation', recovery: 'sentinel-recovery' }[name] ?? name}: ${run ? 'run' : 'skip'}`,
+              `- ${{ echo: 'echo-package', sentinel: 'sentinel-package', isolation: 'sentinel-isolation', recovery: 'sentinel-recovery', service: 'sentinel-service' }[name] ?? name}: ${run ? 'run' : 'skip'}`,
           )
           .join('\n') +
         (checks.validate ? `\n${testsLine(tests)}` : '') +

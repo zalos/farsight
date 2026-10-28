@@ -11,8 +11,14 @@
 import type { Digest, Id } from '../contracts/common.js';
 import type { BuiltinPlanStage, PlanAdapterPin, PlanEnvelope } from '../contracts/plan.js';
 import type { ResourcePolicy } from '../contracts/work.js';
-import type { PipelineDefinition } from '../contracts/pipeline.js';
-import { requireBootstrap, stageModel, stagesOfUnits } from '../planner/pipeline.js';
+import type { PipelineDefinition, ScriptStageDefinition } from '../contracts/pipeline.js';
+import {
+  requireBootstrap,
+  scriptFingerprintOf,
+  SCRIPT_CONTRACT,
+  stageModel,
+  stagesOfUnits,
+} from '../planner/pipeline.js';
 import type { PlannerProfile } from '../planner/types.js';
 import type { ParserLimits, ParserSelection } from '../snapshot/parser.js';
 import { canonicalJsonBytes } from '../store/objects.js';
@@ -33,16 +39,29 @@ export interface ExecutionProfileRecord {
   parse: { selection: ParserSelection; limits: Required<ParserLimits> };
   /** The declared pipeline the run is planned from; absent for a run planned from its implied default. */
   pipeline?: PipelineDefinition;
+  /** Each declared script stage's entry and output schema, by the digests of the bytes the owner adopted. */
+  scripts?: Array<{ stage: string; entry: string; digest: Digest; schema: { id: string; digest: Digest } }>;
 }
 
 /** The record with the declared pipeline the run is planned from (validated: it must derive a stage model). */
-export function withPipeline(record: ExecutionProfileRecord, pipeline: PipelineDefinition): ExecutionProfileRecord {
+export function withPipeline(
+  record: ExecutionProfileRecord,
+  pipeline: PipelineDefinition,
+  scripts: readonly { stage: string; entry: string; digest: Digest; schema: { id: string; digest: Digest } }[] = [],
+): ExecutionProfileRecord {
   try {
     stageModel(pipeline);
   } catch (error) {
     return refuse(`the pipeline cannot be planned: ${(error as Error).message}`);
   }
-  return structuredClone({ ...record, pipeline });
+  for (const s of scripts)
+    if (!pipeline.stages.some((d) => d.id === s.stage && d.kind === 'script' && d.entry === s.entry))
+      refuse(`script entry ${s.stage} is not a script stage of the pipeline`);
+  return structuredClone({
+    ...record,
+    pipeline,
+    ...(scripts.length ? { scripts: [...scripts].sort((a, b) => (a.stage < b.stage ? -1 : 1)) } : {}),
+  });
 }
 
 const refuse = (reason: string): never => {
@@ -109,6 +128,24 @@ export function checkProfileForPlan(record: ExecutionProfileRecord, plan: PlanEn
     } catch (error) {
       refuse(`the plan was not made from the pipeline the profile records: ${(error as Error).message}`);
     }
+  }
+  // A script stage's unit is pinned to the entry the profile records: its fingerprint must follow from that digest.
+  for (const u of plan.units.filter((x) => x.contract === SCRIPT_CONTRACT)) {
+    const stage = record.pipeline?.stages.find((s) => s.id === u.stage && s.kind === 'script') as
+      ScriptStageDefinition | undefined;
+    const entry = record.scripts?.find((s) => s.stage === u.stage);
+    if (
+      !stage ||
+      !entry ||
+      entry.entry !== stage.entry ||
+      scriptFingerprintOf(
+        stage,
+        { entry: entry.digest, schema: entry.schema.digest },
+        u.implementationDigest,
+        u.dependencies,
+      ) !== u.inputFingerprint
+    )
+      refuse(`script unit ${u.id} is not pinned to the entry the profile records`);
   }
 }
 
