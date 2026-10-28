@@ -113,10 +113,13 @@ export class ModelCallError extends ProviderError {
   readonly reservation: Reservation | null;
   readonly nativeAuth?: Readonly<NativeAuthDiagnostic>;
   readonly nativeCopilot?: Readonly<NativeCopilotDiagnostic>;
-  constructor(cause: ProviderError, reservation: Reservation | null) {
+  /** A native run that completed and settled, then was refused (identity, budget): kept for the private record. */
+  readonly agentResult?: CopilotAgentResult;
+  constructor(cause: ProviderError, reservation: Reservation | null, agentResult?: CopilotAgentResult) {
     super(cause.code, '', cause.spend);
     this.message = cause.message;
     this.reservation = reservation;
+    if (agentResult) this.agentResult = agentResult;
     if (cause instanceof NativeCredentialError) this.nativeAuth = cause.nativeAuth;
     if (cause instanceof NativeCopilotError) this.nativeCopilot = cause.nativeCopilot;
   }
@@ -431,6 +434,7 @@ export class ModelBroker {
           'possible',
         ),
         settled,
+        result,
       );
     if (result.usage.inputTokens + result.usage.outputTokens > req.tokens)
       throw new ModelCallError(
@@ -440,9 +444,11 @@ export class ModelBroker {
           'possible',
         ),
         settled,
+        result,
       );
     return Object.freeze({
       result,
+      installation: cli.agent.installation(held.cliRuntime),
       identity: Object.freeze({
         requestedModel: binding.model,
         returnedModel: result.reportedModel,
@@ -669,6 +675,8 @@ export interface AgentRunRequest {
 }
 export interface AgentRunReply {
   readonly result: CopilotAgentResult;
+  /** Which installation ran and its exact path on this machine: private provenance, redacted in public artifacts. */
+  readonly installation: Readonly<{ source: string; executable: string }>;
   readonly identity: ReplyIdentity;
   readonly usage: ModelReply['usage'];
   readonly reservation: Reservation;

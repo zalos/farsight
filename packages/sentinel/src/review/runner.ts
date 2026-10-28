@@ -23,7 +23,7 @@ import {
   type CopilotCredentialPath,
 } from './providers/cli-copilot-profile.js';
 import { CLAUDE_NATIVE_PROFILE, qualifyInstalledNativeClaude } from './providers/cli-native-profile.js';
-import { safeInputPath } from './providers/cli-copilot-agent.js';
+import { safeInputPath, type CopilotAgentResult } from './providers/cli-copilot-agent.js';
 import type { ModelBroker, ModelEnvelope } from './providers/broker.js';
 import type { ProviderBinding } from './providers/profile.js';
 import { reviewFail } from './errors.js';
@@ -69,6 +69,11 @@ export interface AgentRunProvenance {
   readonly runnerVersion: string | null;
   readonly profileId: string;
   readonly executableDigest: Digest | null;
+  /**
+   * The installation that ran: its category and the exact resolved executable path. Private to the owner's record;
+   * `publicProvenance` redacts the path before anything leaves it.
+   */
+  readonly installation: Readonly<{ source: string; executablePath: string }> | null;
   readonly model: Readonly<{ requested: string; reported: string | null; identitySource: 'host-reported' }>;
   readonly promptDigest: Digest | null;
   readonly skillDigests: readonly Digest[];
@@ -89,6 +94,8 @@ export interface AgentQualification {
   readonly modes: readonly AgentMode[];
   /** Which installation matched the pin (`configured`, `path`, `homebrew-cask`, `known-location`). */
   readonly installation?: string;
+  /** The exact resolved executable path: private to the owner's qualification record, never in a public artifact. */
+  readonly executablePath?: string;
   /** The credential path as probed once here: whether this process (a CLI or a service child) can reach the login. */
   readonly credentialPath?: CopilotCredentialPath;
 }
@@ -196,45 +203,90 @@ async function runCopilotNative(
     );
   const started = Date.now(),
     grantedMs = seconds! * 1000;
-  const reply = await context.broker.runAgent(context.envelope, context.binding, {
-    operationId: context.operationId,
-    files: inputs.map((f) => ({ relativePath: f.relativePath, bytes: f.bytes })),
-    instructions,
-    task,
-    maxTurns: turns!,
-    tokens: tokens!,
-    deadlineAt: started + grantedMs,
-    ...(context.signal ? { signal: context.signal } : {}),
-  });
-  const usedMs = Date.now() - started;
-  const value = schema.validate(
-    parseFinalAnswer(reply.result.finalAnswer),
-    new Set(paths),
-    new Set(reply.result.filesRead),
-  );
-  const provenance: AgentRunProvenance = Object.freeze({
-    mode: 'native' as const,
-    runner: 'copilot-cli' as const,
-    runnerVersion: pinned?.version ?? null,
-    profileId: pinned?.id ?? COPILOT_AGENT_PROFILE.id,
-    executableDigest: (pinned?.executableDigest ?? null) as Digest | null,
-    model: Object.freeze({
-      requested: reply.identity.requestedModel,
-      reported: reply.identity.returnedModel,
-      identitySource: 'host-reported' as const,
-    }),
-    promptDigest: canonicalDigest({ instructions: Buffer.from(instructions).toString('base64'), task }) as Digest,
-    skillDigests: Object.freeze([]),
-    turns: reply.result.turns,
-    tokens: Object.freeze({
-      input: reply.usage.inputTokens,
-      output: reply.usage.outputTokens,
-      certainty: 'confirmed' as const,
-    }),
-    cost: Object.freeze({ basis: 'unobserved' as const, reason: 'subscription' as const }),
-    deadline: Object.freeze({ grantedMs, usedMs }),
-    where: 'sandboxed-cli' as const,
-  });
+  const provenanceOf = (
+    result: CopilotAgentResult,
+    installation: Readonly<{ source: string; executable: string }> | null,
+  ): AgentRunProvenance =>
+    Object.freeze({
+      mode: 'native' as const,
+      runner: 'copilot-cli' as const,
+      runnerVersion: pinned?.version ?? null,
+      profileId: pinned?.id ?? COPILOT_AGENT_PROFILE.id,
+      executableDigest: (pinned?.executableDigest ?? null) as Digest | null,
+      installation: installation
+        ? Object.freeze({ source: installation.source, executablePath: installation.executable })
+        : null,
+      model: Object.freeze({
+        requested: context.binding.model,
+        reported: result.reportedModel,
+        identitySource: 'host-reported' as const,
+      }),
+      promptDigest: canonicalDigest({ instructions: Buffer.from(instructions).toString('base64'), task }) as Digest,
+      skillDigests: Object.freeze([]),
+      turns: result.turns,
+      tokens: Object.freeze({
+        input: result.usage.inputTokens,
+        output: result.usage.outputTokens,
+        certainty: 'confirmed' as const,
+      }),
+      cost: Object.freeze({ basis: 'unobserved' as const, reason: 'subscription' as const }),
+      deadline: Object.freeze({ grantedMs, usedMs: Date.now() - started }),
+      where: 'sandboxed-cli' as const,
+    });
+  // A run that completed and settled but is then refused (another model answered, the stage's token budget was
+  // exceeded, the answer fails its schema) keeps its transcript and provenance in a private failed-attempt record;
+  // no stage output is published from it.
+  const failed = (
+    error: { code: string },
+    result: CopilotAgentResult,
+    installation: Readonly<{ source: string; executable: string }> | null,
+  ): never => {
+    throw new NativeRunFailure(
+      error.code,
+      Object.freeze({
+        disclosure: 'private-only' as const,
+        withholding: 'accepted-secret-fold-before-read' as const,
+        failure: error.code,
+        finalAnswer: result.finalAnswer,
+        filesRead: result.filesRead,
+        tools: result.tools,
+        transcript: result.events,
+        share: result.share,
+        instructions,
+        task,
+        provenance: provenanceOf(result, installation),
+      }),
+      error,
+    );
+  };
+  let reply: Awaited<ReturnType<ModelBroker['runAgent']>>;
+  try {
+    reply = await context.broker.runAgent(context.envelope, context.binding, {
+      operationId: context.operationId,
+      files: inputs.map((f) => ({ relativePath: f.relativePath, bytes: f.bytes })),
+      instructions,
+      task,
+      maxTurns: turns!,
+      tokens: tokens!,
+      deadlineAt: started + grantedMs,
+      ...(context.signal ? { signal: context.signal } : {}),
+    });
+  } catch (e) {
+    const settled = (e as { agentResult?: CopilotAgentResult }).agentResult;
+    if (settled) return failed(e as { code: string }, settled, null);
+    throw e;
+  }
+  let value: unknown;
+  try {
+    value = schema.validate(
+      parseFinalAnswer(reply.result.finalAnswer),
+      new Set(paths),
+      new Set(reply.result.filesRead),
+    );
+  } catch (e) {
+    return failed(e as { code: string }, reply.result, reply.installation);
+  }
+  const provenance = provenanceOf(reply.result, reply.installation);
   return Object.freeze({
     mode: 'native' as const,
     output: Object.freeze({ name: named[0]!.name, schema: named[0]!.schema, value }),
@@ -246,6 +298,43 @@ async function runCopilotNative(
     task,
     provenance,
   });
+}
+
+/** A provenance record as it may leave the owner's private record: the executable path redacted, nothing else. */
+export function publicProvenance(p: AgentRunProvenance): AgentRunProvenance {
+  return Object.freeze({
+    ...p,
+    installation: p.installation
+      ? Object.freeze({ source: p.installation.source, executablePath: '<redacted>' })
+      : null,
+  });
+}
+
+/** What a refused native run retains privately: its transcript and provenance, never a stage output. */
+export interface NativeFailedAttempt {
+  readonly disclosure: 'private-only';
+  /** The accepted-secret withholding fold runs over this record before any owner read. */
+  readonly withholding: 'accepted-secret-fold-before-read';
+  readonly failure: string;
+  readonly finalAnswer: string;
+  readonly filesRead: readonly string[];
+  readonly tools: readonly Readonly<{ tool: string; path: string | null }>[];
+  readonly transcript: Uint8Array;
+  readonly share: Uint8Array;
+  readonly instructions: Uint8Array;
+  readonly task: string;
+  readonly provenance: AgentRunProvenance;
+}
+/** A native run that completed and was refused afterwards. Its `code` is the refusal's catalog key. */
+export class NativeRunFailure extends Error {
+  readonly code: string;
+  readonly retained: NativeFailedAttempt;
+  constructor(code: string, retained: NativeFailedAttempt, cause: unknown) {
+    super((cause as Error)?.message ?? code);
+    this.name = 'NativeRunFailure';
+    this.code = code;
+    this.retained = retained;
+  }
 }
 
 /** Brokered: exactly the review session today's dispatch ran. Native: the runner's own native run, if it has one. */
@@ -284,6 +373,7 @@ export const COPILOT_RUNNER: AgentRunner = Object.freeze({
       profileDigest: runtime.profileDigest as Digest,
       modes: COPILOT_RUNNER.modes,
       installation: copilotRuntimeInstallation(runtime).source,
+      executablePath: copilotRuntimeInstallation(runtime).executable,
       credentialPath: await probeCopilotCredentialPath(timingOf(timing)),
     });
   },

@@ -154,7 +154,10 @@ export class CopilotAgentDecoder {
     readonly maxTurns: number,
     readonly allowed: readonly string[] = COPILOT_READ_TOOLS,
   ) {}
-  #bad(reason: NativeCopilotDiagnostic['reason'], code: ProviderError['code'] = 'sentinel.provider.malformedResponse') {
+  #bad(
+    reason: NativeCopilotDiagnostic['reason'],
+    code: ProviderError['code'] = 'sentinel.provider.malformedResponse',
+  ): never {
     throw new NativeCopilotError(code, 'possible', diagnostic(reason, 'stream', this.#events, this.#bytes));
   }
   get bytes() {
@@ -191,11 +194,11 @@ export class CopilotAgentDecoder {
       case 'tool.execution_start': {
         const tool = data.toolName;
         if (typeof tool !== 'string' || !this.allowed.includes(tool)) return this.#bad('disallowed-event');
-        // The CLI's own path check keeps its read tools inside the working directory; a read that names any other
-        // path stops the run here, before the model's next request can carry what it read.
-        const named = obj(data.arguments)?.path,
-          path = this.#relative(named);
-        if (named !== undefined && path === null) return this.#bad('disallowed-event');
+        // The CLI's own path manager keeps its read tools inside the working directory. The seatbelt still lets the
+        // process read its owned state and the keychain files, so the monitor fails closed: a call whose argument
+        // shape is not one this profile knows, or that names any path outside the scratch tree, stops the run here,
+        // before the model's next request can carry what it read.
+        const path = this.#toolPath(tool, obj(data.arguments));
         this.#tools.push(Object.freeze({ tool, path }));
         return;
       }
@@ -214,6 +217,44 @@ export class CopilotAgentDecoder {
       default:
         return;
     }
+  }
+  /**
+   * The scratch-relative path a known read tool names, refusing every other argument shape: `view {path,
+   * view_range?}` and `glob {pattern, path?}`. A glob pattern may not be absolute or step outside the tree.
+   */
+  #toolPath(tool: string, args: Record<string, any> | undefined): string | null {
+    const shapes: Record<string, { required: readonly string[]; optional: readonly string[] }> = {
+      view: { required: ['path'], optional: ['view_range'] },
+      glob: { required: ['pattern'], optional: ['path'] },
+    };
+    const shape = shapes[tool];
+    if (!shape || !args) return this.#bad('disallowed-event');
+    const keys = Object.keys(args);
+    if (
+      shape.required.some((k) => !keys.includes(k)) ||
+      keys.some((k) => !shape.required.includes(k) && !shape.optional.includes(k))
+    )
+      return this.#bad('disallowed-event');
+    if (args.view_range !== undefined) {
+      const r = args.view_range;
+      if (!Array.isArray(r) || r.length > 2 || r.some((n) => !Number.isSafeInteger(n)))
+        return this.#bad('disallowed-event');
+    }
+    if (tool === 'glob') {
+      const pattern = args.pattern;
+      if (
+        typeof pattern !== 'string' ||
+        pattern.length > 1024 ||
+        pattern.startsWith('/') ||
+        pattern.startsWith('~') ||
+        pattern.split(/[\\/]/).includes('..')
+      )
+        return this.#bad('disallowed-event');
+      if (args.path === undefined) return null;
+    }
+    const path = this.#relative(args.path);
+    if (path === null) return this.#bad('disallowed-event');
+    return path;
   }
   /** A path the tool named, made relative to the scratch tree; null for a path outside it or not a path. */
   #relative(path: unknown): string | null {

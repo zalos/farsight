@@ -25,7 +25,7 @@ import {
   COPILOT_AGENT_PROFILE,
   qualifyInstalledNativeCopilot,
 } from '../dist/review/providers/cli-copilot-profile.js';
-import { COPILOT_RUNNER } from '../dist/review/runner.js';
+import { COPILOT_RUNNER, publicProvenance } from '../dist/review/runner.js';
 
 const genuine = process.env.SENTINEL_COPILOT_CODE === '1';
 const record = process.env.SENTINEL_RETAINED_WIRE_RECORD === '1';
@@ -360,7 +360,13 @@ test(
     assert.deepEqual(result.filesRead, ['src/auth.ts'], 'the transcript lists the files read');
     const totals = ledger.totals(envelope.id);
     assert.equal(totals.byState.settled, 1, 'the stage token budget was reserved and settled by the owned usage file');
-    const { usedMs, ...deadline } = result.provenance.deadline;
+    assert.match(
+      result.provenance.installation?.executablePath ?? '',
+      /\/copilot$/,
+      'the exact path is kept privately',
+    );
+    const shown = publicProvenance(result.provenance);
+    const { usedMs, ...deadline } = shown.deadline;
     assert(Number.isSafeInteger(usedMs) && usedMs >= 0);
     compare('copilot-1.0.105-native', {
       profile: COPILOT_AGENT_PROFILE.id,
@@ -369,7 +375,7 @@ test(
       instructions: Buffer.from(result.instructions).toString('utf8'),
       output: result.output,
       tools: result.tools,
-      provenance: { ...result.provenance, deadline },
+      provenance: { ...shown, deadline },
       transcriptBytes: result.transcript.byteLength,
       share: Buffer.from(result.share).toString('utf8'),
     });

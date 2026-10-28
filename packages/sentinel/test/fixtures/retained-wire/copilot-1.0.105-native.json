@@ -109,6 +109,10 @@
     "runnerVersion": "1.0.105",
     "profileId": "copilot-1.0.105-darwin-arm64-native-v1",
     "executableDigest": "sha256:5fd7d15ff02deb08a58593b1b488015bb52c1686014b80b5509e28263cb3ad70",
+    "installation": {
+      "source": "path",
+      "executablePath": "<redacted>"
+    },
     "model": {
       "requested": "gpt-6-luna",
       "reported": "gpt-6-luna",

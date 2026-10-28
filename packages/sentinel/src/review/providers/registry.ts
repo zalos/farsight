@@ -25,6 +25,7 @@ import {
 import {
   copilotProfileById,
   copilotProfileMode,
+  copilotRuntimeInstallation,
   qualifyInstalledNativeCopilot,
   type NativeCopilotRuntime,
 } from './cli-copilot-profile.js';
@@ -82,6 +83,8 @@ export interface CliKind {
     }): object;
     call(authority: object): Promise<CopilotAgentResult>;
     release(authority: object): void;
+    /** The qualified installation that runs: its category and exact executable path (private provenance). */
+    installation(runtime: object): Readonly<{ source: string; executable: string }>;
   }>;
   /** A release gate the adopted settings must open before a stage may select this CLI. */
   readonly releaseGate?: Readonly<{
@@ -213,6 +216,7 @@ const COPILOT_CLI = Object.freeze<CliKind>({
       issueCopilotAgentCall({ ...c, runtime: c.runtime as NativeCopilotRuntime }),
     call: (authority: object) => nativeCopilotAgentCall(authority as CopilotAgentAuthority),
     release: (authority: object) => finishCopilotAgentCall(authority as CopilotAgentAuthority),
+    installation: (runtime: object) => copilotRuntimeInstallation(runtime),
   }),
   issue: (c) => issueCopilotCall({ ...c, runtime: c.runtime as Parameters<typeof issueCopilotCall>[0]['runtime'] }),
   call: (authority: object) => nativeCopilotCall(authority as Parameters<typeof nativeCopilotCall>[0]),

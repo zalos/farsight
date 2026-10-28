@@ -4,9 +4,10 @@
 // sandboxed `--help` and pure argument parser over the copied runtime, with no authentication.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { writeFileSync, chmodSync, existsSync, readFileSync } from 'node:fs';
+import { spawnSync, spawn } from 'node:child_process';
+import { writeFileSync, chmodSync, existsSync, readFileSync, mkdirSync, mkdtempSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import {
   COPILOT_READ_TOOLS,
   CopilotAgentDecoder,
@@ -23,12 +24,20 @@ import {
   copilotProfileMode,
   copilotRuntimeInstallation,
   qualifyInstalledNativeCopilot,
+  copilotSeatbeltPolicy,
   nativeCopilotSetup,
   cleanupNativeCopilotSetup,
   verifyNativeCopilotSetup,
 } from '../dist/review/providers/cli-copilot-profile.js';
+import { openNativeCopilotProxy } from '../dist/review/providers/cli-copilot-proxy.js';
 import { nativeOutputSchema, parseFinalAnswer, NATIVE_OUTPUT_SCHEMAS } from '../dist/review/native.js';
-import { COPILOT_RUNNER, CLAUDE_RUNNER, agentRunner } from '../dist/review/runner.js';
+import {
+  COPILOT_RUNNER,
+  CLAUDE_RUNNER,
+  NativeRunFailure,
+  agentRunner,
+  publicProvenance,
+} from '../dist/review/runner.js';
 
 const WORK = '/private/tmp/sentinel-copilot-original/work';
 const ev = (type: string, data: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
@@ -348,6 +357,33 @@ test(
       });
       assert.equal(parsed.status, 0, 'pure pinned native argument probe: ' + parsed.stderr?.slice(-600));
       assert.match(parsed.stdout, /native-argv-parsed/);
+      // The CLI's own path manager, from the pinned runtime, built as these flags build it (-C work, no --add-dir,
+      // --disallow-temp-dir): view and glob may reach the scratch tree and nothing else the seatbelt leaves readable.
+      const work = join(setup.ownedRoot, 'work');
+      mkdirSync(join(work, 'src'), { recursive: true });
+      writeFileSync(join(work, 'src/original.ts'), 'export const original = 1;\n');
+      const pathProbe = join(setup.ownedRoot, 'native-paths.cjs'),
+        outside = [
+          join(setup.ownedRoot, 'state/config.json'),
+          join(setup.ownedRoot, 'runtime/app.js'),
+          join(homedir(), 'Library/Keychains/login.keychain-db'),
+          '/etc/passwd',
+          '/private/tmp',
+          join(work, '../state/config.json'),
+        ];
+      writeFileSync(
+        pathProbe,
+        `const assert=require('node:assert/strict'),cli=require(${JSON.stringify(setup.ownedRoot + '/runtime/prebuilds/darwin-arm64/cli-native.node')}),runtime=require(${JSON.stringify(setup.ownedRoot + '/runtime/prebuilds/darwin-arm64/runtime.node')});const o=cli.cliParse(['copilot',...${JSON.stringify(args)}]).rootOptions;assert.equal(o.C,${JSON.stringify(work)});assert.equal(o.disallowTempDir,true);assert.equal(o.addDir,undefined);assert.equal(o.allowAllPaths,undefined);(async()=>{const m=await runtime.pathManagerCreateRestricted(o.C,[],!o.disallowTempDir);const within=async p=>await m.isPathWithinAllowedDirectories(p);assert.deepEqual(await m.getDirectories(),[o.C]);assert.equal(await within(${JSON.stringify(join(work, 'src/original.ts'))}),true);for(const p of ${JSON.stringify(outside)})assert.equal(await within(p),false,p);console.log('native-paths-confined')})().catch(e=>{console.error(e&&e.message);process.exitCode=1});`,
+      );
+      const confined = spawnSync('/usr/bin/sandbox-exec', ['-p', purePolicy, process.execPath, pathProbe], {
+        cwd: setup.ownedRoot + '/home',
+        env: { PATH: '/usr/bin:/bin' },
+        encoding: 'utf8',
+        timeout: 10000,
+        maxBuffer: 16384,
+      });
+      assert.equal(confined.status, 0, 'pinned path manager probe: ' + confined.stderr?.slice(-600));
+      assert.match(confined.stdout, /native-paths-confined/);
       const forbidden = spawnSync('/usr/bin/sandbox-exec', ['-p', setup.policy, '/bin/cat', '/etc/passwd'], {
         env: setup.env,
         encoding: 'utf8',
@@ -397,3 +433,200 @@ test('the recorded live native run replays: four inputs read, a schema-valid ans
     'the same run under a one-turn budget stops at its second request',
   );
 });
+
+for (const [name, args] of [
+  ['view without a path', { view_range: [1, 2] }],
+  ['view with an unknown argument', { path: `${WORK}/src/server/auth.ts`, follow: true }],
+  ['view with a non-numeric range', { path: `${WORK}/src/server/auth.ts`, view_range: ['1'] }],
+  ['glob without a pattern', { path: WORK }],
+  ['glob with an absolute pattern', { pattern: '/etc/*' }],
+  ['glob with a home pattern', { pattern: '~/Library/Keychains/*' }],
+  ['glob with a parent step', { pattern: '../state/*.json' }],
+  ['glob rooted outside the tree', { pattern: '*.json', path: '/private/tmp/sentinel-copilot-original/state' }],
+  ['glob with an unknown argument', { pattern: '**/*.ts', root: '/' }],
+  ['a call with no argument object', undefined],
+] as const)
+  test('the stream monitor fails closed on ' + name, () => {
+    const tool = name.startsWith('glob') ? 'glob' : 'view';
+    const bytes = Buffer.from(
+      ev('model.call_start') + ev('tool.execution_start', { toolName: tool, ...(args ? { arguments: args } : {}) }),
+    );
+    assert.throws(
+      () => new CopilotAgentDecoder(WORK, 3).push(bytes),
+      (e: any) => e.code === 'sentinel.provider.malformedResponse' && e.nativeCopilot?.reason === 'disallowed-event',
+    );
+  });
+
+test('the stream monitor accepts the two known read shapes inside the scratch tree', () => {
+  const d = new CopilotAgentDecoder(WORK, 3);
+  d.push(
+    Buffer.from(
+      ev('model.call_start') +
+        ev('tool.execution_start', { toolName: 'glob', arguments: { pattern: 'src/**/*.ts' } }) +
+        ev('tool.execution_start', { toolName: 'glob', arguments: { pattern: '*.ts', path: `${WORK}/src` } }) +
+        ev('tool.execution_start', {
+          toolName: 'view',
+          arguments: { path: `${WORK}/src/server/auth.ts`, view_range: [1, 20] },
+        }) +
+        ev('assistant.message', { model: 'gpt-6-luna', phase: 'final_answer', content: '{}' }) +
+        JSON.stringify({ type: 'result', exitCode: 0 }) +
+        '\n',
+    ),
+  );
+  const out = d.finish();
+  assert.deepEqual(out.tools, [
+    { tool: 'glob', path: null },
+    { tool: 'glob', path: 'src' },
+    { tool: 'view', path: 'src/server/auth.ts' },
+  ]);
+  assert.deepEqual(out.filesRead, ['src', 'src/server/auth.ts']);
+});
+
+const nativeStage = {
+  id: 'review',
+  kind: 'agent' as const,
+  mode: 'native' as const,
+  runner: 'copilot-cli' as const,
+  model: 'gpt-6-luna',
+  produces: [{ name: 'observations', schema: 'sentinel.review-observations/v1' }],
+  budget: { turns: 3, tokens: 20000, seconds: 120 },
+};
+const settledResult = (finalAnswer: string) => ({
+  finalAnswer,
+  reportedModel: 'gpt-6-luna',
+  turns: 2,
+  tools: [{ tool: 'view', path: 'src/server/auth.ts' }],
+  filesRead: ['src/server/auth.ts'],
+  usage: { inputTokens: 9000, outputTokens: 100, requests: 2 },
+  events: new Uint8Array(Buffer.from('{"type":"result","exitCode":0}\n')),
+  share: new Uint8Array(Buffer.from('# Copilot CLI Session\n')),
+});
+const nativeContext = (runAgent: () => Promise<unknown>) => ({
+  native: {
+    broker: { runAgent } as any,
+    envelope: {} as any,
+    binding: { model: 'gpt-6-luna', copilotProfile: { id: COPILOT_AGENT_PROFILE.id } } as any,
+    operationId: 'original-native-stage',
+  },
+});
+// The credential path probe asks the macOS login keychain; elsewhere it refuses before any run, by design.
+test(
+  'a settled native run that fails its schema or budget keeps a private failed-attempt record and publishes nothing',
+  { skip: process.platform !== 'darwin' && 'the credential path probe needs the macOS login keychain' },
+  async () => {
+    const inputs = [{ relativePath: 'src/server/auth.ts', bytes: Buffer.from('export const a = 1;\n') }];
+    const failure = await COPILOT_RUNNER.run(
+      nativeStage,
+      inputs,
+      nativeContext(async () => ({
+        result: settledResult('I could not decide.'),
+        installation: { source: 'path', executable: '/original/bin/copilot' },
+        identity: { requestedModel: 'gpt-6-luna', returnedModel: 'gpt-6-luna' },
+        usage: { inputTokens: 9000, outputTokens: 100 },
+      })),
+    ).then(
+      () => assert.fail('a schema failure publishes nothing'),
+      (e: any) => e,
+    );
+    assert(failure instanceof NativeRunFailure);
+    assert.equal(failure.code, 'sentinel.review.outputSchema');
+    assert.equal(failure.retained.disclosure, 'private-only');
+    assert.equal(failure.retained.withholding, 'accepted-secret-fold-before-read');
+    assert.equal(failure.retained.finalAnswer, 'I could not decide.');
+    assert.deepEqual(failure.retained.filesRead, ['src/server/auth.ts']);
+    assert.equal(Buffer.from(failure.retained.share).toString(), '# Copilot CLI Session\n');
+    assert.deepEqual(failure.retained.provenance.tokens, { input: 9000, output: 100, certainty: 'confirmed' });
+    assert.deepEqual(failure.retained.provenance.cost, { basis: 'unobserved', reason: 'subscription' });
+    assert.deepEqual(failure.retained.provenance.installation, {
+      source: 'path',
+      executablePath: '/original/bin/copilot',
+    });
+    assert.deepEqual(publicProvenance(failure.retained.provenance).installation, {
+      source: 'path',
+      executablePath: '<redacted>',
+    });
+    const overBudget = Object.assign(new Error('over budget'), {
+      code: 'sentinel.provider.budgetExhausted',
+      agentResult: settledResult('{"observations":[],"inspected":[]}'),
+    });
+    const budget = await COPILOT_RUNNER.run(
+      nativeStage,
+      inputs,
+      nativeContext(async () => {
+        throw overBudget;
+      }),
+    ).then(
+      () => assert.fail('an over-budget run publishes nothing'),
+      (e: any) => e,
+    );
+    assert(budget instanceof NativeRunFailure);
+    assert.equal(budget.code, 'sentinel.provider.budgetExhausted');
+    assert.equal(budget.retained.provenance.turns, 2);
+  },
+);
+
+// Zero contact for the native profile: the exact native-v1 seatbelt rules (built by the same function, with Node as the
+// one executable it may run) reach only the owned loopback proxy, and the proxy refuses an unlisted CONNECT before any
+// upstream byte. macOS sandbox-exec only; nothing here is Docker-gated and no Copilot code or login is needed.
+test(
+  'the native profile reaches only the child proxy, which refuses an unlisted destination before any upstream byte',
+  { skip: process.platform !== 'darwin' && 'macOS sandbox-exec' },
+  async (t) => {
+    const owned = realpathSync(mkdtempSync('/private/tmp/sentinel-zero-contact-'));
+    t.after(() => spawnSync('/bin/rm', ['-rf', owned]));
+    for (const d of ['home', 'state', 'tmp', 'work']) mkdirSync(join(owned, d));
+    const proxy = await openNativeCopilotProxy({
+      deadlineAt: Date.now() + 20000,
+      maxUpstreamBytes: 4096,
+      maxDownstreamBytes: 4096,
+    });
+    t.after(() => proxy.close());
+    const policy = copilotSeatbeltPolicy({
+      executable: process.execPath,
+      ownedRoot: owned,
+      ownerHome: homedir(),
+      proxyPort: proxy.port,
+    });
+    const probe = join(owned, 'zero-contact.mjs');
+    writeFileSync(
+      probe,
+      `import { connect } from 'node:net';
+const attempt = (host, port, send) => new Promise((resolve) => {
+  const s = connect({ host, port }, () => { if (send) s.write(send); else { s.destroy(); resolve('connected'); } });
+  let got = '';
+  s.on('data', (b) => { got += b; });
+  s.on('error', (e) => resolve('error:' + e.code));
+  s.on('close', () => resolve(got ? 'reply' : 'closed'));
+  setTimeout(() => { s.destroy(); resolve('timeout'); }, 3000);
+});
+console.log(JSON.stringify({
+  publicHost: await attempt('1.1.1.1', 443),
+  otherLoopback: await attempt('127.0.0.1', 9),
+  proxy: await attempt('127.0.0.1', ${proxy.port}),
+  unlisted: await attempt('127.0.0.1', ${proxy.port}, 'CONNECT example.invalid:443 HTTP/1.1\\r\\nHost: example.invalid:443\\r\\n\\r\\n'),
+}));
+`,
+    );
+    const out = await new Promise<string>((resolve, reject) => {
+      const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, probe], {
+        cwd: join(owned, 'home'),
+        env: { PATH: '/usr/bin:/bin', HOME: homedir() },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let text = '';
+      child.stdout.on('data', (b) => (text += b));
+      child.on('error', reject);
+      child.on('close', (code) => (code === 0 ? resolve(text) : reject(Error('probe exit ' + code))));
+    });
+    assert.deepEqual(JSON.parse(out), {
+      publicHost: 'error:EPERM',
+      otherLoopback: 'error:EPERM',
+      proxy: 'connected',
+      unlisted: 'closed',
+    });
+    const seen = proxy.observation();
+    assert.equal(seen.upstreamWireBytes, 0, 'no byte left for any destination');
+    assert.equal(seen.downstreamWireBytes, 0);
+    assert.equal(seen.endedBy, 'open', 'an unlisted socket is refused without ending the proxy');
+  },
+);
