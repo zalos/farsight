@@ -52,6 +52,7 @@ const ENVELOPES = {
   instructions: ['sentinel-review-instructions/draft-1', 'ReviewInstructionsEnvelope'],
   reviewrequest: ['sentinel-review-request/draft-1', 'ReviewRequestEnvelope'],
   review: ['sentinel-review-record/draft-1', 'ReviewRecordEnvelope'],
+  attemptretained: ['sentinel-attempt-retained/draft-1', 'AttemptRetainedEnvelope'],
   pipeline: ['sentinel-pipeline/draft-1', 'PipelineDefinition'],
   pipelineadoption: ['sentinel-pipeline-adoption/draft-1', 'PipelineAdoptionEnvelope'],
 };

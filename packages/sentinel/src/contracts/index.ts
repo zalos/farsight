@@ -99,6 +99,7 @@ export const ENVELOPES = {
   instructions: { schema: 'sentinel-review-instructions/draft-1', type: 'ReviewInstructionsEnvelope' },
   reviewrequest: { schema: 'sentinel-review-request/draft-1', type: 'ReviewRequestEnvelope' },
   review: { schema: 'sentinel-review-record/draft-1', type: 'ReviewRecordEnvelope' },
+  attemptretained: { schema: 'sentinel-attempt-retained/draft-1', type: 'AttemptRetainedEnvelope' },
   pipeline: { schema: 'sentinel-pipeline/draft-1', type: 'PipelineDefinition' },
   pipelineadoption: { schema: 'sentinel-pipeline-adoption/draft-1', type: 'PipelineAdoptionEnvelope' },
 } as const;

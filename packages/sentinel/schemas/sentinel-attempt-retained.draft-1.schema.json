@@ -1,0 +1,664 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/AttemptRetainedEnvelope",
+  "definitions": {
+    "AttemptRetainedEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-attempt-retained/draft-1"
+        },
+        "privacy": {
+          "type": "string",
+          "const": "source"
+        },
+        "disclosure": {
+          "type": "string",
+          "const": "private-only"
+        },
+        "withholding": {
+          "type": "string",
+          "const": "accepted-secret-fold-before-read"
+        },
+        "stage": {
+          "$ref": "#/definitions/StageId"
+        },
+        "failure": {
+          "$ref": "#/definitions/CatalogKey",
+          "description": "The refusal's catalog key: the code the attempt ended with."
+        },
+        "completed": {
+          "type": "boolean",
+          "description": "Whether the run completed and settled (confirmed usage) before it was refused, or stopped before that."
+        },
+        "finalAnswer": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The CLI's final answer as it printed it; null when it gave none.",
+          "maxLength": 262144
+        },
+        "filesRead": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RelativePath"
+          },
+          "description": "Scratch-relative paths the read tools opened, in first-read order.",
+          "maxItems": 1024
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RetainedToolCall"
+          },
+          "description": "Every tool call the monitor saw, in order.",
+          "maxItems": 4096
+        },
+        "task": {
+          "type": "string",
+          "description": "The task piped to the CLI.",
+          "maxLength": 524288
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "A text or list above was cut to these bounds; the linked transcript holds the whole stream."
+        },
+        "provenance": {
+          "$ref": "#/definitions/RetainedAgentProvenance"
+        },
+        "instructionRecord": {
+          "$ref": "#/definitions/RetainedInstructionRecord"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RetainedLink"
+          },
+          "description": "The transcript and the instructions always, the session export when the CLI wrote one; each role once.",
+          "minItems": 2,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "schema",
+        "privacy",
+        "disclosure",
+        "withholding",
+        "stage",
+        "failure",
+        "completed",
+        "finalAnswer",
+        "filesRead",
+        "tools",
+        "task",
+        "truncated",
+        "provenance",
+        "instructionRecord",
+        "links"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-attempt-retained/draft-1 — what an agent attempt keeps when it is refused and publishes nothing: a native run its monitor stopped, one over its budget, one another model answered, or one whose answer fails its schema. The record is the owner's alone, `privacy: 'source'` here and on every artifact it links, and the accepted-secret withholding fold runs over it and its links before any read. Its bytes (the CLI's stream, its session export, the instructions as delivered) are linked by handle, never by path; the store keeps them with the attempt's end."
+    },
+    "StageId": {
+      "type": "string",
+      "description": "A stage id: a built-in plan stage (`capture`, `review-guided`) or one a pipeline declares (`secrets`, `triage`). Lower-case words joined by single hyphens, so it never collides with a context input, which carries a dot.",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "RelativePath": {
+      "type": "string",
+      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL. A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use `[\\s\\S]`, never `.`, so a line break cannot hide a `..` segment from them.",
+      "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
+      "maxLength": 4096
+    },
+    "RetainedToolCall": {
+      "type": "object",
+      "properties": {
+        "tool": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 4096
+        }
+      },
+      "required": [
+        "tool",
+        "path"
+      ],
+      "additionalProperties": false,
+      "description": "One tool call: the tool and the path it named, if any."
+    },
+    "ShortText": {
+      "type": "string",
+      "description": "A short label (a severity as supplied, a framework name).",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "RetainedAgentProvenance": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "$ref": "#/definitions/AgentMode"
+        },
+        "runner": {
+          "$ref": "#/definitions/AgentRunnerId"
+        },
+        "runnerVersion": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ShortText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profileId": {
+          "$ref": "#/definitions/Id"
+        },
+        "executableDigest": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "installation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RetainedInstallation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The installation that ran: its category and its exact resolved executable path."
+        },
+        "model": {
+          "type": "object",
+          "properties": {
+            "requested": {
+              "$ref": "#/definitions/ModelName"
+            },
+            "reported": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ModelName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "identitySource": {
+              "type": "string",
+              "const": "host-reported"
+            }
+          },
+          "required": [
+            "requested",
+            "reported",
+            "identitySource"
+          ],
+          "additionalProperties": false
+        },
+        "promptDigest": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skillDigests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Digest"
+          },
+          "maxItems": 16
+        },
+        "turns": {
+          "$ref": "#/definitions/Count"
+        },
+        "tokens": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "output": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "certainty": {
+              "type": "string",
+              "enum": [
+                "confirmed",
+                "uncertain"
+              ]
+            }
+          },
+          "required": [
+            "input",
+            "output",
+            "certainty"
+          ],
+          "additionalProperties": false
+        },
+        "cost": {
+          "$ref": "#/definitions/StageCost"
+        },
+        "deadline": {
+          "type": "object",
+          "properties": {
+            "grantedMs": {
+              "$ref": "#/definitions/Count"
+            },
+            "usedMs": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "grantedMs",
+            "usedMs"
+          ],
+          "additionalProperties": false
+        },
+        "where": {
+          "type": "string",
+          "const": "sandboxed-cli"
+        }
+      },
+      "required": [
+        "mode",
+        "runner",
+        "runnerVersion",
+        "profileId",
+        "executableDigest",
+        "installation",
+        "model",
+        "promptDigest",
+        "skillDigests",
+        "turns",
+        "tokens",
+        "cost",
+        "deadline",
+        "where"
+      ],
+      "additionalProperties": false,
+      "description": "The runner's provenance of the refused run, as the owner's record keeps it: the installation's exact executable path included. Anything that leaves the record redacts that path (`publicProvenance`)."
+    },
+    "AgentMode": {
+      "type": "string",
+      "enum": [
+        "brokered",
+        "native"
+      ],
+      "description": "`brokered`: Sentinel runs the loop and the evidence broker serves cited slices. `native`: the CLI runs its own loop over a scratch tree holding only the stage's declared inputs, and its full transcript is retained."
+    },
+    "AgentRunnerId": {
+      "type": "string",
+      "enum": [
+        "claude-cli",
+        "copilot-cli",
+        "hosted-api",
+        "ollama"
+      ],
+      "description": "The agent runners a stage may name: the two CLIs, a hosted model API (off unless `review.hosted-api` is on), and a local model server (an adopted `ollama` provider that keeps the source on this machine)."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "RetainedInstallation": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "executablePath": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      },
+      "required": [
+        "source",
+        "executablePath"
+      ],
+      "additionalProperties": false,
+      "description": "Where the refused run's CLI came from: its installation category and its exact resolved executable path."
+    },
+    "ModelName": {
+      "type": "string",
+      "description": "A model name as the provider spells it.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$"
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "StageCost": {
+      "type": "object",
+      "properties": {
+        "basis": {
+          "enum": [
+            "rates",
+            "unobserved"
+          ]
+        }
+      },
+      "required": [
+        "basis"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "rates"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "rates"
+              },
+              "amount": {
+                "$ref": "#/definitions/DecimalAmount"
+              },
+              "currency": {
+                "$ref": "#/definitions/CurrencyCode"
+              }
+            },
+            "required": [
+              "basis",
+              "amount",
+              "currency"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "unobserved"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "basis": {
+                "type": "string",
+                "const": "unobserved"
+              },
+              "reason": {
+                "$ref": "#/definitions/CostUnobservedReason"
+              }
+            },
+            "required": [
+              "basis",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "description": "What a model stage cost: always one of two answers, never nothing. `rates`: the provider has owner-entered rates and the usage was confirmed (list price, not a bill). `unobserved`: the cost is not known, with its reason, and is never printed as a zero amount. Only a model stage has a cost; Sentinel's own stages, scanners and scripts have none."
+    },
+    "DecimalAmount": {
+      "type": "string",
+      "description": "A non-negative decimal amount written as a string, so money is never a binary float.",
+      "pattern": "^(0|[1-9][0-9]{0,15})(\\.[0-9]{1,9})?$"
+    },
+    "CurrencyCode": {
+      "type": "string",
+      "description": "An ISO 4217 currency code.",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "CostUnobservedReason": {
+      "type": "string",
+      "enum": [
+        "subscription",
+        "usage-unknown",
+        "no-rates"
+      ],
+      "description": "Why a model stage's cost is not known: a subscription CLI reports no price, the usage itself was not confirmed, or the provider has no owner-entered rates."
+    },
+    "RetainedInstructionRecord": {
+      "type": "object",
+      "properties": {
+        "stage": {
+          "$ref": "#/definitions/StageId"
+        },
+        "instructions": {
+          "type": "object",
+          "properties": {
+            "ref": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/PackRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "digest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "ref",
+            "digest"
+          ],
+          "additionalProperties": false
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "$ref": "#/definitions/RelativePath"
+              },
+              "digest": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "relativePath",
+              "digest"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 1024
+        },
+        "task": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "$ref": "#/definitions/Digest"
+            }
+          },
+          "required": [
+            "digest"
+          ],
+          "additionalProperties": false
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "$ref": "#/definitions/PackRef"
+              },
+              "digest": {
+                "$ref": "#/definitions/Digest"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "$ref": "#/definitions/RelativePath"
+                    },
+                    "digest": {
+                      "$ref": "#/definitions/Digest"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "digest"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 256
+              }
+            },
+            "required": [
+              "ref",
+              "digest",
+              "files"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 16
+        },
+        "packs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "$ref": "#/definitions/PackRef"
+              },
+              "digest": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "ref",
+              "digest"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "stage",
+        "instructions",
+        "inputs",
+        "task",
+        "skills",
+        "packs"
+      ],
+      "additionalProperties": false,
+      "description": "The instructions the run was sent, as sealed before its broker call, by digest: the instructions file (whose bytes are the `instructions` link), each input as first received, the task, every promoted skill file and the packs."
+    },
+    "PackRef": {
+      "type": "string",
+      "description": "A file inside a promoted stage pack, `stages/<id>@<revision>#<file>`, or a whole skill pack, `skills/<id>@<revision>`. The pipeline's digest covers the referenced bytes, so a changed prompt is a new pipeline.",
+      "pattern": "^(stages|skills)/[a-z0-9][a-z0-9-]{0,63}@[1-9][0-9]{0,8}(#[A-Za-z0-9][A-Za-z0-9._-]{0,127}(/[A-Za-z0-9][A-Za-z0-9._-]{0,127}){0,7})?$",
+      "maxLength": 512
+    },
+    "RetainedLink": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "transcript",
+            "share",
+            "instructions"
+          ],
+          "description": "`transcript`: the CLI's event stream as the monitor captured it; `share`: its own session export."
+        },
+        "handle": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "schema": {
+          "$ref": "#/definitions/ShortText",
+          "description": "What the bytes are, as the store records it (`application/x-ndjson`, `text/markdown`)."
+        },
+        "bytes": {
+          "$ref": "#/definitions/Count"
+        },
+        "privacy": {
+          "type": "string",
+          "const": "source"
+        }
+      },
+      "required": [
+        "role",
+        "handle",
+        "schema",
+        "bytes",
+        "privacy"
+      ],
+      "additionalProperties": false,
+      "description": "A retained artifact by its handle (the content digest the store accepts), never by a path."
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-attempt-retained.draft-1.schema.json",
+  "title": "sentinel-attempt-retained/draft-1"
+}

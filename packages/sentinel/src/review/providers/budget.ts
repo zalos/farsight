@@ -10,6 +10,7 @@
 // a restart never forgets a call that may have been billed. A settlement above its reservation is recorded in full and
 // marks the envelope overdrawn, which refuses every further reservation; nothing is clamped.
 import { createHash } from 'node:crypto';
+import { closeSync, constants, fchmodSync, lstatSync, openSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { checkSqliteRuntime } from '../../store/runtime.js';
 import { fail } from './errors.js';
@@ -232,6 +233,40 @@ const nanos = (v: unknown, what: string) => {
 type Db = InstanceType<(typeof import('node:sqlite'))['DatabaseSync']>;
 type Row = Record<string, unknown>;
 
+const LEDGER_FILES = (path: string) => [path, `${path}-wal`, `${path}-shm`, `${path}-journal`];
+
+/**
+ * The ledger records the owner's model usage, so its file is this user's alone (0600). It is created that way before
+ * SQLite opens it, and SQLite gives its journal files the database file's mode. A ledger an earlier version created
+ * readable by others is narrowed; a link, a non-regular file or another user's file is refused, never followed.
+ */
+function preparePrivateLedger(path: string): void {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
+  for (const p of LEDGER_FILES(path)) {
+    let s;
+    try {
+      s = lstatSync(p);
+    } catch {
+      continue;
+    }
+    if (!s.isFile() || s.nlink !== 1 || (uid !== undefined && s.uid !== uid))
+      fail('sentinel.provider.ledgerInvalid', 'a ledger file is not a private regular file of this user');
+    if ((s.mode & 0o077) === 0) continue;
+    const fd = openSync(p, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      fchmodSync(fd, 0o600);
+    } finally {
+      closeSync(fd);
+    }
+  }
+  try {
+    closeSync(openSync(path, constants.O_RDWR | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST')
+      fail('sentinel.provider.ledgerInvalid', 'the ledger file could not be created privately');
+  }
+}
+
 export class BudgetLedger {
   readonly #db: Db;
   private constructor(db: Db) {
@@ -243,6 +278,7 @@ export class BudgetLedger {
     if (typeof path !== 'string' || !isAbsolute(path))
       fail('sentinel.provider.ledgerInvalid', 'the ledger path must be absolute');
     const { sqlite } = await checkSqliteRuntime();
+    preparePrivateLedger(path);
     let db: Db;
     try {
       db = new sqlite.DatabaseSync(path, {

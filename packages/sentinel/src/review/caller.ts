@@ -1,9 +1,9 @@
 // The provider-backed model caller (PR 22 over PR 21): one session operation is one `ModelBroker.generate` call under
 // an admitted envelope, with the operation id as the budget ledger's operation id, so a settled or uncertain
 // operation is never sent again. The current binding is passed on every call; a changed provider or policy stops it.
-import type { ModelIdentity } from '../contracts/index.js';
+import type { ModelIdentity, StageCost } from '../contracts/index.js';
 import type { ModelBroker, ModelEnvelope } from './providers/broker.js';
-import { isProviderBinding, type ProviderBinding, type ProviderSelection } from './providers/profile.js';
+import { isProviderBinding, stageCostOf, type ProviderBinding, type ProviderSelection } from './providers/profile.js';
 import { fail } from './providers/errors.js';
 import { cliKind } from './providers/registry.js';
 import { canonicalDigest } from '../policy/digest.js';
@@ -72,6 +72,9 @@ export function providerCaller(
         identity,
         usage: { inputTokens: r.usage.inputTokens, outputTokens: r.usage.outputTokens },
       };
+    },
+    costOf(usage, unsettled): StageCost {
+      return stageCostOf(binding(), usage, unsettled);
     },
   };
 }

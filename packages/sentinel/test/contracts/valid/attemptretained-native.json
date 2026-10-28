@@ -1,0 +1,126 @@
+{
+  "schema": "sentinel-attempt-retained/draft-1",
+  "privacy": "source",
+  "disclosure": "private-only",
+  "withholding": "accepted-secret-fold-before-read",
+  "stage": "review-general",
+  "failure": "sentinel.provider.budgetExhausted",
+  "completed": true,
+  "finalAnswer": "{\"observations\":[]}",
+  "filesRead": [
+    "src/server/routes.ts",
+    "src/server/auth.ts"
+  ],
+  "tools": [
+    {
+      "tool": "Read",
+      "path": "src/server/routes.ts"
+    },
+    {
+      "tool": "Read",
+      "path": "src/server/auth.ts"
+    },
+    {
+      "tool": "StructuredOutput",
+      "path": null
+    }
+  ],
+  "task": "Read .claude/sentinel-stage/skills/invoice-approvals/SKILL.md, then review src/server/routes.ts and src/server/auth.ts.",
+  "truncated": false,
+  "provenance": {
+    "mode": "native",
+    "runner": "claude-cli",
+    "runnerVersion": "2.1.282",
+    "profileId": "claude-code-2.1.282-darwin-arm64-native-v1",
+    "executableDigest": "sha256:fcfd837103965c64de34a6b9b94370d77a347ea71819715a27d5f0ef01775ea4",
+    "installation": {
+      "source": "pinned-executable",
+      "executablePath": "/opt/claude-code/2.1.282/bin/claude"
+    },
+    "model": {
+      "requested": "claude-sonnet-5-5",
+      "reported": "claude-sonnet-5-5",
+      "identitySource": "host-reported"
+    },
+    "promptDigest": "sha256:238fa28a94976c7da14563bc873c2729bd5cd325389085bb4c6dd0de28923590",
+    "skillDigests": [
+      "sha256:9c53c074d7ac6a2728b638ac1f376c5fa9eb8f71603017c3ea638c2fd40548df"
+    ],
+    "turns": 5,
+    "tokens": {
+      "input": 41200,
+      "output": 2140,
+      "certainty": "confirmed"
+    },
+    "cost": {
+      "basis": "unobserved",
+      "reason": "subscription"
+    },
+    "deadline": {
+      "grantedMs": 180000,
+      "usedMs": 61234
+    },
+    "where": "sandboxed-cli"
+  },
+  "instructionRecord": {
+    "stage": "review-general",
+    "instructions": {
+      "ref": null,
+      "digest": "sha256:238fa28a94976c7da14563bc873c2729bd5cd325389085bb4c6dd0de28923590"
+    },
+    "inputs": [
+      {
+        "relativePath": "src/server/routes.ts",
+        "digest": "sha256:e22bc966d9352957f194caf4ede78c8db8526ed8f27b734b03ec2152d7b223d1"
+      },
+      {
+        "relativePath": "src/server/auth.ts",
+        "digest": "sha256:bdf49c3c3882102fc017ffb661108c63a836d065888a4093994398cc55c2ea2f"
+      }
+    ],
+    "task": {
+      "digest": "sha256:0ebb429fa86d481c2630fac53db1c91cffed5d4d41d1021c179444eb67e7ee0b"
+    },
+    "skills": [
+      {
+        "ref": "skills/invoice-approvals@1",
+        "digest": "sha256:9c53c074d7ac6a2728b638ac1f376c5fa9eb8f71603017c3ea638c2fd40548df",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "digest": "sha256:0e95f5a3666031d6fac42bc6ca698b40b61648f4974c8ec355181ed4888c5c26"
+          }
+        ]
+      }
+    ],
+    "packs": [
+      {
+        "ref": "skills/invoice-approvals@1",
+        "digest": "sha256:9c53c074d7ac6a2728b638ac1f376c5fa9eb8f71603017c3ea638c2fd40548df"
+      }
+    ]
+  },
+  "links": [
+    {
+      "role": "transcript",
+      "handle": "sha256:54e6289e14c7b0e7ad9acc2dfc4c1e3d027d0eef7f5c4c3fe7c292761d0e06a6",
+      "schema": "application/x-ndjson",
+      "bytes": 48211,
+      "privacy": "source"
+    },
+    {
+      "role": "share",
+      "handle": "sha256:c3bc45ac352fe43ff8f0a1cc26d6cc29f71f536dc417906f8513ea44ed4bb161",
+      "schema": "text/markdown",
+      "bytes": 9120,
+      "privacy": "source"
+    },
+    {
+      "role": "instructions",
+      "handle": "sha256:238fa28a94976c7da14563bc873c2729bd5cd325389085bb4c6dd0de28923590",
+      "schema": "text/markdown",
+      "bytes": 3310,
+      "privacy": "source"
+    }
+  ]
+}
