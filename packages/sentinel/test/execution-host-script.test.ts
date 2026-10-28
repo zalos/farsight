@@ -75,16 +75,21 @@ const SCHEMA = Buffer.from(
     },
   }),
 );
-/** The coded step, and around it a descendant that keeps the output stream open and outlives the interpreter. */
-const FORKING = Buffer.from(
-  [
-    "import { spawn } from 'node:child_process';",
-    "const sleeper = spawn('/bin/sleep', ['30'], { stdio: ['ignore', 'inherit', 'inherit'] });",
-    "process.stdout.write(JSON.stringify({ schema: 'sentinel.notes/v1', documents: 0, findings: 0, folder: [], environment: [], sleeper: sleeper.pid }));",
-    'process.exit(0);',
-    '',
-  ].join('\n'),
-);
+/**
+ * The coded step, and around it a descendant that keeps the output stream open and outlives the interpreter; the
+ * interpreter lingers long enough for a listing to see its descendant, then exits (`exitAfter`, 0: at once).
+ */
+const forking = (exitAfter: number) =>
+  Buffer.from(
+    [
+      "import { spawn } from 'node:child_process';",
+      "const sleeper = spawn('/bin/sleep', ['30'], { stdio: ['ignore', 'inherit', 'inherit'] });",
+      "process.stdout.write(JSON.stringify({ schema: 'sentinel.notes/v1', documents: 0, findings: 0, folder: [], environment: [], sleeper: sleeper.pid }));",
+      exitAfter ? `setTimeout(() => process.exit(0), ${exitAfter});` : 'process.exit(0);',
+      '',
+    ].join('\n'),
+  );
+const FORKING = forking(400);
 /**
  * The coded step, and beside it a descendant in a session of its own (`detached: true`, so not in the interpreter's
  * group) that outlives the interpreter; the interpreter lingers long enough for its tree to be listed, then exits.
@@ -526,6 +531,66 @@ test('a Linux process row is read after the command name, which may hold spaces 
   const line = '4242 (a (b) c) T 1 4242 4242 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 987654 1234 56\n';
   assert.deepEqual(procRow(4242, line), { pid: 4242, state: 'T', ppid: 1, pgid: 4242, started: 'ticks:987654' });
   assert.equal(procRow(1, '1 (init) S 0'), undefined);
+});
+
+test(
+  'the limit: a descendant started and left before any listing saw it does not hold the attempt either',
+  needsStore,
+  async (t) => {
+    const s = await scripted(t, { hostScripts: true, entry: forking(0) });
+    const t0 = performance.now();
+    const summary = await s.run(s.supplied());
+    const elapsed = performance.now() - t0;
+    assert.equal(summary.state, 'completed', JSON.stringify(summary.failures));
+    const publication = s.store.ledger.getPublication({ id: s.unit.id, revision: 1 })!;
+    assert.ok(publication, 'the script published once its interpreter exited');
+    const o = publication.outputs.find((x: any) => x.schema === 'sentinel.notes/v1')!;
+    const notes = JSON.parse((await s.store.readArtifact(o.id)).toString('utf8'));
+    // Whether a listing saw this sleeper is a race; if none did, it is left running (the stated limit), so this test
+    // ends it by its recorded pid.
+    try {
+      process.kill(notes.sleeper, 'SIGKILL');
+    } catch {
+      /* a listing saw it and the reap killed it */
+    }
+    assert.ok(elapsed < 25_000, `the attempt settled in ${Math.round(elapsed)} ms, not after the sleeper's 30 s`);
+  },
+);
+
+test("an orphaned group whose leader is gone is not the script's: nothing in it is stopped, read or killed", async (t) => {
+  const { reapTree, SYSTEM_PROCESSES } = await import('../dist/execution/script-runner.js');
+  // An unrelated group: a shell leads it and starts a sleeper in it, then the shell is killed, so the group keeps its
+  // id (the shell's pid) with no leader listed, as a recycled id of an exited interpreter's group would.
+  const shell = spawn('/bin/sh', ['-c', '/bin/sleep 30 & echo $!; wait'], {
+    detached: true,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  const member = await new Promise<number>((resolve) => shell.stdout!.once('data', (d) => resolve(Number(String(d)))));
+  const group = shell.pid!;
+  t.after(() => {
+    for (const pid of [member, group])
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        /* already ended */
+      }
+  });
+  process.kill(group, 'SIGKILL');
+  await new Promise((r) => shell.once('exit', r));
+  const [orphan] = await SYSTEM_PROCESSES.rows([member]);
+  assert.ok(orphan && orphan.pgid === group, 'the sleeper is still in the group whose leader is gone');
+  const read: number[] = [];
+  await reapTree(group, new Map(), () => false, {
+    table: SYSTEM_PROCESSES.table,
+    rows: async (pids: readonly number[]) => {
+      read.push(...pids);
+      return SYSTEM_PROCESSES.rows(pids);
+    },
+  });
+  assert.deepEqual(read, [], 'no member of the orphaned group was stopped or read again');
+  const [after] = await SYSTEM_PROCESSES.rows([member]);
+  assert.ok(after && after.started === orphan.started, 'the orphaned member was not killed');
+  assert.ok(!after.state.includes('T'), `the orphaned member was not stopped (state ${after.state})`);
 });
 
 test('an interpreter is measured before a script runs: its path, its digest and its version', async () => {

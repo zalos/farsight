@@ -366,9 +366,10 @@ export interface ScriptProvenance extends ProvenanceBase {
    * like any script the owner runs, and only while the adopted settings turn `stage.host-scripts` on. At its deadline,
    * its output bound and the interpreter's exit, its process group and every descendant listed while it ran are frozen
    * and killed, each only after its pid, parent, group and start time are read again while it is stopped (a process
-   * that no longer matches is continued at once and left alone); the limit of that guarantee is a descendant that left
-   * the tree before a listing saw it, one spawned between the last listing and the kill, and, on macOS, a pid reused
-   * within the same second by a process with the same parent and group.
+   * that no longer matches is continued at once and left alone). A process is the script's only when a listing saw it
+   * descend from the live interpreter, never by process group alone. The limit of that guarantee is a descendant that
+   * left the tree before a listing saw it (it is left running), one spawned between the last listing and the kill,
+   * and, on macOS, a pid reused within the same second by a process with the same parent and group.
    */
   confinement?: 'none';
   /** The schema its output document was validated against before publication, by digest. */
