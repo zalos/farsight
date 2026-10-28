@@ -230,3 +230,18 @@ test('a plan names what it runs: checks, model review, both, the bootstrap, or n
     assert.ok(entry?.hud && entry.professional && entry.define, key);
   }
 });
+
+test('the default pipeline is a valid declaration for any lock: every check stage gets a distinct stage id', () => {
+  const p = defaultPipelineOf({
+    checks: ['test.ok', 'test-ok', '9lives', 'secrets-gitleaks', 'UPPER_case'].map((adapterId) => ({
+      adapterId,
+      rules: [`sentinel.rule.${adapterId.length}`],
+    })),
+  });
+  const model = stageModel(p);
+  const ids = p.stages.map((s: any) => s.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(ids.includes('secrets'));
+  for (const id of ids) assert.match(id, /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/);
+  assert.equal([...model.roles.values()].filter((r: any) => r.role === 'check').length, 5);
+});
