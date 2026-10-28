@@ -1,29 +1,17 @@
-// Canonical JSON and digests for ledger-computed identities (request digests, result digests). Keys are sorted
-// by UTF-16 code unit, there is no whitespace, and only JSON values are accepted: a value that would silently
-// disappear or change (undefined, a function, NaN, a bigint) is refused rather than encoded.
-import { createHash } from 'node:crypto';
+// Canonical JSON and digests for ledger-computed identities (request digests, result digests, plan revisions). The
+// one implementation is the kernel's (kernel/digest.ts); this module keeps its import path and its contract for the
+// folders that use it. The ledger's own copy was deleted once kernel-digest.test.ts proved the two byte-identical on
+// every JSON fixture and every retained object.
+import { canonicalJson as kernelCanonicalJson, digestOf as kernelDigestOf } from '../kernel/digest.js';
 
+/**
+ * The canonical JSON of a value: keys sorted by UTF-16 code unit, no whitespace. Refuses, with a TypeError, a value
+ * that would silently disappear or change (undefined, a function, a non-finite number, a bigint, a non-plain
+ * object, a symbol key, a cycle, nesting past 256 levels) rather than encoding it.
+ */
 export function canonicalJson(value: unknown): string {
-  if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new TypeError('canonical JSON refuses a non-finite number');
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  const plain =
-    typeof value === 'object' &&
-    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
-  if (plain) {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries
-      .map(([k, v]) => {
-        if (v === undefined) throw new TypeError('canonical JSON refuses an undefined member');
-        return `${JSON.stringify(k)}:${canonicalJson(v)}`;
-      })
-      .join(',')}}`;
-  }
-  throw new TypeError(`canonical JSON refuses a ${typeof value}`);
+  return kernelCanonicalJson(value);
 }
 
-export const digestOf = (value: unknown): string =>
-  `sha256:${createHash('sha256').update(canonicalJson(value), 'utf8').digest('hex')}`;
+/** `sha256:<hex>` of {@link canonicalJson}'s UTF-8 bytes; refuses exactly what it refuses. */
+export const digestOf = (value: unknown): string => kernelDigestOf(value);

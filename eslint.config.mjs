@@ -2,10 +2,72 @@
 // disagree). An error rule's existing violations are frozen in eslint-suppressions.json: a new violation fails, an
 // old one is fixed deliberately and then pruned (`pnpm lint --prune-suppressions`).
 import js from '@eslint/js';
+import boundaries from 'eslint-plugin-boundaries';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import prettier from 'eslint-config-prettier/flat';
 import globals from 'globals';
+import { fileURLToPath } from 'node:url';
 import tseslint from 'typescript-eslint';
+
+const root = fileURLToPath(new URL('.', import.meta.url));
+
+// Sentinel's layers (docs/proposals/sentinel-v2/README.md §6): imports point down only, a layer may import its own
+// layer and the ones below it. Each key is a folder or a root file of packages/sentinel/src; `review/providers` is
+// the future `providers/` and is listed before `review` so its files are not also `review`. `app`, `stages` and
+// `providers` are folders the plan adds. The rule is an error. Every upward import that existed when it arrived is
+// frozen in eslint-suppressions.json, file by file with its count, so a new one anywhere fails `pnpm lint`, inside a
+// folder pair that already has debt too; an import that is removed leaves its suppression unused until it is pruned
+// (`pnpm lint --prune-suppressions`); `pnpm lint:boundaries` prints them all. The import-matrix test in
+// packages/sentinel/test checks what a count cannot: the exact set of upward imports (one replaced by another
+// fails), that this table names every folder, that the rule reports exactly the imports the table says point up,
+// and that the import cycle gains no member.
+export const SENTINEL_LAYERS = Object.freeze({
+  kernel: 0,
+  contracts: 1,
+  'validate.ts': 1,
+  'schemas.generated.ts': 1,
+  store: 2,
+  snapshot: 3,
+  rules: 3,
+  policy: 3,
+  planner: 3,
+  findings: 3,
+  reports: 3,
+  imports: 3,
+  evidence: 3,
+  analysis: 3,
+  frameworks: 3,
+  execution: 4,
+  adapters: 5,
+  review: 5,
+  stages: 5,
+  'review/providers': 6,
+  providers: 6,
+  service: 7,
+  app: 7,
+  'capabilities.ts': 7,
+  transport: 8,
+  cli: 8,
+  'cli.ts': 8,
+  'owner-ui': 8,
+  'index.ts': 8,
+});
+const SENTINEL_SRC = 'packages/sentinel/src';
+const sentinelElements = Object.keys(SENTINEL_LAYERS)
+  .sort((a, b) => b.split('/').length - a.split('/').length) // nested folders before their parents
+  .map((name) =>
+    name.endsWith('.ts')
+      ? { type: name, pattern: `${SENTINEL_SRC}/${name}`, mode: 'file' }
+      : { type: name, pattern: `${SENTINEL_SRC}/${name}`, partialMatch: false },
+  );
+const namesUpTo = (layer) => Object.keys(SENTINEL_LAYERS).filter((name) => SENTINEL_LAYERS[name] <= layer);
+const sentinelPolicies = Object.keys(SENTINEL_LAYERS).map((name) => ({
+  from: { element: { type: name } },
+  allow: { to: { element: { types: { anyOf: namesUpTo(SENTINEL_LAYERS[name]) } } } },
+}));
+/** The message the import-matrix test parses: keep `sentinel layers: <from> → <to>` at its start. */
+export const SENTINEL_LAYER_MESSAGE =
+  'sentinel layers: {{from.type}} → {{to.type}} points up; imports point down only (docs/proposals/sentinel-v2/README.md §6, the debt it found is frozen in eslint-suppressions.json)';
 
 const unused = {
   args: 'after-used',
@@ -87,6 +149,26 @@ export default defineConfig([
     languageOptions: { globals: globals.node },
   },
   { files: ['**/*.cjs'], languageOptions: { sourceType: 'commonjs', globals: globals.node } },
+
+  // Sentinel's layers; today's upward imports are frozen as known debt (see SENTINEL_LAYERS).
+  {
+    files: [`${SENTINEL_SRC}/**/*.ts`],
+    plugins: { boundaries },
+    settings: {
+      'boundaries/root-path': root,
+      'boundaries/elements': sentinelElements,
+      'boundaries/elements-single-match': true,
+      // `mode: 'file'` is the only way 7.2.0 classifies a single root file; it is deprecated, not removed.
+      'boundaries/legacy-warnings': false,
+      'import/resolver': { [fileURLToPath(new URL('./scripts/eslint-resolve-ts.cjs', import.meta.url))]: {} },
+    },
+    rules: {
+      'boundaries/dependencies': [
+        'error',
+        { default: 'disallow', policies: sentinelPolicies, message: SENTINEL_LAYER_MESSAGE },
+      ],
+    },
+  },
 
   prettier,
 ]);
