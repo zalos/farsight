@@ -65,6 +65,7 @@ test(
         const admitted = await loadPlan(store, run.id, run.planRevision);
         const review = admitted.plan.units.find((u) => u.review);
         assert.ok(review);
+        assert.equal(review.review?.selection.modelId, 'luna', 'the binding id is distinct from the model name');
         const trace = await readPublishedNativeReview(store, review);
         assert.equal(trace.provenance.mode, 'native');
         assert.equal(trace.observations.length, 2);
@@ -115,6 +116,9 @@ test(
     assert.match(first.markdown, /The token is compared with ==/);
     assert.match(first.html, /cost unobserved · subscription/);
     assert.match(first.markdown.replace(/\\(.)/g, '$1'), /copilot-cli 1\.0\.105 native/);
+    assert.match(first.markdown.replace(/\\(.)/g, '$1'), /model gpt-6-luna/);
+    assert.match(first.html, /model gpt-6-luna/);
+    assert.doesNotMatch(first.markdown, /model luna(?:\s|[·.])/);
     for (const text of [first.markdown, first.html]) {
       assert.ok(text.includes(agent.executableDigest!));
       assert.ok(text.includes(agent.transcript!));

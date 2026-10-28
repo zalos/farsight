@@ -1484,6 +1484,9 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
       const trace = traces.get(unit.id);
       if (!trace) return unbound('a published model review was not read back');
       const record = trace.record;
+      const bindingModel = admitted.policy?.settings.providers
+        .find((p) => p.id === unit.review!.selection.providerId)
+        ?.models?.find((m) => m.id === unit.review!.selection.modelId)?.model;
       const encoding = trace.requests.find((r) => r.wire)?.wire?.encoding;
       const runner =
         encoding === 'sentinel-claude-chat/v1'
@@ -1516,7 +1519,8 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
         runnerVersion: null,
         executableDigest: null,
         model: {
-          requested: record.model?.requestedModel ?? unit.review.selection.modelId,
+          requested:
+            record.model?.requestedModel ?? bindingModel ?? unbound('a published model review has no bound model'),
           reported: record.model?.returnedModel ?? null,
           identitySource: record.model?.source ?? 'unknown',
         },

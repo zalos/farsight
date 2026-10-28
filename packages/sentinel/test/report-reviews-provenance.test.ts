@@ -708,3 +708,62 @@ test(
     assert.deepEqual(digests(again), digests(priv), 'all four brokered report formats regenerate from the same ledger');
   },
 );
+
+test('an unanswered brokered review names the configured model rather than its binding id', needsStore, async (t) => {
+  const dir = scratch(t, 'sentinel-report-unanswered-');
+  const ws = join(dir, 'workspace');
+  mkdirSync(join(ws, 'src'), { recursive: true });
+  writeFileSync(join(ws, 'src/query.ts'), 'export const query = (id: string) => id;\n');
+  const endpoint = await mockEndpoint(t, (_req, res) => json(res, 503, { error: 'unavailable' }));
+  const env = { ...process.env, HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
+  mkdirSync(env.HOME);
+  const cli = cliOver(ws, env);
+  assert.equal((await cli('init')).status, 0);
+  const settingsPath = join(ws, '.farsight/sentinel/settings.json');
+  const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+  const provider = structuredClone(trustedPolicy({ ollama: endpoint.origin }).settings.providers[0]);
+  provider.models[0]!.id = 'luna';
+  provider.models[0]!.model = 'gpt-6-luna';
+  provider.models[0]!.capability.model = 'gpt-6-luna';
+  provider.models[0]!.capability.revision = null;
+  settings.mandatoryRules = [];
+  settings.hostedReviewSecretScan = 'when-selected';
+  settings.providers = [provider];
+  settings.reviewModels = {
+    stages: [{ stage: 'general', providerId: provider.id, modelId: 'luna' }],
+    segments: [],
+  };
+  settings.grants[0].scope.effects = ['local-artifacts', 'paid-inference'];
+  settings.grants.push({ actions: ['paid.admit'], principals: ['human'], confirm: 'always' });
+  writeFileSync(settingsPath, JSON.stringify(settings));
+  assert.equal((await cli('settings', 'adopt', '--confirm')).status, 0);
+  assert.equal((await cli('rules', 'promote', 'builtin:foundation-preview', '--confirm')).status, 0);
+  const planned = await cli('plan');
+  assert.equal(planned.status, 0, JSON.stringify(planned.body));
+  const runId = planned.body.facts.planId;
+  const ran = await cli('run', runId, '--confirm', '--confirm-models');
+  assert.equal(ran.body.facts.state, 'completed', JSON.stringify(ran.body));
+
+  rmSync(join(ws, 'src'), { recursive: true, force: true });
+  const sw = workspaceOf(ws, env);
+  const store = await openStore(sw.storePath);
+  try {
+    const report = await fullReport({
+      store,
+      runId,
+      workspace: ws,
+      trustDir: sw.trustDir,
+      disclosure: 'private',
+      now: new Date('2026-10-28T09:00:00Z'),
+    });
+    const agent = report.document.provenance?.find((p) => p.kind === 'agent');
+    assert.ok(agent && agent.kind === 'agent');
+    assert.equal(agent.model.requested, 'gpt-6-luna');
+    assert.equal(agent.model.reported, null);
+    assert.match(report.markdown.replace(/\\(.)/g, '$1'), /model gpt-6-luna/);
+    assert.match(report.html, /model gpt-6-luna/);
+    assert.doesNotMatch(report.markdown, /model luna(?:\s|[·.])/);
+  } finally {
+    store.close();
+  }
+});
