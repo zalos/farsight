@@ -13,7 +13,7 @@
 import { spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -149,7 +149,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       process.exit(1);
     }
   const scratch = mkdtempSync(join(tmpdir(), 'sentinel-consumers-'));
-  const copies = { sentinel: join(scratch, 'farsight-sentinel.tgz'), farsight: join(scratch, 'farsight-cli.tgz') };
+  // the copies keep the tarballs' own names, which carry the packaged versions the consumers check
+  const copies = { sentinel: join(scratch, basename(sentinel)), farsight: join(scratch, basename(farsight)) };
   copyFileSync(sentinel, copies.sentinel);
   if (options.acceptance) copyFileSync(farsight, copies.farsight);
   let status;
