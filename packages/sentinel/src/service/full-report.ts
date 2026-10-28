@@ -1305,8 +1305,25 @@ const BUILTIN_ADAPTERS: Readonly<Record<string, BuiltinOperation>> = Object.free
   'sentinel-inventory': 'inventory',
   'framework-controls': 'framework-controls',
 });
-/** What a built-in's version is when only its module digest was retained: the digest identifies it. */
+/** What a built-in's version is when its invocation predates recording it: its module digest identifies it. */
 export const BUILTIN_UNVERSIONED = 'not recorded; identified by its module digest';
+
+/**
+ * The worker a scanner attempt ran, from its retained invocation record: for a container, the input whose content
+ * the command executes (`/input/<digest>`, one of the sealed inputs); for a built-in child, the registered adapter's
+ * digest (its module's bytes and path). Null when the record names neither.
+ */
+export function workerDigestOf(invocation: Record<string, any> | undefined): string | null {
+  if (!invocation || invocation.format !== 'sentinel-invocation/draft-1') return null;
+  if (invocation.isolation === 'child')
+    return typeof invocation.adapter?.digest === 'string' ? invocation.adapter.digest : null;
+  const inputs = new Set(Array.isArray(invocation.inputs) ? invocation.inputs : []);
+  for (const a of Array.isArray(invocation.argv) ? invocation.argv : []) {
+    const m = typeof a === 'string' ? /^\/input\/([0-9a-f]{64})$/.exec(a) : null;
+    if (m && inputs.has(`sha256:${m[1]}`)) return `sha256:${m[1]}`;
+  }
+  return null;
+}
 /** At most this many model review units are re-read for one report (each is read back in full, bounded). */
 const MAX_REVIEW_UNITS = 32;
 const MAX_PROVENANCE = 10_000;
@@ -1529,7 +1546,8 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
           worker.kind === 'coordinator-operation'
             ? worker.adapterDigest
             : (invocation?.adapter?.digest ?? unit?.implementationDigest),
-        sentinelVersion: BUILTIN_UNVERSIONED,
+        sentinelVersion:
+          typeof invocation?.sentinel?.version === 'string' ? invocation.sentinel.version : BUILTIN_UNVERSIONED,
       });
       continue;
     }
@@ -1548,7 +1566,7 @@ export async function runStagesOf(store: SentinelStore, a: RunAssessment): Promi
         typeof invocation.image.id === 'string'
           ? { reference: invocation.image.reference, id: invocation.image.id }
           : null,
-      workerDigest: null,
+      workerDigest: workerDigestOf(invocation),
       rules: plan.pins.rules
         .filter((r) => r.adapterId === adapterId && checked.has(`${r.familyId}#${r.revision}`))
         .map((r) => ({ familyId: r.familyId, revision: r.revision, definitionDigest: r.definitionDigest })),

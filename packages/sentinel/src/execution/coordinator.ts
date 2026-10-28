@@ -71,6 +71,18 @@ import {
   type ValidatedPlan,
 } from './plan.js';
 import { loadPlan } from './plans.js';
+
+let packageVersion: string | undefined;
+/** This build's package version, read once from its own package.json: what an operation's invocation names. */
+export function sentinelVersion(): string {
+  if (packageVersion === undefined) {
+    const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
+      version?: unknown;
+    };
+    packageVersion = typeof pkg.version === 'string' && pkg.version ? pkg.version.slice(0, 64) : 'unknown';
+  }
+  return packageVersion;
+}
 import { stageInputsForUnit } from './stage-inputs.js';
 import { checkEntry, interpreterOf, runHostScript, SCRIPT_CONTRACT } from './script-runner.js';
 import { featureEnabled } from '../policy/features.js';
@@ -1249,6 +1261,8 @@ export class Coordinator {
       work: ref,
       coordinatorEpoch: this.#store.epoch,
       adapter: { id: adapter.id, version: adapter.version, digest: adapter.digest },
+      // The Sentinel build that ran the operation: its module digest is the adapter's, its version this package's.
+      sentinel: { version: sentinelVersion() },
       operation: adapter.operation,
       plan: {
         runId: this.#plan.run.id,

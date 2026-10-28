@@ -418,6 +418,99 @@ test('an agent stage cost known only as unobserved is printed with its reason, n
 });
 
 const CLI = new URL('../dist/cli.js', import.meta.url).pathname;
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+
+/** The real CLI over one workspace, as the owner runs it, answering JSON. */
+const cliOver =
+  (ws: string, env: NodeJS.ProcessEnv) =>
+  (...args: string[]) =>
+    new Promise<any>((resolvePromise, reject) => {
+      const child = spawn(process.execPath, [CLI, ...args, '--workspace', ws, '--json'], {
+        cwd: ws,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let out = '';
+      let err = '';
+      child.stdout.on('data', (b) => (out += b));
+      child.stderr.on('data', (b) => (err += b));
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        reject(Error('fixture CLI timeout'));
+      }, 90000);
+      child.on('error', reject);
+      child.on('exit', (status) => {
+        clearTimeout(timer);
+        try {
+          resolvePromise({ status, body: JSON.parse(out) });
+        } catch {
+          reject(Error('fixture CLI output unavailable ' + err.slice(0, 200)));
+        }
+      });
+    });
+
+test(
+  "a scanner unit's provenance names its worker and version, and a Sentinel operation its module and version",
+  needsStore,
+  async (t) => {
+    const dir = scratch(t, 'sentinel-report-tool-');
+    const ws = join(dir, 'workspace');
+    mkdirSync(join(ws, 'src'), { recursive: true });
+    writeFileSync(
+      join(ws, 'src/query.ts'),
+      'export const q = (id: string) => db.query("SELECT * FROM t WHERE id = " + id);\n',
+    );
+    const env = { ...process.env, HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
+    mkdirSync(env.HOME);
+    const cli = cliOver(ws, env);
+    assert.equal((await cli('init')).status, 0);
+    assert.equal((await cli('settings', 'adopt', '--confirm')).status, 0);
+    assert.equal((await cli('rules', 'promote', 'builtin:foundation-preview', '--confirm')).status, 0);
+    const planned = await cli('plan');
+    assert.equal(planned.status, 0, JSON.stringify(planned.body));
+    const id = planned.body.facts.planId;
+    const ran = await cli('run', id, '--confirm');
+    assert.equal(ran.body.facts.state, 'completed', JSON.stringify(ran.body));
+    const sw = workspaceOf(ws, env);
+    const store = await openStore(sw.storePath);
+    try {
+      const doc: any = (
+        await fullReport({
+          store,
+          runId: id,
+          workspace: ws,
+          trustDir: sw.trustDir,
+          disclosure: 'private',
+          now: new Date('2026-10-28T09:00:00Z'),
+        })
+      ).document;
+      assert.ok(validateEnvelope('report', doc).ok);
+      assert.equal(Object.hasOwn(doc, 'reviews'), false, 'no model review planned, no review section');
+      const tools = doc.provenance.filter((p: any) => p.kind === 'tool');
+      assert.ok(tools.length >= 1, JSON.stringify(doc.provenance.map((p: any) => p.kind)));
+      for (const p of tools) {
+        assert.equal(p.adapterId, 'sentinel.preview.detector');
+        assert.notEqual(p.adapterVersion, 'not recorded');
+        assert.equal(p.where, 'child');
+        // A built-in child's worker is its registered adapter, by the digest its invocation names.
+        assert.match(p.workerDigest, /^sha256:[0-9a-f]{64}$/);
+        const unit = await (await import('../dist/execution/plans.js')).loadPlan(store, id);
+        const pin = unit.profile.adapters.find((a: any) => a.adapterId === p.adapterId);
+        assert.equal(p.workerDigest, pin.digest);
+        assert.ok(p.rules.length >= 1 && p.rules.every((r: any) => /^sha256:/.test(r.definitionDigest)));
+        assert.match(p.invocation, /^sha256:/);
+      }
+      const builtins = doc.provenance.filter((p: any) => p.kind === 'builtin');
+      assert.deepEqual(
+        builtins.map((p: any) => p.operation),
+        ['capture', 'parse', 'inventory'],
+      );
+      for (const b of builtins) assert.equal(b.sentinelVersion, VERSION);
+    } finally {
+      store.close();
+    }
+  },
+);
 
 test(
   'a model review run reports its cited observation with its model, and every stage provenance, after the source is gone',
@@ -443,31 +536,7 @@ test(
     });
     const env = { ...process.env, HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
     mkdirSync(env.HOME);
-    const cli = (...args: string[]) =>
-      new Promise<any>((resolvePromise, reject) => {
-        const child = spawn(process.execPath, [CLI, ...args, '--workspace', ws, '--json'], {
-          cwd: ws,
-          env,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        let out = '';
-        let err = '';
-        child.stdout.on('data', (b) => (out += b));
-        child.stderr.on('data', (b) => (err += b));
-        const timer = setTimeout(() => {
-          child.kill('SIGKILL');
-          reject(Error('fixture CLI timeout'));
-        }, 90000);
-        child.on('error', reject);
-        child.on('exit', (status) => {
-          clearTimeout(timer);
-          try {
-            resolvePromise({ status, body: JSON.parse(out) });
-          } catch {
-            reject(Error('fixture CLI output unavailable ' + err.slice(0, 200)));
-          }
-        });
-      });
+    const cli = cliOver(ws, env);
     assert.equal((await cli('init')).status, 0);
     const file = join(ws, '.farsight/sentinel/settings.json');
     const s = JSON.parse(readFileSync(file, 'utf8'));
@@ -541,7 +610,12 @@ test(
     for (const b of doc.provenance.filter((p: any) => p.kind === 'builtin')) {
       assert.equal(b.where, 'in-process');
       assert.match(b.moduleDigest, /^sha256:[0-9a-f]{64}$/);
+      assert.equal(b.sentinelVersion, VERSION, 'the version the operation recorded when it ran');
     }
+    assert.ok(
+      priv.markdown.indexOf('1 model observation') < priv.markdown.indexOf('## Findings'),
+      'counted with the counts',
+    );
     assert.match(priv.markdown, /Request text reaches SQL/);
     assert.match(priv.html, /How each stage ran/);
 

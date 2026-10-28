@@ -125,7 +125,7 @@ ${f.evidence.map((e) => evidenceHtml(doc, e)).join('\n')}
       ? '<p>Every planned check covered its scope.</p>'
       : '<p>Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.</p>';
   const reviews = doc.reviews
-    ? `<h2 id="reviews">${esc(wordOf(doc, 'sentinel.report.review.heading', 'business'))}</h2><p>${esc(wordOf(doc, 'sentinel.report.review.proposed', 'business'))}.${doc.counts.reviewObservations ? ` ${esc(countText(doc, doc.counts.reviewObservations, 'business'))}.` : ''}</p>${doc.reviews
+    ? `<h2 id="reviews">${esc(wordOf(doc, 'sentinel.report.review.heading', 'business'))}</h2><p>${esc(wordOf(doc, 'sentinel.report.review.proposed', 'business'))}.</p>${doc.reviews
         .map((r) => {
           const [head, ...rest] = reviewLines(doc, r);
           return `<section class="card" id="${anchor('review', r.id)}"><h3><span class="sev sev-${esc(r.severity)}">${esc(head!)}</span></h3><ul>${rest.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>${r.evidence.map((e) => evidenceHtml(doc, e)).join('\n')}</section>`;

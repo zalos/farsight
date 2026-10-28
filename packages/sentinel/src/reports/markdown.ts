@@ -178,10 +178,7 @@ export function renderMarkdown(doc: ReportEnvelope): string {
   }
   if (doc.reviews) {
     lines.push(`## ${md(wordOf(doc, 'sentinel.report.review.heading', 'business'))}`, '');
-    lines.push(
-      `${md(wordOf(doc, 'sentinel.report.review.proposed', 'business'))}.${doc.counts.reviewObservations ? ` ${md(countText(doc, doc.counts.reviewObservations, 'business'))}.` : ''}`,
-      '',
-    );
+    lines.push(`${md(wordOf(doc, 'sentinel.report.review.proposed', 'business'))}.`, '');
     for (const r of doc.reviews) {
       lines.push(`### <a id="${anchor('review', r.id)}"></a>${md(reviewLines(doc, r)[0]!)}`, '');
       for (const l of reviewLines(doc, r).slice(1)) lines.push(`- ${md(l)}`);
