@@ -301,9 +301,21 @@ export function scanState({ readOnly, companion, paired, action }) {
   if (readOnly) return { on: false, why: 'sys.readonly.control' };
   if (!companion) return { on: false, why: 'sentinel.ownerUi.launch' };
   if (!paired) return { on: false, why: 'sentinel.viewer.scan.pairing' };
-  if (action && action.available === false)
-    return { on: false, why: action.reasonCode || 'sentinel.viewer.scan.unavailable' };
+  // until the read model has said whether a browser may start this scan, it may not: unknown is off, with why
+  if (!action || typeof action.available !== 'boolean') return { on: false, why: 'sentinel.viewer.scan.checking' };
+  if (!action.available) return { on: false, why: action.reasonCode || 'sentinel.viewer.scan.unavailable' };
   return { on: true, why: 'sentinel.viewer.scan.define' };
+}
+
+/**
+ * The Settings source row's door: live only when the last read of the SCANS answer said a browser may start a scan;
+ * greyed with why when the session is read-only, when no read has said yet, or when the answer refused.
+ */
+export function doorState({ readOnly, action }) {
+  if (readOnly) return { on: false, why: 'sys.readonly.control' };
+  if (!action || typeof action.available !== 'boolean') return { on: false, why: 'sentinel.viewer.scan.unknown' };
+  if (!action.available) return { on: false, why: action.reasonCode || 'sentinel.viewer.scan.unavailable' };
+  return { on: true, why: 'sentinel.viewer.scan.door' };
 }
 
 /** The outputs a ladder card shows: what a reader asks for (the snapshot, the graph, findings, coverage, observations). */

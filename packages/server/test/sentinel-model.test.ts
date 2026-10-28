@@ -219,6 +219,24 @@ test('the Scan button is greyed with its reason, never a dead click', () => {
   assert.equal(m.scanState({ readOnly: false, companion: false, paired: false }).why, 'sentinel.ownerUi.launch');
   assert.equal(m.scanState({ readOnly: false, companion: true, paired: false }).why, 'sentinel.viewer.scan.pairing');
   assert.deepEqual(
+    m.scanState({ readOnly: false, companion: true, paired: true }),
+    { on: false, why: 'sentinel.viewer.scan.checking' },
+    'paired, but the list has not said yet: off, with why',
+  );
+  assert.deepEqual(m.doorState({ readOnly: false, action: null }), { on: false, why: 'sentinel.viewer.scan.unknown' });
+  assert.deepEqual(m.doorState({ readOnly: true, action: { available: true } }), {
+    on: false,
+    why: 'sys.readonly.control',
+  });
+  assert.deepEqual(
+    m.doorState({ readOnly: false, action: { available: false, reasonCode: 'sentinel.review.foregroundRequired' } }),
+    { on: false, why: 'sentinel.review.foregroundRequired' },
+  );
+  assert.deepEqual(m.doorState({ readOnly: false, action: { available: true, reasonCode: null } }), {
+    on: true,
+    why: 'sentinel.viewer.scan.door',
+  });
+  assert.deepEqual(
     m.scanState({
       readOnly: false,
       companion: true,
@@ -250,6 +268,9 @@ test('every word the model names is a catalog key the surface can print', async 
     'sentinel.viewer.stop.notBuilt',
     'sentinel.viewer.scan.define',
     'sentinel.viewer.scan.pairing',
+    'sentinel.viewer.scan.checking',
+    'sentinel.viewer.scan.unknown',
+    'sentinel.viewer.scan.door',
   ];
   for (const k of keys) assert.ok(Object.hasOwn(STRINGS, k), k);
 });

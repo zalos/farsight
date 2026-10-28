@@ -28,6 +28,8 @@ const IDENTIFIER = new RegExp(
     String.raw`\b[0-9a-f]{8,}\b`,
     String.raw`\bsentinel\.[a-z]`,
     String.raw`\b(?:run|work|att|snap)-[0-9a-f]{6,}`,
+    String.raw`\b[a-z][\w.-]*:[0-9][\w.]*\b`, // a model id with its tag: review-model:1
+    String.raw`\b[a-z][\w-]*\/[0-9]+\b`, // a skill or prompt with its revision: owasp-top10/2
   ].join('|'),
   'g',
 );
@@ -40,7 +42,11 @@ const RECORDED: Json = JSON.parse(
 const RUN: string = RECORDED.scan.scan.id;
 const AT = '#/sentinel/' + RUN;
 
-async function standIn(page: Page, baseURL: string | undefined, opts: { scanAction?: Json; readOnly?: boolean } = {}) {
+async function standIn(
+  page: Page,
+  baseURL: string | undefined,
+  opts: { scanAction?: Json; readOnly?: boolean; holdScans?: Promise<void> } = {},
+) {
   // the viewer's own origin: the stand-in answers only it, as the companion does
   const origin = new URL(baseURL ?? 'http://localhost').origin;
   const version: Json = await (await page.request.get('/api/version')).json();
@@ -103,6 +109,7 @@ async function standIn(page: Page, baseURL: string | undefined, opts: { scanActi
     if (req.headers()['authorization'] !== `Bearer ${PASS}`)
       return route.fulfill({ status: 401, headers: cors, json: { error: 'sentinel.viewer.notPaired' } });
     const path = new URL(req.url()).pathname.replace('/api/sentinel/', '');
+    if (path === 'scans' && opts.holdScans) await opts.holdScans; // the list answers late
     const m = /^scans(?:\/before\/(\d+)|\/([^/]+)(?:\/stages\/([^/]+)(?:\/units\/(\d+))?)?)?$/.exec(path);
     const run = m?.[2] ? decodeURIComponent(m[2]) : null;
     const stage = m?.[3] ? decodeURIComponent(m[3]) : null;
@@ -234,6 +241,14 @@ test.describe('the Sentinel ladder', () => {
       if (hits.length) found[hash] = hits;
     }
     expect(found, 'identifier-shaped words in the business register').toEqual({});
+    // a model's words, a prompt's text and the exchanges stay outside the business register
+    const words = await visibleWords(page, '.snt-chrome, .snt-stage, .snt-dock');
+    expect(words).not.toContain('Original fixture review candidate.');
+    expect(words).not.toContain('read the full prompt');
+    await expect(page.locator('details.snt-words, .snt-turn.sys details')).toHaveCount(0);
+    await gotoReady(page, AT + '?lens=business');
+    await expect(page.locator('.snt-dock [data-pane="stage"]')).toContainText(/a model/);
+    await expect(page.locator('.snt-dock [data-pane="stage"]')).not.toContainText('review-model');
   });
 
   test('Scan is greyed with its reason when a model stage needs the owner command line, and a press does nothing', async ({
@@ -321,9 +336,47 @@ test.describe('the Sentinel ladder', () => {
     await expect(page.locator('details.snt-words')).toHaveCount(0);
   });
 
+  test('until the list says a browser may start a scan, Scan is off with why, and a press does nothing', async ({
+    page,
+    baseURL,
+  }) => {
+    let answer: () => void = () => {};
+    const holdScans = new Promise<void>((resolve) => (answer = resolve));
+    await standIn(page, baseURL, { scanAction: { available: true, reasonCode: null }, holdScans });
+    await gotoReady(page, '#/sentinel');
+    await expect(page.frameLocator('iframe.snt-frame').locator('#said')).toHaveText('paired');
+    const scan = page.locator('.snt-scan');
+    await expect(scan).toHaveAttribute('aria-disabled', 'true');
+    await expect(scan).toHaveAttribute('data-tip', 'sentinel.viewer.scan.checking');
+    await scan.click({ force: true });
+    await expect(page.frameLocator('iframe.snt-frame').locator('#said')).toHaveText('paired');
+    answer();
+    await expect(page.locator('.snt-scan-row')).toHaveCount(1);
+    await expect(scan).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
+  test('the Settings door is greyed until the list has said, then follows its answer', async ({ page, baseURL }) => {
+    await standIn(page, baseURL, {
+      scanAction: { available: false, reasonCode: 'sentinel.review.foregroundRequired' },
+    });
+    await gotoReady(page, '#/settings');
+    const fresh = page.locator('#srcrows .snt-door').first();
+    await expect(fresh).toHaveAttribute('aria-disabled', 'true');
+    await expect(fresh).toHaveAttribute('data-tip', 'sentinel.viewer.scan.unknown');
+    // once the Sentinel tab has read the list, the door says what the answer says
+    await page.evaluate(() => (location.hash = '#/sentinel'));
+    await expect(page.locator('.snt-scan-row')).toHaveCount(1);
+    await page.evaluate(() => (location.hash = '#/settings'));
+    const refused = page.locator('#srcrows .snt-door').first();
+    await expect(refused).toHaveAttribute('aria-disabled', 'true');
+    await expect(refused).toHaveAttribute('data-tip', 'sentinel.review.foregroundRequired');
+  });
+
   test('the Settings source row carries the Scan door to the SCANS stop', async ({ page, baseURL }) => {
     await standIn(page, baseURL, { scanAction: { available: true, reasonCode: null } });
-    await gotoReady(page, '#/settings');
+    await gotoReady(page, '#/sentinel');
+    await expect(page.locator('.snt-scan-row')).toHaveCount(1);
+    await page.evaluate(() => (location.hash = '#/settings'));
     const door = page.locator('#srcrows .snt-door').first();
     await expect(door).toHaveAttribute('href', '#/sentinel?do=scan');
     await door.click();

@@ -9,9 +9,9 @@
 // the paired owner frame hands it after the frame's own launch pairing — a pass that reads retained scans and nothing
 // else. This host never receives the owner capability, a reload token or a receipt: writes stay in the frame, which
 // is the owner panel the dock shows when the reader presses Scan (the existing browser preview-and-confirm flow).
-import { t } from '../strings.js';
+import { t, def } from '../strings.js';
 import { S, esc, currentLens } from '../store.js';
-import { tipAttrs } from '../lib/tooltip.js';
+import { tipAttrs, registerTip, sourceText } from '../lib/tooltip.js';
 import { countedHtml, defAttrs } from '../lib/counted.js';
 import { readOnlyWhy } from '../lib/read-only.js';
 import {
@@ -35,7 +35,14 @@ import {
   cardOutputs,
   scanLive,
   scanState,
+  doorState,
 } from '../lib/sentinel-model.js';
+
+/**
+ * Whether a browser may start a scan, as the last read of the SCANS answer said it (the Settings door reads it; the
+ * SCANS stop re-reads it before any press). Unknown until a read has answered: then every door is greyed with why.
+ */
+let lastScanAction = null;
 
 const SN = {
   el: null,
@@ -211,6 +218,7 @@ async function load() {
   try {
     const at = place.scan ? 'scans/' + encodeURIComponent(place.scan) : '';
     if (place.stop === 'scans') SN.scans = await read(place.before ? 'scans/before/' + place.before : 'scans');
+    if (place.stop === 'scans' && SN.scans?.scanAction) lastScanAction = SN.scans.scanAction;
     else if (place.stop === 'pipeline') SN.scan = await read(at);
     else {
       const stageAt = at + '/stages/' + encodeURIComponent(place.stage);
@@ -222,6 +230,7 @@ async function load() {
       SN.unit = stage.units.length ? await read(stageAt + '/units/' + k) : null;
     }
     if (place.stop !== 'scans' && !SN.scans) SN.scans = await read('scans').catch(() => null);
+    if (SN.scans?.scanAction) lastScanAction = SN.scans.scanAction;
     SN.error = null;
   } catch (e) {
     SN.error = (e && e.code) || 'sentinel.ownerUi.failed';
@@ -269,18 +278,46 @@ function whenWords(iso) {
   return (day === today ? t('sentinel.viewer.when.today') : day) + ' ' + hm;
 }
 
-function costHtml(cost) {
-  const w = costWords(cost);
+/**
+ * A measure's tip (a duration, a price, a CPU share): the words shown, what it measures, the scope it is over and
+ * where the read model took it from — a number's tip, for a quantity that is not a count.
+ */
+registerTip('sentinel-measure', (_el, a) => {
+  const rows = [
+    ['sentinel.viewer.tip.measures', a && a.define ? def(a.define) : ''],
+    ['tip.scope', a && a.scope ? t(a.scope) : ''],
+    ['tip.source', a ? sourceText(a.source) : ''],
+  ].filter((r) => r[1]);
   return (
-    '<span class="snt-cost"' + defAttrs(w.key) + '>' + (w.amount ? esc(w.amount) + ' · ' : '') + word(w.key) + '</span>'
+    '<div class="tip-h"><b class="tip-n">' +
+    esc((a && a.words) || '') +
+    '</b></div>' +
+    (rows.length
+      ? '<dl class="tip-dl">' +
+        rows.map((r) => '<dt>' + word(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>').join('') +
+        '</dl>'
+      : '')
   );
+});
+
+/** The tip attributes of a measure the read model supplied with its `scope` and `source`. */
+function measureAttrs(m, words, define) {
+  // the field it was read from is a developer's fact: the business lens names the sync only
+  const source = { api: API, sync: null, ...(biz() || !m.source ? {} : { note: m.source }) };
+  return tipAttrs({ id: 'sentinel-measure', args: { words, define, scope: m.scope, source }, noFocus: true });
 }
 
-function durationHtml(d) {
+function costHtml(cost) {
+  if (!cost) return '';
+  const w = costWords(cost);
+  const words = (w.amount ? w.amount + ' · ' : '') + t(w.key);
+  return '<span class="snt-cost"' + measureAttrs(cost, words, w.key) + '>' + esc(words) + '</span>';
+}
+
+function durationHtml(d, define = 'sentinel.viewer.measure.duration') {
   if (!d) return '';
-  return (
-    '<span class="snt-dur"' + tipAttrs({ key: d.scope, noFocus: true }) + '>' + esc(durationWords(d.ms)) + '</span>'
-  );
+  const words = durationWords(d.ms);
+  return '<span class="snt-dur"' + measureAttrs(d, words, define) + '>' + esc(words) + '</span>';
 }
 
 function statusChip(status, scan, extra = '') {
@@ -540,7 +577,8 @@ function cardHtml(stage, compact) {
     '</div>' +
     (prov.length ? '<div class="snt-prov">' + esc(prov.join(' · ')) + '</div>' : '') +
     '<div class="snt-stc">' +
-    statusChip(stage.status, false, stage.duration ? ' · ' + esc(durationWords(stage.duration.ms)) : '') +
+    statusChip(stage.status) +
+    durationHtml(stage.duration) +
     counts +
     (stage.cost.basis !== 'none' ? costHtml(stage.cost) : '') +
     '</div>' +
@@ -633,13 +671,8 @@ const mono = (text) => '<span class="mono">' + esc(text) + '</span>';
 /** A CPU share, in its words, with its scope's tip (a measure, not a count: it need not be whole). */
 function measureHtml(m) {
   if (!m) return '';
-  return (
-    '<span class="snt-dur"' +
-    tipAttrs({ key: m.scope, noFocus: true }) +
-    '>' +
-    esc(fill(m.unit, { n: m.value })) +
-    '</span>'
-  );
+  const words = fill(m.unit, { n: m.value });
+  return '<span class="snt-dur"' + measureAttrs(m, words, m.unit) + '>' + esc(words) + '</span>';
 }
 
 /**
@@ -654,7 +687,7 @@ function invocationKv(inv, absent) {
         bytesHtml(inv.limits.memory),
         measureHtml(inv.limits.cpus),
         cnt(inv.limits.processes),
-        durationHtml(inv.limits.timeout),
+        durationHtml(inv.limits.timeout, 'sentinel.viewer.measure.timeLimit'),
       ]
         .filter(Boolean)
         .join(' · ')
@@ -672,7 +705,17 @@ function invocationKv(inv, absent) {
 }
 
 function ioList(list) {
-  return list.map((io) => keyChip('plain', io.key, io.count ? ' (' + io.count.n + ')' : '')).join('') || '—';
+  return (
+    list
+      .map((io) =>
+        chip(
+          'plain',
+          word(io.key) + (io.count ? ' (' + cnt(io.count, { words: String(io.count.n) }) + ')' : ''),
+          defAttrs(io.key),
+        ),
+      )
+      .join('') || '—'
+  );
 }
 
 function stageDockHtml(stage) {
@@ -681,11 +724,15 @@ function stageDockHtml(stage) {
   const k = kindChip(stage.kind);
   const code = !biz();
   const impl = p.implementation;
-  const model = p.model
-    ? esc(fill('sentinel.viewer.dock.modelWords', { a: p.model.requested || '—', b: p.model.reported || '—' }))
-    : p.provider
-      ? esc(p.provider.model)
-      : '';
+  // a model's id, a skill's name and a prompt's text are a developer's: the business register says what, not which
+  const model =
+    !p.model && !p.provider
+      ? ''
+      : !code
+        ? word('sentinel.viewer.dock.aModel')
+        : p.model
+          ? esc(fill('sentinel.viewer.dock.modelWords', { a: p.model.requested || '—', b: p.model.reported || '—' }))
+          : esc(p.provider.model);
   const tokens = [stage.counts.tokensIn, stage.counts.tokensOut]
     .filter(Boolean)
     .map((c) => cnt(c))
@@ -700,7 +747,8 @@ function stageDockHtml(stage) {
     word(stage.name) +
     '</h2><div class="snt-row">' +
     keyChip(k.cls, k.key) +
-    statusChip(stage.status, false, stage.duration ? ' · ' + esc(durationWords(stage.duration.ms)) : '') +
+    statusChip(stage.status) +
+    durationHtml(stage.duration) +
     chip('', esc(fill('sentinel.viewer.dock.position', { n: stage.number, m: SN.scan?.stages?.length ?? '' }))) +
     '</div><dl class="snt-kv">' +
     kv('sentinel.viewer.field.where', word(whereKey(p.where))) +
@@ -718,9 +766,15 @@ function stageDockHtml(stage) {
     (p.skills
       ? kv(
           'sentinel.viewer.field.skills',
-          p.skills.length
-            ? esc(p.skills.map((s) => s.name + '/' + s.revision).join(', '))
-            : word('sentinel.viewer.dock.noSkills'),
+          !p.skills.length
+            ? word('sentinel.viewer.dock.noSkills')
+            : code
+              ? esc(p.skills.map((s) => s.name + '/' + s.revision).join(', '))
+              : esc(
+                  fill(p.skills.length === 1 ? 'sentinel.viewer.dock.skillsNOne' : 'sentinel.viewer.dock.skillsN', {
+                    n: p.skills.length,
+                  }),
+                ),
         )
       : '') +
     kv('sentinel.viewer.field.turns', stage.counts.turns ? cnt(stage.counts.turns) : '') +
@@ -799,7 +853,7 @@ function turnHtml(turn) {
   const reply = turn.reply
     ? word(turn.reply.key) +
       placeWords(turn.reply) +
-      (turn.reply.verdict ? ' · ' + esc(turn.reply.verdict) : '') +
+      (turn.reply.verdict && !biz() ? ' · ' + esc(turn.reply.verdict) : '') +
       andThen(cnt(turn.reply.claims))
     : word('sentinel.viewer.absent.notRecorded');
   const tok = (c) => (c && !biz() ? cnt(c) : '');
@@ -835,13 +889,15 @@ function reviewHtml(r) {
           '…</span>'
         : '') +
       '</div><div class="snt-msg">' +
-      (prompt.text
-        ? '<details><summary>' +
-          word('sentinel.viewer.turn.readPrompt') +
-          '</summary><pre class="snt-pre">' +
-          esc(prompt.text) +
-          '</pre></details>'
-        : word('sentinel.viewer.absent.notRecorded')) +
+      (biz()
+        ? word('sentinel.viewer.turn.promptHidden')
+        : prompt.text
+          ? '<details><summary>' +
+            word('sentinel.viewer.turn.readPrompt') +
+            '</summary><pre class="snt-pre">' +
+            esc(prompt.text) +
+            '</pre></details>'
+          : word('sentinel.viewer.absent.notRecorded')) +
       '</div></div>'
     : '';
   const obs = r.observations
@@ -850,7 +906,7 @@ function reviewHtml(r) {
         '<div class="snt-obs"><h4>' +
         esc(fill('sentinel.viewer.obs.head', { s: o.severity })) +
         '</h4><p>' +
-        esc(o.message) +
+        (biz() ? word('sentinel.viewer.obs.hidden') : esc(o.message)) +
         '</p><div class="snt-row">' +
         (biz()
           ? cnt(o.counts.citations)
@@ -1149,11 +1205,11 @@ function scan(button) {
  * same way the Scan button does — greyed with its reason when it cannot, never a dead click.
  */
 export function sentinelScanDoorHtml() {
-  const why = readOnlyWhy();
-  if (why)
+  const door = doorState({ readOnly: !!readOnlyWhy(), action: lastScanAction });
+  if (!door.on)
     return (
       '<span class="map-tb snt-door" style="margin-right:6px;opacity:.45" aria-disabled="true"' +
-      tipAttrs({ key: 'sys.readonly.control', noFocus: true }) +
+      tipAttrs({ key: door.why, noFocus: true }) +
       '>' +
       word('sentinel.viewer.tool.scan') +
       '</span>'
@@ -1162,7 +1218,7 @@ export function sentinelScanDoorHtml() {
     '<a class="map-tb snt-door" style="margin-right:6px" href="' +
     esc('#/sentinel?do=scan') +
     '"' +
-    tipAttrs({ key: 'sentinel.viewer.scan.door', noFocus: true }) +
+    tipAttrs({ key: door.why, noFocus: true }) +
     '>' +
     word('sentinel.viewer.tool.scan') +
     '</a>'
