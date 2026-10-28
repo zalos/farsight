@@ -9,7 +9,7 @@
 // wrapper → the sandboxed runner) is unchanged byte for byte. Both modes record the same provenance shape. The stage
 // input and provenance use the pipeline contract's agent field names.
 import type { Digest } from '../contracts/index.js';
-import type { AgentMode } from '../contracts/pipeline.js';
+import type { AgentMode, AgentRunnerId as DeclaredRunnerId } from '../contracts/pipeline.js';
 import { createHash } from 'node:crypto';
 import { canonicalDigest } from '../policy/digest.js';
 import { fail } from './providers/errors.js';
@@ -47,8 +47,11 @@ import {
 import { resolveStageInstructions, stagePackDigests, type ResolvedStageInstructions } from './packs.js';
 import { retainedAttemptOf, type RetainedNativeAttempt } from './retained.js';
 
-/** The runners an agent stage can name (the pipeline contract's ids). */
-export type AgentRunnerId = 'copilot-cli' | 'claude-cli' | 'hosted-api';
+/**
+ * The runners Sentinel implements, each one of the pipeline contract's declarable runner ids, so a contract change to
+ * one of them fails this build. A declarable id with no runner here (`ollama`) is not one.
+ */
+export type AgentRunnerId = Extract<DeclaredRunnerId, 'copilot-cli' | 'claude-cli' | 'hosted-api'>;
 export type { AgentMode };
 
 /** The agent stage a runner receives (the `agent` kind of the pipeline's `StageDefinition`, same field names). */
@@ -183,6 +186,11 @@ export interface NativeRunContext {
    * behind the accepted-secret withholding fold. A failure here dispatches nothing.
    */
   readonly retain?: (record: NativeInstructionRecord) => Promise<void>;
+  /**
+   * The pack binding an admitted spec sealed: when given, the packs resolved here must be exactly these (reference and
+   * digest, in order), before the credential probe, any reservation or any launch.
+   */
+  readonly packs?: readonly Readonly<{ ref: string; digest: string }>[];
 }
 export interface AgentRunContext {
   readonly brokered?: BrokeredRunContext;
@@ -287,6 +295,12 @@ async function runNative(
     : Object.freeze({ text: null, skills: Object.freeze([]) });
   // A stage with packs runs only after its exact instruction record is sealed by the caller.
   if (packed && !context.retain) return reviewFail('sentinel.review.instructionsUnsealed');
+  // An admitted spec's packs are its own: a trust folder that now resolves other bytes refuses here.
+  if (context.packs && canonicalDigest(stagePackDigests(resolved)) !== canonicalDigest(context.packs))
+    return reviewFail(
+      'sentinel.review.packChanged',
+      'the trust folder resolves other pack bytes than the admitted spec sealed',
+    );
   const paths = inputs.map((f) => safeInputPath(f.relativePath));
   if (new Set(paths).size !== paths.length || !paths.length)
     fail('sentinel.provider.invalidProfile', 'a native stage reads distinct inputs');
@@ -667,6 +681,9 @@ const RUNNERS = new Map<string, AgentRunner>([
   [CLAUDE_RUNNER.id, CLAUDE_RUNNER],
   [HTTP_API_RUNNER.id, HTTP_API_RUNNER],
 ]);
+/** Whether an adopted pin runs its own loop: a native-mode profile runs native agent stages only. */
+export const pinRunsNative = (binding: ProviderBinding): boolean =>
+  providerKind(binding.kind).cli?.mode(binding) === 'native';
 /** Every runner, in a fixed order. */
 export const AGENT_RUNNERS: readonly AgentRunner[] = Object.freeze([COPILOT_RUNNER, CLAUDE_RUNNER, HTTP_API_RUNNER]);
 /** The runner a stage names; an unknown runner is refused, never defaulted. */

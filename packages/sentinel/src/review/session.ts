@@ -38,6 +38,7 @@ import {
 } from './evidence.js';
 import { reviewFail, type ReviewFrontierCode } from './errors.js';
 import type { ReviewRequestEnvelope, ReviewProviderSelection, NativeReviewWire } from '../contracts/instructions.js';
+import type { NamedStageOutput } from '../contracts/pipeline.js';
 import {
   instructionManifest,
   renderedInstructions,
@@ -120,6 +121,25 @@ export interface SessionSpec {
   readonly tools: readonly ToolRequest['action'][];
   /** The promoted pack references the prompt and skills came from, with the digest each resolved to. */
   readonly packs?: readonly Readonly<{ ref: string; digest: string }>[];
+  /**
+   * Present when the review runs in native mode: the CLI's own loop over the scope's files, under this stage's
+   * instructions, skills, output schema and budget (`review/runner.ts`). Absent, the review is a brokered session.
+   */
+  readonly native?: NativeReviewStage;
+}
+
+/** What a native review runs: one agent stage's declaration, as its spec seals it. */
+export interface NativeReviewStage {
+  /** The declared agent stage the review belongs to. */
+  readonly stage: string;
+  readonly runner: import('./runner.js').AgentRunnerId;
+  /** The instructions file the CLI reads, by pack reference; absent means the bundled native instructions. */
+  readonly instructions?: string;
+  /** Ordered skill pack references. */
+  readonly skills?: readonly string[];
+  /** The one named output, validated against its schema before publication. */
+  readonly produces: readonly Readonly<NamedStageOutput>[];
+  readonly budget: Readonly<{ turns: number; tokens: number; seconds: number; usd?: string }>;
 }
 
 export type OperationRecord = ReviewOperation;
@@ -210,6 +230,7 @@ export function specDigest(spec: SessionSpec): Digest {
         }
       : {}),
     ...(spec.packs?.length ? { packs: spec.packs.map((p) => ({ ref: p.ref, digest: p.digest })) } : {}),
+    ...(spec.native ? { native: spec.native } : {}),
   }) as Digest;
 }
 
