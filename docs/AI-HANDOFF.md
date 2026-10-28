@@ -49,6 +49,27 @@ pnpm purge flag for existing worktrees. Root formatting ignores are anchored; Cl
 leaving 319 suppressions across 179 files. Formatting/lint and all 244 script tests passed again. The collector fix is
 tracked in [#200](https://github.com/zalos/farsight/issues/200); npm with ESLint 8/9 remains an unverified case.
 
+## Sentinel v2 proposal — 2026-10-23
+
+The owner reviewed the closeout and the shipped Sentinel and found three problems: the UI is bottom-up (a companion
+page in an iframe organised around coordinator objects), nothing is configurable (stages derived from promoted rules,
+no host scripts, no typed stage-to-stage inputs, prompt bundled, one model binding per run), and the code is scattered
+and dense (18 of 20 folders in one import cycle, 14.8 % of files minified-style, no formatter or linter). Four read-only
+audits on `e85e2382` (architecture, UX, execution model, tooling) ground the new direction in
+[docs/proposals/sentinel-v2/README.md](proposals/sentinel-v2/README.md): a declared pipeline of `builtin · tool · script ·
+agent` stages with typed inputs and outputs in `.farsight/sentinel/pipeline.json`, two agent modes (brokered, native)
+over Claude CLI and Copilot CLI with hosted APIs behind a flag, a five-stop top-down surface (SCANS · PIPELINE · STAGE ·
+ENTRY POINTS · PATH) in the viewer shell, and an eight-layer architecture behind a `SentinelService` facade. Six mocks
+are in `proposals/sentinel-v2/mocks/` (rendered from the invoice-app example; `node docs/proposals/sentinel-v2/mocks/build.mjs`
+re-renders them). The work breakdown is [tasks.md](proposals/sentinel-v2/tasks.md): phase 0 formats and lints the repo
+with no functional change (Prettier 3.9.10 at 120 columns, ESLint 10 flat config with frozen suppressions, lefthook 2.2.2
+with no LFS hook names and `no_auto_install`, a CI `lint` job, an AST-equivalence proof in
+[tooling.md](proposals/sentinel-v2/tooling.md)), then the carve (phase 1), the declared pipeline (2), the surface (3),
+the runners (4), the deferred release (5). Nine owner decisions are listed at the end of tasks.md; none of the phases
+has started. Branch `docs/sentinel-v2-plan` in `../farsight-wt/sentinel-v2-plan`; documentation only, no build, test,
+ingest or server change; the primary checkout is untouched.
+
+
 ## Sentinel session closeout — 2026-10-23
 
 The current recap, owner decisions, open issues and ordered release plan are at the repository root:
