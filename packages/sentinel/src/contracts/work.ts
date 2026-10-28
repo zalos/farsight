@@ -1,7 +1,22 @@
 import type { ArtifactId, CatalogKey, Count, Digest, Id, Ordinal, Timestamp, WorkRef } from './common.js';
 
-/** Who implements a stage. An agentic stage never inherits a deterministic stage's provenance. */
-export type StageKind = 'coded' | 'agentic' | 'external-tool';
+/**
+ * Who implements a stage. An agentic stage never inherits a deterministic stage's provenance. A `script` is an
+ * owner-promoted entry file run on the host or in a pinned script-runner container (a pipeline's `script` kind).
+ */
+export type StageKind = 'coded' | 'agentic' | 'external-tool' | 'script';
+
+/** Every state a work revision can be in. A stage run's state is one of these too. */
+export type WorkState =
+  | 'pending'
+  | 'ready'
+  | 'published'
+  | 'failed'
+  | 'running'
+  | 'leased'
+  | 'blocked'
+  | 'disabled-by-policy'
+  | 'satisfied-by-reuse';
 
 export interface StageRef {
   /** @maxLength 128 */

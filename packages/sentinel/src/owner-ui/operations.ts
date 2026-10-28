@@ -168,14 +168,20 @@ export class OwnerUiOperations {
                         : op === 'owner-ui.scans'
                           ? []
                           : op === 'owner-ui.scan'
-                            ? ['number']
+                            ? ['runId']
                             : op === 'owner-ui.stage'
-                              ? ['number', 'stage']
-                              : op === 'owner-ui.scan-report'
-                                ? ['number', 'format']
-                                : null;
+                              ? ['runId', 'stage']
+                              : op === 'owner-ui.unit'
+                                ? ['runId', 'stage', 'unit']
+                                : op === 'owner-ui.scan-report'
+                                  ? ['runId', 'format']
+                                  : null;
     if (!base) throw new OwnerUiError();
-    const f = bodyFields(body, ['proof', 'revision', ...base], op === 'owner-ui.preview' ? ['parentId'] : []);
+    const f = bodyFields(
+      body,
+      ['proof', 'revision', ...base],
+      op === 'owner-ui.preview' ? ['parentId'] : op === 'owner-ui.scans' ? ['before'] : [],
+    );
     if (typeof f.proof !== 'string' || !/^([a-f0-9]{64})$/.test(f.proof) || !Number.isSafeInteger(f.revision))
       throw new OwnerUiError();
     if (op === 'owner-ui.runs' || op === 'owner-ui.select' || op === 'owner-ui.process')
@@ -189,19 +195,26 @@ export class OwnerUiOperations {
       });
     // The viewer's read model (transport/http/): read-only, under the same paired proof and view revision as every
     // other read here, and never an action; a report is rendered through the existing retained report delivery.
-    if (op === 'owner-ui.scans' || op === 'owner-ui.scan' || op === 'owner-ui.stage')
+    if (op === 'owner-ui.scans' || op === 'owner-ui.scan' || op === 'owner-ui.stage' || op === 'owner-ui.unit')
       return this.#authority.with<unknown>(f.proof, f.revision, null, () => {
         const proof = activeOwnerUiProof()!;
         return op === 'owner-ui.scans'
-          ? this.#scans.scans(proof, context.signal)
+          ? this.#scans.scans(proof, f.before ?? null, context.signal)
           : op === 'owner-ui.scan'
-            ? this.#scans.scan(proof, f.number, context.signal)
-            : this.#scans.stage(proof, f.number, f.stage, context.signal);
+            ? this.#scans.scan(proof, runId(f.runId), context.signal)
+            : op === 'owner-ui.stage'
+              ? this.#scans.stage(proof, runId(f.runId), f.stage, context.signal)
+              : this.#scans.unit(proof, runId(f.runId), f.stage, f.unit, context.signal);
       });
     if (op === 'owner-ui.scan-report')
       return this.#authority.with<unknown>(f.proof, f.revision, null, async () => {
-        const named = this.#scans.reportRun(activeOwnerUiProof()!, f.number, f.format);
-        const delivery = (await this.#handle('report.open', named, by, context)) as {
+        const named = this.#scans.reportRun(activeOwnerUiProof()!, runId(f.runId), f.format);
+        const delivery = (await this.#handle(
+          'report.open',
+          { runId: named.runId, format: named.format },
+          by,
+          context,
+        )) as {
           deliveryId: string;
           format: string;
           formatDigest: string;
@@ -213,6 +226,7 @@ export class OwnerUiOperations {
           format: delivery.format,
           formatDigest: delivery.formatDigest,
           formatBytes: delivery.formatBytes,
+          number: named.number,
         };
       });
     if (op === 'owner-ui.review-capabilities')

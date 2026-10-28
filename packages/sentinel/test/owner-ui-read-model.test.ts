@@ -6,17 +6,23 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { STRINGS } from '@farsight/core/dist/strings.js';
+import { countedProblems } from '@farsight/core/dist/counts.js';
 import {
   costOf,
+  outputView,
   replyOf,
   scanAnswer,
   scansAnswer,
   scanRow,
+  scrubArgv,
   sentOf,
   stageAnswer,
   stageName,
+  unitAnswer,
+  READ_MODEL_LIMITS,
   READ_MODEL_SCHEMAS,
   type AttemptRecord,
+  type InvocationRecordView,
   type ScanRecord,
   type UnitRecord,
 } from '../dist/transport/http/read-model.js';
@@ -24,14 +30,20 @@ import { corsHeaders, preflightHeaders, readRoute, routeOperation } from '../dis
 import { needsStore } from './snapshot-helpers.ts';
 import { by, completedPreviewScan, completedReviewScan } from './helpers/read-model-fixture.ts';
 
-/** Every Counted anywhere in a value: words in the catalog, a breakdown that sums, `n` within `of`. */
+/**
+ * Every Counted anywhere in a value passes core's own countedProblems (catalog words with {n}, a scope in
+ * COUNT_SCOPES, `{m}` when it carries `of`, a breakdown that sums), and every measure names a catalog scope.
+ */
 function assertCountsSound(value: unknown, path = '$'): number {
   let seen = 0;
   if (Array.isArray(value)) value.forEach((v, i) => (seen += assertCountsSound(v, `${path}[${i}]`)));
   else if (value && typeof value === 'object') {
     const v = value as Record<string, any>;
+    if ((typeof v.ms === 'number' || typeof v.value === 'number' || 'basis' in v) && typeof v.scope === 'string')
+      assert.ok(Object.hasOwn(STRINGS, v.scope), `${path}: measure scope ${v.scope} is not in the catalog`);
     if (typeof v.n === 'number' && typeof v.unit === 'string' && typeof v.scope === 'string') {
       seen++;
+      assert.deepEqual(countedProblems(v as any, path), [], path);
       assert.ok(Number.isSafeInteger(v.n) && v.n >= 0, `${path}.n`);
       for (const k of [v.unit, v.bizUnit, v.scope].filter(Boolean))
         assert.ok(Object.hasOwn(STRINGS, k), `${path}: ${k} is not in the catalog`);
@@ -51,9 +63,14 @@ function assertCountsSound(value: unknown, path = '$'): number {
   return seen;
 }
 
-/** No ledger id or artifact handle in an answer: a scan is a number, a stage its contract. */
-function assertNoLedgerIds(value: unknown) {
-  const text = JSON.stringify(value);
+/**
+ * No ledger id or artifact handle in an answer but the run ids that address scans: a stage is its contract, a check
+ * or review its place in the stage.
+ */
+function assertNoLedgerIds(value: unknown, runIds: readonly string[] = []) {
+  // Retained text (an output, an exchange, a prompt) is the record as kept, verbatim; the answer's own fields are not.
+  let text = JSON.stringify(value, (k, v) => (k === 'text' && typeof v === 'string' ? '<retained>' : v));
+  for (const id of runIds) text = text.split(id).join('<run>');
   for (const pattern of [
     /run-[0-9a-f]{8}/,
     /work-[a-z]+-[0-9a-f]{8}/,
@@ -75,6 +92,21 @@ const attempt = (over: Partial<AttemptRecord> = {}): AttemptRecord => ({
   error: null,
   ...over,
 });
+const out = (schema: string, privacy: 'metadata' | 'source-derived' | 'source' = 'source-derived', bytes = 120) => ({
+  schema,
+  privacy,
+  bytes,
+});
+const gitleaksInvocation: InvocationRecordView = {
+  attempt: 1,
+  adapter: { id: 'secrets-gitleaks', version: '8.30.1', digest: 'sha256:' + '1'.repeat(64) },
+  isolation: 'container',
+  operation: null,
+  image: { reference: 'ghcr.io/example/gitleaks:8.30.1', id: 'sha256:' + '2'.repeat(64), architecture: 'arm64' },
+  argv: ['/bin/sh', '/input/' + '4'.repeat(64)],
+  environmentNames: ['HOME', 'SENTINEL_INPUT'],
+  limits: { memoryBytes: 536870912, cpus: 1.5, pids: 64, timeoutMs: 120000 },
+};
 const unit = (key: string, stage: string, over: Partial<UnitRecord> = {}): UnitRecord => ({
   key,
   planRevision: 1,
@@ -90,18 +122,26 @@ const unit = (key: string, stage: string, over: Partial<UnitRecord> = {}): UnitR
   review: null,
   work: { state: 'published', reason: null, kind: 'coded', deadlineMs: 120000, reusedFrom: null },
   attempts: [attempt()],
-  outputs: ['application/json'],
+  outputs: [out('application/json')],
+  reviewed: null,
   ...over,
 });
 function synthetic(over: Partial<ScanRecord> = {}): ScanRecord {
-  const capture = unit('c#1', 'capture', { outputs: ['sentinel-bootstrap-capture/draft-1'] });
-  const parse = unit('p#1', 'parse', { dependencies: ['c#1'], outputs: ['sentinel-parser-result/draft-1'] });
+  const capture = unit('c#1', 'capture', {
+    outputs: [out('sentinel-bootstrap-capture/draft-1')],
+    invocation: { absent: 'sentinel.viewer.invocation.none' },
+  });
+  const parse = unit('p#1', 'parse', {
+    dependencies: ['c#1'],
+    outputs: [out('sentinel-parser-result/draft-1'), out('farsight-analysis', 'source', 4096)],
+  });
   const inventory = unit('i#1', 'inventory', {
     dependencies: ['p#1'],
-    outputs: ['sentinel-bootstrap-inventory/draft-1'],
+    outputs: [out('sentinel-bootstrap-inventory/draft-1')],
   });
-  const check = (key: string, adapter: string, scope: string) =>
+  const check = (key: string, adapter: string, scope: string, invocation?: InvocationRecordView) =>
     unit(key, 'check', {
+      ...(invocation ? { invocation } : {}),
       planRevision: 2,
       contract: `sentinel.stage.check.${adapter}`,
       adapterId: adapter,
@@ -111,7 +151,7 @@ function synthetic(over: Partial<ScanRecord> = {}): ScanRecord {
       inputs: 1,
       work: { state: 'published', reason: null, kind: 'external-tool', deadlineMs: 120000, reusedFrom: null },
       attempts: [attempt({ worker: 'container' })],
-      outputs: ['sentinel-driver-finding/draft-1', 'sentinel-coverage/draft-1'],
+      outputs: [out('sentinel-driver-finding/draft-1'), out('sentinel-coverage/draft-1')],
     });
   const review = unit('r#2', 'review-general', {
     planRevision: 2,
@@ -121,17 +161,20 @@ function synthetic(over: Partial<ScanRecord> = {}): ScanRecord {
     scopes: ['workspace'],
     inputs: 2,
     review: { providerId: 'local-review', modelId: 'review' },
+    reviewed: { kind: 'files' },
+    inputPaths: ['src/a.ts', 'src/b.ts'],
     work: { state: 'published', reason: null, kind: 'agentic', deadlineMs: 120000, reusedFrom: null },
     attempts: [
       attempt({
         usage: { certainty: 'confirmed', inputTokens: 80, outputTokens: 6, monetaryCost: '0.0048', currency: 'USD' },
       }),
     ],
-    outputs: ['sentinel-review-record/draft-1', 'sentinel-observation/draft-1'],
+    outputs: [out('sentinel-review-record/draft-1'), out('sentinel-observation/draft-1')],
   });
   return {
+    id: 'run-synthetic-three',
     number: 3,
-    parentNumber: null,
+    parent: null,
     state: 'completed',
     outcome: 'complete-coverage',
     createdAt: '2026-10-27T10:00:00.000Z',
@@ -144,19 +187,13 @@ function synthetic(over: Partial<ScanRecord> = {}): ScanRecord {
       capture,
       parse,
       inventory,
-      check('g#2', 'secrets-gitleaks', 'src/a.ts'),
+      check('g#2', 'secrets-gitleaks', 'src/a.ts', gitleaksInvocation),
       check('s#2', 'pattern-semgrep', 'src/b.ts'),
       review,
     ],
     adapters: {
-      'secrets-gitleaks': {
-        version: '8.30.1',
-        kind: 'external',
-        image: 'ghcr.io/example/gitleaks@sha256:' + '2'.repeat(64),
-        command: ['gitleaks', 'dir'],
-        registry: 'current',
-      },
-      'pattern-semgrep': { version: null, kind: 'external', image: null, command: null, registry: 'changed' },
+      'secrets-gitleaks': { version: '8.30.1', kind: 'external', registry: 'current' },
+      'pattern-semgrep': { version: null, kind: 'external', registry: 'changed' },
     },
     report: {
       findings: {
@@ -170,12 +207,6 @@ function synthetic(over: Partial<ScanRecord> = {}): ScanRecord {
         n: 1,
         of: 4,
         unit: 'sentinel.count.seenByNoStage',
-        scope: 'sentinel.scope.inventory',
-        source: 'sentinel report fold draft-1',
-      },
-      unknownScopeBoundaries: {
-        n: 0,
-        unit: 'sentinel.count.unknownBoundaries',
         scope: 'sentinel.scope.inventory',
         source: 'sentinel report fold draft-1',
       },
@@ -262,10 +293,19 @@ test('the fold draws parallel stages on one level, counts that sum and provenanc
   const secrets = answer.stages[3]!,
     patterns = answer.stages[4]!,
     review = answer.stages[5]!;
-  assert.equal(secrets.provenance.image, 'ghcr.io/example/gitleaks@sha256:' + '2'.repeat(64));
+  // What ran is the try's own invocation record, never today's registry.
+  assert.deepEqual(secrets.provenance.invocation!.image, gitleaksInvocation.image);
+  assert.deepEqual(secrets.provenance.invocation!.argv, gitleaksInvocation.argv, 'container paths are its own');
+  assert.equal(secrets.provenance.implementation.version, '8.30.1');
+  assert.equal(secrets.provenance.implementation.versionFrom, 'invocation');
+  assert.equal(secrets.provenance.invocation!.limits.memory.n, 536870912);
+  assert.equal(secrets.provenance.invocation!.limits.cpus.value, 1.5);
   assert.equal(secrets.provenance.where, 'container');
   assert.equal(patterns.provenance.implementation.registry, 'changed');
   assert.equal(patterns.provenance.implementation.version, null, 'a changed adapter never lends its version');
+  assert.equal(patterns.provenance.invocation, null);
+  assert.equal(patterns.provenance.invocationAbsent, 'sentinel.viewer.invocation.notRead');
+  assert.equal(answer.stages[0]!.provenance.invocationAbsent, 'sentinel.viewer.invocation.none');
   assert.equal(secrets.counts.findings!.n + patterns.counts.findings!.n, answer.scan.counts.findings!.n);
   assert.equal(review.provenance.where, 'provider');
   assert.deepEqual(review.provenance.provider, { id: 'local-review', model: 'review' });
@@ -287,8 +327,12 @@ test('the fold draws parallel stages on one level, counts that sum and provenanc
     scope: 'sentinel.viewer.scope.scan',
     source: 'sentinel viewer read model draft-1 · attempt usage',
   });
-  // Report counts are the report's own objects, never refolded here.
+  // Report counts are the report's own objects, never refolded here; the disputed one is not shown as one fact.
   assert.equal(answer.scan.counts.seenByNoStage!.source, 'sentinel report fold draft-1');
+  assert.equal(answer.scan.counts.unknownScopeBoundaries, null);
+  assert.equal(answer.scan.absent.unknownScopeBoundaries, 'sentinel.viewer.absent.foldsDisagree');
+  assert.equal(answer.scan.id, 'run-synthetic-three');
+  assert.equal(answer.scan.source!.sources.n, 1);
   assert.ok(assertCountsSound(answer) > 20);
   assert.doesNotMatch(JSON.stringify(answer), /"c#1"|"g#2"|"r#2"/, 'internal unit keys never leave the fold');
 });
@@ -297,7 +341,10 @@ test('the stage answer reads turns by the closed grammar and never the evidence 
   const answer = stageAnswer('example-app', synthetic(), 'sentinel.stage.review.general')!;
   assert.equal(answer.prompt!.text, 'You are reviewing.');
   const [first, second] = answer.units[0]!.review!.turns;
-  assert.deepEqual(first!.sent, { key: 'sentinel.viewer.turn.task', files: 2 });
+  assert.equal(first!.sent!.key, 'sentinel.viewer.turn.task');
+  assert.equal(first!.sent!.files!.n, 2);
+  assert.equal(first!.counts.inputBytes!.n, 100);
+  assert.equal(first!.text, undefined, 'a stage list carries no exchange text');
   assert.deepEqual(first!.reply, { key: 'sentinel.viewer.turn.read', path: 'src/a.ts', lines: [1, 2] });
   assert.deepEqual(second!.sent, {
     key: 'sentinel.viewer.turn.toolResult',
@@ -306,13 +353,18 @@ test('the stage answer reads turns by the closed grammar and never the evidence 
     path: 'src/a.ts',
     lines: [1, 2],
   });
-  assert.deepEqual(second!.reply, { key: 'sentinel.viewer.turn.final', verdict: 'finding', claims: 1 });
+  assert.equal(second!.reply!.key, 'sentinel.viewer.turn.final');
+  assert.equal(second!.reply!.verdict, 'finding');
+  assert.equal(second!.reply!.claims!.n, 1);
+  assert.deepEqual(answer.units[0]!.reviewed!.kind, 'files');
   assert.doesNotMatch(JSON.stringify(answer), /SECRET-LOOKING/);
   assert.equal(answer.units[0]!.review!.observations[0]!.message, 'withTx opens no transaction.');
   assert.equal(stageAnswer('example-app', synthetic(), 'sentinel.stage.absent'), null);
   const check = stageAnswer('example-app', synthetic(), 'sentinel.stage.check.secrets-gitleaks')!;
   assert.equal(check.units[0]!.label, 'src/a.ts');
+  assert.equal(check.units[0]!.counts.files.n, 1);
   assert.equal(check.units[0]!.review, null);
+  assert.equal(check.units[0]!.reviewed, null);
   assertCountsSound(answer);
 });
 
@@ -325,7 +377,7 @@ test('a secret match withholds every file name, prompt and model text, and keeps
   assert.equal(pipeline.scan.counts.modelObservations, null);
   assert.equal(pipeline.scan.absent.modelObservations, 'sentinel.viewer.absent.withheld');
   assert.equal(stage.units[0]!.label, null);
-  assert.equal(stage.units[0]!.files, 1);
+  assert.equal(stage.units[0]!.counts.files.n, 1);
   assert.equal(review.prompt, null);
   assert.equal(review.units[0]!.review, null);
   for (const text of ['src/a.ts', 'src/b.ts', 'withTx', 'You are reviewing'])
@@ -415,38 +467,155 @@ test('states, costs and absences are said, never shown as zero', () => {
     'sentinel.stage.review.general',
   )!;
   assert.deepEqual(failed.units[0]!.review!.turns[0]!.reply, { key: 'sentinel.viewer.turn.failed' });
-  const list = scansAnswer('example-app', [scanRow(synthetic())], false);
-  assert.equal(list.counts.scans.n, 1);
+  const list = scansAnswer('example-app', [scanRow(synthetic())], { total: 3, before: null });
+  assert.equal(list.counts.scans.n, 3);
+  assert.equal(list.counts.shown.n, 1);
+  assert.equal(list.counts.shown.of, 3);
+  assert.deepEqual(list.page, { before: null, older: 3 }, 'the next older page is below the oldest number listed');
+  assert.equal(list.more, true);
+  const first = scansAnswer('example-app', [scanRow(synthetic({ number: 1 }))], { total: 3, before: 2 });
+  assert.deepEqual(first.page, { before: 2, older: null });
+  assert.equal(first.more, false);
   assert.equal(list.readOnly, true);
   assertCountsSound(list);
 });
 
+test('an opened check or review carries what ran, its retained outputs and the exchange words, bounded', () => {
+  const scan = synthetic();
+  const big = 'x'.repeat(READ_MODEL_LIMITS.outputChars + 10);
+  const detail = {
+    invocation: gitleaksInvocation,
+    outputs: [
+      { ...out('sentinel-driver-finding/draft-1'), text: '{"rule":"aws-key","line":3}', reason: null },
+      { ...out('application/json'), text: big, reason: null },
+      { ...out('farsight-analysis', 'source'), text: 'export const source = 1;', reason: null },
+      { ...out('application/octet-stream'), text: null, reason: 'sentinel.viewer.raw.binary' },
+    ],
+  };
+  const opened = unitAnswer('example-app', scan, 'sentinel.stage.check.secrets-gitleaks', 1, detail)!;
+  assert.equal(opened.schema, READ_MODEL_SCHEMAS.unit);
+  assert.equal(opened.invocation!.image!.architecture, 'arm64');
+  assert.equal(opened.outputs[0]!.text, '{"rule":"aws-key","line":3}');
+  assert.equal(opened.outputs[0]!.key, 'sentinel.viewer.io.findings');
+  assert.equal(opened.outputs[0]!.size!.n, 120);
+  assert.equal(opened.outputs[1]!.text!.length, READ_MODEL_LIMITS.outputChars);
+  assert.equal(opened.outputs[1]!.truncated, true);
+  assert.equal(opened.outputs[2]!.text, null, 'the source itself is never streamed here');
+  assert.equal(opened.outputs[2]!.withheld, 'sentinel.viewer.raw.source');
+  assert.equal(opened.outputs[3]!.withheld, 'sentinel.viewer.raw.binary');
+  assert.equal(unitAnswer('example-app', scan, 'sentinel.stage.check.secrets-gitleaks', 2, detail), null);
+  assertCountsSound(opened);
+  // A review opened: each exchange's retained words, bounded, beside the closed-grammar reading.
+  const review = unitAnswer('example-app', scan, 'sentinel.stage.review.general', 1, {
+    invocation: null,
+    outputs: [],
+  })!;
+  const [first, second] = review.unit.review!.turns;
+  assert.equal(first!.text!.sent!.text, '{"task":"general review","files":["src/a.ts","src/b.ts"]}');
+  assert.equal(first!.text!.reply!.text, '{"action":"read","path":"src/a.ts","startLine":1,"endLine":2}');
+  assert.match(second!.text!.sent!.text, /SECRET-LOOKING TEXT/, 'the owner reads the served evidence when opened');
+  assert.equal(second!.text!.reply, null, 'the final reply is the verdict and observations');
+  assert.equal(review.invocationAbsent, 'sentinel.viewer.where.notYet');
+  const long = synthetic();
+  const trace = long.review.units[0]!;
+  const longer = unitAnswer(
+    'example-app',
+    {
+      ...long,
+      review: { status: 'available', units: [{ ...trace, turns: [{ ...trace.turns[0]!, sent: 'y'.repeat(5000) }] }] },
+    },
+    'sentinel.stage.review.general',
+    1,
+    { invocation: null, outputs: [] },
+  )!;
+  assert.equal(longer.unit.review!.turns[0]!.text!.sent!.text.length, READ_MODEL_LIMITS.turnChars);
+  assert.equal(longer.unit.review!.turns[0]!.text!.sent!.truncated, true);
+  // A secret match withholds every output's text and every message, and keeps the numbers.
+  const withheld = synthetic({ withheld: true, review: { status: 'withheld', units: [] } });
+  const hidden = unitAnswer('example-app', withheld, 'sentinel.stage.check.secrets-gitleaks', 1, detail)!;
+  assert.ok(hidden.outputs.every((o) => o.text === null && o.withheld === 'sentinel.viewer.absent.withheld'));
+  assert.equal(hidden.outputs[0]!.size!.n, 120);
+  assert.equal(JSON.stringify(hidden).includes('aws-key'), false);
+  assert.equal(outputView(withheld, detail.outputs[0]!).text, null);
+});
+
+test('argv leaves with no host path and no token in it', () => {
+  const child = scrubArgv(
+    [
+      '/opt/node/bin/node',
+      '--import',
+      'file:///Users/someone/lib/launch-gate.js',
+      '/Users/someone/store/scratch/w-1/input',
+      '--sentinel-token=0123456789abcdef',
+      '--api-key=abcdef',
+      'plain',
+      42,
+    ],
+    'child',
+  );
+  assert.deepEqual(child, [
+    '<host path>',
+    '--import',
+    '<host path>',
+    '<host path>',
+    '--sentinel-token=<redacted>',
+    '--api-key=<redacted>',
+    'plain',
+    '<other>',
+  ]);
+  assert.deepEqual(scrubArgv(['/bin/sh', '/input/abc', '--config=/home/me/x'], 'container'), [
+    '/bin/sh',
+    '/input/abc',
+    '<host path>',
+  ]);
+  assert.equal(scrubArgv(Array(64).fill('a'), 'container').length, READ_MODEL_LIMITS.argvItems);
+});
+
 test('the route table answers GET reads only, from the paired origin only', () => {
-  assert.deepEqual(readRoute('/api/sentinel/scans'), { kind: 'scans' });
-  assert.deepEqual(readRoute('/api/sentinel/scans/12'), { kind: 'scan', number: 12 });
-  assert.deepEqual(readRoute('/api/sentinel/scans/12/stages/sentinel.stage.check.secrets-gitleaks'), {
+  const run = 'run-' + 'a'.repeat(32);
+  assert.deepEqual(readRoute('/api/sentinel/scans'), { kind: 'scans', before: null });
+  assert.deepEqual(readRoute('/api/sentinel/scans/before/12'), { kind: 'scans', before: 12 });
+  assert.deepEqual(readRoute(`/api/sentinel/scans/${run}`), { kind: 'scan', runId: run });
+  assert.deepEqual(readRoute(`/api/sentinel/scans/${run}/stages/sentinel.stage.check.secrets-gitleaks`), {
     kind: 'stage',
-    number: 12,
+    runId: run,
     stage: 'sentinel.stage.check.secrets-gitleaks',
   });
-  assert.deepEqual(readRoute('/api/sentinel/scans/3/report'), { kind: 'report', number: 3, format: 'md' });
-  assert.deepEqual(readRoute('/api/sentinel/scans/3/report/html'), { kind: 'report', number: 3, format: 'html' });
+  assert.deepEqual(readRoute(`/api/sentinel/scans/${run}/stages/sentinel.stage.check.secrets-gitleaks/units/3`), {
+    kind: 'unit',
+    runId: run,
+    stage: 'sentinel.stage.check.secrets-gitleaks',
+    unit: 3,
+  });
+  assert.deepEqual(readRoute(`/api/sentinel/scans/${run}/report`), { kind: 'report', runId: run, format: 'md' });
+  assert.deepEqual(readRoute(`/api/sentinel/scans/${run}/report/html`), { kind: 'report', runId: run, format: 'html' });
   for (const bad of [
-    '/api/sentinel/scans/0',
+    '/api/sentinel/scans/before',
+    '/api/sentinel/scans/before/0',
+    '/api/sentinel/scans/before/x',
     '/api/sentinel/scans/-1',
-    '/api/sentinel/scans/run-0123',
-    '/api/sentinel/scans/1?x=1',
-    '/api/sentinel/scans/1/stages/..%2F..',
-    '/api/sentinel/scans/1/stages/%E0%A4%A',
-    '/api/sentinel/scans/1/report/exe',
+    '/api/sentinel/scans/.hidden',
+    `/api/sentinel/scans/${run}?x=1`,
+    `/api/sentinel/scans/${run}/stages/..%2F..`,
+    `/api/sentinel/scans/${run}/stages/%E0%A4%A`,
+    `/api/sentinel/scans/${run}/stages/x/units/0`,
+    `/api/sentinel/scans/${run}/stages/x/units/a`,
+    `/api/sentinel/scans/${run}/stages/x/other/1`,
+    `/api/sentinel/scans/${run}/report/exe`,
     '/api/sentinel/runs',
     '/api/other',
   ])
     assert.equal(readRoute(bad), null, bad);
-  assert.deepEqual(routeOperation({ kind: 'stage', number: 2, stage: 'x' }), {
+  assert.deepEqual(routeOperation({ kind: 'stage', runId: run, stage: 'x' }), {
     op: 'owner-ui.stage',
-    body: { number: 2, stage: 'x' },
+    body: { runId: run, stage: 'x' },
   });
+  assert.deepEqual(routeOperation({ kind: 'unit', runId: run, stage: 'x', unit: 2 }), {
+    op: 'owner-ui.unit',
+    body: { runId: run, stage: 'x', unit: 2 },
+  });
+  assert.deepEqual(routeOperation({ kind: 'scans', before: null }), { op: 'owner-ui.scans', body: {} });
+  assert.deepEqual(routeOperation({ kind: 'scans', before: 5 }), { op: 'owner-ui.scans', body: { before: 5 } });
   const origin = 'http://127.0.0.1:4500';
   assert.equal(corsHeaders(origin, origin)['access-control-allow-origin'], origin);
   assert.equal(corsHeaders('http://evil.example', origin)['access-control-allow-origin'], undefined);
@@ -467,6 +636,10 @@ test(
     assert.equal(list.schema, READ_MODEL_SCHEMAS.scans);
     assert.equal(list.scans.length, 1);
     assert.equal(list.scans[0].number, 1);
+    assert.equal(list.scans[0].id, f.runId);
+    assert.equal(list.counts.scans.n, 1);
+    assert.deepEqual(list.page, { before: null, older: null });
+    assert.equal((await f.call('owner-ui.scans', { before: 1 })).scans.length, 0);
     assert.equal(list.scans[0].state, 'completed');
     assert.equal(list.scans[0].policy.reasonCode, 'sentinel.service.previewNotCoverage');
     assert.equal(list.scans[0].cost.basis, 'none');
@@ -475,7 +648,7 @@ test(
       { available: true, reasonCode: null },
       'a deterministic scan starts from a browser',
     );
-    const scan = await f.call('owner-ui.scan', { number: 1 });
+    const scan = await f.call('owner-ui.scan', { runId: f.runId });
     assert.deepEqual(
       scan.stages.map((s: any) => [s.name, s.kind, s.status, s.provenance.where]),
       [
@@ -487,6 +660,16 @@ test(
     );
     assert.ok(scan.stages.every((s: any) => s.provenance.implementation.registry === 'current'));
     assert.ok(scan.stages.every((s: any) => /^sha256:[0-9a-f]{64}$/.test(s.provenance.implementation.digest)));
+    // What the preview check ran comes from its try's own authenticated invocation record.
+    const ran = scan.stages[3].provenance;
+    assert.equal(ran.invocation.isolation, 'child');
+    assert.equal(ran.implementation.versionFrom, 'invocation');
+    assert.equal(ran.invocation.adapter.digest, ran.implementation.digest);
+    assert.ok(ran.invocation.argv.includes('<host path>'), 'the host Node and folders are scrubbed');
+    assert.ok(ran.invocation.argv.some((a: string) => a.startsWith('--sentinel-token=<redacted>')));
+    assert.equal(scan.stages[0].provenance.invocation.isolation, 'in-process');
+    assert.equal(scan.stages[0].provenance.invocation.operation, 'capture', "Sentinel's own operation, as recorded");
+    assert.equal(scan.stages[0].provenance.invocation.limits, null);
     assert.equal(scan.stages[3].reads.at(-1).count.n, 1, 'the check read one captured file');
     // The report's numbers are the report's: the same counts report.open prints for this scan.
     const delivered: any = await f.service.handle('report.open', { runId: f.runId, format: 'json' }, by);
@@ -500,26 +683,56 @@ test(
     const doc = JSON.parse(json);
     assert.deepEqual(scan.scan.counts.findings, doc.counts.findings);
     assert.deepEqual(scan.scan.counts.seenByNoStage, doc.counts.seenByNoStage);
-    assert.deepEqual(scan.scan.counts.unknownScopeBoundaries, doc.counts.unknownScopeBoundaries);
-    const stage = await f.call('owner-ui.stage', { number: 1, stage: scan.stages[3].id });
+    assert.equal(scan.scan.counts.unknownScopeBoundaries, null, 'the folds disagree: neither number is shown');
+    assert.equal(scan.scan.absent.unknownScopeBoundaries, 'sentinel.viewer.absent.foldsDisagree');
+    const stage = await f.call('owner-ui.stage', { runId: f.runId, stage: scan.stages[3].id });
     assert.equal(stage.units.length, 1);
     assert.equal(stage.units[0].label, 'src/one.ts');
     assert.equal(stage.units[0].attempts[0].accepted, true);
-    const report = await f.call('owner-ui.scan-report', { number: 1, format: 'md' });
-    assert.match(report.formatDigest, /^sha256:[0-9a-f]{64}$/);
-    assert.deepEqual(Object.keys(report).sort(), ['deliveryId', 'format', 'formatBytes', 'formatDigest']);
-    await assert.rejects(f.call('owner-ui.scan', { number: 2 }), (e: any) => e.code === 'sentinel.viewer.scanUnknown');
-    await assert.rejects(f.call('owner-ui.scan', { number: 'run-1' }));
+    // One check opened: its retained outputs, as text when they are text and not the source itself.
+    const opened = await f.call('owner-ui.unit', { runId: f.runId, stage: scan.stages[3].id, unit: 1 });
+    assert.equal(opened.schema, READ_MODEL_SCHEMAS.unit);
+    assert.equal(opened.invocation.isolation, 'child');
+    assert.ok(opened.outputs.length > 0);
+    const findings = opened.outputs.find((o: any) => o.text?.includes('sentinel-preview-findings/draft-1'));
+    assert.ok(findings, "the preview check's own findings document, as it was kept");
+    assert.equal(findings.size.n, Buffer.byteLength(findings.text));
+    assert.equal(findings.truncated, false);
+    const parse = await f.call('owner-ui.unit', { runId: f.runId, stage: scan.stages[1].id, unit: 1 });
+    assert.equal(parse.invocation.operation, 'parse');
+    // The parsed source itself is linked from the parser's result, never one of its outputs, and never streamed.
+    assert.deepEqual(
+      parse.outputs.map((o: any) => [o.schema, o.privacy]),
+      [['sentinel-parser-result/draft-1', 'source-derived']],
+    );
+    assert.ok(parse.outputs.every((o: any) => o.privacy !== 'source' || o.text === null));
+    for (const answer of [opened, parse])
+      for (const host of [f.ws.path, f.store.storePath, process.execPath])
+        assert.equal(JSON.stringify(answer).includes(host), false, 'no host path leaves: ' + host);
     await assert.rejects(
-      f.call('owner-ui.stage', { number: 1, stage: 'sentinel.stage.absent' }),
+      f.call('owner-ui.unit', { runId: f.runId, stage: scan.stages[3].id, unit: 2 }),
+      (e: any) => e.code === 'sentinel.viewer.unitUnknown',
+    );
+    const report = await f.call('owner-ui.scan-report', { runId: f.runId, format: 'md' });
+    assert.match(report.formatDigest, /^sha256:[0-9a-f]{64}$/);
+    assert.deepEqual(Object.keys(report).sort(), ['deliveryId', 'format', 'formatBytes', 'formatDigest', 'number']);
+    assert.equal(report.number, 1);
+    await assert.rejects(
+      f.call('owner-ui.scan', { runId: 'run-' + '0'.repeat(32) }),
+      (e: any) => e.code === 'sentinel.viewer.scanUnknown',
+    );
+    await assert.rejects(f.call('owner-ui.scan', { number: 1 }), 'a display number is not an address');
+    await assert.rejects(f.call('owner-ui.scan', { runId: '../x' }));
+    await assert.rejects(
+      f.call('owner-ui.stage', { runId: f.runId, stage: 'sentinel.stage.absent' }),
       (e: any) => e.code === 'sentinel.viewer.stageUnknown',
     );
     await assert.rejects(f.call('owner-ui.scans', { extra: 1 }));
     // A read is not authority: an unpaired proof reads nothing.
     await assert.rejects(f.service.handle('owner-ui.scans', { proof: 'e'.repeat(64), revision: 1 }, by));
     assert.equal(f.store.ledger.currentSequence(), sequence, 'reading wrote nothing');
-    for (const answer of [list, scan, stage]) {
-      assertNoLedgerIds(answer);
+    for (const answer of [list, scan, stage, opened, parse]) {
+      assertNoLedgerIds(answer, [f.runId]);
       assert.ok(assertCountsSound(answer) > 0);
     }
   },
@@ -535,7 +748,7 @@ test(
       { available: false, reasonCode: 'sentinel.review.foregroundRequired' },
       'a configured model stage is refused from a browser, said before a press',
     );
-    const scan = await f.call('owner-ui.scan', { number: 1 });
+    const scan = await f.call('owner-ui.scan', { runId: f.runId });
     const agents = scan.stages.filter((s: any) => s.kind === 'agent');
     assert.equal(agents.length, 2);
     assert.equal(scan.scan.counts.agentic.n, 2);
@@ -556,7 +769,7 @@ test(
       assert.equal(stage.cost.basis, 'recorded');
     }
     const general = agents.find((s: any) => s.name === 'sentinel.viewer.stage.reviewGeneral');
-    const stage = await f.call('owner-ui.stage', { number: 1, stage: general.id });
+    const stage = await f.call('owner-ui.stage', { runId: f.runId, stage: general.id });
     assert.match(stage.prompt.text, /You are reviewing/);
     const review = stage.units[0].review;
     assert.equal(review.verdict, 'finding');
@@ -570,9 +783,21 @@ test(
     assert.equal(review.turns[0].reply.path, 'src/original.ts');
     assert.equal(review.observations[0].message, 'Original fixture review candidate.');
     assert.equal(review.observations[0].citations[0].path, 'src/original.ts');
-    assert.doesNotMatch(JSON.stringify(stage), /export const original/, 'the served evidence text is never copied');
-    for (const answer of [scan, stage]) {
-      assertNoLedgerIds(answer);
+    assert.doesNotMatch(JSON.stringify(stage), /export const original/, 'a stage list never copies served text');
+    assert.equal(stage.units[0].reviewed.kind, 'files');
+    // One review opened: every exchange's retained words, bounded, for the paired owner only.
+    const opened = await f.call('owner-ui.unit', { runId: f.runId, stage: general.id, unit: 1 });
+    const words = opened.unit.review.turns;
+    assert.match(words[0].text.sent.text, /"task"/);
+    assert.match(words[0].text.reply.text, /"action":"read"/, "the model's own intermediate reply");
+    assert.match(words[1].text.sent.text, /export const original/, 'what Sentinel served, as retained');
+    assert.equal(opened.disclosure, 'owner-private');
+    const guided = agents.find((s: any) => s.name === 'sentinel.viewer.stage.reviewGuided');
+    const rule = (await f.call('owner-ui.stage', { runId: f.runId, stage: guided.id })).units[0].reviewed;
+    assert.equal(rule.kind, 'rule', 'a guided review names the rule it reviewed');
+    assert.match(rule.rule, /^sentinel\./);
+    for (const answer of [scan, stage, opened]) {
+      assertNoLedgerIds(answer, [f.runId]);
       assertCountsSound(answer);
     }
   },

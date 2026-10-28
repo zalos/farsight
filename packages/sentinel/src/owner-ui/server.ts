@@ -175,6 +175,7 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
     'sentinel.viewer.readOnly': 405,
     'sentinel.viewer.scanUnknown': 404,
     'sentinel.viewer.stageUnknown': 404,
+    'sentinel.viewer.unitUnknown': 404,
     'sentinel.viewer.absent.notFinished': 409,
   };
   async function readModel(
@@ -232,7 +233,7 @@ export async function startOwnerUi(ws: Workspace, farsightOrigin: string) {
         throw new OwnerUiError('sentinel.service.deliveryInvalid');
       res.writeHead(200, {
         'content-type': REPORT_MEDIA[route.format],
-        'content-disposition': `attachment; filename="sentinel-scan-${route.number}.${route.format === 'sarif' ? 'sarif.json' : route.format}"`,
+        'content-disposition': `attachment; filename="sentinel-scan-${Number.isSafeInteger(value.number) ? value.number : 'report'}.${route.format === 'sarif' ? 'sarif.json' : route.format}"`,
         'content-security-policy': "sandbox; default-src 'none'",
         'x-sentinel-format-digest': value.formatDigest,
         ...cors,

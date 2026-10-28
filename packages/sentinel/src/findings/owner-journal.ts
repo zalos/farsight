@@ -25,12 +25,17 @@ import {
 } from './decision-basis.js';
 import { fail } from './decision-data.js';
 
+/** The owner decision history's bounds: bytes per record and in all, entries, and directory entries read. */
 export const OWNER_DECISION_LIMITS = Object.freeze({
   recordBytes: 1024 * 1024,
   historyBytes: 32 * 1024 * 1024,
   entries: 1024,
   directoryEntries: 2048,
 });
+/**
+ * A prepared owner proposal: the accepted finding record it is about and its digest, the checked input, the support it
+ * read and when it was made.
+ */
 export interface OwnerProposal {
   readonly id: string;
   readonly basis: AcceptedFindingRecord;
@@ -59,6 +64,10 @@ interface Entry {
   previous: string | null;
   payload: Payload;
 }
+/**
+ * A replayed owner decision history: its head and sequence, every proposal and every approval's audit. It has authority
+ * only as returned by `readOwnerHistory` and checked by `ownerHistoryOf`.
+ */
 export interface OwnerHistory {
   lastAdmittedAt: string | null;
   head: string | null;
@@ -80,6 +89,10 @@ export function readOwnerReportHistory(context: ImportOwnerContext): OwnerHistor
   reportHistories.add(h);
   return h;
 }
+/**
+ * Ends a report-only history read and verifies the history has not moved since; `sentinel.decision.staleState`
+ * otherwise.
+ */
 export function finishOwnerReportHistory(value: OwnerHistory): void {
   reportHistories.delete(value);
   ownerHistoryOf(value);
@@ -125,6 +138,10 @@ function folder(context: ImportOwnerContext, create = false): string | undefined
     throw e;
   }
 }
+/**
+ * Validates a decision input against its contract and returns a frozen copy; `sentinel.decision.invalidInput` for an
+ * invalid input or repeated evidence.
+ */
 export function checkedOwnerInput(value: unknown): OwnerDecisionInput {
   const checked = validateEnvelope('decisioninput', value);
   if (!checked.ok) return fail('sentinel.decision.invalidInput', 'invalid decision proposal');
@@ -332,6 +349,10 @@ function bindingHistorical(
     }),
   };
 }
+/**
+ * A fresh copy of a history this module read, after checking its owner context and, unless it is a report read, that
+ * the journal head has not moved. A value this module did not read, or a moved head, is `sentinel.decision.staleState`.
+ */
 export function ownerHistoryOf(value: OwnerHistory): Readonly<OwnerHistory> {
   const h = histories.get(value);
   if (h) ownerContextOf(h.context);
@@ -363,6 +384,11 @@ function append(context: ImportOwnerContext, state: OwnerHistory, payload: Paylo
     fail('sentinel.decision.staleState', 'history changed');
   ownerContextOf(context);
 }
+/**
+ * Prepares a proposal over an accepted finding without appending it: checks the input, refuses an expiry that is not in
+ * the future (`sentinel.decision.invalidInput`), reads the support, and remembers the basis it was prepared for, the
+ * only one `appendOwnerDecision` accepts it with.
+ */
 export async function prepareOwnerProposal(
   basis: AcceptedFindingBasis,
   ws: Workspace,
