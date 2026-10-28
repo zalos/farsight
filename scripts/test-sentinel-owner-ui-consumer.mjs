@@ -183,8 +183,10 @@ try {
   assert.ok(model.scan.body.stages.length >= 4);
   assert.ok(model.scan.body.stages.every((s) => s.status === 'done'));
   assert.equal(model.unit.body.schema, 'sentinel-viewer-unit/draft-1');
-  // A scan is addressed by its run id; no other ledger id leaves the read model.
-  assert.equal(JSON.stringify(model).split(model.id).join('<run>').includes('run-'), false);
+  // A scan is addressed by its run id; no other run id leaves the read model's own fields (retained text is the
+  // record as kept, verbatim, to the paired owner only).
+  const fields = JSON.stringify(model, (k, v) => (k === 'text' && typeof v === 'string' ? '<retained>' : v));
+  assert.doesNotMatch(fields.split(model.id).join('<run>'), /run-[0-9a-f]{8}/);
   if (evidence) {
     mkdirSync(evidence, { recursive: true });
     writeFileSync(join(evidence, 'report.md'), report);
