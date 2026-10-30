@@ -855,7 +855,9 @@
                   "store",
                   "tag",
                   "lifecycle",
-                  "overlay"
+                  "gateTier",
+                  "decision",
+                  "field"
                 ]
               },
               "key": {

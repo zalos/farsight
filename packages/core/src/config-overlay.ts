@@ -1,3 +1,5 @@
+import type { FarsightConfig } from './config.js';
+
 /** Workspace declarations about code; path blocks belong in the repository. */
 export const CONFIG_OVERLAY_FIELDS = [
   'tags',
@@ -16,4 +18,5 @@ export const CONFIG_OVERLAY_FIELDS = [
   'patterns',
   'nodes',
 ] as const;
-export { configSchema, configSchemaProblem } from '@farsight/graph';
+export type ConfigOverlay = Pick<FarsightConfig, Extract<(typeof CONFIG_OVERLAY_FIELDS)[number], keyof FarsightConfig>>;
+export { configSchema, configSchemaProblem } from '@farsight/graph/config';
