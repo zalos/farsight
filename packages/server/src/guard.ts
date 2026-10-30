@@ -90,6 +90,7 @@ export function isWriteRoute(method: string | undefined, url: string): boolean {
   if (SAFE_METHODS.has(m)) return false;
   const path = url.split('?')[0] ?? url;
   if (path === '/api/settings') return true;
+  if (/^\/api\/sources\/[^/]+\/openapi$/.test(path)) return true;
   if (path === '/api/sync') return true;
   if (path === '/api/work' || path.startsWith('/api/work/')) return true;
   return false;
