@@ -73,18 +73,23 @@ export function declaredPathWarnings(
   };
   for (const file of ws.files) {
     let text = '';
-    try {
-      text = readFileSync(join(root, file.path), 'utf8');
-    } catch {
-      /* Already reported by config loading. */
+    if (file.from !== 'workspace') {
+      try {
+        text = readFileSync(join(root, file.path), 'utf8');
+      } catch {
+        /* Already reported by config loading. */
+      }
     }
-    const scoped = fragment.nodes.filter((n) => file.root || n.loc?.path.startsWith(`${file.dir}/`));
+    const location = (key: string) => (file.from === 'workspace' ? file.path : `${file.path}:${lineOf(text, key)}`);
+    const scoped = fragment.nodes.filter(
+      (n) => file.root || file.dir === '.' || n.loc?.path.startsWith(`${file.dir}/`),
+    );
     for (const [key, entry] of Object.entries(file.config.glossary ?? {})) {
       const found = scoped.some((n) => {
         const colon = n.kind === 'guard' ? n.name.indexOf(': ') : -1;
         return !!glossaryEntryFor(colon > 0 ? n.name.slice(0, colon) : n.name, { [key]: entry });
       });
-      if (!found) warn(`${file.path}:${lineOf(text, key)} → glossary`, key, 'matches no indexed symbol name.');
+      if (!found) warn(`${location(key)} → glossary`, key, 'matches no indexed symbol name.');
     }
     for (const key of Object.keys(file.config.gateTiers ?? {})) {
       const found = scoped.some(
@@ -92,7 +97,7 @@ export function declaredPathWarnings(
           (n.kind === 'guard' || n.kind === 'rule') &&
           (n.id === key || `${n.loc?.path ?? ''} ${n.name}`.toLowerCase().includes(key.toLowerCase())),
       );
-      if (!found) warn(`${file.path}:${lineOf(text, key)} → gateTiers`, key, 'matches no indexed gate.');
+      if (!found) warn(`${location(key)} → gateTiers`, key, 'matches no indexed gate.');
     }
     for (const declaration of list(file.config.externals)) {
       if (!declaration) continue;
@@ -123,12 +128,11 @@ export function declaredPathWarnings(
       }
     }
     for (const value of strings(file.config.setup)) {
-      const found = fragment.nodes.some(
+      const found = scoped.some(
         (node) =>
-          (file.root || node.loc?.path.startsWith(`${file.dir}/`)) &&
-          (node.id === value ||
-            (node.kind === 'function' &&
-              `${node.loc?.path ?? ''} ${node.name}`.toLowerCase().includes(value.toLowerCase()))),
+          node.id === value ||
+          (node.kind === 'function' &&
+            `${node.loc?.path ?? ''} ${node.name}`.toLowerCase().includes(value.toLowerCase())),
       );
       if (!found) warn(`${file.path} → setup`, value, 'matches no indexed symbol.');
     }

@@ -20,7 +20,7 @@
         "glossary": { "submitInvoice": { "label": "Submit an invoice" } },
         "tags": { "billing": ["invoice"] }
       },
-      "openapi": [{ "path": "docs/vendor-api.json", "name": "Vendor API (example)" }],
+      "openapi": [{ "path": "openapi.yaml", "name": "Vendor API (example)" }],
       "openapiIgnore": ["docs/archived-api.json"]
     },
     {

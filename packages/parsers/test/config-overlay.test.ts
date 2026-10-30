@@ -67,6 +67,33 @@ test('workspace overlay is root-scoped, listed, audited and subordinate to repos
   assert.equal(readFileSync(join(dir, 'farsight.config.json'), 'utf8'), before, 'the source is never rewritten');
 });
 
+test('workspace declaration audits match the whole source and give no invented line numbers', async (t) => {
+  const dir = fixture(t, {
+    'src/main.ts':
+      'export function submit() { return 1; }\n/** @guard */\nexport function requireSession() { return true; }',
+    'src/nested/start.ts': 'export function boot() { return 2; }',
+  });
+  const configOverlay = {
+    from,
+    config: {
+      glossary: { submit: { label: 'Submit work' }, missingGlossary: { label: 'Missing' } },
+      gateTiers: { requireSession: 'policy', missingGate: 'policy' },
+      setup: ['boot', 'missingSetup'],
+    } satisfies FarsightConfig,
+  };
+  const graph = await ingestRepo(dir, { repoName: 'app', configOverlay });
+  assert.equal(graph.nodes.find((n) => n.name === 'submit')?.facets?.business?.label, 'Submit work');
+  assert.deepEqual(graph.nodes.find((n) => n.name === 'requireSession')?.gateTier, { tier: 'policy', from: 'config' });
+  assert.ok(graph.nodes.find((n) => n.name === 'boot')?.tags.includes('setup'));
+  const warnings = [
+    `${from} → glossary: "missingGlossary" matches no indexed symbol name.`,
+    `${from} → gateTiers: "missingGate" matches no indexed gate.`,
+    `${from} → setup: "missingSetup" matches no indexed symbol.`,
+  ];
+  assert.deepEqual(graph.meta?.config?.notes, warnings);
+  assert.deepEqual(graph.specErrors, warnings);
+});
+
 test('overlay lists union and duplicate externals/stores keep the root declaration', (t) => {
   const dir = fixture(t, {
     'farsight.config.json': {

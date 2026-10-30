@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -318,8 +318,7 @@ test('the scrubbed settings example validates', () => {
     readFileSync(new URL('../../../.farsight/settings.example.json', import.meta.url), 'utf8'),
   );
   assert.equal(settingsProblem(example), null);
-  assert.equal(
-    example.sources.find((s: { id: string }) => s.id === 'invoice-app').openapi[0].name,
-    'Vendor API (example)',
-  );
+  const source = example.sources.find((s: { id: string }) => s.id === 'invoice-app');
+  assert.equal(source.openapi[0].name, 'Vendor API (example)');
+  assert.ok(existsSync(new URL(`../../../${source.path}/${source.openapi[0].path}`, import.meta.url)));
 });
