@@ -393,6 +393,11 @@ export default {
           'guards': { 'type': 'array', 'items': { 'type': 'string', 'minLength': 1 } },
           'tier': { 'enum': ['business', 'policy', 'technical'] },
           'business': { 'type': 'string' },
+          'requires': {
+            'type': 'string',
+            'minLength': 1,
+            'description': 'Explicit grant on a hand-made guard, carried on each guards edge for Roles.',
+          },
         },
         'allOf': [
           {

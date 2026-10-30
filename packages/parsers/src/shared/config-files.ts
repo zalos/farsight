@@ -41,6 +41,7 @@ import type {
 import {
   applyConfig,
   applyRouteGuards,
+  applyDeclaredGuardGrants,
   readConfigFile,
   frameworkAliasNames,
   normalizeRoutePath,
@@ -609,6 +610,7 @@ export function applyWorkspaceConfig(nodes: GraphNode[], edges: GraphEdge[], ws:
     const { guarded } = applyConfig(nodes, matcherFields(f.config), edges, opts);
     for (const id of guarded) guardedBy.set(id, f.path);
   }
+  for (const f of ws.files) applyDeclaredGuardGrants(nodes, edges, f.config, { repo: ws.repo, from: f.path });
   return ws.files.length > 0;
 }
 
@@ -616,6 +618,7 @@ export function applyWorkspaceConfig(nodes: GraphNode[], edges: GraphEdge[], ws:
 export function applyWorkspaceRouteGuards(nodes: GraphNode[], edges: GraphEdge[], ws: WorkspaceConfig): void {
   for (const f of ws.files)
     applyRouteGuards(nodes, matcherFields(f.config), edges, f.root ? undefined : scopeOfDir(f.dir));
+  for (const f of ws.files) applyDeclaredGuardGrants(nodes, edges, f.config, { repo: ws.repo, from: f.path });
 }
 
 /** Only the node-matcher fields: plumbing is rebased into `merged` and applied once from there. */

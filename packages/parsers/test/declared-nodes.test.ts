@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { ingestRepo } from '../dist/index.js';
-import { configFilesText, configSchemaProblem } from '@farsight/core';
+import { configFilesText, configSchemaProblem, buildIndex, roleTable } from '@farsight/core';
 import type { FarsightConfig } from '@farsight/core';
 
 function fixture(files: Record<string, string | object>) {
@@ -62,6 +62,35 @@ test('ingest applies nested declarations with relative locations and handlers be
     assert.equal(f.edges.filter((e) => e.kind === 'guards').length, 2);
     assert.ok(f.meta?.config?.files[0]!.fields.includes('nodes'));
     assert.ok(!f.meta?.config?.notes.length, f.meta?.config?.notes.join('\n'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a workspace guard grant reaches a nested route and a route added by the spec pass', async () => {
+  const dir = fixture({
+    'nested/farsight.config.json': { nodes: [{ kind: 'route', name: 'POST /nested', guards: ['approval'] }] },
+    'openapi.json': {
+      openapi: '3.0.0',
+      info: { title: 'Legacy', version: '1' },
+      paths: { '/spec': { post: { responses: { '200': { description: 'OK' } } } } },
+    },
+  });
+  const from = '.farsight/settings.json → sources[app].config';
+  try {
+    const f = await ingestRepo(dir, {
+      ...opts,
+      configOverlay: {
+        from,
+        config: {
+          guards: { approval: ['POST /spec'] },
+          nodes: [{ kind: 'guard', name: 'approval', requires: 'ops.approver' }],
+        },
+      },
+    });
+    const rows = roleTable(buildIndex(f.nodes, f.edges)).rows;
+    assert.deepEqual(new Set(rows.map((r) => r.action.name)), new Set(['POST /nested', 'POST /spec']));
+    assert.ok(rows.every((r) => r.roles.includes('ops.approver') && r.requiresFrom === `${from} → nodes[approval]`));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

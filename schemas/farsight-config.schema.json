@@ -708,6 +708,11 @@
           },
           "business": {
             "type": "string"
+          },
+          "requires": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit grant on a hand-made guard, carried on each guards edge for Roles."
           }
         },
         "allOf": [

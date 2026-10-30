@@ -231,3 +231,26 @@ test('a grant word in a manual guard name does not manufacture a roles grant', (
   assert.deepEqual(roles.roles, []);
   assert.deepEqual(roles.rows, []);
 });
+
+test('an explicit manual guard grant reaches Roles, including a config route guard connection', () => {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  applyConfig(
+    nodes,
+    {
+      guards: { approval: ['POST /approve'] },
+      nodes: [
+        { kind: 'guard', name: 'approval', tier: 'policy', requires: 'ops.approver' },
+        { kind: 'route', name: 'POST /approve', guards: ['approval'], business: 'Approve the invoice.' },
+      ],
+    },
+    edges,
+    { repo: 'app', from: 'workspace config' },
+  );
+  const roles = roleTable(buildIndex(nodes, edges));
+  assert.deepEqual(roles.roles, ['ops.approver']);
+  assert.equal(roles.rows.length, 1);
+  assert.equal(roles.rows[0]!.words, 'Approve the invoice.');
+  assert.equal(roles.rows[0]!.requiresFrom, 'workspace config → nodes[approval]');
+  assert.equal(edges.length, 1);
+});

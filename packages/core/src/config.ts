@@ -29,6 +29,8 @@ export interface NodeDecl {
   handler?: string;
   guards?: string[];
   tier?: 'business' | 'policy' | 'technical';
+  /** Guard grant, carried on its guards edges; a label alone supplies no grant. */
+  requires?: string;
   business?: string;
 }
 
@@ -924,7 +926,31 @@ export function applyConfig(
   }
   applyRouteGuards(nodes, config, edges, scope);
   applyDeclaredNodeEdges(nodes, edges, config, options);
+  applyDeclaredGuardGrants(nodes, edges, config, options);
   return { guarded };
+}
+
+/** Apply explicit manual grants after guard connections exist, including connections from later config/spec passes. */
+export function applyDeclaredGuardGrants(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  config: FarsightConfig,
+  options: ApplyConfigOptions = {},
+): void {
+  const repo = options.repo ?? nodes[0]?.loc?.repo ?? nodes[0]?.id.split('::')[0];
+  if (!repo) return;
+  for (const decl of config.nodes ?? []) {
+    if (decl.kind !== 'guard' || !decl.requires?.trim()) continue;
+    const id = `${repo}::guard::${decl.name}`;
+    for (const edge of edges) {
+      if (edge.kind !== 'guards' || edge.from !== id || edge.meta?.requires) continue;
+      edge.meta = {
+        ...edge.meta,
+        requires: decl.requires,
+        requiresFrom: `${options.from ?? 'farsight.config.json'} → nodes[${decl.name}]`,
+      };
+    }
+  }
 }
 
 /** A declared path stays inside its config folder; it never causes a file read. */

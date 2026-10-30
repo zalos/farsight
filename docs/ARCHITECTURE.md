@@ -2267,7 +2267,7 @@ are the owner CLI's until the view has its own (P-4b for the rerun).
 
 The configuration family is `frameworks` · `patterns` · `nodes`: aliases teach existing framework readers additional
 names; patterns turn matching source syntax or text into the existing graph kinds; manual node declarations supply facts no reader can reach. All use the canonical config schema and can be supplied through the
-workspace overlay without writing into the source. Hand-made `nodes` are folder-scoped declarations tagged `declared`, with optional locations, resolved handler and guard connections carrying `annotation-scan`, and guard tiers from config. Framework aliases are root-scoped. Pattern rules in nested config
+workspace overlay without writing into the source. Hand-made `nodes` are folder-scoped declarations tagged `declared`, with optional locations, resolved handler and guard connections carrying `annotation-scan`, guard tiers from config, and explicit guard grants on the connections Roles reads. Framework aliases are root-scoped. Pattern rules in nested config
 files select only files under that folder, with the workspace's excludes and ignore rules still applied.
 
 Patterns run after config, tooling and setup-origin enrichment and before OpenAPI reconciliation. The existing bundled
