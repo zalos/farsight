@@ -110,6 +110,51 @@ test('overlay lists union and duplicate externals/stores keep the root declarati
   );
 });
 
+test('root-scoped overlay validators apply while a nested file reports them as ignored', async (t) => {
+  const nested = 'app/farsight.config.json';
+  const dir = fixture(t, {
+    [nested]: { validators: ['readMultipart'] },
+    'lib/readers.ts': 'export function readMultipart(req: Request) { return req.formData(); }',
+    'app/api/upload/route.ts':
+      'import { readMultipart } from "../../../lib/readers";\nexport async function POST(req: Request) { return readMultipart(req); }',
+    'openapi.json': {
+      openapi: '3.1.0',
+      paths: {
+        '/api/upload': {
+          post: { requestBody: { required: true, content: { 'multipart/form-data': {} } } },
+        },
+      },
+    },
+  });
+  const withoutOverlay = await ingestRepo(dir, { repoName: 'app' });
+  const routeBefore = withoutOverlay.nodes.find((n) => n.id === 'app::route::POST /api/upload');
+  assert.ok(routeBefore?.contract?.drift?.some((d) => d.kind === 'body-unvalidated'));
+
+  const graph = await ingestRepo(dir, {
+    repoName: 'app',
+    configOverlay: { from, config: { validators: ['readMultipart'] } },
+  });
+  const route = graph.nodes.find((n) => n.id === 'app::route::POST /api/upload');
+  assert.equal(route?.contract?.status, 'both');
+  assert.deepEqual(route?.contract?.drift ?? [], []);
+  assert.ok(graph.edges.some((e) => e.kind === 'calls' && e.to.endsWith('::readMultipart')));
+  const meta = graph.meta!.config!;
+  assert.deepEqual(
+    meta.files.find((f) => f.path === from),
+    {
+      path: from,
+      dir: '.',
+      root: false,
+      from: 'workspace',
+      fields: ['validators'],
+      ignored: [],
+    },
+  );
+  assert.deepEqual(meta.files.find((f) => f.path === nested)?.ignored, ['validators']);
+  assert.ok(meta.notes.includes(`validators is root-only; ${nested}'s was ignored.`));
+  assert.ok(!meta.notes.some((note) => note.includes(from) && note.includes('root-only')));
+});
+
 test('overlay works without a root file and config:false disables it', async (t) => {
   const dir = fixture(t, { 'src/main.ts': 'export function submit() { return 1; }' });
   const configOverlay = { from, config: { glossary: { submit: { label: 'Submit work' } } } };

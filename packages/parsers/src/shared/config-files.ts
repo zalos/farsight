@@ -132,6 +132,8 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
         meta.notes.push(`${JSON.stringify(key)} is not a farsight.config.json field; ${path}'s was ignored.`);
         continue;
       }
+      // This loop reads repository files only. The overlay inserted below has root scope (dir '.')
+      // even though root is false, so its root-only fields must not pass through this rejection.
       if (!root && (ROOT_ONLY_CONFIG_FIELDS as readonly string[]).includes(key)) {
         ignored.push(key);
         meta.notes.push(`${key} is root-only; ${path}'s was ignored.`);
