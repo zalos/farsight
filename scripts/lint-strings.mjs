@@ -95,7 +95,13 @@ const CHROME_FILES = [
   // the Config files list on the Settings page (round 2026-10-05 §6)
   'surfaces/settings-config.js',
   // the lessons for agents and the empty states (round 2026-10-10, proposal 9)
-  'surfaces/settings-lessons.js',
+  'surfaces/settings.js',
+  'surfaces/settings-workspace.js',
+  'surfaces/settings-sources.js',
+  'surfaces/settings-collections.js',
+  'surfaces/settings-agents.js',
+  'lib/settings-model.js',
+  'lib/row-editor.js',
   'lib/empty-state.js',
   'lib/copy-doors.js',
   // the project picker (one searchable list wherever a project, a tag value or a package is picked)

@@ -646,14 +646,14 @@ test.describe('the Sentinel ladder', () => {
     await standIn(page, baseURL, {
       scanAction: { available: false, reasonCode: 'sentinel.review.foregroundRequired' },
     });
-    await gotoReady(page, '#/settings');
+    await gotoReady(page, '#/settings/sources');
     const fresh = page.locator('#srcrows .snt-door').first();
     await expect(fresh).toHaveAttribute('aria-disabled', 'true');
     await expect(fresh).toHaveAttribute('data-tip', 'sentinel.viewer.scan.unknown');
     // once the Sentinel tab has read the list, the door says what the answer says
     await page.evaluate(() => (location.hash = '#/sentinel'));
     await expect(page.locator('.snt-scan-row')).toHaveCount(1);
-    await page.evaluate(() => (location.hash = '#/settings'));
+    await page.evaluate(() => (location.hash = '#/settings/sources'));
     const refused = page.locator('#srcrows .snt-door').first();
     await expect(refused).toHaveAttribute('aria-disabled', 'true');
     await expect(refused).toHaveAttribute('data-tip', 'sentinel.review.foregroundRequired');
@@ -670,7 +670,7 @@ test.describe('the Sentinel ladder', () => {
     await page.route('**/api/sentinel/companion', (route) =>
       route.fulfill({ json: { available: false }, headers: { 'cache-control': 'no-store' } }),
     );
-    await page.evaluate(() => (location.hash = '#/settings'));
+    await page.evaluate(() => (location.hash = '#/settings/sources'));
     const gone = page.locator('#srcrows .snt-door').first();
     await expect(gone).toHaveAttribute('data-tip', 'sentinel.ownerUi.launch');
     await expect(gone).toHaveAttribute('aria-disabled', 'true');
@@ -678,7 +678,7 @@ test.describe('the Sentinel ladder', () => {
     // and the answer is forgotten, not merely hidden: back with the companion, the door has nothing to follow
     await page.unroute('**/api/sentinel/companion');
     await page.evaluate(() => (location.hash = '#/portfolio'));
-    await page.evaluate(() => (location.hash = '#/settings'));
+    await page.evaluate(() => (location.hash = '#/settings/sources'));
     await expect(page.locator('#srcrows .snt-door').first()).toHaveAttribute(
       'data-tip',
       'sentinel.viewer.scan.unknown',
@@ -694,7 +694,7 @@ test.describe('the Sentinel ladder', () => {
       const v = await response.json();
       await route.fulfill({ response, json: { ...v, session: { ...v.session, instance: 'host-' + 'f'.repeat(32) } } });
     });
-    await page.evaluate(() => (location.hash = '#/settings'));
+    await page.evaluate(() => (location.hash = '#/settings/sources'));
     const door = page.locator('#srcrows .snt-door').first();
     await expect(door).toHaveAttribute('data-tip', 'sentinel.viewer.scan.unknown');
     await expect(page.locator('#srcrows a.snt-door')).toHaveCount(0);
@@ -704,7 +704,7 @@ test.describe('the Sentinel ladder', () => {
     await standIn(page, baseURL, { scanAction: { available: true, reasonCode: null } });
     await gotoReady(page, '#/sentinel');
     await expect(page.locator('.snt-scan-row')).toHaveCount(1);
-    await page.evaluate(() => (location.hash = '#/settings'));
+    await page.evaluate(() => (location.hash = '#/settings/sources'));
     const door = page.locator('#srcrows .snt-door').first();
     await expect(door).toHaveAttribute('href', '#/sentinel?do=scan');
     await door.click();

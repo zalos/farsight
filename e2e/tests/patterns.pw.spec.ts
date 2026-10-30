@@ -119,8 +119,7 @@ test('a pattern-only route reaches the Map and APIs, with pattern match evidence
   const dry = await (await fetch(base + 'api/patterns/test?source=invoice-app&rule=custom-route')).json();
   expect(dry.matches[0].name).toBe('POST /pattern-preview');
   expect(readFileSync(workspace.graph, 'utf8')).toBe(before);
-  if (!(await page.locator('#gearbtn').isVisible())) await page.locator('#morebtn').click();
-  await page.locator('#gearbtn').click();
+  await page.goto(base + '#/settings/configuration?lens=code');
   await expect(page.locator('.cfg-pattern-row')).toContainText('custom-route');
   await expect(page.locator('.cfg-pattern-row')).toContainText('121 matches');
   await expect(page.locator('.cfg-patterns')).toContainText('… and 20 more unresolved references');
@@ -134,8 +133,7 @@ test('a pattern-only route reaches the Map and APIs, with pattern match evidence
   await page.screenshot({ path: testInfo.outputPath('pattern-report-omitted.png') });
   await page.goto(base + '#/map/' + encodeURIComponent(flowId) + '?lens=business');
   await expect(page.locator('#stats')).not.toHaveText('loading…');
-  if (!(await page.locator('#gearbtn').isVisible())) await page.locator('#morebtn').click();
-  await page.locator('#gearbtn').click();
+  await page.goto(base + '#/settings/configuration?lens=business');
   await expect(page.locator('.cfg-pattern-row')).toContainText('1 part added');
   await expect(page.locator('.cfg-pattern-row')).toContainText('1 connection added');
   await expect(page.locator('.cfg-patterns')).toContainText('… and 20 more unresolved references');

@@ -17,6 +17,7 @@ async function openSettings(page: Page): Promise<void> {
   if (!(await page.locator('#gearbtn').isVisible())) await page.locator('#morebtn').click();
   await page.locator('#gearbtn').click();
   await expect(page.locator('#settings')).toHaveClass(/open/);
+  await page.locator('.settings-rail a[href="#/settings/configuration"]').click();
   await expect(page.locator('#cfgrows .cfg-src').first()).toBeVisible();
 }
 
@@ -214,7 +215,7 @@ test.describe('OpenAPI registration from Settings', () => {
     workspace?.cleanup();
   });
   async function open(page: Page, base: string) {
-    await page.goto(base + '#/settings?lens=code');
+    await page.goto(base + '#/settings/configuration?lens=code');
     await expect(page.locator('#stats')).not.toHaveText('loading…');
     await expect(sourceBlock(page).locator('.cfg-n-candidates')).toHaveText('2 candidate documents');
     await expect(otherBlock(page).locator('.cfg-n-candidates')).toHaveText('1 candidate document');
@@ -282,7 +283,7 @@ test.describe('OpenAPI registration from Settings', () => {
   });
 
   test('Dismiss persists the ignored path and removes it after sync', async ({ page }) => {
-    await page.goto(writable + '#/settings?lens=code');
+    await page.goto(writable + '#/settings/configuration?lens=code');
     const source = sourceBlock(page);
     const row = source.locator('.cfg-openapi-row[data-path="docs/old-vendor.json"]');
     await row.locator('[data-openapi-action="dismiss"]').click();

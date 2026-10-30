@@ -14,6 +14,7 @@ import { countedHtml, defAttrs } from '../lib/counted.js';
 import { applyReadOnly, readOnlyWhy } from '../lib/read-only.js';
 
 const API = '/api/config';
+let onSaved;
 const cache = { key: null, data: null, error: false, pending: null };
 
 /** A catalog word with `{name}` placeholders filled. */
@@ -173,10 +174,12 @@ async function changeOpenApi(event) {
     // current so that pressing Sync cannot silently undo the registration.
     const source = S.SETTINGS.sources.find((s) => s.id === id);
     if (source) {
+      const previous = structuredClone(source);
       source.openapi = (source.openapi || []).filter((d) => (d.url || d.path) !== path);
       source.openapiIgnore = (source.openapiIgnore || []).filter((p) => p !== path);
       if (action === 'register') source.openapi.push({ path });
       else source.openapiIgnore.push(path);
+      onSaved?.(id, { openapi: source.openapi, openapiIgnore: source.openapiIgnore }, previous);
     }
     row.querySelector('.cfg-openapi-actions').textContent = t('config.openapi.saved');
     note.textContent = t('config.openapi.saved');
@@ -310,7 +313,8 @@ export function configFilesHtml(data, lens) {
 }
 
 /** Draw the list into the Settings page, asking the server again when the graph changed since the last answer. */
-export function renderConfigFiles() {
+export function renderConfigFiles(saved) {
+  onSaved = saved;
   const host = document.getElementById('cfgrows');
   if (!host) return;
   const title = document.getElementById('set-config-title');

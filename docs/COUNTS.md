@@ -1107,6 +1107,23 @@ The PIPELINE stop's edit mode (`GET /api/sentinel/pipeline`, `sentinel-viewer-pi
 *stage n of m*, not a number of anything; what a check says (*reuses* · *changed* · *runs again* · *added*, *problem*)
 is a word per stage, never a tally; a budget field is the value the file holds, printed as written.
 
+### Settings draft and source sync counts
+
+`settings-model.js` folds the existing settings fields without adding graph fields. Settings prints every count
+through `countedHtml`, with its source and scope in the tip.
+
+| number | unit | scope | source |
+|---|---|---|---|
+| lessons | `settings.count.lessons` | `count.scope.workspace` | `lessonsCounted()` over the current draft’s `lessons`; breakdown pinned + unpinned sums to the total |
+| pinned lessons | `settings.count.pinned` | `count.scope.workspace` | draft `lessons[].pinned` |
+| parts and connections read | `settings.count.parts`, `settings.count.connections` | `count.scope.source` | `sourceStatus()` reads the node/edge totals from the saved sync status, never from today’s filtered graph |
+| history | existing `history.fact.read/ingested/notYet` plus `settings.count.newHistory/forgotten/resolved` | `count.scope.source` | the saved history sentence, with ingested + not yet partitioning commits read |
+| tracker sync and links | `settings.count.sent/changed/gone/links` | `count.scope.workSync` for sync results, `count.scope.workSource` for links | the saved work-source result; changed and removed are separate measures, not a partition of sent |
+| cached work items | `count.unit.workItems` | `count.scope.workSource` | `sourceStatus()` reads the item total from the saved work-source sync status |
+
+The source card maps the saved result to a defined status. The workspace graph refresh date appears once,
+formatted for the reader’s locale. These are the last recorded sync’s totals, not fresh live measurements.
+
 ### Pattern rules (ADR 49)
 
 `patternCounts(meta.patterns[repo], repo)` supplies one row per configured rule, in report order. Equal ids in different config

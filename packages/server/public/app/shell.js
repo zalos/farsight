@@ -35,17 +35,22 @@ import { mountJourneys, journeysRefresh } from './surfaces/journeys.js';
 import { isOverlayAddress, overlayToMap } from './lib/route-url.js';
 import { cmapScopeHtml, projectTravelItems } from './surfaces/codemap-projects.js';
 import { pickerHasQuery } from './lib/multi-pick.js';
+import { mergeSettings } from './lib/settings-model.js';
 import { mountCodemap, unmountCodemap, codemapRefresh } from './surfaces/codemap.js';
 import { mountPortfolio, portfolioRefresh } from './surfaces/portfolio.js';
 import { mountChanges, changesRefresh } from './surfaces/changes.js';
 import { mountStewardship } from './surfaces/stewardship.js';
 import { mountApis, apisRefresh } from './surfaces/apis.js';
 import { mountTests, testsRefresh } from './surfaces/tests.js';
-import { mountSentinel, unmountSentinel, sentinelUpdate, sentinelScanDoorHtml } from './surfaces/sentinel.js';
+import { mountSentinel, unmountSentinel, sentinelUpdate } from './surfaces/sentinel.js';
 import { mountWork, workRefresh } from './surfaces/work.js';
 import { mountMap, mapRefresh, mapUpdate, unmountMap, mapOpen, mapTravel } from './surfaces/map.js';
-import { renderConfigFiles } from './surfaces/settings-config.js';
-import { renderLessons } from './surfaces/settings-lessons.js';
+import {
+  mountSettings as mountSettingsPage,
+  unmountSettings as unmountSettingsPage,
+  settingsRefresh,
+  settingsUpdate,
+} from './surfaces/settings.js';
 import { mountReadiness, unmountReadiness, readinessRefresh } from './surfaces/readiness.js';
 import { mountRoles, rolesRefresh } from './surfaces/roles.js';
 import { closeShare } from './share.js';
@@ -102,7 +107,7 @@ const SURFACES = {
   grammar: { mount: mountGrammar, refresh: refreshGrammar },
   // Settings is an address (`#/settings`, round 2026-10-10 finding 3.2) and keeps the top bar (3.3): the page
   // mounts into the surface frame under the chrome instead of covering the window
-  settings: { mount: mountSettings, unmount: unmountSettings, refresh: () => renderSettings() },
+  settings: { mount: mountSettings, unmount: unmountSettings, refresh: settingsRefresh, update: settingsUpdate },
   // an address this build has no page for says so (3.2) — it used to drop the reader on the front door silently
   nowhere: { mount: mountNowhere },
 };
@@ -806,8 +811,6 @@ export function setLens(l, quiet) {
   if (quiet) return;
   renderChrome();
   refreshSurface('lens');
-  // the Config files list names the settings in the lens's words
-  if (settingsOpen()) renderConfigFiles();
 }
 /**
  * Apply a theme: `dark`, `light`, or `system` — the reader's own
@@ -831,11 +834,18 @@ export function applyTheme(theme) {
  */
 export function previewTheme(theme) {
   S.themePreview = theme;
+  if (readOnlyWhy()) {
+    try {
+      localStorage.setItem('fs-theme-preview', theme);
+    } catch {
+      /* window only */
+    }
+  }
   applyTheme(theme);
   const note = document.getElementById('set-theme-note');
   const saved = S.SETTINGS && (S.SETTINGS.theme || 'system');
   if (note)
-    note.textContent = theme !== saved ? t(readOnlyWhy() ? 'sys.readonly.themeHint' : 'surf.theme.preview') : '';
+    note.textContent = readOnlyWhy() ? t('sys.readonly.themeHint') : theme !== saved ? t('surf.theme.preview') : '';
 }
 /**
  * Rebuild the scope button label + grouped multi-select menu. Collections act
@@ -1030,10 +1040,16 @@ export async function saveScopeGroup() {
   const name = prompt(t('set.groupPrompt'));
   if (!name) return;
   const ids = (S.SETTINGS.sources || []).filter((s) => S.scope.includes(s.name)).map((s) => s.id);
-  S.SETTINGS.collections.push({ name, sourceIds: ids });
-  await fetch('/api/settings', { method: 'PUT', body: JSON.stringify(S.SETTINGS) });
+  const currentResponse = await fetch('/api/settings');
+  if (!currentResponse.ok) return;
+  const current = await currentResponse.json();
+  const changed = { ...S.SETTINGS, collections: [...(S.SETTINGS.collections || []), { name, sourceIds: ids }] };
+  const merged = mergeSettings(S.SETTINGS, changed, current);
+  const saved = await fetch('/api/settings', { method: 'PUT', body: JSON.stringify(merged) });
+  if (!saved.ok) return;
+  S.SETTINGS = merged;
   buildScope();
-  renderSettings();
+  settingsRefresh();
 }
 /**
  * @group Lens, theme & filters
@@ -1617,16 +1633,25 @@ export function closeSettings() {
 }
 /** Mount the Settings page into the surface frame, under the top bar. @group Settings page */
 function mountSettings(route, el) {
-  const set = document.getElementById('settings');
-  el.appendChild(set);
-  set.classList.add('open', 'as-surface');
-  renderSettings();
+  mountSettingsPage(route, el, {
+    close: closeSettings,
+    preview: previewTheme,
+    saved: () => {
+      applyTheme(S.SETTINGS.theme);
+      buildScope();
+      renderChrome();
+    },
+    synced: () => {
+      buildScope();
+      buildChips();
+      renderChrome();
+      warmSearch();
+    },
+  });
 }
 /** Hand the Settings page back to the document, closed. @group Settings page */
 function unmountSettings() {
-  const set = document.getElementById('settings');
-  set.classList.remove('open', 'as-surface');
-  document.body.appendChild(set);
+  unmountSettingsPage();
 }
 /**
  * An address this build has no page for: one line that says so, and a door to the front door.
@@ -1647,207 +1672,6 @@ function mountNowhere(route, el) {
     esc(t('shell.nowhereDoor')) +
     ' ›</a></p></div>';
 }
-/**
- * @group Settings page
- * @business The settings screen: manage sources, collections, and appearance.
- */
-export function renderSettings() {
-  if (!S.SETTINGS) return;
-  document.getElementById('srcrows').innerHTML =
-    (S.SETTINGS.sources || [])
-      .map(
-        (s, i) =>
-          '<tr><td><input type="checkbox" data-write ' +
-          (s.enabled ? 'checked' : '') +
-          ' onchange="S.SETTINGS.sources[' +
-          i +
-          '].enabled=this.checked" aria-label="enabled"/></td>' +
-          '<td>' +
-          esc(s.name) +
-          '</td><td>' +
-          s.type +
-          '</td><td class="mono">' +
-          esc(s.path) +
-          '</td>' +
-          '<td><input class="mono" data-write style="width:100%;min-width:120px" value="' +
-          esc((s.exclude || []).join(', ')) +
-          '" placeholder="—" aria-label="exclude globs" onchange="S.SETTINGS.sources[' +
-          i +
-          "].exclude=this.value.split(',').map(x=>x.trim()).filter(Boolean)\"/></td>" +
-          '<td class="st ' +
-          ((s.status || '').startsWith('ok') ? 'ok' : (s.status || '').startsWith('error') ? 'err' : '') +
-          '">' +
-          esc(s.status || '—') +
-          '</td>' +
-          '<td class="src-acts">' +
-          (s.type === 'local' ? sentinelScanDoorHtml() : '') +
-          '<button class="x" data-write onclick="if(!readOnlyWhy()){S.SETTINGS.sources.splice(' +
-          i +
-          ',1);renderSettings()}" aria-label="remove">✕</button></td></tr>',
-      )
-      .join('') || '<tr><td colspan="7" style="color:var(--dim)">' + esc(t('set.noSources')) + '</td></tr>';
-  document.getElementById('collrows').innerHTML =
-    (S.SETTINGS.collections || [])
-      .map(
-        (c, i) =>
-          '<div class="coll"><b>' +
-          esc(c.name) +
-          '</b><span class="mono">' +
-          c.sourceIds
-            .map((id) => {
-              const s = S.SETTINGS.sources.find((s) => s.id === id);
-              return s ? s.name : id;
-            })
-            .join(' · ') +
-          '</span>' +
-          '<button class="x" data-write style="margin-left:auto" onclick="if(!readOnlyWhy()){S.SETTINGS.collections.splice(' +
-          i +
-          ',1);renderSettings()}" aria-label="remove">✕</button></div>',
-      )
-      .join('') || '<div class="set-note">' + esc(t('set.noCollections')) + '</div>';
-  document.getElementById('set-theme').value = S.themePreview || S.SETTINGS.theme || 'system';
-  const tn = document.getElementById('set-theme-note');
-  if (tn)
-    tn.textContent =
-      S.themePreview && S.themePreview !== (S.SETTINGS.theme || 'system')
-        ? t(readOnlyWhy() ? 'sys.readonly.themeHint' : 'surf.theme.preview')
-        : '';
-  document.getElementById('set-lens').value = S.SETTINGS.defaultLens || 'hybrid';
-  const surf = document.getElementById('set-surface');
-  if (surf) {
-    surf.value = S.SETTINGS.defaultSurface || '';
-    // with nothing chosen, say where the register actually lands rather than
-    // showing a value the reader never picked
-    const eff = document.getElementById('set-surface-eff');
-    if (eff)
-      eff.textContent = S.SETTINGS.defaultSurface
-        ? ''
-        : t('set.surfaceByRegister').replace('{s}', t('nav.' + defaultSurface()));
-  }
-  // experiments: workspace flags, off unless the settings file says so
-  // (the Map and the action drill were experiments until the journey page retired into the Map: neither is a flag now)
-  const fl = document.getElementById('set-flags-label');
-  if (fl) fl.textContent = t('set.flags');
-  const fh = document.getElementById('set-flag-shots');
-  if (fh) fh.checked = !!(S.SETTINGS.flags && S.SETTINGS.flags.designShots);
-  const fhn = document.getElementById('set-flag-shots-name');
-  if (fhn) fhn.textContent = t('set.flagShots');
-  const fhs = document.getElementById('set-flag-shots-sub');
-  if (fhs) fhs.textContent = t('set.flagShotsSub');
-  // consequence subtext on every action button (looking vs doing, F12)
-  const sc = document.getElementById('sync-consequence');
-  if (sc) sc.textContent = t('set.syncConsequence');
-  const vc = document.getElementById('save-consequence');
-  if (vc) vc.textContent = t('set.saveConsequence');
-  const ls = document.getElementById('set-landing-sub');
-  if (ls) ls.textContent = t('set.landingSub');
-  const ll = document.getElementById('set-landing-label');
-  if (ll) ll.textContent = t('set.landing');
-  // the config files each source holds, read only (GET /api/config)
-  renderConfigFiles();
-  // the owner's lessons for agents (round 2026-10-10, proposal 9)
-  renderLessons();
-  applyReadOnly();
-}
-/**
- * @group Settings page
- */
-export function addSource() {
-  if (refusedReadOnly()) return;
-  const name = document.getElementById('src-name').value.trim();
-  const type = document.getElementById('src-type').value;
-  const path = document.getElementById('src-path').value.trim();
-  const exclude = document
-    .getElementById('src-exclude')
-    .value.split(',')
-    .map((x) => x.trim())
-    .filter(Boolean);
-  if (!name || !path) return;
-  S.SETTINGS.sources.push({
-    id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-    name,
-    type,
-    path,
-    exclude,
-    enabled: true,
-  });
-  document.getElementById('src-name').value = '';
-  document.getElementById('src-path').value = '';
-  document.getElementById('src-exclude').value = '';
-  renderSettings();
-}
-/**
- * @group Settings page
- */
-export function addCollection() {
-  if (refusedReadOnly()) return;
-  const name = document.getElementById('coll-name').value.trim();
-  if (!name) return;
-  const repos = scopedRepos();
-  const ids = (S.SETTINGS.sources || []).filter((s) => !repos || repos.has(s.name)).map((s) => s.id);
-  S.SETTINGS.collections.push({ name, sourceIds: ids });
-  document.getElementById('coll-name').value = '';
-  renderSettings();
-}
-/** @group Settings page */
-export async function saveSettings() {
-  if (refusedReadOnly()) return;
-  S.SETTINGS.theme = document.getElementById('set-theme').value;
-  S.SETTINGS.defaultLens = document.getElementById('set-lens').value;
-  const surf = document.getElementById('set-surface');
-  if (surf) {
-    if (surf.value) S.SETTINGS.defaultSurface = surf.value;
-    else delete S.SETTINGS.defaultSurface;
-  }
-  const fh = document.getElementById('set-flag-shots');
-  if (fh) {
-    S.SETTINGS.flags = Object.assign({}, S.SETTINGS.flags, { designShots: fh.checked });
-  }
-  applyTheme(S.SETTINGS.theme);
-  S.themePreview = null;
-  const tn = document.getElementById('set-theme-note');
-  if (tn) tn.textContent = '';
-  const r = await fetch('/api/settings', { method: 'PUT', body: JSON.stringify(S.SETTINGS) });
-  document.getElementById('savenote').textContent = r.ok ? t('set.saved') : t('set.saveFailed');
-  buildScope();
-  // a flag may have added or taken away a tab
-  renderChrome();
-  setTimeout(() => (document.getElementById('savenote').textContent = ''), 2500);
-}
-/** @group Settings page */
-export async function syncNow() {
-  if (refusedReadOnly()) return;
-  const btn = document.getElementById('syncbtn'),
-    note = document.getElementById('syncnote');
-  btn.disabled = true;
-  note.textContent = t('set.syncing');
-  await saveSettings();
-  try {
-    const r = await fetch('/api/sync', { method: 'POST' });
-    const out = await r.json();
-    if (out.error) {
-      note.textContent = t('set.syncFailedPrefix') + ' ' + out.error;
-    } else {
-      S.SETTINGS = await fetch('/api/settings').then((r) => r.json());
-      S.GRAPH = await fetch('/graph').then((r) => r.json());
-      S.ROOTS = S.GRAPH.roots || {};
-      indexGuards();
-      buildScope();
-      buildChips();
-      renderSettings();
-      renderChrome();
-      // a sync replaces the graph under whatever is on screen: the same contract
-      // the filters run on, with the reason that says every fact is new
-      refreshSurface('sync');
-      warmSearch();
-      note.textContent = t('set.syncedStats').replace('{n}', out.stats.nodes).replace('{e}', out.stats.edges);
-    }
-  } catch (err) {
-    note.textContent = t('set.syncFailedPrefix') + ' ' + err.message;
-  }
-  btn.disabled = false;
-}
-
 // ── model hub ───────────────────────────────────────────────────
 // Runtime overlay panel: live local AI models/tools/chains/agents from
 // /api/modelhub/state. Everything from that endpoint is untrusted display
@@ -2062,13 +1886,20 @@ async function boot() {
   indexGuards();
   buildScope();
   buildChips();
-  renderSettings();
   // the running build, fail-soft: an older server without /api/version just leaves the tooltip shorter
   const versionRead = fetch('/api/version')
     .then((r) => (r.ok ? r.json() : null))
     .then((v) => {
       if (v) {
         S.VERSION = v;
+        if (readOnlyWhy()) {
+          try {
+            S.themePreview = localStorage.getItem('fs-theme-preview');
+          } catch {
+            /* window only */
+          }
+          applyTheme(S.themePreview || S.SETTINGS.theme);
+        }
         renderChrome();
       }
     })
@@ -2120,12 +1951,7 @@ expose({
   travelTarget,
   openSettings,
   closeSettings,
-  renderSettings,
   readOnlyWhy,
-  addSource,
-  addCollection,
-  saveSettings,
-  syncNow,
   openModelHub,
   closeModelHub,
   pollModelHub,
