@@ -70,6 +70,9 @@
             },
             "routes": {
               "$ref": "#/definitions/RoutesMeta"
+            },
+            "openapi": {
+              "$ref": "#/definitions/OpenApiMeta"
             }
           },
           "required": [
@@ -1414,6 +1417,63 @@
       ],
       "additionalProperties": false,
       "description": "A route declaration the TS/JS adapter recognised and did not turn into a route, or a declared entry point that disagrees with the decorators beside it — named, never guessed (code-parser/src/nest.ts). `non-literal-path`: a `@Controller` / `@Get` path from a constant or a template with a hole; `all-verb`: `@All`; `global-prefix` / `versioning` / `router-module`: a prefix or version the app applies at boot that the recorded routes do not carry; `entrypoint-mismatch`: an `@entrypoint http:VERB /path` naming a route the decorators do not (the decorators win)."
+    },
+    "OpenApiMeta": {
+      "type": "object",
+      "properties": {
+        "applied": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OpenApiDocument"
+          }
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OpenApiDocument"
+          }
+        }
+      },
+      "required": [
+        "applied",
+        "candidates"
+      ],
+      "additionalProperties": false,
+      "description": "OpenAPI documents read for one source. Candidates never add routes or contracts."
+    },
+    "OpenApiDocument": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "operations": {
+          "type": "number"
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "file",
+            "config",
+            "settings"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "title",
+        "version",
+        "operations",
+        "origin"
+      ],
+      "additionalProperties": false,
+      "description": "One OpenAPI document, whether applied or awaiting registration."
     },
     "GraphNode": {
       "type": "object",
@@ -3237,6 +3297,9 @@
             },
             "routes": {
               "$ref": "#/definitions/RoutesMeta"
+            },
+            "openapi": {
+              "$ref": "#/definitions/OpenApiMeta"
             }
           },
           "additionalProperties": false

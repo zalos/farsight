@@ -4,11 +4,98 @@
  * `graph_overview` and `/api/config` cannot disagree. Reading the files is the parsers' job
  * (`loadWorkspaceConfig`); this module never touches the disk.
  */
-import { t } from './strings.js';
-import type { ConfigMeta } from './graph.js';
+import type { ConfigMeta, OpenApiMeta } from './graph.js';
 import { counted, countedText, breakdownText, type Counted } from './counts.js';
+import { t } from './strings.js';
 
 const SOURCE = 'parsers shared/config-files.ts loadWorkspaceConfig → meta.config[repo]';
+
+/** Applied and candidate documents of one source, plus each document's declared operations. */
+export function openApiCounts(meta: OpenApiMeta): {
+  applied: Counted;
+  candidates: Counted;
+  operations: Record<string, Counted>;
+} {
+  const count = (kind: 'applied' | 'candidates') => {
+    const unit = kind === 'applied' ? 'count.unit.openapiApplied' : 'count.unit.openapiCandidates';
+    return counted(meta[kind].length, unit, 'count.scope.source', `meta.openapi[repo].${kind}`, { bizUnit: unit });
+  };
+  return {
+    applied: count('applied'),
+    candidates: count('candidates'),
+    operations: Object.fromEntries(
+      [...meta.applied, ...meta.candidates].map((d) => [
+        d.path,
+        counted(
+          d.operations,
+          'count.unit.openapiOperations',
+          'count.scope.document',
+          'meta.openapi[repo].document.operations',
+          { bizUnit: 'count.unit.openapiOperations' },
+        ),
+      ]),
+    ),
+  };
+}
+
+/** Shell-safe arguments, including source names and document paths supplied by a repository. */
+function shellArg(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+export function openApiOverviewLines(metas: Record<string, OpenApiMeta> | undefined): string[] {
+  return Object.entries(metas ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([repo, meta]) => {
+      if (!meta.candidates.length) return [];
+      const count = openApiCounts(meta).candidates;
+      const key = count.n === 1 ? 'config.openapi.overviewOne' : 'config.openapi.overview';
+      return [
+        `${repo} — ${t(key, 'professional')
+          .replace('{count}', countedText(count, { scope: false }))
+          .replace('{paths}', meta.candidates.map((d) => d.path).join(' · '))}`,
+      ];
+    });
+}
+
+/** One shared text fold for CLI candidates/list and read-only MCP config_files. */
+export function openApiFilesText(
+  metas: Record<string, OpenApiMeta> | undefined,
+  repo?: string,
+  candidatesOnly = false,
+  knownRepos: readonly string[] = [],
+): string[] {
+  if (repo && !metas?.[repo] && knownRepos.includes(repo))
+    return [t('config.openapi.noInventory', 'professional').replace('{source}', repo)];
+  if (!metas) return [t('config.openapi.none', 'professional')];
+  if (repo && !Object.hasOwn(metas, repo))
+    return [t('config.openapi.noSource', 'professional').replace('{source}', repo)];
+  const entries = Object.entries(metas ?? {})
+    .filter(([r]) => !repo || r === repo)
+    .sort(([a], [b]) => a.localeCompare(b));
+  const out: string[] = [];
+  for (const [r, meta] of entries) {
+    const counts = openApiCounts(meta);
+    out.push(
+      `${r} — ${t('config.openapi.title', 'professional')}: ${candidatesOnly ? '' : countedText(counts.applied) + ' · '}${countedText(counts.candidates)}`,
+    );
+    for (const d of [...(candidatesOnly ? [] : meta.applied), ...meta.candidates]) {
+      const candidate = meta.candidates.includes(d);
+      out.push(
+        `  ${d.path} · ${d.title}${d.version ? ` ${d.version}` : ''} · ${countedText(counts.operations[d.path]!)} · ${t('config.openapi.origin.' + (candidate ? 'candidate' : d.origin), 'professional')}`,
+      );
+      if (candidate)
+        out.push(
+          '  ' +
+            t('config.openapi.command', 'professional').replace(
+              '{command}',
+              `farsight api register ${shellArg(r)} ${shellArg(d.path)}`,
+            ),
+        );
+    }
+  }
+  return out.length ? out : [countedText(openApiCounts({ applied: [], candidates: [] }).candidates, { scope: false })];
+}
 
 /** How many config files one source holds (the root's and the scoped ones), and how many conflicts they have. */
 export function configCounts(meta: ConfigMeta): { files: Counted; conflicts: Counted } {

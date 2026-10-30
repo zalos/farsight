@@ -81,6 +81,7 @@ import {
   counted,
   journeyTree,
   configCounts,
+  openApiCounts,
   gateCard,
   roleTable,
   rolesCsv,
@@ -2398,13 +2399,18 @@ export function serveGraph(
       const config = Object.fromEntries(Object.entries(g.meta.config ?? {}).filter(([r]) => !repo || r === repo));
       // the typed counts per source (files, conflicts), so the Settings list prints the fold's numbers
       const counts = Object.fromEntries(Object.entries(config).map(([r, m]) => [r, configCounts(m)]));
+      const openapi = Object.fromEntries(Object.entries(g.meta.openapi ?? {}).filter(([r]) => !repo || r === repo));
+      const openapiCounts = Object.fromEntries(Object.entries(openapi).map(([r, m]) => [r, openApiCounts(m)]));
       // where a manifest's persona declarations and the code disagree about who uses a screen (core screenPersonaNotes)
       const personaNotes = Object.fromEntries(
         Object.keys(config)
           .map((r) => [r, screenPersonaNotes(g.index, g.meta.journeys, new Set([r]))])
           .filter(([, n]) => (n as string[]).length),
       );
-      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, config, counts, personaNotes }));
+      return send(
+        200,
+        JSON.stringify({ generatedAt: g.meta.generatedAt, config, counts, personaNotes, openapi, openapiCounts }),
+      );
     }
     if (url.startsWith('/api/openapi') && req.method === 'GET') {
       // a spec generated from the code — every inference marked x-farsight-inferred

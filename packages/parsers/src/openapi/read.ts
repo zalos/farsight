@@ -7,7 +7,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseDocument, LineCounter, stringify, isMap, isPair, isScalar } from 'yaml';
-import { isOpenApiDoc, type OpenApiDoc } from '@farsight/core';
+import { isOpenApiDoc, t, type OpenApiDoc } from '@farsight/core';
+
+export const OPENAPI_MAX_BYTES = 8 * 1024 * 1024;
 
 export interface ParsedSpec {
   doc: OpenApiDoc;
@@ -80,7 +82,29 @@ export async function readSpecSource(pathOrUrl: string, cwd = process.cwd()): Pr
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`${pathOrUrl}: HTTP ${res.status}`);
-    text = await res.text();
+    const tooLarge = () => new Error(`${pathOrUrl}: ${t('config.openapi.tooLarge', 'professional')}`);
+    if (Number(res.headers.get('content-length')) > OPENAPI_MAX_BYTES) {
+      await res.body?.cancel();
+      throw tooLarge();
+    }
+    const reader = res.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    try {
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > OPENAPI_MAX_BYTES) {
+          await reader.cancel();
+          throw tooLarge();
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader?.releaseLock();
+    }
+    text = new TextDecoder().decode(Buffer.concat(chunks));
   } else {
     text = readFileSync(resolve(cwd, pathOrUrl), 'utf8');
   }
