@@ -299,15 +299,14 @@ export function patternStamp(source, rule) {
         : value;
   return JSON.stringify(canonical([source.id, source.type, source.path, source.exclude || [], rule]));
 }
+export function patternChanged(loaded, source, rule) {
+  const before = loaded.sources?.find((old) => old.id === source.id);
+  return !before?.config?.patterns?.some((old) => equal(old, rule));
+}
 export function untestedPatterns(loaded, draft, acknowledgements) {
   return (draft.sources || []).flatMap((source) => {
-    const before = loaded.sources?.find((old) => old.id === source.id);
     return (source.config?.patterns || [])
-      .filter(
-        (rule) =>
-          !before?.config?.patterns?.some((old) => equal(old, rule)) &&
-          !acknowledgements.has(patternStamp(source, rule)),
-      )
+      .filter((rule) => patternChanged(loaded, source, rule) && !acknowledgements.has(patternStamp(source, rule)))
       .map((rule) => ({ source: source.id, rule: rule.id }));
   });
 }

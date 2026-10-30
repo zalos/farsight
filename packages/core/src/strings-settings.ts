@@ -173,6 +173,8 @@ const formWords: Record<string, [string, string]> = {
   "untested": ["Save untested", "Allow this exact version of the draft rule to save without a test. Further edits require a new choice."],
   "needsTest": ["Test each changed pattern or choose Save untested in Source configuration.", "Save is held only for new or changed rules, compared by value with the loaded version. Object key order and source connection edits do not change saved rules. Each changed version needs a test or an explicit Save untested choice."],
   "acceptedUntested": ["This version may be saved untested.", "This acknowledgement belongs only to the current rule and source inputs."],
+  "unchanged": ["Unchanged saved rule; no new test is required.", "This rule matches its loaded version. Testing is available, but Save does not require a new test until the rule changes."],
+  "workspaceDocuments": ["Workspace documents", "Edit this source’s registered documents and ignored candidate paths."],
   "tested": ["This version was tested.", "The dry run completed for these exact rule and source inputs. Review matches and skipped files before saving."],
   "testing": ["Testing…", "The server is running this draft rule with the normal source and pattern bounds."],
   "failed": ["The test did not finish. Try again.", "No test acknowledgement was recorded; the rule is still in the draft."],

@@ -58,6 +58,7 @@ function field(name, label, path, value, config = {}) {
     key: key(label),
     path: path + (name.startsWith('$') ? '' : '.' + name),
     value,
+    tipOnInput: true,
     ...config,
   }).replace('data-field=', `data-form-field="${esc(name)}" data-field=`);
 }
@@ -72,7 +73,8 @@ function rowHtml(row, index, ctx) {
   const value = (label, config = {}) => field('$value', label, path, Array.isArray(v) ? v.join('\n') : v, config);
   let html =
     row.key !== undefined
-      ? field('$key', 'key', path, row.key, { id: `form-${sourceIndex}-${form}-${index}-key` })
+      ? field('$key', 'key', path, row.key, { id: `form-${sourceIndex}-${form}-${index}-key` }) +
+        '<p class="settings-problem" data-key-problem role="status" hidden></p>'
       : '';
   if (/\.(security|guards|middleware)$/.test(row.path)) {
     html += f('label') + f('tier', 'tier', { options: options(tiers, true) }) + f('requires', 'grant');
@@ -93,7 +95,7 @@ function rowHtml(row, index, ctx) {
   } else if (row.path === 'patterns') {
     const matcher = matchers.find((name) => Object.hasOwn(v.match || {}, name)) || 'call';
     html += f('id') + field('files', 'files', path, (v.files || []).join('\n'), { type: 'textarea' });
-    html += field('$matcher', 'matcher', path + '.match.' + matcher, matcher, {
+    html += field('$matcher', 'matcher', path + '.match', matcher, {
       options: options(matchers),
       id: `form-${sourceIndex}-${form}-${index}-matcher`,
     });
@@ -194,7 +196,8 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
   const supported = (path) => form === 'openapi' || model.supportsField(S.VERSION, path.split('.')[0]);
   const available = model.formPaths[form].filter(supported);
   addPath = available[0] || addPath;
-  root.innerHTML = `<header class="settings-form-heading"><h3${defAttrs(formTitleKey(form))}>${esc(t(formTitleKey(form)))}</h3>${code ? `<button type="button" class="btn" data-form-json aria-expanded="false"${defAttrs(key('json'))}>${esc(t(key('json')))}</button>` : ''}</header>${code ? `<p class="set-note settings-form-paths"><code>${esc(model.formPaths[form].join(' · '))}</code></p><pre class="settings-form-json" hidden></pre>` : ''}<div class="settings-form-add">${fieldHtml({ key: key('rowType'), path: `form-${sourceIndex}-${form}-type`, value: addPath, options: model.formPaths[form].map((p) => [p, key('row.' + p)]) })}</div><div class="settings-form-rows"></div><p class="settings-problem" data-problem-for="sources[${sourceIndex}]${form === 'openapi' ? '.openapi' : '.config'}" hidden></p>`;
+  const heading = form === 'openapi' ? key('workspaceDocuments') : formTitleKey(form);
+  root.innerHTML = `<header class="settings-form-heading"><h3${defAttrs(heading)}>${esc(t(heading))}</h3>${code ? `<button type="button" class="btn" data-form-json aria-expanded="false"${defAttrs(key('json'))}>${esc(t(key('json')))}</button>` : ''}</header>${code ? `<p class="set-note settings-form-paths"><code>${esc(model.formPaths[form].join(' · '))}</code></p><pre class="settings-form-json" hidden></pre>` : ''}<div class="settings-form-add">${fieldHtml({ key: key('rowType'), path: `form-${sourceIndex}-${form}-type`, value: addPath, options: model.formPaths[form].map((p) => [p, key('row.' + p)]) })}</div><div class="settings-form-rows"></div><p class="settings-problem" data-problem-for="sources[${sourceIndex}]${form === 'openapi' ? '.openapi' : '.config'}" hidden></p>`;
   const type = root.querySelector('.settings-form-add select');
   for (const option of type.options)
     if (!supported(option.value)) {
@@ -232,7 +235,7 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
       if (state)
         state.textContent = saved
           ? t(key(saved.kind === 'tested' ? 'tested' : 'acceptedUntested'))
-          : t(key('needsTest'));
+          : t(key(model.patternChanged(S.SETTINGS, source, row.value) ? 'needsTest' : 'unchanged'));
       const result = grid.querySelector(`[data-pattern-result="${i}"]`);
       if (result) result.innerHTML = saved?.result ? patternResultHtml(saved.result) : '';
     });
@@ -249,7 +252,10 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
     input: (event, row, index) => {
       const name = event.target.dataset.formField;
       if (!name || !supported(row.path)) return;
-      if (name === '$key') return;
+      if (name === '$key') {
+        event.target.closest('[data-row]').querySelector('[data-key-problem]').hidden = true;
+        return;
+      }
       model.updateFormValue(row, name, event.target.value);
       commit();
       if (name === '$document') {
@@ -259,8 +265,12 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
         wrap.dataset.fieldWrap = path;
         wrap.querySelector('[data-problem-for]').dataset.problemFor = path;
       }
-      if (name === '$matcher' || name === 'emit.kind' || name === 'kind') editor.draw(index);
-      else {
+      if (name === '$matcher' || name === 'emit.kind' || name === 'kind') {
+        editor.draw();
+        grid
+          .querySelector(`[data-row="${index}"] [data-form-field="${CSS.escape(name)}"]`)
+          ?.focus({ preventScroll: true });
+      } else {
         const preview = event.target.closest('tr').querySelector('.settings-label-preview output');
         if (preview) preview.textContent = model.labelPreview(row.value.label, sample, row.key);
         paintTests();
@@ -287,14 +297,33 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
     const row = rows[index];
     if (rows.some((other) => other !== row && other.path === row.path && other.key === event.target.value)) {
       event.target.value = row.key;
-      const note = event.target.closest('.settings-field').querySelector('.settings-problem');
+      const note = event.target.closest('[data-row]').querySelector('[data-key-problem]');
       note.hidden = false;
       note.textContent = t(key('duplicate'));
       return;
     }
+    const before = rowPath(row, sourceIndex, form);
     model.updateFormValue(row, '$key', event.target.value);
+    const after = rowPath(row, sourceIndex, form);
+    // Keep the same controls mounted so Tab and a pointer click retain their intended target.
+    for (const element of event.target
+      .closest('[data-row]')
+      .querySelectorAll('[data-field],[data-field-wrap],[data-problem-for]'))
+      for (const attribute of ['field', 'fieldWrap', 'problemFor']) {
+        const path = element.dataset[attribute];
+        if (path === before || path?.startsWith(before + '.'))
+          element.dataset[attribute] = after + path.slice(before.length);
+      }
+    for (const input of event.target.closest('[data-row]').querySelectorAll('[data-form-field]')) {
+      if (!input.id.startsWith('set-field-')) continue;
+      const name = 'set-field-' + input.dataset.field.replace(/[^\w-]/g, '-');
+      const wrap = input.closest('.settings-field');
+      input.id = name;
+      input.setAttribute('aria-describedby', name + '-problem');
+      wrap.querySelector('label').htmlFor = name;
+      wrap.querySelector('[data-problem-for]').id = name + '-problem';
+    }
     commit();
-    editor.draw();
   };
   grid.addEventListener('click', async (event) => {
     const button = event.target.closest('[data-pattern-test],[data-pattern-untested]');

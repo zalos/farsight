@@ -194,8 +194,11 @@ test('unchanged saved rules are not gated by source edits or object-key order', 
   const draft = M.clone(loaded);
   draft.sources[0].exclude = ['generated/**'];
   draft.sources[0].config.patterns[0] = { emit: rule.emit, match: rule.match, files: rule.files, id: rule.id };
+  assert.equal(M.patternChanged(loaded, draft.sources[0], draft.sources[0].config.patterns[0]), false);
   assert.deepEqual(M.untestedPatterns(loaded, draft, new Set()), []);
   assert.equal(M.patternStamp(source, rule), M.patternStamp(source, draft.sources[0].config.patterns[0]));
+  draft.sources[0].config.patterns[0].id = 'changed';
+  assert.equal(M.patternChanged(loaded, draft.sources[0], draft.sources[0].config.patterns[0]), true);
 });
 
 test('form value folds preserve typed captures, replace matchers and remove fields hidden by emit-kind changes', () => {

@@ -175,6 +175,100 @@ test.describe('workspace overlay forms', () => {
    * @covers POST /api/patterns/test
    * @covers POST /api/sync
    */
+  test('key edits preserve Tab and pointer focus, field paths, and stay on Settings while typing', async ({ page }) => {
+    for (const [form, next] of [
+      ['gates', 'label'],
+      ['endpoints', 'method'],
+      ['words', 'label'],
+    ]) {
+      await open(page, form);
+      const row = pane(page, form).locator('[data-row]').first();
+      const key = row.locator('[data-form-field="$key"]');
+      const target = row.locator(`[data-form-field="${next}"]`);
+      await key.fill('Renamed' + form);
+      await key.press('Tab');
+      await expect(target).toBeFocused();
+      await expect(target).toHaveAttribute('data-field', new RegExp('Renamed' + form + '\\.' + next + '$'));
+      await page.keyboard.type('t');
+      await expect(page).toHaveURL(/#\/settings\/configuration/);
+      await key.fill('Clicked' + form);
+      await target.click();
+      await expect(target).toBeFocused();
+      await page.keyboard.type('t');
+      await expect(page).toHaveURL(/#\/settings\/configuration/);
+    }
+  });
+
+  test('shape changes keep focus on their selector and unchanged rules do not request a new test', async ({ page }) => {
+    await open(page, 'patterns');
+    const row = pane(page, 'patterns').locator('[data-row]').first();
+    await expect(row.locator('[data-pattern-state]')).toHaveText('Unchanged saved rule; no new test is required.');
+    const emit = row.locator('[data-form-field="emit.kind"]');
+    await emit.selectOption('guard');
+    await expect(emit).toBeFocused();
+    await emit.press('Tab');
+    await expect(row.locator('[data-form-field="emit.name"]')).toBeFocused();
+    await expect(row.locator('[data-pattern-state]')).toContainText('Test each changed pattern');
+    const matcher = row.locator('[data-form-field="$matcher"]');
+    await matcher.selectOption('regex');
+    await expect(matcher).toBeFocused();
+    await matcher.press('Tab');
+    await expect(row.locator('[data-form-field="match.regex"]')).toBeFocused();
+    await card(page).locator('[data-overlay-form="nodes"]').click();
+    const kind = pane(page, 'nodes').locator('[data-form-field="kind"]').first();
+    await kind.selectOption('external');
+    await expect(kind).toBeFocused();
+  });
+
+  test('an in-flight server check cannot hide a duplicate-key correction', async ({ page }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let arrived = false;
+    await page.route('**/api/settings/check', async (route) => {
+      const response = await route.fetch();
+      arrived = true;
+      await held;
+      await route.fulfill({ response });
+    });
+    await open(page);
+    const gates = pane(page, 'gates');
+    await gates.locator('[data-row-action="add"]').click();
+    await expect.poll(() => arrived).toBe(true);
+    const row = gates.locator('[data-row]').last();
+    const key = row.locator('[data-form-field="$key"]');
+    await key.fill('Policy');
+    await key.press('Tab');
+    await expect(row.locator('[data-key-problem]')).toContainText('Choose a different key');
+    const completed = page.waitForResponse('**/api/settings/check');
+    release();
+    await completed;
+    await expect(page.locator('#savebtn')).toBeEnabled();
+    await expect(row.locator('[data-key-problem]')).toBeVisible();
+    await key.fill('UniquePolicy');
+    await expect(row.locator('[data-key-problem]')).toBeHidden();
+    await key.press('Tab');
+    await gates.locator('[data-row-action="add"]').click();
+    const ids = await gates.locator('[id]').evaluateAll((elements) => elements.map((element) => element.id));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  test('matcher validation names the expression and workspace documents have a distinct heading', async ({ page }) => {
+    await open(page, 'patterns');
+    const row = pane(page, 'patterns').locator('[data-row]').first();
+    const expression = row.locator('[data-form-field="match.call"]');
+    await expression.fill('');
+    await expect(expression).toHaveAttribute('aria-invalid', 'true');
+    await expect(expression.locator('..').locator('[data-problem-for]')).toContainText('match.call');
+    await expect(row.locator('[data-form-field="$matcher"]')).not.toHaveAttribute('aria-invalid', 'true');
+    await open(page, 'openapi', writable, 'business');
+    await expect(
+      card(page).locator('.settings-overlay-form').getByText('Interface documents', { exact: true }),
+    ).toHaveCount(1);
+    await expect(pane(page, 'openapi').getByRole('heading', { name: 'Workspace documents' })).toBeVisible();
+  });
+
   test('declared nodes expose only relevant fields and show each row’s last-sync audit', async ({ page }) => {
     await open(page, 'nodes');
     const nodes = pane(page, 'nodes');

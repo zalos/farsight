@@ -10,9 +10,20 @@ export function buttonHtml(key, attrs = '') {
 }
 
 /** A labelled field with a stable server path for the one validation message. */
-export function fieldHtml({ key, path, value, options, type = 'text', id, hint = '', optional = false }) {
+export function fieldHtml({
+  key,
+  path,
+  value,
+  options,
+  type = 'text',
+  id,
+  hint = '',
+  optional = false,
+  tipOnInput = false,
+}) {
   const name = id || 'set-field-' + path.replace(/[^\w-]/g, '-');
-  const attrs = `id="${esc(name)}" data-field="${esc(path)}" data-write aria-describedby="${esc(name)}-problem"`;
+  const tip = defAttrs(key);
+  const attrs = `id="${esc(name)}" data-field="${esc(path)}" data-write aria-describedby="${esc(name)}-problem"${tipOnInput ? tip : ''}`;
   const input = options
     ? `<select ${attrs}>${options
         .map((o) => {
@@ -23,7 +34,7 @@ export function fieldHtml({ key, path, value, options, type = 'text', id, hint =
     : type === 'textarea'
       ? `<textarea ${attrs} rows="3" autocomplete="off">${esc(value ?? '')}</textarea>`
       : `<input ${attrs} type="${type}"${type === 'checkbox' ? (value ? ' checked' : '') : ` value="${esc(value ?? '')}"`}${optional ? ' data-optional' : ''} autocomplete="off"/>`;
-  return `<div class="settings-field" data-field-wrap="${esc(path)}"><label for="${esc(name)}"${defAttrs(key)}>${esc(t(key))}</label>${input}${hint ? `<p class="set-note">${esc(t(hint))}</p>` : ''}<p class="settings-problem" id="${esc(name)}-problem" data-problem-for="${esc(path)}" role="status" hidden></p></div>`;
+  return `<div class="settings-field" data-field-wrap="${esc(path)}"><label for="${esc(name)}"${tipOnInput ? tip.replace('tabindex="0"', 'tabindex="-1"') : tip}>${esc(t(key))}</label>${input}${hint ? `<p class="set-note">${esc(t(hint))}</p>` : ''}<p class="settings-problem" id="${esc(name)}-problem" data-problem-for="${esc(path)}" role="status" hidden></p></div>`;
 }
 
 /** Mount a grid. Columns supply HTML; callbacks edit the caller's shared draft in place. */

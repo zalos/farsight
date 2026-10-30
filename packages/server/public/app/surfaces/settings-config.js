@@ -38,6 +38,7 @@ function fieldHtml(name, lens) {
 
 function openApiHtml(repo, meta, counts) {
   if (!meta) return '';
+  const titleKey = currentLens() === 'business' ? 'settings.forms.openapiBusiness' : 'config.openapi.title';
   const source = ((S.SETTINGS && S.SETTINGS.sources) || []).find(
     (s) => s.name === repo && (s.type === 'local' || s.type === 'git'),
   );
@@ -88,9 +89,9 @@ function openApiHtml(repo, meta, counts) {
       .join('');
   return (
     '<section class="cfg-openapi"><div class="cfg-sub"' +
-    defAttrs('config.openapi.title') +
+    defAttrs(titleKey) +
     '>' +
-    esc(t(currentLens() === 'business' ? 'settings.forms.openapiBusiness' : 'config.openapi.title')) +
+    esc(t(titleKey)) +
     '</div>' +
     countedHtml(counts && counts.applied, API, { cls: 'cnt-n cfg-n-applied' }) +
     ' · ' +
