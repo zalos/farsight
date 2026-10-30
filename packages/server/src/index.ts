@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'no
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve, basename, sep } from 'node:path';
+import { dirname, join, resolve, basename, sep, posix } from 'node:path';
 import {
   GraphStore,
   readModelHubState,
@@ -97,6 +97,11 @@ import {
   tourOf,
   ask,
   askExample,
+  type FarsightConfig,
+  type ConfigOverlay,
+  CONFIG_FIELDS,
+  CONFIG_OVERLAY_FIELDS,
+  configSchemaProblem,
 } from '@farsight/core';
 import type {
   CoverageTestRef,
@@ -121,6 +126,7 @@ import { writeSpine, fillHistorySlot, syncWork, workSourcesOf, keyOptionsOf, han
 import type { SourceConfig as WorkSourceConfig, WorkSettingsSource } from './work.js';
 import {
   ingestRepo,
+  sourceIngestOptions,
   ingestSpec,
   parseSpecText,
   readSpecSource,
@@ -158,6 +164,7 @@ export {
 } from './work.js';
 export type { WorkSettingsSource, WorkSyncOutcome, UnmatchedKey } from './work.js';
 
+/** The server writes workspace settings only, never into a source; MCP never writes into a source. */
 export interface Source {
   id: string;
   name: string;
@@ -172,6 +179,10 @@ export interface Source {
   status?: string;
   /** where this source's Storybook runs, when the repo's own config or scripts do not say (ADR 9) — overrides the graph's recorded URL */
   storybook?: { url?: string; command?: string };
+  /** Data declarations over the code, restricted to CONFIG_OVERLAY_FIELDS by the server. */
+  config?: ConfigOverlay;
+  openapi?: FarsightConfig['openapi'];
+  openapiIgnore?: string[];
   // ── type 'work' only (§10). Secrets are never here: `auth.secret` is a `keychain:` reference,
   // because GET /api/settings serves this file back and the viewer rewrites it wholesale ──
   /** registry id: 'jira' | 'azure-devops' | 'fixture' */
@@ -240,6 +251,55 @@ function loadSettings(ws: string): Settings {
 }
 
 const SOURCE_TYPES = new Set(['local', 'git', 'openapi', 'design', 'work']);
+const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** Registered URLs are fetched at sync; file references stay within their source. */
+function openapiRefProblem(
+  ref: unknown,
+  path: string,
+  kind: 'path' | 'url' | 'reference' = 'reference',
+): string | null {
+  if (typeof ref === 'string' && ref.trim() && !ref.includes('\0')) {
+    if (kind !== 'path') {
+      try {
+        const u = new URL(ref);
+        if ((u.protocol === 'http:' || u.protocol === 'https:') && u.hostname) return null;
+      } catch {
+        /* a source-relative file is not a URL */
+      }
+    }
+    const raw = ref.trim().replace(/\\/g, '/');
+    const normalized = posix.normalize(raw);
+    if (
+      kind !== 'url' &&
+      !raw.startsWith('/') &&
+      !/^[a-z][a-z\d+.-]*:/i.test(raw) &&
+      normalized !== '..' &&
+      !normalized.startsWith('../')
+    )
+      return null;
+  }
+  const expected =
+    kind === 'url' ? 'an HTTP(S) URL' : kind === 'path' ? 'source-relative' : 'source-relative, or an HTTP(S) URL';
+  return `${path} must be ${expected}`;
+}
+
+function openapiEntriesProblem(entries: unknown, path: string): string | null {
+  const schemaProblem = configSchemaProblem({ openapi: entries }, 'config');
+  if (schemaProblem) return schemaProblem.replace('config.openapi', path);
+  for (const [i, entry] of (entries as NonNullable<FarsightConfig['openapi']>).entries()) {
+    const at = `${path}[${i}]`;
+    if ((entry.path === undefined) === (entry.url === undefined)) return `${at} must name exactly one of path or url`;
+    const field = entry.url === undefined ? 'path' : 'url';
+    const problem = openapiRefProblem(entry[field], `${at}.${field}`, field);
+    if (problem) return problem;
+  }
+  return null;
+}
+
+function openapiEntryProblem(entry: unknown, path: string): string | null {
+  return openapiEntriesProblem([entry], path)?.replace(`${path}[0]`, path) ?? null;
+}
 
 /**
  * What PUT /api/settings may write: the shape the server reads back, and no secret
@@ -266,7 +326,16 @@ export function settingsProblem(body: unknown): string | null {
   }
   for (const [i, src] of s.sources.entries()) {
     if (!src || typeof src !== 'object') return `sources[${i}] must be an object`;
-    const x = src as { id?: unknown; name?: unknown; type?: unknown; path?: unknown; auth?: { secret?: unknown } };
+    const x = src as {
+      id?: unknown;
+      name?: unknown;
+      type?: unknown;
+      path?: unknown;
+      auth?: { secret?: unknown };
+      config?: unknown;
+      openapi?: unknown;
+      openapiIgnore?: unknown;
+    };
     if (typeof x.id !== 'string' || !x.id) return `sources[${i}].id must be a non-empty string`;
     if (typeof x.name !== 'string') return `sources[${i}].name must be a string`;
     if (typeof x.type !== 'string' || !SOURCE_TYPES.has(x.type))
@@ -278,6 +347,38 @@ export function settingsProblem(body: unknown): string | null {
     if (secret !== undefined && !(typeof secret === 'string' && isSecretRef(secret))) {
       // never echo it: it may be a pasted token
       return `sources[${i}].auth.secret must be a keychain: or env: reference — secrets never go in settings`;
+    }
+    if (x.type !== 'local' && x.type !== 'git') {
+      for (const key of ['config', 'openapi', 'openapiIgnore'] as const)
+        if (x[key] !== undefined) return `sources[${i}].${key} is only supported on local or git sources`;
+    }
+    if (x.config !== undefined) {
+      const path = `sources[${i}].config`;
+      if (!object(x.config)) return `${path} must be an object`;
+      const config = Object.fromEntries(
+        Object.entries(x.config).filter(([key]) => !key.startsWith('$') && !key.startsWith('//')),
+      );
+      for (const key of Object.keys(config)) {
+        if (!(CONFIG_OVERLAY_FIELDS as readonly string[]).includes(key))
+          return (CONFIG_FIELDS as readonly string[]).includes(key)
+            ? `${path}.${key} is not a workspace overlay field — a path block stays in the repository's farsight.config.json`
+            : `${path}.${key} is not a farsight.config.json field`;
+      }
+      for (const key of Object.keys(config))
+        if (!(CONFIG_FIELDS as readonly string[]).includes(key)) return `${path}.${key} is not in this build`;
+      const problem = configSchemaProblem(config, path);
+      if (problem) return problem;
+    }
+    if (x.openapi !== undefined) {
+      const problem = openapiEntriesProblem(x.openapi, `sources[${i}].openapi`);
+      if (problem) return problem;
+    }
+    if (x.openapiIgnore !== undefined) {
+      if (!Array.isArray(x.openapiIgnore)) return `sources[${i}].openapiIgnore must be a string array`;
+      for (const [j, value] of x.openapiIgnore.entries()) {
+        const problem = openapiRefProblem(value, `sources[${i}].openapiIgnore[${j}]`);
+        if (problem) return problem;
+      }
     }
   }
   return null;
@@ -355,7 +456,10 @@ export async function syncSources(ws: string, settings: Settings, graphPath: str
       }
       const dir = materialize(ws, source);
       // ingestRepo applies the repo's farsight.config.json itself (before + after the spec pass)
-      const fragment = await ingestRepo(dir, { repoName: source.name, exclude: source.exclude });
+      const fragment = await ingestRepo(dir, {
+        repoName: source.name,
+        ...sourceIngestOptions(source),
+      });
       store.roots[fragment.repo] = dir;
       store.addFragment(fragment);
       results[source.id] =
@@ -1268,6 +1372,8 @@ export function serveGraph(
         200,
         JSON.stringify({
           farsight: buildInfo(),
+          configFields: [...CONFIG_FIELDS],
+          overlayFields: CONFIG_OVERLAY_FIELDS.filter((field) => (CONFIG_FIELDS as readonly string[]).includes(field)),
           install,
           currency,
           session: { instance: hostInstance, readOnly: !!readOnly, ...(readOnly ? { why: readOnly } : {}) },
@@ -2925,19 +3031,82 @@ export function serveGraph(
     if (url === '/api/settings' && req.method === 'GET') {
       return send(200, JSON.stringify(loadSettings(ws)));
     }
-    if (url === '/api/settings' && req.method === 'PUT') {
+    if ((url === '/api/settings' && req.method === 'PUT') || (url === '/api/settings/check' && req.method === 'POST')) {
+      const check = url === '/api/settings/check';
       let body = '';
       req.on('data', (c) => (body += c));
       req.on('end', () => {
+        let parsed: unknown;
         try {
-          const parsed = JSON.parse(body);
-          const problem = settingsProblem(parsed);
-          if (problem) return send(400, JSON.stringify({ error: problem }));
-          saveSettings(ws, parsed);
-          send(200, JSON.stringify({ ok: true }));
-        } catch (err) {
-          send(400, JSON.stringify({ error: (err as Error).message }));
+          parsed = JSON.parse(body);
+        } catch {
+          const problem = 'settings must be valid JSON';
+          return send(400, JSON.stringify(check ? { ok: false, problem } : { error: problem }));
         }
+        const problem = settingsProblem(parsed);
+        if (problem)
+          return send(check ? 200 : 400, JSON.stringify(check ? { ok: false, problem } : { error: problem }));
+        if (!check) {
+          try {
+            saveSettings(ws, parsed as Settings);
+          } catch {
+            return send(500, JSON.stringify({ error: 'settings could not be saved' }));
+          }
+        }
+        send(200, JSON.stringify({ ok: true }));
+      });
+      return;
+    }
+    const registration = url.match(/^\/api\/sources\/([^/?]+)\/openapi(?:\?|$)/);
+    if (registration && (req.method === 'POST' || req.method === 'DELETE')) {
+      let id: string;
+      try {
+        id = decodeURIComponent(registration[1]!);
+      } catch {
+        return send(400, JSON.stringify({ error: 'source id must be URL-encoded text' }));
+      }
+      const update = (entry: unknown) => {
+        // Read after the request body: another completed save must not be lost while it arrives.
+        const settings = loadSettings(ws);
+        const i = settings.sources.findIndex((s) => s.id === id);
+        const src = settings.sources[i];
+        if (!src || (src.type !== 'local' && src.type !== 'git'))
+          return send(404, JSON.stringify({ error: 'no code source with that id' }));
+        const path = `sources[${i}].openapi`;
+        const deleting = req.method === 'DELETE';
+        const problem = deleting
+          ? openapiRefProblem(entry, `${path}.path`)
+          : openapiEntryProblem(entry, `${path}[${src.openapi?.length ?? 0}]`);
+        if (problem) return send(400, JSON.stringify({ error: problem }));
+        const item = entry as NonNullable<Source['openapi']>[number];
+        const ref = deleting ? (entry as string) : (item.url ?? item.path)!;
+        src.openapi = (src.openapi ?? []).filter((e) => (e.url ?? e.path) !== ref);
+        src.openapiIgnore = (src.openapiIgnore ?? []).filter((p) => p !== ref);
+        if (deleting) src.openapiIgnore.push(ref);
+        else src.openapi.push(item);
+        const invalid = settingsProblem(settings);
+        if (invalid) return send(400, JSON.stringify({ error: invalid }));
+        try {
+          saveSettings(ws, settings);
+        } catch {
+          return send(500, JSON.stringify({ error: 'settings could not be saved' }));
+        }
+        return send(
+          200,
+          JSON.stringify({ [deleting ? 'dismissed' : 'registered']: ref, source: src.id, next: 'POST /api/sync' }),
+        );
+      };
+      if (req.method === 'DELETE') return update(new URL(url, 'http://localhost').searchParams.get('path'));
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(body);
+        } catch {
+          return send(400, JSON.stringify({ error: 'OpenAPI registration must be valid JSON' }));
+        }
+        update(parsed);
       });
       return;
     }

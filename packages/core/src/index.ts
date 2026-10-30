@@ -2,6 +2,7 @@ export * from './graph.js';
 export * from './store.js';
 export * from './query.js';
 export * from './config.js';
+export * from './config-overlay.js';
 export * from './strings.js';
 export * from './modelhub.js';
 export * from './snapshots.js';

@@ -15,7 +15,13 @@
       "name": "invoice-app",
       "type": "local",
       "path": "examples/invoice-app",
-      "enabled": true
+      "enabled": true,
+      "config": {
+        "glossary": { "submitInvoice": { "label": "Submit an invoice" } },
+        "tags": { "billing": ["invoice"] }
+      },
+      "openapi": [{ "path": "openapi.yaml", "name": "Vendor API (example)" }],
+      "openapiIgnore": ["docs/archived-api.json"]
     },
     {
       "id": "spring-invoice-api",

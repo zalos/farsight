@@ -25,6 +25,7 @@ import type { ParsedManifest } from './design/index.js';
 import { declaredPathWarnings } from './shared/declared-paths.js';
 
 export type { LanguageAdapter, IngestOptions } from './types.js';
+export { sourceIngestOptions } from './types.js';
 export { tsJsAdapter, ingestTsJs, SQL_DRIVERS, storeLike } from './tsjs.js';
 export { applyStores, prismaProviders, springDatasourceJdbc } from './stores.js';
 export {

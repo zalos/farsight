@@ -824,6 +824,10 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "from": {
+                "type": "string",
+                "const": "workspace"
               }
             },
             "required": [
@@ -850,7 +854,10 @@
                   "external",
                   "store",
                   "tag",
-                  "lifecycle"
+                  "lifecycle",
+                  "gateTier",
+                  "decision",
+                  "field"
                 ]
               },
               "key": {
@@ -864,6 +871,11 @@
               },
               "kept": {
                 "type": "string"
+              },
+              "from": {
+                "type": "string",
+                "const": "workspace",
+                "description": "The losing declaration came from workspace settings."
               }
             },
             "required": [
