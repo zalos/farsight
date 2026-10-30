@@ -24,6 +24,7 @@ import type {
   DecisionsMeta,
   RoutesMeta,
   OpenApiMeta,
+  PatternsMeta,
 } from './graph.js';
 
 /** Freshness signals persisted with the snapshot — lets consumers (MCP agents
@@ -70,6 +71,8 @@ export interface GraphMeta {
   routes?: Record<string, RoutesMeta>;
   /** Applied and candidate OpenAPI documents, per source. */
   openapi?: Record<string, OpenApiMeta>;
+  /** Bounded pattern reports, per source. */
+  patterns?: Record<string, PatternsMeta>;
 }
 
 /**
@@ -122,6 +125,9 @@ export class GraphStore {
     }
     if (fragment.meta?.openapi) {
       this.meta.openapi = { ...this.meta.openapi, [fragment.repo]: fragment.meta.openapi };
+    }
+    if (fragment.meta?.patterns) {
+      this.meta.patterns = { ...this.meta.patterns, [fragment.repo]: fragment.meta.patterns };
     }
     if (fragment.meta) {
       // a fragment with no content digest but the same sourceHash as the row already
@@ -235,6 +241,7 @@ export class GraphStore {
       'decisions',
       'routes',
       'openapi',
+      'patterns',
     ] as const;
     for (const field of fields) for (const repo of Object.keys(this.meta[field] ?? {})) repos.add(repo);
     const sources: GraphSource[] = [...repos].map((repo) => {

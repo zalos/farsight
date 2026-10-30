@@ -134,6 +134,7 @@ import {
   repoContentDigest,
 } from '@farsight/parsers';
 import { registerWorkTools } from './work.js';
+import { registerPatternsTools } from './patterns-tools.js';
 import { registerConfigTools } from './config-tools.js';
 import { registerJourneysTools } from './journeys-tools.js';
 import { registerAffectedTools } from './affected-tools.js';
@@ -838,6 +839,7 @@ export function createMcpServer(
   const work = registerWorkTools({ server, graphPath, index: () => index, roots: () => store.roots });
   // every farsight.config.json per source — the root's and the ones scoped to a folder (config-tools.ts)
   const configTools = registerConfigTools({ server, meta: () => store.meta });
+  registerPatternsTools({ server, roots: () => store.roots, options: workspaceOptions });
   // journeys by persona and group, in declared order (journey-organisation-and-config-files.md §4.4)
   const journeysTools = registerJourneysTools({ server, index: () => index, meta: () => store.meta });
   // what a pull request or a commit range touches — only when a code-host source grants agents read (affected-tools.ts)

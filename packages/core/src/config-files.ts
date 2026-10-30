@@ -156,6 +156,7 @@ export function configFilesText(
   metas: Record<string, ConfigMeta> | undefined,
   repo?: string,
   register: Register = 'professional',
+  patterns?: Record<string, import('./graph.js').PatternsMeta>,
 ): string[] {
   const entries = Object.entries(metas ?? {})
     .filter(([r]) => !repo || r === repo)
@@ -197,5 +198,64 @@ export function configFilesText(
       for (const n of meta.notes) out.push(`  ${n}`);
     }
   }
-  return out;
+  return [...out, ...patternFilesText(patterns, repo)];
+}
+
+/** Each rule's numbers, in report order so equal rule ids in different config files stay distinct. */
+export function patternCounts(meta: import('./graph.js').PatternsMeta) {
+  return meta.rules.map((row) => {
+    const count = (key: 'matched' | 'nodes' | 'edges' | 'unresolved' | 'skipped') =>
+      counted(
+        Array.isArray(row[key]) ? row[key].length : (row[key] as number),
+        `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}`,
+        'count.scope.pattern',
+        `meta.patterns[repo].rules[${JSON.stringify(row.file + ':' + row.id)}].${key}`,
+        { bizUnit: `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}Biz` },
+      );
+    return {
+      matched: count('matched'),
+      nodes: count('nodes'),
+      edges: count('edges'),
+      unresolved: count('unresolved'),
+      skipped: count('skipped'),
+    };
+  });
+}
+
+export function patternFilesText(
+  metas: Record<string, import('./graph.js').PatternsMeta> | undefined,
+  repo?: string,
+): string[] {
+  return Object.entries(metas ?? {})
+    .filter(([r]) => !repo || r === repo)
+    .flatMap(([r, meta]) => {
+      const counts = patternCounts(meta);
+      return [
+        `${r} — ${t('config.patterns.title', 'professional')}`,
+        ...meta.rules.flatMap((row, i) => [
+          `  ${row.id} · ${row.file} · ${Object.values(counts[i]!)
+            .map((c) => countedText(c))
+            .join(' · ')}`,
+          ...row.unresolved.map(
+            (u) =>
+              `    ${u.path}:${u.line} · ${t('config.patterns.unresolved', 'professional')} ${JSON.stringify(u.capture)}`,
+          ),
+          ...row.skipped.map((s) => `    ${s.path} · ${s.reason}`),
+        ]),
+      ];
+    });
+}
+
+export function patternOverviewLines(metas: Record<string, import('./graph.js').PatternsMeta> | undefined): string[] {
+  return Object.entries(metas ?? {}).map(([repo, meta]) => {
+    const counts = patternCounts(meta);
+    return `${repo} — ${t('config.patterns.title', 'professional')}: ${meta.rules
+      .map(
+        (r, i) =>
+          `${r.id} (${Object.values(counts[i]!)
+            .map((c) => countedText(c))
+            .join(' · ')})`,
+      )
+      .join('; ')}`;
+  });
 }

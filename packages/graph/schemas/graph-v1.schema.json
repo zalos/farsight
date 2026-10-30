@@ -73,6 +73,9 @@
             },
             "openapi": {
               "$ref": "#/definitions/OpenApiMeta"
+            },
+            "patterns": {
+              "$ref": "#/definitions/PatternsMeta"
             }
           },
           "required": [
@@ -1527,6 +1530,95 @@
       ],
       "additionalProperties": false,
       "description": "One OpenAPI document, whether applied or awaiting registration."
+    },
+    "PatternsMeta": {
+      "type": "object",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PatternRuleReport"
+          }
+        }
+      },
+      "required": [
+        "rules"
+      ],
+      "additionalProperties": false,
+      "description": "Pattern evidence retained once per source, without every match's captures or text."
+    },
+    "PatternRuleReport": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "matched": {
+          "type": "number"
+        },
+        "nodes": {
+          "type": "number"
+        },
+        "edges": {
+          "type": "number"
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "line": {
+                "type": "number"
+              },
+              "capture": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "line",
+              "capture"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "id",
+        "file",
+        "matched",
+        "nodes",
+        "edges",
+        "unresolved",
+        "skipped"
+      ],
+      "additionalProperties": false,
+      "description": "One rule's bounded run. Counts describe distinct graph additions, not repeated matches."
     },
     "GraphNode": {
       "type": "object",
@@ -3244,7 +3336,8 @@
         "work-key",
         "callback-prop",
         "precondition",
-        "flag-gate"
+        "flag-gate",
+        "config-pattern"
       ]
     },
     "ConfidenceTier": {
@@ -3353,6 +3446,9 @@
             },
             "openapi": {
               "$ref": "#/definitions/OpenApiMeta"
+            },
+            "patterns": {
+              "$ref": "#/definitions/PatternsMeta"
             }
           },
           "additionalProperties": false

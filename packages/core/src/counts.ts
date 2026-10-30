@@ -61,6 +61,7 @@ export interface Counted {
  * someone typed.
  */
 export const COUNT_SCOPES = [
+  'count.scope.pattern', // the selected files of one pattern rule in one source
   'surf.scope.api', // declared and implemented operations on one reconciled API surface
   'count.scope.document', // operations declared by one document, including an unapplied candidate
   'echo.portal.scope', // only the bounded page of scoped memory records returned by Echo

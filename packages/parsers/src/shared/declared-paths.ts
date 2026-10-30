@@ -35,7 +35,8 @@ export function declaredPathWarnings(
         strings(f.config.setup).length ||
         Object.keys(f.config.glossary ?? {}).length ||
         Object.keys(f.config.gateTiers ?? {}).length ||
-        Object.keys(f.config.frameworks ?? {}).length,
+        Object.keys(f.config.frameworks ?? {}).length ||
+        list(f.config.patterns).length,
     ) &&
     !manifests.length
   )
@@ -85,6 +86,10 @@ export function declaredPathWarnings(
     const scoped = fragment.nodes.filter(
       (n) => file.root || file.dir === '.' || n.loc?.path.startsWith(`${file.dir}/`),
     );
+    for (const row of fragment.meta?.patterns?.rules ?? []) {
+      if (row.file === file.path && row.matched === 0)
+        warn(`${location(row.id)} → patterns`, row.id, t('config.patterns.unmatched', 'professional'));
+    }
     for (const [group, names] of Object.entries(frameworkAliasNames(file.config.frameworks) ?? {})) {
       for (const name of names) {
         const matched =

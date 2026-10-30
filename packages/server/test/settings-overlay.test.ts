@@ -8,7 +8,7 @@ import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
 import { GraphStore, CONFIG_FIELDS, CONFIG_OVERLAY_FIELDS } from '@farsight/core';
 import { settingsProblem, syncSources, type Settings } from '../dist/index.js';
-import { isWriteRoute } from '../dist/guard.js';
+import { isWriteRoute, refuseRequest } from '../dist/guard.js';
 
 const source = { id: 'app', name: 'app', type: 'local' as const, path: 'source', enabled: true };
 const settings = (extra: Record<string, unknown> = {}) => ({
@@ -321,4 +321,39 @@ test('the scrubbed settings example validates', () => {
   const source = example.sources.find((s: { id: string }) => s.id === 'invoice-app');
   assert.equal(source.openapi[0].name, 'Billing API (example)');
   assert.ok(existsSync(new URL(`../../../${source.path}/${source.openapi[0].path}`, import.meta.url)));
+});
+
+test('pattern test is a guarded read on read-only and historical servers, carries counts and never saves', async (t) => {
+  for (const readOnly of ['flag', 'as-of'] as const) {
+    const s = await server(t, readOnly);
+    const config = {
+      patterns: [
+        {
+          id: 'route',
+          files: ['*.ts'],
+          match: { call: 'portal.$METHOD', args: { path: 0, handler: -1 } },
+          emit: { kind: 'route', method: '$METHOD', path: '$path', handler: '$handler' },
+        },
+      ],
+    };
+    writeFileSync(join(s.ws, 'source', 'app.ts'), `export function submit() {}\nportal.get('/pattern', submit);`);
+    writeFileSync(s.file, JSON.stringify(settings({ config })));
+    const before = readFileSync(s.graph, 'utf8');
+    const saved = readFileSync(s.file, 'utf8');
+    assert.equal(isWriteRoute('GET', '/api/patterns/test?source=app'), false);
+    const result = await s.call('GET', '/api/patterns/test?source=app&rule=route');
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    assert.equal((result.body.matches as { name: string }[])[0]?.name, 'GET /pattern');
+    assert.equal((result.body.counts as { matched: { n: number } }[])[0]?.matched.n, 1);
+    assert.equal((await s.call('GET', '/api/patterns/test?source=unknown')).status, 404);
+    assert.match(refuseRequest({ method: 'GET', headers: { host: 'evil.example' } })!, /localhost only/);
+    assert.equal(readFileSync(s.graph, 'utf8'), before);
+    assert.equal(readFileSync(s.file, 'utf8'), saved);
+    const graph = JSON.parse(before);
+    graph.meta.patterns = { app: result.body.report };
+    writeFileSync(s.graph, JSON.stringify(graph));
+    const inventory = await s.call('GET', '/api/config?repo=app');
+    assert.deepEqual((inventory.body.patterns as Record<string, unknown>).app, result.body.report);
+    assert.deepEqual((inventory.body.patternCounts as Record<string, unknown>).app, result.body.counts);
+  }
 });

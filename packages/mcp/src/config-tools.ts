@@ -7,6 +7,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
+  patternCounts,
+  patternOverviewLines,
   configFilesText,
   configOverviewLines,
   openApiFilesText,
@@ -55,17 +57,31 @@ export function registerConfigTools(ctx: ConfigToolsContext): ConfigTools {
             },
           });
         }
+        for (const [r, patterns] of Object.entries(graphMeta.patterns ?? {})) {
+          if (repo && repo !== r) continue;
+          Object.assign(picked, {
+            [r]: {
+              ...(picked[r] ?? { files: [], conflicts: [], notes: [] }),
+              patterns,
+              patternCounts: patternCounts(patterns),
+            },
+          });
+        }
         return text(JSON.stringify(picked, null, 2));
       }
       return text(
         [
-          ...configFilesText(metas, repo),
+          ...configFilesText(metas, repo, 'professional', graphMeta.patterns),
           ...openApiFilesText(graphMeta.openapi, repo, false, Object.keys(graphMeta.repos ?? {})),
         ].join('\n'),
       );
     },
   );
   return {
-    overviewLines: () => [...configOverviewLines(ctx.meta().config), ...openApiOverviewLines(ctx.meta().openapi)],
+    overviewLines: () => [
+      ...configOverviewLines(ctx.meta().config),
+      ...openApiOverviewLines(ctx.meta().openapi),
+      ...patternOverviewLines(ctx.meta().patterns),
+    ],
   };
 }

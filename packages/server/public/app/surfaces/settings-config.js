@@ -106,6 +106,50 @@ function openApiHtml(repo, meta, counts) {
   );
 }
 
+function patternsHtml(meta, counts) {
+  if (!meta || !meta.rules.length) return '';
+  const columns = ['matched', 'nodes', 'edges', 'unresolved', 'skipped'];
+  const rows = meta.rules
+    .map((rule, i) => {
+      const details = [
+        ...rule.unresolved.map(
+          (u) => u.path + ':' + u.line + ' · ' + t('config.patterns.unresolved') + ' ' + u.capture,
+        ),
+        ...rule.skipped.map((s) => s.path + ' · ' + s.reason),
+      ];
+      return (
+        '<tr class="cfg-pattern-row"><td' +
+        defAttrs('config.patterns.rule') +
+        '><b>' +
+        esc(rule.id) +
+        '</b><div>' +
+        esc(rule.file) +
+        '</div></td>' +
+        columns.map((key) => '<td>' + countedHtml(counts && counts[i] && counts[i][key], API) + '</td>').join('') +
+        '</tr>' +
+        (details.length
+          ? '<tr><td colspan="6"><ul>' +
+            details.map((note) => '<li>' + esc(note) + '</li>').join('') +
+            '</ul></td></tr>'
+          : '')
+      );
+    })
+    .join('');
+  return (
+    '<section class="cfg-patterns"><div class="cfg-sub"' +
+    defAttrs('config.patterns.title') +
+    '>' +
+    esc(t('config.patterns.title')) +
+    ' · <span' +
+    defAttrs('count.scope.pattern') +
+    '>' +
+    esc(t('count.scope.pattern')) +
+    '</span></div><table class="src-table cfg-table"><tbody>' +
+    rows +
+    '</tbody></table></section>'
+  );
+}
+
 async function changeOpenApi(event) {
   const button = event.target.closest('[data-openapi-action]');
   if (!button || readOnlyWhy() || button.disabled) return;
@@ -149,7 +193,8 @@ export function configFilesHtml(data, lens) {
   lens = lens || currentLens();
   const metas = (data && data.config) || {};
   const openapi = (data && data.openapi) || {};
-  const repos = [...new Set([...Object.keys(metas), ...Object.keys(openapi)])].sort();
+  const patterns = (data && data.patterns) || {};
+  const repos = [...new Set([...Object.keys(metas), ...Object.keys(openapi), ...Object.keys(patterns)])].sort();
   if (!repos.length) return '<div class="set-note cfg-none">' + esc(t('config.none')) + '</div>';
   return repos
     .map((repo) => {
@@ -257,6 +302,7 @@ export function configFilesHtml(data, lens) {
             '</ul>'
           : '') +
         openApiHtml(repo, openapi[repo], data.openapiCounts && data.openapiCounts[repo]) +
+        patternsHtml(patterns[repo], data.patternCounts && data.patternCounts[repo]) +
         '</div>'
       );
     })

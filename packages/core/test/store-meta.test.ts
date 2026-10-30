@@ -128,3 +128,27 @@ test('a graph written before the content digest still loads; repoMeta simply has
   back.save(out);
   assert.equal(JSON.parse(readFileSync(out, 'utf8')).meta.sourceDigest, undefined);
 });
+
+test('pattern metadata survives source merging, save/load and portable export as one family', () => {
+  const patterns = {
+    rules: [
+      {
+        id: 'route',
+        file: 'farsight.config.json',
+        matched: 2,
+        nodes: 1,
+        edges: 1,
+        unresolved: [{ path: 'app.ts', line: 3, capture: 'missing' }],
+        skipped: [{ path: 'large.ts', reason: 'larger than 1 MiB' }],
+      },
+    ],
+  };
+  const store = new GraphStore();
+  store.addFragment({ repo: 'app', nodes: [], edges: [], meta: { files: 1, sourceHash: 'x', patterns } });
+  const path = tempFile('patterns.json');
+  store.save(path);
+  const loaded = GraphStore.load(path);
+  assert.deepEqual(loaded.meta.patterns?.app, patterns);
+  assert.deepEqual(loaded.toDocument().sources?.find((s) => s.repo === 'app')?.meta?.patterns, patterns);
+  assert.equal(loaded.meta.openapi, undefined);
+});

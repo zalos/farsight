@@ -661,6 +661,22 @@ export interface OpenApiMeta {
   candidates: OpenApiDocument[];
 }
 
+/** One rule's bounded run. Counts describe distinct graph additions, not repeated matches. */
+export interface PatternRuleReport {
+  id: string;
+  file: string;
+  matched: number;
+  nodes: number;
+  edges: number;
+  unresolved: { path: string; line: number; capture: string }[];
+  skipped: { path: string; reason: string }[];
+}
+
+/** Pattern evidence retained once per source, without every match's captures or text. */
+export interface PatternsMeta {
+  rules: PatternRuleReport[];
+}
+
 // ── dependencies: packages as nodes (docs/proposals/dependencies-and-nx.md §2.1) ──
 // A `package` node is one dependency of one source: a third-party package (`zod`, `@scope/pkg`)
 // or a workspace library a path alias / workspace package name resolves to. The edges into it are
@@ -1129,7 +1145,8 @@ export type ResolutionTechnique =
   | 'work-key' //        MEDIUM — a work-item key read from a commit subject, a branch name or a tracker URL (core/work-graph.ts)
   | 'callback-prop' //   MEDIUM — a function a parent hands a single-site child component as a prop, credited to the child that runs it (parsers/src/callback-props.ts)
   | 'precondition' //   HIGH   — a refusing comparison on a record's status, kind, flag or list, credited to the action it stands in front of (parsers/src/preconditions.ts)
-  | 'flag-gate'; //      HIGH   — a call under a module-level `const X = true|false` whose value means it does not run (`meta.inactive`); the technique it resolved by is kept in the note (parsers/src/flag-gates.ts)
+  | 'flag-gate' //      HIGH   — a call under a module-level `const X = true|false` whose value means it does not run (`meta.inactive`); the technique it resolved by is kept in the note (parsers/src/flag-gates.ts)
+  | 'config-pattern'; // HIGH/MEDIUM — a declared pattern matched source syntax (HIGH) or a text line (MEDIUM); the note names the rule and site
 
 export type ConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -1252,6 +1269,7 @@ export interface GraphFragment {
     decisions?: DecisionsMeta;
     routes?: RoutesMeta;
     openapi?: OpenApiMeta;
+    patterns?: PatternsMeta;
   };
   /** OpenAPI documents that were found but could not be read — reported, never fatal. */
   specErrors?: string[];
