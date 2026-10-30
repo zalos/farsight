@@ -123,7 +123,10 @@ test.describe('a read-only session', () => {
       await expect(page.locator(id)).toHaveAttribute('aria-disabled', 'true');
       await expect(page.locator(id)).toHaveAttribute('data-tip-text', /read-only/);
     }
-    await expect(page.locator('#set-theme')).toBeDisabled();
+    await expect(page.locator('#set-theme')).toBeEnabled();
+    await page.locator('#set-theme').selectOption('light');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator('#set-theme-note')).toContainText('preview');
     await expect(page.locator('#settings-savebar')).toBeHidden();
     await page.locator('.settings-rail a[href="#/settings/sources"]').click();
     await expect(page.locator('[data-field="sources[0].name"]')).toBeDisabled();
@@ -265,9 +268,12 @@ test.describe('a read-only session, on every surface', () => {
     await page.goto(url + '#/work');
     await expect(page.locator('.wk-ro')).toBeVisible();
     await page.locator('.wk-syncbtn').click({ force: true });
-    // The Settings plan treats theme as a workspace write too.
+    // Theme remains a per-window preview on read-only servers.
     await page.goto(url + '#/settings/workspace');
-    await expect(page.locator('#set-theme')).toBeDisabled();
+    await expect(page.locator('#set-theme')).toBeEnabled();
+    await page.locator('#set-theme').selectOption('light');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator('#set-theme-note')).toContainText('preview');
     await page.waitForTimeout(300);
     expect(writes).toEqual([]);
   });

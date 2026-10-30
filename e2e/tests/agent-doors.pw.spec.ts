@@ -103,6 +103,7 @@ test('Settings: lessons for agents — the empty state, a lesson added and pinne
   await expect(sec.locator('[data-row]')).toHaveCount(1);
   await expect(text).toHaveValue('The e2e card is Playwright; the unit card is node:test.');
   await expect(sec.locator('[data-field="lessons[0].pinned"]')).toBeChecked();
+  await expect(sec.locator('#lessons-count')).toHaveText('1 lesson · 1 pinned');
   await sec.locator('[data-row-action="remove"]').click();
   await expect(sec.locator('[data-row]')).toHaveCount(0);
   // the server refuses the same shape without echoing it — nothing is written

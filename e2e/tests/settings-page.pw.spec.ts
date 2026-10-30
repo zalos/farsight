@@ -1,7 +1,7 @@
 // The real Settings page on a private two-source workspace, including concurrent writers.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect } from './support';
 import { CLI, makeProjectsWorkspace } from '../fixture/workspace.mjs';
@@ -74,26 +74,46 @@ test.describe('sectioned Settings', () => {
   for (const section of ['workspace', 'sources', 'collections', 'configuration', 'agents']) {
     for (const register of ['hud', 'professional']) {
       for (const theme of ['dark', 'light']) {
-        test(`${section}, ${register}, ${theme}: fits 1280px and renders without errors`, async ({ page }, info) => {
-          await page.setViewportSize({ width: 1280, height: 900 });
-          await page.addInitScript((value) => localStorage.setItem('fs-register', value), register);
-          const before = settings();
-          before.theme = theme;
-          writeFileSync(file(), JSON.stringify(before));
-          await page.goto(writable + `#/settings/${section}?lens=${register === 'professional' ? 'business' : 'code'}`);
-          await expect(page.locator('.settings-rail [aria-current]')).toHaveAttribute('href', '#/settings/' + section);
-          await expect(page.locator('#settings-section-title')).toBeVisible();
-          if (section === 'configuration') await expect(page.locator('.cfg-src').first()).toBeVisible();
-          await expect(page.locator('#settings-savebar')).toBeHidden();
-          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-          expect(
-            await page.locator('.settings-content').evaluate((el) => el.getBoundingClientRect().width),
-          ).toBeLessThanOrEqual(880);
-          await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-          mkdirSync('build/settings-shots', { recursive: true });
-          await page.screenshot({ path: `build/settings-shots/${section}-${register}-${theme}.png`, fullPage: true });
-          await page.screenshot({ path: info.outputPath(`${section}-${register}-${theme}.png`), fullPage: true });
-        });
+        for (const ro of [false, true]) {
+          test(`${section}, ${register}, ${theme}, ${ro ? 'read-only' : 'writable'}: fits 1280px and renders without errors`, async ({
+            page,
+          }, info) => {
+            await page.setViewportSize({ width: 1280, height: 900 });
+            await page.addInitScript((value) => localStorage.setItem('fs-register', value), register);
+            const before = settings();
+            before.theme = theme;
+            if (ro) {
+              before.collections = [{ name: 'Billing', sourceIds: ['invoice-app'] }];
+              before.lessons = [{ text: 'Read the gates', pinned: true }];
+            }
+            writeFileSync(file(), JSON.stringify(before));
+            await page.goto(
+              (ro ? readonly : writable) +
+                `#/settings/${section}?lens=${register === 'professional' ? 'business' : 'code'}`,
+            );
+            await expect(page.locator('.settings-rail [aria-current]')).toHaveAttribute(
+              'href',
+              '#/settings/' + section,
+            );
+            await expect(page.locator('#settings-section-title')).toBeVisible();
+            if (section === 'configuration') await expect(page.locator('.cfg-src').first()).toBeVisible();
+            await expect(page.locator('#settings-savebar')).toBeHidden();
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+            expect(
+              await page.locator('.settings-content').evaluate((el) => el.getBoundingClientRect().width),
+            ).toBeLessThanOrEqual(880);
+            await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+            await expect(page.locator('.settings-rail a')).toHaveText(
+              register === 'professional'
+                ? ['Workspace', 'Systems', 'Collections', 'What the code means', 'Agents']
+                : ['Workspace', 'Sources', 'Collections', 'Source configuration', 'Agents'],
+            );
+            await page.screenshot({
+              path: info.outputPath(`${section}-${register}-${theme}-${ro ? 'readonly' : 'writable'}.png`),
+              fullPage: true,
+            });
+          });
+        }
       }
     }
   }
@@ -116,6 +136,13 @@ test.describe('sectioned Settings', () => {
       'settings.mcp.budget must be a whole number of tokens, 500 or more',
     );
     await expect(page.locator('#savebtn')).toBeDisabled();
+    await expect(page.locator('#settings-check')).toHaveText('');
+    await page.locator('.settings-rail a[href="#/settings/sources"]').click();
+    await expect(page.locator('#settings-check')).toHaveText(
+      'settings.mcp.budget must be a whole number of tokens, 500 or more',
+    );
+    await expect(page.locator('#settings-check')).toBeInViewport();
+    await page.locator('.settings-rail a[href="#/settings/agents"]').click();
     await page.locator('[data-field="mcp.budget"]').fill('1200');
     const registration = await request.post(writable + 'api/sources/invoice-app/openapi', {
       data: { path: 'docs/concurrent.json' },
@@ -130,7 +157,8 @@ test.describe('sectioned Settings', () => {
     expect(saved.mcp.budget).toBe(1200);
     expect(saved.sources[0].openapi).toEqual([{ path: 'docs/concurrent.json' }]);
     expect(saved.sources[1]).toEqual(other);
-    await expect(page.locator('#settings-savebar')).toBeHidden();
+    await expect(page.locator('#settings-draft-actions')).toBeHidden();
+    await expect(page.locator('#savenote')).toBeInViewport();
     await page.reload();
     await expect(page.locator('[data-field="mcp.budget"]')).toHaveValue('1200');
   });
@@ -138,7 +166,7 @@ test.describe('sectioned Settings', () => {
   /** @covers packages/server/public/app/surfaces/settings-sources.js::renderSources */
   test('work source form refuses a literal secret before any request and saves a reference with permissions', async ({
     page,
-  }) => {
+  }, info) => {
     const requests: string[] = [];
     page.on('request', (request) => requests.push(request.postData() || ''));
     await page.goto(writable + '#/settings/sources');
@@ -162,24 +190,40 @@ test.describe('sectioned Settings', () => {
     ).not.toContain(pasted);
     expect(requests.join('\n')).not.toContain(pasted);
     await expect(page.locator('#savebtn')).toBeDisabled();
-    await card.locator('[data-secret-prefix="keychain:"]').click();
-    await secret.pressSequentially('farsight/example');
+    await secret.evaluate((input, value) => {
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', value);
+      input.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+    }, pasted);
+    await expect(secret).toHaveValue('');
+    await secret.pressSequentially('invalid-reference');
+    await card.locator('[data-field$=".name"]').focus();
+    await expect(secret).toHaveValue('');
+    expect(requests.join('\n')).not.toContain('invalid-reference');
+    await secret.pressSequentially('keychain:farsight/example');
+    await expect(secret).toHaveValue('keychain:farsight/example');
+    await expect(secret).toHaveAttribute('type', 'text');
     await card.locator('[data-permissions] [data-row-action="add"]').click();
     await card.locator('[data-principal="agent"]').check();
     await expect(page.locator('#savebtn')).toBeEnabled();
     await page.locator('#savebtn').click();
     await expect(page.locator('#savenote')).toHaveText('Saved.');
     const source = settings().sources[2];
+    expect(source.id).toBe('work-example');
     expect(source.auth.secret).toBe('keychain:farsight/example');
     expect(source.scope.projects).toEqual(['EXAMPLE']);
     expect(source.permissions.grants[0].principals).toEqual(['human', 'agent']);
-    await page.screenshot({ path: 'build/settings-shots/work-grants.png', fullPage: true });
+    await page.screenshot({ path: info.outputPath('work-grants.png'), fullPage: true });
     await expect(page.locator('#syncbtn')).toBeVisible();
   });
 
   /** @covers packages/server/public/app/surfaces/settings-collections.js::renderCollections */
-  test('collections use the member picker and row editor; Discard restores all sections', async ({ page }) => {
+  test('collections use the member picker and row editor; Discard restores all sections', async ({ page }, info) => {
+    const absent = settings();
+    delete absent.collections;
+    writeFileSync(file(), JSON.stringify(absent));
     await page.goto(writable + '#/settings/collections');
+    await expect(page.locator('#settings-savebar')).toBeHidden();
     await page.locator('[data-row-action="add"]').click();
     await page.locator('[data-field="collections[0].name"]').fill('Billing systems');
     await page.locator('[data-mp-opt="invoice-app"]').click();
@@ -187,11 +231,13 @@ test.describe('sectioned Settings', () => {
     await page.locator('#savebtn').click();
     await expect(page.locator('#savenote')).toHaveText('Saved.');
     expect(settings().collections).toEqual([{ name: 'Billing systems', sourceIds: ['invoice-app'] }]);
-    await page.screenshot({ path: 'build/settings-shots/collection-members.png', fullPage: true });
+    await page.screenshot({ path: info.outputPath('collection-members.png'), fullPage: true });
     await page.locator('[data-row-action="add"]').click();
     await page.locator('[data-field="collections[1].name"]').fill('Second');
     await page.locator('[data-row="1"] [data-row-action="up"]').click();
     await expect(page.locator('[data-field="collections[0].name"]')).toHaveValue('Second');
+    await expect(page.locator('.settings-collection-help')).toBeVisible();
+    await expect(page.locator('[role="gridcell"][tabindex="0"]')).toHaveCount(1);
     await page.locator('.settings-rail a[href="#/settings/workspace"]').click();
     await page.locator('#set-theme').selectOption('light');
     await page.locator('#discardbtn').click();
@@ -203,6 +249,11 @@ test.describe('sectioned Settings', () => {
 
   /** @covers packages/server/public/app/lib/read-only.js::applyReadOnly */
   test('read-only disables every write field and button in every section', async ({ page }) => {
+    const populated = settings();
+    populated.collections = [{ name: 'Billing', sourceIds: ['invoice-app'] }];
+    populated.lessons = [{ text: 'Read the gates', pinned: true }];
+    const original = JSON.stringify(populated);
+    writeFileSync(file(), original);
     const writes: string[] = [];
     page.on('request', (request) => {
       if (['POST', 'PUT', 'DELETE'].includes(request.method())) writes.push(request.url());
@@ -211,6 +262,12 @@ test.describe('sectioned Settings', () => {
       await page.goto(readonly + '#/settings/' + section);
       await expect(page.locator('#set-ro')).toBeVisible();
       if (section === 'configuration') await expect(page.locator('.cfg-src').first()).toBeVisible();
+      await page.evaluate(async () => {
+        const path = '/app/shell.js';
+        const shell = await import(path);
+        shell.setLens('business');
+        shell.renderChrome();
+      });
       const controls = page.locator('#settings [data-write]');
       const states = await controls.evaluateAll((elements) =>
         elements.map((el) => ({
@@ -219,10 +276,16 @@ test.describe('sectioned Settings', () => {
           aria: el.getAttribute('aria-disabled'),
         })),
       );
-      expect(states.every((s) => (s.tag === 'BUTTON' ? s.aria === 'true' : s.disabled))).toBe(true);
+      expect(states.every((s) => s.aria === 'true' || s.disabled)).toBe(true);
     }
+    await page.goto(readonly + '#/settings/workspace');
+    await page.locator('#set-theme').selectOption('light');
+    await expect(page.locator('#set-theme-note')).toContainText('preview');
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator('#settings-savebar')).toBeHidden();
     expect(writes).toEqual([]);
-    expect(readFileSync(file(), 'utf8')).toBe(initial);
+    expect(readFileSync(file(), 'utf8')).toBe(original);
   });
 
   test('a late validation answer cannot overwrite the current draft check', async ({ page }) => {
@@ -284,9 +347,90 @@ test.describe('sectioned Settings', () => {
     await page.keyboard.press('g');
     await page.keyboard.press('s');
     await expect(page.locator('.settings-rail [aria-current]')).toHaveAttribute('href', '#/settings/agents');
+    await expect(page).toHaveURL(/#\/settings\/agents/);
     await page.locator('#settings-section-title').click();
     await page.keyboard.press('?');
     await expect(page.locator('#keymap')).toContainText('g s');
     await expect(page.locator('#keymap')).toContainText('Open Settings');
+  });
+
+  test('blank sources are refused; a local source round trip, both sync doors and removal work', async ({ page }) => {
+    test.setTimeout(90000);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(writable + '#/settings/sources');
+    await page.locator('#source-add').click();
+    await page.locator('[data-source-create]').click();
+    const card = page.locator('.settings-source').last();
+    await expect(card.locator('[data-problem-for$=".name"]')).toHaveText('sources[2].name must be a non-empty string');
+    await expect(page.locator('#savebtn')).toBeDisabled();
+    await card.locator('[data-field$=".name"]').fill('Extra app');
+    await expect(card.locator('[data-problem-for$=".path"]')).toHaveText('sources[2].path must be a non-empty string');
+    await card.locator('[data-field$=".path"]').fill('invoice-app');
+    await card.locator('[data-field$=".exclude"]').fill('**/*.{test,spec}.ts dist/**');
+    await expect(page.locator('#savebtn')).toBeEnabled();
+    await page.locator('#savebtn').click();
+    await expect(page.locator('#savenote')).toHaveText('Saved.');
+    await expect(page.locator('#syncbtn')).toBeInViewport();
+    expect(settings().sources[2].id).toBe('extra-app');
+    expect(settings().sources[2].exclude).toEqual(['**/*.{test,spec}.ts', 'dist/**']);
+    await page.locator('#syncbtn').click();
+    await expect(page.locator('#savenote')).toHaveText('Sync complete.');
+    await page.locator('[data-sync]').first().click();
+    await expect(page.locator('#savenote')).toHaveText('Sync complete.');
+    await page.route('**/api/sync', (route) => route.fulfill({ json: { error: 'Example source is unavailable' } }));
+    await page.locator('[data-sync]').first().click();
+    await expect(page.locator('#savenote')).toContainText('Example source is unavailable');
+    await page.unroute('**/api/sync');
+    await page.locator('[data-source-card="extra-app"] [data-source-remove]').click();
+    await expect(page.locator('#savebtn')).toBeEnabled();
+    await page.locator('#savebtn').click();
+    await expect(page.locator('#savenote')).toHaveText('Saved.');
+    expect(settings().sources.map((source: { id: string }) => source.id)).not.toContain('extra-app');
+  });
+
+  test('unset confirmation and type-specific fields retain their meaning', async ({ page }) => {
+    const current = settings();
+    current.sources.push({
+      id: 'work-example',
+      name: 'Work example',
+      type: 'work',
+      enabled: true,
+      provider: 'jira',
+      site: 'https://example.atlassian.net',
+      auth: { secret: 'env:EXAMPLE' },
+      permissions: { grants: [{ actions: ['edit'], principals: ['agent'] }] },
+    });
+    writeFileSync(file(), JSON.stringify(current));
+    await page.goto(writable + '#/settings/sources');
+    const card = page.locator('[data-source-card="work-example"]');
+    await expect(card.locator('[data-field$=".confirm"]')).toHaveValue('');
+    await expect(card.locator('[data-field$=".path"]')).toHaveCount(0);
+    await expect(card.locator('[data-field$=".org"]')).toHaveCount(0);
+    await page.locator('.settings-rail a[href="#/settings/agents"]').click();
+    await expect(page.locator('.settings-access')).toContainText('Mode: Read-only');
+    await expect(page.locator('.settings-access')).toContainText('Confirmation: Not set (agents per Agent writes)');
+    await page.locator('.settings-rail a[href="#/settings/sources"]').click();
+    await card.locator('[data-field$=".provider"]').selectOption('azure-devops');
+    await expect(card.locator('[data-field$=".site"]')).toHaveCount(0);
+    await expect(card.locator('[data-field$=".org"]')).toBeVisible();
+    await card.locator('[data-field$=".type"]').selectOption('local');
+    await card.locator('[data-field$=".path"]').fill('invoice-app');
+    await expect(page.locator('#savebtn')).toBeEnabled();
+    await page.locator('#savebtn').click();
+    await expect(page.locator('#savenote')).toHaveText('Saved.');
+    expect(settings().sources[2].auth).toBeUndefined();
+    expect(settings().sources[2].permissions).toBeUndefined();
+  });
+
+  test('g s suppresses the Map legend; a lone g opens it after the chord window', async ({ page }) => {
+    await page.goto(writable + '#/map');
+    await expect(page.locator('#stats')).not.toHaveText('loading…');
+    await page.keyboard.press('g');
+    await page.keyboard.press('s');
+    await expect(page).toHaveURL(/#\/settings\/workspace/);
+    await page.locator('#settings-back').click();
+    await expect(page.locator('.map-legend')).toBeHidden();
+    await page.keyboard.press('g');
+    await expect(page.locator('.map-legend')).toBeVisible();
   });
 });

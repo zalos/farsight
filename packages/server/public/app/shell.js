@@ -834,11 +834,18 @@ export function applyTheme(theme) {
  */
 export function previewTheme(theme) {
   S.themePreview = theme;
+  if (readOnlyWhy()) {
+    try {
+      localStorage.setItem('fs-theme-preview', theme);
+    } catch {
+      /* window only */
+    }
+  }
   applyTheme(theme);
   const note = document.getElementById('set-theme-note');
   const saved = S.SETTINGS && (S.SETTINGS.theme || 'system');
   if (note)
-    note.textContent = theme !== saved ? t(readOnlyWhy() ? 'sys.readonly.themeHint' : 'surf.theme.preview') : '';
+    note.textContent = readOnlyWhy() ? t('sys.readonly.themeHint') : theme !== saved ? t('surf.theme.preview') : '';
 }
 /**
  * Rebuild the scope button label + grouped multi-select menu. Collections act
@@ -1885,6 +1892,14 @@ async function boot() {
     .then((v) => {
       if (v) {
         S.VERSION = v;
+        if (readOnlyWhy()) {
+          try {
+            S.themePreview = localStorage.getItem('fs-theme-preview');
+          } catch {
+            /* window only */
+          }
+          applyTheme(S.themePreview || S.SETTINGS.theme);
+        }
         renderChrome();
       }
     })

@@ -1,18 +1,23 @@
-import { esc } from '../store.js';
+import { esc, currentLens } from '../store.js';
 import { t } from '../strings.js';
 import { pickerHtml, resetPicker } from '../lib/multi-pick.js';
 import { fieldHtml, rowEditor } from '../lib/row-editor.js';
 import { applyReadOnly, readOnlyWhy } from '../lib/read-only.js';
 
 export function renderCollections(root, { draft, changed }) {
-  const rows = (draft.collections ||= []);
-  rowEditor(root, {
+  const rows = draft.collections || [];
+  const commit = () => {
+    draft.collections = rows;
+    changed();
+  };
+  root.innerHTML = `<p class="set-note settings-collection-help">${esc(t('settings.collectionHelp'))}</p><div class="settings-collection-editor"></div>`;
+  rowEditor(root.querySelector('.settings-collection-editor'), {
     rows,
     label: 'settings.collections',
     empty: 'set.noCollections',
     addKey: 'settings.addCollection',
     add: () => ({ name: '', sourceIds: [] }),
-    onChange: changed,
+    onChange: commit,
     columns: [
       {
         key: 'settings.name',
@@ -23,9 +28,11 @@ export function renderCollections(root, { draft, changed }) {
         html: (row, i) => {
           const id = 'settings-members-' + i;
           resetPicker(id);
-          return `<div data-write>${pickerHtml(id, {
+          return `<div>${pickerHtml(id, {
             options: (draft.sources || []).map((s) => ({ id: s.id, word: s.name, group: 'sources' })),
-            groups: [{ key: 'sources', word: t('settings.systems') }],
+            groups: [
+              { key: 'sources', word: t(currentLens() === 'business' ? 'settings.systems' : 'settings.sources') },
+            ],
             selected: row.sourceIds,
             multi: true,
             label: t('settings.members'),
@@ -33,7 +40,7 @@ export function renderCollections(root, { draft, changed }) {
             onChange(ids) {
               if (readOnlyWhy()) return;
               row.sourceIds = ids;
-              changed();
+              commit();
               applyReadOnly(root);
             },
           })}</div><p class="settings-problem" data-problem-for="collections[${i}].sourceIds" hidden></p>`;
@@ -43,7 +50,7 @@ export function renderCollections(root, { draft, changed }) {
     input(event, row) {
       if (event.target.matches('[data-field]')) {
         row.name = event.target.value;
-        changed();
+        commit();
       }
     },
     afterRender() {
@@ -53,6 +60,4 @@ export function renderCollections(root, { draft, changed }) {
       applyReadOnly(root);
     },
   });
-  // Explain collections once; the grid and picker supply the controls.
-  root.insertAdjacentHTML('afterbegin', `<p class="set-note">${esc(t('settings.collectionHelp'))}</p>`);
 }

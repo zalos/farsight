@@ -300,7 +300,6 @@ export const STRINGS: Record<string, StringEntry> = {
   'chrome.exitFocus': same('exit focus'),
   'chrome.focusPrefix': same('focus:'),
   'chrome.scopePrefix': same('scope:'),
-  'set.surfaceByRegister': same('by register — this one opens on {s}'),
 
   // ── the flow status table (the front door, 01 §5.2) ────────────────────
   'portfolio.sub': same('Every flow the design manifest names, what is built of it, what the contract says, and what proves it runs.'),
@@ -1388,16 +1387,11 @@ export const STRINGS: Record<string, StringEntry> = {
   'sys.compareFailed': sys('Could not compare the document.'),
 
   // ── settings page ───────────────────────────────────────────────────────
-  'set.saved': same('saved ✓'),
-  'set.saveFailed': sys('save failed'),
   'set.syncing': same('syncing…'),
-  'set.syncFailedPrefix': sys('sync failed:'),
-  'set.syncedStats': same('synced: {n} nodes, {e} edges'),
   'set.noSources': same('no sources yet'),
   'set.noCollections': same('no collections yet'),
   'set.groupPrompt': same('Group name (saved as a collection):'),
   'set.landing': same('Landing surface'),
-  'set.flags': same('Experiments'),
   'set.flagShots': same('Keep a design shot per sync'),
   'set.flagShotsSub': same('copies each screen\u2019s design image into .farsight/cache/shots at every sync, so a past sync can be looked at rather than described \u2014 one file per distinct image, whatever the number of syncs. It keeps designs, never a picture of the running app. Off by default, per workspace, because it writes files.'),
   'set.landingSub': same('where this browser lands on open — a default, never a cage: deep links always win'),

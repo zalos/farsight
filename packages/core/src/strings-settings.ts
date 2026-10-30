@@ -35,11 +35,11 @@ export const SETTINGS_STRINGS: Record<string, StringEntry> = {
   'settings.type': word('Type', 'How the source is read: a folder, repository, document or work tracker.'),
   'settings.path': word('Location', 'A workspace-relative or absolute folder path, repository address or document location, according to the source type.'),
   'settings.enabled': word('Enabled', 'Include this source in the next workspace sync.'),
-  'settings.exclude': word('Excluded paths', 'Comma-separated file patterns omitted while reading this code source.'),
+  'settings.exclude': word('Excluded paths', 'Whitespace-separated file patterns (commas inside a pattern are kept) omitted while reading this code source.'),
   'settings.storybookUrl': word('Storybook URL', 'The running Storybook address for this source. Farsight reads it but does not start it.'),
   'settings.storybookCommand': word('Storybook command', 'The command a person can use to start Storybook. Farsight does not execute it.'),
   'settings.status': word('Source status', 'The result recorded for this source by the last workspace sync.'),
-  'settings.lastSync': word('Graph last refreshed', 'The time the graph currently shown by this viewer was generated; this is the workspace refresh time.'),
+  'settings.lastSync': word('Graph last refreshed: {date}', 'The time the graph currently shown by this viewer was generated; this is the workspace refresh time.'),
   'settings.noSync': word('No sync recorded', 'This source has no saved result from a workspace sync.'),
   'settings.addSource': word('Add a source', 'Add a connection to the shared draft. Save keeps it; a subsequent sync reads it.'),
   'settings.newSource': word('New source', 'Choose the source type, then fill in its connection details.'),
@@ -64,6 +64,7 @@ export const SETTINGS_STRINGS: Record<string, StringEntry> = {
   'settings.keychainRef': word('Use keychain reference', 'Start a keychain: reference, then type the service and account. Never type the secret value.'),
   'settings.envRef': word('Use environment reference', 'Start an env: reference, then type the environment variable name. Never type the secret value.'),
   'settings.authSecret': word('Secret reference', 'Use a keychain: or env: reference. A secret value is discarded and never sent to the server.'),
+  'settings.secretHint': word('Use a prefix button, then type the reference. Never paste a secret value.', 'References are visible text. An unfinished typed prefix is kept only in the field; an invalid completed value is cleared on leaving it. Pasted secrets are discarded immediately.'),
   'settings.poll': word('Poll interval', 'The requested tracker polling interval, for example 5m.'),
   'settings.permissions': word('Permissions', 'Policy grants by action and principal. Unmatched requests are denied; the tracker and credential must also allow the action.'),
   'settings.actions': word('Actions', 'The tracker operations covered by this grant.'),
@@ -81,13 +82,32 @@ export const SETTINGS_STRINGS: Record<string, StringEntry> = {
   'settings.lessonPinned': word('Pinned', 'Include this lesson when an assistant starts a session.'),
   'settings.lessonsEmpty': word('No lessons yet.', 'Add a short note to help assistants work in this workspace.'),
 };
-const values: Record<string, string> = {
-  system: 'Follow the system', dark: 'Dark', light: 'Light', business: 'Business', hybrid: 'Hybrid', code: 'Code', automatic: 'By register',
-  local: 'Local folder', git: 'Git repository', openapi: 'OpenAPI document', design: 'Design document', work: 'Work tracker',
-  jira: 'Jira', 'azure-devops': 'Azure DevOps', fixture: 'Recorded fixture', 'read-only': 'Read-only', edit: 'Edit',
-  'api-token': 'API token reference', 'scoped-token': 'Scoped token reference', 'oauth-3lo': 'OAuth', 'entra-device-code': 'Entra device code',
-  'entra-auth-code': 'Entra authorization code', 'az-cli': 'Azure CLI', pat: 'Personal access token reference', none: 'None',
-  always: 'Always', agent: 'For agents', never: 'Never', confirm: 'Require confirmation', allow: 'Allow', prefix: 'Prefix', core: 'Core', all: 'All',
-  comment: 'Comment', assign: 'Assign', transition: 'Move state', link: 'Link', label: 'Label', create: 'Create',
+const values: Record<string, [string, string]> = {
+  system: ['Follow the system', 'Follow this device’s light or dark appearance preference.'],
+  dark: ['Dark', 'Use the dark appearance in this window.'], light: ['Light', 'Use the light appearance in this window.'],
+  business: ['Business', 'Explain systems using business words and hide implementation details.'], hybrid: ['Hybrid', 'Show business names alongside code names.'], code: ['Code', 'Show implementation names and evidence.'], automatic: ['By register', 'Open the default landing surface for the selected register.'],
+  local: ['Local folder', 'Read source files from a folder on this server.'], git: ['Git repository', 'Clone or update a repository before reading its source files.'], openapi: ['OpenAPI document', 'Read an API contract as a declared source.'], design: ['Design document', 'Read a screen manifest as a declared source.'], work: ['Work tracker', 'Read work items from a configured tracker.'], 'code-host': ['Code host', 'Read pull requests and checks from the configured code host.'],
+  jira: ['Jira', 'Connect to the Jira site and its scoped projects.'], 'azure-devops': ['Azure DevOps', 'Connect to the Azure DevOps organization and its scoped projects.'], fixture: ['Recorded fixture', 'Read a local recorded tracker fixture.'],
+  'api-token': ['API token reference', 'Resolve the configured reference to an API token for this provider.'], 'scoped-token': ['Scoped token reference', 'Resolve a token reference whose provider permissions are limited to selected scopes.'], 'oauth-3lo': ['OAuth', 'Use the provider’s delegated OAuth authorization.'], 'entra-device-code': ['Entra device code', 'Authenticate through the Entra device authorization flow.'], 'entra-auth-code': ['Entra authorization code', 'Authenticate through the Entra authorization code flow.'], 'az-cli': ['Azure CLI', 'Use the identity already authenticated by Azure CLI.'], pat: ['Personal access token reference', 'Resolve a reference to a personal access token.'], none: ['None', 'Do not apply this optional authentication or attribution setting.'],
+  unset: ['Not set (agents per Agent writes)', 'This grant adds no confirmation requirement. People may proceed; Agent writes still controls confirmation for assistants.'],
+  always: ['Always', 'Require confirmation for both people and assistants covered by this grant.'], agent: ['For agents', 'Require confirmation when an assistant uses this grant.'], never: ['Never', 'This grant adds no confirmation requirement; the source’s Agent writes policy still applies.'], confirm: ['Require confirmation', 'Require a person to confirm assistant writes even when a grant permits them.'], allow: ['Allow', 'Permit assistant writes when the grant, tracker and credential checks allow them.'], prefix: ['Prefix', 'Add agent attribution at the beginning of agent comments.'], core: ['Core', 'Expose the usual assistant tools.'], all: ['All', 'Expose all available assistant tools.'],
 };
-for (const [key, label] of Object.entries(values)) SETTINGS_STRINGS['settings.value.' + key] = word(label, 'Choose ' + label + ' for this setting.');
+for (const [key, [label, define]] of Object.entries(values)) SETTINGS_STRINGS['settings.value.' + key] = word(label, define);
+const details: Record<string, [string, string]> = {
+  'mode.read-only': ['Read-only', 'Read work items without permitting tracker changes.'], 'mode.edit': ['Edit allowed', 'Tracker changes may be requested; grants, tracker checks and credentials must also allow them.'],
+  'action.comment': ['Comment', 'Add a comment to a work item.'], 'action.edit': ['Edit', 'Change the allowed fields of a work item.'], 'action.assign': ['Assign', 'Change who a work item is assigned to.'], 'action.transition': ['Move state', 'Move a work item to an allowed workflow state.'], 'action.link': ['Link', 'Add a relationship between work items.'], 'action.label': ['Label', 'Change a work item’s labels.'], 'action.create': ['Create', 'Create a work item in the permitted scope.'],
+  'status.ok': ['Sync complete', 'The latest workspace sync successfully read this source.'], 'status.error': ['Sync failed', 'The latest workspace sync could not read this source. The server’s reason follows.'], 'status.none': ['No sync recorded', 'No sync result is saved for this source.'], 'status.disabled': ['Disabled', 'This source is excluded from workspace syncs.'], 'status.skipped': ['Not refreshed', 'The last sync did not refresh this source.'], 'status.cached': ['Read from cache', 'Cached work items were read without contacting the tracker.'],
+  'status.historyUnavailable': ['History unavailable', 'This sync could not read the source’s commit history.'],
+  'status.historyCapped': ['History read capped', 'This sync stopped at the configured history read limit; older commits may remain unread.'],
+  'count.newHistory': ['{n} new commits read this sync', 'Commits newly read from this source during the recorded sync.'],
+  'count.forgotten': ['{n} keyed commits forgotten', 'Previously known commits no longer reachable in this source’s history.'],
+  'count.resolved': ['{n} keyed commits resolved to code', 'Commits naming a work item whose changed code was resolved in this sync.'],
+  'count.sent': ['{n} work items sent', 'Work items the tracker sent during the recorded sync.'],
+  'count.changed': ['{n} work items changed', 'Cached work items changed by the recorded sync.'],
+  'count.gone': ['{n} work items removed', 'Cached work items removed by the recorded sync.'],
+  'count.links': ['{n} links to the system', 'Relationships connecting this work source’s items to the application graph after the recorded sync.'],
+  'count.parts': ['{n} parts read', 'Parts read from this source in the last recorded sync.'], 'count.partsOne': ['{n} part read', 'One part read from this source in the last recorded sync.'],
+  'count.connections': ['{n} connections read', 'Relationships read from this source in the last recorded sync.'], 'count.connectionsOne': ['{n} connection read', 'One relationship read from this source in the last recorded sync.'],
+  'count.lessons': ['{n} lessons', 'Every lesson in this workspace draft, pinned or unpinned.'], 'count.lessonsOne': ['{n} lesson', 'The lesson in this workspace draft.'], 'count.pinned': ['{n} pinned', 'Lessons in this workspace draft selected for an assistant’s session-start context.'], 'count.unpinned': ['{n} unpinned', 'Lessons retained in this workspace draft but excluded from session-start context.'],
+};
+for (const [key, [label, define]] of Object.entries(details)) SETTINGS_STRINGS['settings.' + key] = word(label, define);

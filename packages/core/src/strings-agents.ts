@@ -40,17 +40,7 @@ export const AGENT_STRINGS: Record<string, StringEntry> = {
 
   // ── lessons for agents (Settings) ──
   'set.lessons.title': same('Lessons for agents', 'Notes the owner writes for every AI agent that opens this workspace. A pinned lesson is read at the start of every agent session, in the session-start context; an agent never writes one.'),
-  'set.lessons.sub': two(
-    'Pinned notes are read by every agent at the start of its session. Only a person writes them, here; save to keep them.',
-    'Pinned lessons are read by every agent at session start (MCP resource farsight://context, graph_overview brief). Only a person writes them, here; Save settings keeps them in .farsight/settings.json.',
-    'What a lesson is for, and where an agent reads it.'),
-  'set.lessons.placeholder': same('a lesson, e.g. the e2e card is Playwright, the unit card is node:test'),
   'set.lessons.add': same('+ Add lesson'),
-  'set.lessons.pin': same('pinned', 'Read at the start of every agent session. An unpinned lesson is kept and counted, not read.'),
-  'set.lessons.remove': same('remove this lesson'),
-  'set.lessons.secret': same('A lesson is read by every agent: it may not carry a token, a key or a keychain reference.', 'Lessons are plain text that every agent session reads. A credential belongs in the keychain, never in a lesson.'),
-  'set.lessons.count': same('{n} lessons · {p} pinned', 'How many lessons the settings hold, and how many of them every agent reads at session start.'),
-  'set.lessons.countOne': one('1 lesson · {p} pinned', 'set.lessons.count'),
 
   // ── empty states: what the surface is for, why it is empty, what fills it ──
   'empty.work': two(

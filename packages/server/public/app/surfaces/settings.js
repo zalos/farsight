@@ -78,6 +78,8 @@ export function settingsUpdate(route) {
   const asked = route?.param || lastSection() || 'workspace';
   section = model.sections.some((s) => s.id === asked) ? asked : 'workspace';
   remember();
+  if (!route?.param)
+    history.replaceState(null, '', location.hash.replace(/^#\/settings(?=[?@]|$)/, '#/settings/' + section));
   renderSettings();
 }
 export function settingsRefresh() {
@@ -92,7 +94,10 @@ function paintStatus() {
   if (!root) return;
   const dirty = isDirty();
   const bar = root.querySelector('#settings-savebar');
-  bar.hidden = !dirty;
+  bar.hidden = !(dirty || message || syncRequired || problem);
+  root.querySelector('#settings-draft-actions').hidden = !dirty;
+  root.querySelector('#settings-unsaved').hidden = !dirty;
+  root.querySelector('#save-consequence').hidden = !dirty;
   root.querySelector('#settings-unsaved').textContent = t('settings.unsaved');
   const save = root.querySelector('#savebtn');
   const discard = root.querySelector('#discardbtn');
@@ -103,7 +108,7 @@ function paintStatus() {
   save.disabled = saving || checking || !!problem;
   discard.disabled = saving;
   root.querySelector('#savenote').textContent = message;
-  root.querySelector('#settings-check').textContent = checking ? t('settings.checking') : problem;
+  root.querySelector('#settings-check').textContent = checking ? t('settings.checking') : '';
   root.querySelector('#settings-sync-needed').hidden = !syncRequired;
   root.querySelectorAll('[data-sync],#syncbtn').forEach((button) => {
     button.disabled = syncing || saving || dirty;
@@ -131,7 +136,7 @@ function paintStatus() {
       root.querySelectorAll('[data-field]').forEach((input) => {
         if (input.dataset.field === target.dataset.problemFor) input.setAttribute('aria-invalid', 'true');
       });
-    }
+    } else root.querySelector('#settings-check').textContent = problem;
   }
 }
 
@@ -235,9 +240,8 @@ export async function syncNow() {
   paintStatus();
   try {
     const response = await fetch('/api/sync', { method: 'POST' });
-    if (!response.ok) throw new Error('sync');
-    const result = await response.json();
-    if (result.error) throw new Error('sync');
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.error) throw new Error(result.error || response.statusText);
     const [settingsResponse, graphResponse] = await Promise.all([fetch('/api/settings'), fetch('/graph')]);
     if (!settingsResponse.ok || !graphResponse.ok) throw new Error('reload');
     S.SETTINGS = await settingsResponse.json();
@@ -249,8 +253,8 @@ export async function syncNow() {
     hooks.synced?.();
     syncRequired = false;
     message = t('settings.synced');
-  } catch {
-    message = t('settings.syncFailed');
+  } catch (error) {
+    message = t('settings.syncFailed') + (error.message ? ' ' + error.message : '');
   } finally {
     syncing = false;
     renderSettings();
@@ -271,7 +275,7 @@ function registered(id, fields, previous) {
 export function renderSettings() {
   if (!root || !draft) return;
   const selected = model.sections.find((s) => s.id === section);
-  root.innerHTML = `<div class="settings-page"><header class="settings-heading"><div><h1>${esc(t('surf.chrome.settings'))}</h1><p>${esc(t('settings.intro'))}</p></div><button type="button" class="btn" id="settings-back"${defAttrs('settings.back')}>${esc(t('settings.back'))}</button></header><p id="set-ro" class="set-ro" role="status" hidden></p><div class="settings-layout"><nav class="settings-rail" aria-label="${esc(t('surf.chrome.settings'))}">${model.sections.map((item) => `<a href="#/settings/${item.id}"${item.id === section ? ' aria-current="page"' : ''}${defAttrs(sectionKey(item))}>${esc(t(sectionKey(item)))}</a>`).join('')}</nav><main class="settings-content"><h2 id="settings-section-title"${defAttrs(sectionKey(selected))}>${esc(t(sectionKey(selected)))}</h2><div id="settings-section"></div><div class="settings-feedback"><p id="settings-check" role="status"></p><p id="savenote" role="status"></p><div id="settings-sync-needed" hidden>${buttonHtml('settings.syncApply', 'id="syncbtn"')}<p class="consequence">${esc(t('set.syncConsequence'))}</p></div></div></main></div><footer id="settings-savebar" class="settings-savebar" hidden><div><strong id="settings-unsaved"></strong><p id="save-consequence" class="consequence">${esc(t('set.saveConsequence'))}</p></div>${buttonHtml('settings.save', 'id="savebtn"')}${buttonHtml('settings.discard', 'id="discardbtn"')}</footer></div>`;
+  root.innerHTML = `<div class="settings-page"><header class="settings-heading"><div><h1>${esc(t('surf.chrome.settings'))}</h1><p>${esc(t('settings.intro'))}</p></div><button type="button" class="btn" id="settings-back"${defAttrs('settings.back')}>${esc(t('settings.back'))}</button></header><p id="set-ro" class="set-ro" role="status" hidden></p><div class="settings-layout"><nav class="settings-rail" aria-label="${esc(t('surf.chrome.settings'))}">${model.sections.map((item) => `<a href="#/settings/${item.id}"${item.id === section ? ' aria-current="page"' : ''}${defAttrs(sectionKey(item))}>${esc(t(sectionKey(item)))}</a>`).join('')}</nav><section class="settings-content" aria-labelledby="settings-section-title"><h2 id="settings-section-title"${defAttrs(sectionKey(selected))}>${esc(t(sectionKey(selected)))}</h2><div id="settings-section"></div></section></div><footer id="settings-savebar" class="settings-savebar" hidden><div><strong id="settings-unsaved"></strong><p id="save-consequence" class="consequence">${esc(t('set.saveConsequence'))}</p><p id="settings-check" role="status"></p><p id="savenote" role="status"></p><div id="settings-sync-needed" hidden>${buttonHtml('settings.syncApply', 'id="syncbtn"')}<p class="consequence">${esc(t('set.syncConsequence'))}</p></div></div><div id="settings-draft-actions">${buttonHtml('settings.save', 'id="savebtn"')}${buttonHtml('settings.discard', 'id="discardbtn"')}</div></footer></div>`;
   const content = root.querySelector('#settings-section');
   const context = { draft, changed: settingsChanged, sync: syncNow, preview: hooks.preview };
   if (section === 'workspace') renderWorkspace(content, context);

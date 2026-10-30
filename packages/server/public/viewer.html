@@ -625,11 +625,12 @@
   .settings-grid .mpk-list{max-height:190px}
   .settings-access{border-top:1px solid var(--line);padding:16px 0}
   .settings-access p{color:var(--muted);line-height:1.6}
-  .settings-feedback{min-height:20px;margin-top:24px;line-height:1.6}
   #settings-check{color:var(--err)}
   #settings-check:empty,#savenote:empty{display:none}
   .settings-savebar{position:fixed;bottom:27px;left:50%;transform:translateX(-50%);width:min(1104px,calc(100% - 56px));box-sizing:border-box;z-index:30;display:flex;align-items:center;gap:14px;padding:16px 20px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 -8px 32px #0002}
-  .settings-savebar>div{flex:1}
+  .settings-savebar>div:first-child{flex:1}
+  .settings-savebar #settings-draft-actions{display:flex;gap:14px}
+  .settings-savebar p:empty{display:none}
   .settings-savebar #savebtn{border-color:var(--accent);color:var(--accent)}
   .settings-savebar strong{color:var(--accent);font-weight:500}
   .settings-savebar .consequence{display:block;margin:5px 0 0;color:var(--muted);line-height:1.5}

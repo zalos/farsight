@@ -106,6 +106,7 @@ export function toggleKeymapPanel(force) {
  * @group Keymap
  */
 let settingsPrefixUntil = 0;
+let settingsPrefixTimer;
 function onKeydown(e) {
   // a tip is the top-most thing on screen: Esc closes it before anything else,
   // `?` on a focused trigger opens its tip rather than this keymap, and Tab
@@ -154,10 +155,22 @@ function onKeydown(e) {
   if (e.key === 's' && Date.now() < settingsPrefixUntil) {
     e.preventDefault();
     settingsPrefixUntil = 0;
+    clearTimeout(settingsPrefixTimer);
     openSettings();
     return;
   }
-  settingsPrefixUntil = e.key === 'g' ? Date.now() + 1000 : 0;
+  if (e.key === 'g') {
+    e.preventDefault();
+    clearTimeout(settingsPrefixTimer);
+    settingsPrefixUntil = Date.now() + 1000;
+    const address = location.hash;
+    settingsPrefixTimer = setTimeout(() => {
+      settingsPrefixUntil = 0;
+      if (mapOpen() && location.hash === address) mapKey({ key: 'g' });
+    }, 1000);
+    return;
+  }
+  settingsPrefixUntil = 0;
   // every detail is a door (round 2026-10-05 §3.2): Enter on a focused detail opens its first door, o the editor
   // a gate answers its key the way it answers its click: Enter or Space opens the gate card (swarm-fixes 2026-10-05)
   if (gateKeydown(e)) return;
