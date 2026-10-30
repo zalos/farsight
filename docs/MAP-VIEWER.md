@@ -425,7 +425,7 @@ business lens, and `body.lens-business .fs-tip .tip-code{display:none}` backs th
   breakpoints it replaced let the toolbar run off the right edge at 1440 while 1280 fitted.
 - **The table** (the Sheet) keeps its Verified-by foot inside the column (the evidence chip wraps) and draws a gate's name over
   the column's whole width with its count and doors under it, so identifiers break only between words.
-- **Settings → Experiments**: one flag per line, its sentence under it (`.set-flags`) — one flag left, design shots.
+- **Settings → Experiments**: one flag per line, its sentence under it (`.settings-field`) — one flag left, design shots.
 
 **The sync chip's RESTART (2026-09-27)** comes from `/api/version`'s `install` (`restartNeeded` in `shell.js`): the
 server decides it build to build — core `installState()` reads the identity of the build on disk (the workspace
@@ -675,8 +675,8 @@ front door, the header, the Portfolio and the Map; and the front door drawn iden
   `sys.readonly.control` tip that says why and who to ask); once the session is read-only, `installReadOnly()` greys every
   `[data-write]` drawn later (a MutationObserver) and spends a press on one before its handler runs, pinning its tip
   instead. Handlers (`workSync`, `workEdit`, `postIntent`, `workSettle`, `saveSettings`…) also return early. Work prints
-  `sys.readonly.page` under its strip and `sys.readonly.workPane` in the item pane; the theme hint reads
-  `sys.readonly.themeHint`. Boot waits up to 1.5 s for `/api/version` before the first surface mounts, so a surface
+  `sys.readonly.page` under its strip and `sys.readonly.workPane` in the item pane; Settings also disables its
+  theme selector. Boot waits up to 1.5 s for `/api/version` before the first surface mounts, so a surface
   draws its write controls knowing the session. An export (Save) is not a write. The READ-ONLY chip folds last before
   the tabs.
 - **Addresses** (`shell.js`): Settings is `#/settings` — a surface that mounts the `#settings` node into the surface

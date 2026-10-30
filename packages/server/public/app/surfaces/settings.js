@@ -13,6 +13,7 @@ import { renderConfigFiles } from './settings-config.js';
 
 let root = null;
 let draft = null;
+let loaded = null;
 let hooks = {};
 let section = 'workspace';
 let checkTimer;
@@ -23,6 +24,12 @@ let saving = false;
 let syncing = false;
 let syncRequired = false;
 let message = '';
+
+function blockDuringWrite(event) {
+  if (!(saving || syncing) || !root?.contains(event.target) || !event.target.closest('[data-write]')) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
 
 function isDirty() {
   return !!draft && model.dirty(S.SETTINGS, draft);
@@ -52,10 +59,14 @@ export function mountSettings(route, element, callbacks) {
   root.classList.add('open', 'as-surface');
   root.setAttribute('role', 'region');
   root.setAttribute('aria-label', t('surf.chrome.settings'));
+  for (const type of ['click', 'input', 'change', 'keydown']) window.addEventListener(type, blockDuringWrite, true);
   if (!draft) draft = model.clone(S.SETTINGS);
+  else if (loaded !== S.SETTINGS) draft = model.mergeSettings(loaded, draft, S.SETTINGS);
+  loaded = S.SETTINGS;
   settingsUpdate(route);
 }
 export function unmountSettings() {
+  for (const type of ['click', 'input', 'change', 'keydown']) window.removeEventListener(type, blockDuringWrite, true);
   clearTimeout(checkTimer);
   checkSequence++;
   checking = false;
@@ -70,6 +81,10 @@ export function settingsUpdate(route) {
   renderSettings();
 }
 export function settingsRefresh() {
+  if (draft && loaded !== S.SETTINGS) {
+    draft = model.mergeSettings(loaded, draft, S.SETTINGS);
+    loaded = S.SETTINGS;
+  }
   renderSettings();
 }
 
@@ -93,6 +108,11 @@ function paintStatus() {
   root.querySelectorAll('[data-sync],#syncbtn').forEach((button) => {
     button.disabled = syncing || saving || dirty;
   });
+  if (saving || syncing) {
+    root.querySelectorAll('[data-write]').forEach((control) => {
+      if ('disabled' in control) control.disabled = true;
+    });
+  }
   root.querySelectorAll('[data-problem-for]').forEach((el) => {
     el.hidden = true;
     el.textContent = '';
@@ -186,6 +206,7 @@ export async function saveSettings() {
     }
     syncRequired ||= model.needsSync(current, merged);
     S.SETTINGS = merged;
+    loaded = merged;
     draft = model.clone(merged);
     S.themePreview = null;
     problem = '';
@@ -220,6 +241,7 @@ export async function syncNow() {
     const [settingsResponse, graphResponse] = await Promise.all([fetch('/api/settings'), fetch('/graph')]);
     if (!settingsResponse.ok || !graphResponse.ok) throw new Error('reload');
     S.SETTINGS = await settingsResponse.json();
+    loaded = S.SETTINGS;
     draft = model.clone(S.SETTINGS);
     S.GRAPH = await graphResponse.json();
     S.ROOTS = S.GRAPH.roots || {};
@@ -249,9 +271,9 @@ function registered(id, fields, previous) {
 export function renderSettings() {
   if (!root || !draft) return;
   const selected = model.sections.find((s) => s.id === section);
-  root.innerHTML = `<div class="settings-page"><header class="settings-heading"><div><h1>${esc(t('surf.chrome.settings'))}</h1><p>${esc(t('settings.intro'))}</p></div><button type="button" class="btn" id="settings-back"${defAttrs('settings.back')}>${esc(t('settings.back'))}</button></header><p id="set-ro" class="set-ro" role="status" hidden></p><div class="settings-layout"><nav class="settings-rail" aria-label="${esc(t('surf.chrome.settings'))}">${model.sections.map((item) => `<a href="#/settings/${item.id}"${item.id === section ? ' aria-current="page"' : ''}${defAttrs(sectionKey(item))}>${esc(t(sectionKey(item)))}</a>`).join('')}</nav><main class="settings-content"><h2 id="settings-section-title"${defAttrs(sectionKey(selected))}>${esc(t(sectionKey(selected)))}</h2><div id="settings-section"></div><div class="settings-feedback"><p id="settings-check" role="status"></p><p id="savenote" role="status"></p><div id="settings-sync-needed" hidden>${buttonHtml('settings.syncApply', 'id="syncbtn"')}<p class="consequence">${esc(t('set.syncConsequence'))}</p></div></div></main></div><footer id="settings-savebar" class="settings-savebar" hidden><div><strong id="settings-unsaved"></strong><p id="save-consequence" class="consequence">${esc(t('set.saveConsequence'))}</p></div>${buttonHtml('settings.save', 'id="savebtn" class="primary"')}${buttonHtml('settings.discard', 'id="discardbtn"')}</footer></div>`;
+  root.innerHTML = `<div class="settings-page"><header class="settings-heading"><div><h1>${esc(t('surf.chrome.settings'))}</h1><p>${esc(t('settings.intro'))}</p></div><button type="button" class="btn" id="settings-back"${defAttrs('settings.back')}>${esc(t('settings.back'))}</button></header><p id="set-ro" class="set-ro" role="status" hidden></p><div class="settings-layout"><nav class="settings-rail" aria-label="${esc(t('surf.chrome.settings'))}">${model.sections.map((item) => `<a href="#/settings/${item.id}"${item.id === section ? ' aria-current="page"' : ''}${defAttrs(sectionKey(item))}>${esc(t(sectionKey(item)))}</a>`).join('')}</nav><main class="settings-content"><h2 id="settings-section-title"${defAttrs(sectionKey(selected))}>${esc(t(sectionKey(selected)))}</h2><div id="settings-section"></div><div class="settings-feedback"><p id="settings-check" role="status"></p><p id="savenote" role="status"></p><div id="settings-sync-needed" hidden>${buttonHtml('settings.syncApply', 'id="syncbtn"')}<p class="consequence">${esc(t('set.syncConsequence'))}</p></div></div></main></div><footer id="settings-savebar" class="settings-savebar" hidden><div><strong id="settings-unsaved"></strong><p id="save-consequence" class="consequence">${esc(t('set.saveConsequence'))}</p></div>${buttonHtml('settings.save', 'id="savebtn"')}${buttonHtml('settings.discard', 'id="discardbtn"')}</footer></div>`;
   const content = root.querySelector('#settings-section');
-  const context = { draft, changed: settingsChanged, sync: syncNow, checkSecret: () => {}, preview: hooks.preview };
+  const context = { draft, changed: settingsChanged, sync: syncNow, preview: hooks.preview };
   if (section === 'workspace') renderWorkspace(content, context);
   else if (section === 'sources') renderSources(content, context);
   else if (section === 'collections') renderCollections(content, context);
@@ -261,7 +283,7 @@ export function renderSettings() {
       .unavailableFields(draft, S.VERSION)
       .map(
         (field) =>
-          `<div class="settings-unavailable"><label>${esc(field.source)}${currentLens() === 'business' ? '' : ` · <code>${esc(field.field)}</code>`}<input data-write data-unsupported disabled value="${esc(t('settings.notInBuild'))}"${defAttrs('settings.notInBuild')}/></label><p class="settings-problem" data-problem-for="${esc(field.path)}" hidden></p></div>`,
+          `<fieldset disabled class="settings-unavailable"><label>${esc(field.source)}${currentLens() === 'business' ? '' : ` · <code>${esc(field.field)}</code>`}<input data-write data-unsupported disabled value="${esc(t('settings.notInBuild'))}"${defAttrs('settings.notInBuild')}/></label><p class="settings-problem" data-problem-for="${esc(field.path)}" hidden></p></fieldset>`,
       )
       .join(
         '',

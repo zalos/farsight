@@ -6,7 +6,7 @@ import { readAt, writeAt } from '../lib/settings-model.js';
 import { readOnlyWhy } from '../lib/read-only.js';
 
 export function renderAgents(root, { draft, changed }) {
-  root.innerHTML = `<section class="set-sec settings-fields">${fieldHtml({ key: 'settings.tools', path: 'mcp.tools', value: draft.mcp?.tools || 'core', options: ['core', 'all'] })}${fieldHtml({ key: 'settings.budget', path: 'mcp.budget', value: draft.mcp?.budget, type: 'number', optional: true })}</section><section id="set-lessons" class="set-sec"><h2 id="set-lessons-title"${defAttrs('set.lessons.title')}>${esc(t('set.lessons.title'))}</h2><p class="set-note">${esc(t('set.lessons.sub'))}</p><div id="lessonrows"></div></section><section class="set-sec"><h2${defAttrs('settings.grantsSummary')}>${esc(t('settings.grantsSummary'))}</h2>${
+  root.innerHTML = `<section class="set-sec settings-fields">${fieldHtml({ key: 'settings.tools', path: 'mcp.tools', value: draft.mcp?.tools || 'core', options: ['core', 'all'] })}${fieldHtml({ key: 'settings.budget', path: 'mcp.budget', value: draft.mcp?.budget, type: 'number', optional: true })}</section><section id="set-lessons" class="set-sec"><h2 id="set-lessons-title"${defAttrs('set.lessons.title')}>${esc(t('set.lessons.title'))}</h2><p class="set-note">${esc(t('settings.lessonsHelp'))}</p><div id="lessonrows"></div></section><section class="set-sec"><h2${defAttrs('settings.grantsSummary')}>${esc(t('settings.grantsSummary'))}</h2>${
     (draft.sources || [])
       .filter((s) => s.type === 'work')
       .map(

@@ -589,6 +589,7 @@
   .settings-rail a[aria-current]{color:var(--accent);border-color:var(--line);background:var(--panel);box-shadow:inset 3px 0 var(--accent)}
   .settings-content{min-width:0;max-width:880px}
   .settings-content>h2{margin:0 0 18px;font-family:var(--hud);font-size:18px;letter-spacing:.06em;color:var(--ink)}
+  .settings-content a{color:var(--accent)}
   .settings-content h3{margin:0;font-size:14px;font-weight:600;color:var(--ink)}
   .settings-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}
   .settings-field{display:flex;flex-direction:column;gap:7px;min-width:0;margin:0}
@@ -616,6 +617,8 @@
   .settings-grid th:first-child{width:30%}
   .settings-row-actions{display:flex;flex-direction:column;gap:8px}
   .settings-row-actions .btn{font-size:11px;white-space:normal;min-width:0}
+  .settings-secret-prefix{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .settings-secret-prefix .btn{font-size:11px;white-space:normal}
   .settings-grant-actions{display:flex;flex-direction:column;gap:8px}
   .settings-grant-actions label{display:flex;align-items:center;gap:6px}
   .settings-grid .mpk{min-width:0;width:100%}
@@ -627,6 +630,7 @@
   #settings-check:empty,#savenote:empty{display:none}
   .settings-savebar{position:fixed;bottom:27px;left:50%;transform:translateX(-50%);width:min(1104px,calc(100% - 56px));box-sizing:border-box;z-index:30;display:flex;align-items:center;gap:14px;padding:16px 20px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 -8px 32px #0002}
   .settings-savebar>div{flex:1}
+  .settings-savebar #savebtn{border-color:var(--accent);color:var(--accent)}
   .settings-savebar strong{color:var(--accent);font-weight:500}
   .settings-savebar .consequence{display:block;margin:5px 0 0;color:var(--muted);line-height:1.5}
   .settings-page [hidden]{display:none!important}
@@ -645,19 +649,7 @@
   .src-table .mono{font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all}
   .src-table .st{font-family:var(--mono);font-size:10px}
   .st.ok{color:var(--ok)} .st.err{color:var(--err)}
-  .addrow{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-  .addrow input{flex:1;min-width:140px}
-  .coll{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line-soft);font-size:12.5px;flex-wrap:wrap}
-  .coll .mono{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
-  .set-row{display:flex;align-items:center;gap:14px;padding:6px 0;font-size:13px}
-  .set-row label{min-width:120px;color:var(--muted)}
-  .set-foot{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
   .set-note{color:var(--dim);font-size:11.5px}
-  /* the Experiments: one flag per line, its sentence under its name (it wrapped one word per line beside it) */
-  .set-flags-row{align-items:flex-start}
-  .set-flags{display:flex;flex-direction:column;gap:12px;flex:1;min-width:0}
-  .set-flagitem .set-note{display:block;margin:3px 0 0 24px;max-width:72ch;line-height:1.45}
-  .set-row .set-flag{min-width:0}
   /* a read-only session: every write control stays on screen, greyed, with its reason as the tip */
   .set-ro{margin:-12px 0 20px;padding:8px 12px;border:1px dashed var(--line);border-radius:4px;color:var(--muted);font-size:12px}
   .btn.ro-off,.x.ro-off,.sc-save.ro-off{opacity:.45;cursor:not-allowed}
@@ -1475,7 +1467,6 @@
   .jrn-cut-where{display:block;font-family:var(--mono);font-size:9.5px;color:var(--dim);margin-top:3px;word-break:break-word}
   .jrn-cut-foot{margin-top:16px;padding-top:10px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;color:var(--dim)}
   @media (prefers-reduced-motion:reduce){.jrn-cutlist{transition:none!important}}
-  .set-flag{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink);cursor:pointer}
 
   /* ── the action drill (the journey-timeline design reference 02-action-drill · the Map's action stop):
      the rail of actions, one action's beats as lanes × columns with elbow wires, the inspector on the right ── */
@@ -3351,7 +3342,6 @@
     body.rd-on .rd-table th{font-size:8.5px;padding:4px 5px}
     body.rd-on .rd-table td{padding:6px 5px}
   }
-.les-list{list-style:none;margin:6px 0;padding:0}.les-row{display:flex;gap:10px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--line)}.les-text{flex:1}
 .dd-copy{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}.dd-copy .dd-door.copy{cursor:pointer;font:inherit}.dd-copy.compact .dd-door.copy{font-size:10px;padding:0 4px}.dd-copy-l{font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.7}.dd-copied{font-family:var(--mono);font-size:11px;color:var(--ok, #6FCF8E);border:1px solid currentColor;border-radius:3px;padding:0 5px;max-width:100%;overflow-wrap:anywhere}
 .ch-agent{font-size:11px;opacity:.85;border:1px solid var(--line);border-radius:3px;padding:0 4px;margin-left:4px}
   /* ── the Map's chrome holds still (cleanup pass 2026-10-11, lane P1) ─────────────────────────────────────────

@@ -1,7 +1,7 @@
 // The real Settings page on a private two-source workspace, including concurrent writers.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect } from './support';
 import { CLI, makeProjectsWorkspace } from '../fixture/workspace.mjs';
@@ -90,6 +90,8 @@ test.describe('sectioned Settings', () => {
             await page.locator('.settings-content').evaluate((el) => el.getBoundingClientRect().width),
           ).toBeLessThanOrEqual(880);
           await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+          mkdirSync('build/settings-shots', { recursive: true });
+          await page.screenshot({ path: `build/settings-shots/${section}-${register}-${theme}.png`, fullPage: true });
           await page.screenshot({ path: info.outputPath(`${section}-${register}-${theme}.png`), fullPage: true });
         });
       }
@@ -155,12 +157,13 @@ test.describe('sectioned Settings', () => {
       'sources[2].auth.secret must be a keychain: or env: reference — secrets never go in settings',
     );
     expect(await page.content()).not.toContain(pasted);
-    expect(await page.locator('input').evaluateAll((inputs) => inputs.map((input) => input.value))).not.toContain(
-      pasted,
-    );
+    expect(
+      await page.locator('input').evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value)),
+    ).not.toContain(pasted);
     expect(requests.join('\n')).not.toContain(pasted);
     await expect(page.locator('#savebtn')).toBeDisabled();
-    await secret.fill('keychain:farsight/example');
+    await card.locator('[data-secret-prefix="keychain:"]').click();
+    await secret.pressSequentially('farsight/example');
     await card.locator('[data-permissions] [data-row-action="add"]').click();
     await card.locator('[data-principal="agent"]').check();
     await expect(page.locator('#savebtn')).toBeEnabled();
@@ -170,6 +173,7 @@ test.describe('sectioned Settings', () => {
     expect(source.auth.secret).toBe('keychain:farsight/example');
     expect(source.scope.projects).toEqual(['EXAMPLE']);
     expect(source.permissions.grants[0].principals).toEqual(['human', 'agent']);
+    await page.screenshot({ path: 'build/settings-shots/work-grants.png', fullPage: true });
     await expect(page.locator('#syncbtn')).toBeVisible();
   });
 
@@ -183,6 +187,7 @@ test.describe('sectioned Settings', () => {
     await page.locator('#savebtn').click();
     await expect(page.locator('#savenote')).toHaveText('Saved.');
     expect(settings().collections).toEqual([{ name: 'Billing systems', sourceIds: ['invoice-app'] }]);
+    await page.screenshot({ path: 'build/settings-shots/collection-members.png', fullPage: true });
     await page.locator('[data-row-action="add"]').click();
     await page.locator('[data-field="collections[1].name"]').fill('Second');
     await page.locator('[data-row="1"] [data-row-action="up"]').click();
@@ -218,6 +223,58 @@ test.describe('sectioned Settings', () => {
     }
     expect(writes).toEqual([]);
     expect(readFileSync(file(), 'utf8')).toBe(initial);
+  });
+
+  test('a late validation answer cannot overwrite the current draft check', async ({ page }) => {
+    let release: () => void = () => {};
+    let received: () => void = () => {};
+    const firstSeen = new Promise<void>((resolve) => {
+      received = resolve;
+    });
+    const delay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    await page.route('**/api/settings/check', async (route) => {
+      if (++calls === 1) {
+        received();
+        await delay;
+        await route.fulfill({
+          json: { ok: false, problem: 'settings.mcp.budget must be a whole number of tokens, 500 or more' },
+        });
+      } else await route.continue();
+    });
+    await page.goto(writable + '#/settings/agents');
+    await page.locator('[data-field="mcp.budget"]').fill('400');
+    await firstSeen;
+    await page.locator('[data-field="mcp.budget"]').fill('1500');
+    await expect(page.locator('#savebtn')).toBeEnabled();
+    release();
+    await expect(page.locator('[data-problem-for="mcp.budget"]')).toBeHidden();
+    await page.locator('#savebtn').click();
+    await expect(page.locator('#savenote')).toHaveText('Saved.');
+    expect(settings().mcp.budget).toBe(1500);
+  });
+
+  test('unsupported overlay fields are visible, disabled and preserved', async ({ page }) => {
+    const current = settings();
+    current.sources[0].config = { glossary: { App: { label: 'Application' } } };
+    writeFileSync(file(), JSON.stringify(current));
+    await page.route('**/api/version', async (route) => {
+      const response = await route.fetch();
+      const value = await response.json();
+      value.overlayFields = value.overlayFields.filter((field: string) => field !== 'glossary');
+      await route.fulfill({ response, json: value });
+    });
+    await page.goto(writable + '#/settings/configuration?lens=code');
+    await expect(page.locator('[data-unsupported]')).toBeDisabled();
+    await expect(page.locator('[data-unsupported]')).toHaveValue('Not in this build');
+    await page.locator('.settings-rail a[href="#/settings/workspace"]').click();
+    await page.locator('#set-theme').selectOption('light');
+    await expect(page.locator('#savebtn')).toBeEnabled();
+    await page.locator('#savebtn').click();
+    await expect(page.locator('#savenote')).toHaveText('Saved.');
+    expect(settings().sources[0].config).toEqual(current.sources[0].config);
   });
 
   test('section memory and g s are discoverable in the keymap', async ({ page }) => {

@@ -47,7 +47,7 @@ function sourceForm(source, index) {
     .filter((path) => path !== 'permissions')
     .map((path) => {
       const value = model.readAt(source, path);
-      return fieldHtml({
+      const field = fieldHtml({
         key: 'settings.' + labels[path],
         path: `sources[${index}].${path}`,
         value: lists.has(path) ? (value || []).join(', ') : value,
@@ -55,6 +55,8 @@ function sourceForm(source, index) {
         type: path === 'enabled' ? 'checkbox' : path === 'auth.secret' ? 'password' : 'text',
         optional: !['name', 'path'].includes(path),
       });
+      if (path !== 'auth.secret') return field;
+      return `<div>${field}<div class="settings-secret-prefix">${['keychain:', 'env:'].map((prefix) => buttonHtml(prefix === 'keychain:' ? 'settings.keychainRef' : 'settings.envRef', `data-secret-prefix="${prefix}" data-secret-source="${index}"`)).join('')}</div></div>`;
     })
     .join(
       '',
@@ -117,10 +119,10 @@ function renderPermissions(root, source, index, changed) {
 }
 
 export function renderSources(root, context) {
-  const { draft, changed, sync, checkSecret } = context;
+  const { draft, changed, sync } = context;
   let adding = false;
   const draw = () => {
-    root.innerHTML = `<div id="srcrows">${(draft.sources || []).map((source, i) => `<article class="set-sec settings-source" data-source-card="${esc(source.id)}"><header><h3>${esc(source.name || t('settings.newSource'))}</h3><span class="settings-type"${defAttrs('settings.value.' + source.type)}>${esc(t('settings.value.' + source.type))}</span></header><p class="settings-source-status"${defAttrs('settings.status')}>${esc(source.status || t('settings.noSync'))}</p><p class="set-note"${defAttrs('settings.lastSync')}>${esc(t('settings.lastSync'))}: ${esc(S.GRAPH?.meta?.generatedAt || t('settings.noSync'))}</p>${sourceForm(source, i)}<footer>${buttonHtml('settings.sync', 'data-sync')}${source.type === 'local' ? sentinelScanDoorHtml() : ''}${buttonHtml('settings.remove', `data-source-remove="${i}"`)}</footer></article>`).join('') || `<p class="set-note">${esc(t('set.noSources'))}</p>`}</div>${buttonHtml('settings.addSource', 'id="source-add" data-source-add')}<div id="source-add-form"${adding ? '' : ' hidden'}><label class="settings-field">${esc(t('settings.type'))}<select id="source-add-type" data-write>${Object.keys(
+    root.innerHTML = `<div id="srcrows">${(draft.sources || []).map((source, i) => `<article class="set-sec settings-source" data-source-card="${esc(source.id)}"><header><h3>${esc(source.name || t('settings.newSource'))}</h3><span class="settings-type"${defAttrs('settings.value.' + source.type)}>${esc(t('settings.value.' + source.type))}</span></header><p class="settings-source-status"${defAttrs('settings.status')}>${esc(source.status || t('settings.noSync'))}</p><p class="set-note"${defAttrs('settings.lastSync')}>${esc(t('settings.lastSync'))}: ${esc(S.GRAPH?.meta?.generatedAt || t('settings.noSync'))}</p>${sourceForm(source, i)}<footer>${buttonHtml('settings.sync', 'data-sync')}${source.type === 'local' ? sentinelScanDoorHtml() : ''}${buttonHtml('settings.remove', `data-source-remove="${i}"`)}</footer></article>`).join('') || `<p class="set-note">${esc(t('set.noSources'))}</p>`}</div>${buttonHtml('settings.addSource', 'id="source-add" data-source-add')}<div id="source-add-form"${adding ? '' : ' hidden'}><label class="settings-field"${defAttrs('settings.type')}>${esc(t('settings.type'))}<select id="source-add-type" data-write>${Object.keys(
       model.sourceFields,
     )
       .map((type) => `<option value="${type}">${esc(t('settings.value.' + type))}</option>`)
@@ -152,7 +154,6 @@ export function renderSources(root, context) {
       if (!value && input.value) {
         input.value = '';
         model.writeAt(source, path, '');
-        checkSecret();
         changed();
         return;
       }
@@ -162,7 +163,7 @@ export function renderSources(root, context) {
         .split(',')
         .map((v) => v.trim())
         .filter(Boolean);
-    if (input.hasAttribute('data-optional') && value === '' && path !== 'auth.secret') value = undefined;
+    if (input.hasAttribute('data-optional') && value === '') value = undefined;
     model.writeAt(source, path, value);
     changed();
     if (path === 'type') draw();
@@ -170,6 +171,17 @@ export function renderSources(root, context) {
   root.onclick = (event) => {
     const button = event.target.closest('button');
     if (!button || readOnlyWhy()) return;
+    if (button.dataset.secretPrefix) {
+      const index = Number(button.dataset.secretSource);
+      const path = `sources[${index}].auth.secret`;
+      const input = [...root.querySelectorAll('[data-field]')].find((el) => el.dataset.field === path);
+      model.writeAt(draft.sources[index], 'auth.secret', button.dataset.secretPrefix);
+      input.value = button.dataset.secretPrefix;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      changed();
+      return;
+    }
     if (button.hasAttribute('data-sync')) {
       sync();
       return;

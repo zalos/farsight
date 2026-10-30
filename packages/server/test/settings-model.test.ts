@@ -15,7 +15,7 @@ test('a theme save preserves concurrent registration, dismissal, overlay and les
   Object.assign(current.sources[0], {
     openapi: [{ path: 'api.yml' }],
     openapiIgnore: ['old.yml'],
-    config: { glossary: { App: 'Application' } },
+    config: { glossary: { App: { label: 'Application' } } },
   });
   current.lessons = [{ text: 'Read the gates', pinned: true }];
   assert.deepEqual(M.mergeSettings(base, draft, current), { ...current, theme: 'light' });
@@ -75,4 +75,17 @@ test('all sections and type-specific fields are explicit; secrets are references
   assert.equal(M.secretReference('pasted-value'), '');
   assert.equal(M.secretReference('env:EXAMPLE_TOKEN'), 'env:EXAMPLE_TOKEN');
   assert.equal(M.secretReference('keychain:farsight/example'), 'keychain:farsight/example');
+});
+
+test('unsupported overlay fields use both running-build capability lists', () => {
+  const settings = {
+    sources: [{ name: 'App', config: { glossary: {}, patterns: [], tests: {}, $schema: 'example' } }],
+  };
+  assert.deepEqual(
+    M.unavailableFields(settings, { configFields: ['glossary', 'tests'], overlayFields: ['glossary', 'patterns'] }),
+    [
+      { source: 'App', field: 'patterns', path: 'sources[0].config.patterns' },
+      { source: 'App', field: 'tests', path: 'sources[0].config.tests' },
+    ],
+  );
 });

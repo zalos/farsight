@@ -54,5 +54,5 @@ export function renderCollections(root, { draft, changed }) {
     },
   });
   // Explain collections once; the grid and picker supply the controls.
-  root.insertAdjacentHTML('afterbegin', `<p class="set-note">${esc(t('settings.collections'))}</p>`);
+  root.insertAdjacentHTML('afterbegin', `<p class="set-note">${esc(t('settings.collectionHelp'))}</p>`);
 }

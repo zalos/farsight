@@ -35,6 +35,7 @@ import { mountJourneys, journeysRefresh } from './surfaces/journeys.js';
 import { isOverlayAddress, overlayToMap } from './lib/route-url.js';
 import { cmapScopeHtml, projectTravelItems } from './surfaces/codemap-projects.js';
 import { pickerHasQuery } from './lib/multi-pick.js';
+import { mergeSettings } from './lib/settings-model.js';
 import { mountCodemap, unmountCodemap, codemapRefresh } from './surfaces/codemap.js';
 import { mountPortfolio, portfolioRefresh } from './surfaces/portfolio.js';
 import { mountChanges, changesRefresh } from './surfaces/changes.js';
@@ -1032,8 +1033,14 @@ export async function saveScopeGroup() {
   const name = prompt(t('set.groupPrompt'));
   if (!name) return;
   const ids = (S.SETTINGS.sources || []).filter((s) => S.scope.includes(s.name)).map((s) => s.id);
-  S.SETTINGS.collections.push({ name, sourceIds: ids });
-  await fetch('/api/settings', { method: 'PUT', body: JSON.stringify(S.SETTINGS) });
+  const currentResponse = await fetch('/api/settings');
+  if (!currentResponse.ok) return;
+  const current = await currentResponse.json();
+  const changed = { ...S.SETTINGS, collections: [...(S.SETTINGS.collections || []), { name, sourceIds: ids }] };
+  const merged = mergeSettings(S.SETTINGS, changed, current);
+  const saved = await fetch('/api/settings', { method: 'PUT', body: JSON.stringify(merged) });
+  if (!saved.ok) return;
+  S.SETTINGS = merged;
   buildScope();
   settingsRefresh();
 }

@@ -29,12 +29,12 @@ test.describe('Settings is named', () => {
     await expect(page.locator('#settings')).toHaveClass(/\bopen\b/);
   });
 
-  /** @covers packages/server/public/app/shell.js::renderSettings */
+  /** @covers packages/server/public/app/surfaces/settings-workspace.js::renderWorkspace */
   test('the Experiments read one flag per line, their sentence under them, never one word wide', async ({ page }) => {
     await gotoReady(page, '#/portfolio');
     await page.evaluate(() => (window as any).openSettings());
     // the Map and the action drill are no experiments since the journey page retired into the Map: one flag is left
-    const notes = page.locator('.set-flagitem .set-note');
+    const notes = page.locator('[data-field-wrap="flags.designShots"] .set-note');
     await expect(notes).toHaveCount(1);
     for (const w of await notes.evaluateAll((ns) => ns.map((n) => n.getBoundingClientRect().width)))
       expect(w).toBeGreaterThan(300);
