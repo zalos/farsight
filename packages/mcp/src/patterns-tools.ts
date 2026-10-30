@@ -28,7 +28,11 @@ export function registerPatternsTools(ctx: {
         ...(isError ? { isError } : {}),
       });
       const sources = Object.entries(ctx.roots()).filter(([r]) => !repo || r === repo);
-      if (!sources.length) return text(word('sourceMissing').replace('{source}', repo ?? ''), true);
+      if (!sources.length)
+        return text(
+          word('sourceMissing').replace('{source}', () => repo ?? ''),
+          true,
+        );
       const options = ctx.options();
       try {
         const results = [];

@@ -1673,7 +1673,8 @@ switch (command) {
     }
     if (!sources.length && !Object.keys(store?.roots ?? {}).length && (!repo || repo === basename(workspace)))
       selected.set(repo ?? basename(workspace), { root: workspace, options: {} });
-    if (!selected.size) fail(word('config.patterns.sourceMissing', 'professional').replace('{source}', repo ?? ''));
+    if (!selected.size)
+      fail(word('config.patterns.sourceMissing', 'professional').replace('{source}', () => repo ?? ''));
     const results = [];
     for (const [name, { root, options }] of selected)
       results.push(await testPatterns(root, { ...options, repoName: name }, { rule: flag('rule') }));

@@ -62,6 +62,9 @@ test('patterns_test is read-only in all tier, shares CLI text and config/overvie
   assert.equal(result.matches[0].name, 'POST /missing');
   assert.match(result.report.rules[0].file, /sources\[source-id\]/);
   assert.equal(await call('patterns_test', { repo: 'app' }), patternsTestText(result));
+  const missing = await client.callTool({ name: 'patterns_test', arguments: { repo: 'missing$&' } });
+  assert.equal(missing.isError, true);
+  assert.match((missing.content as { text: string }[])[0]!.text, /missing\$&/);
   const files = JSON.parse(await call('config_files', { repo: 'app', json: true }));
   assert.equal(files.app.patterns.rules[0].matched, 2);
   assert.equal(files.app.patternCounts[0].matched.n, 2);

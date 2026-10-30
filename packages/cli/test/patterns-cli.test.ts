@@ -39,6 +39,9 @@ test('patterns test shares the engine output, selects source and rule, and write
   const text = run(['--repo', 'app']);
   assert.equal(text.status, 0, text.stderr);
   assert.equal(text.stdout.trim(), patternsTestText(result));
+  const missing = run(['--repo', 'missing$&']);
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /missing\$&/);
   assert.deepEqual(JSON.parse(run(['--rule', 'no-rule', '--json']).stdout)[0].report.rules, []);
   assert.notEqual(run(['--repo', 'unknown']).status, 0);
   assert.deepEqual(readdirSync(join(root, '.farsight')), ['settings.json']);
