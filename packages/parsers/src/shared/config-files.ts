@@ -79,8 +79,10 @@ export type ScopedStoreDecl = StoreDecl & { dir: string; from: string };
 export interface WorkspaceConfig {
   /** Source identity for declarations when no adapter produced a node. */
   repo?: string;
-  /** Existence is checked inside the source only, including files no adapter supports. */
+  /** Selection and existence are checked inside the source, including files no adapter supports. */
   hasFile?: (path: string) => boolean;
+  /** Ingest-only declaration provenance, carried across the spec pass and audit. */
+  declaredIndex?: DeclaredNodeIndex;
   /** the root file's config, or null when there is none (or it could not be read) */
   root: FarsightConfig | null;
   /** root first, then by folder depth, then by path — only the files that could be read */
@@ -269,8 +271,12 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
   if (ws.files.some((f) => f.config.nodes?.length)) {
     ws.repo = options.repoName ?? repoRoot.split('/').filter(Boolean).pop()!;
     const root = realpathSync(repoRoot);
+    const selected = new Set(
+      collectFiles(repoRoot, [''], options).map((path) => relative(repoRoot, path).replaceAll('\\', '/')),
+    );
     const files = new Map<string, boolean>();
     ws.hasFile = (path) => {
+      if (!selected.has(path)) return false;
       if (!files.has(path)) {
         let exists = false;
         try {
@@ -281,6 +287,7 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
             !isAbsolute(rel) &&
             rel !== '..' &&
             !rel.replaceAll('\\', '/').startsWith('../') &&
+            selected.has(rel.replaceAll('\\', '/')) &&
             statSync(absolute).isFile();
         } catch {
           /* A missing file has no source location; the audit gives its note. */
@@ -693,7 +700,8 @@ function glossaryConflicts(files: ConfigFile[]): ConfigMeta['conflicts'] {
  */
 export function applyWorkspaceConfig(nodes: GraphNode[], edges: GraphEdge[], ws: WorkspaceConfig): boolean {
   // plumbing is a path glob: every file's, rebased into one list, tags the whole source once
-  const declaredIndex = new DeclaredNodeIndex(nodes, edges);
+  const declaredIndex = new DeclaredNodeIndex(nodes, edges, ws.declaredIndex);
+  ws.declaredIndex = declaredIndex;
   if (ws.merged.plumbing?.length) applyConfig(nodes, { plumbing: ws.merged.plumbing }, edges, { declaredIndex });
   const guardedBy = new Map<string, string>();
   for (const f of ws.files) {
@@ -721,6 +729,7 @@ export function applyWorkspaceConfig(nodes: GraphNode[], edges: GraphEdge[], ws:
     applyDeclaredGuardGrants(nodes, edges, f.config, {
       repo: ws.repo,
       from: f.path,
+      dir: f.dir,
       scope: scopeOfDir(f.dir),
       declaredIndex,
     });
@@ -729,13 +738,15 @@ export function applyWorkspaceConfig(nodes: GraphNode[], edges: GraphEdge[], ws:
 
 /** Route-shaped guard matchers again, after the OpenAPI pass added its routes — each file over its own folder. */
 export function applyWorkspaceRouteGuards(nodes: GraphNode[], edges: GraphEdge[], ws: WorkspaceConfig): void {
-  const declaredIndex = new DeclaredNodeIndex(nodes, edges);
+  const declaredIndex = new DeclaredNodeIndex(nodes, edges, ws.declaredIndex);
+  ws.declaredIndex = declaredIndex;
   for (const f of ws.files)
     applyRouteGuards(nodes, matcherFields(f.config), edges, f.root ? undefined : scopeOfDir(f.dir), declaredIndex);
   for (const f of ws.files)
     applyDeclaredGuardGrants(nodes, edges, f.config, {
       repo: ws.repo,
       from: f.path,
+      dir: f.dir,
       scope: scopeOfDir(f.dir),
       declaredIndex,
     });

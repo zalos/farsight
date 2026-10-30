@@ -885,7 +885,7 @@ export function applyConfig(
       node.kind = 'guard';
       guarded.push(node.id);
       node.name = `${node.name}: ${label}`;
-      index.addNode(node);
+      index.recordGuardLabel(node, label);
       if (!node.tags.includes('auth')) node.tags.push('auth');
       // calls into the wrapper gain a guards edge pointing back at the caller; the calls edge stays,
       // because the wrapper is also run — what it does inside (its reads, writes, calls) is part of the walk
@@ -942,7 +942,7 @@ export function applyDeclaredGuardGrants(
     if (decl.kind !== 'guard' || !decl.requires?.trim()) continue;
     const id = `${repo}::guard::${decl.name}`;
     const guard = index.byId.get(id);
-    if (!guard || (guard.loc && options.scope && !options.scope(guard))) continue;
+    if (!guard || !index.inScope(guard, options.dir, options.scope)) continue;
     for (const edge of index.guardsFrom.get(id) ?? []) {
       if (edge.meta?.requires) continue;
       edge.meta = {
@@ -963,6 +963,13 @@ export function declaredNodePath(value: string, dir = '.'): string | undefined {
   return path.replace(/^\.\//, '');
 }
 
+interface DeclarationState {
+  origins: Map<string, string>;
+  guardLabels: Map<string, string>;
+}
+// Ingest-only provenance survives index rebuilds without adding fields to the application graph.
+const declarationStates = new WeakMap<GraphNode[], DeclarationState>();
+
 /** One mutable index for declaration matching and connections, shared across each workspace pass. */
 export class DeclaredNodeIndex {
   readonly byId = new Map<string, GraphNode>();
@@ -976,9 +983,28 @@ export class DeclaredNodeIndex {
   readonly files = new Set<string>();
   private readonly edgeKeys = new Set<string>();
 
-  constructor(nodes: GraphNode[], edges: GraphEdge[] = []) {
+  private readonly state: DeclarationState;
+
+  constructor(nodes: GraphNode[], edges: GraphEdge[] = [], previous?: DeclaredNodeIndex) {
+    this.state = previous?.state ?? declarationStates.get(nodes) ?? { origins: new Map(), guardLabels: new Map() };
+    declarationStates.set(nodes, this.state);
     for (const node of nodes) this.addNode(node);
     for (const edge of edges) this.addEdge(edge);
+  }
+
+  recordDeclaration(node: GraphNode, dir = '.'): void {
+    this.state.origins.set(node.id, dir);
+  }
+
+  inScope(node: GraphNode, dir = '.', scope?: ConfigScope): boolean {
+    if (!scope) return true;
+    const origin = this.state.origins.get(node.id);
+    return origin !== undefined ? origin === dir || origin.startsWith(`${dir}/`) : scope(node);
+  }
+
+  recordGuardLabel(node: GraphNode, label: string): void {
+    this.state.guardLabels.set(node.id, label);
+    this.addNode(node);
   }
 
   addNode(node: GraphNode): void {
@@ -1006,8 +1032,9 @@ export class DeclaredNodeIndex {
       if (!bucket.has(repo)) bucket.set(repo, node);
       this.routes.set(route, bucket);
     }
-    if (node.kind === 'guard' && node.name.includes(': ')) {
-      const key = `${repo}::${node.name.slice(node.name.indexOf(': ') + 2)}`;
+    const label = this.state.guardLabels.get(node.id);
+    if (node.kind === 'guard' && label !== undefined) {
+      const key = `${repo}::${label}`;
       const bucket = this.guardLabels.get(key) ?? new Set<GraphNode>();
       bucket.add(node);
       this.guardLabels.set(key, bucket);
@@ -1096,13 +1123,14 @@ function applyDeclaredNodes(nodes: GraphNode[], config: FarsightConfig, options:
     if (decl.kind === 'route' && !/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|ALL) \/\S*$/.test(decl.name))
       continue;
     let node = declaredNodeTarget(index, decl, repo);
-    // A nested declaration cannot augment a reader's route outside its own folder; the audit explains it.
-    if (node && options.scope && node.loc && !options.scope(node)) continue;
+    // A nested declaration cannot change parts owned outside its folder; the audit explains it.
+    if (node && !index.inScope(node, options.dir, options.scope)) continue;
     const created = !node;
     if (!node) {
       node = { id: `${repo}::${decl.kind}::${decl.name}`, kind: decl.kind, name: decl.name, tags: ['declared'] };
       if (decl.kind === 'guard') node.tags.push('auth');
       nodes.push(node);
+      index.recordDeclaration(node, options.dir);
     }
     ids.add(node.id);
     const loc = decl.loc?.match(/^(.*):([1-9]\d*)$/);
@@ -1163,7 +1191,7 @@ function applyDeclaredNodeEdges(
   for (const decl of config.nodes ?? []) {
     if (decl.kind !== 'route') continue;
     const route = declaredNodeTarget(index, decl, repo);
-    if (!route || (options.scope && route.loc && !options.scope(route))) continue;
+    if (!route || !index.inScope(route, options.dir, options.scope)) continue;
     const handler = decl.handler && declaredNodeHandler(index, decl.handler, repo, options.dir, options.scope);
     if (handler) link('calls', route.id, handler.id);
     for (const label of decl.guards ?? []) {
