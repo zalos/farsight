@@ -14,7 +14,7 @@ function one(word: string, pluralKey: string): StringEntry {
 
 export const CONFIG_STRINGS: Record<string, StringEntry> = {
   'count.unit.configFiles': same('{n} config files',
-    'Farsight config files one source holds, each counted once: the one in its top folder, which speaks for the whole source, and any in a folder below it, which speaks only for the code in that folder. A file that could not be read is not counted; it is named in the notes.'),
+    'Farsight config files one source holds, each counted once: the one in its top folder, which speaks for the whole source, any in a folder below it, which speaks only for the code in that folder, and the source-wide overlay kept in workspace settings. A file that could not be read is not counted; it is named in the notes.'),
   'count.unit.configFilesOne': one('1 config file', 'count.unit.configFiles'),
   'count.part.configRoot': same('{n} for the whole source',
     'The config file in the top folder of the source. Its words apply to all of the code, and only it may say how projects group and which folders are tooling.'),
@@ -22,6 +22,11 @@ export const CONFIG_STRINGS: Record<string, StringEntry> = {
   'count.part.configScoped': same('{n} for one folder',
     'Config files in a folder below the top one. Each speaks only for the code in its own folder, and the paths it names start from that folder. Where two files name the same thing, the nearer one wins.'),
   'count.part.configScopedOne': one('1 for one folder', 'count.part.configScoped'),
+  'count.part.configWorkspace': same('{n} from workspace settings',
+    'Source-wide declarations kept in workspace settings. They add information about the code without changing a file in the source.'),
+  'count.part.configWorkspaceOne': one('1 from workspace settings', 'count.part.configWorkspace'),
+  'config.scope.workspace': same('workspace settings — the whole source',
+    'These declarations live in workspace settings and apply across this source. The source’s own declarations keep their word when both give the same setting.'),
   'count.unit.configConflicts': same('{n} conflicts',
     'Places where two config files of one source say different things about the same name: two words for one function, a second declaration of a third party or a data store, or a check one file already made. The file whose word stands is named beside each.'),
   'count.unit.configConflictsOne': one('1 conflict', 'count.unit.configConflicts'),
@@ -61,6 +66,12 @@ export const CONFIG_STRINGS: Record<string, StringEntry> = {
     'Two config files name the same data store differently, or put the same table in different stores. The nearer file’s word stands for its own folder; otherwise the first is kept.'),
   'config.conflict.lifecycle': same('{key} has two words for one status — {files}. {kept}’s stands.',
     'Two config files, or two words in one file, name the same status of a record differently for the same kind of user. The nearer file’s word is the one shown.'),
+  'config.conflict.gateTier': same('{key} has two check tiers — {files}. {kept}’s is kept.',
+    'Two declarations assign a check to different tiers. The source’s own assignment is kept over the workspace assignment.'),
+  'config.conflict.decision': same('{key} has two decision declarations — {files}. {kept}’s is kept.',
+    'The source and workspace name the same decision differently. The source’s declaration is kept.'),
+  'config.conflict.field': same('{key} is declared twice — {files}. {kept}’s is kept.',
+    'The source and workspace both give this setting. The source’s value is kept.'),
   'config.conflict.tag': same('{key} is tagged differently — {files}. {kept}’s stands.',
     'Two config files tag the same part in ways that disagree. The file named last is the one that stands.'),
 

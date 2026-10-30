@@ -38,6 +38,10 @@
       "types": "./dist/config-check.d.ts",
       "import": "./dist/config-check.js"
     },
+    "./config": {
+      "types": "./dist/config-validation.d.ts",
+      "import": "./dist/config-validation.js"
+    },
     "./schema": "./schemas/graph-v1.schema.json",
     "./types": {
       "types": "./dist/graph.d.ts",

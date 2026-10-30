@@ -1196,7 +1196,7 @@ export interface ConfigMeta {
   }[];
   /** two files said different things about one key; `kept` is the file whose word stands */
   conflicts: {
-    kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag' | 'lifecycle' | 'overlay';
+    kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag' | 'lifecycle' | 'gateTier' | 'decision' | 'field';
     key: string;
     files: string[];
     kept: string;

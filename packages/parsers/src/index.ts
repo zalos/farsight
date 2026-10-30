@@ -26,6 +26,7 @@ import type { ParsedManifest } from './design/index.js';
 import { declaredPathWarnings } from './shared/declared-paths.js';
 
 export type { LanguageAdapter, IngestOptions } from './types.js';
+export { sourceIngestOptions } from './types.js';
 export { tsJsAdapter, ingestTsJs, SQL_DRIVERS, storeLike } from './tsjs.js';
 export { applyStores, prismaProviders, springDatasourceJdbc } from './stores.js';
 export {
@@ -175,9 +176,6 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
     a?.length || b?.length ? [...(a ?? []), ...(b ?? [])] : undefined;
   const opts: IngestOptions = {
     ...options,
-    configOverlay: options.configOverlay,
-    openapiRegistered: options.openapiRegistered,
-    openapiIgnored: options.openapiIgnored,
     repoName: repo,
     occurrences: options.occurrences === true,
     testFiles: options.testFiles ?? (options.tests === false ? 'include' : 'exclude'),

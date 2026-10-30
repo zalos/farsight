@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { configSchemaProblem } from '@farsight/graph';
+import { configSchemaProblem } from '@farsight/graph/config';
 import type {
   GraphNode,
   GraphEdge,
