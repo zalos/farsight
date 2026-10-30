@@ -533,7 +533,13 @@ test('candidate metadata survives design and store persistence without moving no
     openapiRegistered: [{ path: 'docs/vendor-api.json' }],
     openapiIgnored: ['docs/vendor-api.json'],
   });
-  assert.equal(ignored.meta!.openapi, undefined);
+  assert.deepEqual(ignored.meta!.openapi, { applied: [], candidates: [] });
+  store.addFragment(ignored);
+  assert.deepEqual(
+    store.meta.openapi?.candidate,
+    { applied: [], candidates: [] },
+    'a refresh clears prior candidate metadata',
+  );
 });
 
 test('discovery refuses local declarations and candidate symlinks outside the source', async () => {

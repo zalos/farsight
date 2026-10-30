@@ -38,6 +38,17 @@ for (const [name, example] of [
       delete actual.meta.sourceHash;
       assert.ok(actual.edges.every((edge: Record<string, unknown>) => !('occurrences' in edge)));
       const expected = JSON.parse(readFileSync(new URL(`./fixtures/extraction/${name}.json`, import.meta.url), 'utf8'));
+      // Discovery adds a document inventory, not graph content. The historical
+      // applied set still equals the spec nodes in the frozen extraction baseline.
+      assert.deepEqual(
+        actual.meta.openapi.applied.map((d: { path: string }) => d.path).sort(),
+        expected.nodes
+          .filter((n: { kind: string }) => n.kind === 'api')
+          .map((n: { loc: { path: string } }) => n.loc.path)
+          .sort(),
+      );
+      assert.deepEqual(actual.meta.openapi.candidates, []);
+      delete actual.meta.openapi;
       // This fixture intentionally declares a plumbing folder it does not contain. Keep the historical
       // graph baseline intact, but require the new diagnostic in both retained metadata and ingest output.
       if (name === 'workspace') {

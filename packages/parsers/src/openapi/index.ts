@@ -33,7 +33,6 @@ export async function applySpecs(
   const config = (workspace ?? loadWorkspaceConfig(repoRoot, options)).merged;
   const { specs, errors } = await discoverSpecs(repoRoot, options, config.openapi ?? []);
   const applied: SpecApplication[] = [];
-  if (!specs.length) return { applied, errors };
   const openapi: OpenApiMeta = { applied: [], candidates: [] };
   const hash = createHash('sha1').update(fragment.meta?.sourceHash ?? '');
   for (const spec of specs) {
