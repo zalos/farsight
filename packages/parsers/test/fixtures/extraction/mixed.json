@@ -918,6 +918,27 @@
       }
     },
     {
+      "id": "compat::web/src/server/invoiceSummaryController.ts::InvoiceSummaryController.ready",
+      "kind": "function",
+      "name": "InvoiceSummaryController.ready",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "web/src/server/invoiceSummaryController.ts",
+        "line": 8,
+        "endLine": 11
+      },
+      "snippet": "@JsonGet('ready')\n  ready() {\n    return { ready: true };\n  }",
+      "group": "InvoiceSummaryController",
+      "tags": [
+        "invoice"
+      ],
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
       "id": "compat::web/src/server/notify.ts::EmailNotifier.send",
       "kind": "function",
       "name": "EmailNotifier.send",
@@ -1282,6 +1303,7 @@
       },
       "tags": [
         "invoice",
+        "undocumented",
         "api:invoices"
       ],
       "contract": {
@@ -1349,6 +1371,7 @@
       },
       "tags": [
         "invoice",
+        "undocumented",
         "api:invoices"
       ],
       "contract": {
@@ -1403,6 +1426,7 @@
       },
       "tags": [
         "invoice",
+        "undocumented",
         "api:invoices"
       ],
       "contract": {
@@ -1472,6 +1496,7 @@
       },
       "tags": [
         "invoice",
+        "undocumented",
         "api:invoices"
       ],
       "contract": {
@@ -1616,6 +1641,7 @@
       "tags": [
         "invoice",
         "payment",
+        "undocumented",
         "api:payments"
       ],
       "contract": {
@@ -1669,6 +1695,7 @@
       },
       "tags": [
         "invoice",
+        "undocumented",
         "api:payments"
       ],
       "contract": {
@@ -2761,6 +2788,16 @@
       }
     },
     {
+      "id": "compat::package::@nestjs/common",
+      "kind": "package",
+      "name": "@nestjs/common",
+      "tags": [],
+      "package": {
+        "scope": "third-party",
+        "note": "imported by 1 file but declared in no package.json above it"
+      }
+    },
+    {
       "id": "compat::package::clsx",
       "kind": "package",
       "name": "clsx",
@@ -2917,6 +2954,21 @@
       "loc": {
         "repo": "compat",
         "path": "web/src/server/config/env.ts",
+        "line": 1
+      },
+      "tags": [],
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::module::web/src/server/invoiceSummaryController.ts",
+      "kind": "module",
+      "name": "web/src/server/invoiceSummaryController.ts",
+      "loc": {
+        "repo": "compat",
+        "path": "web/src/server/invoiceSummaryController.ts",
         "line": 1
       },
       "tags": [],
@@ -3117,6 +3169,73 @@
       }
     },
     {
+      "id": "compat::service/src/main/java/com/acme/invoices/api/InvoiceApiDelegate.java::InvoiceApiDelegate",
+      "kind": "class",
+      "name": "InvoiceApiDelegate",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "service/src/main/java/com/acme/invoices/api/InvoiceApiDelegate.java",
+        "line": 7,
+        "endLine": 9
+      },
+      "docs": "The interface generated from openapi.yaml; operationId is the method name.",
+      "tags": [
+        "invoice",
+        "interface",
+        "http-api"
+      ],
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::service/src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java::InvoiceApiDelegateImpl",
+      "kind": "class",
+      "name": "InvoiceApiDelegateImpl",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "service/src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java",
+        "line": 8,
+        "endLine": 21
+      },
+      "tags": [
+        "invoice",
+        "service",
+        "implements:InvoiceApiDelegate",
+        "http-api"
+      ],
+      "signature": "implements InvoiceApiDelegate",
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::service/src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java::InvoiceApiDelegateImpl.getInvoiceForApproval",
+      "kind": "function",
+      "name": "InvoiceApiDelegateImpl.getInvoiceForApproval",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "service/src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java",
+        "line": 16,
+        "endLine": 20
+      },
+      "snippet": "@Override\n  @SomeAnnotationPolicy(resource = \"invoice\", action = \"approve\")\n  public ResponseEntity<Invoice> getInvoiceForApproval(Long id) {\n    return ResponseEntity.ok(invoices.get(id));\n  }",
+      "group": "InvoiceApiDelegateImpl",
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
       "id": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController",
       "kind": "class",
       "name": "InvoiceController",
@@ -3125,7 +3244,7 @@
         "repo": "compat",
         "path": "service/src/main/java/com/acme/invoices/api/InvoiceController.java",
         "line": 23,
-        "endLine": 101
+        "endLine": 108
       },
       "docs": "HTTP surface for the invoice lifecycle. Everything here delegates to InvoiceService; the controller only turns HTTP into calls. Since 1.0.",
       "tags": [
@@ -3548,6 +3667,34 @@
             "message": "implemented in the code; not declared in the spec"
           }
         ]
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.approval",
+      "kind": "function",
+      "name": "InvoiceController.approval",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "service/src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 102,
+        "endLine": 106
+      },
+      "docs": "Reads the invoice an approver is reviewing.",
+      "snippet": "@ApiRoute(value = \"/{id}/approval\", method = \"POST\")\n  @SomeAnnotationPolicy(resource = \"invoice\", action = \"approve\")\n  public Invoice approval(@PathVariable Long id) {\n    return invoices.get(id);\n  }",
+      "group": "InvoiceController",
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice endpoints: approval"
+        }
       },
       "project": {
         "name": "compat",
@@ -4933,6 +5080,68 @@
       }
     },
     {
+      "id": "compat::api::service/openapi.yaml",
+      "kind": "api",
+      "name": "Generated invoice approval API",
+      "tags": [
+        "api"
+      ],
+      "signature": "openapi 3.0.3 · version 1.0.0",
+      "loc": {
+        "repo": "compat",
+        "path": "service/openapi.yaml",
+        "line": 1
+      },
+      "facets": {
+        "business": {
+          "label": "Generated invoice approval API"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::route::GET /api/invoices/{id}/approval-details",
+      "kind": "route",
+      "name": "GET /api/invoices/{id}/approval-details",
+      "lang": "openapi",
+      "tags": [
+        "spec-only"
+      ],
+      "contract": {
+        "status": "spec-only",
+        "apiId": "compat::api::service/openapi.yaml",
+        "spec": {
+          "path": "service/openapi.yaml",
+          "line": 7,
+          "operationId": "getInvoiceForApproval"
+        },
+        "summary": "Read an invoice for approval",
+        "params": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": [
+          {
+            "status": "200",
+            "description": "The invoice under review"
+          }
+        ],
+        "drift": [
+          {
+            "kind": "spec-only",
+            "message": "declared in the spec; no implementation found in the indexed code"
+          }
+        ]
+      }
+    },
+    {
       "id": "compat::api::web/openapi.yaml",
       "kind": "api",
       "name": "Billing API",
@@ -5281,9 +5490,9 @@
         ],
         "runs": [
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/e2e/results.json",
@@ -5293,9 +5502,9 @@
             "join": "exact"
           },
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/e2e/results.json",
@@ -5307,9 +5516,9 @@
           }
         ],
         "run": {
-          "id": "3bafa0573772",
+          "id": "b246924e5559",
           "at": "2026-09-21T09:14:03.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "changed",
           "stale": true,
           "report": "web/e2e/results.json",
@@ -5371,9 +5580,9 @@
         ],
         "runs": [
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/e2e/results.json",
@@ -5383,9 +5592,9 @@
             "join": "exact"
           },
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/e2e/results.json",
@@ -5396,9 +5605,9 @@
           }
         ],
         "run": {
-          "id": "3bafa0573772",
+          "id": "b246924e5559",
           "at": "2026-09-21T09:14:03.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "changed",
           "stale": true,
           "report": "web/e2e/results.json",
@@ -5456,9 +5665,9 @@
         ],
         "runs": [
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/e2e/results.json",
@@ -5468,9 +5677,9 @@
             "join": "exact"
           },
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/e2e/results.json",
@@ -5481,9 +5690,9 @@
           }
         ],
         "run": {
-          "id": "3bafa0573772",
+          "id": "b246924e5559",
           "at": "2026-09-21T09:14:03.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "changed",
           "stale": true,
           "report": "web/e2e/results.json",
@@ -5540,9 +5749,9 @@
         ],
         "runs": [
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/e2e/results.json",
@@ -5552,9 +5761,9 @@
             "join": "exact"
           },
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/e2e/results.json",
@@ -5565,9 +5774,9 @@
           }
         ],
         "run": {
-          "id": "3bafa0573772",
+          "id": "b246924e5559",
           "at": "2026-09-21T09:14:03.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "changed",
           "stale": true,
           "report": "web/e2e/results.json",
@@ -5620,9 +5829,9 @@
         ],
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/coverage/vitest-results.json",
@@ -5633,9 +5842,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "changed",
           "stale": true,
           "report": "web/coverage/vitest-results.json",
@@ -5678,9 +5887,9 @@
         ],
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/coverage/vitest-results.json",
@@ -5691,9 +5900,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "changed",
           "stale": true,
           "report": "web/coverage/vitest-results.json",
@@ -5736,9 +5945,9 @@
         ],
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/coverage/vitest-results.json",
@@ -5748,9 +5957,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "changed",
           "stale": true,
           "report": "web/coverage/vitest-results.json",
@@ -5795,9 +6004,9 @@
         "file": "web/test/rates.spec.ts",
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/coverage/vitest-results.json",
@@ -5809,9 +6018,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "changed",
           "stale": true,
           "report": "web/coverage/vitest-results.json",
@@ -5857,9 +6066,9 @@
         "inactive": true,
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/coverage/vitest-results.json",
@@ -5869,9 +6078,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "changed",
           "stale": true,
           "report": "web/coverage/vitest-results.json",
@@ -5915,9 +6124,9 @@
         "inactive": true,
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "changed",
             "stale": true,
             "report": "web/coverage/vitest-results.json",
@@ -5927,9 +6136,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "changed",
           "stale": true,
           "report": "web/coverage/vitest-results.json",
@@ -5968,10 +6177,10 @@
           "src/server/invoiceService.ts"
         ],
         "run": {
-          "id": "330d9a7a0df9",
+          "id": "d6d040d74d01",
           "at": "2000-01-01T00:00:00.000Z",
           "status": "unknown",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "changed",
           "stale": true,
           "report": "web/coverage/coverage-final.json"
@@ -7492,6 +7701,24 @@
     {
       "id": "e102",
       "kind": "imports",
+      "from": "compat::module::web/src/server/invoiceSummaryController.ts",
+      "to": "compat::package::@nestjs/common",
+      "meta": {
+        "specifier": "@nestjs/common",
+        "line": 1,
+        "form": "import",
+        "names": "Controller,Get"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e103",
+      "kind": "imports",
       "from": "compat::module::web/src/server/ocr.ts",
       "to": "compat::package::@azure-rest/ai-document-intelligence",
       "meta": {
@@ -7508,7 +7735,7 @@
       }
     },
     {
-      "id": "e103",
+      "id": "e104",
       "kind": "imports",
       "from": "compat::module::web/src/server/plumbing/format.ts",
       "to": "compat::package::date-fns",
@@ -7526,7 +7753,7 @@
       }
     },
     {
-      "id": "e104",
+      "id": "e105",
       "kind": "imports",
       "from": "compat::module::web/src/server/routes.ts",
       "to": "compat::package::express",
@@ -7544,7 +7771,7 @@
       }
     },
     {
-      "id": "e105",
+      "id": "e106",
       "kind": "imports",
       "from": "compat::module::web/src/server/schemas.ts",
       "to": "compat::package::zod",
@@ -7562,7 +7789,7 @@
       }
     },
     {
-      "id": "e106",
+      "id": "e107",
       "kind": "imports",
       "from": "compat::module::web/src/ui/CreateInvoiceForm.tsx",
       "to": "compat::package::react",
@@ -7580,7 +7807,7 @@
       }
     },
     {
-      "id": "e107",
+      "id": "e108",
       "kind": "imports",
       "from": "compat::module::web/src/ui/EditInvoiceDrawer.tsx",
       "to": "compat::package::react",
@@ -7598,7 +7825,7 @@
       }
     },
     {
-      "id": "e108",
+      "id": "e109",
       "kind": "imports",
       "from": "compat::module::web/src/ui/fields.tsx",
       "to": "compat::package::react",
@@ -7616,7 +7843,7 @@
       }
     },
     {
-      "id": "e109",
+      "id": "e110",
       "kind": "imports",
       "from": "compat::module::web/src/ui/fields.tsx",
       "to": "compat::package::clsx",
@@ -7634,7 +7861,7 @@
       }
     },
     {
-      "id": "e110",
+      "id": "e111",
       "kind": "imports",
       "from": "compat::module::web/src/ui/InvoiceListPage.tsx",
       "to": "compat::package::react",
@@ -7652,7 +7879,7 @@
       }
     },
     {
-      "id": "e111",
+      "id": "e112",
       "kind": "imports",
       "from": "compat::module::web/src/ui/router.tsx",
       "to": "compat::package::react-router-dom",
@@ -7670,7 +7897,7 @@
       }
     },
     {
-      "id": "e112",
+      "id": "e113",
       "kind": "imports",
       "from": "compat::web/src/server/approvals.ts::receiptFor",
       "to": "compat::package::@invoice/plumbing",
@@ -7687,7 +7914,7 @@
       }
     },
     {
-      "id": "e113",
+      "id": "e114",
       "kind": "imports",
       "from": "compat::web/src/server/config/env.ts::appEnvSchema",
       "to": "compat::package::zod",
@@ -7704,7 +7931,7 @@
       }
     },
     {
-      "id": "e114",
+      "id": "e115",
       "kind": "imports",
       "from": "compat::web/src/server/ocr.ts::AzureOcr.extract",
       "to": "compat::package::@azure-rest/ai-document-intelligence",
@@ -7721,7 +7948,7 @@
       }
     },
     {
-      "id": "e115",
+      "id": "e116",
       "kind": "imports",
       "from": "compat::web/src/server/plumbing/format.ts::fmt",
       "to": "compat::package::date-fns",
@@ -7738,7 +7965,7 @@
       }
     },
     {
-      "id": "e116",
+      "id": "e117",
       "kind": "imports",
       "from": "compat::web/src/server/schemas.ts::draftInvoiceSchema",
       "to": "compat::package::zod",
@@ -7755,7 +7982,7 @@
       }
     },
     {
-      "id": "e117",
+      "id": "e118",
       "kind": "imports",
       "from": "compat::web/src/server/schemas.ts::updateInvoiceSchema",
       "to": "compat::package::zod",
@@ -7772,7 +7999,7 @@
       }
     },
     {
-      "id": "e118",
+      "id": "e119",
       "kind": "imports",
       "from": "compat::web/src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
       "to": "compat::package::react",
@@ -7789,7 +8016,7 @@
       }
     },
     {
-      "id": "e119",
+      "id": "e120",
       "kind": "imports",
       "from": "compat::web/src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
       "to": "compat::package::react",
@@ -7806,7 +8033,7 @@
       }
     },
     {
-      "id": "e120",
+      "id": "e121",
       "kind": "imports",
       "from": "compat::web/src/ui/InvoiceListPage.tsx::InvoiceListPage",
       "to": "compat::package::react",
@@ -7823,7 +8050,7 @@
       }
     },
     {
-      "id": "e121",
+      "id": "e122",
       "kind": "imports",
       "from": "compat::web/src/ui/fields.tsx::LineItemRow",
       "to": "compat::package::react",
@@ -7840,7 +8067,7 @@
       }
     },
     {
-      "id": "e122",
+      "id": "e123",
       "kind": "imports",
       "from": "compat::web/src/ui/fields.tsx::MoneyField",
       "to": "compat::package::clsx",
@@ -7857,7 +8084,7 @@
       }
     },
     {
-      "id": "e123",
+      "id": "e124",
       "kind": "calls",
       "from": "compat::route::GET /api/invoices",
       "to": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.list",
@@ -7869,7 +8096,7 @@
       }
     },
     {
-      "id": "e124",
+      "id": "e125",
       "kind": "calls",
       "from": "compat::route::GET /api/invoices/:param",
       "to": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.get",
@@ -7881,7 +8108,7 @@
       }
     },
     {
-      "id": "e125",
+      "id": "e126",
       "kind": "calls",
       "from": "compat::route::POST /api/invoices",
       "to": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.create",
@@ -7893,7 +8120,7 @@
       }
     },
     {
-      "id": "e126",
+      "id": "e127",
       "kind": "calls",
       "from": "compat::route::PUT /api/invoices/:param",
       "to": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.update",
@@ -7905,7 +8132,7 @@
       }
     },
     {
-      "id": "e127",
+      "id": "e128",
       "kind": "calls",
       "from": "compat::route::POST /api/invoices/:param/send",
       "to": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.send",
@@ -7917,7 +8144,7 @@
       }
     },
     {
-      "id": "e128",
+      "id": "e129",
       "kind": "guards",
       "from": "compat::guard::PreAuthorize(hasAuthority('billing:admin'))",
       "to": "compat::route::POST /api/invoices/:param/send",
@@ -7929,7 +8156,7 @@
       }
     },
     {
-      "id": "e129",
+      "id": "e130",
       "kind": "calls",
       "from": "compat::route::DELETE /api/invoices/:param",
       "to": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.delete",
@@ -7941,7 +8168,7 @@
       }
     },
     {
-      "id": "e130",
+      "id": "e131",
       "kind": "guards",
       "from": "compat::guard::PreAuthorize(hasAuthority('billing:admin'))",
       "to": "compat::route::DELETE /api/invoices/:param",
@@ -7953,13 +8180,13 @@
       }
     },
     {
-      "id": "e131",
+      "id": "e132",
       "kind": "publishes",
       "from": "compat::service/src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.publishInvoiceSent",
       "to": "compat::queue::invoice.sent"
     },
     {
-      "id": "e132",
+      "id": "e133",
       "kind": "consumes",
       "from": "compat::queue::payment.settled",
       "to": "compat::service/src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.onPaymentSettled",
@@ -7971,7 +8198,22 @@
       }
     },
     {
-      "id": "e133",
+      "id": "e134",
+      "kind": "calls",
+      "from": "compat::service/src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java::InvoiceApiDelegateImpl.getInvoiceForApproval",
+      "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
+      "meta": {
+        "line": 19
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceService"
+      }
+    },
+    {
+      "id": "e135",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.list",
       "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.list",
@@ -7986,7 +8228,7 @@
       }
     },
     {
-      "id": "e134",
+      "id": "e136",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.get",
       "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
@@ -8001,7 +8243,7 @@
       }
     },
     {
-      "id": "e135",
+      "id": "e137",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.create",
       "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.create",
@@ -8016,7 +8258,7 @@
       }
     },
     {
-      "id": "e136",
+      "id": "e138",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.update",
       "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
@@ -8031,7 +8273,7 @@
       }
     },
     {
-      "id": "e137",
+      "id": "e139",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.send",
       "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
@@ -8046,7 +8288,7 @@
       }
     },
     {
-      "id": "e138",
+      "id": "e140",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.delete",
       "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
@@ -8061,7 +8303,22 @@
       }
     },
     {
-      "id": "e139",
+      "id": "e141",
+      "kind": "calls",
+      "from": "compat::service/src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.approval",
+      "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
+      "meta": {
+        "line": 105
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceService"
+      }
+    },
+    {
+      "id": "e142",
       "kind": "reads",
       "from": "compat::service/src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.onPaymentSettled",
       "to": "compat::table::invoices",
@@ -8078,7 +8335,7 @@
       }
     },
     {
-      "id": "e140",
+      "id": "e143",
       "kind": "writes",
       "from": "compat::service/src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.onPaymentSettled",
       "to": "compat::table::invoices",
@@ -8095,7 +8352,7 @@
       }
     },
     {
-      "id": "e141",
+      "id": "e144",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/jobs/OverdueInvoiceJob.java::OverdueInvoiceJob.markOverdueInvoices",
       "to": "compat::service/src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatusAndDueDateBefore",
@@ -8110,7 +8367,7 @@
       }
     },
     {
-      "id": "e142",
+      "id": "e145",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/jobs/OverdueInvoiceJob.java::OverdueInvoiceJob.markOverdueInvoices",
       "to": "compat::service/src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.markOverdue",
@@ -8125,7 +8382,7 @@
       }
     },
     {
-      "id": "e143",
+      "id": "e146",
       "kind": "reads",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.list",
       "to": "compat::table::invoices",
@@ -8142,7 +8399,7 @@
       }
     },
     {
-      "id": "e144",
+      "id": "e147",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.list",
       "to": "compat::service/src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatus",
@@ -8157,7 +8414,7 @@
       }
     },
     {
-      "id": "e145",
+      "id": "e148",
       "kind": "reads",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
       "to": "compat::table::invoices",
@@ -8174,7 +8431,7 @@
       }
     },
     {
-      "id": "e146",
+      "id": "e149",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.create",
       "to": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.taxFor",
@@ -8189,7 +8446,7 @@
       }
     },
     {
-      "id": "e147",
+      "id": "e150",
       "kind": "writes",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.create",
       "to": "compat::table::invoices",
@@ -8206,7 +8463,7 @@
       }
     },
     {
-      "id": "e148",
+      "id": "e151",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
       "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
@@ -8221,7 +8478,7 @@
       }
     },
     {
-      "id": "e149",
+      "id": "e152",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
       "to": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.taxFor",
@@ -8236,7 +8493,7 @@
       }
     },
     {
-      "id": "e150",
+      "id": "e153",
       "kind": "writes",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
       "to": "compat::table::invoices",
@@ -8253,7 +8510,7 @@
       }
     },
     {
-      "id": "e151",
+      "id": "e154",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
       "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
@@ -8268,7 +8525,7 @@
       }
     },
     {
-      "id": "e152",
+      "id": "e155",
       "kind": "guards",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.requireBillingOwner",
       "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
@@ -8280,7 +8537,7 @@
       }
     },
     {
-      "id": "e153",
+      "id": "e156",
       "kind": "writes",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
       "to": "compat::table::invoices",
@@ -8297,7 +8554,7 @@
       }
     },
     {
-      "id": "e154",
+      "id": "e157",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
       "to": "compat::service/src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.publishInvoiceSent",
@@ -8312,7 +8569,7 @@
       }
     },
     {
-      "id": "e155",
+      "id": "e158",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
       "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
@@ -8327,7 +8584,7 @@
       }
     },
     {
-      "id": "e156",
+      "id": "e159",
       "kind": "guards",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.requireBillingOwner",
       "to": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
@@ -8339,7 +8596,7 @@
       }
     },
     {
-      "id": "e157",
+      "id": "e160",
       "kind": "writes",
       "from": "compat::service/src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
       "to": "compat::table::invoices",
@@ -8356,7 +8613,7 @@
       }
     },
     {
-      "id": "e158",
+      "id": "e161",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.taxFor",
       "to": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.iso",
@@ -8371,7 +8628,7 @@
       }
     },
     {
-      "id": "e159",
+      "id": "e162",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.treatmentFor",
       "to": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.iso",
@@ -8386,7 +8643,7 @@
       }
     },
     {
-      "id": "e160",
+      "id": "e163",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.treatmentFor",
       "to": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.percent",
@@ -8401,7 +8658,7 @@
       }
     },
     {
-      "id": "e161",
+      "id": "e164",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.rateFor",
       "to": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.iso",
@@ -8416,7 +8673,7 @@
       }
     },
     {
-      "id": "e162",
+      "id": "e165",
       "kind": "calls",
       "from": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.percent",
       "to": "compat::service/src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.rateFor",
@@ -8431,7 +8688,7 @@
       }
     },
     {
-      "id": "e163",
+      "id": "e166",
       "kind": "validates",
       "from": "compat::service/src/main/java/com/acme/invoices/api/dto/CreateInvoiceRequest.java::CreateInvoiceRequest",
       "to": "compat::route::POST /api/invoices",
@@ -8443,7 +8700,7 @@
       }
     },
     {
-      "id": "e164",
+      "id": "e167",
       "kind": "validates",
       "from": "compat::service/src/main/java/com/acme/invoices/api/dto/CreateInvoiceRequest.java::CreateInvoiceRequest",
       "to": "compat::route::PUT /api/invoices/:param",
@@ -8455,7 +8712,7 @@
       }
     },
     {
-      "id": "e165",
+      "id": "e168",
       "kind": "reads",
       "from": "compat::service/src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatus",
       "to": "compat::table::invoices",
@@ -8472,7 +8729,7 @@
       }
     },
     {
-      "id": "e166",
+      "id": "e169",
       "kind": "reads",
       "from": "compat::service/src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatusAndDueDateBefore",
       "to": "compat::table::invoices",
@@ -8489,7 +8746,7 @@
       }
     },
     {
-      "id": "e167",
+      "id": "e170",
       "kind": "reads",
       "from": "compat::service/src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.outstandingCentsFor",
       "to": "compat::table::invoices",
@@ -8506,7 +8763,7 @@
       }
     },
     {
-      "id": "e168",
+      "id": "e171",
       "kind": "writes",
       "from": "compat::service/src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.markOverdue",
       "to": "compat::table::invoices",
@@ -8523,7 +8780,172 @@
       }
     },
     {
-      "id": "e169",
+      "id": "e172",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::GET /api/invoices/{id}/approval-details",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e173",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::GET /invoices",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e174",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::GET /invoices/:id",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e175",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::POST /invoices",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e176",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::PATCH /invoices/:id",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e177",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::POST /invoices/:id/finalize",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e178",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::POST /invoices/:id/approve",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e179",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::POST /invoices/:id/payment-intent",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e180",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::POST /invoices/:id/mark-paid",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e181",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::GET /api/invoices",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e182",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::GET /api/invoices/:param",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e183",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::POST /api/invoices",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e184",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::PUT /api/invoices/:param",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e185",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::POST /api/invoices/:param/send",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e186",
+      "kind": "contains",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::DELETE /api/invoices/:param",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e187",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::GET /invoices",
@@ -8534,7 +8956,7 @@
       }
     },
     {
-      "id": "e170",
+      "id": "e188",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::POST /invoices",
@@ -8545,7 +8967,7 @@
       }
     },
     {
-      "id": "e171",
+      "id": "e189",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::GET /invoices/:id",
@@ -8556,7 +8978,7 @@
       }
     },
     {
-      "id": "e172",
+      "id": "e190",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::PATCH /invoices/:id",
@@ -8567,7 +8989,7 @@
       }
     },
     {
-      "id": "e173",
+      "id": "e191",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::POST /invoices/:id/payment-intent",
@@ -8578,7 +9000,7 @@
       }
     },
     {
-      "id": "e174",
+      "id": "e192",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::POST /invoices/:id/mark-paid",
@@ -8589,7 +9011,7 @@
       }
     },
     {
-      "id": "e175",
+      "id": "e193",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::DELETE /invoices/{id}",
@@ -8600,7 +9022,7 @@
       }
     },
     {
-      "id": "e176",
+      "id": "e194",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::POST /invoices/:id/finalize",
@@ -8611,7 +9033,7 @@
       }
     },
     {
-      "id": "e177",
+      "id": "e195",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::POST /invoices/:id/approve",
@@ -8622,7 +9044,7 @@
       }
     },
     {
-      "id": "e178",
+      "id": "e196",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::GET /api/invoices",
@@ -8633,7 +9055,7 @@
       }
     },
     {
-      "id": "e179",
+      "id": "e197",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::GET /api/invoices/:param",
@@ -8644,7 +9066,7 @@
       }
     },
     {
-      "id": "e180",
+      "id": "e198",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::POST /api/invoices",
@@ -8655,7 +9077,7 @@
       }
     },
     {
-      "id": "e181",
+      "id": "e199",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::PUT /api/invoices/:param",
@@ -8666,7 +9088,7 @@
       }
     },
     {
-      "id": "e182",
+      "id": "e200",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::POST /api/invoices/:param/send",
@@ -8677,7 +9099,7 @@
       }
     },
     {
-      "id": "e183",
+      "id": "e201",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
       "to": "compat::route::DELETE /api/invoices/:param",
@@ -8688,7 +9110,7 @@
       }
     },
     {
-      "id": "d184",
+      "id": "d202",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::page::/invoices",
@@ -8699,7 +9121,7 @@
       }
     },
     {
-      "id": "d185",
+      "id": "d203",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::page::/invoices/new",
@@ -8710,7 +9132,7 @@
       }
     },
     {
-      "id": "d186",
+      "id": "d204",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::page::/invoices/:id/pay",
@@ -8721,7 +9143,7 @@
       }
     },
     {
-      "id": "d187",
+      "id": "d205",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::page::/invoices/:param/discard",
@@ -8732,7 +9154,7 @@
       }
     },
     {
-      "id": "d188",
+      "id": "d206",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::page::/invoices/:id/edit",
@@ -8746,7 +9168,7 @@
       }
     },
     {
-      "id": "d189",
+      "id": "d207",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::flow::billing-cycle",
@@ -8757,7 +9179,7 @@
       }
     },
     {
-      "id": "d190",
+      "id": "d208",
       "kind": "renders",
       "from": "compat::flow::billing-cycle",
       "to": "compat::page::/invoices/new",
@@ -8771,7 +9193,7 @@
       }
     },
     {
-      "id": "d191",
+      "id": "d209",
       "kind": "renders",
       "from": "compat::flow::billing-cycle",
       "to": "compat::page::/invoices",
@@ -8785,7 +9207,7 @@
       }
     },
     {
-      "id": "d192",
+      "id": "d210",
       "kind": "renders",
       "from": "compat::flow::billing-cycle",
       "to": "compat::page::/invoices/:param/discard",
@@ -8799,7 +9221,7 @@
       }
     },
     {
-      "id": "d193",
+      "id": "d211",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::flow::new-invoice",
@@ -8810,7 +9232,7 @@
       }
     },
     {
-      "id": "d194",
+      "id": "d212",
       "kind": "renders",
       "from": "compat::flow::new-invoice",
       "to": "compat::page::/invoices/new",
@@ -8824,7 +9246,7 @@
       }
     },
     {
-      "id": "d195",
+      "id": "d213",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::flow::draft-and-send",
@@ -8835,7 +9257,7 @@
       }
     },
     {
-      "id": "d196",
+      "id": "d214",
       "kind": "renders",
       "from": "compat::flow::draft-and-send",
       "to": "compat::page::/invoices",
@@ -8849,7 +9271,7 @@
       }
     },
     {
-      "id": "d197",
+      "id": "d215",
       "kind": "renders",
       "from": "compat::flow::draft-and-send",
       "to": "compat::page::/invoices/:param/discard",
@@ -8863,7 +9285,7 @@
       }
     },
     {
-      "id": "d198",
+      "id": "d216",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::flow::get-paid",
@@ -8874,7 +9296,7 @@
       }
     },
     {
-      "id": "d199",
+      "id": "d217",
       "kind": "renders",
       "from": "compat::flow::get-paid",
       "to": "compat::page::/invoices/:id/pay",
@@ -9168,7 +9590,7 @@
     }
   ],
   "meta": {
-    "files": 40,
+    "files": 46,
     "journeys": {
       "personas": [
         {
@@ -9235,7 +9657,7 @@
       ],
       "notes": []
     },
-    "sourceDigest": "84ce909d2825",
+    "sourceDigest": "93d93c5da210",
     "stores": {
       "named": {
         "config": 3
@@ -9256,7 +9678,8 @@
           "spec": "node:url",
           "files": 1
         }
-      ]
+      ],
+      "undeclared": 1
     },
     "decisions": {
       "decisions": [
@@ -9314,7 +9737,9 @@
             "tags",
             "glossary"
           ],
-          "ignored": []
+          "ignored": [
+            "frameworks"
+          ]
         },
         {
           "path": "web/farsight.config.json",
@@ -9330,11 +9755,16 @@
             "journeys",
             "lifecycle"
           ],
-          "ignored": []
+          "ignored": [
+            "frameworks"
+          ]
         }
       ],
       "conflicts": [],
-      "notes": [],
+      "notes": [
+        "frameworks is root-only; service/farsight.config.json's was ignored.",
+        "frameworks is root-only; web/farsight.config.json's was ignored."
+      ],
       "glossary": [
         {
           "key": "InvoiceController",
@@ -9522,7 +9952,7 @@
           "runner": "vitest",
           "level": "unit",
           "mtime": "2000-01-01T00:00:00.000Z",
-          "runId": "051008f1facf",
+          "runId": "3bdbffe01420",
           "freshness": "changed",
           "glob": "web/coverage/vitest-results.json",
           "matched": 1,
@@ -9539,7 +9969,7 @@
           "runner": "vitest",
           "level": "unit",
           "mtime": "2000-01-01T00:00:00.000Z",
-          "runId": "330d9a7a0df9",
+          "runId": "d6d040d74d01",
           "freshness": "changed",
           "glob": "web/coverage/coverage-final.json",
           "matched": 1,
@@ -9552,7 +9982,7 @@
           "runner": "playwright",
           "level": "e2e",
           "mtime": "2000-01-01T00:00:00.000Z",
-          "runId": "3bafa0573772",
+          "runId": "b246924e5559",
           "freshness": "changed",
           "glob": "web/e2e/results.json",
           "matched": 1,
@@ -9627,7 +10057,7 @@
         "`web/coverage/vitest-results.json` was produced against a different checkout — the code changed since the run, so it is evidence of the past, not of now ×2 — `web/coverage/vitest-results.json`, `web/coverage/coverage-final.json`",
         "`web/e2e/results.json` was produced against a different checkout — the code changed since the run, so it is evidence of the past, not of now"
       ],
-      "sourceDigest": "84ce909d2825"
+      "sourceDigest": "93d93c5da210"
     },
     "projects": {
       "tool": "none",

@@ -256,7 +256,7 @@ test('code that uses an imported binding gets its own imports edge; an SDK exter
   );
 });
 
-test('the invoice-app fixture: two third-party imports with their ranges, one aliased internal library, no new source file', async () => {
+test('the invoice-app fixture: package imports, an aliased internal library and the Nest alias controller', async () => {
   const f = await ingestRepo(invoiceApp, { repoName: 'invoice-app' });
   const p = (name: string) => f.nodes.find((n) => n.id === `invoice-app::package::${name}`)?.package;
   assert.equal(p('date-fns')?.version, '^4.1.0');
@@ -284,5 +284,14 @@ test('the invoice-app fixture: two third-party imports with their ranges, one al
     ),
     'the aliased import still resolves the call',
   );
-  assert.equal(f.nodes.filter((n) => n.kind === 'package').length, 8);
+  assert.ok(p('@nestjs/common'), 'the alias controller imports the Nest framework');
+  assert.ok(
+    f.edges.some(
+      (e) =>
+        e.kind === 'imports' &&
+        e.from.includes('invoiceSummaryController.ts') &&
+        e.to === 'invoice-app::package::@nestjs/common',
+    ),
+  );
+  assert.equal(f.nodes.filter((n) => n.kind === 'package').length, 9);
 });

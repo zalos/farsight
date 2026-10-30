@@ -56,6 +56,98 @@
       }
     },
     {
+      "id": "compat::src/main/java/com/acme/invoices/api/InvoiceApiDelegate.java::InvoiceApiDelegate",
+      "kind": "class",
+      "name": "InvoiceApiDelegate",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceApiDelegate.java",
+        "line": 7,
+        "endLine": 9
+      },
+      "docs": "The interface generated from openapi.yaml; operationId is the method name.",
+      "tags": [
+        "invoice",
+        "interface",
+        "http-api"
+      ],
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java::InvoiceApiDelegateImpl",
+      "kind": "class",
+      "name": "InvoiceApiDelegateImpl",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java",
+        "line": 8,
+        "endLine": 21
+      },
+      "tags": [
+        "invoice",
+        "service",
+        "implements:InvoiceApiDelegate",
+        "http-api",
+        "controller"
+      ],
+      "signature": "implements InvoiceApiDelegate",
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java::InvoiceApiDelegateImpl.getInvoiceForApproval",
+      "kind": "function",
+      "name": "InvoiceApiDelegateImpl.getInvoiceForApproval",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java",
+        "line": 16,
+        "endLine": 20
+      },
+      "snippet": "@Override\n  @SomeAnnotationPolicy(resource = \"invoice\", action = \"approve\")\n  public ResponseEntity<Invoice> getInvoiceForApproval(Long id) {\n    return ResponseEntity.ok(invoices.get(id));\n  }",
+      "signature": "@Override @SomeAnnotationPolicy(resource = \"invoice\", action = \"approve\") public ResponseEntity<Invoice> getInvoiceForApproval(Long id)",
+      "group": "InvoiceApiDelegateImpl",
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::guard::SomeAnnotationPolicy(approve on invoice)",
+      "kind": "guard",
+      "name": "approve on invoice",
+      "gateTier": {
+        "tier": "policy",
+        "from": "config"
+      },
+      "lang": "java",
+      "tags": [
+        "auth",
+        "http-api"
+      ],
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java",
+        "line": 17
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
       "id": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController",
       "kind": "class",
       "name": "InvoiceController",
@@ -64,7 +156,7 @@
         "repo": "compat",
         "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
         "line": 23,
-        "endLine": 101
+        "endLine": 108
       },
       "docs": "HTTP surface for the invoice lifecycle. Everything here delegates to InvoiceService; the controller only turns HTTP into calls. Since 1.0.",
       "tags": [
@@ -125,13 +217,24 @@
       },
       "tags": [
         "invoice",
-        "http-api"
+        "http-api",
+        "undocumented"
       ],
       "facets": {
         "business": {
           "label": "List invoices",
           "description": "The invoices a billing user can act on today."
         }
+      },
+      "contract": {
+        "status": "code-only",
+        "apiId": "compat::api::openapi.yaml",
+        "drift": [
+          {
+            "kind": "code-only",
+            "message": "implemented in the code; not declared in the spec"
+          }
+        ]
       },
       "project": {
         "name": "compat",
@@ -178,13 +281,24 @@
       },
       "tags": [
         "invoice",
-        "http-api"
+        "http-api",
+        "undocumented"
       ],
       "facets": {
         "business": {
           "label": "Open an invoice",
           "description": "Everything about one invoice."
         }
+      },
+      "contract": {
+        "status": "code-only",
+        "apiId": "compat::api::openapi.yaml",
+        "drift": [
+          {
+            "kind": "code-only",
+            "message": "implemented in the code; not declared in the spec"
+          }
+        ]
       },
       "project": {
         "name": "compat",
@@ -232,13 +346,24 @@
       },
       "tags": [
         "invoice",
-        "http-api"
+        "http-api",
+        "undocumented"
       ],
       "facets": {
         "business": {
           "label": "Raise an invoice",
           "description": "Creates a new draft invoice for a customer."
         }
+      },
+      "contract": {
+        "status": "code-only",
+        "apiId": "compat::api::openapi.yaml",
+        "drift": [
+          {
+            "kind": "code-only",
+            "message": "implemented in the code; not declared in the spec"
+          }
+        ]
       },
       "project": {
         "name": "compat",
@@ -286,13 +411,24 @@
       },
       "tags": [
         "invoice",
-        "http-api"
+        "http-api",
+        "undocumented"
       ],
       "facets": {
         "business": {
           "label": "Correct an invoice",
           "description": "Saves changes to a draft before it is sent."
         }
+      },
+      "contract": {
+        "status": "code-only",
+        "apiId": "compat::api::openapi.yaml",
+        "drift": [
+          {
+            "kind": "code-only",
+            "message": "implemented in the code; not declared in the spec"
+          }
+        ]
       },
       "project": {
         "name": "compat",
@@ -341,13 +477,24 @@
       },
       "tags": [
         "invoice",
-        "http-api"
+        "http-api",
+        "undocumented"
       ],
       "facets": {
         "business": {
           "label": "Send an invoice",
           "description": "Sends the invoice to the customer and emails them the PDF."
         }
+      },
+      "contract": {
+        "status": "code-only",
+        "apiId": "compat::api::openapi.yaml",
+        "drift": [
+          {
+            "kind": "code-only",
+            "message": "implemented in the code; not declared in the spec"
+          }
+        ]
       },
       "project": {
         "name": "compat",
@@ -414,13 +561,82 @@
       },
       "tags": [
         "invoice",
-        "http-api"
+        "http-api",
+        "undocumented"
       ],
       "facets": {
         "business": {
           "label": "Cancel an invoice",
           "description": "Withdraws an invoice that should never have been raised."
         }
+      },
+      "contract": {
+        "status": "code-only",
+        "apiId": "compat::api::openapi.yaml",
+        "drift": [
+          {
+            "kind": "code-only",
+            "message": "implemented in the code; not declared in the spec"
+          }
+        ]
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.approval",
+      "kind": "function",
+      "name": "InvoiceController.approval",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 102,
+        "endLine": 106
+      },
+      "docs": "Reads the invoice an approver is reviewing.",
+      "snippet": "@ApiRoute(value = \"/{id}/approval\", method = \"POST\")\n  @SomeAnnotationPolicy(resource = \"invoice\", action = \"approve\")\n  public Invoice approval(@PathVariable Long id) {\n    return invoices.get(id);\n  }",
+      "group": "InvoiceController",
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice endpoints: approval"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::route::POST /api/invoices/:param/approval",
+      "kind": "route",
+      "name": "POST /api/invoices/:param/approval",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 102
+      },
+      "tags": [
+        "invoice",
+        "http-api",
+        "undocumented"
+      ],
+      "contract": {
+        "status": "code-only",
+        "apiId": "compat::api::openapi.yaml",
+        "drift": [
+          {
+            "kind": "code-only",
+            "message": "implemented in the code; not declared in the spec"
+          }
+        ]
       },
       "project": {
         "name": "compat",
@@ -1846,11 +2062,91 @@
         "name": "compat",
         "root": "."
       }
+    },
+    {
+      "id": "compat::api::openapi.yaml",
+      "kind": "api",
+      "name": "Generated invoice approval API",
+      "tags": [
+        "api"
+      ],
+      "signature": "openapi 3.0.3 · version 1.0.0",
+      "loc": {
+        "repo": "compat",
+        "path": "openapi.yaml",
+        "line": 1
+      },
+      "facets": {
+        "business": {
+          "label": "Generated invoice approval API"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::route::GET /api/invoices/{id}/approval-details",
+      "kind": "route",
+      "name": "GET /api/invoices/{id}/approval-details",
+      "lang": "java",
+      "tags": [],
+      "contract": {
+        "status": "both",
+        "apiId": "compat::api::openapi.yaml",
+        "spec": {
+          "path": "openapi.yaml",
+          "line": 7,
+          "operationId": "getInvoiceForApproval"
+        },
+        "summary": "Read an invoice for approval",
+        "params": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": [
+          {
+            "status": "200",
+            "description": "The invoice under review"
+          }
+        ],
+        "drift": []
+      },
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java",
+        "line": 16,
+        "endLine": 20
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
     }
   ],
   "edges": [
     {
       "id": "e0",
+      "kind": "guards",
+      "from": "compat::guard::SomeAnnotationPolicy(approve on invoice)",
+      "to": "compat::src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java::InvoiceApiDelegateImpl.getInvoiceForApproval",
+      "meta": {
+        "requires": "approve"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@SomeAnnotationPolicy read as a gate by farsight.config.json → frameworks.spring.security"
+      }
+    },
+    {
+      "id": "e1",
       "kind": "calls",
       "from": "compat::route::GET /api/invoices",
       "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.list",
@@ -1862,7 +2158,7 @@
       }
     },
     {
-      "id": "e1",
+      "id": "e2",
       "kind": "calls",
       "from": "compat::route::GET /api/invoices/:param",
       "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.get",
@@ -1874,7 +2170,7 @@
       }
     },
     {
-      "id": "e2",
+      "id": "e3",
       "kind": "calls",
       "from": "compat::route::POST /api/invoices",
       "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.create",
@@ -1886,7 +2182,7 @@
       }
     },
     {
-      "id": "e3",
+      "id": "e4",
       "kind": "calls",
       "from": "compat::route::PUT /api/invoices/:param",
       "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.update",
@@ -1898,7 +2194,7 @@
       }
     },
     {
-      "id": "e4",
+      "id": "e5",
       "kind": "calls",
       "from": "compat::route::POST /api/invoices/:param/send",
       "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.send",
@@ -1910,7 +2206,7 @@
       }
     },
     {
-      "id": "e5",
+      "id": "e6",
       "kind": "guards",
       "from": "compat::guard::PreAuthorize(hasAuthority('billing:admin'))",
       "to": "compat::route::POST /api/invoices/:param/send",
@@ -1922,7 +2218,7 @@
       }
     },
     {
-      "id": "e6",
+      "id": "e7",
       "kind": "calls",
       "from": "compat::route::DELETE /api/invoices/:param",
       "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.delete",
@@ -1934,7 +2230,7 @@
       }
     },
     {
-      "id": "e7",
+      "id": "e8",
       "kind": "guards",
       "from": "compat::guard::PreAuthorize(hasAuthority('billing:admin'))",
       "to": "compat::route::DELETE /api/invoices/:param",
@@ -1946,13 +2242,40 @@
       }
     },
     {
-      "id": "e8",
+      "id": "e9",
+      "kind": "calls",
+      "from": "compat::route::POST /api/invoices/:param/approval",
+      "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.approval",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@ApiRoute read as a route by farsight.config.json → frameworks.spring.mappings"
+      }
+    },
+    {
+      "id": "e10",
+      "kind": "guards",
+      "from": "compat::guard::SomeAnnotationPolicy(approve on invoice)",
+      "to": "compat::route::POST /api/invoices/:param/approval",
+      "meta": {
+        "requires": "approve"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@SomeAnnotationPolicy read as a gate by farsight.config.json → frameworks.spring.security"
+      }
+    },
+    {
+      "id": "e11",
       "kind": "publishes",
       "from": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.publishInvoiceSent",
       "to": "compat::queue::invoice.sent"
     },
     {
-      "id": "e9",
+      "id": "e12",
       "kind": "consumes",
       "from": "compat::queue::payment.settled",
       "to": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.onPaymentSettled",
@@ -1964,7 +2287,22 @@
       }
     },
     {
-      "id": "e10",
+      "id": "e13",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java::InvoiceApiDelegateImpl.getInvoiceForApproval",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
+      "meta": {
+        "line": 19
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceService"
+      }
+    },
+    {
+      "id": "e14",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.list",
       "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.list",
@@ -1979,7 +2317,7 @@
       }
     },
     {
-      "id": "e11",
+      "id": "e15",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.get",
       "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
@@ -1994,7 +2332,7 @@
       }
     },
     {
-      "id": "e12",
+      "id": "e16",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.create",
       "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.create",
@@ -2009,7 +2347,7 @@
       }
     },
     {
-      "id": "e13",
+      "id": "e17",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.update",
       "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
@@ -2024,7 +2362,7 @@
       }
     },
     {
-      "id": "e14",
+      "id": "e18",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.send",
       "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
@@ -2039,7 +2377,7 @@
       }
     },
     {
-      "id": "e15",
+      "id": "e19",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.delete",
       "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
@@ -2054,7 +2392,22 @@
       }
     },
     {
-      "id": "e16",
+      "id": "e20",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.approval",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
+      "meta": {
+        "line": 105
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceService"
+      }
+    },
+    {
+      "id": "e21",
       "kind": "reads",
       "from": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.onPaymentSettled",
       "to": "compat::table::invoices",
@@ -2071,7 +2424,7 @@
       }
     },
     {
-      "id": "e17",
+      "id": "e22",
       "kind": "writes",
       "from": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.onPaymentSettled",
       "to": "compat::table::invoices",
@@ -2088,7 +2441,7 @@
       }
     },
     {
-      "id": "e18",
+      "id": "e23",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/jobs/OverdueInvoiceJob.java::OverdueInvoiceJob.markOverdueInvoices",
       "to": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatusAndDueDateBefore",
@@ -2103,7 +2456,7 @@
       }
     },
     {
-      "id": "e19",
+      "id": "e24",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/jobs/OverdueInvoiceJob.java::OverdueInvoiceJob.markOverdueInvoices",
       "to": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.markOverdue",
@@ -2118,7 +2471,7 @@
       }
     },
     {
-      "id": "e20",
+      "id": "e25",
       "kind": "reads",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.list",
       "to": "compat::table::invoices",
@@ -2135,7 +2488,7 @@
       }
     },
     {
-      "id": "e21",
+      "id": "e26",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.list",
       "to": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatus",
@@ -2150,7 +2503,7 @@
       }
     },
     {
-      "id": "e22",
+      "id": "e27",
       "kind": "reads",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
       "to": "compat::table::invoices",
@@ -2167,7 +2520,7 @@
       }
     },
     {
-      "id": "e23",
+      "id": "e28",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.create",
       "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.taxFor",
@@ -2182,7 +2535,7 @@
       }
     },
     {
-      "id": "e24",
+      "id": "e29",
       "kind": "writes",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.create",
       "to": "compat::table::invoices",
@@ -2199,7 +2552,7 @@
       }
     },
     {
-      "id": "e25",
+      "id": "e30",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
       "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
@@ -2214,7 +2567,7 @@
       }
     },
     {
-      "id": "e26",
+      "id": "e31",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
       "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.taxFor",
@@ -2229,7 +2582,7 @@
       }
     },
     {
-      "id": "e27",
+      "id": "e32",
       "kind": "writes",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
       "to": "compat::table::invoices",
@@ -2246,7 +2599,7 @@
       }
     },
     {
-      "id": "e28",
+      "id": "e33",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
       "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
@@ -2261,7 +2614,7 @@
       }
     },
     {
-      "id": "e29",
+      "id": "e34",
       "kind": "guards",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.requireBillingOwner",
       "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
@@ -2273,7 +2626,7 @@
       }
     },
     {
-      "id": "e30",
+      "id": "e35",
       "kind": "writes",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
       "to": "compat::table::invoices",
@@ -2290,7 +2643,7 @@
       }
     },
     {
-      "id": "e31",
+      "id": "e36",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
       "to": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.publishInvoiceSent",
@@ -2305,7 +2658,7 @@
       }
     },
     {
-      "id": "e32",
+      "id": "e37",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
       "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
@@ -2320,7 +2673,7 @@
       }
     },
     {
-      "id": "e33",
+      "id": "e38",
       "kind": "guards",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.requireBillingOwner",
       "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
@@ -2332,7 +2685,7 @@
       }
     },
     {
-      "id": "e34",
+      "id": "e39",
       "kind": "writes",
       "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
       "to": "compat::table::invoices",
@@ -2349,7 +2702,7 @@
       }
     },
     {
-      "id": "e35",
+      "id": "e40",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.taxFor",
       "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.iso",
@@ -2364,7 +2717,7 @@
       }
     },
     {
-      "id": "e36",
+      "id": "e41",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.treatmentFor",
       "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.iso",
@@ -2379,7 +2732,7 @@
       }
     },
     {
-      "id": "e37",
+      "id": "e42",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.treatmentFor",
       "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.percent",
@@ -2394,7 +2747,7 @@
       }
     },
     {
-      "id": "e38",
+      "id": "e43",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.rateFor",
       "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.iso",
@@ -2409,7 +2762,7 @@
       }
     },
     {
-      "id": "e39",
+      "id": "e44",
       "kind": "calls",
       "from": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.percent",
       "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.rateFor",
@@ -2424,7 +2777,7 @@
       }
     },
     {
-      "id": "e40",
+      "id": "e45",
       "kind": "validates",
       "from": "compat::src/main/java/com/acme/invoices/api/dto/CreateInvoiceRequest.java::CreateInvoiceRequest",
       "to": "compat::route::POST /api/invoices",
@@ -2436,7 +2789,7 @@
       }
     },
     {
-      "id": "e41",
+      "id": "e46",
       "kind": "validates",
       "from": "compat::src/main/java/com/acme/invoices/api/dto/CreateInvoiceRequest.java::CreateInvoiceRequest",
       "to": "compat::route::PUT /api/invoices/:param",
@@ -2448,7 +2801,7 @@
       }
     },
     {
-      "id": "e42",
+      "id": "e47",
       "kind": "reads",
       "from": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatus",
       "to": "compat::table::invoices",
@@ -2465,7 +2818,7 @@
       }
     },
     {
-      "id": "e43",
+      "id": "e48",
       "kind": "reads",
       "from": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatusAndDueDateBefore",
       "to": "compat::table::invoices",
@@ -2482,7 +2835,7 @@
       }
     },
     {
-      "id": "e44",
+      "id": "e49",
       "kind": "reads",
       "from": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.outstandingCentsFor",
       "to": "compat::table::invoices",
@@ -2499,7 +2852,7 @@
       }
     },
     {
-      "id": "e45",
+      "id": "e50",
       "kind": "writes",
       "from": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.markOverdue",
       "to": "compat::table::invoices",
@@ -2514,11 +2867,128 @@
         "confidence": "HIGH",
         "note": "a repository method on Invoice"
       }
+    },
+    {
+      "id": "e51",
+      "kind": "contains",
+      "from": "compat::api::openapi.yaml",
+      "to": "compat::route::GET /api/invoices/{id}/approval-details",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e52",
+      "kind": "contains",
+      "from": "compat::api::openapi.yaml",
+      "to": "compat::route::GET /api/invoices",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e53",
+      "kind": "contains",
+      "from": "compat::api::openapi.yaml",
+      "to": "compat::route::GET /api/invoices/:param",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e54",
+      "kind": "contains",
+      "from": "compat::api::openapi.yaml",
+      "to": "compat::route::POST /api/invoices",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e55",
+      "kind": "contains",
+      "from": "compat::api::openapi.yaml",
+      "to": "compat::route::PUT /api/invoices/:param",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e56",
+      "kind": "contains",
+      "from": "compat::api::openapi.yaml",
+      "to": "compat::route::POST /api/invoices/:param/send",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e57",
+      "kind": "contains",
+      "from": "compat::api::openapi.yaml",
+      "to": "compat::route::DELETE /api/invoices/:param",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e58",
+      "kind": "contains",
+      "from": "compat::api::openapi.yaml",
+      "to": "compat::route::POST /api/invoices/:param/approval",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "dlg59",
+      "kind": "calls",
+      "from": "compat::route::GET /api/invoices/{id}/approval-details",
+      "to": "compat::src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java::InvoiceApiDelegateImpl.getInvoiceForApproval",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "InvoiceApiDelegateImpl implements a delegate interface named by farsight.config.json → frameworks.spring.delegates; getInvoiceForApproval is the spec's operationId"
+      }
+    },
+    {
+      "id": "dlg60",
+      "kind": "guards",
+      "from": "compat::guard::SomeAnnotationPolicy(approve on invoice)",
+      "to": "compat::route::GET /api/invoices/{id}/approval-details",
+      "meta": {
+        "requires": "approve",
+        "via": "handler",
+        "handler": "compat::src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java::InvoiceApiDelegateImpl.getInvoiceForApproval"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@SomeAnnotationPolicy read as a gate by farsight.config.json → frameworks.spring.security"
+      }
     }
   ],
   "meta": {
-    "files": 9,
-    "sourceDigest": "119efaec39e1",
+    "files": 14,
+    "sourceDigest": "c8e10aa71bb6",
     "stores": {
       "unnamed": 1
     },
@@ -2529,6 +2999,7 @@
           "dir": ".",
           "root": true,
           "fields": [
+            "frameworks",
             "tags",
             "glossary"
           ],
@@ -2728,7 +3199,7 @@
       "blindSpots": [
         "No `tests` block in farsight.config.json; declared and static evidence only (docs/proposals/tests-surface.md §3.2)"
       ],
-      "sourceDigest": "119efaec39e1"
+      "sourceDigest": "c8e10aa71bb6"
     },
     "projects": {
       "tool": "none",

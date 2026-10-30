@@ -2095,7 +2095,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         ) {
           const label = alias ? (fillAlias(alias.label, mwArgs) ?? mwName) : mwArg;
           const requires = alias?.requires ? fillAlias(alias.requires, mwArgs) : undefined;
-          const guardId = `${repo}::guard::${mwName}(${label ?? ''})`;
+          const guardId = `${repo}::guard::${mwName}(${mwArg ?? ''})`;
           addNode({
             id: guardId,
             kind: 'guard',

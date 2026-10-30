@@ -177,3 +177,19 @@ test('framework alias schema accepts every reader and rejects misspelled or malf
   ])
     assert.ok(validate({ frameworks }, s).length, JSON.stringify(frameworks));
 });
+
+test('malformed framework declarations in source config are reported before reaching a reader', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { readConfigFile } = await import('../dist/index.js');
+  const root = mkdtempSync(join(tmpdir(), 'alias-config-'));
+  try {
+    const path = join(root, 'farsight.config.json');
+    writeFileSync(path, JSON.stringify({ frameworks: { spring: { security: { Policy: { label: 42 } } } } }));
+    const result = readConfigFile(path);
+    assert.ok('error' in result);
+    assert.match(result.error, /frameworks.spring.security.Policy.label/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

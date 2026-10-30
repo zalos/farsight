@@ -925,6 +925,56 @@
       }
     },
     {
+      "id": "compat::route::GET /api/invoice-summary/ready",
+      "kind": "route",
+      "name": "GET /api/invoice-summary/ready",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "src/server/invoiceSummaryController.ts",
+        "line": 8
+      },
+      "tags": [
+        "invoice",
+        "undocumented"
+      ],
+      "contract": {
+        "status": "code-only",
+        "apiId": "compat::api::openapi.yaml",
+        "drift": [
+          {
+            "kind": "code-only",
+            "message": "implemented in the code; not declared in the spec"
+          }
+        ]
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/server/invoiceSummaryController.ts::InvoiceSummaryController.ready",
+      "kind": "function",
+      "name": "InvoiceSummaryController.ready",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "src/server/invoiceSummaryController.ts",
+        "line": 8,
+        "endLine": 11
+      },
+      "snippet": "@JsonGet('ready')\n  ready() {\n    return { ready: true };\n  }",
+      "group": "InvoiceSummaryController",
+      "tags": [
+        "invoice"
+      ],
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
       "id": "compat::src/server/notify.ts::EmailNotifier.send",
       "kind": "function",
       "name": "EmailNotifier.send",
@@ -2768,6 +2818,16 @@
       }
     },
     {
+      "id": "compat::package::@nestjs/common",
+      "kind": "package",
+      "name": "@nestjs/common",
+      "tags": [],
+      "package": {
+        "scope": "third-party",
+        "note": "imported by 1 file but declared in no package.json above it"
+      }
+    },
+    {
       "id": "compat::package::clsx",
       "kind": "package",
       "name": "clsx",
@@ -2924,6 +2984,21 @@
       "loc": {
         "repo": "compat",
         "path": "src/server/config/env.ts",
+        "line": 1
+      },
+      "tags": [],
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::module::src/server/invoiceSummaryController.ts",
+      "kind": "module",
+      "name": "src/server/invoiceSummaryController.ts",
+      "loc": {
+        "repo": "compat",
+        "path": "src/server/invoiceSummaryController.ts",
         "line": 1
       },
       "tags": [],
@@ -3449,9 +3524,9 @@
         ],
         "runs": [
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "e2e/results.json",
@@ -3461,9 +3536,9 @@
             "join": "exact"
           },
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "e2e/results.json",
@@ -3475,9 +3550,9 @@
           }
         ],
         "run": {
-          "id": "3bafa0573772",
+          "id": "b246924e5559",
           "at": "2026-09-21T09:14:03.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "unchanged",
           "stale": false,
           "report": "e2e/results.json",
@@ -3539,9 +3614,9 @@
         ],
         "runs": [
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "e2e/results.json",
@@ -3551,9 +3626,9 @@
             "join": "exact"
           },
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "e2e/results.json",
@@ -3564,9 +3639,9 @@
           }
         ],
         "run": {
-          "id": "3bafa0573772",
+          "id": "b246924e5559",
           "at": "2026-09-21T09:14:03.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "unchanged",
           "stale": false,
           "report": "e2e/results.json",
@@ -3624,9 +3699,9 @@
         ],
         "runs": [
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "e2e/results.json",
@@ -3636,9 +3711,9 @@
             "join": "exact"
           },
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "e2e/results.json",
@@ -3649,9 +3724,9 @@
           }
         ],
         "run": {
-          "id": "3bafa0573772",
+          "id": "b246924e5559",
           "at": "2026-09-21T09:14:03.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "unchanged",
           "stale": false,
           "report": "e2e/results.json",
@@ -3708,9 +3783,9 @@
         ],
         "runs": [
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "e2e/results.json",
@@ -3720,9 +3795,9 @@
             "join": "exact"
           },
           {
-            "id": "3bafa0573772",
+            "id": "b246924e5559",
             "at": "2026-09-21T09:14:03.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "e2e/results.json",
@@ -3733,9 +3808,9 @@
           }
         ],
         "run": {
-          "id": "3bafa0573772",
+          "id": "b246924e5559",
           "at": "2026-09-21T09:14:03.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "unchanged",
           "stale": false,
           "report": "e2e/results.json",
@@ -3788,9 +3863,9 @@
         ],
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "coverage/vitest-results.json",
@@ -3801,9 +3876,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "unchanged",
           "stale": false,
           "report": "coverage/vitest-results.json",
@@ -3846,9 +3921,9 @@
         ],
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "coverage/vitest-results.json",
@@ -3859,9 +3934,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "unchanged",
           "stale": false,
           "report": "coverage/vitest-results.json",
@@ -3904,9 +3979,9 @@
         ],
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "coverage/vitest-results.json",
@@ -3916,9 +3991,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "unchanged",
           "stale": false,
           "report": "coverage/vitest-results.json",
@@ -3963,9 +4038,9 @@
         "file": "test/rates.spec.ts",
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "coverage/vitest-results.json",
@@ -3977,9 +4052,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "unchanged",
           "stale": false,
           "report": "coverage/vitest-results.json",
@@ -4025,9 +4100,9 @@
         "inactive": true,
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "coverage/vitest-results.json",
@@ -4037,9 +4112,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "unchanged",
           "stale": false,
           "report": "coverage/vitest-results.json",
@@ -4083,9 +4158,9 @@
         "inactive": true,
         "runs": [
           {
-            "id": "051008f1facf",
+            "id": "3bdbffe01420",
             "at": "2025-09-10T00:00:00.000Z",
-            "sourceDigest": "08f46f22a395",
+            "sourceDigest": "27299c74e1a7",
             "freshness": "unchanged",
             "stale": false,
             "report": "coverage/vitest-results.json",
@@ -4095,9 +4170,9 @@
           }
         ],
         "run": {
-          "id": "051008f1facf",
+          "id": "3bdbffe01420",
           "at": "2025-09-10T00:00:00.000Z",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "unchanged",
           "stale": false,
           "report": "coverage/vitest-results.json",
@@ -4136,10 +4211,10 @@
           "src/server/invoiceService.ts"
         ],
         "run": {
-          "id": "330d9a7a0df9",
+          "id": "d6d040d74d01",
           "at": "2000-01-01T00:00:00.000Z",
           "status": "unknown",
-          "sourceDigest": "08f46f22a395",
+          "sourceDigest": "27299c74e1a7",
           "freshness": "unchanged",
           "stale": false,
           "report": "coverage/coverage-final.json"
@@ -4424,6 +4499,18 @@
     },
     {
       "id": "e19",
+      "kind": "calls",
+      "from": "compat::route::GET /api/invoice-summary/ready",
+      "to": "compat::src/server/invoiceSummaryController.ts::InvoiceSummaryController.ready",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@JsonGet read as a route by farsight.config.json → frameworks.nest.verbs"
+      }
+    },
+    {
+      "id": "e20",
       "kind": "reads",
       "from": "compat::src/server/payments.ts::recordPaymentIntent",
       "to": "compat::table::invoices",
@@ -4440,7 +4527,7 @@
       }
     },
     {
-      "id": "e20",
+      "id": "e21",
       "kind": "writes",
       "from": "compat::src/server/payments.ts::recordPaymentIntent",
       "to": "compat::table::invoices",
@@ -4457,7 +4544,7 @@
       }
     },
     {
-      "id": "e21",
+      "id": "e22",
       "kind": "reads",
       "from": "compat::src/server/payments.ts::markInvoicePaid",
       "to": "compat::table::invoices",
@@ -4474,7 +4561,7 @@
       }
     },
     {
-      "id": "e22",
+      "id": "e23",
       "kind": "writes",
       "from": "compat::src/server/payments.ts::settleInvoice",
       "to": "compat::table::invoices",
@@ -4491,7 +4578,7 @@
       }
     },
     {
-      "id": "e23",
+      "id": "e24",
       "kind": "writes",
       "from": "compat::src/server/payments.ts::setInvoiceStatus",
       "to": "compat::table::invoices",
@@ -4508,7 +4595,7 @@
       }
     },
     {
-      "id": "e24",
+      "id": "e25",
       "kind": "guards",
       "from": "compat::guard::requireScope(billing:read)",
       "to": "compat::route::GET /invoices",
@@ -4520,7 +4607,7 @@
       }
     },
     {
-      "id": "e25",
+      "id": "e26",
       "kind": "guards",
       "from": "compat::guard::requireScope(billing:read)",
       "to": "compat::route::GET /invoices/:id",
@@ -4532,7 +4619,7 @@
       }
     },
     {
-      "id": "e26",
+      "id": "e27",
       "kind": "guards",
       "from": "compat::guard::requireScope(billing:write)",
       "to": "compat::route::POST /invoices",
@@ -4544,7 +4631,7 @@
       }
     },
     {
-      "id": "e27",
+      "id": "e28",
       "kind": "guards",
       "from": "compat::guard::requireScope(billing:write)",
       "to": "compat::route::PATCH /invoices/:id",
@@ -4556,7 +4643,7 @@
       }
     },
     {
-      "id": "e28",
+      "id": "e29",
       "kind": "guards",
       "from": "compat::guard::requireScope(billing:admin)",
       "to": "compat::route::POST /invoices/:id/finalize",
@@ -4568,7 +4655,7 @@
       }
     },
     {
-      "id": "e29",
+      "id": "e30",
       "kind": "guards",
       "from": "compat::guard::requireScope(billing:admin)",
       "to": "compat::route::POST /invoices/:id/approve",
@@ -4580,7 +4667,7 @@
       }
     },
     {
-      "id": "e30",
+      "id": "e31",
       "kind": "guards",
       "from": "compat::guard::requireScope(billing:admin)",
       "to": "compat::route::POST /invoices/:id/payment-intent",
@@ -4592,7 +4679,7 @@
       }
     },
     {
-      "id": "e31",
+      "id": "e32",
       "kind": "guards",
       "from": "compat::guard::requireScope(billing:admin)",
       "to": "compat::route::POST /invoices/:id/mark-paid",
@@ -4604,7 +4691,7 @@
       }
     },
     {
-      "id": "e32",
+      "id": "e33",
       "kind": "reads",
       "from": "compat::src/server/taxEngine.ts::computeTax",
       "to": "compat::table::customers",
@@ -4621,7 +4708,7 @@
       }
     },
     {
-      "id": "e33",
+      "id": "e34",
       "kind": "calls",
       "from": "compat::src/server/approvals.ts::approveInvoice",
       "to": "compat::src/server/approvals.ts::withTx",
@@ -4636,7 +4723,7 @@
       }
     },
     {
-      "id": "e34",
+      "id": "e35",
       "kind": "calls",
       "from": "compat::src/server/approvals.ts::approveInvoice",
       "to": "compat::src/server/approvals.ts::receiptFor",
@@ -4651,7 +4738,7 @@
       }
     },
     {
-      "id": "e35",
+      "id": "e36",
       "kind": "calls",
       "from": "compat::src/server/approvals.ts::receiptFor",
       "to": "compat::src/server/plumbing/format.ts::fmt",
@@ -4666,7 +4753,7 @@
       }
     },
     {
-      "id": "e36",
+      "id": "e37",
       "kind": "validates",
       "from": "compat::src/server/config/env.ts::appEnvSchema",
       "to": "compat::src/server/config/env.ts::loadEnv",
@@ -4678,7 +4765,7 @@
       }
     },
     {
-      "id": "e37",
+      "id": "e38",
       "kind": "calls",
       "from": "compat::src/server/container.ts::buildContainer",
       "to": "compat::src/server/config/env.ts::loadEnv",
@@ -4694,7 +4781,7 @@
       }
     },
     {
-      "id": "e38",
+      "id": "e39",
       "kind": "calls",
       "from": "compat::src/server/container.ts::getContainer",
       "to": "compat::src/server/container.ts::holder",
@@ -4709,7 +4796,7 @@
       }
     },
     {
-      "id": "e39",
+      "id": "e40",
       "kind": "calls",
       "from": "compat::src/server/container.ts::getContainer",
       "to": "compat::src/server/container.ts::buildContainer",
@@ -4725,7 +4812,7 @@
       }
     },
     {
-      "id": "e40",
+      "id": "e41",
       "kind": "calls",
       "from": "compat::src/server/invoiceService.ts::createInvoice",
       "to": "compat::src/server/taxEngine.ts::computeTax",
@@ -4740,7 +4827,7 @@
       }
     },
     {
-      "id": "e41",
+      "id": "e42",
       "kind": "calls",
       "from": "compat::src/server/invoiceService.ts::updateInvoice",
       "to": "compat::src/server/taxEngine.ts::computeTax",
@@ -4755,7 +4842,7 @@
       }
     },
     {
-      "id": "e42",
+      "id": "e43",
       "kind": "calls",
       "from": "compat::src/server/invoiceService.ts::finalizeInvoice",
       "to": "compat::src/server/invoiceService.ts::nextInvoiceNumber",
@@ -4770,7 +4857,7 @@
       }
     },
     {
-      "id": "e43",
+      "id": "e44",
       "kind": "calls",
       "from": "compat::src/server/payments.ts::recordPaymentIntent",
       "to": "compat::src/server/payments.ts::settleInvoice",
@@ -4789,7 +4876,7 @@
       }
     },
     {
-      "id": "e44",
+      "id": "e45",
       "kind": "calls",
       "from": "compat::src/server/payments.ts::markInvoicePaid",
       "to": "compat::src/server/payments.ts::settleInvoice",
@@ -4804,7 +4891,7 @@
       }
     },
     {
-      "id": "e45",
+      "id": "e46",
       "kind": "calls",
       "from": "compat::src/server/payments.ts::reopenInvoice",
       "to": "compat::src/server/payments.ts::setInvoiceStatus",
@@ -4819,7 +4906,7 @@
       }
     },
     {
-      "id": "e46",
+      "id": "e47",
       "kind": "calls",
       "from": "compat::src/server/payments.ts::rejectApproval",
       "to": "compat::src/server/payments.ts::setInvoiceStatus",
@@ -4834,7 +4921,7 @@
       }
     },
     {
-      "id": "e47",
+      "id": "e48",
       "kind": "calls",
       "from": "compat::route::GET /invoices",
       "to": "compat::src/server/invoiceService.ts::listInvoices",
@@ -4849,7 +4936,7 @@
       }
     },
     {
-      "id": "e48",
+      "id": "e49",
       "kind": "calls",
       "from": "compat::route::GET /invoices/:id",
       "to": "compat::src/server/invoiceService.ts::getInvoice",
@@ -4864,7 +4951,7 @@
       }
     },
     {
-      "id": "e49",
+      "id": "e50",
       "kind": "validates",
       "from": "compat::src/server/schemas.ts::draftInvoiceSchema",
       "to": "compat::route::POST /invoices",
@@ -4876,7 +4963,7 @@
       }
     },
     {
-      "id": "e50",
+      "id": "e51",
       "kind": "calls",
       "from": "compat::route::POST /invoices",
       "to": "compat::src/server/invoiceService.ts::createInvoice",
@@ -4891,7 +4978,7 @@
       }
     },
     {
-      "id": "e51",
+      "id": "e52",
       "kind": "validates",
       "from": "compat::src/server/schemas.ts::updateInvoiceSchema",
       "to": "compat::route::PATCH /invoices/:id",
@@ -4903,7 +4990,7 @@
       }
     },
     {
-      "id": "e52",
+      "id": "e53",
       "kind": "calls",
       "from": "compat::route::PATCH /invoices/:id",
       "to": "compat::src/server/invoiceService.ts::updateInvoice",
@@ -4918,7 +5005,7 @@
       }
     },
     {
-      "id": "e53",
+      "id": "e54",
       "kind": "calls",
       "from": "compat::route::POST /invoices/:id/finalize",
       "to": "compat::src/server/invoiceService.ts::finalizeInvoice",
@@ -4933,7 +5020,7 @@
       }
     },
     {
-      "id": "e54",
+      "id": "e55",
       "kind": "guards",
       "from": "compat::src/server/approvals.ts::approveInvoice",
       "to": "compat::route::POST /invoices/:id/approve",
@@ -4945,7 +5032,7 @@
       }
     },
     {
-      "id": "e55",
+      "id": "e56",
       "kind": "calls",
       "from": "compat::route::POST /invoices/:id/approve",
       "to": "compat::src/server/approvals.ts::approveInvoice",
@@ -4961,7 +5048,7 @@
       }
     },
     {
-      "id": "e56",
+      "id": "e57",
       "kind": "calls",
       "from": "compat::route::POST /invoices/:id/payment-intent",
       "to": "compat::src/server/payments.ts::recordPaymentIntent",
@@ -4976,7 +5063,7 @@
       }
     },
     {
-      "id": "e57",
+      "id": "e58",
       "kind": "calls",
       "from": "compat::route::POST /invoices/:id/mark-paid",
       "to": "compat::src/server/payments.ts::markInvoicePaid",
@@ -4991,7 +5078,7 @@
       }
     },
     {
-      "id": "e58",
+      "id": "e59",
       "kind": "validates",
       "from": "compat::src/server/schemas.ts::draftInvoiceSchema",
       "to": "compat::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
@@ -5003,7 +5090,7 @@
       }
     },
     {
-      "id": "e59",
+      "id": "e60",
       "kind": "calls",
       "from": "compat::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
       "to": "compat::src/api/client.ts::createInvoice",
@@ -5018,7 +5105,7 @@
       }
     },
     {
-      "id": "e60",
+      "id": "e61",
       "kind": "validates",
       "from": "compat::src/server/schemas.ts::draftInvoiceSchema",
       "to": "compat::src/ui/CreateInvoiceForm.tsx::submit",
@@ -5030,7 +5117,7 @@
       }
     },
     {
-      "id": "e61",
+      "id": "e62",
       "kind": "calls",
       "from": "compat::src/ui/CreateInvoiceForm.tsx::submit",
       "to": "compat::src/api/client.ts::createInvoice",
@@ -5045,7 +5132,7 @@
       }
     },
     {
-      "id": "e62",
+      "id": "e63",
       "kind": "calls",
       "from": "compat::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
       "to": "compat::src/api/client.ts::getInvoice",
@@ -5060,7 +5147,7 @@
       }
     },
     {
-      "id": "e63",
+      "id": "e64",
       "kind": "calls",
       "from": "compat::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
       "to": "compat::src/api/client.ts::updateInvoice",
@@ -5075,7 +5162,7 @@
       }
     },
     {
-      "id": "e64",
+      "id": "e65",
       "kind": "calls",
       "from": "compat::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
       "to": "compat::src/api/client.ts::finalizeInvoice",
@@ -5090,7 +5177,7 @@
       }
     },
     {
-      "id": "e65",
+      "id": "e66",
       "kind": "calls",
       "from": "compat::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
       "to": "compat::src/ui/EditInvoiceDrawer.tsx::onSave",
@@ -5105,7 +5192,7 @@
       }
     },
     {
-      "id": "e66",
+      "id": "e67",
       "kind": "calls",
       "from": "compat::src/ui/EditInvoiceDrawer.tsx::onSave",
       "to": "compat::src/api/client.ts::updateInvoice",
@@ -5120,7 +5207,7 @@
       }
     },
     {
-      "id": "e67",
+      "id": "e68",
       "kind": "calls",
       "from": "compat::src/ui/EditInvoiceDrawer.tsx::onSend",
       "to": "compat::src/api/client.ts::finalizeInvoice",
@@ -5135,7 +5222,7 @@
       }
     },
     {
-      "id": "e68",
+      "id": "e69",
       "kind": "calls",
       "from": "compat::src/ui/InvoiceListPage.tsx::InvoiceListPage",
       "to": "compat::src/api/client.ts::listInvoices",
@@ -5150,7 +5237,7 @@
       }
     },
     {
-      "id": "e69",
+      "id": "e70",
       "kind": "calls",
       "from": "compat::src/ui/PaymentsPage.tsx::PaymentsPage",
       "to": "compat::src/api/client.ts::recordPaymentIntent",
@@ -5165,7 +5252,7 @@
       }
     },
     {
-      "id": "e70",
+      "id": "e71",
       "kind": "calls",
       "from": "compat::src/ui/PaymentsPage.tsx::PaymentsPage",
       "to": "compat::src/api/client.ts::markInvoicePaid",
@@ -5180,7 +5267,7 @@
       }
     },
     {
-      "id": "e71",
+      "id": "e72",
       "kind": "calls",
       "from": "compat::src/ui/PaymentsPage.tsx::PaymentsPage",
       "to": "compat::src/ui/PaymentsPage.tsx::onIntent",
@@ -5195,7 +5282,7 @@
       }
     },
     {
-      "id": "e72",
+      "id": "e73",
       "kind": "calls",
       "from": "compat::src/ui/PaymentsPage.tsx::onIntent",
       "to": "compat::src/api/client.ts::recordPaymentIntent",
@@ -5210,7 +5297,7 @@
       }
     },
     {
-      "id": "e73",
+      "id": "e74",
       "kind": "calls",
       "from": "compat::src/ui/PaymentsPage.tsx::onPaid",
       "to": "compat::src/api/client.ts::markInvoicePaid",
@@ -5225,7 +5312,7 @@
       }
     },
     {
-      "id": "e74",
+      "id": "e75",
       "kind": "renders",
       "from": "compat::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
       "to": "compat::src/ui/fields.tsx::LineItemRow",
@@ -5240,7 +5327,7 @@
       }
     },
     {
-      "id": "e75",
+      "id": "e76",
       "kind": "renders",
       "from": "compat::src/ui/InvoiceListPage.tsx::InvoiceListPage",
       "to": "compat::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
@@ -5255,7 +5342,7 @@
       }
     },
     {
-      "id": "e76",
+      "id": "e77",
       "kind": "renders",
       "from": "compat::src/ui/InvoiceListPage.tsx::InvoiceListPage",
       "to": "compat::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
@@ -5270,7 +5357,7 @@
       }
     },
     {
-      "id": "e77",
+      "id": "e78",
       "kind": "renders",
       "from": "compat::src/ui/fields.tsx::LineItemRow",
       "to": "compat::src/ui/fields.tsx::MoneyField",
@@ -5285,7 +5372,7 @@
       }
     },
     {
-      "id": "e78",
+      "id": "e79",
       "kind": "renders",
       "from": "compat::page::/invoices",
       "to": "compat::src/ui/InvoiceListPage.tsx::InvoiceListPage",
@@ -5294,7 +5381,7 @@
       }
     },
     {
-      "id": "e79",
+      "id": "e80",
       "kind": "renders",
       "from": "compat::page::/invoices/new",
       "to": "compat::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
@@ -5303,7 +5390,7 @@
       }
     },
     {
-      "id": "e80",
+      "id": "e81",
       "kind": "renders",
       "from": "compat::page::/invoices/:id/edit",
       "to": "compat::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
@@ -5312,7 +5399,7 @@
       }
     },
     {
-      "id": "e81",
+      "id": "e82",
       "kind": "renders",
       "from": "compat::page::/invoices/:id/pay",
       "to": "compat::src/ui/PaymentsPage.tsx::PaymentsPage",
@@ -5321,7 +5408,7 @@
       }
     },
     {
-      "id": "e82",
+      "id": "e83",
       "kind": "calls",
       "from": "compat::src/server/notify.ts::notifyApproved",
       "to": "compat::src/server/notify.ts::EmailNotifier.send",
@@ -5341,7 +5428,7 @@
       }
     },
     {
-      "id": "e83",
+      "id": "e84",
       "kind": "calls",
       "from": "compat::src/server/ocr.ts::readInvoice",
       "to": "compat::src/server/ocr.ts::AzureOcr.extract",
@@ -5361,7 +5448,7 @@
       }
     },
     {
-      "id": "e84",
+      "id": "e85",
       "kind": "calls",
       "from": "compat::src/server/container.ts::OutboxWorker.drain",
       "to": "compat::src/server/container.ts::buildContainer.hooks.invoiceApproved",
@@ -5378,7 +5465,7 @@
       }
     },
     {
-      "id": "e85",
+      "id": "e86",
       "kind": "http",
       "from": "compat::src/api/client.ts::listInvoices",
       "to": "compat::route::GET /invoices",
@@ -5394,7 +5481,7 @@
       }
     },
     {
-      "id": "e86",
+      "id": "e87",
       "kind": "http",
       "from": "compat::src/api/client.ts::getInvoice",
       "to": "compat::route::GET /invoices/:id",
@@ -5410,7 +5497,7 @@
       }
     },
     {
-      "id": "e87",
+      "id": "e88",
       "kind": "http",
       "from": "compat::src/api/client.ts::createInvoice",
       "to": "compat::route::POST /invoices",
@@ -5426,7 +5513,7 @@
       }
     },
     {
-      "id": "e88",
+      "id": "e89",
       "kind": "http",
       "from": "compat::src/api/client.ts::updateInvoice",
       "to": "compat::route::PATCH /invoices/:id",
@@ -5442,7 +5529,7 @@
       }
     },
     {
-      "id": "e89",
+      "id": "e90",
       "kind": "http",
       "from": "compat::src/api/client.ts::finalizeInvoice",
       "to": "compat::route::POST /invoices/:id/finalize",
@@ -5458,7 +5545,7 @@
       }
     },
     {
-      "id": "e90",
+      "id": "e91",
       "kind": "http",
       "from": "compat::src/api/client.ts::recordPaymentIntent",
       "to": "compat::route::POST /invoices/:id/payment-intent",
@@ -5474,7 +5561,7 @@
       }
     },
     {
-      "id": "e91",
+      "id": "e92",
       "kind": "http",
       "from": "compat::src/api/client.ts::markInvoicePaid",
       "to": "compat::route::POST /invoices/:id/mark-paid",
@@ -5490,7 +5577,7 @@
       }
     },
     {
-      "id": "e92",
+      "id": "e93",
       "kind": "http",
       "from": "compat::src/server/ocr.ts::AzureOcr.extract",
       "to": "compat::external::Azure Document Intelligence",
@@ -5506,7 +5593,7 @@
       }
     },
     {
-      "id": "e93",
+      "id": "e94",
       "kind": "http",
       "from": "compat::src/server/erpClient.ts::ErpClient.request",
       "to": "compat::external::Example ERP",
@@ -5523,7 +5610,7 @@
       }
     },
     {
-      "id": "pre94",
+      "id": "pre95",
       "kind": "validates",
       "from": "compat::precondition::src/server/invoiceService.ts::finalizeInvoice::invoices.lines#present",
       "to": "compat::src/server/invoiceService.ts::finalizeInvoice",
@@ -5539,7 +5626,7 @@
       }
     },
     {
-      "id": "pre95",
+      "id": "pre96",
       "kind": "validates",
       "from": "compat::precondition::src/server/invoiceService.ts::updateInvoice::invoices.status",
       "to": "compat::src/server/invoiceService.ts::updateInvoice",
@@ -5555,7 +5642,7 @@
       }
     },
     {
-      "id": "pre96",
+      "id": "pre97",
       "kind": "validates",
       "from": "compat::precondition::src/server/payments.ts::recordPaymentIntent::invoices.status",
       "to": "compat::src/server/payments.ts::recordPaymentIntent",
@@ -5571,7 +5658,7 @@
       }
     },
     {
-      "id": "pre97",
+      "id": "pre98",
       "kind": "validates",
       "from": "compat::precondition::src/server/payments.ts::markInvoicePaid::invoices.status",
       "to": "compat::src/server/payments.ts::markInvoicePaid",
@@ -5587,7 +5674,7 @@
       }
     },
     {
-      "id": "pre98",
+      "id": "pre99",
       "kind": "validates",
       "from": "compat::precondition::src/ui/EditInvoiceDrawer.tsx::onSend::invoices.status",
       "to": "compat::src/ui/EditInvoiceDrawer.tsx::onSend",
@@ -5603,7 +5690,7 @@
       }
     },
     {
-      "id": "e94",
+      "id": "e95",
       "kind": "imports",
       "from": "compat::module::src/server/approvals.ts",
       "to": "compat::package::@invoice/plumbing",
@@ -5621,7 +5708,7 @@
       }
     },
     {
-      "id": "e95",
+      "id": "e96",
       "kind": "imports",
       "from": "compat::module::src/server/auth.ts",
       "to": "compat::package::express",
@@ -5640,7 +5727,7 @@
       }
     },
     {
-      "id": "e96",
+      "id": "e97",
       "kind": "imports",
       "from": "compat::module::src/server/config/env.ts",
       "to": "compat::package::zod",
@@ -5658,7 +5745,25 @@
       }
     },
     {
-      "id": "e97",
+      "id": "e98",
+      "kind": "imports",
+      "from": "compat::module::src/server/invoiceSummaryController.ts",
+      "to": "compat::package::@nestjs/common",
+      "meta": {
+        "specifier": "@nestjs/common",
+        "line": 1,
+        "form": "import",
+        "names": "Controller,Get"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e99",
       "kind": "imports",
       "from": "compat::module::src/server/ocr.ts",
       "to": "compat::package::@azure-rest/ai-document-intelligence",
@@ -5676,7 +5781,7 @@
       }
     },
     {
-      "id": "e98",
+      "id": "e100",
       "kind": "imports",
       "from": "compat::module::src/server/plumbing/format.ts",
       "to": "compat::package::date-fns",
@@ -5694,7 +5799,7 @@
       }
     },
     {
-      "id": "e99",
+      "id": "e101",
       "kind": "imports",
       "from": "compat::module::src/server/routes.ts",
       "to": "compat::package::express",
@@ -5712,7 +5817,7 @@
       }
     },
     {
-      "id": "e100",
+      "id": "e102",
       "kind": "imports",
       "from": "compat::module::src/server/schemas.ts",
       "to": "compat::package::zod",
@@ -5730,7 +5835,7 @@
       }
     },
     {
-      "id": "e101",
+      "id": "e103",
       "kind": "imports",
       "from": "compat::module::src/ui/CreateInvoiceForm.tsx",
       "to": "compat::package::react",
@@ -5748,7 +5853,7 @@
       }
     },
     {
-      "id": "e102",
+      "id": "e104",
       "kind": "imports",
       "from": "compat::module::src/ui/EditInvoiceDrawer.tsx",
       "to": "compat::package::react",
@@ -5766,7 +5871,7 @@
       }
     },
     {
-      "id": "e103",
+      "id": "e105",
       "kind": "imports",
       "from": "compat::module::src/ui/fields.tsx",
       "to": "compat::package::react",
@@ -5784,7 +5889,7 @@
       }
     },
     {
-      "id": "e104",
+      "id": "e106",
       "kind": "imports",
       "from": "compat::module::src/ui/fields.tsx",
       "to": "compat::package::clsx",
@@ -5802,7 +5907,7 @@
       }
     },
     {
-      "id": "e105",
+      "id": "e107",
       "kind": "imports",
       "from": "compat::module::src/ui/InvoiceListPage.tsx",
       "to": "compat::package::react",
@@ -5820,7 +5925,7 @@
       }
     },
     {
-      "id": "e106",
+      "id": "e108",
       "kind": "imports",
       "from": "compat::module::src/ui/router.tsx",
       "to": "compat::package::react-router-dom",
@@ -5838,7 +5943,7 @@
       }
     },
     {
-      "id": "e107",
+      "id": "e109",
       "kind": "imports",
       "from": "compat::src/server/approvals.ts::receiptFor",
       "to": "compat::package::@invoice/plumbing",
@@ -5855,7 +5960,7 @@
       }
     },
     {
-      "id": "e108",
+      "id": "e110",
       "kind": "imports",
       "from": "compat::src/server/config/env.ts::appEnvSchema",
       "to": "compat::package::zod",
@@ -5872,7 +5977,7 @@
       }
     },
     {
-      "id": "e109",
+      "id": "e111",
       "kind": "imports",
       "from": "compat::src/server/ocr.ts::AzureOcr.extract",
       "to": "compat::package::@azure-rest/ai-document-intelligence",
@@ -5889,7 +5994,7 @@
       }
     },
     {
-      "id": "e110",
+      "id": "e112",
       "kind": "imports",
       "from": "compat::src/server/plumbing/format.ts::fmt",
       "to": "compat::package::date-fns",
@@ -5906,7 +6011,7 @@
       }
     },
     {
-      "id": "e111",
+      "id": "e113",
       "kind": "imports",
       "from": "compat::src/server/schemas.ts::draftInvoiceSchema",
       "to": "compat::package::zod",
@@ -5923,7 +6028,7 @@
       }
     },
     {
-      "id": "e112",
+      "id": "e114",
       "kind": "imports",
       "from": "compat::src/server/schemas.ts::updateInvoiceSchema",
       "to": "compat::package::zod",
@@ -5940,7 +6045,7 @@
       }
     },
     {
-      "id": "e113",
+      "id": "e115",
       "kind": "imports",
       "from": "compat::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
       "to": "compat::package::react",
@@ -5957,7 +6062,7 @@
       }
     },
     {
-      "id": "e114",
+      "id": "e116",
       "kind": "imports",
       "from": "compat::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
       "to": "compat::package::react",
@@ -5974,7 +6079,7 @@
       }
     },
     {
-      "id": "e115",
+      "id": "e117",
       "kind": "imports",
       "from": "compat::src/ui/InvoiceListPage.tsx::InvoiceListPage",
       "to": "compat::package::react",
@@ -5991,7 +6096,7 @@
       }
     },
     {
-      "id": "e116",
+      "id": "e118",
       "kind": "imports",
       "from": "compat::src/ui/fields.tsx::LineItemRow",
       "to": "compat::package::react",
@@ -6008,7 +6113,7 @@
       }
     },
     {
-      "id": "e117",
+      "id": "e119",
       "kind": "imports",
       "from": "compat::src/ui/fields.tsx::MoneyField",
       "to": "compat::package::clsx",
@@ -6025,7 +6130,7 @@
       }
     },
     {
-      "id": "e123",
+      "id": "e125",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
       "to": "compat::route::GET /invoices",
@@ -6036,7 +6141,7 @@
       }
     },
     {
-      "id": "e124",
+      "id": "e126",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
       "to": "compat::route::POST /invoices",
@@ -6047,7 +6152,7 @@
       }
     },
     {
-      "id": "e125",
+      "id": "e127",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
       "to": "compat::route::GET /invoices/:id",
@@ -6058,7 +6163,7 @@
       }
     },
     {
-      "id": "e126",
+      "id": "e128",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
       "to": "compat::route::PATCH /invoices/:id",
@@ -6069,7 +6174,7 @@
       }
     },
     {
-      "id": "e127",
+      "id": "e129",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
       "to": "compat::route::POST /invoices/:id/payment-intent",
@@ -6080,7 +6185,7 @@
       }
     },
     {
-      "id": "e128",
+      "id": "e130",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
       "to": "compat::route::POST /invoices/:id/mark-paid",
@@ -6091,7 +6196,7 @@
       }
     },
     {
-      "id": "e129",
+      "id": "e131",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
       "to": "compat::route::DELETE /invoices/{id}",
@@ -6102,7 +6207,18 @@
       }
     },
     {
-      "id": "e130",
+      "id": "e132",
+      "kind": "contains",
+      "from": "compat::api::openapi.yaml",
+      "to": "compat::route::GET /api/invoice-summary/ready",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "e133",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
       "to": "compat::route::POST /invoices/:id/finalize",
@@ -6113,7 +6229,7 @@
       }
     },
     {
-      "id": "e131",
+      "id": "e134",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
       "to": "compat::route::POST /invoices/:id/approve",
@@ -6124,7 +6240,7 @@
       }
     },
     {
-      "id": "d132",
+      "id": "d135",
       "kind": "contains",
       "from": "compat::design::docs/design/screens.json",
       "to": "compat::page::/invoices",
@@ -6135,7 +6251,7 @@
       }
     },
     {
-      "id": "d133",
+      "id": "d136",
       "kind": "contains",
       "from": "compat::design::docs/design/screens.json",
       "to": "compat::page::/invoices/new",
@@ -6146,7 +6262,7 @@
       }
     },
     {
-      "id": "d134",
+      "id": "d137",
       "kind": "contains",
       "from": "compat::design::docs/design/screens.json",
       "to": "compat::page::/invoices/:id/pay",
@@ -6157,7 +6273,7 @@
       }
     },
     {
-      "id": "d135",
+      "id": "d138",
       "kind": "contains",
       "from": "compat::design::docs/design/screens.json",
       "to": "compat::page::/invoices/:param/discard",
@@ -6168,7 +6284,7 @@
       }
     },
     {
-      "id": "d136",
+      "id": "d139",
       "kind": "contains",
       "from": "compat::design::docs/design/screens.json",
       "to": "compat::page::/invoices/:id/edit",
@@ -6182,7 +6298,7 @@
       }
     },
     {
-      "id": "d137",
+      "id": "d140",
       "kind": "contains",
       "from": "compat::design::docs/design/screens.json",
       "to": "compat::flow::billing-cycle",
@@ -6193,7 +6309,7 @@
       }
     },
     {
-      "id": "d138",
+      "id": "d141",
       "kind": "renders",
       "from": "compat::flow::billing-cycle",
       "to": "compat::page::/invoices/new",
@@ -6207,7 +6323,7 @@
       }
     },
     {
-      "id": "d139",
+      "id": "d142",
       "kind": "renders",
       "from": "compat::flow::billing-cycle",
       "to": "compat::page::/invoices",
@@ -6221,7 +6337,7 @@
       }
     },
     {
-      "id": "d140",
+      "id": "d143",
       "kind": "renders",
       "from": "compat::flow::billing-cycle",
       "to": "compat::page::/invoices/:param/discard",
@@ -6235,7 +6351,7 @@
       }
     },
     {
-      "id": "d141",
+      "id": "d144",
       "kind": "contains",
       "from": "compat::design::docs/design/screens.json",
       "to": "compat::flow::new-invoice",
@@ -6246,7 +6362,7 @@
       }
     },
     {
-      "id": "d142",
+      "id": "d145",
       "kind": "renders",
       "from": "compat::flow::new-invoice",
       "to": "compat::page::/invoices/new",
@@ -6260,7 +6376,7 @@
       }
     },
     {
-      "id": "d143",
+      "id": "d146",
       "kind": "contains",
       "from": "compat::design::docs/design/screens.json",
       "to": "compat::flow::draft-and-send",
@@ -6271,7 +6387,7 @@
       }
     },
     {
-      "id": "d144",
+      "id": "d147",
       "kind": "renders",
       "from": "compat::flow::draft-and-send",
       "to": "compat::page::/invoices",
@@ -6285,7 +6401,7 @@
       }
     },
     {
-      "id": "d145",
+      "id": "d148",
       "kind": "renders",
       "from": "compat::flow::draft-and-send",
       "to": "compat::page::/invoices/:param/discard",
@@ -6299,7 +6415,7 @@
       }
     },
     {
-      "id": "d146",
+      "id": "d149",
       "kind": "contains",
       "from": "compat::design::docs/design/screens.json",
       "to": "compat::flow::get-paid",
@@ -6310,7 +6426,7 @@
       }
     },
     {
-      "id": "d147",
+      "id": "d150",
       "kind": "renders",
       "from": "compat::flow::get-paid",
       "to": "compat::page::/invoices/:id/pay",
@@ -6324,7 +6440,7 @@
       }
     },
     {
-      "id": "cites148",
+      "id": "cites151",
       "kind": "cites",
       "from": "compat::flow::billing-cycle",
       "to": "compat::doc::docs/design/flows.md",
@@ -6339,7 +6455,7 @@
       }
     },
     {
-      "id": "cites149",
+      "id": "cites152",
       "kind": "cites",
       "from": "compat::flow::draft-and-send",
       "to": "compat::doc::docs/design/flows.md",
@@ -6354,7 +6470,7 @@
       }
     },
     {
-      "id": "cites150",
+      "id": "cites153",
       "kind": "cites",
       "from": "compat::flow::draft-and-send",
       "to": "compat::doc::docs/decisions/0001-approval-limits.md",
@@ -6654,7 +6770,7 @@
       "to": "compat::src/server/invoiceService.ts::createInvoice",
       "meta": {
         "evidence": "observed",
-        "runId": "330d9a7a0df9",
+        "runId": "d6d040d74d01",
         "lines": 3,
         "match": "name+line"
       },
@@ -6672,7 +6788,7 @@
       "to": "compat::src/server/invoiceService.ts::listInvoices",
       "meta": {
         "evidence": "observed",
-        "runId": "330d9a7a0df9",
+        "runId": "d6d040d74d01",
         "lines": 1,
         "match": "name+line"
       },
@@ -6685,7 +6801,7 @@
     }
   ],
   "meta": {
-    "files": 31,
+    "files": 32,
     "journeys": {
       "personas": [
         {
@@ -6752,7 +6868,7 @@
       ],
       "notes": []
     },
-    "sourceDigest": "08f46f22a395",
+    "sourceDigest": "27299c74e1a7",
     "stores": {
       "named": {
         "config": 4
@@ -6773,7 +6889,8 @@
           "spec": "node:url",
           "files": 1
         }
-      ]
+      ],
+      "undeclared": 1
     },
     "decisions": {
       "decisions": [
@@ -6833,6 +6950,7 @@
           "dir": ".",
           "root": true,
           "fields": [
+            "frameworks",
             "tests",
             "externals",
             "stores",
@@ -6864,7 +6982,7 @@
           "runner": "vitest",
           "level": "unit",
           "mtime": "2000-01-01T00:00:00.000Z",
-          "runId": "051008f1facf",
+          "runId": "3bdbffe01420",
           "freshness": "unchanged",
           "glob": "coverage/vitest-results.json",
           "matched": 1,
@@ -6881,7 +6999,7 @@
           "runner": "vitest",
           "level": "unit",
           "mtime": "2000-01-01T00:00:00.000Z",
-          "runId": "330d9a7a0df9",
+          "runId": "d6d040d74d01",
           "freshness": "unchanged",
           "glob": "coverage/coverage-final.json",
           "matched": 1,
@@ -6894,7 +7012,7 @@
           "runner": "playwright",
           "level": "e2e",
           "mtime": "2000-01-01T00:00:00.000Z",
-          "runId": "3bafa0573772",
+          "runId": "b246924e5559",
           "freshness": "unchanged",
           "glob": "e2e/results.json",
           "matched": 1,
@@ -6937,7 +7055,7 @@
         "`e2e/coverage/coverage-final.json` matched 0 files under compat — no e2e coverage report; declared and static evidence only",
         "`e2e/billing.pw.spec.ts` declares `CON-99`, which nothing in the graph matches"
       ],
-      "sourceDigest": "08f46f22a395"
+      "sourceDigest": "27299c74e1a7"
     },
     "projects": {
       "tool": "none",

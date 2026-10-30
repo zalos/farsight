@@ -111,3 +111,78 @@ test('delegate matching respects declaration paths, public overrides and operati
   assert.equal(joinDelegates(ambiguous, ['*ApiDelegate'])[0]?.kind, 'delegate-unmatched');
   assert.ok(!ambiguous.edges.some((e) => e.kind === 'calls'));
 });
+
+test('joined routes use the ordinary security and request-body drift checks', () => {
+  const f = fixture();
+  f.edges = [];
+  f.nodes[2]!.contract!.security = ['bearer'];
+  f.nodes[2]!.contract!.requestBody = { schema: 'Invoice', required: true };
+  joinDelegates(f, ['*ApiDelegate']);
+  const kinds = f.nodes[2]!.contract!.drift!.map((d) => d.kind);
+  assert.ok(kinds.includes('security-missing-in-code'));
+  assert.ok(kinds.includes('body-unvalidated'));
+  assert.ok(!kinds.includes('spec-only'));
+});
+
+test('a spec without operationIds still names the unmatched delegate override', () => {
+  const f = fixture();
+  delete f.nodes[2]!.contract!.spec!.operationId;
+  assert.equal(joinDelegates(f, ['*ApiDelegate'])[0]?.kind, 'delegate-unmatched');
+  assert.ok(!f.edges.some((e) => e.kind === 'calls'));
+});
+
+test('ingest passes configured aliases into readers, joins spec delegates, and respects disabling specs', async () => {
+  const { ingestRepo } = await import('../dist/index.js');
+  const { fileURLToPath } = await import('node:url');
+  const root = fileURLToPath(new URL('../../../examples/spring-invoice-api', import.meta.url));
+  const f = await ingestRepo(root, { repoName: 'spring', tests: false, design: false });
+  const alias = f.nodes.find((n) => n.name === 'POST /api/invoices/:param/approval' && n.kind === 'route');
+  assert.ok(alias);
+  const route = f.nodes.find((n) => n.contract?.spec?.operationId === 'getInvoiceForApproval')!;
+  assert.equal(route.contract?.status, 'both');
+  assert.ok(
+    f.edges.some(
+      (e) => e.kind === 'calls' && e.from === route.id && e.to.endsWith('InvoiceApiDelegateImpl.getInvoiceForApproval'),
+    ),
+  );
+  const rows = roleTable(buildIndex(f.nodes, f.edges)).rows;
+  assert.ok(
+    rows.some((r) => r.guard.name === 'approve on invoice' && r.action.id === route.id && r.roles.includes('approve')),
+  );
+  assert.ok(f.meta?.config?.files.find((file) => file.root)?.fields.includes('frameworks'));
+  const noSpecs = await ingestRepo(root, { repoName: 'spring', openapi: false, tests: false, design: false });
+  assert.ok(!noSpecs.edges.some((e) => e.resolution?.note?.includes('frameworks.spring.delegates')));
+  assert.ok(!noSpecs.meta?.routes?.gaps.some((g) => g.kind === 'delegate-unmatched'));
+});
+
+test('framework aliases in a nested config are reported as ignored, with root and overlay aliases applied', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { ingestRepo } = await import('../dist/index.js');
+  const root = mkdtempSync(join(tmpdir(), 'nested-frameworks-'));
+  try {
+    mkdirSync(join(root, 'src'));
+    writeFileSync(
+      join(root, 'src', 'api.ts'),
+      `import {Controller} from '@nestjs/common'; @Controller('api') class C { @JsonGet('x') x() {} }`,
+    );
+    const frameworks = { nest: { verbs: { JsonGet: 'GET' } } };
+    writeFileSync(join(root, 'src', 'farsight.config.json'), JSON.stringify({ frameworks }));
+    const nested = await ingestRepo(root, { repoName: 'sample', openapi: false, design: false, tests: false });
+    assert.ok(!nested.nodes.some((n) => n.kind === 'route'));
+    assert.ok(
+      nested.meta?.config?.files.find((f) => f.path === 'src/farsight.config.json')?.ignored.includes('frameworks'),
+    );
+    const overlay = await ingestRepo(root, {
+      repoName: 'sample',
+      openapi: false,
+      design: false,
+      tests: false,
+      configOverlay: { from: '.farsight/settings.json', config: { frameworks } },
+    });
+    assert.ok(overlay.nodes.some((n) => n.name === 'GET /api/x'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

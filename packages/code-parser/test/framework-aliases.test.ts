@@ -165,6 +165,7 @@ function handler() {}
       assert.equal(e.resolution?.technique, 'annotation-scan');
       assert.equal(e.resolution?.confidence, 'HIGH');
       assert.ok(f.nodes.find((n) => n.name === 'tenant' && n.kind === 'guard'));
+      assert.ok(f.nodes.find((n) => n.id === 'sample::guard::requireRole(approve)' && n.name === 'role: approve'));
       const missing = f.nodes.find((n) => n.name === 'withTenant' && n.kind === 'guard')!;
       assert.equal(f.edges.find((e) => e.from === missing.id && e.kind === 'guards')!.meta?.requires, undefined);
       assert.equal(

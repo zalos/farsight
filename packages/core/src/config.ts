@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { configSchemaProblem } from '@farsight/graph';
 import type {
   GraphNode,
   GraphEdge,
@@ -299,6 +300,10 @@ export function readConfigFile(path: string): { config: FarsightConfig } | { err
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: 'is not a JSON object' };
   const config = raw as FarsightConfig;
+  if (config.frameworks !== undefined) {
+    const error = configSchemaProblem({ frameworks: config.frameworks }, 'config');
+    if (error) return { error };
+  }
   sanitizeStores(config);
   sanitizeProjects(config);
   sanitizeJourneys(config);
