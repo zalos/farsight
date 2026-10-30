@@ -13,6 +13,17 @@ function one(word: string, pluralKey: string): StringEntry {
 }
 
 export const CONFIG_STRINGS: Record<string, StringEntry> = {
+  'config.field.nodes': same('declared parts', 'Web addresses, checks, outside systems and messages supplied by a person when no reader finds them in the code.'),
+  'config.nodes.title': same('Declared', 'A person supplied this part in configuration. It is not evidence that a reader found its implementation.'),
+  'config.nodes.kind.route': same('web address', 'A request address and method declared by a person.'),
+  'config.nodes.kind.guard': same('check', 'A condition declared by a person that must hold for an action.'),
+  'config.nodes.kind.external': same('outside system', 'Another system declared by a person.'),
+  'config.nodes.kind.queue': same('message channel', 'A named message channel declared by a person.'),
+  'config.nodes.evidence': same('declared by {from} → nodes', 'A person supplied this connection in configuration. The code reader did not establish it.'),
+  'config.nodes.invalid': same('invalid declared parts: {error}', 'This declaration block does not satisfy the configuration contract and was not applied.'),
+  'config.nodes.missingLoc': same('names no indexed source file in this config folder (missing, ignored, excluded or unsupported).', 'The location could not be matched to a selected source file inside the folder this configuration describes.'),
+  'config.nodes.missingHandler': same('names no unique indexed handler in this config folder.', 'The named target could not be resolved to exactly one known part. No placeholder or connection was added.'),
+  'config.nodes.missingGuard': same('matches no declared or indexed check.', 'The check label names neither a hand-made check nor a check found by the configuration rules.'),
   'count.unit.patternMatchedOne': one('1 match', 'count.unit.patternMatched'),
   'count.unit.patternMatchedBizOne': one('1 match', 'count.unit.patternMatchedBiz'),
   'count.unit.patternNodesOne': one('1 node added', 'count.unit.patternNodes'),

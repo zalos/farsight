@@ -447,7 +447,7 @@ export function operationDrift(
   // a gate declared in farsight.config.json is a statement, not a detection: when it is the
   // only gate on an implemented route, say so — the handler enforces nothing the parser can see
   const declaredOnly = guards.filter((g) => g.tags.includes('declared'));
-  if (route.loc && guards.length && declaredOnly.length === guards.length) {
+  if ((route.loc || route.tags.includes('declared')) && guards.length && declaredOnly.length === guards.length) {
     drift.push({
       kind: 'security-declared-only',
       message: `gate declared in farsight.config.json (${declaredOnly.map((g) => g.name).join(', ')}); no guard detected in the code`,
@@ -546,14 +546,20 @@ export function reconcile(
   const apiId = opts.apiId ?? apiNodeId(source.repo, source.path);
   const specUsesSecurity = specDeclaresSecurity(doc, ops);
 
-  // implemented routes: kind route with a source location (spec-only nodes have none)
+  // Source locations and hand-made declarations are code-side; spec-only routes are neither.
   const codeRoutes: { node: GraphNode; key: string; repo: string }[] = [];
   for (const n of index.byId.values()) {
-    if (n.kind !== 'route' || !n.loc) continue;
-    if (opts.repo && n.loc.repo !== opts.repo) continue;
+    if (
+      n.kind !== 'route' ||
+      (!n.loc &&
+        (!n.tags.includes('declared') || n.contract?.status === 'declared' || n.contract?.status === 'spec-only'))
+    )
+      continue;
+    const repo = n.loc?.repo ?? n.id.split('::')[0]!;
+    if (opts.repo && repo !== opts.repo) continue;
     const mp = routeMethodPath(n);
     if (!mp) continue;
-    codeRoutes.push({ node: n, key: `${mp.method} ${normalizeRoutePath(mp.path)}`, repo: n.loc.repo });
+    codeRoutes.push({ node: n, key: `${mp.method} ${normalizeRoutePath(mp.path)}`, repo });
   }
   const byKey = new Map<string, GraphNode[]>();
   for (const r of codeRoutes) byKey.set(r.key, [...(byKey.get(r.key) ?? []), r.node]);
@@ -587,7 +593,7 @@ export function reconcile(
     }
     if (hit) {
       claimed.add(hit.id);
-      reposHit.add(hit.loc!.repo);
+      reposHit.add(hit.loc?.repo ?? hit.id.split('::')[0]!);
       const drift = operationDrift(op, hit, index, specUsesSecurity, opts);
       if (drift.length) mismatched++;
       driftTotal += drift.length;

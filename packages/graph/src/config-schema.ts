@@ -378,6 +378,32 @@ export default {
         "Decisions by id, the same shape as a manifest's decisions[]: an entry overrides a manifest's decision field by field (root file first, the nearest nested file last), or declares one no manifest does when it gives a title and a state. A nested file's doc is relative to its folder.",
       'items': { '$ref': '#/$defs/decisionOverride' },
     },
+    'nodes': {
+      'type': 'array',
+      'description': 'Hand-made parts; nested declarations and their paths stay inside the config folder.',
+      'items': {
+        'type': 'object',
+        'additionalProperties': false,
+        'required': ['kind', 'name'],
+        'properties': {
+          'kind': { 'enum': ['route', 'guard', 'external', 'queue'] },
+          'name': { 'type': 'string', 'minLength': 1, 'pattern': '\\S' },
+          'loc': { 'type': 'string', 'pattern': '^.+:[1-9][0-9]*$' },
+          'handler': { 'type': 'string', 'minLength': 1 },
+          'guards': { 'type': 'array', 'items': { 'type': 'string', 'minLength': 1 } },
+          'tier': { 'enum': ['business', 'policy', 'technical'] },
+          'business': { 'type': 'string' },
+        },
+        'allOf': [
+          {
+            'if': { 'properties': { 'kind': { 'const': 'route' } } },
+            'then': {
+              'properties': { 'name': { 'pattern': '^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|ALL) /\\S*$' } },
+            },
+          },
+        ],
+      },
+    },
   },
   '$defs': {
     'glossaryEntry': {

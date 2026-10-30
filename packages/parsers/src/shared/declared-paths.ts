@@ -1,7 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parseSync } from 'oxc-parser';
-import { glossaryEntryFor, frameworkAliasNames, t } from '@farsight/core';
+import {
+  glossaryEntryFor,
+  frameworkAliasNames,
+  declaredNodePath,
+  declaredNodeHandler,
+  declaredNodeGuards,
+  scopeOfDir,
+  t,
+} from '@farsight/core';
 import { readDocQuote } from '../cited-docs.js';
 import type { ParsedManifest } from '../design/index.js';
 import type { GraphFragment } from '@farsight/core';
@@ -36,7 +44,8 @@ export function declaredPathWarnings(
         Object.keys(f.config.glossary ?? {}).length ||
         Object.keys(f.config.gateTiers ?? {}).length ||
         Object.keys(f.config.frameworks ?? {}).length ||
-        list(f.config.patterns).length,
+        list(f.config.patterns).length ||
+        list(f.config.nodes).length,
     ) &&
     !manifests.length
   )
@@ -86,6 +95,28 @@ export function declaredPathWarnings(
     const scoped = fragment.nodes.filter(
       (n) => file.root || file.dir === '.' || n.loc?.path.startsWith(`${file.dir}/`),
     );
+    for (const declaration of file.config.nodes ?? []) {
+      if (declaration.loc) {
+        const loc = declaration.loc.match(/^(.*):([1-9]\d*)$/);
+        const path = loc && declaredNodePath(loc[1]!, file.dir);
+        if (!path || !files.has(path))
+          warn(
+            `${location(declaration.loc)} → nodes.loc`,
+            declaration.loc,
+            t('config.nodes.missingLoc', 'professional'),
+          );
+      }
+      if (declaration.kind !== 'route') continue;
+      if (declaration.handler && !declaredNodeHandler(fragment.nodes, declaration.handler, fragment.repo, file.dir))
+        warn(
+          `${location(declaration.handler)} → nodes.handler`,
+          declaration.handler,
+          t('config.nodes.missingHandler', 'professional'),
+        );
+      for (const label of declaration.guards ?? [])
+        if (!declaredNodeGuards(fragment.nodes, label, file.config, fragment.repo, scopeOfDir(file.dir)).length)
+          warn(`${location(label)} → nodes.guards`, label, t('config.nodes.missingGuard', 'professional'));
+    }
     for (const row of fragment.meta?.patterns?.rules ?? []) {
       if (row.file !== file.path) continue;
       const budgetReasons = ['budget', 'fileBudget', 'byteBudget', 'queryLimit'].map((key) =>

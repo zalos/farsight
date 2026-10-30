@@ -43,6 +43,7 @@ import {
   applyRouteGuards,
   readConfigFile,
   frameworkAliasNames,
+  normalizeRoutePath,
   scopeOfDir,
   stringList,
   CONFIG_FIELDS,
@@ -71,6 +72,8 @@ export interface ConfigFile {
 export type ScopedStoreDecl = StoreDecl & { dir: string; from: string };
 
 export interface WorkspaceConfig {
+  /** Source identity for declarations when no adapter produced a node. */
+  repo?: string;
   /** the root file's config, or null when there is none (or it could not be read) */
   root: FarsightConfig | null;
   /** root first, then by folder depth, then by path — only the files that could be read */
@@ -147,7 +150,17 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
     }
     for (const key of ignored) delete (config as Record<string, unknown>)[key];
     const frameworks = frameworkAliasNames(config.frameworks);
-    meta.files.push({ path, dir, root, fields, ignored, ...(frameworks ? { frameworks } : {}) });
+    meta.files.push({
+      path,
+      dir,
+      root,
+      fields,
+      ignored,
+      ...(frameworks ? { frameworks } : {}),
+      ...(config.nodes?.length
+        ? { nodes: config.nodes.map(({ kind, name, business }) => ({ kind, name, ...(business ? { business } : {}) })) }
+        : {}),
+    });
     ws.files.push({ path, dir, config, root });
     if (root) ws.root = config;
   }
@@ -193,6 +206,18 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
         return false;
       });
     }
+    if (config.nodes && ws.root?.nodes) {
+      const key = (n: NonNullable<FarsightConfig['nodes']>[number]) =>
+        `${n.kind}:${n.kind === 'route' ? normalizeRoutePath(n.name) : n.name}`;
+      const root = new Map(ws.root.nodes.map((n) => [key(n), n]));
+      config.nodes = config.nodes.filter((n) => {
+        const first = root.get(key(n));
+        if (!first) return true;
+        if (JSON.stringify(first) !== JSON.stringify(n))
+          addConflict(meta, 'field', `nodes.${key(n)}`, [CONFIG_FILE, path], CONFIG_FILE);
+        return false;
+      });
+    }
     const at = ws.files[0]?.root ? 1 : 0;
     ws.files.splice(at, 0, { path, dir: '.', root: false, from: 'workspace', config });
     meta.files.splice(at, 0, {
@@ -203,6 +228,9 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
       fields,
       ignored,
       ...(frameworkAliasNames(config.frameworks) ? { frameworks: frameworkAliasNames(config.frameworks) } : {}),
+      ...(config.nodes?.length
+        ? { nodes: config.nodes.map(({ kind, name, business }) => ({ kind, name, ...(business ? { business } : {}) })) }
+        : {}),
     });
   }
   ws.merged = mergeConfigs(ws.files, meta, ws.stores);
@@ -223,6 +251,8 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
     }
   }
   if (words.size) meta.glossary = [...words.values()];
+  if (ws.files.some((f) => f.config.nodes?.length))
+    ws.repo = options.repoName ?? repoRoot.split('/').filter(Boolean).pop()!;
   return ws;
 }
 
@@ -562,6 +592,9 @@ export function applyWorkspaceConfig(nodes: GraphNode[], edges: GraphEdge[], ws:
   const guardedBy = new Map<string, string>();
   for (const f of ws.files) {
     const opts: ApplyConfigOptions = {
+      repo: ws.repo,
+      dir: f.dir,
+      from: f.path,
       ...(f.root ? {} : { scope: scopeOfDir(f.dir) }),
       guarded: new Set(guardedBy.keys()),
       onGuardConflict: (node) =>
@@ -588,6 +621,7 @@ export function applyWorkspaceRouteGuards(nodes: GraphNode[], edges: GraphEdge[]
 /** Only the node-matcher fields: plumbing is rebased into `merged` and applied once from there. */
 function matcherFields(c: FarsightConfig): FarsightConfig {
   return {
+    ...(c.nodes ? { nodes: c.nodes } : {}),
     ...(c.tags ? { tags: c.tags } : {}),
     ...(c.glossary ? { glossary: c.glossary } : {}),
     ...(c.guards ? { guards: c.guards } : {}),

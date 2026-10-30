@@ -185,6 +185,10 @@ export function configFilesText(
       for (const [group, names] of Object.entries(f.frameworks ?? {})) {
         out.push(`  ${t(`config.alias.${group}`, register)}: ${names.map((name) => JSON.stringify(name)).join(', ')}`);
       }
+      for (const node of f.nodes ?? [])
+        out.push(
+          `  ${t('config.nodes.title', register)} · ${t(`config.nodes.kind.${node.kind}`, register)}: ${node.name}${node.business ? ` — ${node.business}` : ''}`,
+        );
     }
     if (meta.conflicts.length) {
       out.push('conflicts:');
