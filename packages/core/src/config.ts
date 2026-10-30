@@ -674,45 +674,35 @@ export function applyRouteGuards(
   config: FarsightConfig,
   edges: GraphEdge[],
   scope?: ConfigScope,
+  index = new DeclaredNodeIndex(nodes, edges),
 ): number {
   let added = 0;
-  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const byId = index.byId;
   for (const [label, matchers] of Object.entries(config.guards ?? {})) {
     const routes = matchers
       .map((m) => m.match(ROUTE_MATCHER))
       .filter((m): m is RegExpMatchArray => !!m)
       .map((m) => `${m[1]} ${routeKey(m[2]!)}`);
     if (!routes.length) continue;
-    // a snapshot: the guard nodes pushed below are never routes, and the scope must not see them
-    for (const node of [...nodes]) {
-      if (node.kind !== 'route') continue;
+    const candidates = new Set(routes.flatMap((key) => index.routeGuards.get(key) ?? []));
+    for (const node of [...candidates].sort((a, b) => index.order.get(a.id)! - index.order.get(b.id)!)) {
       if (scope && !scope(node)) continue;
       const mp = node.name.match(ROUTE_MATCHER);
       if (!mp || !routes.includes(`${mp[1]} ${routeKey(mp[2]!)}`)) continue;
       const repo = node.loc?.repo ?? node.id.split('::')[0]!;
       const manualId = `${repo}::guard::${label}`;
       const manual = byId.get(manualId);
-      const guardId =
-        manual?.kind === 'guard' && manual.tags.includes('declared') ? manualId : `${repo}::guard::config:${label}`;
-      if (!byId.has(guardId)) {
-        const guard: GraphNode = {
-          id: guardId,
-          kind: 'guard',
-          name: label,
-          tags: ['auth', 'declared'],
-          facets: { business: { description: `Gate declared in farsight.config.json: ${label}.` } },
-        };
-        nodes.push(guard);
-        byId.set(guardId, guard);
-      }
-      if (edges.some((e) => e.kind === 'guards' && e.from === guardId && e.to === node.id)) continue;
-      edges.push({
+      const guard = manual?.kind === 'guard' ? manual : configGuard(nodes, index, repo, label);
+      if (index.hasEdge('guards', guard.id, node.id)) continue;
+      const edge: GraphEdge = {
         id: `cfg-guard-${edges.length}`,
         kind: 'guards',
-        from: guardId,
+        from: guard.id,
         to: node.id,
         resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' },
-      });
+      };
+      edges.push(edge);
+      index.addEdge(edge);
       added++;
     }
   }
@@ -815,6 +805,10 @@ export interface ApplyConfigOptions {
   /** Config folder and display provenance; workspace overlays use their settings label. */
   dir?: string;
   from?: string;
+  /** Confirm a repo-relative location exists inside the selected source. */
+  hasFile?: (path: string) => boolean;
+  /** Shared across a workspace pass; additions are indexed as they happen. */
+  declaredIndex?: DeclaredNodeIndex;
   /** only these nodes (a nested config file's folder); every node when absent */
   scope?: ConfigScope;
   /**
@@ -838,6 +832,8 @@ export function applyConfig(
   edges: GraphEdge[] = [],
   options: ApplyConfigOptions = {},
 ): ApplyConfigResult {
+  const index = options.declaredIndex ?? new DeclaredNodeIndex(nodes, edges);
+  options = { ...options, declaredIndex: index };
   const declared = applyDeclaredNodes(nodes, config, options);
   const scope = options.scope ? (node: GraphNode) => declared.has(node.id) || options.scope!(node) : undefined;
   const { guarded: already } = options;
@@ -889,13 +885,13 @@ export function applyConfig(
       node.kind = 'guard';
       guarded.push(node.id);
       node.name = `${node.name}: ${label}`;
+      index.addNode(node);
       if (!node.tags.includes('auth')) node.tags.push('auth');
       // calls into the wrapper gain a guards edge pointing back at the caller; the calls edge stays,
       // because the wrapper is also run — what it does inside (its reads, writes, calls) is part of the walk
-      for (const e of [...edges]) {
-        if (e.kind !== 'calls' || e.to !== node.id) continue;
-        if (edges.some((g) => g.kind === 'guards' && g.from === node.id && g.to === e.from)) continue;
-        edges.push({
+      for (const e of index.callsInto.get(node.id) ?? []) {
+        if (index.hasEdge('guards', node.id, e.from)) continue;
+        const edge: GraphEdge = {
           id: `g${edges.length}`,
           kind: 'guards',
           from: node.id,
@@ -906,7 +902,9 @@ export function applyConfig(
             confidence: 'HIGH',
             note: `declared a guard by farsight.config.json (${label})`,
           },
-        });
+        };
+        edges.push(edge);
+        index.addEdge(edge);
         e.meta = { ...e.meta, via: 'guard' };
       }
     }
@@ -924,7 +922,7 @@ export function applyConfig(
       }
     }
   }
-  applyRouteGuards(nodes, config, edges, scope);
+  applyRouteGuards(nodes, config, edges, scope, index);
   applyDeclaredNodeEdges(nodes, edges, config, options);
   applyDeclaredGuardGrants(nodes, edges, config, options);
   return { guarded };
@@ -938,12 +936,15 @@ export function applyDeclaredGuardGrants(
   options: ApplyConfigOptions = {},
 ): void {
   const repo = options.repo ?? nodes[0]?.loc?.repo ?? nodes[0]?.id.split('::')[0];
-  if (!repo) return;
-  for (const decl of config.nodes ?? []) {
+  if (!repo || !config.nodes?.length) return;
+  const index = options.declaredIndex ?? new DeclaredNodeIndex(nodes, edges);
+  for (const decl of config.nodes) {
     if (decl.kind !== 'guard' || !decl.requires?.trim()) continue;
     const id = `${repo}::guard::${decl.name}`;
-    for (const edge of edges) {
-      if (edge.kind !== 'guards' || edge.from !== id || edge.meta?.requires) continue;
+    const guard = index.byId.get(id);
+    if (!guard || (guard.loc && options.scope && !options.scope(guard))) continue;
+    for (const edge of index.guardsFrom.get(id) ?? []) {
+      if (edge.meta?.requires) continue;
       edge.meta = {
         ...edge.meta,
         requires: decl.requires,
@@ -962,47 +963,116 @@ export function declaredNodePath(value: string, dir = '.'): string | undefined {
   return path.replace(/^\.\//, '');
 }
 
+/** One mutable index for declaration matching and connections, shared across each workspace pass. */
+export class DeclaredNodeIndex {
+  readonly byId = new Map<string, GraphNode>();
+  readonly routes = new Map<string, Map<string, GraphNode>>();
+  readonly routeGuards = new Map<string, GraphNode[]>();
+  readonly order = new Map<string, number>();
+  readonly handlers = new Map<string, Set<GraphNode>>();
+  readonly guardLabels = new Map<string, Set<GraphNode>>();
+  readonly guardsFrom = new Map<string, GraphEdge[]>();
+  readonly callsInto = new Map<string, GraphEdge[]>();
+  readonly files = new Set<string>();
+  private readonly edgeKeys = new Set<string>();
+
+  constructor(nodes: GraphNode[], edges: GraphEdge[] = []) {
+    for (const node of nodes) this.addNode(node);
+    for (const edge of edges) this.addEdge(edge);
+  }
+
+  addNode(node: GraphNode): void {
+    const fresh = !this.byId.has(node.id);
+    if (fresh) this.order.set(node.id, this.order.size);
+    this.byId.set(node.id, node);
+    const repo = node.loc?.repo ?? node.id.split('::')[0]!;
+    if (node.loc) {
+      this.files.add(node.loc.path);
+      const key = `${repo}::${node.loc.path}::${node.name.split(': ')[0]}`;
+      const bucket = this.handlers.get(key) ?? new Set<GraphNode>();
+      bucket.add(node);
+      this.handlers.set(key, bucket);
+    }
+    const route = node.kind === 'route' && declaredRouteKey(node.name);
+    if (route) {
+      if (fresh) {
+        const match = node.name.match(ROUTE_MATCHER)!;
+        const key = `${match[1]} ${routeKey(match[2]!)}`;
+        const targets = this.routeGuards.get(key) ?? [];
+        targets.push(node);
+        this.routeGuards.set(key, targets);
+      }
+      const bucket = this.routes.get(route) ?? new Map<string, GraphNode>();
+      if (!bucket.has(repo)) bucket.set(repo, node);
+      this.routes.set(route, bucket);
+    }
+    if (node.kind === 'guard' && node.name.includes(': ')) {
+      const key = `${repo}::${node.name.slice(node.name.indexOf(': ') + 2)}`;
+      const bucket = this.guardLabels.get(key) ?? new Set<GraphNode>();
+      bucket.add(node);
+      this.guardLabels.set(key, bucket);
+    }
+  }
+
+  hasEdge(kind: GraphEdge['kind'], from: string, to: string): boolean {
+    return this.edgeKeys.has(JSON.stringify([kind, from, to]));
+  }
+
+  addEdge(edge: GraphEdge): void {
+    this.edgeKeys.add(JSON.stringify([edge.kind, edge.from, edge.to]));
+    const map = edge.kind === 'guards' ? this.guardsFrom : edge.kind === 'calls' ? this.callsInto : undefined;
+    if (!map) return;
+    const key = edge.kind === 'guards' ? edge.from : edge.to;
+    const bucket = map.get(key) ?? [];
+    bucket.push(edge);
+    map.set(key, bucket);
+  }
+}
+
 /** An exact id, or one unambiguous declaration in the named file. No guessed or placeholder targets. */
 export function declaredNodeHandler(
-  nodes: GraphNode[],
+  index: DeclaredNodeIndex,
   ref: string,
   repo: string,
   dir = '.',
   scope = scopeOfDir(dir),
 ): GraphNode | undefined {
-  const candidates = nodes.filter((n) => (n.loc?.repo ?? n.id.split('::')[0]) === repo && (!scope || scope(n)));
-  const exact = candidates.find((n) => n.id === ref);
-  if (exact) return exact;
+  const exact = index.byId.get(ref);
+  if (exact && (exact.loc?.repo ?? exact.id.split('::')[0]) === repo && (!scope || scope(exact))) return exact;
   const parts = ref.split('::');
   if (parts.length !== 2) return undefined;
   const path = declaredNodePath(parts[0]!, dir);
   if (!path) return undefined;
-  const found = candidates.filter((n) => n.loc?.path === path && n.name.split(': ')[0] === parts[1]);
+  const found = [...(index.handlers.get(`${repo}::${path}::${parts[1]}`) ?? [])].filter((n) => !scope || scope(n));
   return found.length === 1 ? found[0] : undefined;
 }
 
 /** Labels refer to hand-made guards or guards produced by this config's existing guard rules. */
 export function declaredNodeGuards(
-  nodes: GraphNode[],
+  index: DeclaredNodeIndex,
   label: string,
   config: FarsightConfig,
   repo: string,
   scope?: ConfigScope,
 ): GraphNode[] {
-  const explicit = new Set([`${repo}::guard::${label}`, `${repo}::guard::config:${label}`]);
+  const found = new Set<GraphNode>();
+  for (const id of [`${repo}::guard::${label}`, `${repo}::guard::config:${label}`]) {
+    const node = index.byId.get(id);
+    if (node?.kind === 'guard') found.add(node);
+  }
   const matchers = config.guards?.[label];
-  return nodes.filter((n) => {
-    if (n.kind !== 'guard' || (n.loc?.repo ?? n.id.split('::')[0]) !== repo) return false;
-    if (explicit.has(n.id)) return true;
-    return (
-      !!matchers &&
-      (!scope || scope(n)) &&
-      n.name.endsWith(`: ${label}`) &&
-      matchers.some(
-        (m) => !ROUTE_MATCHER.test(m) && `${n.loc?.path ?? ''} ${n.name}`.toLowerCase().includes(m.toLowerCase()),
+  if (matchers)
+    for (const node of index.guardLabels.get(`${repo}::${label}`) ?? []) {
+      if (
+        (!scope || scope(node)) &&
+        matchers.some(
+          (m) =>
+            !ROUTE_MATCHER.test(m) && `${node.loc?.path ?? ''} ${node.name}`.toLowerCase().includes(m.toLowerCase()),
+        )
       )
-    );
-  });
+        found.add(node);
+    }
+  return [...found];
 }
 
 function declaredRouteKey(name: string): string | undefined {
@@ -1010,41 +1080,57 @@ function declaredRouteKey(name: string): string | undefined {
   return match ? `${match[1]} ${normalizeRoutePath(match[2]!)}` : undefined;
 }
 
-function declaredTarget(nodes: GraphNode[], decl: NodeDecl, repo: string): GraphNode | undefined {
-  const name = decl.kind === 'route' ? declaredRouteKey(decl.name) : decl.name;
-  return nodes.find(
-    (n) =>
-      n.kind === decl.kind &&
-      (n.loc?.repo ?? n.id.split('::')[0]) === repo &&
-      (decl.kind === 'route' ? declaredRouteKey(n.name) === name : n.id === `${repo}::${decl.kind}::${name}`),
-  );
+export function declaredNodeTarget(index: DeclaredNodeIndex, decl: NodeDecl, repo: string): GraphNode | undefined {
+  if (decl.kind === 'route') return index.routes.get(declaredRouteKey(decl.name) ?? '')?.get(repo);
+  const node = index.byId.get(`${repo}::${decl.kind}::${decl.name}`);
+  return node?.kind === decl.kind ? node : undefined;
 }
 
 function applyDeclaredNodes(nodes: GraphNode[], config: FarsightConfig, options: ApplyConfigOptions): Set<string> {
   const ids = new Set<string>();
   const repo = options.repo ?? nodes[0]?.loc?.repo ?? nodes[0]?.id.split('::')[0];
   if (!repo) return ids;
+  const index = options.declaredIndex!;
   for (const decl of config.nodes ?? []) {
-    const name = decl.kind === 'route' ? declaredRouteKey(decl.name) : decl.name;
-    if (!name) continue;
-    let node = declaredTarget(nodes, decl, repo);
-    // A nested declaration cannot augment a reader's route outside its own folder.
+    if (!['route', 'guard', 'external', 'queue'].includes(decl.kind) || !decl.name?.trim()) continue;
+    if (decl.kind === 'route' && !/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|ALL) \/\S*$/.test(decl.name))
+      continue;
+    let node = declaredNodeTarget(index, decl, repo);
+    // A nested declaration cannot augment a reader's route outside its own folder; the audit explains it.
     if (node && options.scope && node.loc && !options.scope(node)) continue;
+    const created = !node;
     if (!node) {
-      node = { id: `${repo}::${decl.kind}::${name}`, kind: decl.kind, name, tags: [] };
+      node = { id: `${repo}::${decl.kind}::${decl.name}`, kind: decl.kind, name: decl.name, tags: ['declared'] };
+      if (decl.kind === 'guard') node.tags.push('auth');
       nodes.push(node);
     }
     ids.add(node.id);
-    if (!node.tags.includes('declared')) node.tags.push('declared');
-    if (decl.kind === 'guard' && !node.tags.includes('auth')) node.tags.push('auth');
     const loc = decl.loc?.match(/^(.*):([1-9]\d*)$/);
     const path = loc && declaredNodePath(loc[1]!, options.dir);
-    if (!node.loc && path) node.loc = { repo, path, line: Number(loc![2]) };
+    if (created && path && (options.hasFile?.(path) ?? index.files.has(path)))
+      node.loc = { repo, path, line: Number(loc![2]) };
     if (decl.business && !node.facets?.business?.description)
       node.facets = { ...node.facets, business: { ...node.facets?.business, description: decl.business } };
     if (decl.kind === 'guard' && decl.tier && !node.gateTier) node.gateTier = { tier: decl.tier, from: 'config' };
+    index.addNode(node);
   }
   return ids;
+}
+
+function configGuard(nodes: GraphNode[], index: DeclaredNodeIndex, repo: string, label: string): GraphNode {
+  const id = `${repo}::guard::config:${label}`;
+  const existing = index.byId.get(id);
+  if (existing) return existing;
+  const guard: GraphNode = {
+    id,
+    kind: 'guard',
+    name: label,
+    tags: ['auth', 'declared'],
+    facets: { business: { description: t('config.nodes.guardDescription', 'professional').replace('{label}', label) } },
+  };
+  nodes.push(guard);
+  index.addNode(guard);
+  return guard;
 }
 
 function applyDeclaredNodeEdges(
@@ -1055,10 +1141,11 @@ function applyDeclaredNodeEdges(
 ): void {
   const repo = options.repo ?? nodes[0]?.loc?.repo ?? nodes[0]?.id.split('::')[0];
   if (!repo) return;
+  const index = options.declaredIndex!;
   const from = options.from ?? 'farsight.config.json';
   const link = (kind: 'calls' | 'guards', source: string, target: string) => {
-    if (source === target || edges.some((e) => e.kind === kind && e.from === source && e.to === target)) return;
-    edges.push({
+    if (source === target || index.hasEdge(kind, source, target)) return;
+    const edge: GraphEdge = {
       id: `declared|${kind}|${source}|${target}`,
       kind,
       from: source,
@@ -1069,17 +1156,22 @@ function applyDeclaredNodeEdges(
         confidence: 'HIGH',
         note: t('config.nodes.evidence', 'professional').replace('{from}', from),
       },
-    });
+    };
+    edges.push(edge);
+    index.addEdge(edge);
   };
   for (const decl of config.nodes ?? []) {
     if (decl.kind !== 'route') continue;
-    const route = declaredTarget(nodes, decl, repo);
+    const route = declaredNodeTarget(index, decl, repo);
     if (!route || (options.scope && route.loc && !options.scope(route))) continue;
-    const handler = decl.handler && declaredNodeHandler(nodes, decl.handler, repo, options.dir, options.scope);
+    const handler = decl.handler && declaredNodeHandler(index, decl.handler, repo, options.dir, options.scope);
     if (handler) link('calls', route.id, handler.id);
-    for (const label of decl.guards ?? [])
-      for (const guard of declaredNodeGuards(nodes, label, config, repo, options.scope))
-        link('guards', guard.id, route.id);
+    for (const label of decl.guards ?? []) {
+      const guards = declaredNodeGuards(index, label, config, repo, options.scope);
+      if (!guards.length && Object.hasOwn(config.guards ?? {}, label))
+        guards.push(configGuard(nodes, index, repo, label));
+      for (const guard of guards) link('guards', guard.id, route.id);
+    }
   }
 }
 

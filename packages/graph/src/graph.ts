@@ -1230,7 +1230,7 @@ export interface ConfigMeta {
     from?: 'workspace';
     frameworks?: FrameworkAliasSummary;
     /** Declarations supplied by this file, absent when none; no copied source text. */
-    nodes?: { kind: 'route' | 'guard' | 'external' | 'queue'; name: string; business?: string }[];
+    nodes?: { kind: 'route' | 'guard' | 'external' | 'queue'; name: string; business?: string; notes?: string[] }[];
   }[];
   /** two files said different things about one key; `kept` is the file whose word stands */
   conflicts: {

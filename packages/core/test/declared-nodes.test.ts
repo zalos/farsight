@@ -5,6 +5,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   applyConfig,
+  apiSurface,
+  apiImplementedCount,
+  stateOfPlay,
+  stateOfPlayLines,
+  countedProblems,
+  breakdownText,
+  roleTableLines,
+  t,
   applySpecToFragment,
   buildIndex,
   businessSummary,
@@ -40,7 +48,7 @@ test('declared routes resolve both handler forms, preserve business words and wa
     };
     applyConfig(nodes, config, edges);
     const route = nodes.find((n) => n.kind === 'route')!;
-    assert.equal(route.id, 'app::route::POST /legacy/:param');
+    assert.equal(route.id, 'app::route::POST /legacy/{id}');
     assert.deepEqual(route.tags, ['declared']);
     assert.equal(route.loc, undefined);
     assert.equal(businessSummary(route), 'A supplier posts an invoice.');
@@ -105,6 +113,7 @@ test('a reader route is augmented in place without losing its location or call e
   assert.equal(route.id, 'app::reader::GET /x/:id');
   assert.deepEqual(route.loc, handler().loc);
   assert.deepEqual(edges, before);
+  assert.ok(!route.tags.includes('declared'));
 });
 
 test('a declared route reconciles as both with or without loc, including a second spec pass', () => {
@@ -114,8 +123,9 @@ test('a declared route reconciles as both with or without loc, including a secon
       fragment.nodes,
       { nodes: [{ kind: 'route', name: 'POST /legacy', ...(loc ? { loc } : {}) }] },
       fragment.edges,
-      { repo: 'app' },
+      { repo: 'app', hasFile: (path) => path === 'legacy.pl' },
     );
+    assert.equal(!!fragment.nodes[0]!.loc, !!loc);
     const spec = {
       openapi: '3.0.0',
       info: { title: 'Legacy', version: '1' },
@@ -165,6 +175,10 @@ test('the config schema refuses a bad kind, missing name and unknown node field 
     [{ kind: 'table', name: 'x' }, 'kind'],
     [{ kind: 'route' }, 'name'],
     [{ kind: 'guard', name: 'session', typo: true }, 'typo'],
+    [{ kind: 'guard', name: 'session', handler: 'src/a.ts::run' }, 'handler'],
+    [{ kind: 'queue', name: 'q', guards: ['session'] }, 'guards'],
+    [{ kind: 'route', name: 'GET /x', tier: 'policy' }, 'tier'],
+    [{ kind: 'external', name: 'Ledger', requires: 'admin' }, 'requires'],
   ] as const) {
     assert.match(configSchemaProblem({ nodes: [node] }, 'config')!, new RegExp(`config\\.nodes\\[0\\]\\.${path}`));
     assert.ok(validate({ nodes: [node] }, schema).length);
@@ -253,4 +267,172 @@ test('an explicit manual guard grant reaches Roles, including a config route gua
   assert.equal(roles.rows[0]!.words, 'Approve the invoice.');
   assert.equal(roles.rows[0]!.requiresFrom, 'workspace config → nodes[approval]');
   assert.equal(edges.length, 1);
+});
+
+test('attaching a declaration to a reader guard preserves enforcement and produces no security drift', () => {
+  const route: GraphNode = { ...handler(), id: 'app::route::GET /secure', kind: 'route', name: 'GET /secure' };
+  const guard: GraphNode = {
+    ...handler('src/auth.ts'),
+    id: 'app::guard::requireRole(admin)',
+    kind: 'guard',
+    name: 'requireRole(admin)',
+    tags: ['auth'],
+  };
+  const fragment: GraphFragment = {
+    repo: 'app',
+    nodes: [route, guard],
+    edges: [{ id: 'reader-guard', from: guard.id, to: route.id, kind: 'guards' }],
+  };
+  applyConfig(
+    fragment.nodes,
+    {
+      nodes: [
+        {
+          kind: 'guard',
+          name: guard.name,
+          business: 'An administrator may continue.',
+          tier: 'policy',
+          requires: 'admin',
+        },
+      ],
+    },
+    fragment.edges,
+  );
+  assert.deepEqual(guard.tags, ['auth']);
+  assert.equal(guard.facets?.business?.description, 'An administrator may continue.');
+  assert.equal(guard.gateTier?.tier, 'policy');
+  assert.equal(fragment.edges[0]!.meta?.requires, 'admin');
+  applySpecToFragment(
+    fragment,
+    {
+      openapi: '3.0.0',
+      info: { title: 'App', version: '1' },
+      paths: { '/secure': { get: { 'x-guards': [guard.name], responses: { '200': { description: 'OK' } } } } },
+    },
+    { repo: 'app', path: 'openapi.json' },
+  );
+  assert.equal(fragment.nodes.find((n) => n.id === route.id)!.contract?.status, 'both');
+  assert.deepEqual(fragment.nodes.find((n) => n.id === route.id)!.contract?.drift ?? [], []);
+});
+
+test('core refuses unsupported node kinds even when called without schema validation', () => {
+  const nodes: GraphNode[] = [];
+  applyConfig(
+    nodes,
+    {
+      nodes: [
+        { kind: 'table', name: 'evil_table' },
+        { kind: 'function', name: 'injected' },
+        { kind: 'route', name: 'not a route' },
+      ],
+    } as unknown as FarsightConfig,
+    [],
+    { repo: 'app' },
+  );
+  assert.deepEqual(nodes, []);
+});
+
+test('a route naming an unmatched config guard key creates one declared guard and reuses it', () => {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  const config: FarsightConfig = {
+    guards: { session: ['missingWrapper'] },
+    nodes: [
+      { kind: 'route', name: 'GET /one', guards: ['session'] },
+      { kind: 'route', name: 'GET /two', guards: ['session'] },
+    ],
+  };
+  applyConfig(nodes, config, edges, { repo: 'app' });
+  applyConfig(nodes, config, edges, { repo: 'app' });
+  assert.equal(nodes.filter((n) => n.kind === 'guard').length, 1);
+  assert.equal(nodes.find((n) => n.kind === 'guard')!.id, 'app::guard::config:session');
+  assert.equal(edges.length, 2);
+  assert.ok(edges.every((e) => e.kind === 'guards' && e.resolution?.technique === 'annotation-scan'));
+});
+
+test('API and state counts separate reader evidence from hand-made routes, including declarations with locations', () => {
+  const route: GraphNode = { ...handler(), id: 'app::route::GET /code', kind: 'route', name: 'GET /code' };
+  const fragment: GraphFragment = { repo: 'app', nodes: [route], edges: [] };
+  applyConfig(
+    fragment.nodes,
+    {
+      nodes: [
+        { kind: 'route', name: 'GET /manual' },
+        { kind: 'route', name: 'GET /located', loc: 'src/bridge.ts:4' },
+        { kind: 'route', name: 'GET /absent', guards: ['session'] },
+        { kind: 'guard', name: 'session' },
+      ],
+    },
+    fragment.edges,
+  );
+  const implied = apiSurface(buildIndex(fragment.nodes, fragment.edges));
+  assert.equal(implied[0]!.counts.implemented, 4);
+  assert.equal(implied[0]!.operations.find((o) => o.name === 'GET /located')!.loc?.line, 4);
+  const report = applySpecToFragment(
+    fragment,
+    {
+      openapi: '3.0.0',
+      info: { title: 'App', version: '1' },
+      paths: {
+        '/code': { get: { responses: { '200': { description: 'OK' } } } },
+        '/manual': { get: { responses: { '200': { description: 'OK' } } } },
+        '/missing': { get: { responses: { '200': { description: 'OK' } } } },
+      },
+    },
+    { repo: 'app', path: 'openapi.json' },
+  );
+  const index = buildIndex(fragment.nodes, fragment.edges);
+  const api = apiSurface(index)[0]!;
+  assert.equal(api.counts.operations, 5);
+  assert.equal(api.counts.implemented, 4);
+  const expected = [
+    { n: 1, key: 'count.part.apiFoundInCode' },
+    { n: 3, key: 'count.part.apiDeclaredByPerson' },
+  ];
+  assert.deepEqual(api.counts.implementedBreakdown, expected);
+  assert.deepEqual(report.counts.implementedBreakdown, expected);
+  assert.ok(
+    report.codeOnly.every((r) =>
+      r.contract.drift?.some(
+        (d) => /declared by a person/.test(d.message) && !/implemented in the code/.test(d.message),
+      ),
+    ),
+  );
+  const state = stateOfPlay(index, undefined);
+  assert.equal(state.built.operations.n, 4);
+  assert.equal(state.built.operations.of, 5);
+  assert.deepEqual(state.built.operations.breakdown, expected);
+  assert.deepEqual(countedProblems(state.built.operations), []);
+  assert.deepEqual(countedProblems(apiImplementedCount(api.counts)), []);
+  for (const register of ['hud', 'professional'] as const) {
+    assert.match(
+      stateOfPlayLines(state, { register }).join('\n'),
+      /4 of 5 operations found in code or declared by a person \(1 found in code · 3 declared by a person\)/,
+    );
+    assert.equal(breakdownText(apiImplementedCount(api.counts), register), '1 found in code · 3 declared by a person');
+    assert.match(t('api.list.legend', register), /impl = found in code or declared by a person/);
+    assert.match(t('roles.lead', register), /code or configuration/);
+  }
+  const noLoc = fragment.nodes.find((n) => n.name === 'GET /absent')!;
+  assert.ok(!noLoc.contract?.drift?.some((d) => d.kind === 'security-declared-only'));
+});
+
+test('Roles text attributes explicit grants to configuration as well as code', () => {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  applyConfig(
+    nodes,
+    {
+      nodes: [
+        { kind: 'guard', name: 'approval', requires: 'ops.approver' },
+        { kind: 'route', name: 'POST /approve', guards: ['approval'] },
+      ],
+    },
+    edges,
+    { repo: 'app' },
+  );
+  const lines = roleTableLines(roleTable(buildIndex(nodes, edges))).join('\n');
+  assert.match(lines, /Roles named in code or configuration: ops.approver/);
+  assert.match(lines, /farsight.config.json → nodes\[approval\]/);
+  assert.doesNotMatch(lines, /roles the code names/);
 });

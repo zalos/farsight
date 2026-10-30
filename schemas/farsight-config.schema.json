@@ -731,6 +731,36 @@
                 }
               }
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "route"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "handler": false,
+                "guards": false
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "guard"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "tier": false,
+                "requires": false
+              }
+            }
           }
         ]
       }

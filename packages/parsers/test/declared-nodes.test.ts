@@ -52,6 +52,7 @@ test('ingest applies nested declarations with relative locations and handlers be
     const noLoc = f.nodes.find((n) => n.name === 'GET /without-location')!;
     assert.equal(noLoc.loc, undefined);
     assert.equal(noLoc.contract?.status, 'both');
+    assert.ok(!noLoc.contract?.drift?.some((d) => d.kind === 'security-declared-only'));
     assert.equal(f.nodes.filter((n) => n.kind === 'route').length, 2);
     assert.ok(
       f.edges.some(
@@ -153,6 +154,8 @@ test('each invalid reference is audited with file and line, or the overlay label
         if (overlay) assert.ok(note.startsWith(`${from} → nodes.${field}`), note);
         else assert.match(note, /^farsight\.config\.json:\d+ → nodes\./);
       }
+      assert.deepEqual(f.meta!.config!.files[0]!.nodes![0]!.notes, notes);
+      assert.equal(f.nodes.find((n) => n.kind === 'route')!.loc?.path, 'legacy/handlers.pl');
       assert.equal(f.edges.length, 0);
       assert.equal(f.nodes.filter((n) => n.kind === 'guard').length, 0);
     } finally {
@@ -172,7 +175,7 @@ test('declaring a reader route attaches by normalized method/path and keeps its 
     const routes = f.nodes.filter((n) => n.kind === 'route');
     assert.equal(routes.length, 1);
     assert.equal(routes[0]!.loc?.path, 'src/server.ts');
-    assert.ok(routes[0]!.tags.includes('declared'));
+    assert.ok(!routes[0]!.tags.includes('declared'));
     assert.ok(f.edges.some((e) => e.kind === 'calls' && e.from === routes[0]!.id && e.to.endsWith('::readInvoice')));
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -208,6 +211,92 @@ test('root declarations win overlay conflicts, with no second handler or lost wo
     assert.ok(f.edges.some((e) => e.kind === 'calls' && e.to.endsWith('::first')));
     assert.ok(f.meta!.config!.conflicts.some((c) => c.from === 'workspace' && c.kept === 'farsight.config.json'));
     assert.ok(f.nodes.some((n) => n.id === 'app::queue::InvoicePosted'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('invalid overlay node blocks are dropped with their field path and ignored metadata', async () => {
+  const dir = fixture({});
+  const from = '.farsight/settings.json → sources[app].config';
+  try {
+    for (const [node, field] of [
+      [{ kind: 'table', name: 'evil_table' }, 'kind'],
+      [{ kind: 'function', name: 'injected' }, 'kind'],
+      [{ kind: 'route', name: 'not a route' }, 'name'],
+      [{ kind: 'guard', name: 'session', handler: 'a.ts::run' }, 'handler'],
+    ] as const) {
+      const f = await ingestRepo(dir, {
+        ...opts,
+        configOverlay: { from, config: { nodes: [node] } as unknown as FarsightConfig },
+      });
+      assert.equal(f.nodes.length, 0);
+      assert.deepEqual(f.meta!.config!.files[0]!.ignored, ['nodes']);
+      assert.deepEqual(f.meta!.config!.files[0]!.fields, []);
+      assert.equal(f.meta!.config!.files[0]!.nodes, undefined);
+      assert.ok(f.meta!.config!.notes[0]!.startsWith(`${from}: invalid declared parts: config.nodes[0].${field}`));
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('audit notes locate each declaring entry and stay beside its own summary row', async () => {
+  const config: FarsightConfig = {
+    guards: { repeated: ['notFound'] },
+    nodes: [
+      { kind: 'route', name: 'GET /outside', loc: '../outside.ts:8' },
+      { kind: 'route', name: 'GET /missing', loc: 'missing.ts:8', guards: ['unmatched'] },
+      { kind: 'route', name: 'GET /label', guards: ['repeated'] },
+      { kind: 'route', name: 'GET /again', guards: ['unmatched'] },
+    ],
+  };
+  const body = JSON.stringify(config, null, 2);
+  const dir = fixture({ 'nested/farsight.config.json': body, 'outside.ts': 'export function outside() {}' });
+  try {
+    const f = await ingestRepo(dir, opts);
+    const summaries = f.meta!.config!.files[0]!.nodes!;
+    const outside = summaries.find((n) => n.name === 'GET /outside')!;
+    assert.match(outside.notes![0]!, /is outside this config folder/);
+    const missing = summaries.find((n) => n.name === 'GET /missing')!;
+    assert.equal(missing.notes!.length, 2);
+    assert.match(missing.notes![0]!, /names no indexed source file/);
+    assert.equal(summaries.find((n) => n.name === 'GET /label')!.notes, undefined);
+    for (const summary of [missing, summaries.find((n) => n.name === 'GET /again')!]) {
+      const start = body.indexOf(JSON.stringify(summary.name));
+      const at = body.indexOf('"unmatched"', start);
+      const line = body.slice(0, at).split('\n').length;
+      assert.ok(
+        summary.notes!.some((n) => n.startsWith(`nested/farsight.config.json:${line} → nodes.guards:`)),
+        summary.notes!.join('\n'),
+      );
+    }
+    assert.ok(f.nodes.filter((n) => n.kind === 'route').every((n) => !n.loc));
+    assert.ok(f.nodes.some((n) => n.id === 'app::guard::config:repeated'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('nested route collisions outside the folder are audited without attaching a declaration', async () => {
+  const config = { nodes: [{ kind: 'route', name: 'GET /invoices/{invoiceId}', business: 'Wrong folder.' }] };
+  const body = JSON.stringify(config, null, 2);
+  const dir = fixture({
+    'src/server.ts':
+      "import express from 'express'; const app = express(); app.get('/invoices/:id', (req,res) => res.json({}));",
+    'nested/farsight.config.json': body,
+  });
+  try {
+    const f = await ingestRepo(dir, opts);
+    const routes = f.nodes.filter((n) => n.kind === 'route');
+    assert.equal(routes.length, 1);
+    assert.ok(!routes[0]!.tags.includes('declared'));
+    assert.notEqual(routes[0]!.facets?.business?.description, 'Wrong folder.');
+    const line = body.slice(0, body.indexOf('"GET /invoices/{invoiceId}"')).split('\n').length;
+    const note = f.meta!.config!.files[0]!.nodes![0]!.notes![0]!;
+    assert.ok(note.startsWith(`nested/farsight.config.json:${line} → nodes.name:`), note);
+    assert.match(note, /outside this config folder; this declaration was not applied/);
+    assert.ok(f.meta!.config!.notes.includes(note));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

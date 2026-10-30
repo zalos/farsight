@@ -50,7 +50,7 @@ export interface StateOfPlay {
     journeys: Counted;
     /** screens built, of the screens the designs declare */
     screens: Counted;
-    /** operations with code behind them, of the operations the API surfaces list */
+    /** Operations found in code or declared by a person, with a disjoint evidence breakdown when declarations contribute. */
     operations: Counted;
     storylines: Counted;
     branches: Counted;
@@ -117,6 +117,10 @@ export function stateOfPlay(
   const designOnly = designs.reduce((s, d) => s + d.counts.designOnly, 0);
   const opsAll = apis.reduce((s, a) => s + a.counts.operations, 0);
   const opsImpl = apis.reduce((s, a) => s + a.counts.implemented, 0);
+  const opsPeople = apis.reduce(
+    (s, a) => s + (a.counts.implementedBreakdown?.find((p) => p.key === 'count.part.apiDeclaredByPerson')?.n ?? 0),
+    0,
+  );
   const opsGap = apis.filter((a) => !a.specSource).reduce((s, a) => s + a.counts.notImplemented, 0);
   const branches = tree.storylines.reduce((s, x) => s + x.branches.length, 0);
 
@@ -135,10 +139,21 @@ export function stateOfPlay(
     ),
     operations: counted(
       opsImpl,
-      'state.unit.operations',
+      opsPeople ? 'state.unit.operationsSupplied' : 'state.unit.operations',
       SCOPE,
       `${SRC} ← apiSurface().counts.implemented / .operations`,
-      { of: opsAll, recheck: RECHECK.apis },
+      {
+        of: opsAll,
+        recheck: RECHECK.apis,
+        ...(opsPeople
+          ? {
+              breakdown: [
+                { n: opsImpl - opsPeople, key: 'count.part.apiFoundInCode' },
+                { n: opsPeople, key: 'count.part.apiDeclaredByPerson' },
+              ],
+            }
+          : {}),
+      },
     ),
     storylines: counted(tree.storylines.length, 'count.unit.storylines', SCOPE, `${SRC} ← journeyTree().storylines`, {
       bizUnit: 'count.unit.storylines',
@@ -355,7 +370,8 @@ export function stateOfPlayLines(s: StateOfPlay, opts: { register?: Register } =
       .join(' · ')}`,
   );
   out.push(`${t('state.col.built', register)}:`);
-  for (const c of [s.built.journeys, s.built.screens, s.built.operations]) out.push(`- ${w(c)}${re(c)}`);
+  for (const c of [s.built.journeys, s.built.screens, s.built.operations])
+    out.push(`- ${w(c)}${c.breakdown?.length ? ` (${breakdownText(c, register)})` : ''}${re(c)}`);
   out.push(`- ${w(s.built.storylines)} · ${w(s.built.branches)}${re(s.built.storylines)}`);
   out.push(`${t('state.col.validated', register)}:`);
   for (const v of s.validated.byVerdict)

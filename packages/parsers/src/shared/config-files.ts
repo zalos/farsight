@@ -24,7 +24,8 @@
  * a path that is absolute or climbs out of the source is dropped with a note. Nothing outside the
  * source is ever read.
  */
-import { join, posix, relative } from 'node:path';
+import { realpathSync, statSync } from 'node:fs';
+import { isAbsolute, join, posix, relative } from 'node:path';
 import type {
   ApplyConfigOptions,
   ConfigMeta,
@@ -42,6 +43,9 @@ import {
   applyConfig,
   applyRouteGuards,
   applyDeclaredGuardGrants,
+  DeclaredNodeIndex,
+  configSchemaProblem,
+  t,
   readConfigFile,
   frameworkAliasNames,
   normalizeRoutePath,
@@ -75,6 +79,8 @@ export type ScopedStoreDecl = StoreDecl & { dir: string; from: string };
 export interface WorkspaceConfig {
   /** Source identity for declarations when no adapter produced a node. */
   repo?: string;
+  /** Existence is checked inside the source only, including files no adapter supports. */
+  hasFile?: (path: string) => boolean;
   /** the root file's config, or null when there is none (or it could not be read) */
   root: FarsightConfig | null;
   /** root first, then by folder depth, then by path — only the files that could be read */
@@ -171,6 +177,14 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
     const config = structuredClone(given);
     const fields: string[] = [];
     const ignored: string[] = [];
+    if (config.nodes !== undefined) {
+      const problem = configSchemaProblem({ nodes: config.nodes }, 'config');
+      if (problem) {
+        meta.notes.push(`${path}: ${t('config.nodes.invalid', 'professional').replace('{error}', problem)}`);
+        ignored.push('nodes');
+        delete config.nodes;
+      }
+    }
     for (const key of Object.keys(config)) {
       if (key.startsWith('$') || key.startsWith('//')) {
         delete (config as Record<string, unknown>)[key];
@@ -252,8 +266,30 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
     }
   }
   if (words.size) meta.glossary = [...words.values()];
-  if (ws.files.some((f) => f.config.nodes?.length))
+  if (ws.files.some((f) => f.config.nodes?.length)) {
     ws.repo = options.repoName ?? repoRoot.split('/').filter(Boolean).pop()!;
+    const root = realpathSync(repoRoot);
+    const files = new Map<string, boolean>();
+    ws.hasFile = (path) => {
+      if (!files.has(path)) {
+        let exists = false;
+        try {
+          const absolute = realpathSync(join(root, path));
+          const rel = relative(root, absolute);
+          exists =
+            !!rel &&
+            !isAbsolute(rel) &&
+            rel !== '..' &&
+            !rel.replaceAll('\\', '/').startsWith('../') &&
+            statSync(absolute).isFile();
+        } catch {
+          /* A missing file has no source location; the audit gives its note. */
+        }
+        files.set(path, exists);
+      }
+      return files.get(path)!;
+    };
+  }
   return ws;
 }
 
@@ -350,23 +386,7 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
         else if (!handledFields.has(key)) {
           const first = fields[key];
           const conflict = (name: string) => addConflict(meta, 'field', name, [rootFile!.path, f.path], rootFile!.path);
-          if (Array.isArray(first) && Array.isArray(value)) {
-            fields[key] = dedupeBy([...first, ...value], (item) => JSON.stringify(item));
-          } else if (
-            first &&
-            value &&
-            typeof first === 'object' &&
-            typeof value === 'object' &&
-            !Array.isArray(first) &&
-            !Array.isArray(value)
-          ) {
-            const rootBlock = first as Record<string, unknown>;
-            fields[key] = { ...value, ...rootBlock };
-            for (const [entry, given] of Object.entries(value)) {
-              if (Object.hasOwn(rootBlock, entry) && JSON.stringify(rootBlock[entry]) !== JSON.stringify(given))
-                conflict(`${key}.${entry}`);
-            }
-          } else if (JSON.stringify(first) !== JSON.stringify(value)) conflict(key);
+          fields[key] = mergeOverlayValue(first, value, key, conflict);
         }
       }
       for (const field of ['setup', 'validators', 'internalRoutes'] as const)
@@ -499,6 +519,45 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
   return merged;
 }
 
+/** Merge nested maps down to their entries; one framework alias is an atomic declaration. */
+function mergeOverlayValue(
+  first: unknown,
+  given: unknown,
+  path: string,
+  conflict: (path: string) => void,
+  depth = 0,
+): unknown {
+  if (Array.isArray(first) && Array.isArray(given))
+    return dedupeBy([...first, ...given], (item) => JSON.stringify(item));
+  const alias = path.startsWith('frameworks.') && depth === 3;
+  if (
+    !alias &&
+    first &&
+    given &&
+    typeof first === 'object' &&
+    typeof given === 'object' &&
+    !Array.isArray(first) &&
+    !Array.isArray(given)
+  ) {
+    const root = first as Record<string, unknown>;
+    const merged = { ...root };
+    for (const [key, value] of Object.entries(given)) {
+      // Define an own property even for an alias spelled __proto__.
+      Object.defineProperty(merged, key, {
+        value: Object.hasOwn(root, key)
+          ? mergeOverlayValue(root[key], value, `${path}.${key}`, conflict, depth + 1)
+          : value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return merged;
+  }
+  if (JSON.stringify(first) !== JSON.stringify(given)) conflict(path);
+  return first;
+}
+
 function dedupeBy<T>(items: T[], key: (t: T) => string): T[] {
   const seen = new Set<string>();
   return items.filter((t) => {
@@ -589,11 +648,14 @@ function glossaryConflicts(files: ConfigFile[]): ConfigMeta['conflicts'] {
  */
 export function applyWorkspaceConfig(nodes: GraphNode[], edges: GraphEdge[], ws: WorkspaceConfig): boolean {
   // plumbing is a path glob: every file's, rebased into one list, tags the whole source once
-  if (ws.merged.plumbing?.length) applyConfig(nodes, { plumbing: ws.merged.plumbing }, edges);
+  const declaredIndex = new DeclaredNodeIndex(nodes, edges);
+  if (ws.merged.plumbing?.length) applyConfig(nodes, { plumbing: ws.merged.plumbing }, edges, { declaredIndex });
   const guardedBy = new Map<string, string>();
   for (const f of ws.files) {
     const opts: ApplyConfigOptions = {
       repo: ws.repo,
+      hasFile: ws.hasFile,
+      declaredIndex,
       dir: f.dir,
       from: f.path,
       ...(f.root ? {} : { scope: scopeOfDir(f.dir) }),
@@ -610,15 +672,28 @@ export function applyWorkspaceConfig(nodes: GraphNode[], edges: GraphEdge[], ws:
     const { guarded } = applyConfig(nodes, matcherFields(f.config), edges, opts);
     for (const id of guarded) guardedBy.set(id, f.path);
   }
-  for (const f of ws.files) applyDeclaredGuardGrants(nodes, edges, f.config, { repo: ws.repo, from: f.path });
+  for (const f of ws.files)
+    applyDeclaredGuardGrants(nodes, edges, f.config, {
+      repo: ws.repo,
+      from: f.path,
+      scope: scopeOfDir(f.dir),
+      declaredIndex,
+    });
   return ws.files.length > 0;
 }
 
 /** Route-shaped guard matchers again, after the OpenAPI pass added its routes — each file over its own folder. */
 export function applyWorkspaceRouteGuards(nodes: GraphNode[], edges: GraphEdge[], ws: WorkspaceConfig): void {
+  const declaredIndex = new DeclaredNodeIndex(nodes, edges);
   for (const f of ws.files)
-    applyRouteGuards(nodes, matcherFields(f.config), edges, f.root ? undefined : scopeOfDir(f.dir));
-  for (const f of ws.files) applyDeclaredGuardGrants(nodes, edges, f.config, { repo: ws.repo, from: f.path });
+    applyRouteGuards(nodes, matcherFields(f.config), edges, f.root ? undefined : scopeOfDir(f.dir), declaredIndex);
+  for (const f of ws.files)
+    applyDeclaredGuardGrants(nodes, edges, f.config, {
+      repo: ws.repo,
+      from: f.path,
+      scope: scopeOfDir(f.dir),
+      declaredIndex,
+    });
 }
 
 /** Only the node-matcher fields: plumbing is rebased into `merged` and applied once from there. */

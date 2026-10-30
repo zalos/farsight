@@ -406,6 +406,14 @@ export default {
               'properties': { 'name': { 'pattern': '^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|ALL) /\\S*$' } },
             },
           },
+          {
+            'if': { 'properties': { 'kind': { 'const': 'route' } } },
+            'else': { 'properties': { 'handler': false, 'guards': false } },
+          },
+          {
+            'if': { 'properties': { 'kind': { 'const': 'guard' } } },
+            'else': { 'properties': { 'tier': false, 'requires': false } },
+          },
         ],
       },
     },
