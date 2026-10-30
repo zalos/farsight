@@ -216,13 +216,15 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
     event.currentTarget.setAttribute('aria-expanded', String(!json.hidden));
     updateJson();
   });
-  const commit = () => {
+  const commit = (redraw = false) => {
     const next = model.blockOf(rows, block(), form);
     if (form === 'openapi') {
       if (Object.hasOwn(next, 'openapi')) source.openapi = next.openapi;
       if (Object.hasOwn(next, 'openapiIgnore')) source.openapiIgnore = next.openapiIgnore;
     } else source.config = next;
-    rows.splice(0, rows.length, ...model.rowsOf(block(), form));
+    // Object enumeration moves integer-like keys first. Keep mounted row identities
+    // in DOM order until the row editor redraws after an add, remove or move.
+    if (redraw) rows.splice(0, rows.length, ...model.rowsOf(block(), form));
     updateJson();
     changed();
   };
@@ -248,7 +250,7 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
     columns: [
       { key: key('entry'), html: (row, i) => rowHtml(row, i, { sourceIndex, sourceId: source.id, form, report }) },
     ],
-    onChange: commit,
+    onChange: () => commit(true),
     input: (event, row, index) => {
       const name = event.target.dataset.formField;
       if (!name || !supported(row.path)) return;

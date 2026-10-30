@@ -199,6 +199,39 @@ test.describe('workspace overlay forms', () => {
     }
   });
 
+  test('an integer-like key rename keeps sibling edits attached to the correct saved entries', async ({ page }) => {
+    const saved = settings();
+    saved.sources[0].config.glossary = {
+      submitInvoice: { label: 'Submit an invoice', description: 'Submission wording.' },
+      approveInvoice: { label: 'Approve an invoice', description: 'Approval wording.' },
+    };
+    writeFileSync(file(), JSON.stringify(saved));
+    await open(page, 'words');
+    const words = pane(page, 'words');
+    const submit = words.locator('[data-row]').nth(0);
+    const approve = words.locator('[data-row]').nth(1);
+    const key = approve.locator('[data-form-field="$key"]');
+    const label = approve.locator('[data-form-field="label"]');
+    await key.fill('2024');
+    await key.press('Tab');
+    await expect(label).toBeFocused();
+    await label.fill('Approve an invoice (edited)');
+    await submit.locator('[data-form-field="label"]').fill('Submit an invoice (edited)');
+    await expect(page).toHaveURL(/#\/settings\/configuration/);
+    await expect(page.locator('#savebtn')).toBeEnabled();
+    await page.locator('#savebtn').click();
+    await expect(page.locator('#savenote')).toHaveText('Saved.');
+    expect(settings().sources[0].config.glossary).toEqual({
+      2024: { label: 'Approve an invoice (edited)', description: 'Approval wording.' },
+      submitInvoice: { label: 'Submit an invoice (edited)', description: 'Submission wording.' },
+    });
+    await card(page).locator('[data-config-tab="workspace"]').click();
+    await card(page).locator('[data-overlay-form="words"]').click();
+    const first = pane(page, 'words').locator('[data-row]').first();
+    await expect(first.locator('[data-form-field="$key"]')).toHaveValue('2024');
+    await expect(first.locator('[data-form-field="label"]')).toHaveValue('Approve an invoice (edited)');
+  });
+
   test('shape changes keep focus on their selector and unchanged rules do not request a new test', async ({ page }) => {
     await open(page, 'patterns');
     const row = pane(page, 'patterns').locator('[data-row]').first();
