@@ -1,4 +1,11 @@
 {
+  "frameworks": {
+    "spring": {
+      "mappings": { "ApiRoute": { "method": "pair:method", "path": "pair:value" } },
+      "security": { "SomeAnnotationPolicy": { "label": "$action on $resource", "tier": "policy", "requires": "$action" } },
+      "delegates": ["*ApiDelegate"]
+    }
+  },
   "tags": {
     "http-api": ["/api/"],
     "persistence": ["/domain/"],

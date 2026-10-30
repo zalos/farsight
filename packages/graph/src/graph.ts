@@ -624,7 +624,14 @@ export interface StoresMeta {
  * an `@entrypoint http:VERB /path` naming a route the decorators do not (the decorators win).
  */
 export interface RouteGap {
-  kind: 'non-literal-path' | 'all-verb' | 'global-prefix' | 'router-module' | 'versioning' | 'entrypoint-mismatch';
+  kind:
+    | 'non-literal-path'
+    | 'all-verb'
+    | 'global-prefix'
+    | 'router-module'
+    | 'versioning'
+    | 'entrypoint-mismatch'
+    | 'delegate-unmatched';
   /** repo-relative file of the decorator or call */
   path: string;
   line: number;
@@ -1224,6 +1231,24 @@ export interface GraphFragment {
   specErrors?: string[];
   /** true when a farsight.config.json (at the root or nested) was applied by ingestRepo */
   configApplied?: boolean;
+}
+
+/** Names interpreted by the built-in framework readers. Configuration only; never stamped on graph elements. */
+export interface FrameworksConfig {
+  spring?: {
+    /** Annotation name → fixed HTTP verb or argument selector, and the path argument selector. */
+    mappings?: Record<string, { method: string; path: string }>;
+    security?: Record<string, { label: string; tier?: GateTier; requires?: string }>;
+    delegates?: string[];
+    listeners?: Record<string, string>;
+  };
+  nest?: {
+    verbs?: Record<string, string>;
+    guards?: Record<string, { label: string; tier?: GateTier; requires?: string }>;
+  };
+  express?: {
+    middleware?: Record<string, { label: string; tier?: GateTier; requires?: string }>;
+  };
 }
 
 export interface ExternalDecl {

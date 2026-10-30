@@ -141,3 +141,39 @@ test('multipart reader schema accepts exact reader names and ids and rejects non
     );
   }
 });
+
+test('framework alias schema accepts every reader and rejects misspelled or malformed declarations', () => {
+  const s = schema('farsight-config.schema.json');
+  assert.deepEqual(
+    validate(
+      {
+        frameworks: {
+          spring: {
+            mappings: {
+              ApiRoute: { method: 'pair:method', path: 'arg:0' },
+              JsonGet: { method: 'GET', path: 'pair:path' },
+            },
+            security: { Policy: { label: '$action on $resource', requires: '$action', tier: 'policy' } },
+            delegates: ['*ApiDelegate'],
+            listeners: { OnEvent: 'pair:topic' },
+          },
+          nest: { verbs: { JsonGet: 'GET' }, guards: { UseTenant: { label: 'tenant', tier: 'technical' } } },
+          express: { middleware: { requireRole: { label: 'role: $0', requires: '$0' } } },
+        },
+      },
+      s,
+    ),
+    [],
+  );
+  for (const frameworks of [
+    { sprng: {} },
+    { spring: { mappings: { ApiRoute: { method: 'BAD', path: 'arg:0' } } } },
+    { spring: { security: { Policy: { label: 'policy', tier: 'urgent' } } } },
+    { spring: { delegates: '*ApiDelegate' } },
+    { spring: { listeners: { OnEvent: 'arg:x' } } },
+    { nest: { verbs: { JsonGet: 'BAD' } } },
+    { nest: { guards: { UseTenant: {} } } },
+    { express: { middleware: { withTenant: { label: 'tenant', requires: 1 } } } },
+  ])
+    assert.ok(validate({ frameworks }, s).length, JSON.stringify(frameworks));
+});

@@ -9,7 +9,9 @@ import type {
   JourneyStorylineLaneDecl,
   JourneyStorylineHandoffDecl,
   DecisionDecl,
+  FrameworksConfig,
 } from './graph.js';
+export type { FrameworksConfig } from './graph.js';
 import { humanizeName } from './query.js';
 
 /**
@@ -56,6 +58,8 @@ export interface FarsightConfig {
   tests?: TestsConfigBlock;
   /** third-party systems the parser cannot see by itself, or renames/kinds for ones it can */
   externals?: ExternalDecl[];
+  /** Names that the built-in Spring, Nest and Express readers interpret using their existing semantics. */
+  frameworks?: FrameworksConfig;
   /** the data stores the repo's tables live in, when the code does not say — fills the gap, never overrides code (`via: 'config'`) */
   stores?: StoreDecl[];
   /** glob(s) whose functions are plumbing regardless of @business: helpers in journeys, out of the coverable set, never entry points */
@@ -110,6 +114,7 @@ export const CONFIG_FIELDS = [
   'tests',
   'storybook',
   'externals',
+  'frameworks',
   'stores',
   'journeys',
   'projects',
@@ -122,6 +127,7 @@ export const CONFIG_FIELDS = [
 
 /** Fields only the source's root farsight.config.json may give; a nested file's value is ignored with a note. */
 export const ROOT_ONLY_CONFIG_FIELDS = [
+  'frameworks',
   'projects',
   'tooling',
   'internalRoutes',

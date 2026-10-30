@@ -8,9 +8,11 @@
  * holes, `@All`, `@Version`, `setGlobalPrefix`, `enableVersioning` and `RouterModule` are each a
  * named gap (`RouteGap` on the fragment's `meta.routes`), never a guess at the URL.
  */
-import type { RouteGap } from '@farsight/graph';
+import type { FrameworksConfig, GateTier, RouteGap } from '@farsight/graph';
 import { isNode, memberChain, walk, type AstNode } from './walk.js';
 import { normalizePath } from './shared/tags.js';
+
+export type NestAliases = NonNullable<FrameworksConfig['nest']>;
 
 /** The package whose `@Controller` makes a class a controller — same-named decorators from anywhere else are not read. */
 export const NEST_COMMON = '@nestjs/common';
@@ -75,7 +77,7 @@ export interface NestDecorator {
   at: AstNode;
 }
 
-export function nestDecorator(dec: AstNode, file: NestFile): NestDecorator | undefined {
+export function nestDecorator(dec: AstNode, file: NestFile, aliases: NestAliases = {}): NestDecorator | undefined {
   const expr = dec.expression as AstNode | undefined;
   if (!isNode(expr)) return undefined;
   const call = expr.type === 'CallExpression';
@@ -87,6 +89,9 @@ export function nestDecorator(dec: AstNode, file: NestFile): NestDecorator | und
   } else if (chain.length === 2 && file.bindings.get(chain[0]!) === '*') {
     name = chain[1];
   }
+  const local = chain.at(-1);
+  if (!name && local && (Object.hasOwn(aliases.verbs ?? {}, local) || Object.hasOwn(aliases.guards ?? {}, local)))
+    name = local;
   return name ? { name, args: call ? ((expr.arguments as AstNode[]) ?? []) : [], at: dec } : undefined;
 }
 
@@ -100,6 +105,31 @@ export function literalString(n: unknown): string | undefined {
       .join('');
   }
   return undefined;
+}
+
+/** Alias templates read literal positional arguments and named properties of object arguments. */
+export function fillAlias(template: string, args: AstNode[]): string | undefined {
+  let missing = false;
+  const value = template.replace(/\$(\w+)/g, (_, key: string) => {
+    let value: string | undefined;
+    if (/^\d+$/.test(key)) value = literalString(args[Number(key)]);
+    else
+      for (const arg of args) {
+        if (arg.type !== 'ObjectExpression') continue;
+        const props = (arg.properties as AstNode[]) ?? [];
+        if (props.some((p) => p.type === 'SpreadElement' || p.computed)) continue;
+        const prop = props
+          .filter((p) => {
+            const k = p.key as AstNode | undefined;
+            return (k?.name ?? k?.value) === key;
+          })
+          .at(-1);
+        if (prop) value = literalString(prop.value);
+      }
+    if (value === undefined) missing = true;
+    return value ?? '';
+  });
+  return missing ? undefined : value;
 }
 
 /** A string or an array of strings, all literal — undefined the moment one element is not. */
@@ -174,6 +204,7 @@ export interface MethodRoute {
   path: string;
   decorator: string;
   at: AstNode;
+  alias?: string;
 }
 export interface MethodGap {
   kind: RouteGap['kind'];
@@ -182,12 +213,16 @@ export interface MethodGap {
 }
 
 /** The routes a method's verb decorators declare (one per path), and the decorators that could not become one. */
-export function methodRoutes(m: AstNode, file: NestFile): { routes: MethodRoute[]; gaps: MethodGap[] } {
+export function methodRoutes(
+  m: AstNode,
+  file: NestFile,
+  aliases: NestAliases = {},
+): { routes: MethodRoute[]; gaps: MethodGap[] } {
   const routes: MethodRoute[] = [];
   const gaps: MethodGap[] = [];
   for (const dec of (m.decorators as AstNode[]) ?? []) {
     if (!isNode(dec)) continue;
-    const d = nestDecorator(dec, file);
+    const d = nestDecorator(dec, file, aliases);
     if (!d) continue;
     if (d.name === 'All') {
       gaps.push({ kind: 'all-verb', decorator: d.name, at: dec });
@@ -197,14 +232,22 @@ export function methodRoutes(m: AstNode, file: NestFile): { routes: MethodRoute[
       gaps.push({ kind: 'versioning', decorator: d.name, at: dec });
       continue;
     }
-    const verb = NEST_VERBS[d.name];
+    const alias = Object.hasOwn(aliases.verbs ?? {}, d.name) ? aliases.verbs?.[d.name] : undefined;
+    const verb = NEST_VERBS[d.name] ?? alias;
     if (!verb) continue;
     const paths = pathsOf(d.args);
     if (!paths) {
       gaps.push({ kind: 'non-literal-path', decorator: d.name, at: dec });
       continue;
     }
-    for (const path of paths) routes.push({ verb, path, decorator: d.name, at: dec });
+    for (const path of paths)
+      routes.push({
+        verb,
+        path,
+        decorator: d.name,
+        at: dec,
+        ...(alias && !NEST_VERBS[d.name] ? { alias: d.name } : {}),
+      });
   }
   return { routes, gaps };
 }
@@ -213,6 +256,9 @@ export function methodRoutes(m: AstNode, file: NestFile): { routes: MethodRoute[
 export interface GuardRef {
   label: string;
   className?: string;
+  alias?: string;
+  tier?: GateTier;
+  requires?: string;
   argument: number;
   at: AstNode;
 }
@@ -242,12 +288,25 @@ export function bodySchemasOf(method: AstNode, file: NestFile): { name: string; 
   return out;
 }
 
-export function useGuardsOf(decorators: unknown, file: NestFile): GuardRef[] {
+export function useGuardsOf(decorators: unknown, file: NestFile, aliases: NestAliases = {}): GuardRef[] {
   const out: GuardRef[] = [];
   for (const dec of (decorators as AstNode[]) ?? []) {
     if (!isNode(dec)) continue;
-    const d = nestDecorator(dec, file);
-    if (d?.name !== 'UseGuards') continue;
+    const d = nestDecorator(dec, file, aliases);
+    if (!d) continue;
+    const alias = Object.hasOwn(aliases.guards ?? {}, d.name) ? aliases.guards?.[d.name] : undefined;
+    if (alias && d.name !== 'UseGuards') {
+      out.push({
+        label: fillAlias(alias.label, d.args) ?? d.name,
+        alias: d.name,
+        tier: alias.tier,
+        requires: alias.requires ? fillAlias(alias.requires, d.args) : undefined,
+        argument: 0,
+        at: dec,
+      });
+      continue;
+    }
+    if (d.name !== 'UseGuards') continue;
     for (const [argument, arg] of d.args.entries()) {
       if (!isNode(arg)) continue;
       if (arg.type === 'Identifier' && typeof arg.name === 'string') {
