@@ -8,78 +8,61 @@ export default {
   'type': 'object',
   'additionalProperties': false,
   'patternProperties': {
-    '^\\$': {
-      'description': 'Keys starting with $ ($schema, $comment) are for editors; Farsight skips them.',
-    },
+    '^\\$': { 'description': 'Keys starting with $ ($schema, $comment) are for editors; Farsight skips them.' },
   },
   'properties': {
     'tags': {
       'type': 'object',
-      'description': 'tag \u2192 list of matchers. A node matches on substring of its path or name (case-insensitive).',
+      'description': 'tag → list of matchers. A node matches on substring of its path or name (case-insensitive).',
       'additionalProperties': {
         'type': 'array',
         'description': "Matchers: a substring of a node's path or name.",
-        'items': {
-          'type': 'string',
-        },
+        'items': { 'type': 'string' },
       },
     },
     'glossary': {
       'type': 'object',
       'description':
-        'node name (or `METHOD /path` for routes) \u2192 business-lens label/description. A class member (`Class.member`) matches, in order: its exact name, then its member part, then its class part.',
-      'additionalProperties': {
-        '$ref': '#/$defs/glossaryEntry',
-      },
+        'node name (or `METHOD /path` for routes) → business-lens label/description. A class member (`Class.member`) matches, in order: its exact name, then its member part, then its class part.',
+      'additionalProperties': { '$ref': '#/$defs/glossaryEntry' },
     },
     'guards': {
       'type': 'object',
       'description':
-        'guard label \u2192 matchers. A function matcher (substring of path or name) turns the function into a guard node and flips calls into it to guards edges on the caller; a route matcher (`GET /api/v1/track/{token}`) declares a gate on that route.',
+        'guard label → matchers. A function matcher (substring of path or name) turns the function into a guard node and flips calls into it to guards edges on the caller; a route matcher (`GET /api/v1/track/{token}`) declares a gate on that route.',
       'additionalProperties': {
         'type': 'array',
         'description': "Matchers: a substring of a function's path or name, or a route.",
-        'items': {
-          'type': 'string',
-        },
+        'items': { 'type': 'string' },
       },
     },
     'gateTiers': {
       'type': 'object',
       'description':
-        "matcher \u2192 tier: the tier a gate or rule is in when its class gives the wrong one. A matcher is an exact node id or a substring of the gate's path or name (the guards' shape). A `@guard[tier]` in the code wins over it.",
-      'additionalProperties': {
-        'type': 'string',
-        'enum': ['business', 'policy', 'technical'],
-      },
+        "matcher → tier: the tier a gate or rule is in when its class gives the wrong one. A matcher is an exact node id or a substring of the gate's path or name (the guards' shape). A `@guard[tier]` in the code wins over it.",
+      'additionalProperties': { 'type': 'string', 'enum': ['business', 'policy', 'technical'] },
     },
     'entrypoints': {
       'type': 'object',
       'description':
-        'entrypoint label \u2192 matchers. Matching nodes get searchable entrypoint tags so trace_flow can seed from them (cron/queue jobs\u2026).',
+        'entrypoint label → matchers. Matching nodes get searchable entrypoint tags so trace_flow can seed from them (cron/queue jobs…).',
       'additionalProperties': {
         'type': 'array',
         'description': "Matchers: a substring of a node's path or name.",
-        'items': {
-          'type': 'string',
-        },
+        'items': { 'type': 'string' },
       },
     },
     'setup': {
       'type': 'array',
       'description':
-        "node ids (or name matchers, the guards shape) of the functions that build the process container \u2014 the setup closure's roots.",
-      'items': {
-        'type': 'string',
-      },
+        "node ids (or name matchers, the guards shape) of the functions that build the process container — the setup closure's roots.",
+      'items': { 'type': 'string' },
     },
     'plumbing': {
       'type': 'array',
       'description':
         'glob(s) whose functions are plumbing regardless of @business: helpers in journeys, out of the coverable set, never entry points.',
-      'items': {
-        'type': 'string',
-      },
+      'items': { 'type': 'string' },
     },
     'design': {
       'type': 'array',
@@ -93,41 +76,23 @@ export default {
             'type': 'string',
             'description': 'A repo-relative (or folder-relative, in a nested file) manifest path.',
           },
-          'path': {
-            'type': 'string',
-            'description': 'The same as manifest, the older spelling.',
-          },
-          'url': {
-            'type': 'string',
-            'description': 'A manifest served at a URL.',
-          },
-          'name': {
-            'type': 'string',
-            'description': 'What to call the design source.',
-          },
+          'path': { 'type': 'string', 'description': 'The same as manifest, the older spelling.' },
+          'url': { 'type': 'string', 'description': 'A manifest served at a URL.' },
+          'name': { 'type': 'string', 'description': 'What to call the design source.' },
         },
       },
     },
     'openapi': {
       'type': 'array',
       'description':
-        "OpenAPI/Swagger documents describing this repo's HTTP surface \u2014 a repo-relative path or a URL each. Discovery by filename still runs; this adds specs it would not find (e.g. served by the API itself).",
+        "OpenAPI/Swagger documents describing this repo's HTTP surface — a repo-relative path or a URL each. Discovery by filename still runs; this adds specs it would not find (e.g. served by the API itself).",
       'items': {
         'type': 'object',
         'additionalProperties': false,
         'properties': {
-          'path': {
-            'type': 'string',
-            'description': 'A repo-relative spec path.',
-          },
-          'url': {
-            'type': 'string',
-            'description': 'A spec served at a URL.',
-          },
-          'name': {
-            'type': 'string',
-            'description': 'What to call the spec.',
-          },
+          'path': { 'type': 'string', 'description': 'A repo-relative spec path.' },
+          'url': { 'type': 'string', 'description': 'A spec served at a URL.' },
+          'name': { 'type': 'string', 'description': 'What to call the spec.' },
           'phase': {
             'type': 'string',
             'description':
@@ -137,9 +102,7 @@ export default {
             'type': 'array',
             'description':
               'Delivery phases from earliest to latest. If omitted, first use of x-phase in the contract defines the order.',
-            'items': {
-              'type': 'string',
-            },
+            'items': { 'type': 'string' },
           },
         },
       },
@@ -148,36 +111,19 @@ export default {
       'type': 'array',
       'description':
         'Configured multipart readers, named by exact function name or full node id. Only a real same-source call path from a route with a declared multipart/form-data body supplies validation credit; naming a reader alone proves nothing.',
-      'items': {
-        'type': 'string',
-      },
+      'items': { 'type': 'string' },
     },
     'internalRoutes': {
       'type': 'array',
       'description':
         'Exact internal METHOD /path declarations, excluded only from undocumented-policy failures. Parameter spelling is normalized; these are not globs and raw drift remains visible.',
-      'items': {
-        'type': 'string',
-        'pattern': '^[A-Z]+ /.*$',
-      },
+      'items': { 'type': 'string', 'pattern': '^[A-Z]+ /.*$' },
     },
-    'tests': {
-      '$ref': '#/$defs/tests',
-    },
+    'tests': { '$ref': '#/$defs/tests' },
     'storybook': {
       'description':
-        "the repo's Storybook(s) \u2014 where the config lives and where it runs when it runs (ADR 9). Discovery of `.storybook/main.*` still runs; this names the URL and the start command.",
-      'anyOf': [
-        {
-          '$ref': '#/$defs/storybook',
-        },
-        {
-          'type': 'array',
-          'items': {
-            '$ref': '#/$defs/storybook',
-          },
-        },
-      ],
+        "the repo's Storybook(s) — where the config lives and where it runs when it runs (ADR 9). Discovery of `.storybook/main.*` still runs; this names the URL and the start command.",
+      'anyOf': [{ '$ref': '#/$defs/storybook' }, { 'type': 'array', 'items': { '$ref': '#/$defs/storybook' } }],
     },
     'frameworks': {
       'type': 'object',
@@ -199,10 +145,7 @@ export default {
                     'pattern':
                       '^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|CONNECT|arg:[0-9]+|pair:[A-Za-z_][A-Za-z0-9_]*)$',
                   },
-                  'path': {
-                    'type': 'string',
-                    'pattern': '^(arg:[0-9]+|pair:[A-Za-z_][A-Za-z0-9_]*)$',
-                  },
+                  'path': { 'type': 'string', 'pattern': '^(arg:[0-9]+|pair:[A-Za-z_][A-Za-z0-9_]*)$' },
                 },
               },
             },
@@ -213,31 +156,16 @@ export default {
                 'additionalProperties': false,
                 'required': ['label'],
                 'properties': {
-                  'label': {
-                    'type': 'string',
-                  },
-                  'tier': {
-                    'type': 'string',
-                    'enum': ['business', 'policy', 'technical'],
-                  },
-                  'requires': {
-                    'type': 'string',
-                  },
+                  'label': { 'type': 'string' },
+                  'tier': { 'type': 'string', 'enum': ['business', 'policy', 'technical'] },
+                  'requires': { 'type': 'string' },
                 },
               },
             },
-            'delegates': {
-              'type': 'array',
-              'items': {
-                'type': 'string',
-              },
-            },
+            'delegates': { 'type': 'array', 'items': { 'type': 'string' } },
             'listeners': {
               'type': 'object',
-              'additionalProperties': {
-                'type': 'string',
-                'pattern': '^(arg:[0-9]+|pair:[A-Za-z_][A-Za-z0-9_]*)$',
-              },
+              'additionalProperties': { 'type': 'string', 'pattern': '^(arg:[0-9]+|pair:[A-Za-z_][A-Za-z0-9_]*)$' },
             },
           },
         },
@@ -259,16 +187,9 @@ export default {
                 'additionalProperties': false,
                 'required': ['label'],
                 'properties': {
-                  'label': {
-                    'type': 'string',
-                  },
-                  'tier': {
-                    'type': 'string',
-                    'enum': ['business', 'policy', 'technical'],
-                  },
-                  'requires': {
-                    'type': 'string',
-                  },
+                  'label': { 'type': 'string' },
+                  'tier': { 'type': 'string', 'enum': ['business', 'policy', 'technical'] },
+                  'requires': { 'type': 'string' },
                 },
               },
             },
@@ -285,16 +206,9 @@ export default {
                 'additionalProperties': false,
                 'required': ['label'],
                 'properties': {
-                  'label': {
-                    'type': 'string',
-                  },
-                  'tier': {
-                    'type': 'string',
-                    'enum': ['business', 'policy', 'technical'],
-                  },
-                  'requires': {
-                    'type': 'string',
-                  },
+                  'label': { 'type': 'string' },
+                  'tier': { 'type': 'string', 'enum': ['business', 'policy', 'technical'] },
+                  'requires': { 'type': 'string' },
                 },
               },
             },
@@ -307,47 +221,33 @@ export default {
     'externals': {
       'type': 'array',
       'description': 'third-party systems the parser cannot see by itself, or renames/kinds for ones it can.',
-      'items': {
-        '$ref': '#/$defs/external',
-      },
+      'items': { '$ref': '#/$defs/external' },
     },
     'stores': {
       'type': 'array',
       'description':
-        "the data stores the repo's tables live in, when the code does not say \u2014 fills the gap, never overrides code. In a nested file a declaration names only the tables under that file's folder; the nearer file wins.",
-      'items': {
-        '$ref': '#/$defs/store',
-      },
+        "the data stores the repo's tables live in, when the code does not say — fills the gap, never overrides code. In a nested file a declaration names only the tables under that file's folder; the nearer file wins.",
+      'items': { '$ref': '#/$defs/store' },
     },
-    'journeys': {
-      '$ref': '#/$defs/journeys',
-    },
-    'projects': {
-      '$ref': '#/$defs/projects',
-    },
+    'journeys': { '$ref': '#/$defs/journeys' },
+    'projects': { '$ref': '#/$defs/projects' },
     'tooling': {
       'type': 'array',
       'description':
-        'glob(s) of tooling \u2014 scripts a person runs by hand, not the running app. Default ["scripts/**"]; [] turns it off. Root-only.',
-      'items': {
-        'type': 'string',
-      },
+        'glob(s) of tooling — scripts a person runs by hand, not the running app. Default ["scripts/**"]; [] turns it off. Root-only.',
+      'items': { 'type': 'string' },
     },
     'lifecycle': {
       'type': 'object',
       'description':
-        "The words people use for a record's statuses, per persona, and the conditions they see that are not a status. Keyed by the record's node id or table name. The code decides the statuses and the moves; this only names them \u2014 a status the code does not declare is a note. In a nested file an entry names only records whose statuses are declared under that file's folder; the nearer file's word stands.",
-      'additionalProperties': {
-        '$ref': '#/$defs/lifecycleEntry',
-      },
+        "The words people use for a record's statuses, per persona, and the conditions they see that are not a status. Keyed by the record's node id or table name. The code decides the statuses and the moves; this only names them — a status the code does not declare is a note. In a nested file an entry names only records whose statuses are declared under that file's folder; the nearer file's word stands.",
+      'additionalProperties': { '$ref': '#/$defs/lifecycleEntry' },
     },
     'decisions': {
       'type': 'array',
       'description':
         "Decisions by id, the same shape as a manifest's decisions[]: an entry overrides a manifest's decision field by field (root file first, the nearest nested file last), or declares one no manifest does when it gives a title and a state. A nested file's doc is relative to its folder.",
-      'items': {
-        '$ref': '#/$defs/decisionOverride',
-      },
+      'items': { '$ref': '#/$defs/decisionOverride' },
     },
   },
   '$defs': {
@@ -356,14 +256,8 @@ export default {
       'required': ['label'],
       'additionalProperties': false,
       'properties': {
-        'label': {
-          'type': 'string',
-          'description': 'The word the business lens shows.',
-        },
-        'description': {
-          'type': 'string',
-          'description': 'One sentence on what it does, in plain words.',
-        },
+        'label': { 'type': 'string', 'description': 'The word the business lens shows.' },
+        'description': { 'type': 'string', 'description': 'One sentence on what it does, in plain words.' },
       },
     },
     'testReport': {
@@ -372,68 +266,26 @@ export default {
         "Where one level's results/coverage reports live. Paths are repo-relative globs; the adapter never runs tests.",
       'additionalProperties': false,
       'properties': {
-        'runner': {
-          'enum': ['vitest', 'jest', 'node:test', 'playwright', 'cypress', 'junit', 'other'],
-        },
+        'runner': { 'enum': ['vitest', 'jest', 'node:test', 'playwright', 'cypress', 'junit', 'other'] },
         'results': {
           'description':
-            'per-case status/duration: a vitest `json` reporter file, a playwright `json` reporter file, or junit XML \u2014 one glob or several',
-          'anyOf': [
-            {
-              'type': 'string',
-            },
-            {
-              'type': 'array',
-              'items': {
-                'type': 'string',
-              },
-            },
-          ],
+            'per-case status/duration: a vitest `json` reporter file, a playwright `json` reporter file, or junit XML — one glob or several',
+          'anyOf': [{ 'type': 'string' }, { 'type': 'array', 'items': { 'type': 'string' } }],
         },
         'coverage': {
           'description':
-            'istanbul-shaped coverage-final.json \u2014 attributed at the run level unless the report names a test; one glob or several',
-          'anyOf': [
-            {
-              'type': 'string',
-            },
-            {
-              'type': 'array',
-              'items': {
-                'type': 'string',
-              },
-            },
-          ],
+            'istanbul-shaped coverage-final.json — attributed at the run level unless the report names a test; one glob or several',
+          'anyOf': [{ 'type': 'string' }, { 'type': 'array', 'items': { 'type': 'string' } }],
         },
         'report': {
-          'description': 'an html report to deep-link to \u2014 one, or one per results file',
-          'anyOf': [
-            {
-              'type': 'string',
-            },
-            {
-              'type': 'array',
-              'items': {
-                'type': 'string',
-              },
-            },
-          ],
+          'description': 'an html report to deep-link to — one, or one per results file',
+          'anyOf': [{ 'type': 'string' }, { 'type': 'array', 'items': { 'type': 'string' } }],
         },
       },
     },
     'testLevel': {
       'description': 'one block, or one per config file that gave this level',
-      'anyOf': [
-        {
-          '$ref': '#/$defs/testReport',
-        },
-        {
-          'type': 'array',
-          'items': {
-            '$ref': '#/$defs/testReport',
-          },
-        },
-      ],
+      'anyOf': [{ '$ref': '#/$defs/testReport' }, { 'type': 'array', 'items': { '$ref': '#/$defs/testReport' } }],
     },
     'tests': {
       'type': 'object',
@@ -444,26 +296,16 @@ export default {
         'include': {
           'type': 'array',
           'description': 'extra globs that claim a file as a test (added to the defaults)',
-          'items': {
-            'type': 'string',
-          },
+          'items': { 'type': 'string' },
         },
         'exclude': {
           'type': 'array',
           'description': 'globs that un-claim a file the defaults would have taken',
-          'items': {
-            'type': 'string',
-          },
+          'items': { 'type': 'string' },
         },
-        'unit': {
-          '$ref': '#/$defs/testLevel',
-        },
-        'integration': {
-          '$ref': '#/$defs/testLevel',
-        },
-        'e2e': {
-          '$ref': '#/$defs/testLevel',
-        },
+        'unit': { '$ref': '#/$defs/testLevel' },
+        'integration': { '$ref': '#/$defs/testLevel' },
+        'e2e': { '$ref': '#/$defs/testLevel' },
       },
     },
     'storybook': {
@@ -479,7 +321,7 @@ export default {
         'url': {
           'type': 'string',
           'description':
-            'where it is served when it runs (`http://localhost:6006`) \u2014 the only origin the viewer will frame',
+            'where it is served when it runs (`http://localhost:6006`) — the only origin the viewer will frame',
         },
         'root': {
           'type': 'string',
@@ -488,69 +330,39 @@ export default {
         },
         'command': {
           'type': 'string',
-          'description': 'what a person runs to start it (`npm run storybook`) \u2014 printed when it is not reached',
+          'description': 'what a person runs to start it (`npm run storybook`) — printed when it is not reached',
         },
-        'name': {
-          'type': 'string',
-          'description': 'What to call it.',
-        },
+        'name': { 'type': 'string', 'description': 'What to call it.' },
       },
     },
     'decisionOverride': {
       'type': 'object',
-      'description': 'A decision by id; every other field optional \u2014 an override gives only what it changes.',
+      'description': 'A decision by id; every other field optional — an override gives only what it changes.',
       'required': ['id'],
       'additionalProperties': false,
       'properties': {
-        'id': {
-          'type': 'string',
-          'description': "The decision's id.",
-        },
-        'title': {
-          'type': 'string',
-          'description': "The decision, in the team's words.",
-        },
-        'state': {
-          'enum': ['open', 'decided'],
-          'description': 'open = not decided yet; decided = made.',
-        },
+        'id': { 'type': 'string', 'description': "The decision's id." },
+        'title': { 'type': 'string', 'description': "The decision, in the team's words." },
+        'state': { 'enum': ['open', 'decided'], 'description': 'open = not decided yet; decided = made.' },
         'decided': {
           'type': 'string',
           'pattern': '^\\d{4}-\\d{2}-\\d{2}$',
           'description': 'The date it was decided (YYYY-MM-DD).',
         },
-        'owner': {
-          'type': 'string',
-          'description': 'Who owns it.',
-        },
-        'summary': {
-          'type': 'string',
-          'description': "The team's words on it, quoted as written.",
-        },
-        'doc': {
-          'type': 'string',
-          'description': 'A markdown document inside the source, optionally with #anchor.',
-        },
+        'owner': { 'type': 'string', 'description': 'Who owns it.' },
+        'summary': { 'type': 'string', 'description': "The team's words on it, quoted as written." },
+        'doc': { 'type': 'string', 'description': 'A markdown document inside the source, optionally with #anchor.' },
         'affects': {
           'type': 'array',
           'description': 'Node ids, screen ids or flow ids it bears on.',
-          'items': {
-            'type': 'string',
-          },
+          'items': { 'type': 'string' },
         },
       },
     },
     'external': {
       'description':
-        'One declared external: a third-party system the code calls (an import), or a party \u2014 a counterparty the app hands work to outside its code (kind party, no import).',
-      'anyOf': [
-        {
-          '$ref': '#/$defs/externalSystem',
-        },
-        {
-          '$ref': '#/$defs/externalParty',
-        },
-      ],
+        'One declared external: a third-party system the code calls (an import), or a party — a counterparty the app hands work to outside its code (kind party, no import).',
+      'anyOf': [{ '$ref': '#/$defs/externalSystem' }, { '$ref': '#/$defs/externalParty' }],
     },
     'externalSystem': {
       'type': 'object',
@@ -562,12 +374,9 @@ export default {
         'import': {
           'type': 'string',
           'description':
-            'a bare package specifier, or `<repo-relative path>::<Class>` \u2014 the client class the external is reached through',
+            'a bare package specifier, or `<repo-relative path>::<Class>` — the client class the external is reached through',
         },
-        'name': {
-          'type': 'string',
-          'description': 'What to call the system.',
-        },
+        'name': { 'type': 'string', 'description': 'What to call the system.' },
         'kind': {
           'enum': ['erp', 'ocr', 'files', 'email', 'queue', 'db', 'http'],
           'description': 'What kind of system it is.',
@@ -575,29 +384,20 @@ export default {
         'store': {
           'type': 'boolean',
           'description':
-            'this external is (true) or is not (false) used as a data store \u2014 overrides the default from the kind (erp \u00b7 db \u00b7 files are)',
+            'this external is (true) or is not (false) used as a data store — overrides the default from the kind (erp · db · files are)',
         },
       },
     },
     'externalParty': {
       'type': 'object',
       'description':
-        'A counterparty the app hands work to outside its code \u2014 a payment partner, the client. No import: no code reaches it. Drawn as a lane when a declared step or hand-off names it.',
+        'A counterparty the app hands work to outside its code — a payment partner, the client. No import: no code reaches it. Drawn as a lane when a declared step or hand-off names it.',
       'required': ['name', 'kind'],
       'additionalProperties': false,
       'properties': {
-        'name': {
-          'type': 'string',
-          'description': "What to call the party; a step's who names it.",
-        },
-        'kind': {
-          'const': 'party',
-          'description': 'A party.',
-        },
-        'role': {
-          'type': 'string',
-          'description': "What it does, in the team's words.",
-        },
+        'name': { 'type': 'string', 'description': "What to call the party; a step's who names it." },
+        'kind': { 'const': 'party', 'description': 'A party.' },
+        'role': { 'type': 'string', 'description': "What it does, in the team's words." },
         'persona': {
           'type': 'string',
           'description': 'A declared persona id the party also is (the client who uses a portal).',
@@ -611,14 +411,8 @@ export default {
       'required': ['name', 'kind'],
       'additionalProperties': false,
       'properties': {
-        'name': {
-          'type': 'string',
-          'description': 'What to call the store.',
-        },
-        'kind': {
-          'enum': ['sql', 'document', 'files', 'erp', 'other'],
-          'description': 'What kind of store it is.',
-        },
+        'name': { 'type': 'string', 'description': 'What to call the store.' },
+        'kind': { 'enum': ['sql', 'document', 'files', 'erp', 'other'], 'description': 'What kind of store it is.' },
         'engine': {
           'enum': ['postgres', 'mysql', 'sqlite', 'mssql', 'mongodb'],
           'description': 'A database engine, when you know it.',
@@ -626,9 +420,7 @@ export default {
         'tables': {
           'type': 'array',
           'description': 'The table names this store holds; absent = every table the code left unnamed.',
-          'items': {
-            'type': 'string',
-          },
+          'items': { 'type': 'string' },
         },
       },
     },
@@ -645,32 +437,19 @@ export default {
             'required': ['id'],
             'additionalProperties': false,
             'properties': {
-              'id': {
-                'type': 'string',
-                'description': "The persona's id.",
-              },
-              'name': {
-                'type': 'string',
-                'description': 'Who they are.',
-              },
-              'description': {
-                'type': 'string',
-                'description': 'One sentence on them.',
-              },
+              'id': { 'type': 'string', 'description': "The persona's id." },
+              'name': { 'type': 'string', 'description': 'Who they are.' },
+              'description': { 'type': 'string', 'description': 'One sentence on them.' },
               'routes': {
                 'type': 'array',
                 'description': "Route globs this persona's screens live under (/ops/**); replaces the manifest's list.",
-                'items': {
-                  'type': 'string',
-                },
+                'items': { 'type': 'string' },
               },
               'signsInWith': {
                 'type': 'array',
                 'description':
                   "The guards that sign this persona in, by name or node id; replaces the manifest's list.",
-                'items': {
-                  'type': 'string',
-                },
+                'items': { 'type': 'string' },
               },
             },
           },
@@ -682,22 +461,10 @@ export default {
             'required': ['id'],
             'additionalProperties': false,
             'properties': {
-              'id': {
-                'type': 'string',
-                'description': "The group's id.",
-              },
-              'name': {
-                'type': 'string',
-                'description': 'What the group is called.',
-              },
-              'description': {
-                'type': 'string',
-                'description': 'One sentence on it.',
-              },
-              'persona': {
-                'type': 'string',
-                'description': 'The persona it exists under only.',
-              },
+              'id': { 'type': 'string', 'description': "The group's id." },
+              'name': { 'type': 'string', 'description': 'What the group is called.' },
+              'description': { 'type': 'string', 'description': 'One sentence on it.' },
+              'persona': { 'type': 'string', 'description': 'The persona it exists under only.' },
             },
           },
         },
@@ -708,32 +475,13 @@ export default {
             'required': ['id'],
             'additionalProperties': false,
             'properties': {
-              'id': {
-                'type': 'string',
-                'description': 'The flow id a manifest declared.',
-              },
+              'id': { 'type': 'string', 'description': 'The flow id a manifest declared.' },
               'persona': {
                 'description': 'Who the flow is for: a persona id or name, or several.',
-                'anyOf': [
-                  {
-                    'type': 'string',
-                  },
-                  {
-                    'type': 'array',
-                    'items': {
-                      'type': 'string',
-                    },
-                  },
-                ],
+                'anyOf': [{ 'type': 'string' }, { 'type': 'array', 'items': { 'type': 'string' } }],
               },
-              'group': {
-                'type': 'string',
-                'description': 'The group it sits in.',
-              },
-              'order': {
-                'type': 'number',
-                'description': 'Its place in the group, ascending.',
-              },
+              'group': { 'type': 'string', 'description': 'The group it sits in.' },
+              'order': { 'type': 'number', 'description': 'Its place in the group, ascending.' },
             },
           },
         },
@@ -746,48 +494,26 @@ export default {
             'required': ['id'],
             'additionalProperties': false,
             'properties': {
-              'id': {
-                'type': 'string',
-                'description': "The storyline's id.",
-              },
-              'name': {
-                'type': 'string',
-                'description': 'What the storyline is called.',
-              },
-              'description': {
-                'type': 'string',
-                'description': 'One or two sentences on what the story is.',
-              },
+              'id': { 'type': 'string', 'description': "The storyline's id." },
+              'name': { 'type': 'string', 'description': 'What the storyline is called.' },
+              'description': { 'type': 'string', 'description': 'One or two sentences on what the story is.' },
               'journeys': {
                 'type': 'array',
                 'description':
                   'Flow ids, in the order the story tells them; an entry written as an object with branchOf and when is a branch off that step.',
-                'items': {
-                  'anyOf': [
-                    {
-                      'type': 'string',
-                    },
-                    {
-                      '$ref': '#/$defs/storylineEntry',
-                    },
-                  ],
-                },
+                'items': { 'anyOf': [{ 'type': 'string' }, { '$ref': '#/$defs/storylineEntry' }] },
               },
               'lanes': {
                 'type': 'array',
                 'description':
                   "The lanes the swimlane layout names or overrides (a list given in config replaces the manifest's).",
-                'items': {
-                  '$ref': '#/$defs/storylineLane',
-                },
+                'items': { '$ref': '#/$defs/storylineLane' },
               },
               'handoffs': {
                 'type': 'array',
                 'description':
                   "Hand-offs the swimlane layout draws when the graph finds both ends (a list given in config replaces the manifest's).",
-                'items': {
-                  '$ref': '#/$defs/storylineHandoff',
-                },
+                'items': { '$ref': '#/$defs/storylineHandoff' },
               },
             },
           },
@@ -797,7 +523,7 @@ export default {
     'projects': {
       'type': 'object',
       'description':
-        "How the workspace's project tags group. A dimension with the prefix or the key of a default (`scope:` \u2192 domain, `type:` \u2192 type, `platform:` \u2192 platform) replaces it; any other is added. Root-only.",
+        "How the workspace's project tags group. A dimension with the prefix or the key of a default (`scope:` → domain, `type:` → type, `platform:` → platform) replaces it; any other is added. Root-only.",
       'additionalProperties': false,
       'properties': {
         'tagDimensions': {
@@ -807,30 +533,19 @@ export default {
             'required': ['key', 'prefix', 'label'],
             'additionalProperties': false,
             'properties': {
-              'key': {
-                'type': 'string',
-                'description': "The dimension's key.",
-              },
+              'key': { 'type': 'string', 'description': "The dimension's key." },
               'prefix': {
                 'type': 'string',
                 'description': 'The tag prefix that gives a value under the key (`scope:`).',
               },
-              'label': {
-                'type': 'string',
-                'description': 'What the dimension is called.',
-              },
+              'label': { 'type': 'string', 'description': 'What the dimension is called.' },
             },
           },
         },
         'tagValues': {
           'type': 'object',
           'description': 'tagValues[key][value] is the word a lens prints for a tag value.',
-          'additionalProperties': {
-            'type': 'object',
-            'additionalProperties': {
-              'type': 'string',
-            },
-          },
+          'additionalProperties': { 'type': 'object', 'additionalProperties': { 'type': 'string' } },
         },
         'graphFile': {
           'type': 'string',
@@ -846,10 +561,7 @@ export default {
       'required': ['id'],
       'additionalProperties': false,
       'properties': {
-        'id': {
-          'type': 'string',
-          'description': 'The flow id of the journey.',
-        },
+        'id': { 'type': 'string', 'description': 'The flow id of the journey.' },
         'branchOf': {
           'type': 'string',
           'description': 'The step of this storyline (a flow id in its journeys) the branch leaves from.',
@@ -873,38 +585,27 @@ export default {
         'views': {
           'type': 'object',
           'description':
-            'persona id \u2192 { word \u2192 the statuses (as the code spells them) that persona calls by that word }.',
+            'persona id → { word → the statuses (as the code spells them) that persona calls by that word }.',
           'additionalProperties': {
             'type': 'object',
-            'additionalProperties': {
-              'type': 'array',
-              'items': {
-                'type': 'string',
-              },
-            },
+            'additionalProperties': { 'type': 'array', 'items': { 'type': 'string' } },
           },
         },
         'overlays': {
           'type': 'array',
-          'description': 'Conditions a person sees that are not a status \u2014 a row in another table.',
+          'description': 'Conditions a person sees that are not a status — a row in another table.',
           'items': {
             'type': 'object',
             'required': ['name', 'table', 'when'],
             'additionalProperties': false,
             'properties': {
-              'name': {
-                'type': 'string',
-                'description': 'The word a person uses for it.',
-              },
+              'name': { 'type': 'string', 'description': 'The word a person uses for it.' },
               'table': {
                 'type': 'string',
                 'description':
                   'The table it is read from (node id or table name); one the code does not have is a note.',
               },
-              'when': {
-                'type': 'string',
-                'description': 'When it holds, in words.',
-              },
+              'when': { 'type': 'string', 'description': 'When it holds, in words.' },
             },
           },
         },
@@ -913,39 +614,23 @@ export default {
     'storylineLane': {
       'type': 'object',
       'description':
-        "One lane of the storyline's swimlane layout, named by the design. Lanes are derived from the graph \u2014 one per persona who owns a journey of the storyline and one per store its code writes to \u2014 so an entry only names, orders or adds a second line to one. Give exactly one of persona or store. An entry the graph cannot find is a note, never a lane.",
+        "One lane of the storyline's swimlane layout, named by the design. Lanes are derived from the graph — one per persona who owns a journey of the storyline and one per store its code writes to — so an entry only names, orders or adds a second line to one. Give exactly one of persona or store. An entry the graph cannot find is a note, never a lane.",
       'required': ['id'],
       'additionalProperties': false,
       'properties': {
-        'id': {
-          'type': 'string',
-          'description': "The lane's id; a hand-off may name it.",
-        },
-        'persona': {
-          'type': 'string',
-          'description': 'A declared persona id: the lane of that kind of person.',
-        },
+        'id': { 'type': 'string', 'description': "The lane's id; a hand-off may name it." },
+        'persona': { 'type': 'string', 'description': 'A declared persona id: the lane of that kind of person.' },
         'store': {
           'type': 'string',
           'description': "A store's name as the code or the config gives it: the lane of that store.",
         },
-        'surface': {
-          'type': 'string',
-          'description': "Where that person works, a second line under the lane's name.",
-        },
+        'surface': { 'type': 'string', 'description': "Where that person works, a second line under the lane's name." },
         'name': {
           'type': 'string',
           'description': "The word the lane is printed under, in place of the persona's or the store's.",
         },
       },
-      'oneOf': [
-        {
-          'required': ['persona'],
-        },
-        {
-          'required': ['store'],
-        },
-      ],
+      'oneOf': [{ 'required': ['persona'] }, { 'required': ['store'] }],
     },
     'storylineHandoff': {
       'type': 'object',
@@ -971,10 +656,7 @@ export default {
           'type': 'string',
           'description': 'The status as the code spells it. Required for moves; a seen hand-off without one is a note.',
         },
-        'when': {
-          'type': 'string',
-          'description': 'A label for the arrow, in words.',
-        },
+        'when': { 'type': 'string', 'description': 'A label for the arrow, in words.' },
       },
     },
   },
