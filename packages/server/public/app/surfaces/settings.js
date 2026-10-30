@@ -24,6 +24,7 @@ let saving = false;
 let syncing = false;
 let syncRequired = false;
 let message = '';
+let savebarObserver;
 
 function blockDuringWrite(event) {
   if (!(saving || syncing) || !root?.contains(event.target) || !event.target.closest('[data-write]')) return;
@@ -66,6 +67,7 @@ export function mountSettings(route, element, callbacks) {
   settingsUpdate(route);
 }
 export function unmountSettings() {
+  savebarObserver?.disconnect();
   for (const type of ['click', 'input', 'change', 'keydown']) window.removeEventListener(type, blockDuringWrite, true);
   clearTimeout(checkTimer);
   checkSequence++;
@@ -274,6 +276,7 @@ function registered(id, fields, previous) {
 
 export function renderSettings() {
   if (!root || !draft) return;
+  savebarObserver?.disconnect();
   const selected = model.sections.find((s) => s.id === section);
   root.innerHTML = `<div class="settings-page"><header class="settings-heading"><div><h1>${esc(t('surf.chrome.settings'))}</h1><p>${esc(t('settings.intro'))}</p></div><button type="button" class="btn" id="settings-back"${defAttrs('settings.back')}>${esc(t('settings.back'))}</button></header><p id="set-ro" class="set-ro" role="status" hidden></p><div class="settings-layout"><nav class="settings-rail" aria-label="${esc(t('surf.chrome.settings'))}">${model.sections.map((item) => `<a href="#/settings/${item.id}"${item.id === section ? ' aria-current="page"' : ''}${defAttrs(sectionKey(item))}>${esc(t(sectionKey(item)))}</a>`).join('')}</nav><section class="settings-content" aria-labelledby="settings-section-title"><h2 id="settings-section-title"${defAttrs(sectionKey(selected))}>${esc(t(sectionKey(selected)))}</h2><div id="settings-section"></div></section></div><footer id="settings-savebar" class="settings-savebar" hidden><div><strong id="settings-unsaved"></strong><p id="save-consequence" class="consequence">${esc(t('set.saveConsequence'))}</p><p id="settings-check" role="status"></p><p id="savenote" role="status"></p><div id="settings-sync-needed" hidden>${buttonHtml('settings.syncApply', 'id="syncbtn"')}<p class="consequence">${esc(t('set.syncConsequence'))}</p></div></div><div id="settings-draft-actions">${buttonHtml('settings.save', 'id="savebtn"')}${buttonHtml('settings.discard', 'id="discardbtn"')}</div></footer></div>`;
   const content = root.querySelector('#settings-section');
@@ -309,5 +312,11 @@ export function renderSettings() {
     hooks.saved?.();
     renderSettings();
   };
+  const page = root.querySelector('.settings-page');
+  const bar = root.querySelector('#settings-savebar');
+  savebarObserver = new ResizeObserver(() => {
+    page.style.setProperty('--settings-bar-height', Math.ceil(bar.getBoundingClientRect().height) + 'px');
+  });
+  savebarObserver.observe(bar);
   paintStatus();
 }

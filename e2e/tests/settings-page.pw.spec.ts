@@ -169,6 +169,7 @@ test.describe('sectioned Settings', () => {
   }, info) => {
     const requests: string[] = [];
     page.on('request', (request) => requests.push(request.postData() || ''));
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(writable + '#/settings/sources');
     await page.locator('#source-add').click();
     await page.locator('#source-add-type').selectOption('work');
@@ -180,6 +181,7 @@ test.describe('sectioned Settings', () => {
     const secret = card.locator('[data-field$=".auth.secret"]');
     const pasted = 'do-not-send-this-pasted-credential';
     await secret.fill(pasted);
+    await card.locator('[data-field$=".name"]').focus();
     await expect(secret).toHaveValue('');
     await expect(card.locator('[data-problem-for$=".auth.secret"]')).toHaveText(
       'sources[2].auth.secret must be a keychain: or env: reference — secrets never go in settings',
@@ -200,9 +202,20 @@ test.describe('sectioned Settings', () => {
     await card.locator('[data-field$=".name"]').focus();
     await expect(secret).toHaveValue('');
     expect(requests.join('\n')).not.toContain('invalid-reference');
+    await secret.pressSequentially('keychian');
+    await secret.press('Backspace');
+    await expect(secret).toHaveValue('keychia');
+    await secret.fill('');
     await secret.pressSequentially('keychain:farsight/example');
     await expect(secret).toHaveValue('keychain:farsight/example');
     await expect(secret).toHaveAttribute('type', 'text');
+    await card.locator('[data-secret-prefix="keychain:"]').click();
+    await secret.evaluate((input) => {
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', 'farsight/pasted-account');
+      input.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+    });
+    await expect(secret).toHaveValue('keychain:farsight/pasted-account');
     await card.locator('[data-permissions] [data-row-action="add"]').click();
     await card.locator('[data-principal="agent"]').check();
     await expect(page.locator('#savebtn')).toBeEnabled();
@@ -210,9 +223,10 @@ test.describe('sectioned Settings', () => {
     await expect(page.locator('#savenote')).toHaveText('Saved.');
     const source = settings().sources[2];
     expect(source.id).toBe('work-example');
-    expect(source.auth.secret).toBe('keychain:farsight/example');
+    expect(source.auth.secret).toBe('keychain:farsight/pasted-account');
     expect(source.scope.projects).toEqual(['EXAMPLE']);
     expect(source.permissions.grants[0].principals).toEqual(['human', 'agent']);
+    await card.locator('[data-field$=".confirm"]').evaluate((el) => el.scrollIntoView({ block: 'center' }));
     await page.screenshot({ path: info.outputPath('work-grants.png'), fullPage: true });
     await expect(page.locator('#syncbtn')).toBeVisible();
   });
@@ -354,7 +368,9 @@ test.describe('sectioned Settings', () => {
     await expect(page.locator('#keymap')).toContainText('Open Settings');
   });
 
-  test('blank sources are refused; a local source round trip, both sync doors and removal work', async ({ page }) => {
+  test('blank sources are refused; a local source round trip, both sync doors and removal work', async ({
+    page,
+  }, info) => {
     test.setTimeout(90000);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(writable + '#/settings/sources');
@@ -371,6 +387,18 @@ test.describe('sectioned Settings', () => {
     await page.locator('#savebtn').click();
     await expect(page.locator('#savenote')).toHaveText('Saved.');
     await expect(page.locator('#syncbtn')).toBeInViewport();
+    const lastNote = page.locator('#settings-section > .set-note').last();
+    await expect(async () => {
+      const bottom = await lastNote.evaluate((note) => {
+        for (let parent = note.parentElement; parent; parent = parent.parentElement) {
+          if (/auto|scroll/.test(getComputedStyle(parent).overflowY)) parent.scrollTop = parent.scrollHeight;
+        }
+        return note.getBoundingClientRect().bottom;
+      });
+      const bar = await page.locator('#settings-savebar').boundingBox();
+      expect(bottom).toBeLessThan(bar!.y);
+    }).toPass();
+    await page.screenshot({ path: info.outputPath('saved-source-bottom.png'), fullPage: true });
     expect(settings().sources[2].id).toBe('extra-app');
     expect(settings().sources[2].exclude).toEqual(['**/*.{test,spec}.ts', 'dist/**']);
     await page.locator('#syncbtn').click();
@@ -388,7 +416,8 @@ test.describe('sectioned Settings', () => {
     expect(settings().sources.map((source: { id: string }) => source.id)).not.toContain('extra-app');
   });
 
-  test('unset confirmation and type-specific fields retain their meaning', async ({ page }) => {
+  test('unset confirmation and type-specific fields retain their meaning', async ({ page }, info) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     const current = settings();
     current.sources.push({
       id: 'work-example',
@@ -406,10 +435,20 @@ test.describe('sectioned Settings', () => {
     await expect(card.locator('[data-field$=".confirm"]')).toHaveValue('');
     await expect(card.locator('[data-field$=".path"]')).toHaveCount(0);
     await expect(card.locator('[data-field$=".org"]')).toHaveCount(0);
+    await card.locator('[data-field$=".confirm"]').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await page.screenshot({ path: info.outputPath('unset-confirmation.png'), fullPage: true });
     await page.locator('.settings-rail a[href="#/settings/agents"]').click();
     await expect(page.locator('.settings-access')).toContainText('Mode: Read-only');
-    await expect(page.locator('.settings-access')).toContainText('Confirmation: Not set (agents per Agent writes)');
+    await expect(page.locator('.settings-access')).toContainText('Confirmation: Not set');
     await page.locator('.settings-rail a[href="#/settings/sources"]').click();
+    await card.locator('[data-field$=".agentWrites"]').selectOption('allow');
+    await expect(page.locator('#settings-savebar')).toBeVisible();
+    await card.locator('[data-field$=".agentWrites"]').selectOption('confirm');
+    await expect(page.locator('#settings-savebar')).toBeHidden();
+    await card.locator('[data-field$=".attribution"]').selectOption('none');
+    await expect(page.locator('#settings-savebar')).toBeVisible();
+    await card.locator('[data-field$=".attribution"]').selectOption('prefix');
+    await expect(page.locator('#settings-savebar')).toBeHidden();
     await card.locator('[data-field$=".provider"]').selectOption('azure-devops');
     await expect(card.locator('[data-field$=".site"]')).toHaveCount(0);
     await expect(card.locator('[data-field$=".org"]')).toBeVisible();

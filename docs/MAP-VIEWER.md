@@ -675,8 +675,9 @@ front door, the header, the Portfolio and the Map; and the front door drawn iden
   `sys.readonly.control` tip that says why and who to ask); once the session is read-only, `installReadOnly()` greys every
   `[data-write]` drawn later (a MutationObserver) and spends a press on one before its handler runs, pinning its tip
   instead. Handlers (`workSync`, `workEdit`, `postIntent`, `workSettle`, `saveSettings`…) also return early. Work prints
-  `sys.readonly.page` under its strip and `sys.readonly.workPane` in the item pane; Settings also disables its
-  theme selector. Boot waits up to 1.5 s for `/api/version` before the first surface mounts, so a surface
+  `sys.readonly.page` under its strip and `sys.readonly.workPane` in the item pane; Settings keeps its
+  theme selector available as a browser-local preview, labelled with `sys.readonly.themeHint`, without writing settings.
+  Boot waits up to 1.5 s for `/api/version` before the first surface mounts, so a surface
   draws its write controls knowing the session. An export (Save) is not a write. The READ-ONLY chip folds last before
   the tabs.
 - **Addresses** (`shell.js`): Settings is `#/settings` — a surface that mounts the `#settings` node into the surface
@@ -1032,7 +1033,7 @@ lens or register change calls `update(ctx)` with the new `lens`; closing calls `
 | arrows | outside the property and card | pan 80 px (Shift: 240) |
 | `[` / `]` | property | previous / next screen |
 | `p` · `+ − 0` · `b` · `y` | | plumbing · the next stop in or out, fit what is in view · what uses the card's node · copy the link |
-| `g` | | opens and closes the legend (`mapToggleLegend` → `toggleLegend`) whatever has the focus; over an open screen it does nothing. `?` is the keymap here as everywhere (2026-10-05: it had four jobs) |
+| `g` | | after the chord window, opens and closes the legend (`mapToggleLegend` → `toggleLegend`) whatever has the focus; `g s` opens Settings and cancels the pending legend toggle. Over an open screen a lone `g` does nothing. `?` is the keymap here as everywhere (2026-10-05: it had four jobs) |
 
 What a level does not show is `inert` (`applyTabbing`, redone when the level or the property changes): the ghosted
 streets and heads at the neighbourhood, the board under an open property; covers are `visibility:hidden` on the

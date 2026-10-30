@@ -578,7 +578,7 @@
   .nowhere code{font-family:var(--mono);font-size:12px;color:var(--ink)}
   .nowhere .sym{width:15px;height:15px}
   /* Sectioned Settings: the rail stays beside one bounded content column. */
-  .settings-page{max-width:1160px;margin:0 auto;padding:28px 28px 100px;font-size:13px}
+  .settings-page{max-width:1160px;margin:0 auto;padding:28px 28px max(100px,calc(var(--settings-bar-height,0px) + 48px));font-size:13px}
   .settings-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:28px}
   .settings-heading h1{font-family:var(--hud);text-transform:uppercase;letter-spacing:.16em;font-size:21px;color:var(--accent);margin:0 0 8px}
   .settings-heading p{color:var(--muted);margin:0;line-height:1.6}
@@ -638,7 +638,7 @@
   #source-add-form{margin-top:16px;padding:20px;border:1px solid var(--line);background:var(--panel)}
   #source-add-form .settings-field{margin-bottom:14px}
   .settings-unavailable{opacity:.6;border:1px dashed var(--line);padding:12px;margin:12px 0}
-  @media(max-width:800px){.settings-page{padding:20px 16px 140px}.settings-layout{grid-template-columns:1fr;gap:20px}.settings-rail{position:static;flex-direction:row;flex-wrap:wrap;gap:2px}.settings-rail a{padding:8px 10px}.settings-fields{grid-template-columns:1fr}.settings-savebar{width:calc(100% - 24px);flex-wrap:wrap}.settings-savebar>div{flex-basis:100%}}
+  @media(max-width:800px){.settings-page{padding:20px 16px max(140px,calc(var(--settings-bar-height,0px) + 48px))}.settings-layout{grid-template-columns:1fr;gap:20px}.settings-rail{position:static;flex-direction:row;flex-wrap:wrap;gap:2px}.settings-rail a{padding:8px 10px}.settings-fields{grid-template-columns:1fr}.settings-savebar{width:calc(100% - 24px);flex-wrap:wrap}.settings-savebar>div{flex-basis:100%}}
   .set-wrap{max-width:860px;margin:0 auto;padding:28px 24px 80px}
   .set-wrap h1{font-family:var(--hud);text-transform:uppercase;letter-spacing:.18em;font-size:17px;color:var(--accent);margin:0 0 4px}
   .set-wrap .sub{color:var(--muted);font-size:12.5px;margin:0 0 24px}

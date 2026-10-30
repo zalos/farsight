@@ -55,7 +55,11 @@ export function normalized(value) {
   if (copy.mcp?.tools === 'core') delete copy.mcp.tools;
   if (copy.flags?.designShots === false) delete copy.flags.designShots;
   for (const key of ['collections', 'lessons']) if (!copy[key]?.length) delete copy[key];
-  for (const source of copy.sources || []) if (!source.exclude?.length) delete source.exclude;
+  for (const source of copy.sources || []) {
+    if (!source.exclude?.length) delete source.exclude;
+    if (source.permissions?.agentWrites === 'confirm') delete source.permissions.agentWrites;
+    if (source.permissions?.attribution === 'prefix') delete source.permissions.attribution;
+  }
   prune(copy);
   return copy;
 }

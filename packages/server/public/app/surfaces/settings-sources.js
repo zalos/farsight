@@ -137,7 +137,12 @@ export function renderSources(root, context) {
   let adding = false;
   const statusHtml = (source) => {
     const status = model.sourceStatus(source);
-    return `<p class="settings-source-status"><span${defAttrs(status.key)}>${esc(t(status.key))}</span> ${status.counts.map((count) => countedHtml(count, '/api/settings')).join(' · ')} ${status.notices.map((key) => `<span${defAttrs(key)}>${esc(t(key))}</span>`).join(' · ')}</p>${status.reason ? `<p class="set-note">${esc(status.reason)}</p>` : ''}`;
+    const details = [
+      `<span${defAttrs(status.key)}>${esc(t(status.key))}</span>`,
+      ...status.counts.map((count) => countedHtml(count, '/api/settings')),
+      ...status.notices.map((key) => `<span${defAttrs(key)}>${esc(t(key))}</span>`),
+    ];
+    return `<p class="settings-source-status">${details.join(' · ')}</p>${status.reason ? `<p class="set-note">${esc(status.reason)}</p>` : ''}`;
   };
   const draw = () => {
     const generated = S.GRAPH?.meta?.generatedAt;
@@ -172,12 +177,8 @@ export function renderSources(root, context) {
     let value = input.type === 'checkbox' ? input.checked : input.value;
     if (path === 'auth.secret') {
       // An incomplete hand-typed prefix stays only in this field, never in the draft or a request.
-      const raw = value;
       value = model.secretReference(value);
-      if (!value && input.value && (event.inputType === 'insertFromPaste' || !event.data || event.data.length > 1))
-        input.value = '';
       model.writeAt(source, path, value || (input.value ? '' : undefined));
-      if (!value && raw) model.writeAt(source, path, '');
       changed();
       return;
     }
@@ -211,11 +212,13 @@ export function renderSources(root, context) {
     const input = event.target;
     if (!input.dataset.field?.endsWith('.auth.secret') || readOnlyWhy()) return;
     const pasted = event.clipboardData?.getData('text') || '';
-    if (model.secretReference(pasted)) return;
+    const result = input.value.slice(0, input.selectionStart) + pasted + input.value.slice(input.selectionEnd);
     event.preventDefault();
-    input.value = '';
+    const reference = model.secretReference(result);
+    if (reference) input.setRangeText(pasted, input.selectionStart, input.selectionEnd, 'end');
+    else input.value = '';
     const index = Number(/^sources\[(\d+)\]/.exec(input.dataset.field)[1]);
-    model.writeAt(draft.sources[index], 'auth.secret', '');
+    model.writeAt(draft.sources[index], 'auth.secret', reference || (result ? '' : undefined));
     changed();
   };
   root.onclick = (event) => {

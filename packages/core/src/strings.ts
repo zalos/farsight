@@ -1391,8 +1391,6 @@ export const STRINGS: Record<string, StringEntry> = {
   'set.noSources': same('no sources yet'),
   'set.noCollections': same('no collections yet'),
   'set.groupPrompt': same('Group name (saved as a collection):'),
-  'set.landing': same('Landing surface'),
-  'set.flagShots': same('Keep a design shot per sync'),
   'set.flagShotsSub': same('copies each screen\u2019s design image into .farsight/cache/shots at every sync, so a past sync can be looked at rather than described \u2014 one file per distinct image, whatever the number of syncs. It keeps designs, never a picture of the running app. Off by default, per workspace, because it writes files.'),
   'set.landingSub': same('where this browser lands on open — a default, never a cage: deep links always win'),
   'set.syncConsequence': same('re-parses sources on disk · rewrites graph.json · never modifies your code'),

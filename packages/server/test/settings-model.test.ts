@@ -112,6 +112,19 @@ test('missing build capabilities are unknown, not unsupported', () => {
   assert.deepEqual(M.unavailableFields(settings), []);
   assert.deepEqual(M.unavailableFields(settings, {}), []);
 });
+test('restoring the displayed permission defaults restores saved meaning and preserves concurrent changes', () => {
+  const base = { sources: [{ id: 'work', type: 'work' }] };
+  const draft = M.clone(base);
+  draft.sources[0].permissions = { agentWrites: 'allow', attribution: 'none' };
+  assert.equal(M.dirty(base, draft), true);
+  draft.sources[0].permissions.agentWrites = 'confirm';
+  assert.equal(M.dirty(base, draft), true);
+  draft.sources[0].permissions.attribution = 'prefix';
+  assert.equal(M.dirty(base, draft), false);
+  const current = M.clone(base);
+  current.sources[0].permissions = { agentWrites: 'allow', attribution: 'none' };
+  assert.deepEqual(M.mergeSettings(base, draft, current), current);
+});
 test('new source ids are name slugs and changing type drops hidden connection fields', () => {
   assert.equal(M.sourceId('Billing API', []), 'billing-api');
   assert.equal(M.sourceId('Billing API', [{ id: 'billing-api' }]), 'billing-api-2');
