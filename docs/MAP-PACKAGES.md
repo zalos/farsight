@@ -5,6 +5,13 @@ bindings and unresolved decision affects become ingest warnings using existing m
 including nested `.gitignore` rules, lives in `packages/code-parser/src/shared/files.ts`. Nest body-schema
 declarations are read in `packages/code-parser/src/nest.ts` and resolved to rules in `tsjs.ts`.
 
+Pattern matching lives in `packages/parsers/src/patterns.ts`: scoped file selection, bounded matching, span and
+same-file handler joins, existing graph identities, per-rule reports and the shared dry-run text. The source-preparation
+and `testPatterns` entry point are in `parsers/src/index.ts`. `packages/code-parser/src/treesitter/queries.ts` owns the
+bundled grammar-by-extension map and memoised queries over the harness's grammar loader, exported by code-parser's
+index. `core/config-files.ts` folds pattern counts for every surface; `mcp/patterns-tools.ts` registers the read-only
+all-tier test tool. The config contract family (`frameworks`, `patterns`, planned `nodes`) is ADR 49.
+
 > Moved out of `AGENTS.md` so it is not read at the start of every session. This is the reference: open it when
 > you need to find something, not to orient. `AGENTS.md` keeps the contract, the commands and the gotchas.
 

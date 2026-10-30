@@ -1106,3 +1106,21 @@ The PIPELINE stop's edit mode (`GET /api/sentinel/pipeline`, `sentinel-viewer-pi
 **no count**: a row's and the drawer's *Stage n* is the stage's place in the file's declaration order, a position like
 *stage n of m*, not a number of anything; what a check says (*reuses* · *changed* · *runs again* · *added*, *problem*)
 is a word per stage, never a tally; a budget field is the value the file holds, printed as written.
+
+### Pattern rules (ADR 49)
+
+`patternCounts(meta.patterns[repo])` supplies one row per configured rule, in report order. Equal ids in different config
+files remain separate rows. The CLI config list and pattern test, MCP config files/overview/test, and Settings config
+report read these same Counteds; `GET /api/config` carries them as `patternCounts` beside `patterns`.
+The closed scope registry adds `count.scope.pattern`: **for this pattern rule**, over its selected files in its source
+and config folder. The count tooltip cites that scope and the report field.
+
+| printed number (code / business) | report field | what counts |
+|---|---|---|
+| matches | `rules[].matched` | one syntax query match or matching text line; repeated sites in different rules belong to each rule |
+| nodes added / parts added | `rules[].nodes` | distinct new graph nodes added by this rule; existing ids and entrypoint tagging add zero |
+| edges added / connections added | `rules[].edges` | distinct new `(kind, from, to)` relationships added by this rule; existing relationships add zero |
+| unresolved references | `rules[].unresolved.length` | unresolved capture or handler references, deduplicated within one match; several can belong to one match |
+| skipped inputs | `rules[].skipped.length` | files or declarations set aside with a reason; one budget note records the stopping point, not a count of unvisited files |
+
+These counts describe parsing and declarations. They confer no test-run, coverage or release-readiness credit.

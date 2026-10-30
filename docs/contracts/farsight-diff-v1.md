@@ -205,3 +205,7 @@ The gate block appended to the diff:
 - `expected-diff.json` — the frozen expected output; `diff.test.ts` requires byte-for-byte JSON equality and validates it against the schema file.
 
 Regenerating (`node packages/core/test/fixtures/make-fixtures.mjs`) is a **contract event**: if the regenerated diff differs from `expected-diff.json`, either the parser changed (update the fixtures, note it in the commit) or the contract broke (stop).
+
+The technique enum adds `config-pattern` (ADR 49): HIGH for a declared syntax matcher, MEDIUM for a text regex.
+This is an additive member of v1; consumers display unknown technique members verbatim. The enum remains pinned
+in the schema and core diff test, and does not imply runtime verification.

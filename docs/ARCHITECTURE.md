@@ -2262,3 +2262,32 @@ every receipt and admission rule above, and the owner CLI. *Why:* one
 place reads a scan (the view, in the three registers, with every number a `Counted`), and the owner-origin frame keeps
 only what must stay off the application host — the confirmations. A comparison report and a rerun from the browser
 are the owner CLI's until the view has its own (P-4b for the rerun).
+
+49. **Configuration extends the shared graph through data, never loaded adapters (2026-10-30).**
+
+The configuration family is `frameworks` · `patterns` · `nodes`: aliases teach existing framework readers additional
+names; patterns turn matching source syntax or text into the existing graph kinds; manual node declarations are the
+planned next member for facts no reader can reach. All use the canonical config schema and can be supplied through the
+workspace overlay without writing into the source. Framework aliases are root-scoped. Pattern rules in nested config
+files select only files under that folder, with the workspace's excludes and ignore rules still applied.
+
+Patterns run after config, tooling and setup-origin enrichment and before OpenAPI reconciliation. The existing bundled
+Tree-sitter grammars interpret call, decorator, annotation and raw-query matchers; a JavaScript regular expression per
+text line is the cheap tier. There is no dependency download, loaded adapter, shell command or source evaluation.
+Handlers resolve only to unique same-file declarations; enclosing targets use the innermost declaration span. Missing
+captures and handlers are reported, never replaced by placeholder nodes. Route identity uses the readers' normalized
+method/path key, so patterns, specs and client calls meet the same route.
+
+`config-pattern` is declared evidence: the rule author supplied its meaning and matching supplies its source site.
+Syntax matches carry HIGH confidence and regex matches MEDIUM; neither claims runtime verification. This adds one
+member to the frozen, additive-only `farsight-diff v1` technique enum. Unknown technique members remain printable verbatim.
+Per-rule reports are retained once in `meta.patterns`; match text and capture details are returned by explicit dry runs,
+not copied into every report. CLI `patterns test`, MCP `patterns_test` (all tier) and `GET /api/patterns/test` share the
+same engine and do not save a graph. GET remains available on read-only and historical servers, reading today's source
+files rather than pretending the historical snapshot contains them.
+
+The pass reads selected regular files of at most 1 MiB, admits at most 64 rules per source, caps regex source at 512
+characters, and checks a one-second per-rule budget between files. It cannot preempt a running JavaScript regex; file
+bounds and explicit globs limit its inputs, not its worst-case matching time. The shared report names skips and
+unresolved targets; every displayed count comes from `patternCounts`. This leaves authoring forms to the Settings forms
+lane and keeps the parser contract usable independently through config files, CLI and MCP.

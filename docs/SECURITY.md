@@ -326,3 +326,14 @@ Fixtures recorded from a live tracker must be rewritten to the example values be
 `00000000-0000-4000-8000-…`. `pnpm audit --prod` should report nothing. Refresh the lockfile when it does.
 
 Workspace OpenAPI registration (`POST /api/sources/:id/openapi`) and dismissal (`DELETE /api/sources/:id/openapi?path=…`) write only `.farsight/settings.json` and pass through the same request and read-only guards. A registered spec URL is fetched when the source syncs; registration itself does not fetch it. `POST /api/settings/check` validates a draft without saving and remains available on read-only and historical servers. File references are confined to their source; workspace overlays cannot add path blocks.
+
+**Pattern rules are bounded data, never executable adapters.** `patterns[]` reads only files selected by its globs
+inside the source, with workspace excludes and ignore rules applied; a nested config scopes its rules to its folder.
+The pass refuses symbolic file replacements and paths resolving outside the source. Each regular file is capped at
+1 MiB, regex source at 512 characters, and the source at 64 rules across root, workspace overlay and nested files.
+A one-second per-rule time budget is checked between selected files, with the stopping point recorded. Node cannot
+interrupt a running regular expression: this budget is not a regex timeout, and adversarial expressions can exceed it
+within one file. Tree-sitter uses only bundled grammars and a bounded in-progress match count. Nothing is spawned,
+installed, evaluated or fetched by this pass; no file outside the source is read. `patterns test`, `patterns_test` and
+`GET /api/patterns/test` use fresh local source files and do not write a graph, source file or snapshot. The GET passes
+through the loopback request guard and remains available on read-only and historical servers.
