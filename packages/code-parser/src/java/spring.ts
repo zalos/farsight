@@ -14,7 +14,7 @@ export interface Ann {
   node: TSNode;
   /** POSITIONAL string-literal arguments, unquoted (named `key = "v"` args live in pairs). */
   strings: string[];
-  /** Positional arguments by their actual index, without quotes. */
+  /** Positional arguments as raw source; Java normally uses named pairs, with arg:1 only in syntax recovery. */
   args?: (string | undefined)[];
   /** `key = value` arguments, value as raw source text. */
   pairs: Map<string, string>;
@@ -49,7 +49,7 @@ export function annotationsOf(decl: TSNode): Ann[] {
         if (arg && arg.type !== 'element_value_pair') {
           // Tree-sitter preserves a literal before a named pair inside a recovery node.
           const value = arg.type === 'ERROR' && arg.namedChildren.length === 1 ? arg.namedChildren[0] : arg;
-          positional.push(value ? annotationValue(value.text) : undefined);
+          positional.push(value?.text);
         }
       }
       for (const pair of childrenOfType(args, 'element_value_pair')) {
@@ -82,7 +82,7 @@ export const MAPPING_ANNS: Record<string, string> = {
   PatchMapping: 'PATCH',
 };
 
-/** Read literal strings and enum/constant names; expressions are not values. */
+/** A literal string only: the spelling of a constant is not its value. */
 function annotationValue(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
   if (/^"(?:[^"\\]|\\.)*"$/.test(raw)) {
@@ -92,15 +92,26 @@ function annotationValue(raw: string | undefined): string | undefined {
       return undefined;
     }
   }
-  return /^[\w.$-]+$/.test(raw) ? raw : undefined;
+  return undefined;
 }
 
-const argOf = (a: Ann, spec: string): string | undefined =>
-  spec.startsWith('arg:')
-    ? (a.args ?? a.strings)[Number(spec.slice(4))]
-    : spec.startsWith('pair:')
-      ? annotationValue(a.pairs.get(spec.slice(5)))
-      : spec;
+function rawArg(a: Ann, selector: string): string | undefined {
+  const positional = (index: number) =>
+    a.args?.[index] ??
+    (a.args === undefined && a.strings[index] !== undefined ? JSON.stringify(a.strings[index]) : undefined);
+  if (selector.startsWith('arg:')) {
+    const index = Number(selector.slice(4));
+    return positional(index) ?? (index === 0 ? a.pairs.get('value') : undefined);
+  }
+  const key = selector.slice(5);
+  return a.pairs.get(key) ?? (key === 'value' ? positional(0) : undefined);
+}
+
+function argOf(a: Ann, selector: string, verb = false): string | undefined {
+  if (!selector.startsWith('arg:') && !selector.startsWith('pair:')) return selector;
+  const raw = rawArg(a, selector);
+  return annotationValue(raw) ?? (verb ? /^RequestMethod\.([A-Z]+)$/.exec(raw ?? '')?.[1] : undefined);
+}
 
 /** Missing holes leave no label or grant; callers use the annotation's name for the label. */
 function fillAnn(template: string, a: Ann): string | undefined {
@@ -117,7 +128,7 @@ function fillAnn(template: string, a: Ann): string | undefined {
 export function routeMapping(
   anns: Ann[],
   aliases: SpringAliases = {},
-): { method: string; path: string; alias?: string } | null {
+): { method: string; path: string; alias?: string } | { unreadable: true; alias: string; node: TSNode } | null {
   for (const a of anns) {
     const verb = MAPPING_ANNS[a.name];
     if (verb) return { method: verb, path: annString(a, 'value', 'path') ?? '' };
@@ -127,12 +138,11 @@ export function routeMapping(
     }
     const alias = Object.hasOwn(aliases.mappings ?? {}, a.name) ? aliases.mappings?.[a.name] : undefined;
     if (!alias) continue;
-    const method = argOf(a, alias.method)
-      ?.replace(/^RequestMethod\./, '')
-      .toUpperCase();
+    const method = argOf(a, alias.method, true)?.toUpperCase();
     const path = argOf(a, alias.path);
     if (method && /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|CONNECT)$/.test(method) && path !== undefined)
       return { method, path, alias: a.name };
+    return { unreadable: true, alias: a.name, node: a.node };
   }
   return null;
 }

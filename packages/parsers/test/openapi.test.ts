@@ -102,7 +102,7 @@ test('ingestRepo(examples/invoice-app): the fixture drift lands on the route nod
     required: true,
     fields: ['customerId', 'lines'],
   });
-  // freshness folds the spec in (24 source files — including the alias controller — — payments.ts and PaymentsPage.tsx since lane moves — + src/ui/CreateInvoiceForm.stories.tsx +
+  // freshness folds the spec in (24 source files — including the alias module — payments.ts and PaymentsPage.tsx since lane moves — + src/ui/CreateInvoiceForm.stories.tsx +
   // scripts/make-coverage.mjs + 4 spec files claimed by the tests adapter + openapi.yaml +
   // docs/design/screens.json)
   assert.equal(f.meta!.files, 32);

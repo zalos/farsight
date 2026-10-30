@@ -185,10 +185,19 @@ test('malformed framework declarations in source config are reported before reac
   const root = mkdtempSync(join(tmpdir(), 'alias-config-'));
   try {
     const path = join(root, 'farsight.config.json');
-    writeFileSync(path, JSON.stringify({ frameworks: { spring: { security: { Policy: { label: 42 } } } } }));
+    writeFileSync(
+      path,
+      JSON.stringify({
+        tags: { billing: ['Invoice'] },
+        frameworks: { spring: { security: { Policy: { label: 42 } } } },
+      }),
+    );
     const result = readConfigFile(path);
-    assert.ok('error' in result);
-    assert.match(result.error, /frameworks.spring.security.Policy.label/);
+    assert.ok('config' in result);
+    assert.equal(result.config.frameworks, undefined);
+    assert.deepEqual(result.config.tags, { billing: ['Invoice'] });
+    assert.deepEqual(result.ignored, ['frameworks']);
+    assert.match(result.notes!.join('\n'), /frameworks.spring.security.Policy.label/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

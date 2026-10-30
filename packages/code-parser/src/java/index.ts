@@ -12,7 +12,7 @@ import { PARSER_VERSION } from '../version.js';
  */
 import { readFileSync, checkpoint, fileStatus, fileReadError, parseError, currentRead } from '../repository.js';
 import { relative as platformRelative, resolve as resolvePath } from 'node:path';
-import type { GraphFragment, GraphNode, GraphEdge } from '@farsight/graph';
+import type { GraphFragment, GraphNode, GraphEdge, RouteGap } from '@farsight/graph';
 import type { LanguageAdapter, IngestOptions } from '../types.js';
 import { collectFiles, freshnessMeta } from '../shared/files.js';
 import { parseDoc, docCommentAbove, docLinkFields, type ParsedDoc } from '../shared/docs.js';
@@ -83,6 +83,7 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
   const meta = freshnessMeta(repoRoot, files);
   const nodes = new Map<string, GraphNode>();
   const edges: GraphEdge[] = [];
+  const routeGaps: RouteGap[] = [];
   if (!files.length) return { repo, nodes: [], edges, meta };
 
   const parse = await grammarParser('java');
@@ -277,7 +278,12 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
   }
 
   occurrences.attach(edges);
-  return { repo, nodes: [...nodes.values()], edges, meta };
+  return {
+    repo,
+    nodes: [...nodes.values()],
+    edges,
+    meta: { ...meta, ...(routeGaps.length ? { routes: { gaps: routeGaps } } : {}) },
+  };
 
   // ── extraction ───────────────────────────────────────────────────
 
@@ -389,7 +395,7 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       '';
     const entityName = kind === 'interface' ? repositoryEntity(extendsText) : null;
 
-    const implementsNode = childrenOfType(decl, 'super_interfaces')[0];
+    const implementsNode = aliases.delegates?.length ? childrenOfType(decl, 'super_interfaces')[0] : undefined;
     const implemented = (
       implementsNode?.namedChildren.flatMap((n) => (n?.type === 'type_list' ? n.namedChildren : [n])) ?? []
     )
@@ -529,7 +535,15 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       // route: mapping annotation + class-level base path
       const mapping = routeMapping(anns, aliases);
       let routeId: string | undefined;
-      if (mapping) {
+      if (mapping && 'unreadable' in mapping) {
+        routeGaps.push({
+          kind: 'non-literal-path',
+          path: jt.file,
+          line: mapping.node.startPosition.row + 1,
+          name: `${jt.name}.${mName}`,
+          text: `@${mapping.alias} on ${mName} has a non-literal path or unreadable HTTP verb; its route is not recorded`,
+        });
+      } else if (mapping) {
         const path = normalizePath(joinPaths(classBase, mapping.path));
         routeId = `${repo}::route::${mapping.method} ${path}`;
         addNode({

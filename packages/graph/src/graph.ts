@@ -1185,7 +1185,15 @@ export interface Flow {
  */
 export interface ConfigMeta {
   /** root first, then by folder depth, then by path; `fields` = the keys the file gave, `ignored` = the ones not applied */
-  files: { path: string; dir: string; root: boolean; fields: string[]; ignored: string[]; from?: 'workspace' }[];
+  files: {
+    path: string;
+    dir: string;
+    root: boolean;
+    fields: string[];
+    ignored: string[];
+    from?: 'workspace';
+    frameworks?: FrameworkAliasSummary;
+  }[];
   /** two files said different things about one key; `kept` is the file whose word stands */
   conflicts: {
     kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag' | 'lifecycle' | 'overlay';
@@ -1235,10 +1243,24 @@ export interface GraphFragment {
   configApplied?: boolean;
 }
 
+/** Only configured alias names, retained once per config file for the shared config list. */
+export type FrameworkAliasSummary = Partial<
+  Record<
+    | 'spring.mappings'
+    | 'spring.security'
+    | 'spring.listeners'
+    | 'spring.delegates'
+    | 'nest.verbs'
+    | 'nest.guards'
+    | 'express.middleware',
+    string[]
+  >
+>;
+
 /** Names interpreted by the built-in framework readers. Configuration only; never stamped on graph elements. */
 export interface FrameworksConfig {
   spring?: {
-    /** Annotation name → fixed HTTP verb or argument selector, and the path argument selector. */
+    /** Annotation name → fixed HTTP verb or selector. Java normally uses pair:name; arg:0 equals pair:value, while arg:1 is reachable only through syntax recovery. */
     mappings?: Record<string, { method: string; path: string }>;
     security?: Record<string, { label: string; tier?: GateTier; requires?: string }>;
     delegates?: string[];

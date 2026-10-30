@@ -183,7 +183,7 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
     testFiles: options.testFiles ?? (options.tests === false ? 'include' : 'exclude'),
     testGlobs: { ...testGlobsOf(config?.tests), ...options.testGlobs },
     externals: merge(config?.externals, options.externals),
-    frameworks: config?.frameworks,
+    frameworks: config?.frameworks ?? options.frameworks,
     plumbing: merge(config?.plumbing, options.plumbing),
     setup: merge(config?.setup, options.setup),
   };
@@ -204,7 +204,7 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   if (options.openapi !== false) {
     const { errors, securityByApi } = await applySpecs(merged, repoRoot, opts, workspace);
     routeGaps.push(
-      ...joinDelegates(merged, config.frameworks?.spring?.delegates ?? [], {
+      ...joinDelegates(merged, opts.frameworks?.spring?.delegates ?? [], {
         guardNames: config.guards,
         validators: config.validators,
         securityByApi,

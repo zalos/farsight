@@ -405,9 +405,9 @@ test('a native Copilot observation and its retained provenance render in every r
   assert.equal(out.sarif.version, '2.1.0');
   assert.equal(out.sarif.runs[0].results.length, 1, 'SARIF retains the scanner finding, not the model claim');
   assert.deepEqual(digests(out), {
-    json: 'sha256:d7eefe82e0b9de7e6ba5d1c30a5d7a36094dea0ff5cf434444472a3093b07ff3',
-    markdown: 'sha256:2d66a8a64daf6eff91f04dc2c4fdd7aad288baa53b712b2aa130d4cf8a6231a1',
-    html: 'sha256:3df2f2434791cb3f6eb8e078fbe54659c17a70e6b81910e91c5f756317110d5d',
+    json: 'sha256:bc87377ad2fe73519f853ce8012d860ce572eb0b02a8da1fe2fc1bbe7ac85271',
+    markdown: 'sha256:3e5fd825adeb91167d6185ce573380383fe2f4df55df1b601d7ac4c62442b1a9',
+    html: 'sha256:b041f332b6ef241a155971be57ec4df5dd0a9d087ac9e6e2588f7e8fd13c8893',
     sarif: 'sha256:8b769e712b16a71bdbfe9dd21f78054b5b629cdf967fe06d3c20fc9a58f24ca1',
   });
   const withheld = withholdSecretRun(out.document, new Map());
@@ -439,9 +439,9 @@ test('a brokered-only review retains its four report renderings', needsStore, as
     ],
   );
   assert.deepEqual(digests(out), {
-    json: 'sha256:6ad9a34fdad03dc2c43cf2c7b0247bd9fe1e612aeaec123775ffc4fdb563e7ff',
-    markdown: 'sha256:1af919c05f8231a911797e0d9d5ac259cdb317df14e4e5092d4dd242ad7ab998',
-    html: 'sha256:626385cedbf610248b8e5d84adfe10b9b0049d63363f76801541cf776e6ba7b0',
+    json: 'sha256:d1910c88d98f00b8ba812397febc485246b25f9f5c9c79a263e749789a893e51',
+    markdown: 'sha256:84e230fb3cab7ad225ec95efc6654b2d9ee8edfca1f4814e45218b9283cc4c11',
+    html: 'sha256:699d8077e63ea47661623445f9c7fc013b62220eb2968079a17b2ca9e681848f',
     sarif: 'sha256:8b769e712b16a71bdbfe9dd21f78054b5b629cdf967fe06d3c20fc9a58f24ca1',
   });
 });

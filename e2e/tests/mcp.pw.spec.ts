@@ -144,7 +144,7 @@ test.describe('MCP data flow', () => {
   /** @covers packages/mcp/src/run.ts::runMcpServer */
   test('graph_overview describes the fixture graph and its freshness', async () => {
     const out = await call('graph_overview');
-    expect(out).toContain('Farsight semantic graph: 134 nodes'); // Includes the alias controller, its handler, route and framework package.
+    expect(out).toContain('Farsight semantic graph: 134 nodes'); // Includes the alias route, handler, module and declared framework package.
     expect(out).toContain(`repos: ${REPO}`);
     expect(out).toContain('sync:1');
   });

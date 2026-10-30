@@ -18,7 +18,7 @@ test.describe('front door', () => {
     }
     // the fixture's design manifest reaches the picker: its flows, with the start-here one first
     await expect(page.getByText('Billing cycle', { exact: true }).first()).toBeVisible();
-    // 87 parts + 8 packages + 12 module nodes (a file's import list) since the dependencies pass
+    // Includes the Nest alias route, handler, module and declared framework package.
     await expect(page.locator('#stats')).toContainText('of 134');
   });
 
@@ -109,7 +109,7 @@ test.describe('front door', () => {
   /** @covers GET /graph */
   test('/graph serves the fixture graph the viewer draws', async ({ request }) => {
     const graph = await (await request.get('/graph')).json();
-    expect(graph.nodes.length).toBe(134); // Four added parts for the Nest alias controller. Previously: 87 parts + 3 preconditions read from the code + 8 packages + 12 module nodes + 2 cited documents + 1 party, + 17 for the payments shape (lane moves: a screen, its flow, page and component, two routes, eight functions, two preconditions, a module)
+    expect(graph.nodes.length).toBe(134); // Four added parts: the Nest alias route, handler, module and declared package. Previously: 87 parts + 3 preconditions read from the code + 8 packages + 12 module nodes + 2 cited documents + 1 party, + 17 for the payments shape (lane moves: a screen, its flow, page and component, two routes, eight functions, two preconditions, a module)
     expect(graph.nodes.some((n: { id: string }) => n.id === 'invoice-app::route::GET /api/invoice-summary/ready')).toBe(
       true,
     );

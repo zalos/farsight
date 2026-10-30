@@ -217,8 +217,7 @@
       },
       "tags": [
         "invoice",
-        "http-api",
-        "undocumented"
+        "http-api"
       ],
       "facets": {
         "business": {
@@ -227,12 +226,17 @@
         }
       },
       "contract": {
-        "status": "code-only",
+        "status": "both",
         "apiId": "compat::api::openapi.yaml",
-        "drift": [
+        "spec": {
+          "path": "openapi.yaml",
+          "line": 7,
+          "operationId": "list"
+        },
+        "responses": [
           {
-            "kind": "code-only",
-            "message": "implemented in the code; not declared in the spec"
+            "status": "200",
+            "description": "Invoices for the billing dashboard"
           }
         ]
       },
@@ -281,8 +285,7 @@
       },
       "tags": [
         "invoice",
-        "http-api",
-        "undocumented"
+        "http-api"
       ],
       "facets": {
         "business": {
@@ -291,12 +294,25 @@
         }
       },
       "contract": {
-        "status": "code-only",
+        "status": "both",
         "apiId": "compat::api::openapi.yaml",
-        "drift": [
+        "spec": {
+          "path": "openapi.yaml",
+          "line": 30,
+          "operationId": "get"
+        },
+        "params": [
           {
-            "kind": "code-only",
-            "message": "implemented in the code; not declared in the spec"
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": [
+          {
+            "status": "200",
+            "description": "The invoice"
           }
         ]
       },
@@ -346,8 +362,7 @@
       },
       "tags": [
         "invoice",
-        "http-api",
-        "undocumented"
+        "http-api"
       ],
       "facets": {
         "business": {
@@ -356,12 +371,22 @@
         }
       },
       "contract": {
-        "status": "code-only",
+        "status": "both",
         "apiId": "compat::api::openapi.yaml",
-        "drift": [
+        "spec": {
+          "path": "openapi.yaml",
+          "line": 12,
+          "operationId": "create"
+        },
+        "requestBody": {
+          "contentType": "application/json",
+          "schema": "object",
+          "required": true
+        },
+        "responses": [
           {
-            "kind": "code-only",
-            "message": "implemented in the code; not declared in the spec"
+            "status": "201",
+            "description": "Draft invoice created"
           }
         ]
       },
@@ -411,8 +436,7 @@
       },
       "tags": [
         "invoice",
-        "http-api",
-        "undocumented"
+        "http-api"
       ],
       "facets": {
         "business": {
@@ -421,12 +445,30 @@
         }
       },
       "contract": {
-        "status": "code-only",
+        "status": "both",
         "apiId": "compat::api::openapi.yaml",
-        "drift": [
+        "spec": {
+          "path": "openapi.yaml",
+          "line": 35,
+          "operationId": "update"
+        },
+        "params": [
           {
-            "kind": "code-only",
-            "message": "implemented in the code; not declared in the spec"
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "requestBody": {
+          "contentType": "application/json",
+          "schema": "object",
+          "required": true
+        },
+        "responses": [
+          {
+            "status": "200",
+            "description": "Draft invoice updated"
           }
         ]
       },
@@ -477,8 +519,7 @@
       },
       "tags": [
         "invoice",
-        "http-api",
-        "undocumented"
+        "http-api"
       ],
       "facets": {
         "business": {
@@ -487,12 +528,25 @@
         }
       },
       "contract": {
-        "status": "code-only",
+        "status": "both",
         "apiId": "compat::api::openapi.yaml",
-        "drift": [
+        "spec": {
+          "path": "openapi.yaml",
+          "line": 58,
+          "operationId": "send"
+        },
+        "params": [
           {
-            "kind": "code-only",
-            "message": "implemented in the code; not declared in the spec"
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": [
+          {
+            "status": "200",
+            "description": "Invoice sent"
           }
         ]
       },
@@ -561,8 +615,7 @@
       },
       "tags": [
         "invoice",
-        "http-api",
-        "undocumented"
+        "http-api"
       ],
       "facets": {
         "business": {
@@ -571,12 +624,25 @@
         }
       },
       "contract": {
-        "status": "code-only",
+        "status": "both",
         "apiId": "compat::api::openapi.yaml",
-        "drift": [
+        "spec": {
+          "path": "openapi.yaml",
+          "line": 46,
+          "operationId": "delete"
+        },
+        "params": [
           {
-            "kind": "code-only",
-            "message": "implemented in the code; not declared in the spec"
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": [
+          {
+            "status": "204",
+            "description": "Invoice cancelled"
           }
         ]
       },
@@ -596,7 +662,7 @@
         "line": 102,
         "endLine": 106
       },
-      "docs": "Reads the invoice an approver is reviewing.",
+      "docs": "Requests the invoice details needed to make an approval decision.",
       "snippet": "@ApiRoute(value = \"/{id}/approval\", method = \"POST\")\n  @SomeAnnotationPolicy(resource = \"invoice\", action = \"approve\")\n  public Invoice approval(@PathVariable Long id) {\n    return invoices.get(id);\n  }",
       "group": "InvoiceController",
       "tags": [
@@ -625,16 +691,28 @@
       },
       "tags": [
         "invoice",
-        "http-api",
-        "undocumented"
+        "http-api"
       ],
       "contract": {
-        "status": "code-only",
+        "status": "both",
         "apiId": "compat::api::openapi.yaml",
-        "drift": [
+        "spec": {
+          "path": "openapi.yaml",
+          "line": 70,
+          "operationId": "approval"
+        },
+        "params": [
           {
-            "kind": "code-only",
-            "message": "implemented in the code; not declared in the spec"
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": [
+          {
+            "status": "200",
+            "description": "Invoice details for the approval decision"
           }
         ]
       },
@@ -2066,7 +2144,7 @@
     {
       "id": "compat::api::openapi.yaml",
       "kind": "api",
-      "name": "Generated invoice approval API",
+      "name": "Invoice API",
       "tags": [
         "api"
       ],
@@ -2078,7 +2156,7 @@
       },
       "facets": {
         "business": {
-          "label": "Generated invoice approval API"
+          "label": "Invoice API"
         }
       },
       "project": {
@@ -2087,17 +2165,19 @@
       }
     },
     {
-      "id": "compat::route::GET /api/invoices/{id}/approval-details",
+      "id": "compat::route::GET /api/invoices/:param/approval-details",
       "kind": "route",
-      "name": "GET /api/invoices/{id}/approval-details",
+      "name": "GET /api/invoices/:param/approval-details",
       "lang": "java",
-      "tags": [],
+      "tags": [
+        "invoice"
+      ],
       "contract": {
         "status": "both",
         "apiId": "compat::api::openapi.yaml",
         "spec": {
           "path": "openapi.yaml",
-          "line": 7,
+          "line": 76,
           "operationId": "getInvoiceForApproval"
         },
         "summary": "Read an invoice for approval",
@@ -2872,7 +2952,7 @@
       "id": "e51",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
-      "to": "compat::route::GET /api/invoices/{id}/approval-details",
+      "to": "compat::route::GET /api/invoices",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -2883,7 +2963,7 @@
       "id": "e52",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
-      "to": "compat::route::GET /api/invoices",
+      "to": "compat::route::POST /api/invoices",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -2905,7 +2985,7 @@
       "id": "e54",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
-      "to": "compat::route::POST /api/invoices",
+      "to": "compat::route::PUT /api/invoices/:param",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -2916,7 +2996,7 @@
       "id": "e55",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
-      "to": "compat::route::PUT /api/invoices/:param",
+      "to": "compat::route::DELETE /api/invoices/:param",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -2938,7 +3018,7 @@
       "id": "e57",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
-      "to": "compat::route::DELETE /api/invoices/:param",
+      "to": "compat::route::POST /api/invoices/:param/approval",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -2949,7 +3029,7 @@
       "id": "e58",
       "kind": "contains",
       "from": "compat::api::openapi.yaml",
-      "to": "compat::route::POST /api/invoices/:param/approval",
+      "to": "compat::route::GET /api/invoices/:param/approval-details",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -2959,7 +3039,7 @@
     {
       "id": "dlg59",
       "kind": "calls",
-      "from": "compat::route::GET /api/invoices/{id}/approval-details",
+      "from": "compat::route::GET /api/invoices/:param/approval-details",
       "to": "compat::src/main/java/com/acme/invoices/api/InvoiceApiDelegateImpl.java::InvoiceApiDelegateImpl.getInvoiceForApproval",
       "resolution": {
         "status": "resolved",
@@ -2972,7 +3052,7 @@
       "id": "dlg60",
       "kind": "guards",
       "from": "compat::guard::SomeAnnotationPolicy(approve on invoice)",
-      "to": "compat::route::GET /api/invoices/{id}/approval-details",
+      "to": "compat::route::GET /api/invoices/:param/approval-details",
       "meta": {
         "requires": "approve",
         "via": "handler",
@@ -2988,7 +3068,7 @@
   ],
   "meta": {
     "files": 14,
-    "sourceDigest": "c8e10aa71bb6",
+    "sourceDigest": "28f0e25c3847",
     "stores": {
       "unnamed": 1
     },
@@ -3003,7 +3083,18 @@
             "tags",
             "glossary"
           ],
-          "ignored": []
+          "ignored": [],
+          "frameworks": {
+            "spring.mappings": [
+              "ApiRoute"
+            ],
+            "spring.security": [
+              "SomeAnnotationPolicy"
+            ],
+            "spring.delegates": [
+              "*ApiDelegate"
+            ]
+          }
         }
       ],
       "conflicts": [],
@@ -3199,7 +3290,7 @@
       "blindSpots": [
         "No `tests` block in farsight.config.json; declared and static evidence only (docs/proposals/tests-surface.md §3.2)"
       ],
-      "sourceDigest": "c8e10aa71bb6"
+      "sourceDigest": "28f0e25c3847"
     },
     "projects": {
       "tool": "none",

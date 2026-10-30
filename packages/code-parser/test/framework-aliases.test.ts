@@ -25,7 +25,8 @@ const frameworks: AdapterOptions['frameworks'] = {
     mappings: {
       ApiRoute: { method: 'pair:method', path: 'arg:0' },
       JsonGet: { method: 'GET', path: 'pair:path' },
-      PosRoute: { method: 'arg:0', path: 'arg:1' },
+      PosRoute: { method: 'arg:0', path: 'pair:path' },
+      ValueRoute: { method: 'GET', path: 'pair:value' },
     },
     security: {
       SomeAnnotationPolicy: { label: '$action on $resource', requires: '$action', tier: 'policy' },
@@ -53,13 +54,18 @@ test('Spring aliases read paths and verbs, policy grants and tiers, listeners an
       'Api.java': `
 @RestController @RequestMapping("/invoices")
 class InvoiceApiDelegateImpl implements InvoiceApiDelegate, java.io.Serializable {
-  @ApiRoute("/approve", method = "POST")
+  @ApiRoute(value = "/approve", method = "POST")
   @SomeAnnotationPolicy(resource = "invoice", action = "approve")
   public void approve() {}
   @JsonGet(path = "/list") public void list() {}
-  @PosRoute("PATCH", "/edit") public void edit() {}
-  @ApiRoute("/enum", method = RequestMethod.PUT) public void enumVerb() {}
+  @PosRoute(value = "PATCH", path = "/edit") public void edit() {}
+  @ValueRoute("/short") public void shortValue() {}
+  @ApiRoute(value = "/enum", method = RequestMethod.PUT) public void enumVerb() {}
   @ApiRoute("/unknown") public void missingVerb() {}
+  @ApiRoute(value = Paths.APPROVE, method = "POST") public void constantPath() {}
+  @ApiRoute(value = "/prefix" + SUFFIX, method = "POST") public void expressionPath() {}
+  @ApiRoute(value = "/unknown-verb", method = HttpVerbs.POST) public void constantVerb() {}
+  @SomeAnnotationPolicy(resource = Resources.INVOICE, action = Actions.APPROVE) public void constantPolicy() {}
   @RequiresRole() public void missingRole() {}
   @RequiresRole("billing") public void billing() {}
   @OnEvent(topic = "invoice.approved") @KafkaListener("invoice.legacy") public void consume() {}
@@ -74,8 +80,19 @@ class InvoiceApiDelegateImpl implements InvoiceApiDelegate, java.io.Serializable
           .filter((n) => n.kind === 'route')
           .map((n) => n.name)
           .sort(),
-        ['GET /invoices/list', 'PATCH /invoices/edit', 'POST /invoices/approve', 'PUT /invoices/enum'],
+        [
+          'GET /invoices/list',
+          'GET /invoices/short',
+          'PATCH /invoices/edit',
+          'POST /invoices/approve',
+          'PUT /invoices/enum',
+        ],
       );
+      assert.equal(f.meta?.routes?.gaps.length, 4);
+      assert.ok(f.meta!.routes!.gaps.every((g) => g.kind === 'non-literal-path' && g.path === 'Api.java' && g.line));
+      const constantPolicy = f.nodes.find((n) => n.kind === 'guard' && n.name === 'SomeAnnotationPolicy')!;
+      assert.ok(constantPolicy);
+      assert.equal(f.edges.find((e) => e.from === constantPolicy.id)?.meta?.requires, undefined);
       const policy = f.nodes.find((n) => n.name === 'approve on invoice')!;
       assert.equal(policy.kind, 'guard');
       assert.deepEqual(policy.gateTier, { tier: 'policy', from: 'config' });
@@ -113,6 +130,8 @@ class InvoiceApiDelegateImpl implements InvoiceApiDelegate, java.io.Serializable
       const plain = await ingestJava(root, { repoName: 'sample' });
       assert.equal(plain.nodes.filter((n) => n.kind === 'route').length, 0);
       assert.ok(!plain.nodes.find((n) => n.name === 'InvoiceApiDelegateImpl.getInvoice')!.signature);
+      assert.ok(!plain.nodes.find((n) => n.name === 'InvoiceApiDelegateImpl')!.signature);
+      assert.ok(!plain.nodes.some((n) => n.tags.some((t) => t.startsWith('implements:'))));
     },
   );
 });

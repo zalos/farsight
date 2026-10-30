@@ -2824,7 +2824,17 @@
       "tags": [],
       "package": {
         "scope": "third-party",
-        "note": "imported by 1 file but declared in no package.json above it"
+        "version": "^10.4.0",
+        "declaredIn": [
+          "package.json"
+        ],
+        "declarations": [
+          {
+            "path": "package.json",
+            "range": "^10.4.0",
+            "field": "dependencies"
+          }
+        ]
       }
     },
     {
@@ -6889,8 +6899,7 @@
           "spec": "node:url",
           "files": 1
         }
-      ],
-      "undeclared": 1
+      ]
     },
     "decisions": {
       "decisions": [
@@ -6960,7 +6969,12 @@
             "journeys",
             "lifecycle"
           ],
-          "ignored": []
+          "ignored": [],
+          "frameworks": {
+            "nest.verbs": [
+              "JsonGet"
+            ]
+          }
         }
       ],
       "conflicts": [],

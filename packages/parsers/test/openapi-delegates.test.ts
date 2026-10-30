@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { joinDelegates } from '../dist/openapi/delegates.js';
-import { buildIndex, roleTable, type GraphFragment, type GraphNode } from '@farsight/core';
+import { buildIndex, roleTable, configFilesText, type GraphFragment, type GraphNode } from '@farsight/core';
 
 function fixture(): GraphFragment {
   const loc = { repo: 'sample', path: 'src/InvoiceApiDelegateImpl.java', line: 1 };
@@ -112,6 +112,28 @@ test('delegate matching respects declaration paths, public overrides and operati
   assert.ok(!ambiguous.edges.some((e) => e.kind === 'calls'));
 });
 
+test('joined routes use controller paths and tags, and an already implemented route is left intact', () => {
+  const f = fixture();
+  const route = f.nodes[2]!;
+  route.id = 'sample::route::POST /invoices/{id}/approve';
+  route.name = 'POST /invoices/{id}/approve';
+  f.edges.push({ id: 'contains', kind: 'contains', from: 'api', to: route.id });
+  joinDelegates(f, ['*ApiDelegate']);
+  assert.equal(route.id, 'sample::route::POST /invoices/:param/approve');
+  assert.equal(route.name, 'POST /invoices/:param/approve');
+  assert.ok(route.tags.includes('invoice'));
+  assert.equal(f.edges.find((e) => e.id === 'contains')!.to, route.id);
+  const built = fixture();
+  built.nodes[2]!.contract!.status = 'both';
+  const before = JSON.stringify(built);
+  assert.deepEqual(joinDelegates(built, ['*ApiDelegate']), []);
+  assert.equal(JSON.stringify(built), before);
+  const noSpec = fixture();
+  noSpec.nodes = noSpec.nodes.filter((n) => n.kind !== 'route');
+  joinDelegates(noSpec, ['*ApiDelegate']);
+  assert.ok(!noSpec.nodes[0]!.tags.includes('controller'));
+});
+
 test('joined routes use the ordinary security and request-body drift checks', () => {
   const f = fixture();
   f.edges = [];
@@ -209,6 +231,11 @@ test('ingest passes configured aliases into readers, joins spec delegates, and r
     rows.some((r) => r.guard.name === 'approve on invoice' && r.action.id === route.id && r.roles.includes('approve')),
   );
   assert.ok(f.meta?.config?.files.find((file) => file.root)?.fields.includes('frameworks'));
+  for (const register of ['hud', 'professional'] as const) {
+    const listed = configFilesText({ spring: f.meta!.config! }, 'spring', register).join('\n');
+    for (const name of ['ApiRoute', 'SomeAnnotationPolicy', '*ApiDelegate']) assert.ok(listed.includes(name));
+  }
+  assert.ok(f.nodes.filter((n) => n.kind === 'route').every((n) => n.contract?.status === 'both'));
   const noSpecs = await ingestRepo(root, { repoName: 'spring', openapi: false, tests: false, design: false });
   assert.ok(!noSpecs.edges.some((e) => e.resolution?.note?.includes('frameworks.spring.delegates')));
   assert.ok(!noSpecs.meta?.routes?.gaps.some((g) => g.kind === 'delegate-unmatched'));
@@ -241,6 +268,70 @@ test('framework aliases in a nested config are reported as ignored, with root an
       configOverlay: { from: '.farsight/settings.json', config: { frameworks } },
     });
     assert.ok(overlay.nodes.some((n) => n.name === 'GET /api/x'));
+    const direct = await ingestRepo(root, {
+      repoName: 'sample',
+      openapi: false,
+      design: false,
+      tests: false,
+      frameworks,
+    });
+    assert.ok(direct.nodes.some((n) => n.name === 'GET /api/x'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('unmatched aliases name their config line and malformed aliases preserve other settings', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { ingestRepo } = await import('../dist/index.js');
+  const root = mkdtempSync(join(tmpdir(), 'alias-warnings-'));
+  try {
+    writeFileSync(
+      join(root, 'api.ts'),
+      `import {Controller} from '@nestjs/common'; @Controller('api') class C { @JsonGet('x') x() {} }`,
+    );
+    const frameworks = {
+      spring: {
+        mappings: { TypoGet: { method: 'GET', path: 'arg:0' } },
+        security: { TypoPolicy: { label: 'policy' } },
+        listeners: { MissingEvent: 'pair:topic' },
+        delegates: ['*WrongDelegate'],
+      },
+      nest: { verbs: { JsonGet: 'GET', WrongGet: 'GET' }, guards: { MissingGuard: { label: 'tenant' } } },
+      express: { middleware: { missingMiddleware: { label: 'tenant' } } },
+    };
+    const path = join(root, 'farsight.config.json');
+    writeFileSync(path, JSON.stringify({ frameworks }, null, 2));
+    const f = await ingestRepo(root, { repoName: 'sample', tests: false, design: false, openapi: false });
+    const notes = f.meta!.config!.notes.filter((n) => n.includes('frameworks.'));
+    assert.equal(notes.length, 7);
+    for (const name of [
+      'TypoGet',
+      'TypoPolicy',
+      'MissingEvent',
+      '*WrongDelegate',
+      'WrongGet',
+      'MissingGuard',
+      'missingMiddleware',
+    ]) {
+      assert.ok(
+        notes.some((n) => n.includes(JSON.stringify(name)) && /farsight\.config\.json:\d+ → frameworks\./.test(n)),
+        name,
+      );
+    }
+    assert.ok(!notes.some((n) => n.includes('"JsonGet"')));
+    const file = f.meta!.config!.files[0]!;
+    assert.deepEqual(file.frameworks?.['nest.verbs'], ['JsonGet', 'WrongGet']);
+    writeFileSync(
+      path,
+      JSON.stringify({ tags: { billing: ['api.ts'] }, frameworks: { spring: { security: { Bad: { label: 42 } } } } }),
+    );
+    const bad = await ingestRepo(root, { repoName: 'sample', tests: false, design: false, openapi: false });
+    assert.ok(bad.nodes.some((n) => n.tags.includes('billing')));
+    assert.ok(bad.meta!.config!.files[0]!.ignored.includes('frameworks'));
+    assert.ok(bad.meta!.config!.notes.some((n) => n.includes('frameworks was ignored')));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

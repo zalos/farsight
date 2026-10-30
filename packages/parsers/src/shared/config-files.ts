@@ -42,6 +42,7 @@ import {
   applyConfig,
   applyRouteGuards,
   readConfigFile,
+  frameworkAliasNames,
   scopeOfDir,
   stringList,
   CONFIG_FIELDS,
@@ -122,8 +123,9 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
     }
     const dir = root ? '.' : posix.dirname(path);
     const config = read.config;
+    meta.notes.push(...(read.notes ?? []).map((note) => `${path}: ${note}`));
     const fields: string[] = [];
-    const ignored: string[] = [];
+    const ignored: string[] = [...(read.ignored ?? [])];
     for (const key of Object.keys(config)) {
       // `$schema`, `$comment` and the like are for editors, not for Farsight
       if (key.startsWith('$') || key.startsWith('//')) continue;
@@ -143,7 +145,8 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
       fields.push(key);
     }
     for (const key of ignored) delete (config as Record<string, unknown>)[key];
-    meta.files.push({ path, dir, root, fields, ignored });
+    const frameworks = frameworkAliasNames(config.frameworks);
+    meta.files.push({ path, dir, root, fields, ignored, ...(frameworks ? { frameworks } : {}) });
     ws.files.push({ path, dir, config, root });
     if (root) ws.root = config;
   }
@@ -182,6 +185,7 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
       from: 'workspace',
       fields: Object.keys(given),
       ignored: [],
+      ...(frameworkAliasNames(config.frameworks) ? { frameworks: frameworkAliasNames(config.frameworks) } : {}),
     });
   }
   ws.merged = mergeConfigs(ws.files, meta, ws.stores);

@@ -206,7 +206,7 @@ test(
   'review units declared as agent stages are the recorded review units, and admission re-derives each one',
   needsStore,
   () => {
-    // The guided review (one unit per planned check: the preview's 30 fit the review side's bound of 32) and the general
+    // The guided review (one unit per planned check: the preview's 31 fit the review side's bound of 32) and the general
     // review (one unit per source partition), both on a local model, with the review adapters' digests fixed stand-ins.
     const terms: Terms = { ...portableTerms('static'), review: { guided: ['all'], general: true } };
     const { policy, packs } = inputsOf(terms);

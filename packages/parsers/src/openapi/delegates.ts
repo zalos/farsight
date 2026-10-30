@@ -9,6 +9,7 @@ import {
   type RouteGap,
 } from '@farsight/core';
 import { globToRegExp } from '../shared/files.js';
+import { autoTags, normalizePath } from '../shared/tags.js';
 
 const RESPONSE_ENTITY = /\bResponseEntity\s*</;
 const classKey = (node: GraphNode, name = node.name) => `${node.loc?.repo}\0${node.loc?.path}\0${name}`;
@@ -28,7 +29,6 @@ export function joinDelegates(fragment: GraphFragment, globs: string[], drift: D
     if (!node.tags.some((tag) => tag.startsWith('implements:') && patterns.some((re) => re.test(tag.slice(11)))))
       continue;
     classes.set(classKey(node), node);
-    if (!node.tags.includes('controller')) node.tags.push('controller');
   }
   if (!classes.size) return [];
   const operations = new Map<string, GraphNode[]>();
@@ -75,6 +75,7 @@ export function joinDelegates(fragment: GraphFragment, globs: string[], drift: D
     gates.set(e.to, list);
   }
   const joined: GraphNode[] = [];
+  const renamed = new Map<string, string>();
   const gaps: RouteGap[] = [];
   for (const [method, handlers] of candidates) {
     const routes = operations.get(method) ?? [];
@@ -92,6 +93,23 @@ export function joinDelegates(fragment: GraphFragment, globs: string[], drift: D
         continue;
       }
       const route = routes[0]!;
+      if (route.contract?.status === 'both') continue;
+      const address = /^([A-Z]+) (.+)$/.exec(route.name);
+      if (!address) continue;
+      const path = normalizePath(address[2]!);
+      const routeId = `${fragment.repo}::route::${address[1]} ${path}`;
+      if (fragment.nodes.some((n) => n.id === routeId && n !== route)) {
+        gaps.push({
+          kind: 'delegate-unmatched',
+          path: fn.loc!.path,
+          line: fn.loc!.line,
+          name: fn.name,
+          text: t('config.delegate.ambiguous', 'professional').replace('{name}', fn.name).replace('{method}', method),
+        });
+        continue;
+      }
+      renamed.set(route.id, routeId);
+      route.name = `${address[1]} ${path}`;
       const callKey = `calls\0${route.id}\0${fn.id}`;
       if (!keys.has(callKey)) {
         fragment.edges.push({
@@ -124,10 +142,19 @@ export function joinDelegates(fragment: GraphFragment, globs: string[], drift: D
         route.contract.status = 'both';
         joined.push(route);
       }
-      route.tags = route.tags.filter((tag) => tag !== 'spec-only');
+      route.tags = [
+        ...new Set([...route.tags.filter((tag) => tag !== 'spec-only'), ...autoTags(fn.loc!.path, path, 'route')]),
+      ];
       route.loc ??= { ...fn.loc! };
       if (route.lang === 'openapi') route.lang = 'java';
+      const cls = classes.get(classKey(fn, fn.name.slice(0, fn.name.lastIndexOf('.'))))!;
+      if (!cls.tags.includes('controller')) cls.tags.push('controller');
     }
+  }
+  for (const route of joined) route.id = renamed.get(route.id) ?? route.id;
+  for (const edge of fragment.edges) {
+    edge.from = renamed.get(edge.from) ?? edge.from;
+    edge.to = renamed.get(edge.to) ?? edge.to;
   }
   // Reuse the normal controller drift rules after every handler and gate has been joined.
   const index = buildIndex(fragment.nodes, fragment.edges);

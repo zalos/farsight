@@ -50,7 +50,7 @@ test('deps list: the packages count with its split, one line per package with th
   const r = run(['deps', 'list']);
   assert.equal(r.status, 0, r.err);
   assert.match(r.out, /^9 packages across every source in scope \(8 third-party · 1 from this workspace\)/);
-  assert.match(r.out, /@nestjs\/common\s+invoice-app\s+third-party\s+\(undeclared\)/);
+  assert.match(r.out, /@nestjs\/common\s+invoice-app\s+third-party\s+\^10\.4\.0/);
   for (const row of packagesOf(index).rows) {
     const line = r.out.split('\n').find((l) => l.trimStart().startsWith(row.name + ' '))!;
     assert.ok(line, row.name);

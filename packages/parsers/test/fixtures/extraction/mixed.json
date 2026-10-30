@@ -2794,7 +2794,17 @@
       "tags": [],
       "package": {
         "scope": "third-party",
-        "note": "imported by 1 file but declared in no package.json above it"
+        "version": "^10.4.0",
+        "declaredIn": [
+          "web/package.json"
+        ],
+        "declarations": [
+          {
+            "path": "web/package.json",
+            "range": "^10.4.0",
+            "field": "dependencies"
+          }
+        ]
       }
     },
     {
@@ -3204,10 +3214,8 @@
       "tags": [
         "invoice",
         "service",
-        "implements:InvoiceApiDelegate",
         "http-api"
       ],
-      "signature": "implements InvoiceApiDelegate",
       "project": {
         "name": "compat",
         "root": "."
@@ -3684,7 +3692,7 @@
         "line": 102,
         "endLine": 106
       },
-      "docs": "Reads the invoice an approver is reviewing.",
+      "docs": "Requests the invoice details needed to make an approval decision.",
       "snippet": "@ApiRoute(value = \"/{id}/approval\", method = \"POST\")\n  @SomeAnnotationPolicy(resource = \"invoice\", action = \"approve\")\n  public Invoice approval(@PathVariable Long id) {\n    return invoices.get(id);\n  }",
       "group": "InvoiceController",
       "tags": [
@@ -5082,7 +5090,7 @@
     {
       "id": "compat::api::service/openapi.yaml",
       "kind": "api",
-      "name": "Generated invoice approval API",
+      "name": "Invoice API",
       "tags": [
         "api"
       ],
@@ -5094,12 +5102,50 @@
       },
       "facets": {
         "business": {
-          "label": "Generated invoice approval API"
+          "label": "Invoice API"
         }
       },
       "project": {
         "name": "compat",
         "root": "."
+      }
+    },
+    {
+      "id": "compat::route::POST /api/invoices/{id}/approval",
+      "kind": "route",
+      "name": "POST /api/invoices/{id}/approval",
+      "lang": "openapi",
+      "tags": [
+        "spec-only"
+      ],
+      "contract": {
+        "status": "spec-only",
+        "apiId": "compat::api::service/openapi.yaml",
+        "spec": {
+          "path": "service/openapi.yaml",
+          "line": 70,
+          "operationId": "approval"
+        },
+        "params": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": [
+          {
+            "status": "200",
+            "description": "Invoice details for the approval decision"
+          }
+        ],
+        "drift": [
+          {
+            "kind": "spec-only",
+            "message": "declared in the spec; no implementation found in the indexed code"
+          }
+        ]
       }
     },
     {
@@ -5115,7 +5161,7 @@
         "apiId": "compat::api::service/openapi.yaml",
         "spec": {
           "path": "service/openapi.yaml",
-          "line": 7,
+          "line": 76,
           "operationId": "getInvoiceForApproval"
         },
         "summary": "Read an invoice for approval",
@@ -8783,7 +8829,7 @@
       "id": "e172",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::GET /api/invoices/{id}/approval-details",
+      "to": "compat::route::GET /api/invoices",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8794,7 +8840,7 @@
       "id": "e173",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::GET /invoices",
+      "to": "compat::route::POST /api/invoices",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8805,7 +8851,7 @@
       "id": "e174",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::GET /invoices/:id",
+      "to": "compat::route::GET /api/invoices/:param",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8816,7 +8862,7 @@
       "id": "e175",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::POST /invoices",
+      "to": "compat::route::PUT /api/invoices/:param",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8827,7 +8873,7 @@
       "id": "e176",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::PATCH /invoices/:id",
+      "to": "compat::route::DELETE /api/invoices/:param",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8838,7 +8884,7 @@
       "id": "e177",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::POST /invoices/:id/finalize",
+      "to": "compat::route::POST /api/invoices/:param/send",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8849,7 +8895,7 @@
       "id": "e178",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::POST /invoices/:id/approve",
+      "to": "compat::route::POST /api/invoices/{id}/approval",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8860,7 +8906,7 @@
       "id": "e179",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::POST /invoices/:id/payment-intent",
+      "to": "compat::route::GET /api/invoices/{id}/approval-details",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8871,7 +8917,7 @@
       "id": "e180",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::POST /invoices/:id/mark-paid",
+      "to": "compat::route::GET /invoices",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8882,7 +8928,7 @@
       "id": "e181",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::GET /api/invoices",
+      "to": "compat::route::GET /invoices/:id",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8893,7 +8939,7 @@
       "id": "e182",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::GET /api/invoices/:param",
+      "to": "compat::route::POST /invoices",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8904,7 +8950,7 @@
       "id": "e183",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::POST /api/invoices",
+      "to": "compat::route::PATCH /invoices/:id",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8915,7 +8961,7 @@
       "id": "e184",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::PUT /api/invoices/:param",
+      "to": "compat::route::POST /invoices/:id/finalize",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8926,7 +8972,7 @@
       "id": "e185",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::POST /api/invoices/:param/send",
+      "to": "compat::route::POST /invoices/:id/approve",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8937,7 +8983,7 @@
       "id": "e186",
       "kind": "contains",
       "from": "compat::api::service/openapi.yaml",
-      "to": "compat::route::DELETE /api/invoices/:param",
+      "to": "compat::route::POST /invoices/:id/payment-intent",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8947,8 +8993,8 @@
     {
       "id": "e187",
       "kind": "contains",
-      "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::GET /invoices",
+      "from": "compat::api::service/openapi.yaml",
+      "to": "compat::route::POST /invoices/:id/mark-paid",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8959,7 +9005,7 @@
       "id": "e188",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::POST /invoices",
+      "to": "compat::route::GET /invoices",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8970,7 +9016,7 @@
       "id": "e189",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::GET /invoices/:id",
+      "to": "compat::route::POST /invoices",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8981,7 +9027,7 @@
       "id": "e190",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::PATCH /invoices/:id",
+      "to": "compat::route::GET /invoices/:id",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -8992,7 +9038,7 @@
       "id": "e191",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::POST /invoices/:id/payment-intent",
+      "to": "compat::route::PATCH /invoices/:id",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9003,7 +9049,7 @@
       "id": "e192",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::POST /invoices/:id/mark-paid",
+      "to": "compat::route::POST /invoices/:id/payment-intent",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9014,7 +9060,7 @@
       "id": "e193",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::DELETE /invoices/{id}",
+      "to": "compat::route::POST /invoices/:id/mark-paid",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9025,7 +9071,7 @@
       "id": "e194",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::POST /invoices/:id/finalize",
+      "to": "compat::route::DELETE /invoices/{id}",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9036,7 +9082,7 @@
       "id": "e195",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::POST /invoices/:id/approve",
+      "to": "compat::route::POST /invoices/:id/finalize",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9047,7 +9093,7 @@
       "id": "e196",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::GET /api/invoices",
+      "to": "compat::route::POST /invoices/:id/approve",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9058,7 +9104,7 @@
       "id": "e197",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::GET /api/invoices/:param",
+      "to": "compat::route::GET /api/invoices",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9069,7 +9115,7 @@
       "id": "e198",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::POST /api/invoices",
+      "to": "compat::route::GET /api/invoices/:param",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9080,7 +9126,7 @@
       "id": "e199",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::PUT /api/invoices/:param",
+      "to": "compat::route::POST /api/invoices",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9091,7 +9137,7 @@
       "id": "e200",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::POST /api/invoices/:param/send",
+      "to": "compat::route::PUT /api/invoices/:param",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9102,7 +9148,7 @@
       "id": "e201",
       "kind": "contains",
       "from": "compat::api::web/openapi.yaml",
-      "to": "compat::route::DELETE /api/invoices/:param",
+      "to": "compat::route::POST /api/invoices/:param/send",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9110,10 +9156,10 @@
       }
     },
     {
-      "id": "d202",
+      "id": "e202",
       "kind": "contains",
-      "from": "compat::design::web/docs/design/screens.json",
-      "to": "compat::page::/invoices",
+      "from": "compat::api::web/openapi.yaml",
+      "to": "compat::route::DELETE /api/invoices/:param",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9124,7 +9170,7 @@
       "id": "d203",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
-      "to": "compat::page::/invoices/new",
+      "to": "compat::page::/invoices",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9135,7 +9181,7 @@
       "id": "d204",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
-      "to": "compat::page::/invoices/:id/pay",
+      "to": "compat::page::/invoices/new",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9146,7 +9192,7 @@
       "id": "d205",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
-      "to": "compat::page::/invoices/:param/discard",
+      "to": "compat::page::/invoices/:id/pay",
       "resolution": {
         "status": "resolved",
         "technique": "annotation-scan",
@@ -9155,6 +9201,17 @@
     },
     {
       "id": "d206",
+      "kind": "contains",
+      "from": "compat::design::web/docs/design/screens.json",
+      "to": "compat::page::/invoices/:param/discard",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d207",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::page::/invoices/:id/edit",
@@ -9168,7 +9225,7 @@
       }
     },
     {
-      "id": "d207",
+      "id": "d208",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::flow::billing-cycle",
@@ -9179,7 +9236,7 @@
       }
     },
     {
-      "id": "d208",
+      "id": "d209",
       "kind": "renders",
       "from": "compat::flow::billing-cycle",
       "to": "compat::page::/invoices/new",
@@ -9193,7 +9250,7 @@
       }
     },
     {
-      "id": "d209",
+      "id": "d210",
       "kind": "renders",
       "from": "compat::flow::billing-cycle",
       "to": "compat::page::/invoices",
@@ -9207,7 +9264,7 @@
       }
     },
     {
-      "id": "d210",
+      "id": "d211",
       "kind": "renders",
       "from": "compat::flow::billing-cycle",
       "to": "compat::page::/invoices/:param/discard",
@@ -9221,7 +9278,7 @@
       }
     },
     {
-      "id": "d211",
+      "id": "d212",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::flow::new-invoice",
@@ -9232,7 +9289,7 @@
       }
     },
     {
-      "id": "d212",
+      "id": "d213",
       "kind": "renders",
       "from": "compat::flow::new-invoice",
       "to": "compat::page::/invoices/new",
@@ -9246,7 +9303,7 @@
       }
     },
     {
-      "id": "d213",
+      "id": "d214",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::flow::draft-and-send",
@@ -9257,7 +9314,7 @@
       }
     },
     {
-      "id": "d214",
+      "id": "d215",
       "kind": "renders",
       "from": "compat::flow::draft-and-send",
       "to": "compat::page::/invoices",
@@ -9271,7 +9328,7 @@
       }
     },
     {
-      "id": "d215",
+      "id": "d216",
       "kind": "renders",
       "from": "compat::flow::draft-and-send",
       "to": "compat::page::/invoices/:param/discard",
@@ -9285,7 +9342,7 @@
       }
     },
     {
-      "id": "d216",
+      "id": "d217",
       "kind": "contains",
       "from": "compat::design::web/docs/design/screens.json",
       "to": "compat::flow::get-paid",
@@ -9296,7 +9353,7 @@
       }
     },
     {
-      "id": "d217",
+      "id": "d218",
       "kind": "renders",
       "from": "compat::flow::get-paid",
       "to": "compat::page::/invoices/:id/pay",
@@ -9657,7 +9714,7 @@
       ],
       "notes": []
     },
-    "sourceDigest": "93d93c5da210",
+    "sourceDigest": "3cbf28041a35",
     "stores": {
       "named": {
         "config": 3
@@ -9678,8 +9735,7 @@
           "spec": "node:url",
           "files": 1
         }
-      ],
-      "undeclared": 1
+      ]
     },
     "decisions": {
       "decisions": [
@@ -10057,7 +10113,7 @@
         "`web/coverage/vitest-results.json` was produced against a different checkout — the code changed since the run, so it is evidence of the past, not of now ×2 — `web/coverage/vitest-results.json`, `web/coverage/coverage-final.json`",
         "`web/e2e/results.json` was produced against a different checkout — the code changed since the run, so it is evidence of the past, not of now"
       ],
-      "sourceDigest": "93d93c5da210"
+      "sourceDigest": "3cbf28041a35"
     },
     "projects": {
       "tool": "none",
