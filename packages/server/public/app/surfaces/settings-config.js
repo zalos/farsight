@@ -141,9 +141,9 @@ function patternsHtml(meta, counts) {
     '>' +
     esc(t('config.patterns.title')) +
     ' · <span' +
-    defAttrs('count.scope.pattern') +
+    defAttrs('count.scope.source') +
     '>' +
-    esc(t('count.scope.pattern')) +
+    esc(t('count.scope.source')) +
     '</span></div><table class="src-table cfg-table"><tbody>' +
     rows +
     '</tbody></table></section>'

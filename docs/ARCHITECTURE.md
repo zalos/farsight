@@ -2274,11 +2274,11 @@ files select only files under that folder, with the workspace's excludes and ign
 Patterns run after config, tooling and setup-origin enrichment and before OpenAPI reconciliation. The existing bundled
 Tree-sitter grammars interpret call, decorator, annotation and raw-query matchers; a JavaScript regular expression per
 text line is the cheap tier. There is no dependency download, loaded adapter, shell command or source evaluation.
-Handlers resolve only to unique same-file declarations; enclosing targets use the innermost declaration span. Missing
+Handlers resolve only to unique same-file declarations; enclosing targets use the innermost function, component or class (including guard functions and server actions) with a real declaration span, never point-located route nodes. Self-edges are refused. Missing
 captures and handlers are reported, never replaced by placeholder nodes. Route identity uses the readers' normalized
-method/path key, so patterns, specs and client calls meet the same route.
+method/path key, so patterns, reader routes, specs and client calls meet the same route. A pattern reuses an existing reader route and adds its source note without replacing the reader evidence. Optional guard `requires` captures populate the existing guards-edge grant metadata used by Roles.
 
-`config-pattern` is declared evidence: the rule author supplied its meaning and matching supplies its source site.
+`config-pattern` records pattern evidence: the rule author supplied its meaning and matching supplies its source site. Matched nodes carry `pattern:<id>`; they do not carry the `declared` tag reserved for manual declarations, so guard drift counts a matched check as detected in source.
 Syntax matches carry HIGH confidence and regex matches MEDIUM; neither claims runtime verification. This adds one
 member to the frozen, additive-only `farsight-diff v1` technique enum. Unknown technique members remain printable verbatim.
 Per-rule reports are retained once in `meta.patterns`; match text and capture details are returned by explicit dry runs,
@@ -2286,8 +2286,12 @@ not copied into every report. CLI `patterns test`, MCP `patterns_test` (all tier
 same engine and do not save a graph. GET remains available on read-only and historical servers, reading today's source
 files rather than pretending the historical snapshot contains them.
 
-The pass reads selected regular files of at most 1 MiB, admits at most 64 rules per source, caps regex source at 512
-characters, and checks a one-second per-rule budget between files. It cannot preempt a running JavaScript regex; file
-bounds and explicit globs limit its inputs, not its worst-case matching time. The shared report names skips and
-unresolved targets; every displayed count comes from `patternCounts`. This leaves authoring forms to the Settings forms
-lane and keeps the parser contract usable independently through config files, CLI and MCP.
+The pass reads selected regular files of at most 1 MiB, admits at most 64 rules per source, caps regex source and query
+string literals at 512 characters and raw query source at 4096. Each selected file is parsed once for all applicable rules.
+Each rule consumes a deterministic prefix in sorted path order: at most 2048 files and 64 MiB, with a thirty-second safety
+budget and the remaining time passed to query traversal. Every budget stop becomes a sync warning. Running JavaScript
+regexes, including query predicates, cannot be preempted. Dry runs return at most 1000 details with returned and omitted
+Counteds; snippet and capture previews keep fourteen lines and at most 4096 characters. No selected rule means no adapter
+extraction, and HTTP admits one test per source while rejecting cross-site requests to this cost-bearing GET. The report
+names skips and unresolved captures; every displayed count comes from the shared core folds. Authoring forms remain the
+Settings forms lane, with the contract independently usable through config files, CLI and MCP.

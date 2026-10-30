@@ -87,7 +87,14 @@ export function declaredPathWarnings(
       (n) => file.root || file.dir === '.' || n.loc?.path.startsWith(`${file.dir}/`),
     );
     for (const row of fragment.meta?.patterns?.rules ?? []) {
-      if (row.file === file.path && row.matched === 0)
+      if (row.file !== file.path) continue;
+      const budgetReasons = ['budget', 'fileBudget', 'byteBudget', 'queryLimit'].map((key) =>
+        t('config.patterns.' + key, 'professional'),
+      );
+      const skips = row.skipped.filter((skip) => row.matched === 0 || budgetReasons.includes(skip.reason));
+      if (skips.length) {
+        for (const skip of skips) warn(`${location(row.id)} → patterns`, row.id, `${skip.path}: ${skip.reason}`);
+      } else if (row.matched === 0)
         warn(`${location(row.id)} → patterns`, row.id, t('config.patterns.unmatched', 'professional'));
     }
     for (const [group, names] of Object.entries(frameworkAliasNames(file.config.frameworks) ?? {})) {

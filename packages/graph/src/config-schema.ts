@@ -23,72 +23,95 @@ export default {
           'id': { 'type': 'string', 'pattern': '^[A-Za-z0-9][A-Za-z0-9_.:-]*$' },
           'files': { 'type': 'array', 'minItems': 1, 'items': { 'type': 'string', 'minLength': 1 } },
           'match': {
+            'type': 'object',
             'oneOf': [
+              { 'required': ['call'] },
+              { 'required': ['decorator'] },
+              { 'required': ['annotation'] },
+              { 'required': ['query'] },
+              { 'required': ['regex'] },
+            ],
+            'allOf': [
               {
-                'type': 'object',
-                'additionalProperties': false,
-                'required': ['call'],
-                'properties': {
-                  'call': { 'type': 'string', 'minLength': 1 },
-                  'args': {
-                    'type': 'object',
-                    'propertyNames': { 'pattern': '^[A-Za-z_][A-Za-z0-9_]*$' },
-                    'additionalProperties': {
-                      'anyOf': [
-                        { 'type': 'integer', 'minimum': -1 },
-                        { 'type': 'string', 'pattern': '^pair:[A-Za-z_][A-Za-z0-9_]*$' },
-                      ],
+                'if': { 'required': ['call'] },
+                'then': {
+                  'type': 'object',
+                  'additionalProperties': false,
+                  'required': ['call'],
+                  'properties': {
+                    'call': { 'type': 'string', 'minLength': 1 },
+                    'args': {
+                      'type': 'object',
+                      'propertyNames': { 'pattern': '^[A-Za-z_][A-Za-z0-9_]*$' },
+                      'additionalProperties': {
+                        'anyOf': [
+                          { 'type': 'integer', 'minimum': -1 },
+                          { 'type': 'string', 'pattern': '^pair:[A-Za-z_][A-Za-z0-9_]*$' },
+                        ],
+                      },
                     },
                   },
                 },
               },
               {
-                'type': 'object',
-                'additionalProperties': false,
-                'required': ['decorator'],
-                'properties': {
-                  'decorator': { 'type': 'string', 'minLength': 1 },
-                  'args': {
-                    'type': 'object',
-                    'propertyNames': { 'pattern': '^[A-Za-z_][A-Za-z0-9_]*$' },
-                    'additionalProperties': {
-                      'anyOf': [
-                        { 'type': 'integer', 'minimum': -1 },
-                        { 'type': 'string', 'pattern': '^pair:[A-Za-z_][A-Za-z0-9_]*$' },
-                      ],
+                'if': { 'required': ['decorator'] },
+                'then': {
+                  'type': 'object',
+                  'additionalProperties': false,
+                  'required': ['decorator'],
+                  'properties': {
+                    'decorator': { 'type': 'string', 'minLength': 1 },
+                    'args': {
+                      'type': 'object',
+                      'propertyNames': { 'pattern': '^[A-Za-z_][A-Za-z0-9_]*$' },
+                      'additionalProperties': {
+                        'anyOf': [
+                          { 'type': 'integer', 'minimum': -1 },
+                          { 'type': 'string', 'pattern': '^pair:[A-Za-z_][A-Za-z0-9_]*$' },
+                        ],
+                      },
                     },
                   },
                 },
               },
               {
-                'type': 'object',
-                'additionalProperties': false,
-                'required': ['annotation'],
-                'properties': {
-                  'annotation': { 'type': 'string', 'minLength': 1 },
-                  'args': {
-                    'type': 'object',
-                    'propertyNames': { 'pattern': '^[A-Za-z_][A-Za-z0-9_]*$' },
-                    'additionalProperties': {
-                      'anyOf': [
-                        { 'type': 'integer', 'minimum': -1 },
-                        { 'type': 'string', 'pattern': '^pair:[A-Za-z_][A-Za-z0-9_]*$' },
-                      ],
+                'if': { 'required': ['annotation'] },
+                'then': {
+                  'type': 'object',
+                  'additionalProperties': false,
+                  'required': ['annotation'],
+                  'properties': {
+                    'annotation': { 'type': 'string', 'minLength': 1 },
+                    'args': {
+                      'type': 'object',
+                      'propertyNames': { 'pattern': '^[A-Za-z_][A-Za-z0-9_]*$' },
+                      'additionalProperties': {
+                        'anyOf': [
+                          { 'type': 'integer', 'minimum': -1 },
+                          { 'type': 'string', 'pattern': '^pair:[A-Za-z_][A-Za-z0-9_]*$' },
+                        ],
+                      },
                     },
                   },
                 },
               },
               {
-                'type': 'object',
-                'additionalProperties': false,
-                'required': ['query'],
-                'properties': { 'query': { 'type': 'string', 'minLength': 1 } },
+                'if': { 'required': ['query'] },
+                'then': {
+                  'type': 'object',
+                  'additionalProperties': false,
+                  'required': ['query'],
+                  'properties': { 'query': { 'type': 'string', 'minLength': 1, 'maxLength': 4096 } },
+                },
               },
               {
-                'type': 'object',
-                'additionalProperties': false,
-                'required': ['regex'],
-                'properties': { 'regex': { 'type': 'string', 'minLength': 1, 'maxLength': 512 } },
+                'if': { 'required': ['regex'] },
+                'then': {
+                  'type': 'object',
+                  'additionalProperties': false,
+                  'required': ['regex'],
+                  'properties': { 'regex': { 'type': 'string', 'minLength': 1, 'maxLength': 512 } },
+                },
               },
             ],
           },
@@ -110,6 +133,7 @@ export default {
               'kind': { 'enum': ['route', 'guard', 'external', 'queue', 'rule', 'flag', 'entrypoint'] },
               'tier': { 'enum': ['business', 'policy', 'technical'] },
               'tags': { 'type': 'array', 'items': { 'type': 'string', 'minLength': 1 } },
+              'requires': { 'type': 'string', 'minLength': 1 },
             },
           },
           'business': { 'type': 'string', 'minLength': 1 },

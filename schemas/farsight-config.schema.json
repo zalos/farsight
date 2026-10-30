@@ -38,124 +38,188 @@
             }
           },
           "match": {
+            "type": "object",
             "oneOf": [
               {
-                "type": "object",
-                "additionalProperties": false,
                 "required": [
                   "call"
-                ],
-                "properties": {
-                  "call": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "args": {
-                    "type": "object",
-                    "propertyNames": {
-                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                    },
-                    "additionalProperties": {
-                      "anyOf": [
-                        {
-                          "type": "integer",
-                          "minimum": -1
-                        },
-                        {
-                          "type": "string",
-                          "pattern": "^pair:[A-Za-z_][A-Za-z0-9_]*$"
-                        }
-                      ]
-                    }
-                  }
-                }
+                ]
               },
               {
-                "type": "object",
-                "additionalProperties": false,
                 "required": [
                   "decorator"
-                ],
-                "properties": {
-                  "decorator": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "args": {
-                    "type": "object",
-                    "propertyNames": {
-                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                    },
-                    "additionalProperties": {
-                      "anyOf": [
-                        {
-                          "type": "integer",
-                          "minimum": -1
-                        },
-                        {
-                          "type": "string",
-                          "pattern": "^pair:[A-Za-z_][A-Za-z0-9_]*$"
-                        }
-                      ]
-                    }
-                  }
-                }
+                ]
               },
               {
-                "type": "object",
-                "additionalProperties": false,
                 "required": [
                   "annotation"
-                ],
-                "properties": {
-                  "annotation": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "args": {
-                    "type": "object",
-                    "propertyNames": {
-                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                ]
+              },
+              {
+                "required": [
+                  "query"
+                ]
+              },
+              {
+                "required": [
+                  "regex"
+                ]
+              }
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "call"
+                  ]
+                },
+                "then": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "call"
+                  ],
+                  "properties": {
+                    "call": {
+                      "type": "string",
+                      "minLength": 1
                     },
-                    "additionalProperties": {
-                      "anyOf": [
-                        {
-                          "type": "integer",
-                          "minimum": -1
-                        },
-                        {
-                          "type": "string",
-                          "pattern": "^pair:[A-Za-z_][A-Za-z0-9_]*$"
-                        }
-                      ]
+                    "args": {
+                      "type": "object",
+                      "propertyNames": {
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                      },
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": -1
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^pair:[A-Za-z_][A-Za-z0-9_]*$"
+                          }
+                        ]
+                      }
                     }
                   }
                 }
               },
               {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "query"
-                ],
-                "properties": {
-                  "query": {
-                    "type": "string",
-                    "minLength": 1
+                "if": {
+                  "required": [
+                    "decorator"
+                  ]
+                },
+                "then": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "decorator"
+                  ],
+                  "properties": {
+                    "decorator": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "args": {
+                      "type": "object",
+                      "propertyNames": {
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                      },
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": -1
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^pair:[A-Za-z_][A-Za-z0-9_]*$"
+                          }
+                        ]
+                      }
+                    }
                   }
                 }
               },
               {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "regex"
-                ],
-                "properties": {
-                  "regex": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 512
+                "if": {
+                  "required": [
+                    "annotation"
+                  ]
+                },
+                "then": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "annotation"
+                  ],
+                  "properties": {
+                    "annotation": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "args": {
+                      "type": "object",
+                      "propertyNames": {
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                      },
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": -1
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^pair:[A-Za-z_][A-Za-z0-9_]*$"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "required": [
+                    "query"
+                  ]
+                },
+                "then": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "query"
+                  ],
+                  "properties": {
+                    "query": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "required": [
+                    "regex"
+                  ]
+                },
+                "then": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "regex"
+                  ],
+                  "properties": {
+                    "regex": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    }
                   }
                 }
               }
@@ -232,6 +296,10 @@
                   "type": "string",
                   "minLength": 1
                 }
+              },
+              "requires": {
+                "type": "string",
+                "minLength": 1
               }
             }
           },
@@ -244,7 +312,7 @@
     },
     "tags": {
       "type": "object",
-      "description": "tag → list of matchers. A node matches on substring of its path or name (case-insensitive).",
+      "description": "tag \u2192 list of matchers. A node matches on substring of its path or name (case-insensitive).",
       "additionalProperties": {
         "type": "array",
         "description": "Matchers: a substring of a node's path or name.",
@@ -255,14 +323,14 @@
     },
     "glossary": {
       "type": "object",
-      "description": "node name (or `METHOD /path` for routes) → business-lens label/description. A class member (`Class.member`) matches, in order: its exact name, then its member part, then its class part.",
+      "description": "node name (or `METHOD /path` for routes) \u2192 business-lens label/description. A class member (`Class.member`) matches, in order: its exact name, then its member part, then its class part.",
       "additionalProperties": {
         "$ref": "#/$defs/glossaryEntry"
       }
     },
     "guards": {
       "type": "object",
-      "description": "guard label → matchers. A function matcher (substring of path or name) turns the function into a guard node and flips calls into it to guards edges on the caller; a route matcher (`GET /api/v1/track/{token}`) declares a gate on that route.",
+      "description": "guard label \u2192 matchers. A function matcher (substring of path or name) turns the function into a guard node and flips calls into it to guards edges on the caller; a route matcher (`GET /api/v1/track/{token}`) declares a gate on that route.",
       "additionalProperties": {
         "type": "array",
         "description": "Matchers: a substring of a function's path or name, or a route.",
@@ -273,15 +341,19 @@
     },
     "gateTiers": {
       "type": "object",
-      "description": "matcher → tier: the tier a gate or rule is in when its class gives the wrong one. A matcher is an exact node id or a substring of the gate's path or name (the guards' shape). A `@guard[tier]` in the code wins over it.",
+      "description": "matcher \u2192 tier: the tier a gate or rule is in when its class gives the wrong one. A matcher is an exact node id or a substring of the gate's path or name (the guards' shape). A `@guard[tier]` in the code wins over it.",
       "additionalProperties": {
         "type": "string",
-        "enum": ["business", "policy", "technical"]
+        "enum": [
+          "business",
+          "policy",
+          "technical"
+        ]
       }
     },
     "entrypoints": {
       "type": "object",
-      "description": "entrypoint label → matchers. Matching nodes get searchable entrypoint tags so trace_flow can seed from them (cron/queue jobs…).",
+      "description": "entrypoint label \u2192 matchers. Matching nodes get searchable entrypoint tags so trace_flow can seed from them (cron/queue jobs\u2026).",
       "additionalProperties": {
         "type": "array",
         "description": "Matchers: a substring of a node's path or name.",
@@ -292,7 +364,7 @@
     },
     "setup": {
       "type": "array",
-      "description": "node ids (or name matchers, the guards shape) of the functions that build the process container — the setup closure's roots.",
+      "description": "node ids (or name matchers, the guards shape) of the functions that build the process container \u2014 the setup closure's roots.",
       "items": {
         "type": "string"
       }
@@ -332,7 +404,7 @@
     },
     "openapi": {
       "type": "array",
-      "description": "OpenAPI/Swagger documents describing this repo's HTTP surface — a repo-relative path or a URL each. Discovery by filename still runs; this adds specs it would not find (e.g. served by the API itself).",
+      "description": "OpenAPI/Swagger documents describing this repo's HTTP surface \u2014 a repo-relative path or a URL each. Discovery by filename still runs; this adds specs it would not find (e.g. served by the API itself).",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -356,7 +428,9 @@
           "phaseOrder": {
             "type": "array",
             "description": "Delivery phases from earliest to latest. If omitted, first use of x-phase in the contract defines the order.",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         }
       }
@@ -364,18 +438,23 @@
     "validators": {
       "type": "array",
       "description": "Configured multipart readers, named by exact function name or full node id. Only a real same-source call path from a route with a declared multipart/form-data body supplies validation credit; naming a reader alone proves nothing.",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "internalRoutes": {
       "type": "array",
       "description": "Exact internal METHOD /path declarations, excluded only from undocumented-policy failures. Parameter spelling is normalized; these are not globs and raw drift remains visible.",
-      "items": { "type": "string", "pattern": "^[A-Z]+ /.*$" }
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]+ /.*$"
+      }
     },
     "tests": {
       "$ref": "#/$defs/tests"
     },
     "storybook": {
-      "description": "the repo's Storybook(s) — where the config lives and where it runs when it runs (ADR 9). Discovery of `.storybook/main.*` still runs; this names the URL and the start command.",
+      "description": "the repo's Storybook(s) \u2014 where the config lives and where it runs when it runs (ADR 9). Discovery of `.storybook/main.*` still runs; this names the URL and the start command.",
       "anyOf": [
         {
           "$ref": "#/$defs/storybook"
@@ -549,7 +628,7 @@
     },
     "stores": {
       "type": "array",
-      "description": "the data stores the repo's tables live in, when the code does not say — fills the gap, never overrides code. In a nested file a declaration names only the tables under that file's folder; the nearer file wins.",
+      "description": "the data stores the repo's tables live in, when the code does not say \u2014 fills the gap, never overrides code. In a nested file a declaration names only the tables under that file's folder; the nearer file wins.",
       "items": {
         "$ref": "#/$defs/store"
       }
@@ -562,14 +641,14 @@
     },
     "tooling": {
       "type": "array",
-      "description": "glob(s) of tooling — scripts a person runs by hand, not the running app. Default [\"scripts/**\"]; [] turns it off. Root-only.",
+      "description": "glob(s) of tooling \u2014 scripts a person runs by hand, not the running app. Default [\"scripts/**\"]; [] turns it off. Root-only.",
       "items": {
         "type": "string"
       }
     },
     "lifecycle": {
       "type": "object",
-      "description": "The words people use for a record's statuses, per persona, and the conditions they see that are not a status. Keyed by the record's node id or table name. The code decides the statuses and the moves; this only names them — a status the code does not declare is a note. In a nested file an entry names only records whose statuses are declared under that file's folder; the nearer file's word stands.",
+      "description": "The words people use for a record's statuses, per persona, and the conditions they see that are not a status. Keyed by the record's node id or table name. The code decides the statuses and the moves; this only names them \u2014 a status the code does not declare is a note. In a nested file an entry names only records whose statuses are declared under that file's folder; the nearer file's word stands.",
       "additionalProperties": {
         "$ref": "#/$defs/lifecycleEntry"
       }
@@ -617,7 +696,7 @@
           ]
         },
         "results": {
-          "description": "per-case status/duration: a vitest `json` reporter file, a playwright `json` reporter file, or junit XML — one glob or several",
+          "description": "per-case status/duration: a vitest `json` reporter file, a playwright `json` reporter file, or junit XML \u2014 one glob or several",
           "anyOf": [
             {
               "type": "string"
@@ -631,7 +710,7 @@
           ]
         },
         "coverage": {
-          "description": "istanbul-shaped coverage-final.json — attributed at the run level unless the report names a test; one glob or several",
+          "description": "istanbul-shaped coverage-final.json \u2014 attributed at the run level unless the report names a test; one glob or several",
           "anyOf": [
             {
               "type": "string"
@@ -645,7 +724,7 @@
           ]
         },
         "report": {
-          "description": "an html report to deep-link to — one, or one per results file",
+          "description": "an html report to deep-link to \u2014 one, or one per results file",
           "anyOf": [
             {
               "type": "string"
@@ -715,7 +794,7 @@
         },
         "url": {
           "type": "string",
-          "description": "where it is served when it runs (`http://localhost:6006`) — the only origin the viewer will frame"
+          "description": "where it is served when it runs (`http://localhost:6006`) \u2014 the only origin the viewer will frame"
         },
         "root": {
           "type": "string",
@@ -723,7 +802,7 @@
         },
         "command": {
           "type": "string",
-          "description": "what a person runs to start it (`npm run storybook`) — printed when it is not reached"
+          "description": "what a person runs to start it (`npm run storybook`) \u2014 printed when it is not reached"
         },
         "name": {
           "type": "string",
@@ -733,7 +812,7 @@
     },
     "decisionOverride": {
       "type": "object",
-      "description": "A decision by id; every other field optional — an override gives only what it changes.",
+      "description": "A decision by id; every other field optional \u2014 an override gives only what it changes.",
       "required": [
         "id"
       ],
@@ -781,7 +860,7 @@
       }
     },
     "external": {
-      "description": "One declared external: a third-party system the code calls (an import), or a party — a counterparty the app hands work to outside its code (kind party, no import).",
+      "description": "One declared external: a third-party system the code calls (an import), or a party \u2014 a counterparty the app hands work to outside its code (kind party, no import).",
       "anyOf": [
         {
           "$ref": "#/$defs/externalSystem"
@@ -803,7 +882,7 @@
       "properties": {
         "import": {
           "type": "string",
-          "description": "a bare package specifier, or `<repo-relative path>::<Class>` — the client class the external is reached through"
+          "description": "a bare package specifier, or `<repo-relative path>::<Class>` \u2014 the client class the external is reached through"
         },
         "name": {
           "type": "string",
@@ -823,13 +902,13 @@
         },
         "store": {
           "type": "boolean",
-          "description": "this external is (true) or is not (false) used as a data store — overrides the default from the kind (erp · db · files are)"
+          "description": "this external is (true) or is not (false) used as a data store \u2014 overrides the default from the kind (erp \u00b7 db \u00b7 files are)"
         }
       }
     },
     "externalParty": {
       "type": "object",
-      "description": "A counterparty the app hands work to outside its code — a payment partner, the client. No import: no code reaches it. Drawn as a lane when a declared step or hand-off names it.",
+      "description": "A counterparty the app hands work to outside its code \u2014 a payment partner, the client. No import: no code reaches it. Drawn as a lane when a declared step or hand-off names it.",
       "required": [
         "name",
         "kind"
@@ -1062,7 +1141,7 @@
     },
     "projects": {
       "type": "object",
-      "description": "How the workspace's project tags group. A dimension with the prefix or the key of a default (`scope:` → domain, `type:` → type, `platform:` → platform) replaces it; any other is added. Root-only.",
+      "description": "How the workspace's project tags group. A dimension with the prefix or the key of a default (`scope:` \u2192 domain, `type:` \u2192 type, `platform:` \u2192 platform) replaces it; any other is added. Root-only.",
       "additionalProperties": false,
       "properties": {
         "tagDimensions": {
@@ -1139,7 +1218,7 @@
       "properties": {
         "views": {
           "type": "object",
-          "description": "persona id → { word → the statuses (as the code spells them) that persona calls by that word }.",
+          "description": "persona id \u2192 { word \u2192 the statuses (as the code spells them) that persona calls by that word }.",
           "additionalProperties": {
             "type": "object",
             "additionalProperties": {
@@ -1152,7 +1231,7 @@
         },
         "overlays": {
           "type": "array",
-          "description": "Conditions a person sees that are not a status — a row in another table.",
+          "description": "Conditions a person sees that are not a status \u2014 a row in another table.",
           "items": {
             "type": "object",
             "required": [
@@ -1181,7 +1260,7 @@
     },
     "storylineLane": {
       "type": "object",
-      "description": "One lane of the storyline's swimlane layout, named by the design. Lanes are derived from the graph — one per persona who owns a journey of the storyline and one per store its code writes to — so an entry only names, orders or adds a second line to one. Give exactly one of persona or store. An entry the graph cannot find is a note, never a lane.",
+      "description": "One lane of the storyline's swimlane layout, named by the design. Lanes are derived from the graph \u2014 one per persona who owns a journey of the storyline and one per store its code writes to \u2014 so an entry only names, orders or adds a second line to one. Give exactly one of persona or store. An entry the graph cannot find is a note, never a lane.",
       "required": [
         "id"
       ],

@@ -89,13 +89,13 @@ test.afterAll(async () => {
  * @covers GET /api/config
  * @covers packages/server/public/app/surfaces/settings-config.js::configFilesHtml
  */
-test('a pattern-only route reaches the Map and APIs, with declared match evidence and a counted report', async ({
+test('a pattern-only route reaches the Map and APIs, with pattern match evidence and a counted report', async ({
   page,
 }, testInfo) => {
   const graph = await (await fetch(base + 'graph')).json();
   const route = graph.nodes.find((n: { id: string }) => n.id === routeId);
   expect(route.tags).toContain('pattern:custom-route');
-  expect(route.tags).toContain('declared');
+  expect(route.tags).not.toContain('declared');
   const edge = graph.edges.find((e: { from: string; kind: string }) => e.from === routeId && e.kind === 'calls');
   expect(edge.resolution).toMatchObject({ technique: 'config-pattern', confidence: 'HIGH' });
   expect(edge.resolution.note).toContain('patterns[custom-route]');

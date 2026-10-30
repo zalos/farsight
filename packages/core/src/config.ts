@@ -35,6 +35,8 @@ export interface PatternDecl {
     topic?: string;
     handler?: string;
     guards?: string;
+    /** Grant captured at the matched guard site; carried on its guards edge. */
+    requires?: string;
     publishes?: string;
     consumes?: string;
     validates?: string;

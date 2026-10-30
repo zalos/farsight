@@ -234,5 +234,5 @@ export function createParser(options: { adapters: readonly LanguageAdapter[] }) 
   return Object.freeze({ parseRepository, extractRepository });
 }
 
-export { grammarQuery, grammarForFile } from './treesitter/queries.js';
+export { grammarQuery, grammarForFile, queryLimitProblem } from './treesitter/queries.js';
 export type { GrammarQuery } from './treesitter/queries.js';

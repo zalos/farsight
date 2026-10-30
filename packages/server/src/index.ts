@@ -1246,6 +1246,7 @@ export function serveGraph(
     return [...origins].sort();
   };
 
+  const patternTestsInFlight = new Set<string>();
   const server = createServer((req, res) => {
     const send = (code: number, body: string | Buffer, type = 'application/json') => {
       res.writeHead(code, { 'content-type': type });
@@ -2403,15 +2404,21 @@ export function serveGraph(
       if (!source || !repo || !root)
         return send(
           404,
-          JSON.stringify({ error: t('config.patterns.sourceMissing', 'professional').replace('{source}', id ?? '') }),
+          JSON.stringify({
+            error: t('config.patterns.sourceMissing', 'professional').replace('{source}', () => id ?? ''),
+          }),
         );
+      if (patternTestsInFlight.has(source.id))
+        return send(409, JSON.stringify({ error: t('config.patterns.inFlight', 'professional') }));
+      patternTestsInFlight.add(source.id);
       void testPatterns(
         root,
         { ...sourceIngestOptions(source), repoName: repo },
         { rule: u.searchParams.get('rule') || undefined },
       )
         .then((result) => send(200, JSON.stringify(result)))
-        .catch(() => send(400, JSON.stringify({ error: t('config.patterns.failed', 'professional') })));
+        .catch(() => send(400, JSON.stringify({ error: t('config.patterns.failed', 'professional') })))
+        .finally(() => patternTestsInFlight.delete(source.id));
       return;
     }
     // ── config files (docs/proposals/journey-organisation-and-config-files.md §5.4) — meta.config as ingest recorded it ──
@@ -2427,7 +2434,7 @@ export function serveGraph(
       const openapi = Object.fromEntries(Object.entries(g.meta.openapi ?? {}).filter(([r]) => !repo || r === repo));
       const openapiCounts = Object.fromEntries(Object.entries(openapi).map(([r, m]) => [r, openApiCounts(m)]));
       const patterns = Object.fromEntries(Object.entries(g.meta.patterns ?? {}).filter(([r]) => !repo || r === repo));
-      const patternCountRows = Object.fromEntries(Object.entries(patterns).map(([r, m]) => [r, patternCounts(m)]));
+      const patternCountRows = Object.fromEntries(Object.entries(patterns).map(([r, m]) => [r, patternCounts(m, r)]));
       // where a manifest's persona declarations and the code disagree about who uses a screen (core screenPersonaNotes)
       const personaNotes = Object.fromEntries(
         Object.keys(config)

@@ -1109,7 +1109,7 @@ is a word per stage, never a tally; a budget field is the value the file holds, 
 
 ### Pattern rules (ADR 49)
 
-`patternCounts(meta.patterns[repo])` supplies one row per configured rule, in report order. Equal ids in different config
+`patternCounts(meta.patterns[repo], repo)` supplies one row per configured rule, in report order. Equal ids in different config
 files remain separate rows. The CLI config list and pattern test, MCP config files/overview/test, and Settings config
 report read these same Counteds; `GET /api/config` carries them as `patternCounts` beside `patterns`.
 The closed scope registry adds `count.scope.pattern`: **for this pattern rule**, over its selected files in its source
@@ -1124,3 +1124,12 @@ and config folder. The count tooltip cites that scope and the report field.
 | skipped inputs | `rules[].skipped.length` | files or declarations set aside with a reason; one budget note records the stopping point, not a count of unvisited files |
 
 These counts describe parsing and declarations. They confer no test-run, coverage or release-readiness credit.
+
+The pattern report's `Counted.source` names the actual source and the rule's array index. Its Settings section heading
+uses **in this source**; individual number tips retain **for this pattern rule**. `patternMatchCounts(total, returned, repo)`
+also supplies the explicit dry-run detail cap, separate from per-rule matches:
+
+| printed number | unit key | scope and source | what counts |
+|---|---|---|---|
+| matches returned | `count.unit.patternReturned` | `count.scope.source`; named source's `patterns test.matches.returned` | details included in this response, at most 1000, unresolved first |
+| matches omitted | `count.unit.patternOmitted` | `count.scope.source`; named source's `patterns test.matches.omitted` | processed matches minus returned details; not unvisited files or matches beyond a stopped budget |

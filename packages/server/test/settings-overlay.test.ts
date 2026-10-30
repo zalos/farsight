@@ -357,3 +357,35 @@ test('pattern test is a guarded read on read-only and historical servers, carrie
     assert.deepEqual((inventory.body.patternCounts as Record<string, unknown>).app, result.body.counts);
   }
 });
+
+test('pattern dry runs admit one request per source, refuse competing work and release the source afterward', async (t) => {
+  const s = await server(t, 'flag');
+  const noRules = await s.call('GET', '/api/patterns/test?source=app');
+  assert.equal(noRules.status, 200);
+  assert.deepEqual(noRules.body.matches, []);
+  const config = {
+    patterns: [
+      {
+        id: 'route',
+        files: ['*.ts'],
+        match: { call: 'portal.get', args: { path: 0, handler: 1 } },
+        emit: { kind: 'route', path: '$path', handler: '$handler' },
+      },
+    ],
+  };
+  for (let i = 0; i < 50; i++)
+    writeFileSync(
+      join(s.ws, 'source', `app${i}.ts`),
+      `export function save${i}() {}\nportal.get('/route${i}', save${i});`,
+    );
+  writeFileSync(s.file, JSON.stringify(settings({ config })));
+  for (const headers of [{ origin: 'http://evil.example' }, { 'sec-fetch-site': 'cross-site' }])
+    assert.equal((await s.call('GET', '/api/patterns/test?source=app', undefined, headers)).status, 403);
+  const responses = await Promise.all(Array.from({ length: 8 }, () => s.call('GET', '/api/patterns/test?source=app')));
+  assert.equal(responses.filter((r) => r.status === 200).length, 1, JSON.stringify(responses.map((r) => r.status)));
+  assert.equal(responses.filter((r) => r.status === 409).length, 7);
+  assert.equal(
+    (await s.call('GET', '/api/patterns/test?source=app', undefined, { 'sec-fetch-site': 'same-origin' })).status,
+    200,
+  );
+});

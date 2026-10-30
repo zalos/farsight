@@ -58,7 +58,7 @@ test('call captures, same-file resolution, distinct additions, unresolved first 
       assert.equal(dry.matches[0]?.name, 'GET /missing');
       assert.deepEqual(dry.report, graph.meta?.patterns);
       assert.match(patternsTestText(dry), /would emit route GET \/missing → unresolved/);
-      assert.equal(patternCounts(dry.report)[0]?.matched.n, 3);
+      assert.equal(patternCounts(dry.report, 'app')[0]?.matched.n, 3);
     },
   );
 });

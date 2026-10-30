@@ -202,14 +202,14 @@ export function configFilesText(
 }
 
 /** Each rule's numbers, in report order so equal rule ids in different config files stay distinct. */
-export function patternCounts(meta: import('./graph.js').PatternsMeta) {
-  return meta.rules.map((row) => {
+export function patternCounts(meta: import('./graph.js').PatternsMeta, repo: string) {
+  return meta.rules.map((row, index) => {
     const count = (key: 'matched' | 'nodes' | 'edges' | 'unresolved' | 'skipped') =>
       counted(
         Array.isArray(row[key]) ? row[key].length : (row[key] as number),
         `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}`,
         'count.scope.pattern',
-        `meta.patterns[repo].rules[${JSON.stringify(row.file + ':' + row.id)}].${key}`,
+        `meta.patterns[${JSON.stringify(repo)}].rules[${index}].${key}${Array.isArray(row[key]) ? '.length' : ''}`,
         { bizUnit: `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}Biz` },
       );
     return {
@@ -229,7 +229,7 @@ export function patternFilesText(
   return Object.entries(metas ?? {})
     .filter(([r]) => !repo || r === repo)
     .flatMap(([r, meta]) => {
-      const counts = patternCounts(meta);
+      const counts = patternCounts(meta, r);
       return [
         `${r} — ${t('config.patterns.title', 'professional')}`,
         ...meta.rules.flatMap((row, i) => [
@@ -248,7 +248,7 @@ export function patternFilesText(
 
 export function patternOverviewLines(metas: Record<string, import('./graph.js').PatternsMeta> | undefined): string[] {
   return Object.entries(metas ?? {}).map(([repo, meta]) => {
-    const counts = patternCounts(meta);
+    const counts = patternCounts(meta, repo);
     return `${repo} — ${t('config.patterns.title', 'professional')}: ${meta.rules
       .map(
         (r, i) =>
@@ -258,4 +258,17 @@ export function patternOverviewLines(metas: Record<string, import('./graph.js').
       )
       .join('; ')}`;
   });
+}
+
+/** The explicitly bounded dry-run list, kept apart from the rule's total matches. */
+export function patternMatchCounts(total: number, returned: number, repo: string) {
+  const count = (n: number, kind: 'Returned' | 'Omitted') =>
+    counted(
+      n,
+      'count.unit.pattern' + kind,
+      'count.scope.source',
+      `patterns test[${JSON.stringify(repo)}].matches.${kind.toLowerCase()}`,
+      { bizUnit: 'count.unit.pattern' + kind },
+    );
+  return { returned: count(returned, 'Returned'), omitted: count(total - returned, 'Omitted') };
 }

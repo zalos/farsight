@@ -1703,7 +1703,7 @@ switch (command) {
                 {
                   ...meta,
                   ...(store.meta.patterns?.[r]
-                    ? { patterns: store.meta.patterns[r], patternCounts: patternCounts(store.meta.patterns[r]!) }
+                    ? { patterns: store.meta.patterns[r], patternCounts: patternCounts(store.meta.patterns[r]!, r) }
                     : {}),
                 },
               ]),

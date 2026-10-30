@@ -1,12 +1,15 @@
 /** Bounded, declarative matching over selected source files; the same pass powers ingest and dry runs. */
 import { constants, closeSync, fstatSync, openSync, readSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
-import { grammarForFile, grammarQuery } from '@farsight/code-parser';
-import { grammarParser, normalizePath, type TSNode } from '@farsight/code-parser/support';
+import { grammarForFile, grammarQuery, queryLimitProblem } from '@farsight/code-parser';
+import { grammarParser, snippetRange, type TSNode } from '@farsight/code-parser/support';
 import { configSchemaProblem } from '@farsight/graph/config';
 import {
   t,
   patternFilesText,
+  normalizeRoutePath,
+  countedText,
+  type Counted,
   type GraphFragment,
   type GraphNode,
   type GraphEdge,
@@ -20,7 +23,14 @@ import type { IngestOptions } from './types.js';
 
 export const PATTERN_MAX_BYTES = 1024 * 1024;
 export const PATTERN_MAX_RULES = 64;
-export const PATTERN_BUDGET_MS = 1000;
+export const PATTERN_BUDGET_MS = 30_000;
+export const PATTERN_MAX_FILES = 2048;
+export const PATTERN_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
+export const PATTERN_MAX_DRY_MATCHES = 1000;
+const DECLARATIONS = new Set<GraphNode['kind']>(['function', 'class', 'component', 'guard']);
+const preview = (text: string) => snippetRange(text, 0, text.length).slice(0, 4096);
+const words = (key: string, values: Record<string, string>) =>
+  word(key).replace(/\{([A-Za-z]+)\}/g, (token, key: string) => values[key] ?? token);
 
 export interface PatternMatch {
   rule: string;
@@ -39,6 +49,9 @@ export interface PatternRunOptions {
   rule?: string;
   /** Tests can lower the fixed production budget; a caller cannot raise it. */
   budgetMs?: number;
+  maxFiles?: number;
+  maxBytes?: number;
+  maxMatches?: number;
   onMatch?: (match: PatternMatch) => void;
 }
 interface Match {
@@ -48,16 +61,21 @@ interface Match {
   captures: Record<string, string>;
 }
 const word = (key: string) => t('config.patterns.' + key, 'professional');
-const fill = (template: string, captures: Record<string, string>): string | undefined => {
-  let missing = false;
+const fill = (
+  template: string,
+  captures: Record<string, string>,
+  missing: (capture: string) => void,
+): string | undefined => {
+  let absent = false;
   const value = template.replace(/\$([A-Za-z_][A-Za-z0-9_]*|\d+)/g, (_, key: string) => {
     if (!Object.hasOwn(captures, key) || captures[key] === undefined) {
-      missing = true;
+      absent = true;
+      missing('$' + key);
       return '';
     }
     return captures[key]!;
   });
-  return missing ? undefined : value;
+  return absent ? undefined : value;
 };
 
 /** Static literals, identifiers and member paths only; expressions are never evaluated. */
@@ -149,71 +167,83 @@ function calleeCaptures(template: string, actual: string): Record<string, string
   return captures;
 }
 
-async function queryMatches(rule: PatternDecl, grammar: string, source: string): Promise<Match[] | undefined> {
+async function queryMatches(
+  rule: PatternDecl,
+  grammar: string,
+  root: TSNode,
+  remainingMs: () => number,
+): Promise<Match[] | undefined> {
   const compiled = compile(rule, grammar);
   if (!compiled) return undefined;
-  const parse = await grammarParser(grammar);
-  try {
-    const query = await grammarQuery(grammar, compiled);
-    const root = parse(source);
-    if (!root) throw new Error(word('parseFailed'));
-    const results = query.matches(root, { matchLimit: 65536 });
-    if (query.didExceedMatchLimit()) throw new Error(word('queryLimit'));
-    const matches: Match[] = [];
-    for (const result of results) {
-      const nodes = Object.fromEntries(result.captures.map((c) => [c.name, c.node]));
-      if (!result.captures.length) continue;
-      // With no @site, use the smallest ancestor that contains every capture.
-      let site = nodes.site ?? result.captures[0]!.node;
-      if (!nodes.site)
-        while (
-          site.parent &&
-          result.captures.some(({ node }) => node.startIndex < site.startIndex || node.endIndex > site.endIndex)
-        )
-          site = site.parent;
-      let captures: Record<string, string> = Object.create(null);
-      if ('query' in rule.match) {
-        for (const { name, node } of result.captures) captures[name] = valueOf(node) ?? node.text;
-      } else {
-        let name = nodes.name;
-        let args = nodes.args;
-        if ('decorator' in rule.match && name?.type === 'call_expression') {
-          args = name.childForFieldName('arguments') ?? undefined;
-          name = name.childForFieldName('function') ?? undefined;
-        }
-        let actual = name?.text ?? '';
-        if ('call' in rule.match && grammar === 'java') {
-          const object = site.childForFieldName('object');
-          if (object) actual = `${object.text}.${actual}`;
-        }
-        const template =
-          'call' in rule.match
-            ? rule.match.call
-            : 'decorator' in rule.match
-              ? rule.match.decorator
-              : 'annotation' in rule.match
-                ? rule.match.annotation
-                : '';
-        const hit = calleeCaptures(template, actual);
-        if (!hit) continue;
-        captures = { ...hit, ...argsOf(rule, args) };
+  const query = await grammarQuery(grammar, compiled);
+  const remaining = remainingMs();
+  if (remaining <= 0) throw new Error(word('budget'));
+  const started = performance.now();
+  let stopped = false;
+  const results = query.matches(root, {
+    matchLimit: 65536,
+    timeoutMicros: Math.max(1, Math.ceil(remaining * 1000)),
+    progressCallback: () => (stopped = performance.now() - started >= remaining),
+  });
+  if (stopped || performance.now() - started >= remaining) throw new Error(word('budget'));
+  if (query.didExceedMatchLimit()) throw new Error(word('queryLimit'));
+  const matches: Match[] = [];
+  for (const result of results) {
+    const nodes = Object.fromEntries(result.captures.map((c) => [c.name, c.node]));
+    if (!result.captures.length) continue;
+    // With no @site, use the smallest ancestor that contains every capture.
+    let site = nodes.site ?? result.captures[0]!.node;
+    if (!nodes.site)
+      while (
+        site.parent &&
+        result.captures.some(({ node }) => node.startIndex < site.startIndex || node.endIndex > site.endIndex)
+      )
+        site = site.parent;
+    let captures: Record<string, string> = Object.create(null);
+    if ('query' in rule.match) {
+      for (const { name, node } of result.captures) captures[name] = valueOf(node) ?? node.text;
+    } else {
+      let name = nodes.name;
+      let args = nodes.args;
+      if ('decorator' in rule.match && name?.type === 'call_expression') {
+        args = name.childForFieldName('arguments') ?? undefined;
+        name = name.childForFieldName('function') ?? undefined;
       }
-      matches.push({ line: site.startPosition.row + 1, endLine: site.endPosition.row + 1, text: site.text, captures });
+      let actual = name?.text ?? '';
+      if ('call' in rule.match && grammar === 'java') {
+        const object = site.childForFieldName('object');
+        if (object) actual = `${object.text}.${actual}`;
+      }
+      const template =
+        'call' in rule.match
+          ? rule.match.call
+          : 'decorator' in rule.match
+            ? rule.match.decorator
+            : 'annotation' in rule.match
+              ? rule.match.annotation
+              : '';
+      const hit = calleeCaptures(template, actual);
+      if (!hit) continue;
+      captures = { ...hit, ...argsOf(rule, args) };
     }
-    return matches;
-  } finally {
-    parse.dispose();
+    matches.push({
+      line: site.startPosition.row + 1,
+      endLine: site.endPosition.row + 1,
+      text: preview(site.text),
+      captures,
+    });
   }
+  return matches;
 }
 
 function regexMatches(regex: RegExp, source: string): Match[] {
   return source.split(/\r?\n/).flatMap((line, i) => {
     const hit = regex.exec(line);
-    return hit ? [{ line: i + 1, endLine: i + 1, text: hit[0], captures: { ...hit.groups } }] : [];
+    return hit ? [{ line: i + 1, endLine: i + 1, text: preview(hit[0]), captures: { ...hit.groups } }] : [];
   });
 }
 
-function readSelected(root: string, path: string): string {
+function readSelected(root: string, path: string): { source: string; bytes: number } {
   const abs = resolve(root, path);
   const rel = relative(root, realpathSync(abs));
   if (isAbsolute(rel) || rel === '..' || rel.startsWith('../')) throw new Error(word('outside'));
@@ -230,7 +260,7 @@ function readSelected(root: string, path: string): string {
       size += read;
     }
     if (size > PATTERN_MAX_BYTES) throw new Error(word('tooLarge'));
-    return bytes.subarray(0, size).toString('utf8');
+    return { source: bytes.subarray(0, size).toString('utf8'), bytes: size };
   } finally {
     closeSync(fd);
   }
@@ -256,13 +286,35 @@ export async function applyPatterns(
     .sort();
   const byPath = new Map<string, GraphNode[]>();
   for (const node of fragment.nodes)
-    if (node.loc?.repo === fragment.repo && !['file', 'module', 'repo', 'test'].includes(node.kind)) {
+    if (
+      node.loc?.repo === fragment.repo &&
+      (DECLARATIONS.has(node.kind) || (node.kind === 'route' && node.tags.includes('server-action')))
+    ) {
       const here = byPath.get(node.loc.path) ?? [];
       here.push(node);
       byPath.set(node.loc.path, here);
     }
   const nodes = new Map(fragment.nodes.map((node) => [node.id, node]));
-  const edges = new Set(fragment.edges.map((edge) => `${edge.kind}|${edge.from}|${edge.to}`));
+  const edges = new Map(fragment.edges.map((edge) => [`${edge.kind}|${edge.from}|${edge.to}`, edge]));
+  const routeKey = (name: string) => {
+    const parts = /^([A-Z]+) (\/.*)$/.exec(name);
+    return parts ? `${parts[1]} ${normalizeRoutePath(parts[2]!)}` : undefined;
+  };
+  const routes = new Map(fragment.nodes.filter((n) => n.kind === 'route').map((n) => [routeKey(n.name), n]));
+  const budget = Math.max(0, Math.min(run.budgetMs ?? PATTERN_BUDGET_MS, PATTERN_BUDGET_MS));
+  const maxFiles = Math.max(0, Math.min(run.maxFiles ?? PATTERN_MAX_FILES, PATTERN_MAX_FILES));
+  const maxBytes = Math.max(0, Math.min(run.maxBytes ?? PATTERN_MAX_TOTAL_BYTES, PATTERN_MAX_TOTAL_BYTES));
+  const states: {
+    rule: PatternDecl;
+    row: PatternRuleReport;
+    dir: string;
+    globs: RegExp[];
+    regex?: RegExp;
+    files: number;
+    bytes: number;
+    elapsed: number;
+    stopped: boolean;
+  }[] = [];
   const span = (node: GraphNode) => (node.loc!.endLine ?? node.loc!.line) - node.loc!.line;
   for (const [index, { file, rule }] of declarations.entries()) {
     if (run.rule && rule?.id !== run.rule) continue;
@@ -283,11 +335,18 @@ export async function applyPatterns(
     }
     const invalid = configSchemaProblem({ patterns: [rule] }, 'config');
     if (invalid) {
-      skip(file.path, word('invalid').replace('{error}', invalid));
+      skip(file.path, words('invalid', { error: invalid }));
       continue;
     }
-    const started = performance.now();
-    const budget = Math.max(0, Math.min(run.budgetMs ?? PATTERN_BUDGET_MS, PATTERN_BUDGET_MS));
+    const limit = 'query' in rule.match ? queryLimitProblem(rule.match.query) : undefined;
+    if (limit) {
+      skip(file.path, word(limit));
+      continue;
+    }
+    if (rule.files.some((glob) => isAbsolute(glob) || glob.replaceAll('\\', '/').split('/').includes('..'))) {
+      skip(file.path, word('outside'));
+      continue;
+    }
     const globs = rule.files.map((glob) => globToRegExp(glob));
     let regex: RegExp | undefined;
     try {
@@ -296,175 +355,247 @@ export async function applyPatterns(
       skip(file.path, word('invalidRegex'));
       continue;
     }
-    for (const path of files) {
-      if (file.dir !== '.' && !path.startsWith(file.dir + '/')) continue;
-      const local = file.dir === '.' ? path : path.slice(file.dir.length + 1);
-      if (!globs.some((glob) => glob.test(local))) continue;
-      if (performance.now() - started >= budget) {
-        skip(path, word('budget'));
-        break;
-      }
-      let matches: Match[] | undefined;
-      try {
-        const source = readSelected(root, path);
-        const grammar = grammarForFile(path);
-        matches = regex ? regexMatches(regex, source) : grammar ? await queryMatches(rule, grammar, source) : undefined;
-      } catch (error) {
-        const reason =
-          error instanceof Error &&
-          [word('tooLarge'), word('outside'), word('unreadable'), word('parseFailed'), word('queryLimit')].includes(
-            error.message,
-          )
-            ? error.message
-            : word('invalidQuery');
-        skip(path, reason);
-        continue;
-      }
-      if (!matches) {
-        skip(path, word('grammar'));
-        continue;
-      }
-      const here = byPath.get(path) ?? [];
-      for (const match of matches) {
-        row.matched++;
-        const holding = here
-          .filter((n) => n.loc!.line <= match.line && (n.loc!.endLine ?? n.loc!.line) >= match.endLine)
-          .sort((a, b) => span(a) - span(b) || Number(a.kind === 'class') - Number(b.kind === 'class'));
-        const host = holding[0];
-        const unresolved: string[] = [];
-        let resolvedTarget: GraphNode | undefined;
-        const missing = (capture: string) => {
-          if (!unresolved.includes(capture)) {
-            unresolved.push(capture);
-            row.unresolved.push({ path, line: match.line, capture });
-          }
+    states.push({ rule, row, dir: file.dir, globs, regex, files: 0, bytes: 0, elapsed: 0, stopped: false });
+  }
+  // A file is read and parsed once. Every applicable rule sees this same tree before it is disposed.
+  for (const path of files) {
+    const selected = states.filter(
+      (s) =>
+        !s.stopped &&
+        (s.dir === '.' || path.startsWith(s.dir + '/')) &&
+        s.globs.some((glob) => glob.test(s.dir === '.' ? path : path.slice(s.dir.length + 1))),
+    );
+    let input: ReturnType<typeof readSelected> | undefined;
+    let parse: Awaited<ReturnType<typeof grammarParser>> | undefined;
+    let rootNode: TSNode | null | undefined;
+    let parseMs = 0;
+    try {
+      for (const state of selected) {
+        const { rule, row, regex } = state;
+        const skip = (reason: string, stop = false) => {
+          row.skipped.push({ path, reason });
+          state.stopped = stop;
         };
-        const interpolate = (template: string) => {
-          const value = fill(template, match.captures);
-          if (value === undefined) missing(template);
-          return value;
-        };
-        const targetOf = (template: string | undefined): GraphNode | undefined => {
-          if (!template) return undefined;
-          if (template === 'enclosing') {
-            if (!host) missing(template);
-            if (host) resolvedTarget = host;
-            return host;
-          }
-          const value = interpolate(template);
-          if (value === undefined) return undefined;
-          const exact = here.filter((n) => n.name === value);
-          const cls = holding.find((n) => n.kind === 'class');
-          const method = value.startsWith('this.') ? value.slice(5) : value;
-          const candidates = exact.length
-            ? exact
-            : here.filter((n) => (cls ? n.name === `${cls.name}.${method}` : n.name.endsWith(`.${method}`)));
-          if (candidates.length === 1) {
-            resolvedTarget = candidates[0];
-            return candidates[0];
-          }
-          missing(value);
-          return undefined;
-        };
-        const emit = rule.emit;
-        const handler = targetOf(emit.handler);
-        const nameTemplate =
-          emit.kind === 'route' ? `${emit.method ?? 'GET'} ${emit.path ?? ''}` : (emit.topic ?? emit.name ?? rule.id);
-        let name = interpolate(nameTemplate);
-        if (name && emit.kind === 'route') {
-          const space = name.indexOf(' ');
-          const method = name
-            .slice(0, space)
-            .replace(/^RequestMethod\./, '')
-            .toUpperCase();
-          const pathValue = name.slice(space + 1);
-          if (!/^[A-Z]+$/.test(method) || !pathValue.startsWith('/')) {
-            missing(nameTemplate);
-            name = undefined;
-          } else name = `${method} ${normalizePath(pathValue)}`;
+        if (state.files >= maxFiles) {
+          skip(word('fileBudget'), true);
+          continue;
         }
-        const resolution: GraphEdge['resolution'] = {
-          status: 'resolved',
-          technique: 'config-pattern',
-          confidence: regex ? 'MEDIUM' : 'HIGH',
-          note: word('evidence')
-            .replace('{from}', file.path)
-            .replace('{rule}', rule.id)
-            .replace('{path}', path)
-            .replace('{line}', String(match.line)),
-        };
-        const link = (kind: GraphEdge['kind'], from: string, to: string) => {
-          const id = `${kind}|${from}|${to}`;
-          if (edges.has(id)) return;
-          edges.add(id);
-          fragment.edges.push({ id, kind, from, to, resolution });
-          row.edges++;
-        };
-        const business = rule.business ?? emit.business;
-        const description = business ? interpolate(business) : undefined;
-        const tags = ['pattern:' + rule.id, ...(emit.tags ?? [])];
-        if (name && emit.kind === 'entrypoint') {
-          const target = handler ?? (!emit.handler ? targetOf('enclosing') : undefined);
-          if (target) {
-            target.tags = [...new Set([...target.tags, ...tags, 'entrypoint', name])];
-            if (description)
-              target.facets = { ...target.facets, business: { ...target.facets?.business, description } };
-          }
-        } else if (name) {
-          const id = `${fragment.repo}::${emit.kind}::${name}`;
-          const prior = nodes.get(id);
-          if (prior) prior.tags = [...new Set([...prior.tags, ...tags])];
-          else {
-            const node: GraphNode = {
-              id,
-              kind: emit.kind as Exclude<PatternDecl['emit']['kind'], 'entrypoint'>,
-              name,
-              tags: [...tags, 'declared', ...(emit.kind === 'guard' ? ['auth'] : [])],
-              loc: { repo: fragment.repo, path, line: match.line, endLine: match.endLine },
-              snippet: match.text,
-              ...(description ? { facets: { business: { description } } } : {}),
-              ...(emit.tier && ['guard', 'rule'].includes(emit.kind)
-                ? { gateTier: { tier: emit.tier, from: 'config' as const } }
-                : {}),
-            };
-            nodes.set(id, node);
-            fragment.nodes.push(node);
-            row.nodes++;
-          }
-          if (emit.kind === 'route' && handler) link('calls', id, handler.id);
-          if (emit.kind === 'guard') {
-            const target = emit.guards ? targetOf(emit.guards) : handler;
-            if (target) link('guards', id, target.id);
-          }
-          if (emit.kind === 'rule') {
-            const target = emit.validates ? targetOf(emit.validates) : handler;
-            if (target) link('validates', id, target.id);
-          }
-          if (emit.kind === 'queue') {
-            const publisher = targetOf(emit.publishes);
-            const consumer = emit.consumes ? targetOf(emit.consumes) : handler;
-            if (publisher) link('publishes', publisher.id, id);
-            if (consumer) link('consumes', id, consumer.id);
-          }
+        if (state.elapsed >= budget) {
+          skip(word('budget'), true);
+          continue;
         }
-        run.onMatch?.({
-          rule: rule.id,
-          file: file.path,
-          path,
-          ...match,
-          kind: emit.kind,
-          name: name ?? nameTemplate,
-          ...(resolvedTarget ? { handler: resolvedTarget.id } : {}),
-          unresolved,
-        });
+        state.files++;
+        let matches: Match[] | undefined;
+        const started = performance.now();
+        try {
+          input ??= readSelected(root, path);
+          if (state.bytes + input.bytes > maxBytes) {
+            skip(word('byteBudget'), true);
+            continue;
+          }
+          state.bytes += input.bytes;
+          const grammar = grammarForFile(path);
+          if (regex) matches = regexMatches(regex, input.source);
+          else if (grammar && compile(rule, grammar)) {
+            if (!parse) {
+              const parseStarted = performance.now();
+              parse = await grammarParser(grammar);
+              rootNode = parse(input.source);
+              parseMs = performance.now() - parseStarted;
+            } else state.elapsed += parseMs;
+            if (!rootNode) throw new Error(word('parseFailed'));
+            matches = await queryMatches(
+              rule,
+              grammar,
+              rootNode,
+              () => budget - state.elapsed - (performance.now() - started),
+            );
+          }
+          if (performance.now() - started + state.elapsed >= budget) throw new Error(word('budget'));
+        } catch (error) {
+          const known = [
+            'tooLarge',
+            'outside',
+            'unreadable',
+            'parseFailed',
+            'queryLimit',
+            'budget',
+            'queryLength',
+            'predicateLength',
+          ].map(word);
+          const reason = error instanceof Error && known.includes(error.message) ? error.message : word('invalidQuery');
+          skip(reason, reason === word('budget') || reason === word('queryLimit'));
+          continue;
+        } finally {
+          state.elapsed += performance.now() - started;
+        }
+        if (!matches) {
+          skip(word('grammar'));
+          continue;
+        }
+        const emissionStarted = performance.now();
+        const here = byPath.get(path) ?? [];
+        for (const match of matches) {
+          row.matched++;
+          const holding = here
+            .filter((n) => n.loc!.endLine !== undefined && n.loc!.line <= match.line && n.loc!.endLine >= match.endLine)
+            .sort((a, b) => span(a) - span(b) || Number(a.kind === 'class') - Number(b.kind === 'class'));
+          const host = holding[0];
+          const unresolved: string[] = [];
+          let resolvedTarget: GraphNode | undefined;
+          const missing = (capture: string) => {
+            if (!unresolved.includes(capture)) {
+              unresolved.push(capture);
+              row.unresolved.push({ path, line: match.line, capture });
+            }
+          };
+          const interpolate = (template: string) => {
+            return fill(template, match.captures, missing);
+          };
+          const targetOf = (template: string | undefined): GraphNode | undefined => {
+            if (!template) return undefined;
+            if (template === 'enclosing') {
+              if (!host) missing(template);
+              if (host) resolvedTarget = host;
+              return host;
+            }
+            const value = interpolate(template);
+            if (value === undefined) return undefined;
+            const exact = here.filter((n) => n.name === value);
+            const cls = holding.find((n) => n.kind === 'class');
+            const method = value.startsWith('this.') ? value.slice(5) : value;
+            const candidates = exact.length
+              ? exact
+              : here.filter((n) => (cls ? n.name === `${cls.name}.${method}` : n.name.endsWith(`.${method}`)));
+            if (candidates.length === 1) {
+              resolvedTarget = candidates[0];
+              return candidates[0];
+            }
+            missing(value);
+            return undefined;
+          };
+          const emit = rule.emit;
+          const handler = targetOf(emit.handler);
+          const nameTemplate =
+            emit.kind === 'route' ? `${emit.method ?? 'GET'} ${emit.path ?? ''}` : (emit.topic ?? emit.name ?? rule.id);
+          let name = interpolate(nameTemplate);
+          if (name && emit.kind === 'route') {
+            const space = name.indexOf(' ');
+            const method = name
+              .slice(0, space)
+              .replace(/^RequestMethod\./, '')
+              .toUpperCase();
+            const pathValue = name.slice(space + 1);
+            if (!/^[A-Z]+$/.test(method) || !pathValue.startsWith('/')) {
+              missing(nameTemplate);
+              name = undefined;
+            } else name = `${method} ${normalizeRoutePath(pathValue)}`;
+          }
+          const resolution: GraphEdge['resolution'] = {
+            status: 'resolved',
+            technique: 'config-pattern',
+            confidence: regex ? 'MEDIUM' : 'HIGH',
+            note: words('evidence', { from: row.file, rule: rule.id, path, line: String(match.line) }),
+          };
+          const link = (kind: GraphEdge['kind'], from: string, to: string, requires?: string) => {
+            if (from === to) return;
+            const id = `${kind}|${from}|${to}`;
+            const prior = edges.get(id);
+            if (prior) {
+              // Keep the reader's resolution technique, adding the pattern's source evidence.
+              const note = prior.resolution?.note;
+              prior.resolution = {
+                ...resolution,
+                ...prior.resolution,
+                note: note?.includes(resolution.note!) ? note : [note, resolution.note].filter(Boolean).join('; '),
+              };
+              if (requires) prior.meta = { requires, ...prior.meta };
+              return;
+            }
+            const edge: GraphEdge = { id, kind, from, to, resolution, ...(requires ? { meta: { requires } } : {}) };
+            edges.set(id, edge);
+            fragment.edges.push(edge);
+            row.edges++;
+          };
+          const business = rule.business ?? emit.business;
+          const description = business ? interpolate(business) : undefined;
+          const tags = ['pattern:' + rule.id, ...(emit.tags ?? [])];
+          if (name && emit.kind === 'entrypoint') {
+            const target = handler ?? (!emit.handler ? targetOf('enclosing') : undefined);
+            if (target) {
+              target.tags = [...new Set([...target.tags, ...tags, 'entrypoint', name])];
+              if (description)
+                target.facets = { ...target.facets, business: { ...target.facets?.business, description } };
+            }
+          } else if (name) {
+            const prior =
+              (emit.kind === 'route' ? routes.get(routeKey(name)) : undefined) ??
+              nodes.get(`${fragment.repo}::${emit.kind}::${name}`);
+            const id = prior?.id ?? `${fragment.repo}::${emit.kind}::${name}`;
+            if (prior) prior.tags = [...new Set([...prior.tags, ...tags])];
+            else {
+              const node: GraphNode = {
+                id,
+                kind: emit.kind as Exclude<PatternDecl['emit']['kind'], 'entrypoint'>,
+                name,
+                tags: [...tags, ...(emit.kind === 'guard' ? ['auth'] : [])],
+                loc: { repo: fragment.repo, path, line: match.line, endLine: match.endLine },
+                snippet: match.text,
+                ...(description ? { facets: { business: { description } } } : {}),
+                ...(emit.tier && ['guard', 'rule'].includes(emit.kind)
+                  ? { gateTier: { tier: emit.tier, from: 'config' as const } }
+                  : {}),
+              };
+              nodes.set(id, node);
+              if (emit.kind === 'route') routes.set(routeKey(name), node);
+              fragment.nodes.push(node);
+              row.nodes++;
+            }
+            if (emit.kind === 'route' && handler) link('calls', id, handler.id);
+            if (emit.kind === 'guard') {
+              const target = emit.guards ? targetOf(emit.guards) : handler;
+              const requires = emit.requires ? interpolate(emit.requires) : undefined;
+              if (target) link('guards', id, target.id, requires);
+            }
+            if (emit.kind === 'rule') {
+              const target = emit.validates ? targetOf(emit.validates) : handler;
+              if (target) link('validates', id, target.id);
+            }
+            if (emit.kind === 'queue') {
+              const publisher = targetOf(emit.publishes);
+              const consumer = emit.consumes ? targetOf(emit.consumes) : handler;
+              if (publisher) link('publishes', publisher.id, id);
+              if (consumer) link('consumes', id, consumer.id);
+            }
+          }
+          run.onMatch?.({
+            rule: rule.id,
+            file: row.file,
+            path,
+            ...match,
+            captures: Object.fromEntries(Object.entries(match.captures).map(([key, value]) => [key, preview(value)])),
+            kind: emit.kind,
+            name: name ?? nameTemplate,
+            ...(resolvedTarget ? { handler: resolvedTarget.id } : {}),
+            unresolved,
+          });
+        }
+        state.elapsed += performance.now() - emissionStarted;
       }
+    } finally {
+      parse?.dispose();
     }
   }
   return report;
 }
 
 /** Shared CLI/MCP text, with unresolved matches first; details are returned only by an explicit dry run. */
-export function patternsTestText(result: { repo: string; report: PatternsMeta; matches: PatternMatch[] }): string {
+export function patternsTestText(result: {
+  repo: string;
+  report: PatternsMeta;
+  matches: PatternMatch[];
+  matchCounts?: { returned: Counted; omitted: Counted };
+}): string {
   const matches = [...result.matches].sort(
     (a, b) =>
       Number(!!b.unresolved.length) - Number(!!a.unresolved.length) || a.path.localeCompare(b.path) || a.line - b.line,
@@ -472,18 +603,23 @@ export function patternsTestText(result: { repo: string; report: PatternsMeta; m
   return [
     ...patternFilesText({ [result.repo]: result.report }),
     ...matches.map((match) =>
-      word('match')
-        .replace('{site}', `${match.path}:${match.line}`)
-        .replace('{captures}', JSON.stringify(match.captures))
-        .replace('{kind}', match.kind)
-        .replace('{name}', match.name)
-        .replace(
-          '{handler}',
-          match.unresolved.length
-            ? `${word('unresolved')} (${match.unresolved.join(', ')})`
-            : (match.handler ?? word('noHandler')),
-        ),
+      words('match', {
+        site: `${match.path}:${match.line}`,
+        captures: JSON.stringify(match.captures),
+        kind: match.kind,
+        name: match.name,
+        handler: match.unresolved.length
+          ? `${word('unresolved')} (${match.unresolved.join(', ')})`
+          : (match.handler ?? word('noHandler')),
+      }),
     ),
+    ...(result.matchCounts
+      ? [
+          Object.values(result.matchCounts)
+            .map((c) => countedText(c))
+            .join(' · '),
+        ]
+      : []),
     ...(!result.report.rules.length ? [word('none')] : []),
   ].join('\n');
 }

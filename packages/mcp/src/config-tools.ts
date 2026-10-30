@@ -63,7 +63,7 @@ export function registerConfigTools(ctx: ConfigToolsContext): ConfigTools {
             [r]: {
               ...(picked[r] ?? { files: [], conflicts: [], notes: [] }),
               patterns,
-              patternCounts: patternCounts(patterns),
+              patternCounts: patternCounts(patterns, r),
             },
           });
         }
