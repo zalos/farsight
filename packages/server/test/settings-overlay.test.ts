@@ -319,6 +319,6 @@ test('the scrubbed settings example validates', () => {
   );
   assert.equal(settingsProblem(example), null);
   const source = example.sources.find((s: { id: string }) => s.id === 'invoice-app');
-  assert.equal(source.openapi[0].name, 'Vendor API (example)');
+  assert.equal(source.openapi[0].name, 'Billing API (example)');
   assert.ok(existsSync(new URL(`../../../${source.path}/${source.openapi[0].path}`, import.meta.url)));
 });
