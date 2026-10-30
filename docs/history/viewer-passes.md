@@ -3,6 +3,55 @@
 Archived from `docs/AI-HANDOFF.md` on 2026-10-28 (2026-09-21 → 10-14). Dated records, verbatim apart from
 re-pointed relative links; read on demand, never loaded at session start. Index: [README.md](README.md).
 
+## The Settings page and the overlay forms — 2026-10-30
+
+Lanes S2 (#259) and S3 (#262) of [the Settings page proposal](../proposals/settings-page.md), implemented by Sol
+over the agent bridge, each reviewed twice by Opus and squash-merged by the lead; S1 (#256, the server side) is
+recorded in [parsers-and-cli.md](parsers-and-cli.md).
+
+- **#259 — the sectioned page.** Five sections at `#/settings/<section>` (the rail remembers the last one; bare
+  `#/settings` rewrites to it); one loaded copy plus one draft, one Save; a field's validation message is
+  `settingsProblem()`'s own sentence through `POST /api/settings/check` (250 ms debounce) — the only JS rule is a
+  prefix guard on the secret field (`keychain:` / `env:`), a transport guard equal to `isSecretRef`; the Save merge
+  re-reads `/api/settings` and keeps every field the draft did not touch (sources matched by id), so a
+  registration made through the route or the CLI while the page is open survives a Save; one row editor
+  (`lib/row-editor.js`, ARIA grid, roving tabindex) under the permissions grid and collections; `shell.js` shed
+  the page (2135 → 1946 lines), `viewer.html` its inline markup, `settings-lessons.js` moved into
+  `settings-agents.js`; a `<fieldset disabled>` holds fields the build does not know. **Decisions made in review:**
+  on a read-only or `--as-of` server the theme control is a per-window preview, not a write (reviewer swarms depend
+  on previewing the light theme); `g s` is a chord that suppresses the Map's `g`; a blank source is refused by the
+  server (`settingsProblem`: non-empty `name`, non-empty `path` for code sources), not by JS; a grant without
+  `confirm` shows *Not set* with its define as the tip; the save outcome and the *sync to apply* door live in the
+  sticky bar. Reviewers blocked, then verified: a blank source ingesting the workspace root; unset grants shown as
+  *Always*; the door below the fold; a false *Unsaved* bar on Collections; the read-only banner contradicting the
+  greyed theme; a pasted token reaching the DOM (never did — probed by fill, paste and keystroke). Checks at the
+  merged head: core 410 · server 423 · CLI 71 · MCP 77 · scripts 313; e2e 435/435 locally and in CI; 40 fresh-page
+  shots (5 sections × 2 registers × 2 themes × writable/read-only) at 1280 px with 0 page and 0 console errors.
+- **#262 — the overlay forms.** Seven forms (Gates · Endpoints · Patterns · Declared nodes · OpenAPI · Words ·
+  Externals and stores) over the one row editor, each row one JSON entry, `rowsOf`/`blockOf` in the pure model
+  with a lossless round-trip test per form (fields a form does not draw survive); two tabs per code source (*In
+  the repository* read-only, *In this workspace* the overlay); a JSON toggle and *Export to the repository* hidden
+  in the business register; the pattern **Test** runs `POST /api/patterns/test` with the draft rule (one dry run
+  per source, 409 otherwise; writes nothing; allowed read-only; refused cross-site) and a rule saves only after
+  that exact draft was tested or the person says *save untested*; `POST /api/config/export` and `farsight config
+  export <source> [--into-source]` share the parsers' `exportWorkspaceConfig` so the exported JSON equals what
+  ingest applies (export-then-ingest keeps every node and edge; only the provenance note changes). Reviewers
+  blocked, then verified: a broken argument field writing `[object Object]`; a registration lost on the next Save
+  when D's doors sat inside the form; non-route emit kinds unsavable from empty defaults; focus dropped to `<body>`
+  after a key edit (then an integer-like key rename re-sorting rows under the DOM). Checks at the merged head:
+  core 425 · parsers 334 · server 448 · CLI 73 · MCP 78 · scripts 313; forms e2e 43; CI e2e 479; 32 shots with 0
+  errors; real ingest identical to main (12,552 nodes · 26,763 edges). Left open: per-source sync, one shared
+  registration helper, the dry run holding the event loop on a large source.
+- **The §7 done walk (2026-10-30, dogfood server 4478 on `e3bf7c38`, from Settings alone):** a work source saved
+  with `keychain:farsight/walk-example` (id slugged from the name); `@SomeAnnotationPolicy` declared as a Spring
+  policy gate in the spring example's overlay, listed by `config list` beside the repository's own declaration and
+  by `farsight roles` as *approve on invoice*; `examples/spring-invoice-api/openapi.yaml` registered on the
+  farsight source (where `examples/**` is excluded) and shown on the APIs page as *Spring example (walk)* after a
+  sync; a regex rule over `packages/server/src/index.ts` tested (11 matches, each resolved to its enclosing
+  handler), saved, and after a sync 11 routes carry `pattern:server-routes` with `config-pattern` evidence — ten
+  attached to routes the readers already knew, one new (`PUT /api/settings`), reachable by ⌘K on the code map.
+  The walk's declarations were reverted and the server re-synced (sync 86).
+
 ## Current state — 2026-10-10
 
 `main` is green. **The lanes round, its cleanup pass and swarm round 3's fixes are live** (items 15–18 below, PRs

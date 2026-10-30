@@ -3,6 +3,73 @@
 Archived from `docs/AI-HANDOFF.md` on 2026-10-28 (2026-10-17 → 10-21). Dated records, verbatim apart from
 re-pointed relative links; read on demand, never loaded at session start. Index: [README.md](README.md).
 
+## Custom node patterns — 2026-10-30
+
+Lanes S1, D, A, B and C of [the custom node patterns proposal](../proposals/custom-node-patterns.md) (the viewer
+lanes S2/S3 are in [viewer-passes.md](viewer-passes.md)), implemented by Sol over the agent bridge in three waves
+(S1 ∥ D ∥ A → S2 ∥ B → S3 ∥ C), each PR reviewed twice by Opus on its own diff and squash-merged by the lead after
+*may merge*; every parser lane carried a real ingest of this repository against a `main` build in its body.
+
+- **#256 S1 — the workspace overlay.** `IngestOptions.configOverlay` / `openapiRegistered` / `openapiIgnored`; the
+  overlay is a root-scoped config applied after the repository's root file (root wins the same key with a
+  `from: 'workspace'` conflict; maps merge key by key down to the alias; lists union), listed in `meta.config.files`
+  and audited; `CONFIG_OVERLAY_FIELDS` in core; `settingsProblem` validates `sources[].config` against the embedded
+  config schema (`scripts/config-schema.mjs`, ajv from `@farsight/graph`, `./config` subpath) and `sources[].openapi[]`
+  through the same schema; `POST /api/settings/check` (allowed read-only), `POST|DELETE /api/sources/<id>/openapi`
+  (write routes); `GET /api/version` → `configFields`/`overlayFields`; one `sourceIngestOptions` builder shared by
+  the server's sync and MCP's refresh. Blocked and fixed: the merger dropped every overlay field it had no case for
+  (A's `frameworks` never reached `merged`); a raw `config.conflict.overlay` key on Settings; a second rule set for
+  `openapi[]`; false *matches no indexed* warnings for every matched overlay declaration (the audit scoped the
+  overlay to `./`). Real ingest: 12,448 nodes · 26,599 edges · digest `4c20bd135cf2` identical; the reviewer's own
+  tree 12,469 · 26,626 identical.
+- **#257 D — OpenAPI candidates.** Discovery sniffs every `.json`/`.yaml`/`.yml` (2 KiB head, ≤ 8 MiB) and
+  classifies `applied` (named, under `openapi/` by the historical whole-text rule, declared, or registered →
+  `origin: 'settings'`) against `candidate` (never applied, so every graph stays byte-identical); `meta.openapi`
+  one GraphStore family; `farsight api candidates|register|dismiss [--into-source]`; Register/Dismiss doors on
+  Settings; MCP `config_files` and one `graph_overview` line; a dismissal applies to would-be candidates only (the
+  repository's word wins; the CLI refuses to dismiss an applied path). Blocked and fixed: the applied set under
+  `openapi/` moving in both directions; an out-of-source symlink dropped silently (now reported as *path leaves the
+  source*); counts under the wrong scope. Real ingests: this repository 12,448 / 26,599 and the reference app
+  5,711 / 15,346 identical, the only growth the `meta.openapi` block.
+- **#258 A — framework aliases and the delegate join.** `frameworks.spring.{mappings,security,delegates,listeners}`,
+  `frameworks.nest.{verbs,guards}`, `frameworks.express.middleware` (type in `@farsight/graph` beside
+  `ExternalDecl`; root-only this lane); readers read their name tables from the options and emit the same ids;
+  paths and holes fill from string literals only (a constant records a `non-literal-path` gap, never a URL; an
+  enum never becomes a grant); `joinDelegates` after `applySpecs` matches public `ResponseEntity` overrides on a
+  `*ApiDelegate` class to `operationId`, moves the contract to `both` and repairs the route like a controller route
+  (drift via the exported `operationDrift`, mirrored guards with `meta.requires`); `implements:` tags and class
+  signatures only when `delegates` is configured, so a graph without a block is byte-identical; `config list`
+  prints the aliases; an unmatched alias is an audit note. The Spring example gained an `@ApiRoute` endpoint, a
+  policy-annotated handler, a generated-style delegate and a spec covering all eight operations; the invoice example
+  an aliased Nest verb and its `@nestjs/common` declaration — fixture digests, extraction snapshots, deps counts and
+  Sentinel's retained-report and planner goldens re-derived, each tied to an example edit. Real ingest: this
+  repository 12,448 / 26,599 identical under both builds; main's examples byte-equal; PR examples 67/56 → 68/61 and
+  133/171 → 134/173.
+- **#260 B — `patterns[]`.** Four matchers (call · decorator · annotation · query → one tree-sitter query per
+  grammar through `code-parser/treesitter/queries.ts`; regex per line) emitting route · guard · external · queue ·
+  rule · flag · entrypoint in the readers' id shapes, attaching to an existing route found by
+  `METHOD normalizeRoutePath(path)` instead of minting a twin; `enclosing` = the innermost declaration span (never a
+  route node, never a self-loop); `$handler` same-file; evidence `config-pattern` HIGH (syntax) / MEDIUM (regex) —
+  the diff contract grew by exactly one member with its pin, schema and doc line; one parse per file shared across
+  rules, deterministic file and byte caps per rule with a sync warning on any stop; `meta.patterns[]` as Counteds;
+  `farsight patterns test`, MCP `patterns_test` (`all` tier) and `GET /api/patterns/test` (early return without
+  rules, one run per source, foreign-origin GET refused — a new cost-bearing-GET rule in `guard.ts`); ADR 49 (the
+  technique and the config-contract family frameworks · patterns · nodes); SECURITY.md's bounds. Blocked and fixed:
+  twin routes beside reader routes with parameters; `enclosing` on point-located nodes; `declared` on pattern nodes
+  causing false drift; a non-deterministic 1-second budget; the unbounded dry run; any all-letter word accepted as an
+  HTTP method. Real ingest: 12,547 / 26,849, digest `4567d7c5ceb3`, identical; a rule over this repository repeats
+  with the same site hash.
+- **#261 C — hand-made `nodes[]`.** route · guard · external · queue with `loc?`, `handler?`, `guards?`, `tier?`,
+  `requires?`, `business?`; applied inside `applyConfig` before `applyRouteGuards`; ids as the person wrote them with
+  attach-not-twin by the normalised key; `declared` only on nodes the declaration creates (an attach adds only the
+  sentence, tier, grant and edges, keeping the reader's evidence); a declared route a spec also declares reads
+  `both` with or without `loc` through an explicit `declared` branch in `core/openapi.ts`; `implemented` became
+  *supplied* with a summing breakdown (found in code · declared by a person) on the front door, the APIs card, the
+  CLI legend and MCP `api_surface`; overlay `nodes` schema-validated; a nested file cannot change a root-owned node
+  (audit note); a `loc` is kept only for a file the collector would select, so an ignored or excluded file is never
+  served by `/api/source`; per-row audit notes on `ConfigMeta.files[].nodes[]`. Real ingest: 12,689 / 27,085,
+  digest `577950333329`, identical.
+
 ## Parser and CLI gap delivery — 2026-10-21
 
 Seven independently reviewed changes close the parser and CLI gaps: API delivery policy, raw test-server
