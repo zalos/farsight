@@ -49,7 +49,8 @@ after(() => {
 test('deps list: the packages count with its split, one line per package with the fold’s numbers', () => {
   const r = run(['deps', 'list']);
   assert.equal(r.status, 0, r.err);
-  assert.match(r.out, /^8 packages across every source in scope \(7 third-party · 1 from this workspace\)/);
+  assert.match(r.out, /^9 packages across every source in scope \(8 third-party · 1 from this workspace\)/);
+  assert.match(r.out, /@nestjs\/common\s+invoice-app\s+third-party\s+\(undeclared\)/);
   for (const row of packagesOf(index).rows) {
     const line = r.out.split('\n').find((l) => l.trimStart().startsWith(row.name + ' '))!;
     assert.ok(line, row.name);
@@ -58,7 +59,7 @@ test('deps list: the packages count with its split, one line per package with th
   assert.match(r.out, /@invoice\/plumbing\s+invoice-app\s+workspace\s+\(alias\)/);
   assert.match(r.out, /the runtime's own modules, never counted as packages: node:fs, node:path, node:url/);
   const third = run(['deps', 'list', '--third-party']);
-  assert.match(third.out, /^7 packages/);
+  assert.match(third.out, /^8 packages/);
   assert.ok(!third.out.includes('@invoice/plumbing'));
   assert.match(run(['deps', 'list', '--workspace']).out, /^1 package across/);
 });
@@ -69,7 +70,7 @@ test('deps list --json is farsight-deps v0, says it is not frozen, and carries t
   const doc = JSON.parse(r.out);
   assert.deepEqual([doc.format, doc.version, doc.frozen], ['farsight-deps', 0, false]);
   assert.deepEqual(doc.rows, JSON.parse(JSON.stringify(packagesOf(index).rows)));
-  assert.equal(doc.packages.n, 8);
+  assert.equal(doc.packages.n, 9);
 });
 
 test('deps where: every importing file with its line and specifier, and the code that uses it', () => {

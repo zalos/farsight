@@ -419,7 +419,11 @@ describe('dependencies — packages as nodes', () => {
       pk,
     );
     const overview = await call('graph_overview');
-    assert.match(overview, /dependencies: 8 packages \(7 third-party · 1 from this workspace\)/);
+    assert.match(overview, /dependencies: 9 packages \(8 third-party · 1 from this workspace\)/);
+    assert.match(
+      await call('search_graph', { query: '@nestjs/common', kind: 'package' }),
+      /\[package\] @nestjs\/common/,
+    );
   });
 });
 

@@ -132,7 +132,8 @@ test('GET /api/deps serves packagesOf whole: rows, the packages count and the bu
   const fold = packagesOf(index);
   assert.deepEqual(body.rows, JSON.parse(JSON.stringify(fold.rows)));
   assert.deepEqual(body.packages, fold.packages);
-  assert.equal(body.packages.n, 8);
+  assert.equal(body.packages.n, 9);
+  assert.ok(body.rows.some((r: any) => r.name === '@nestjs/common' && r.scope === 'third-party'));
   assert.deepEqual(
     body.meta['invoice-app'].builtins.map((b: any) => b.spec),
     ['node:fs', 'node:path', 'node:url'],
@@ -153,7 +154,7 @@ test('GET /api/deps filters by kind, repo and scope; a bad kind or hops is a 400
     ws.body.packages.breakdown.map((p: any) => p.n),
     [0, 1],
   );
-  assert.equal((await get('/api/deps?kind=third-party')).body.rows.length, 7);
+  assert.equal((await get('/api/deps?kind=third-party')).body.rows.length, 8);
   assert.equal((await get('/api/deps?repo=nope')).body.rows.length, 0);
   const scoped = await get('/api/deps?scope=other');
   assert.equal(scoped.body.rows.length, 0);
