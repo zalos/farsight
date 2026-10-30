@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
+import type { FarsightConfig } from '@farsight/core';
 import { ingestRepo, loadWorkspaceConfig } from '../dist/index.js';
 
 const from = '.farsight/settings.json → sources[app].config';
@@ -108,6 +109,35 @@ test('overlay lists union and duplicate externals/stores keep the root declarati
       ['store', 'workspace', 'farsight.config.json'],
     ],
   );
+});
+
+test('overlay blocks without a field-specific merger reach merged; repository blocks keep precedence', (t) => {
+  const dir = fixture(t, {});
+  const config: FarsightConfig = {
+    gateTiers: { check: 'policy' },
+    lifecycle: { orders: { views: { operator: { Draft: ['draft'] } } } },
+    decisions: [{ id: 'review-policy', title: 'Review policy' }],
+    validators: ['readMultipart'],
+    internalRoutes: ['GET /health'],
+  };
+  const overlayOnly = loadWorkspaceConfig(dir, { configOverlay: { from, config } });
+  assert.deepEqual(overlayOnly.merged, config);
+  assert.deepEqual(overlayOnly.meta.conflicts, []);
+
+  const root: FarsightConfig = { gateTiers: { approve: 'business' } };
+  writeFileSync(join(dir, 'farsight.config.json'), JSON.stringify(root));
+  const withRoot = loadWorkspaceConfig(dir, { configOverlay: { from, config } });
+  assert.deepEqual(withRoot.merged, { ...config, ...root });
+  assert.deepEqual(withRoot.meta.conflicts, [
+    {
+      kind: 'overlay',
+      key: 'gateTiers',
+      files: ['farsight.config.json', from],
+      kept: 'farsight.config.json',
+      from: 'workspace',
+    },
+  ]);
+  assert.deepEqual(config.gateTiers, { check: 'policy' }, 'the supplied overlay stays intact');
 });
 
 test('root-scoped overlay validators apply while a nested file reports them as ignored', async (t) => {
