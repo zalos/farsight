@@ -2266,10 +2266,14 @@ are the owner CLI's until the view has its own (P-4b for the rerun).
 49. **Configuration extends the shared graph through data, never loaded adapters (2026-10-30).**
 
 The configuration family is `frameworks` · `patterns` · `nodes`: aliases teach existing framework readers additional
-names; patterns turn matching source syntax or text into the existing graph kinds; manual node declarations are the
-planned next member for facts no reader can reach. All use the canonical config schema and can be supplied through the
-workspace overlay without writing into the source. Framework aliases are root-scoped. Pattern rules in nested config
-files select only files under that folder, with the workspace's excludes and ignore rules still applied.
+names; patterns turn matching source syntax or text into the existing graph kinds; manual node declarations supply
+facts no reader can reach. All use the canonical config schema and can be supplied through the workspace overlay
+without writing into the source. Hand-made `nodes` are folder-scoped declarations that attach to existing identities
+without creating twins or changing reader evidence; only new nodes are tagged `declared`, handler and guard connections
+carry `annotation-scan`, explicit grants feed Roles, and hand-made routes count on the code side of the contract
+(`both` when the spec also names them) with the implemented count partitioned into found in code and declared by a
+person. Framework aliases are root-scoped. Pattern rules in nested config files select only files under that folder,
+with the workspace's excludes and ignore rules still applied.
 
 Patterns run after config, tooling and setup-origin enrichment and before OpenAPI reconciliation. The existing bundled
 Tree-sitter grammars interpret call, decorator, annotation and raw-query matchers; a JavaScript regular expression per

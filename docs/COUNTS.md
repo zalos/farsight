@@ -203,7 +203,16 @@ not list*. A screen row's `⚠ n drift` has the same tip over that screen (`desi
 ### APIs (`/api/apis` → `apiSurface().counts`)
 
 `35 operations · 27 implemented · 8 not implemented · what differs 19` — scope one API (its spec + the code).
-`consumers 25`, `gated 25`. The page says *these counts overlap* where they do. No contradiction found; not typed yet.
+`consumers 25`, `gated 25`. The page says *these counts overlap* where they do.
+
+`implemented` retains the contract's code-side total, including hand-made routes: matching a specification does not
+prove implementation. When a person contributes routes, `counts.implementedBreakdown` partitions that total into
+`count.part.apiFoundInCode` and `count.part.apiDeclaredByPerson`; the parts sum to `implemented`. Attaching configuration
+to a reader route stays in the code part, while a hand-made route with a supplied location stays in the person part.
+`apiImplementedCount(counts)` wraps the total, denominator and breakdown in a `Counted` with scope `surf.scope.api`,
+source `apiSurface().counts.implemented / .operations`, and re-check `farsight api list` / `api_surface`; the CLI prints
+the evidence breakdown beside the table and defines `impl` in its legend. The reconcile report carries the same
+optional breakdown. Other legacy API totals remain untyped.
 
 ### Change impact (`/api/impact` → `impactOf()`; drawer, journey IMPACT tab, CLI `impact`, MCP `impact_of`)
 
@@ -763,7 +772,7 @@ none of the re-check commands.
 |---|---|---|---|---|
 | `built.journeys` | `count.unit.journeysBuilt` (`of`) | journeys whose every screen is built, of the journeys the designs declare (each flow once) | `designSurface().flows[].status` | `farsight state` · `graph_overview` |
 | `built.screens` | `state.unit.screensBuilt` (`of`) | screens built, of the screens the designs declare (code-only pages left out) | `designSurface().counts.built / .designed` | `farsight design list` · `design_surface` |
-| `built.operations` | `state.unit.operations` (`of`; no business unit) | operations with code, of every operation on the API surfaces | `apiSurface().counts.implemented / .operations` | `farsight api list` · `api_surface` |
+| `built.operations` | `state.unit.operations` or `state.unit.operationsSupplied` (`of`; no business unit) | operations found in code or declared by a person, of every operation on the API surfaces; when hand-made declarations contribute, a disjoint breakdown of `count.part.apiFoundInCode` + `count.part.apiDeclaredByPerson` sums to the total | `apiSurface().counts.implemented / .operations` | `farsight api list` · `api_surface` |
 | `built.storylines` · `built.branches` | `count.unit.storylines` · `count.part.storylineBranches` | storylines, and the branches they declare | `journeyTree().storylines[].branches` | `farsight journeys` · `journeys` |
 | `validated.byVerdict[].journeys` | `count.unit.journeys` + the word (`verdict.word.key`, lane V's words) | the **fully built** journeys by their one test verdict, strongest class first — build state wins (swarm round 3: *10 of 18 journeys built* beside *17 journeys passed*) | `testsSurface().journeys[].coverage.verdict.word` | `farsight tests matrix` · `test_coverage` |
 | `validated.notFullyBuilt` | `state.unit.journeysBuiltOnly` *n journeys not fully built, so no journey verdict* | journeys with a screen designed and not built, whatever their word: counted apart, never under one | breakdown `count.part.partlyBuilt` (`verdict.word.builtOnly`) · `count.part.noScreenBuilt` (`coverage.sharedEvidence`) | `farsight tests matrix` · `test_coverage` |

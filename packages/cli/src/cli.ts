@@ -37,6 +37,7 @@ import {
   testsMatrixCsv,
   countedLine,
   breakdownText,
+  apiImplementedCount,
   countedText,
   storyCounts,
   t as word,
@@ -1454,12 +1455,11 @@ switch (command) {
       for (const a of apis) {
         const c = a.counts;
         console.log(
-          `  ${a.name.slice(0, 40).padEnd(40)}  ${a.repo.slice(0, 15).padEnd(15)}  ${String(c.operations).padStart(3)}  ${String(c.declared).padStart(4)}  ${String(c.implemented).padStart(4)}  ${String(c.notImplemented).padStart(8)}  ${String(c.undocumented).padStart(5)}  ${String(c.consumers).padStart(9)}  ${String(c.drift).padStart(5)}  ${a.kind === 'spec' ? a.specPath : '(implied from code — no spec on file)'}${a.specSource ? '  [spec-only source]' : ''}`,
+          `  ${a.name.slice(0, 40).padEnd(40)}  ${a.repo.slice(0, 15).padEnd(15)}  ${String(c.operations).padStart(3)}  ${String(c.declared).padStart(4)}  ${String(c.implemented).padStart(4)}  ${String(c.notImplemented).padStart(8)}  ${String(c.undocumented).padStart(5)}  ${String(c.consumers).padStart(9)}  ${String(c.drift).padStart(5)}  ${a.kind === 'spec' ? a.specPath : word('api.list.noSpec', 'professional')}${a.specSource ? '  [spec-only source]' : ''}`,
         );
+        if (c.implementedBreakdown) console.log(`    ${breakdownText(apiImplementedCount(c))}`);
       }
-      console.log(
-        '\n  ops = routes on this surface · decl = named in the spec · impl = with source · not-impl = in the spec, not the code (not a gap for a spec-only source) · undoc = in the code, not the spec',
-      );
+      console.log('\n  ' + word('api.list.legend', 'professional'));
       console.log('\n' + candidateLines().join('\n'));
       break;
     }
