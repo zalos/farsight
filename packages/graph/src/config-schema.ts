@@ -216,7 +216,7 @@ export default {
         },
       },
       'description':
-        'Additional names read using the built-in Spring, Nest and Express semantics. Template holes $0 and $1 read positional arguments; $name reads a named argument. Unfilled labels use the annotation name.',
+        'Additional names read using the built-in Spring, Nest and Express semantics. Java selectors normally use pair:name; arg:0 is equivalent to pair:value, while arg:1 is reachable only through syntax recovery. Template holes $0 and $1 read positional arguments; $name reads a named argument. Unfilled labels use the annotation name.',
     },
     'externals': {
       'type': 'array',

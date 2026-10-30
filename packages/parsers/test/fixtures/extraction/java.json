@@ -2170,7 +2170,8 @@
       "name": "GET /api/invoices/:param/approval-details",
       "lang": "java",
       "tags": [
-        "invoice"
+        "invoice",
+        "http-api"
       ],
       "contract": {
         "status": "both",

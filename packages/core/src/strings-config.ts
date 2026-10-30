@@ -85,7 +85,7 @@ export const CONFIG_STRINGS: Record<string, StringEntry> = {
   'config.alias.nest.guards': same('Nest checks', 'Names the source declares for checks a request must pass.'),
   'config.alias.express.middleware': same('Express request checks', 'Names the source declares for checks performed before a request reaches its handler.'),
   'config.alias.unmatched': same('matches no indexed use.', 'This configured name or pattern did not match any use in the code Farsight read.'),
-  'config.alias.invalid': same('frameworks was ignored: {error}', 'Only the invalid framework declarations were ignored. The other settings in this file still apply.'),
+  'config.alias.invalid': same('frameworks was ignored: {error}', 'The entire frameworks block was ignored because it contains an invalid declaration. The other settings in this file still apply.'),
   'config.delegate.unmatched': same('{name} returns a ResponseEntity on a delegate, but no operation in the repo’s specs is named {method}; the route is not recorded', 'A method on a declared delegate has no matching named operation in the API descriptions, so Farsight cannot give it a web address.'),
   'config.delegate.ambiguous': same('{name} matches more than one operation or handler named {method}; the route is not joined', 'More than one operation or handler has this name, so Farsight cannot select one without guessing.'),
   'config.field.externals': same('outside systems', 'Third-party systems the code talks to that Farsight cannot see by itself, with a name and a kind.'),

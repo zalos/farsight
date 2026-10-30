@@ -204,11 +204,12 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   if (options.openapi !== false) {
     const { errors, securityByApi } = await applySpecs(merged, repoRoot, opts, workspace);
     routeGaps.push(
-      ...joinDelegates(merged, opts.frameworks?.spring?.delegates ?? [], {
-        guardNames: config.guards,
-        validators: config.validators,
-        securityByApi,
-      }),
+      ...joinDelegates(
+        merged,
+        opts.frameworks?.spring?.delegates ?? [],
+        { guardNames: config.guards, validators: config.validators, securityByApi },
+        workspace,
+      ),
     );
     if (errors.length) merged.specErrors = errors;
     applyWorkspaceRouteGuards(merged.nodes, merged.edges, workspace);

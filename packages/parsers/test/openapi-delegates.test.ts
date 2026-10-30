@@ -221,6 +221,7 @@ test('ingest passes configured aliases into readers, joins spec delegates, and r
   assert.ok(alias);
   const route = f.nodes.find((n) => n.contract?.spec?.operationId === 'getInvoiceForApproval')!;
   assert.equal(route.contract?.status, 'both');
+  assert.ok(route.tags.includes('http-api'), 'the joined route receives the same configured tags as controllers');
   assert.ok(
     f.edges.some(
       (e) => e.kind === 'calls' && e.from === route.id && e.to.endsWith('InvoiceApiDelegateImpl.getInvoiceForApproval'),

@@ -1,7 +1,9 @@
 /** Join generated Spring delegate implementations to the operations already read by the spec pass. */
 import {
+  applyConfig,
   buildIndex,
   operationDrift,
+  scopeOfDir,
   t,
   type GraphFragment,
   type GraphNode,
@@ -10,6 +12,7 @@ import {
 } from '@farsight/core';
 import { globToRegExp } from '../shared/files.js';
 import { autoTags, normalizePath } from '../shared/tags.js';
+import type { WorkspaceConfig } from '../shared/config-files.js';
 
 const RESPONSE_ENTITY = /\bResponseEntity\s*</;
 const classKey = (node: GraphNode, name = node.name) => `${node.loc?.repo}\0${node.loc?.path}\0${name}`;
@@ -20,7 +23,12 @@ export interface DelegateDriftContext extends Pick<ReconcileOptions, 'guardNames
 }
 
 /** In place; unmatched overrides are gaps, never invented routes. Without a spec there is nothing to join. */
-export function joinDelegates(fragment: GraphFragment, globs: string[], drift: DelegateDriftContext = {}): RouteGap[] {
+export function joinDelegates(
+  fragment: GraphFragment,
+  globs: string[],
+  drift: DelegateDriftContext = {},
+  workspace?: WorkspaceConfig,
+): RouteGap[] {
   if (!globs.length) return [];
   const patterns = globs.map(globToRegExp);
   const classes = new Map<string, GraphNode>();
@@ -155,6 +163,12 @@ export function joinDelegates(fragment: GraphFragment, globs: string[], drift: D
   for (const edge of fragment.edges) {
     edge.from = renamed.get(edge.from) ?? edge.from;
     edge.to = renamed.get(edge.to) ?? edge.to;
+  }
+  // The first config pass preceded these routes. Apply only tags here; guard renames are not idempotent.
+  for (const file of workspace?.files ?? []) {
+    applyConfig(joined, { tags: file.config.tags }, [], {
+      scope: file.root ? undefined : scopeOfDir(file.dir),
+    });
   }
   // Reuse the normal controller drift rules after every handler and gate has been joined.
   const index = buildIndex(fragment.nodes, fragment.edges);
