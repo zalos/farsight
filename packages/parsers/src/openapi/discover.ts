@@ -5,8 +5,8 @@
  * `farsight.config.json → openapi` declares (paths or URLs — the config is
  * how "the API itself" gets registered as a source of truth for its shape).
  */
-import { readFileSync, statSync } from 'node:fs';
-import { relative, basename } from 'node:path';
+import { closeSync, openSync, readSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { relative, basename, resolve, isAbsolute } from 'node:path';
 import { collectFiles } from '../shared/files.js';
 import type { IngestOptions } from '../types.js';
 import { parseSpecText, readSpecSource, isSpecUrl, type ParsedSpec } from './read.js';
@@ -19,14 +19,57 @@ export interface DiscoveredSpec extends ParsedSpec {
   path: string;
   text: string;
   name?: string;
-  /** 'file' = found by name; 'config' = declared */
-  origin: 'file' | 'config';
+  origin: 'file' | 'config' | 'settings';
+  status: 'applied' | 'candidate';
+  phase?: string;
+  phaseOrder?: string[];
 }
 
 export interface OpenApiDeclaration {
   path?: string;
   url?: string;
   name?: string;
+  phase?: string;
+  phaseOrder?: string[];
+}
+
+/** Inspect only the prefix, without parsing unrelated JSON or YAML documents. */
+function hasSpecKey(head: string): boolean {
+  if (!head.trimStart().startsWith('{'))
+    return /^(?:openapi|swagger|"openapi"|"swagger"|'openapi'|'swagger')\s*:/m.test(head);
+  // JSON keys may be on the first line, after other fields, or inside nested objects.
+  // Only an object key at depth one counts; a quoted example in a description does not.
+  let depth = 0;
+  for (let i = 0; i < head.length; i++) {
+    const ch = head[i];
+    if (ch === '{' || ch === '[') depth++;
+    else if (ch === '}' || ch === ']') depth--;
+    else if (ch === '"') {
+      const start = i++;
+      for (; i < head.length; i++) {
+        if (head[i] === '\\') i++;
+        else if (head[i] === '"') break;
+      }
+      if (depth === 1 && /^\s*:/.test(head.slice(i + 1)) && /^"(?:openapi|swagger)"$/.test(head.slice(start, i + 1)))
+        return true;
+    }
+  }
+  return false;
+}
+
+function readHead(path: string): string {
+  const fd = openSync(path, 'r');
+  try {
+    const head = Buffer.alloc(2048);
+    return head.subarray(0, readSync(fd, head, 0, head.length, 0)).toString('utf8');
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function insideSource(root: string, path: string): boolean {
+  const rel = relative(realpathSync(root), realpathSync(path));
+  return rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel);
 }
 
 export async function discoverSpecs(
@@ -37,47 +80,69 @@ export async function discoverSpecs(
   const specs: DiscoveredSpec[] = [];
   const errors: string[] = [];
   const seen = new Set<string>();
+  const keyOf = (ref: string) =>
+    isSpecUrl(ref) ? ref : relative(repoRoot, resolve(repoRoot, ref)).replaceAll('\\', '/');
+  const ignored = new Set((options.openapiIgnored ?? []).map(keyOf));
 
   // declared first — they win over discovery for the same path
-  for (const d of declared) {
+  const declarations = [
+    ...declared.map((d) => ({ ...d, origin: 'config' as const })),
+    ...(options.openapiRegistered ?? []).map((d) => ({ ...d, origin: 'settings' as const })),
+  ];
+  for (const d of declarations) {
     const ref = d.url ?? d.path;
     if (!ref) continue;
+    const key = keyOf(ref);
+    if (ignored.has(key) || seen.has(key)) continue;
+    seen.add(key);
     try {
+      if (!isSpecUrl(ref)) {
+        const path = resolve(repoRoot, ref);
+        if (!insideSource(repoRoot, path)) throw new Error('path leaves the source');
+        if (statSync(path).size > MAX_BYTES) throw new Error('document is larger than 8 MiB');
+      }
       const parsed = await readSpecSource(ref, repoRoot);
-      const key = isSpecUrl(ref)
-        ? ref
-        : relative(repoRoot, ref.startsWith('/') ? ref : `${repoRoot}/${ref}`).replace(/^\.\//, '');
-      seen.add(key);
-      specs.push({ ...parsed, path: key, origin: 'config', ...(d.name ? { name: d.name } : {}) });
+      specs.push({
+        ...parsed,
+        path: key,
+        origin: d.origin,
+        status: 'applied',
+        ...(d.name ? { name: d.name } : {}),
+        ...(d.phase ? { phase: d.phase } : {}),
+        ...('phaseOrder' in d && d.phaseOrder ? { phaseOrder: d.phaseOrder } : {}),
+      });
     } catch (err) {
       // a declaration that names no file says so in words, without the absolute path the error carries
       const missing = (err as NodeJS.ErrnoException).code === 'ENOENT';
       errors.push(
-        `openapi ${ref}: ${missing ? 'declared in farsight.config.json, but there is no file at that path' : (err as Error).message.split('\n')[0]}`,
+        `openapi ${ref}: ${missing ? `declared in ${d.origin === 'settings' ? '.farsight/settings.json' : 'farsight.config.json'}, but there is no file at that path` : (err as Error).message.split('\n')[0]}`,
       );
     }
   }
 
-  const candidates = collectFiles(repoRoot, ['.yaml', '.yml', '.json'], options, (base) => !NAME_RE.test(base)).concat(
-    collectFiles(repoRoot, ['.yaml', '.yml', '.json'], options).filter((abs) =>
-      /(^|\/)openapi\//.test(relative(repoRoot, abs)),
-    ),
-  );
-  for (const abs of [...new Set(candidates)].sort()) {
-    const rel = relative(repoRoot, abs);
-    if (seen.has(rel)) continue;
+  for (const abs of collectFiles(repoRoot, ['.yaml', '.yml', '.json'], options).sort()) {
+    const rel = keyOf(abs);
+    if (seen.has(rel) || ignored.has(rel)) continue;
+    const named = NAME_RE.test(basename(abs));
+    const underOpenapi = /(^|\/)openapi\//.test(rel);
     try {
-      if (statSync(abs).size > MAX_BYTES) continue;
+      if (!insideSource(repoRoot, abs) || statSync(abs).size > MAX_BYTES) continue;
+      // Preserve errors for spec-named files. Everything else needs a top-level key
+      // in its first 2 KiB before we read the body and attempt a parse.
+      if (!named && !hasSpecKey(readHead(abs))) continue;
       const text = readFileSync(abs, 'utf8');
-      // files found only by directory get a cheap sniff before a full parse;
-      // a file *named* like a spec is parsed regardless so a broken one is reported
-      if (!NAME_RE.test(basename(abs)) && !/(^|\n)\s*"?(openapi|swagger)"?\s*:/.test(text)) continue;
       const parsed = parseSpecText(text, rel);
       seen.add(rel);
-      specs.push({ ...parsed, path: rel, text, origin: 'file' });
+      specs.push({
+        ...parsed,
+        path: rel,
+        text,
+        origin: 'file',
+        status: named || underOpenapi ? 'applied' : 'candidate',
+      });
     } catch (err) {
       // a file named like a spec that does not parse as one is worth a word, not a failure
-      if (NAME_RE.test(basename(abs))) errors.push(`openapi ${rel}: ${(err as Error).message.split('\n')[0]}`);
+      if (named) errors.push(`openapi ${rel}: ${(err as Error).message.split('\n')[0]}`);
     }
   }
   return { specs, errors };

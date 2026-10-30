@@ -426,3 +426,112 @@ test('ingest config maps x-guards and proves configured multipart reader calls',
   assert.deepEqual(route.contract?.drift ?? [], []);
   assert.ok(fragment.edges.some((edge) => edge.kind === 'calls' && edge.to.endsWith('::readMultipart')));
 });
+
+// Candidates are evidence for a registration door, never permission to change a graph.
+test('discovery classifies named, directory, declared, workspace and sniffed documents; ignores win', async () => {
+  const doc = JSON.stringify({
+    openapi: '3.1.0',
+    info: { title: 'Vendor', version: '1.4' },
+    paths: { '/vendor': { get: {} } },
+  });
+  const dir = tempRepo({
+    'openapi.yaml': 'openapi: 3.0.0\npaths: {}',
+    'openapi/other.json': doc,
+    'docs/vendor-api.json': doc,
+    'docs/declared.json': doc,
+    'docs/workspace.json': doc,
+    'docs/ignored.json': doc,
+    'excluded/vendor.json': doc,
+  });
+  const { specs, errors } = await discoverSpecs(
+    dir,
+    {
+      exclude: ['excluded/**'],
+      openapiIgnored: ['docs/ignored.json'],
+      openapiRegistered: [{ path: 'docs/workspace.json', name: 'Workspace', phase: 'preview' }],
+    },
+    [{ path: 'docs/declared.json' }, { path: 'docs/missing.json' }, { path: 'docs/ignored.json' }],
+  );
+  assert.deepEqual(
+    specs.map((s) => [s.path, s.status, s.origin]),
+    [
+      ['docs/declared.json', 'applied', 'config'],
+      ['docs/workspace.json', 'applied', 'settings'],
+      ['docs/vendor-api.json', 'candidate', 'file'],
+      ['openapi.yaml', 'applied', 'file'],
+      ['openapi/other.json', 'applied', 'file'],
+    ],
+  );
+  assert.equal(specs[1]!.phase, 'preview');
+  assert.deepEqual(errors, [
+    'openapi docs/missing.json: declared in farsight.config.json, but there is no file at that path',
+  ]);
+});
+
+test('candidate sniff is bounded and top-level, understands compact JSON and YAML, and respects ignores', async () => {
+  const doc = { openapi: '3.0.0', paths: {} };
+  const dir = tempRepo({
+    'docs/compact.json': JSON.stringify({ info: { title: 'Nested' }, ...doc }),
+    'docs/quoted.yaml': "'swagger': '2.0'\npaths: {}\n",
+    'docs/nested.json': JSON.stringify({ example: doc, padding: 'x'.repeat(2048), ...doc }),
+    'docs/late.json': JSON.stringify({ padding: 'x'.repeat(2048), ...doc }),
+    'docs/too-big.json': JSON.stringify({ ...doc, description: 'x'.repeat(8 * 1024 * 1024) }),
+    'docs/bad.yaml': 'openapi: 3.0.0\npaths: [',
+    'docs/gitignored.json': JSON.stringify(doc),
+    '.gitignore': 'docs/gitignored.json\n',
+  });
+  const { specs, errors } = await discoverSpecs(dir, {});
+  assert.deepEqual(
+    specs.map((s) => s.path),
+    ['docs/compact.json', 'docs/quoted.yaml'],
+  );
+  assert.deepEqual(errors, []);
+});
+
+test('candidate metadata survives design and store persistence without moving nodes, edges or freshness', async () => {
+  const dir = tempRepo({
+    'src/app.ts': 'export function hello() { return 1; }',
+    'docs/vendor-api.json': JSON.stringify({
+      openapi: '3.1.0',
+      info: { title: 'Vendor', version: '1.4' },
+      paths: { '/vendor': { get: {}, parameters: [] } },
+    }),
+  });
+  const plain = await ingestRepo(dir, { repoName: 'candidate', openapi: false });
+  const found = await ingestRepo(dir, { repoName: 'candidate' });
+  assert.deepEqual(found.nodes, plain.nodes);
+  assert.deepEqual(found.edges, plain.edges);
+  assert.equal(found.meta!.files, plain.meta!.files);
+  assert.equal(found.meta!.sourceHash, plain.meta!.sourceHash);
+  assert.equal(found.meta!.sourceDigest, plain.meta!.sourceDigest);
+  assert.deepEqual(found.meta!.openapi, {
+    applied: [],
+    candidates: [{ path: 'docs/vendor-api.json', title: 'Vendor', version: '1.4', operations: 1, origin: 'file' }],
+  });
+  const { GraphStore, openApiCounts, countedProblems } = await import('@farsight/core');
+  const store = new GraphStore();
+  store.addFragment(found);
+  const graphPath = join(dir, 'saved.json');
+  store.save(graphPath);
+  assert.deepEqual(GraphStore.load(graphPath).meta.openapi?.candidate, found.meta!.openapi);
+  assert.deepEqual(store.toDocument().sources?.find((s) => s.repo === 'candidate')?.meta?.openapi, found.meta!.openapi);
+  const counts = openApiCounts(found.meta!.openapi!);
+  for (const c of [counts.applied, counts.candidates, ...Object.values(counts.operations)])
+    assert.deepEqual(countedProblems(c), []);
+  const invoice = await ingestRepo(invoiceApp, { repoName: 'invoice-app' });
+  assert.equal(invoice.meta!.openapi!.applied[0]!.path, 'openapi.yaml', 'the later design pass retains the report');
+  const registered = await ingestRepo(dir, {
+    repoName: 'candidate',
+    openapiRegistered: [{ path: 'docs/vendor-api.json', name: 'Registered', phase: 'preview' }],
+  });
+  assert.equal(registered.meta!.openapi!.applied[0]!.origin, 'settings');
+  assert.equal(registered.meta!.openapi!.candidates.length, 0);
+  assert.ok(registered.nodes.some((n) => n.kind === 'route' && n.name === 'GET /vendor'));
+  assert.ok(registered.nodes.some((n) => n.kind === 'api' && n.name === 'Registered'));
+  const ignored = await ingestRepo(dir, {
+    repoName: 'candidate',
+    openapiRegistered: [{ path: 'docs/vendor-api.json' }],
+    openapiIgnored: ['docs/vendor-api.json'],
+  });
+  assert.equal(ignored.meta!.openapi, undefined);
+});
