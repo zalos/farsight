@@ -5,8 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { ingestRepo, parseSpecText, discoverSpecs, ingestSpec, specToYaml } from '../dist/index.js';
+import { join, resolve, relative } from 'node:path';
+import { ingestRepo, parseSpecText, discoverSpecs, ingestSpec, specToYaml, readSpecSource } from '../dist/index.js';
 import { graphToSpec, buildIndex } from '@farsight/core';
 
 const invoiceApp = resolve(import.meta.dirname, '../../../examples/invoice-app');
@@ -428,7 +428,7 @@ test('ingest config maps x-guards and proves configured multipart reader calls',
 });
 
 // Candidates are evidence for a registration door, never permission to change a graph.
-test('discovery classifies named, directory, declared, workspace and sniffed documents; ignores win', async () => {
+test('discovery classifies documents; dismissals hide candidates but preserve repository declarations', async () => {
   const doc = JSON.stringify({
     openapi: '3.1.0',
     info: { title: 'Vendor', version: '1.4' },
@@ -436,36 +436,65 @@ test('discovery classifies named, directory, declared, workspace and sniffed doc
   });
   const dir = tempRepo({
     'openapi.yaml': 'openapi: 3.0.0\npaths: {}',
-    'openapi/other.json': doc,
+    'openapi/other.json': JSON.stringify(JSON.parse(doc), null, 2),
     'docs/vendor-api.json': doc,
     'docs/declared.json': doc,
     'docs/workspace.json': doc,
     'docs/ignored.json': doc,
+    'docs/ignored-declared.json': doc,
     'excluded/vendor.json': doc,
   });
   const { specs, errors } = await discoverSpecs(
     dir,
     {
       exclude: ['excluded/**'],
-      openapiIgnored: ['docs/ignored.json'],
+      openapiIgnored: ['docs/ignored.json', 'docs/ignored-declared.json', 'openapi.yaml', 'openapi/other.json'],
       openapiRegistered: [{ path: 'docs/workspace.json', name: 'Workspace', phase: 'preview' }],
     },
-    [{ path: 'docs/declared.json' }, { path: 'docs/missing.json' }, { path: 'docs/ignored.json' }],
+    [{ path: 'docs/declared.json' }, { path: 'docs/missing.json' }, { path: 'docs/ignored-declared.json' }],
   );
   assert.deepEqual(
     specs.map((s) => [s.path, s.status, s.origin]),
     [
       ['docs/declared.json', 'applied', 'config'],
+      ['docs/ignored-declared.json', 'applied', 'config'],
       ['docs/workspace.json', 'applied', 'settings'],
       ['docs/vendor-api.json', 'candidate', 'file'],
       ['openapi.yaml', 'applied', 'file'],
       ['openapi/other.json', 'applied', 'file'],
     ],
   );
-  assert.equal(specs[1]!.phase, 'preview');
+  assert.equal(specs.find((s) => s.path === 'docs/workspace.json')!.phase, 'preview');
   assert.deepEqual(errors, [
     'openapi docs/missing.json: declared in farsight.config.json, but there is no file at that path',
   ]);
+});
+
+test('openapi folder keeps its historical applied set; compact documents remain candidates', async () => {
+  const doc = { openapi: '3.0.0', paths: {} };
+  const dir = tempRepo({
+    'openapi/late.yaml': '# ' + 'header'.repeat(500) + '\nopenapi: 3.0.0\npaths: {}\n',
+    'openapi/pretty-late.json': JSON.stringify({ info: { description: 'x'.repeat(2048) }, ...doc }, null, 2),
+    'openapi/compact.json': JSON.stringify(doc),
+  });
+  const { specs, errors } = await discoverSpecs(dir, {});
+  assert.deepEqual(errors, []);
+  assert.deepEqual(
+    specs.map((s) => [s.path, s.status]),
+    [
+      ['openapi/compact.json', 'candidate'],
+      ['openapi/late.yaml', 'applied'],
+      ['openapi/pretty-late.json', 'applied'],
+    ],
+  );
+  const dismissed = await discoverSpecs(dir, { openapiIgnored: specs.map((s) => s.path) });
+  assert.deepEqual(
+    dismissed.specs.map((s) => [s.path, s.status]),
+    [
+      ['openapi/late.yaml', 'applied'],
+      ['openapi/pretty-late.json', 'applied'],
+    ],
+  );
 });
 
 test('candidate sniff is bounded and top-level, understands compact JSON and YAML, and respects ignores', async () => {
@@ -516,6 +545,7 @@ test('candidate metadata survives design and store persistence without moving no
   assert.deepEqual(GraphStore.load(graphPath).meta.openapi?.candidate, found.meta!.openapi);
   assert.deepEqual(store.toDocument().sources?.find((s) => s.repo === 'candidate')?.meta?.openapi, found.meta!.openapi);
   const counts = openApiCounts(found.meta!.openapi!);
+  assert.equal(counts.operations['docs/vendor-api.json']!.scope, 'count.scope.document');
   for (const c of [counts.applied, counts.candidates, ...Object.values(counts.operations)])
     assert.deepEqual(countedProblems(c), []);
   const invoice = await ingestRepo(invoiceApp, { repoName: 'invoice-app' });
@@ -550,4 +580,40 @@ test('discovery refuses local declarations and candidate symlinks outside the so
   const declared = await discoverSpecs(dir, {}, [{ path: 'candidate.json' }]);
   assert.deepEqual(declared.specs, []);
   assert.deepEqual(declared.errors, ['openapi candidate.json: path leaves the source']);
+  const outsidePath = relative(dir, join(outside, 'vendor.json'));
+  assert.ok(outsidePath.startsWith('../'));
+  const traversal = await discoverSpecs(dir, {}, [{ path: outsidePath }]);
+  assert.deepEqual(traversal.specs, []);
+  assert.deepEqual(traversal.errors, [`openapi ${outsidePath}: path leaves the source`]);
+  writeFileSync(
+    join(dir, 'large.json'),
+    JSON.stringify({ openapi: '3.0.0', paths: {}, padding: 'x'.repeat(8 * 1024 * 1024) }),
+  );
+  const large = await discoverSpecs(dir, {}, [{ path: 'large.json' }]);
+  assert.deepEqual(large.specs, []);
+  assert.deepEqual(large.errors, ['openapi large.json: document is larger than 8 MiB']);
+});
+
+test('URL reads enforce the 8 MiB cap from headers and streamed bytes, including dishonest lengths', async (t) => {
+  const limit = 8 * 1024 * 1024;
+  const doc = JSON.stringify({ openapi: '3.0.0', info: { title: 'Café' }, paths: {} });
+  let response = new Response(doc);
+  t.mock.method(globalThis, 'fetch', async () => response);
+  assert.equal((await readSpecSource('https://example.com/spec')).doc.info?.title, 'Café');
+  response = new Response(Buffer.concat([Buffer.from(doc), Buffer.alloc(limit - Buffer.byteLength(doc), ' ')]));
+  assert.equal((await readSpecSource('https://example.com/spec')).doc.info?.title, 'Café', 'exactly 8 MiB is accepted');
+  for (const contentLength of [String(limit + 1), undefined, '1']) {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(1024 * 1024));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    response = new Response(body, { headers: contentLength ? { 'content-length': contentLength } : {} });
+    await assert.rejects(readSpecSource('https://example.com/spec'), /document is larger than 8 MiB/);
+    assert.equal(cancelled, true, 'refused responses stop reading the stream');
+  }
 });

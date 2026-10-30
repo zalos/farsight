@@ -38,8 +38,21 @@ test('api candidates and list use recorded metadata, filter by source and expose
     assert.equal(result.app.candidates[0].operations, 2);
     assert.equal(result.app.counts.candidates.n, 1);
     assert.equal(result.app.counts.candidates.scope, 'count.scope.source');
+    assert.equal(result.app.counts.operations['docs/vendor-api.json'].scope, 'count.scope.document');
     assert.match(run('candidates').stdout, /farsight api register 'app' 'docs\/vendor-api.json'/);
     assert.match(run('list').stdout, /Vendor API 1.4/);
+    for (const command of ['candidates', 'list']) {
+      const empty = run(command, '--repo', 'other');
+      assert.equal(empty.status, 0, empty.stderr);
+      assert.match(empty.stdout, /0 candidate documents/);
+      assert.doesNotMatch(empty.stdout, /Sync the sources/);
+      const missing = run(command, '--repo', 'missing');
+      assert.notEqual(missing.status, 0);
+      assert.match(missing.stderr, /No such source: missing/);
+    }
+    assert.notEqual(run('candidates', '--repo', 'missing', '--json').status, 0);
+    writeFileSync(join(cwd, 'graph.json'), JSON.stringify({ version: 1, nodes: [], edges: [] }));
+    assert.match(run('candidates').stdout, /Sync the sources to discover them/);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
@@ -94,16 +107,62 @@ test('api register/dismiss round-trip workspace settings without requiring a gra
       assert.notEqual(run(...args).status, 0, args.join(' '));
       assert.equal(readFileSync(file, 'utf8'), before);
     }
+    assert.equal(run('dismiss', 'app', 'docs/shared.json').status, 0);
+    const dismissedSettings = readFileSync(file, 'utf8');
     r = run('register', '--into-source', 'app', 'docs/shared.json', '--phase', 'release');
     assert.equal(r.status, 0, r.stderr);
     assert.deepEqual(JSON.parse(readFileSync(configFile, 'utf8')), {
       glossary: { hello: 'Hello' },
       openapi: [{ path: 'docs/shared.json', phase: 'release' }],
     });
-    assert.equal(readFileSync(file, 'utf8'), before);
+    assert.equal(readFileSync(file, 'utf8'), dismissedSettings);
     writeFileSync(configFile, '{broken');
     assert.notEqual(run('register', 'app', 'docs/shared.json', '--into-source').status, 0);
     assert.equal(readFileSync(configFile, 'utf8'), '{broken');
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('api dismiss refuses a document applied at the last sync without changing settings', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'api-applied-'));
+  try {
+    mkdirSync(join(cwd, '.farsight'));
+    const file = join(cwd, '.farsight/settings.json');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        defaultLens: 'hybrid',
+        collections: [],
+        sources: [{ id: 'app-id', name: 'app', type: 'local', path: 'source', enabled: true }],
+      }),
+    );
+    const before = readFileSync(file, 'utf8');
+    writeFileSync(
+      join(cwd, 'graph.json'),
+      JSON.stringify({
+        version: 1,
+        nodes: [],
+        edges: [],
+        meta: {
+          openapi: {
+            app: {
+              candidates: [],
+              applied: [
+                { path: 'openapi.yaml', title: 'App', version: '1', operations: 1, origin: 'file' },
+                { path: 'docs/declared.json', title: 'Declared', version: '1', operations: 1, origin: 'config' },
+              ],
+            },
+          },
+        },
+      }),
+    );
+    for (const path of ['openapi.yaml', 'docs/declared.json']) {
+      const result = spawnSync(process.execPath, [cli, 'api', 'dismiss', 'app-id', path], { cwd, encoding: 'utf8' });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /The repository applies .*; it cannot be dismissed as a candidate/);
+      assert.equal(readFileSync(file, 'utf8'), before);
+    }
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

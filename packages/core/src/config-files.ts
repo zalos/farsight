@@ -29,7 +29,7 @@ export function openApiCounts(meta: OpenApiMeta): {
         counted(
           d.operations,
           'count.unit.openapiOperations',
-          'surf.scope.api',
+          'count.scope.document',
           'meta.openapi[repo].document.operations',
           { bizUnit: 'count.unit.openapiOperations' },
         ),
@@ -64,12 +64,14 @@ export function openApiFilesText(
   repo?: string,
   candidatesOnly = false,
 ): string[] {
+  if (!metas) return [t('config.openapi.none', 'professional')];
+  if (repo && !Object.hasOwn(metas, repo))
+    return [t('config.openapi.noSource', 'professional').replace('{source}', repo)];
   const entries = Object.entries(metas ?? {})
     .filter(([r]) => !repo || r === repo)
     .sort(([a], [b]) => a.localeCompare(b));
   const out: string[] = [];
   for (const [r, meta] of entries) {
-    if (candidatesOnly && !meta.candidates.length) continue;
     const counts = openApiCounts(meta);
     out.push(
       `${r} — ${t('config.openapi.title', 'professional')}: ${candidatesOnly ? '' : countedText(counts.applied) + ' · '}${countedText(counts.candidates)}`,
@@ -89,7 +91,7 @@ export function openApiFilesText(
         );
     }
   }
-  return out.length ? out : [t('config.openapi.none', 'professional')];
+  return out.length ? out : [countedText(openApiCounts({ applied: [], candidates: [] }).candidates, { scope: false })];
 }
 
 /** How many config files one source holds (the root's and the scoped ones), and how many conflicts they have. */

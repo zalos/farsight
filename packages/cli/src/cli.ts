@@ -1324,7 +1324,13 @@ switch (command) {
         fail(word('config.openapi.sourceMissing', 'professional').replace('{source}', sourceRef));
       if (['name', 'phase'].some((name) => hasFlag(name) && (!flag(name) || flag(name)!.startsWith('--'))))
         fail(word('config.openapi.usage', 'professional'));
-      const wasIgnored = source.openapiIgnore?.includes(ref);
+      const graphFile = resolve(flag('graph', 'graph.json')!);
+      if (
+        sub === 'dismiss' &&
+        existsSync(graphFile) &&
+        GraphStore.load(graphFile).meta.openapi?.[source.name]?.applied.some((d) => d.path === ref)
+      )
+        fail(word('config.openapi.repositoryApplies', 'professional').replace('{path}', ref));
       const entry = {
         ...(isSpecUrl(ref) ? { url: ref } : { path: ref }),
         ...(flag('name') ? { name: flag('name') } : {}),
@@ -1348,7 +1354,6 @@ switch (command) {
       );
       if (problem) fail(problem);
       if (hasFlag('into-source')) {
-        if (wasIgnored) fail(word('config.openapi.ignoredInWorkspace', 'professional'));
         if (source.type !== 'local') fail(word('config.openapi.localOnly', 'professional'));
         const root = realpathSync(resolve(source.path));
         const configPath = join(root, 'farsight.config.json');
@@ -1385,6 +1390,13 @@ switch (command) {
     const graphFile = resolve(flag('graph', 'graph.json')!);
     if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
     const store = GraphStore.load(graphFile);
+    if (
+      (sub === 'candidates' || sub === 'list' || !sub) &&
+      flag('repo') &&
+      store.meta.openapi &&
+      !Object.hasOwn(store.meta.openapi, flag('repo')!)
+    )
+      fail(word('config.openapi.noSource', 'professional').replace('{source}', flag('repo')!));
     if (sub === 'candidates') {
       const entries = Object.entries(store.meta.openapi ?? {}).filter(
         ([repo]) => !flag('repo') || repo === flag('repo'),

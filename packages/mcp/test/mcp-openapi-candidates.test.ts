@@ -42,6 +42,7 @@ test('config_files and graph_overview read candidates without config files and p
     assert.match(config, /farsight api register 'vendor' 'docs\/vendor-api.json'/);
     const json = JSON.parse(await call('config_files', { json: true }));
     assert.equal(json.vendor.openapiCounts.candidates.n, 1);
+    assert.equal(json.vendor.openapiCounts.operations['docs/vendor-api.json'].scope, 'count.scope.document');
     assert.equal(json.vendor.openapi.candidates[0].path, 'docs/vendor-api.json');
     assert.deepEqual(JSON.parse(await call('config_files', { repo: 'missing', json: true })), {});
     assert.match(

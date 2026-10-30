@@ -10,10 +10,10 @@ import { relative, basename, resolve, isAbsolute } from 'node:path';
 import { t } from '@farsight/core';
 import { collectFiles } from '../shared/files.js';
 import type { IngestOptions } from '../types.js';
-import { parseSpecText, readSpecSource, isSpecUrl, type ParsedSpec } from './read.js';
+import { parseSpecText, readSpecSource, isSpecUrl, OPENAPI_MAX_BYTES, type ParsedSpec } from './read.js';
 
 const NAME_RE = /^(openapi|swagger|api(-|_)?(spec|docs?)?|.*\.openapi|.*\.swagger)\.(ya?ml|json)$/i;
-const MAX_BYTES = 8 * 1024 * 1024;
+const DIRECTORY_SPEC_KEY = /(^|\n)\s*"?(openapi|swagger)"?\s*:/;
 
 export interface DiscoveredSpec extends ParsedSpec {
   /** repo-relative path, or the URL */
@@ -73,6 +73,10 @@ function insideSource(root: string, path: string): boolean {
   return rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel);
 }
 
+/**
+ * Read applied documents and unapplied candidates. Callers that change the graph
+ * must filter on `status === 'applied'`; candidates are only registration suggestions.
+ */
 export async function discoverSpecs(
   repoRoot: string,
   options: IngestOptions,
@@ -94,13 +98,13 @@ export async function discoverSpecs(
     const ref = d.url ?? d.path;
     if (!ref) continue;
     const key = keyOf(ref);
-    if (ignored.has(key) || seen.has(key)) continue;
+    if (seen.has(key) || (d.origin === 'settings' && ignored.has(key))) continue;
     seen.add(key);
     try {
       if (!isSpecUrl(ref)) {
         const path = resolve(repoRoot, ref);
         if (!insideSource(repoRoot, path)) throw new Error(t('config.openapi.outsideSource', 'professional'));
-        if (statSync(path).size > MAX_BYTES) throw new Error(t('config.openapi.tooLarge', 'professional'));
+        if (statSync(path).size > OPENAPI_MAX_BYTES) throw new Error(t('config.openapi.tooLarge', 'professional'));
       }
       const parsed = await readSpecSource(ref, repoRoot);
       specs.push({
@@ -123,15 +127,17 @@ export async function discoverSpecs(
 
   for (const abs of collectFiles(repoRoot, ['.yaml', '.yml', '.json'], options).sort()) {
     const rel = keyOf(abs);
-    if (seen.has(rel) || ignored.has(rel)) continue;
+    if (seen.has(rel)) continue;
     const named = NAME_RE.test(basename(abs));
     const underOpenapi = /(^|\/)openapi\//.test(rel);
     try {
-      if (!insideSource(repoRoot, abs) || statSync(abs).size > MAX_BYTES) continue;
-      // Preserve errors for spec-named files. Everything else needs a top-level key
-      // in its first 2 KiB before we read the body and attempt a parse.
-      if (!named && !hasSpecKey(readHead(abs))) continue;
-      const text = readFileSync(abs, 'utf8');
+      if (!insideSource(repoRoot, abs) || statSync(abs).size > OPENAPI_MAX_BYTES) continue;
+      // The historical directory sniff decides the applied set, including a key
+      // after a long header. The prefix scanner only widens candidate discovery.
+      let text = underOpenapi && !named ? readFileSync(abs, 'utf8') : undefined;
+      const applied = named || (text !== undefined && DIRECTORY_SPEC_KEY.test(text));
+      if (!applied && (ignored.has(rel) || !hasSpecKey(readHead(abs)))) continue;
+      text ??= readFileSync(abs, 'utf8');
       const parsed = parseSpecText(text, rel);
       seen.add(rel);
       specs.push({
@@ -139,7 +145,7 @@ export async function discoverSpecs(
         path: rel,
         text,
         origin: 'file',
-        status: named || underOpenapi ? 'applied' : 'candidate',
+        status: applied ? 'applied' : 'candidate',
       });
     } catch (err) {
       // a file named like a spec that does not parse as one is worth a word, not a failure

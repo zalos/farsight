@@ -1422,73 +1422,13 @@
         "applied": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string"
-              },
-              "title": {
-                "type": "string"
-              },
-              "version": {
-                "type": "string"
-              },
-              "operations": {
-                "type": "number"
-              },
-              "origin": {
-                "type": "string",
-                "enum": [
-                  "file",
-                  "config",
-                  "settings"
-                ]
-              }
-            },
-            "required": [
-              "path",
-              "title",
-              "version",
-              "operations",
-              "origin"
-            ],
-            "additionalProperties": false
+            "$ref": "#/definitions/OpenApiDocument"
           }
         },
         "candidates": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string"
-              },
-              "title": {
-                "type": "string"
-              },
-              "version": {
-                "type": "string"
-              },
-              "operations": {
-                "type": "number"
-              },
-              "origin": {
-                "type": "string",
-                "enum": [
-                  "file",
-                  "config",
-                  "settings"
-                ]
-              }
-            },
-            "required": [
-              "path",
-              "title",
-              "version",
-              "operations",
-              "origin"
-            ],
-            "additionalProperties": false
+            "$ref": "#/definitions/OpenApiDocument"
           }
         }
       },
@@ -1498,6 +1438,40 @@
       ],
       "additionalProperties": false,
       "description": "OpenAPI documents read for one source. Candidates never add routes or contracts."
+    },
+    "OpenApiDocument": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "operations": {
+          "type": "number"
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "file",
+            "config",
+            "settings"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "title",
+        "version",
+        "operations",
+        "origin"
+      ],
+      "additionalProperties": false,
+      "description": "One OpenAPI document, whether applied or awaiting registration."
     },
     "GraphNode": {
       "type": "object",

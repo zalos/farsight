@@ -639,22 +639,19 @@ export interface RoutesMeta {
   gaps: RouteGap[];
 }
 
+/** One OpenAPI document, whether applied or awaiting registration. */
+export interface OpenApiDocument {
+  path: string;
+  title: string;
+  version: string;
+  operations: number;
+  origin: 'file' | 'config' | 'settings';
+}
+
 /** OpenAPI documents read for one source. Candidates never add routes or contracts. */
 export interface OpenApiMeta {
-  applied: {
-    path: string;
-    title: string;
-    version: string;
-    operations: number;
-    origin: 'file' | 'config' | 'settings';
-  }[];
-  candidates: {
-    path: string;
-    title: string;
-    version: string;
-    operations: number;
-    origin: 'file' | 'config' | 'settings';
-  }[];
+  applied: OpenApiDocument[];
+  candidates: OpenApiDocument[];
 }
 
 // ── dependencies: packages as nodes (docs/proposals/dependencies-and-nx.md §2.1) ──
