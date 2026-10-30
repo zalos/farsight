@@ -16,7 +16,7 @@ export function renderAgents(root, { draft, changed }) {
               .filter((g) => !g.principals || g.principals.includes('agent'))
               .map(
                 (g) =>
-                  `<p>${(g.actions || []).map((a) => `<span${defAttrs('settings.action.' + a)}>${esc(t('settings.action.' + a))}</span>`).join(' · ')} · <span${defAttrs('settings.confirm')}>${esc(t('settings.confirm'))}: ${esc(t('settings.value.' + (g.confirm || 'unset')))}</span>${g.scope || g.fields || g.to ? ` · <span${defAttrs('settings.grantRestrictions')}>${esc(t('settings.grantRestrictions'))}</span>` : ''}</p>`,
+                  `<p>${(g.actions || []).map((a) => `<span${defAttrs('settings.action.' + a)}>${esc(t('settings.action.' + a))}</span>`).join(' · ')} · <span${defAttrs('settings.confirm')}>${esc(t('settings.confirm'))}:</span> <span${defAttrs('settings.value.' + (g.confirm || 'unset'))}>${esc(t('settings.value.' + (g.confirm || 'unset')))}</span>${g.scope || g.fields || g.to ? ` · <span${defAttrs('settings.grantRestrictions')}>${esc(t('settings.grantRestrictions'))}</span>` : ''}</p>`,
               )
               .join('') || `<p class="set-note">${esc(t('settings.grantsEmpty'))}</p>`
           }<p${defAttrs('settings.agentWrites')}>${esc(t('settings.agentWrites'))}: ${esc(t('settings.value.' + (s.permissions?.agentWrites || 'confirm')))}</p></article>`,

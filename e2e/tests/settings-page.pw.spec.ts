@@ -436,10 +436,19 @@ test.describe('sectioned Settings', () => {
     await expect(card.locator('[data-field$=".path"]')).toHaveCount(0);
     await expect(card.locator('[data-field$=".org"]')).toHaveCount(0);
     await card.locator('[data-field$=".confirm"]').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await card.locator('[data-field$=".confirm"]').hover();
+    await expect(page.locator('#fs-tip')).toContainText(
+      'This grant adds no confirmation requirement. People may proceed; Agent writes still controls confirmation for assistants.',
+    );
+    await page.keyboard.press('Escape');
     await page.screenshot({ path: info.outputPath('unset-confirmation.png'), fullPage: true });
     await page.locator('.settings-rail a[href="#/settings/agents"]').click();
     await expect(page.locator('.settings-access')).toContainText('Mode: Read-only');
     await expect(page.locator('.settings-access')).toContainText('Confirmation: Not set');
+    await expect(page.locator('.settings-access span').filter({ hasText: /^Not set$/ })).toHaveAttribute(
+      'data-tip-args',
+      JSON.stringify({ key: 'settings.value.unset' }),
+    );
     await page.locator('.settings-rail a[href="#/settings/sources"]').click();
     await card.locator('[data-field$=".agentWrites"]').selectOption('allow');
     await expect(page.locator('#settings-savebar')).toBeVisible();

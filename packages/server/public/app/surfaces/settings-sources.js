@@ -1,6 +1,7 @@
 import { S, esc } from '../store.js';
 import { t } from '../strings.js';
 import { defAttrs, countedHtml } from '../lib/counted.js';
+import { setTip } from '../lib/tooltip.js';
 import { fieldHtml, buttonHtml, rowEditor } from '../lib/row-editor.js';
 import * as model from '../lib/settings-model.js';
 import { applyReadOnly, readOnlyWhy } from '../lib/read-only.js';
@@ -78,6 +79,11 @@ function sourceForm(source, index) {
 }
 
 function renderPermissions(root, source, index, changed) {
+  const confirmationTip = (input) =>
+    setTip(input.closest('[role="gridcell"]'), {
+      id: 'def',
+      args: { key: 'settings.value.' + (input.value || 'unset') },
+    });
   // Missing grants remain missing until the editor is changed.
   const rows = source.permissions?.grants || [];
   const commit = () => {
@@ -91,6 +97,7 @@ function renderPermissions(root, source, index, changed) {
     empty: 'settings.grantsEmpty',
     add: () => ({ actions: ['comment'], principals: ['human'], confirm: 'always' }),
     onChange: commit,
+    afterRender: () => root.querySelectorAll('[data-field$=".confirm"]').forEach(confirmationTip),
     columns: [
       {
         key: 'settings.actions',
@@ -124,8 +131,10 @@ function renderPermissions(root, source, index, changed) {
         row.principals = input.checked
           ? [...new Set([...current, input.dataset.principal])]
           : current.filter((p) => p !== input.dataset.principal);
-      } else if (input.dataset.field) model.writeAt(row, 'confirm', input.value || undefined);
-      else return;
+      } else if (input.dataset.field) {
+        model.writeAt(row, 'confirm', input.value || undefined);
+        confirmationTip(input);
+      } else return;
       commit();
       event.stopPropagation();
     },
