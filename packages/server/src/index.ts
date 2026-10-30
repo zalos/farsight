@@ -2395,32 +2395,74 @@ export function serveGraph(
         }),
       );
     }
-    // A dry run reads the configured checkout and never saves, syncs or fetches a source.
-    if ((url === '/api/patterns/test' || url.startsWith('/api/patterns/test?')) && req.method === 'GET') {
+    // Both dry-run doors share admission and parser bounds; neither saves nor syncs.
+    if (
+      (url === '/api/patterns/test' || url.startsWith('/api/patterns/test?')) &&
+      (req.method === 'GET' || req.method === 'POST')
+    ) {
       const u = new URL(url, 'http://localhost');
-      const id = u.searchParams.get('source');
-      const source = loadSettings(ws).sources.find((s) => s.id === id && (s.type === 'local' || s.type === 'git'));
-      const repo = source?.name || source?.id;
-      const root =
-        source?.type === 'local' ? resolve(ws, source.path) : repo ? checkoutRoot(ws, graphPath, repo) : undefined;
-      if (!source || !repo || !root)
-        return send(
-          404,
-          JSON.stringify({
-            error: t('config.patterns.sourceMissing', 'professional').replace('{source}', () => id ?? ''),
-          }),
-        );
-      if (patternTestsInFlight.has(source.id))
-        return send(409, JSON.stringify({ error: t('config.patterns.inFlight', 'professional') }));
-      patternTestsInFlight.add(source.id);
-      void testPatterns(
-        root,
-        { ...sourceIngestOptions(source), repoName: repo },
-        { rule: u.searchParams.get('rule') || undefined },
-      )
-        .then((result) => send(200, JSON.stringify(result)))
-        .catch(() => send(400, JSON.stringify({ error: t('config.patterns.failed', 'professional') })))
-        .finally(() => patternTestsInFlight.delete(source.id));
+      const run = (id: unknown, draftRule?: unknown) => {
+        const source = loadSettings(ws).sources.find((s) => s.id === id && (s.type === 'local' || s.type === 'git'));
+        const repo = source?.name || source?.id;
+        const root =
+          source?.type === 'local' ? resolve(ws, source.path) : repo ? checkoutRoot(ws, graphPath, repo) : undefined;
+        if (!source || !repo || !root)
+          return send(
+            404,
+            JSON.stringify({
+              error: t('config.patterns.sourceMissing', 'professional').replace('{source}', () =>
+                typeof id === 'string' ? id : '',
+              ),
+            }),
+          );
+        if (req.method === 'POST') {
+          const problem = configSchemaProblem({ patterns: [draftRule] }, 'rule');
+          if (problem) return send(400, JSON.stringify({ error: problem }));
+        }
+        if (patternTestsInFlight.has(source.id))
+          return send(409, JSON.stringify({ error: t('config.patterns.inFlight', 'professional') }));
+        patternTestsInFlight.add(source.id);
+        const rule = draftRule as import('@farsight/core').PatternDecl | undefined;
+        void testPatterns(
+          root,
+          {
+            ...sourceIngestOptions(source),
+            repoName: repo,
+            ...(rule
+              ? {
+                  configOverlay: {
+                    from: `.farsight/settings.json → sources[${source.id}].config`,
+                    config: { patterns: [rule] },
+                  },
+                }
+              : {}),
+          },
+          { rule: rule?.id || u.searchParams.get('rule') || undefined },
+          rule,
+        )
+          .then((result) => send(200, JSON.stringify(result)))
+          .catch(() => send(400, JSON.stringify({ error: t('config.patterns.failed', 'professional') })))
+          .finally(() => patternTestsInFlight.delete(source.id));
+      };
+      if (req.method === 'GET') run(u.searchParams.get('source'));
+      else {
+        let body = '';
+        let bytes = 0;
+        req.on('data', (chunk: Buffer) => {
+          bytes += chunk.length;
+          if (bytes <= 1024 * 1024) body += chunk;
+        });
+        req.on('end', () => {
+          if (bytes > 1024 * 1024)
+            return send(413, JSON.stringify({ error: t('settings.forms.testTooLarge', 'professional') }));
+          try {
+            const value = JSON.parse(body);
+            run(value?.source, value?.rule);
+          } catch {
+            send(400, JSON.stringify({ error: t('settings.forms.testInvalid', 'professional') }));
+          }
+        });
+      }
       return;
     }
     // ── config files (docs/proposals/journey-organisation-and-config-files.md §5.4) — meta.config as ingest recorded it ──

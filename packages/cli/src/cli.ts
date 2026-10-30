@@ -20,6 +20,7 @@ import {
   reconcile,
   driftMarkdown,
   loadConfig,
+  configSchemaProblem,
   storybookLive,
   designSurface,
   reconcileDesign,
@@ -267,6 +268,7 @@ usage:
                                                                written, 1 not written, 2 waiting for --confirm
   ${word('config.patterns.usage', 'professional')}
 
+  farsight config export <source> [--into-source]
   farsight config list [--graph graph.json] [--repo name] [--json]
                                                                every farsight.config.json per source: the root file and the ones
                                                                scoped to a folder, the fields each gives and any it ignored, then
@@ -1687,7 +1689,102 @@ switch (command) {
     // every farsight.config.json per source, as ingest recorded them on meta.config — the same
     // fold the MCP config_files tool and graph_overview print (core config-files.ts)
     const sub = positional[0] ?? 'list';
-    if (sub !== 'list') fail(`unknown config subcommand: ${sub} (list)`);
+    if (sub === 'export') {
+      if (positional.length !== 2) fail(word('settings.forms.exportUsage', 'professional'));
+      const settingsFile = resolve('.farsight/settings.json');
+      let settings: Settings;
+      try {
+        settings = JSON.parse(readFileSync(settingsFile, 'utf8')) as Settings;
+        if (!settings || !Array.isArray(settings.sources)) throw new Error();
+      } catch {
+        fail(word('config.openapi.settingsMissing', 'professional'));
+      }
+      const problem = settingsProblem(settings);
+      if (problem) fail(problem);
+      const id = positional[1]!;
+      const byId = settings.sources.filter((source) => source.id === id);
+      const found = byId.length ? byId : settings.sources.filter((source) => source.name === id);
+      const source = found[0];
+      if (found.length !== 1 || !source || !['local', 'git'].includes(source.type))
+        fail(word('config.openapi.sourceMissing', 'professional').replace('{source}', id));
+      if (hasFlag('into-source') && source.type !== 'local') fail(word('config.openapi.localOnly', 'professional'));
+      const graphFile = resolve(flag('graph', 'graph.json')!);
+      const store = source.type === 'git' && existsSync(graphFile) ? GraphStore.load(graphFile) : undefined;
+      const root = realpathSync(source.type === 'local' ? resolve(source.path) : repoCheckout(store, source.name).root);
+      const configFile = join(root, 'farsight.config.json');
+      if (existsSync(configFile)) {
+        const rel = relative(root, realpathSync(configFile));
+        if (rel === '..' || rel.startsWith('../') || isAbsolute(rel))
+          fail(word('config.openapi.pathInvalid', 'professional'));
+      }
+      let repository: Record<string, unknown>;
+      try {
+        repository = existsSync(configFile) ? JSON.parse(readFileSync(configFile, 'utf8')) : {};
+        if (
+          !repository ||
+          typeof repository !== 'object' ||
+          Array.isArray(repository) ||
+          configSchemaProblem(repository, 'config')
+        )
+          throw new Error();
+      } catch {
+        fail(word('config.openapi.sourceConfigInvalid', 'professional'));
+      }
+      const overlay = { ...source.config, ...(source.openapi?.length ? { openapi: source.openapi } : {}) };
+      // Export only the root and workspace declarations. Nested configurations keep
+      // their folder scope, and existing root entries keep their word on a collision.
+      const merge = (first: any, second: any, path: string): any => {
+        if (first === undefined) return second;
+        if (second === undefined) return first;
+        if (Array.isArray(first) && Array.isArray(second)) {
+          const identity = (value: any) =>
+            path === 'openapi'
+              ? (value.url ?? value.path)
+              : path === 'patterns' || path === 'decisions'
+                ? value.id
+                : path === 'nodes'
+                  ? `${value.kind}:${value.name}`
+                  : path === 'externals'
+                    ? (value.import ?? `party:${value.name?.toLowerCase()}`)
+                    : path === 'stores'
+                      ? value.name
+                      : JSON.stringify(value);
+          const seen = new Set();
+          return [...first, ...second].filter((value) => {
+            const id = identity(value);
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+        }
+        if (
+          first &&
+          second &&
+          typeof first === 'object' &&
+          typeof second === 'object' &&
+          !Array.isArray(first) &&
+          !Array.isArray(second)
+        ) {
+          if (/^(glossary|gateTiers|lifecycle)\.[^.]+$/.test(path) || /^frameworks\.[^.]+\.[^.]+\.[^.]+$/.test(path))
+            return first;
+          return Object.fromEntries(
+            [...new Set([...Object.keys(first), ...Object.keys(second)])].map((key) => [
+              key,
+              merge(first[key], second[key], path ? path + '.' + key : key),
+            ]),
+          );
+        }
+        return first;
+      };
+      const exported = merge(repository, overlay, '');
+      const invalid = configSchemaProblem(exported, 'config');
+      if (invalid) fail(invalid);
+      const json = JSON.stringify(exported, null, 2) + '\n';
+      if (hasFlag('into-source')) writeFileSync(configFile, json);
+      process.stdout.write(json);
+      break;
+    }
+    if (sub !== 'list') fail(`unknown config subcommand: ${sub} (list, export)`);
     const graphFile = resolve(flag('graph', 'graph.json')!);
     if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
     const store = GraphStore.load(graphFile);

@@ -407,3 +407,70 @@ test('pattern dry runs admit one request per source, refuse competing work and r
     200,
   );
 });
+
+test('draft pattern tests are isolated, read-only and never persist their rule', async (t) => {
+  for (const readOnly of ['flag', 'as-of'] as const) {
+    const s = await server(t, readOnly);
+    writeFileSync(
+      join(s.ws, 'source', 'app.ts'),
+      `export function submit() {}\nportal.get('/draft', submit);\nportal.get('/missing', unknownHandler);`,
+    );
+    const savedRules = Array.from({ length: 64 }, (_, i) => ({
+      id: i === 0 ? 'draft' : `saved-${i}`,
+      files: ['*.ts'],
+      match: { call: 'portal.get', args: { path: 0 } },
+      emit: { kind: 'route', method: 'GET', path: '/saved' },
+    }));
+    writeFileSync(join(s.ws, 'source', 'farsight.config.json'), JSON.stringify({ patterns: savedRules }));
+    const rule = {
+      id: 'draft',
+      files: ['*.ts'],
+      match: { call: 'portal.get', args: { path: 0, handler: -1 } },
+      emit: { kind: 'route', method: 'GET', path: '$path', handler: '$handler' },
+    };
+    const before = [s.file, s.graph, join(s.ws, 'source', 'farsight.config.json')].map((file) =>
+      readFileSync(file, 'utf8'),
+    );
+    assert.equal(isWriteRoute('POST', '/api/patterns/test'), false);
+    const response = await s.call('POST', '/api/patterns/test', { source: 'app', rule });
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    const report = response.body.report as any;
+    const matches = response.body.matches as any[];
+    assert.equal(report.rules.length, 1);
+    assert.equal(report.rules[0].id, 'draft');
+    assert.equal(report.rules[0].matched, 2);
+    assert.deepEqual(report.rules[0].skipped, []);
+    assert.equal(matches[0].name, 'GET /missing');
+    assert.ok(matches[0].unresolved.length);
+    assert.equal(matches[1].name, 'GET /draft');
+    assert.deepEqual(
+      [s.file, s.graph, join(s.ws, 'source', 'farsight.config.json')].map((file) => readFileSync(file, 'utf8')),
+      before,
+    );
+    assert.equal((await s.call('POST', '/api/patterns/test', { source: 'app', rule: {} })).status, 400);
+    assert.equal((await s.call('POST', '/api/patterns/test', { source: 'app' })).status, 400);
+    assert.equal((await s.call('POST', '/api/patterns/test', { source: 'missing', rule })).status, 404);
+    assert.equal(
+      (await s.call('POST', '/api/patterns/test', { source: 'app', rule }, { origin: 'http://evil.example' })).status,
+      403,
+    );
+    assert.equal(
+      (await s.call('POST', '/api/patterns/test', { source: 'app', rule }, { 'sec-fetch-site': 'cross-site' })).status,
+      403,
+    );
+    assert.equal(
+      (await s.call('POST', '/api/patterns/test', { source: 'app', rule, padding: 'x'.repeat(1024 * 1024) })).status,
+      413,
+    );
+    for (let i = 0; i < 50; i++)
+      writeFileSync(
+        join(s.ws, 'source', `extra${i}.ts`),
+        `export function extra${i}() {}\nportal.get('/extra${i}', extra${i});`,
+      );
+    const competing = await Promise.all(
+      Array.from({ length: 4 }, () => s.call('POST', '/api/patterns/test', { source: 'app', rule })),
+    );
+    assert.ok(competing.some((r) => r.status === 200));
+    assert.ok(competing.some((r) => r.status === 409));
+  }
+});

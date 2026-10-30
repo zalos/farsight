@@ -94,6 +94,7 @@ const CHROME_FILES = [
   'lib/codemap-model.js',
   // the Config files list on the Settings page (round 2026-10-05 §6)
   'surfaces/settings-config.js',
+  'surfaces/settings-forms.js',
   // the lessons for agents and the empty states (round 2026-10-10, proposal 9)
   'surfaces/settings.js',
   'surfaces/settings-workspace.js',

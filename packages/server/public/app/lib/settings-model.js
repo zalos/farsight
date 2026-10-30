@@ -139,6 +139,136 @@ export function unavailableFields(settings, version) {
   );
 }
 
+// A row is exactly one map entry or one array item. Keep values intact, including
+// optional fields the current form does not draw. Paths describe containers, not keys.
+export const formPaths = {
+  gates: [
+    'frameworks.spring.security',
+    'frameworks.nest.guards',
+    'frameworks.express.middleware',
+    'guards',
+    'gateTiers',
+  ],
+  endpoints: ['frameworks.spring.mappings', 'frameworks.nest.verbs', 'frameworks.spring.delegates', 'nodes'],
+  patterns: ['patterns'],
+  nodes: ['nodes'],
+  openapi: ['openapi', 'openapiIgnore'],
+  words: ['glossary', 'tags', 'entrypoints'],
+  externals: ['externals', 'stores'],
+};
+const arrayBlocks = new Set([
+  'frameworks.spring.delegates',
+  'nodes',
+  'patterns',
+  'openapi',
+  'openapiIgnore',
+  'externals',
+  'stores',
+]);
+const inForm = (value, path, form) => form !== 'endpoints' || path !== 'nodes' || value?.kind === 'route';
+
+export function supportsField(version, field) {
+  return (
+    !Array.isArray(version?.configFields) ||
+    !Array.isArray(version?.overlayFields) ||
+    (version.configFields.includes(field) && version.overlayFields.includes(field))
+  );
+}
+
+export function rowsOf(block = {}, form) {
+  return formPaths[form].flatMap((path) => {
+    const value = readAt(block, path);
+    if (arrayBlocks.has(path))
+      return (Array.isArray(value) ? value : []).flatMap((value, index) =>
+        inForm(value, path, form) ? [{ path, index, value: clone(value) }] : [],
+      );
+    return Object.entries(value || {}).map(([key, value]) => ({ path, key, value: clone(value) }));
+  });
+}
+
+/** Replace only this form's containers, preserving sibling fields and non-route nodes. */
+export function blockOf(rows, block = {}, form) {
+  const result = clone(block);
+  for (const path of formPaths[form]) {
+    const selected = rows.filter((row) => row.path === path);
+    const previous = readAt(block, path);
+    if (previous === undefined && !selected.length) continue;
+    let value;
+    if (arrayBlocks.has(path)) {
+      const next = selected.map((row) => clone(row.value));
+      if (form === 'endpoints' && path === 'nodes') {
+        value = (previous || []).flatMap((node) =>
+          node.kind !== 'route' ? [clone(node)] : next.length ? [next.shift()] : [],
+        );
+        value.push(...next);
+      } else value = next;
+    } else value = Object.fromEntries(selected.map((row) => [row.key, clone(row.value)]));
+    writeAt(result, path, value);
+  }
+  return result;
+}
+
+export function formBlock(block, form) {
+  return blockOf(rowsOf(block, form), {}, form);
+}
+
+export function labelPreview(template, sample, fallback) {
+  let missing = false;
+  const result = String(template || '').replace(/\$([A-Za-z_][A-Za-z0-9_]*|\d+)/g, (token, key) => {
+    if (!Object.hasOwn(sample, key)) {
+      missing = true;
+      return token;
+    }
+    return sample[key];
+  });
+  return missing ? fallback : result;
+}
+
+// Acknowledgements live only in this browser draft, never in settings JSON.
+// Bind them to the full rule and source inputs so editing either invalidates a test.
+export function patternStamp(source, rule) {
+  return JSON.stringify([source.id, source.type, source.path, source.exclude || [], rule]);
+}
+export function untestedPatterns(loaded, draft, acknowledgements) {
+  return (draft.sources || []).flatMap((source) => {
+    const before = loaded.sources?.find((old) => old.id === source.id);
+    return (source.config?.patterns || [])
+      .filter(
+        (rule) =>
+          !before?.config?.patterns?.some((old) => patternStamp(before, old) === patternStamp(source, rule)) &&
+          !acknowledgements.has(patternStamp(source, rule)),
+      )
+      .map((rule) => ({ source: source.id, rule: rule.id }));
+  });
+}
+
+export function patternTestCounted(result) {
+  const rules = result.report.rules;
+  const count = (n, unit, scope, source, breakdown) => ({
+    n,
+    unit,
+    bizUnit: unit,
+    scope,
+    source,
+    ...(breakdown ? { breakdown } : {}),
+  });
+  return {
+    rules: count(rules.length, 'count.unit.rules', 'count.scope.source', 'patterns test.report.rules.length'),
+    matches: count(
+      rules.reduce((sum, rule) => sum + rule.matched, 0),
+      'count.unit.matches',
+      'count.scope.source',
+      'patterns test.report.rules[].matched',
+      rules.map((rule) => ({ n: rule.matched, key: 'count.unit.matches', label: rule.id })),
+    ),
+  };
+}
+
+/** Exportable workspace declarations; ignored candidates remain local preferences. */
+export function exportOverlay(source) {
+  return { ...clone(source.config || {}), ...(source.openapi?.length ? { openapi: clone(source.openapi) } : {}) };
+}
+
 export function sourceId(name, sources) {
   const base =
     name

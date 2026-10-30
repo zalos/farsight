@@ -192,10 +192,27 @@ function preparePatternFragment(
 }
 
 /** Fresh source parsing and the pattern pass on a disposable fragment. Never saves or fetches specs. */
-export async function testPatterns(repoPath: string, options: IngestOptions = {}, run: PatternRunOptions = {}) {
+export async function testPatterns(
+  repoPath: string,
+  options: IngestOptions = {},
+  run: PatternRunOptions = {},
+  draftRule?: import('@farsight/core').PatternDecl,
+) {
   const repoRoot = resolvePath(repoPath);
   const repo = options.repoName ?? repoRoot.split('/').filter(Boolean).pop()!;
   const workspace = loadWorkspaceConfig(repoRoot, options);
+  if (draftRule) {
+    // Only the disposable pattern inventory changes. Repository configuration still
+    // guides adapter extraction, but saved rules cannot shadow or consume the draft's budget.
+    for (const file of workspace.files) delete file.config.patterns;
+    workspace.files.push({
+      path: options.configOverlay?.from ?? 'workspace draft',
+      dir: '.',
+      root: false,
+      from: 'workspace',
+      config: { patterns: [structuredClone(draftRule)] },
+    });
+  }
   // Config discovery is cheap relative to adapter extraction. No selected rule means no source parsing.
   if (
     !workspace.files.some(

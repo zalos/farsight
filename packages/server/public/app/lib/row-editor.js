@@ -20,7 +20,9 @@ export function fieldHtml({ key, path, value, options, type = 'text', id, hint =
           return `<option value="${esc(v)}"${String(value ?? '') === v ? ' selected' : ''}>${esc(t(label))}</option>`;
         })
         .join('')}</select>`
-    : `<input ${attrs} type="${type}"${type === 'checkbox' ? (value ? ' checked' : '') : ` value="${esc(value ?? '')}"`}${optional ? ' data-optional' : ''} autocomplete="off"/>`;
+    : type === 'textarea'
+      ? `<textarea ${attrs} rows="3" autocomplete="off">${esc(value ?? '')}</textarea>`
+      : `<input ${attrs} type="${type}"${type === 'checkbox' ? (value ? ' checked' : '') : ` value="${esc(value ?? '')}"`}${optional ? ' data-optional' : ''} autocomplete="off"/>`;
   return `<div class="settings-field" data-field-wrap="${esc(path)}"><label for="${esc(name)}"${defAttrs(key)}>${esc(t(key))}</label>${input}${hint ? `<p class="set-note">${esc(t(hint))}</p>` : ''}<p class="settings-problem" id="${esc(name)}-problem" data-problem-for="${esc(path)}" role="status" hidden></p></div>`;
 }
 
@@ -31,7 +33,9 @@ export function rowEditor(root, spec) {
     root.innerHTML = `<div class="settings-grid-scroll"><table class="settings-grid" role="grid" aria-label="${esc(t(spec.label))}"><thead><tr role="row">${columns.map((c) => `<th role="columnheader"${defAttrs(c.key)}>${esc(t(c.key))}</th>`).join('')}<th role="columnheader"${defAttrs('settings.rowActions')}>${esc(t('settings.rowActions'))}</th></tr></thead><tbody>${rows.map((row, index) => `<tr role="row" data-row="${index}">${columns.map((col) => `<td role="gridcell" tabindex="-1">${col.html(row, index)}</td>`).join('')}<td role="gridcell" tabindex="-1" class="settings-row-actions">${['up', 'down', 'remove'].map((action) => buttonHtml('settings.' + action, `data-row-action="${action}"${(action === 'up' && index === 0) || (action === 'down' && index === rows.length - 1) ? ' disabled' : ''}`)).join('')}</td></tr>`).join('')}</tbody></table></div>${!rows.length && spec.empty ? `<p class="set-note">${esc(t(spec.empty))}</p>` : ''}${spec.add ? buttonHtml(spec.addKey || 'settings.add', 'data-row-action="add"') : ''}`;
     root.querySelector('[role="gridcell"]')?.setAttribute('tabindex', '0');
     root
-      .querySelectorAll('[role="gridcell"] input,[role="gridcell"] select,[role="gridcell"] button')
+      .querySelectorAll(
+        '[role="gridcell"] input,[role="gridcell"] select,[role="gridcell"] textarea,[role="gridcell"] button',
+      )
       .forEach((el) => (el.tabIndex = -1));
     applyReadOnly(root);
     if (spec.afterRender) spec.afterRender();
@@ -61,9 +65,13 @@ export function rowEditor(root, spec) {
     if (!cell) return;
     root.querySelectorAll('[role="gridcell"]').forEach((el) => (el.tabIndex = el === cell ? 0 : -1));
     root
-      .querySelectorAll('[role="gridcell"] input,[role="gridcell"] select,[role="gridcell"] button')
+      .querySelectorAll(
+        '[role="gridcell"] input,[role="gridcell"] select,[role="gridcell"] textarea,[role="gridcell"] button',
+      )
       .forEach((el) => (el.tabIndex = -1));
-    cell.querySelectorAll('input,select,button').forEach((el) => (el.tabIndex = event.target === cell ? -1 : 0));
+    cell
+      .querySelectorAll('input,select,textarea,button')
+      .forEach((el) => (el.tabIndex = event.target === cell ? -1 : 0));
   });
   root.onkeydown = (event) => {
     const cell = event.target.closest('[role="gridcell"]');
@@ -75,7 +83,7 @@ export function rowEditor(root, spec) {
     if (event.target !== cell) return;
     if (event.key === 'Enter' || event.key === 'F2') {
       event.preventDefault();
-      cell.querySelector('input,select,button,[role="combobox"]')?.focus();
+      cell.querySelector('input,select,textarea,button,[role="combobox"]')?.focus();
       return;
     }
     const row = cell.parentElement;
@@ -96,4 +104,5 @@ export function rowEditor(root, spec) {
     }
   };
   draw();
+  return { draw };
 }
