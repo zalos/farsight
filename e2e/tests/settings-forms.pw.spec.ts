@@ -104,6 +104,8 @@ test.describe('workspace overlay forms', () => {
           guards: ['Portal session'],
           business: 'Send a request.',
         },
+        { kind: 'external', name: 'Portal partner', business: 'Provides documents.' },
+        { kind: 'queue', name: 'Portal events', loc: 'src/missing.ts:4' },
       ];
       writeFileSync(file(), JSON.stringify(saved));
     }
@@ -173,6 +175,32 @@ test.describe('workspace overlay forms', () => {
    * @covers POST /api/patterns/test
    * @covers POST /api/sync
    */
+  test('declared nodes expose only relevant fields and show each row’s last-sync audit', async ({ page }) => {
+    await open(page, 'nodes');
+    const nodes = pane(page, 'nodes');
+    await expect(nodes.locator('[data-row]')).toHaveCount(4);
+    const guard = nodes
+      .locator('[data-row]')
+      .filter({ has: page.locator('[data-form-field="name"][value="Portal session"]') });
+    await expect(guard.locator('[data-form-field="requires"]')).toBeVisible();
+    await expect(guard.locator('[data-form-field="handler"]')).toHaveCount(0);
+    const route = nodes
+      .locator('[data-row]')
+      .filter({ has: page.locator('[data-form-field="name"][value="POST /manual"]') });
+    await expect(route.locator('[data-form-field="tier"]')).toHaveCount(0);
+    const queue = nodes
+      .locator('[data-row]')
+      .filter({ has: page.locator('[data-form-field="name"][value="Portal events"]') });
+    const response = await page.request.get(writable + 'api/config');
+    const report = (await response.json()).config['invoice-app'];
+    const note = report.files
+      .find((file: any) => file.from === 'workspace')
+      .nodes.find((node: any) => node.kind === 'queue' && node.name === 'Portal events').notes[0];
+    expect(note).toContain('missing.ts');
+    await expect(queue.locator('.settings-form-audit')).toContainText(note);
+    await expect(guard.locator('.settings-form-audit')).not.toContainText(note);
+  });
+
   test('a gate and pattern are edited, tested, saved, exported and recorded after sync', async ({ page }) => {
     const other = settings().sources[1];
     await open(page);

@@ -608,6 +608,8 @@ export function exportWorkspaceConfig(
   }
   const decisions = files.flatMap((file) => file.config.decisions ?? []);
   if (decisions.length) merged.decisions = dedupeBy(decisions, (decision) => decision.id);
+  const nodes = files.flatMap((file) => file.config.nodes ?? []);
+  if (nodes.length) merged.nodes = dedupeBy(nodes, (node) => JSON.stringify(node));
   return merged;
 }
 

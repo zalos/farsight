@@ -2275,6 +2275,15 @@ carry `annotation-scan`, explicit grants feed Roles, and hand-made routes count 
 person. Framework aliases are root-scoped. Pattern rules in nested config files select only files under that folder,
 with the workspace's excludes and ignore rules still applied.
 
+Settings edits one workspace draft through the shared row editor and the server's `settingsProblem`/config schema
+validator. `POST /api/patterns/test` accepts one unsaved rule and shares the GET dry run's engine, source options,
+admission limit and bounds; it replaces only the disposable pattern inventory. `POST /api/config/export` reads the
+repository root and merges a validated draft through parsers' `exportWorkspaceConfig`, also used by CLI
+`config export`. That helper reuses ingest's merge rules and folds its per-file declarations without flattening
+nested files. Both POST routes write nothing, remain available on read-only servers and reject cross-site requests.
+The browser shows merged JSON to paste; only the explicit CLI `--into-source` writes the repository file, preserving
+the workspace overlay and saying that it remains there.
+
 Patterns run after config, tooling and setup-origin enrichment and before OpenAPI reconciliation. The existing bundled
 Tree-sitter grammars interpret call, decorator, annotation and raw-query matchers; a JavaScript regular expression per
 text line is the cheap tier. There is no dependency download, loaded adapter, shell command or source evaluation.
