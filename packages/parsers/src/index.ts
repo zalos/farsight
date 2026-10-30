@@ -23,6 +23,11 @@ import {
 import { applyLifecycleConfig } from './shared/lifecycle-config.js';
 import { applyDecisions, applyParties } from './decisions.js';
 import type { ParsedManifest } from './design/index.js';
+import { applyPatterns, type PatternMatch, type PatternRunOptions, PATTERN_MAX_DRY_MATCHES } from './patterns.js';
+import { patternCounts, patternMatchCounts } from '@farsight/core';
+export { applyPatterns, patternsTestText } from './patterns.js';
+export type { PatternMatch, PatternRunOptions } from './patterns.js';
+
 import { declaredPathWarnings } from './shared/declared-paths.js';
 
 export type { LanguageAdapter, IngestOptions } from './types.js';
@@ -144,6 +149,98 @@ export type { ParsedStoryFile } from './stories/index.js';
 export const adapters: readonly LanguageAdapter[] = Object.freeze([tsJsAdapter, javaAdapter]);
 const codeParser = createParser({ adapters });
 
+/** The adapter inputs shared by ingest and pattern testing; no spec fetching or persistence. */
+async function patternInputs(
+  repoRoot: string,
+  options: IngestOptions,
+  workspace = loadWorkspaceConfig(repoRoot, options),
+) {
+  // the source's config files are read once here: their `tests` globs must reach the language
+  // adapters (they skip claimed spec files) before any of them runs. `merged` is the root's
+  // config with every nested file's paths rebased and its lists unioned (shared/config-files.ts)
+  const config = workspace.merged;
+  const repo = options.repoName ?? repoRoot.split('/').filter(Boolean).pop()!;
+  // the config's externals/plumbing/setup blocks travel into the adapters the way testGlobs does
+  const merge = <T>(a?: T[], b?: T[]): T[] | undefined =>
+    a?.length || b?.length ? [...(a ?? []), ...(b ?? [])] : undefined;
+  const opts: IngestOptions = {
+    ...options,
+    repoName: repo,
+    occurrences: options.occurrences === true,
+    testFiles: options.testFiles ?? (options.tests === false ? 'include' : 'exclude'),
+    testGlobs: { ...testGlobsOf(config?.tests), ...options.testGlobs },
+    externals: merge(config?.externals, options.externals),
+    frameworks: config?.frameworks ?? options.frameworks,
+    plumbing: merge(config?.plumbing, options.plumbing),
+    setup: merge(config?.setup, options.setup),
+  };
+  const fragments = await codeParser.extractRepository(repoRoot, opts);
+  return { workspace, opts, fragments };
+}
+
+/** One preparation step shared by ingest and dry runs, before either runs pattern rules. */
+function preparePatternFragment(
+  repo: string,
+  fragments: GraphFragment[],
+  workspace: ReturnType<typeof loadWorkspaceConfig>,
+) {
+  const fragment = mergeFragments(repo, fragments);
+  if (applyWorkspaceConfig(fragment.nodes, fragment.edges, workspace)) fragment.configApplied = true;
+  applyTooling(fragment.nodes, fragment.edges, workspace.merged.tooling ?? DEFAULT_TOOLING);
+  applySetupOrigin(fragment.nodes, fragment.edges);
+  return fragment;
+}
+
+/** Fresh source parsing and the pattern pass on a disposable fragment. Never saves or fetches specs. */
+export async function testPatterns(repoPath: string, options: IngestOptions = {}, run: PatternRunOptions = {}) {
+  const repoRoot = resolvePath(repoPath);
+  const repo = options.repoName ?? repoRoot.split('/').filter(Boolean).pop()!;
+  const workspace = loadWorkspaceConfig(repoRoot, options);
+  // Config discovery is cheap relative to adapter extraction. No selected rule means no source parsing.
+  if (
+    !workspace.files.some(
+      (file) =>
+        Array.isArray(file.config.patterns) && file.config.patterns.some((rule) => !run.rule || rule?.id === run.rule),
+    )
+  ) {
+    const report = { rules: [] };
+    return {
+      repo,
+      report,
+      counts: patternCounts(report, repo),
+      matches: [] as PatternMatch[],
+      matchCounts: patternMatchCounts(0, 0, repo),
+    };
+  }
+  const { opts, fragments } = await patternInputs(repoRoot, options, workspace);
+  const fragment = preparePatternFragment(repo, fragments, workspace);
+  const limit = Math.max(0, Math.min(run.maxMatches ?? PATTERN_MAX_DRY_MATCHES, PATTERN_MAX_DRY_MATCHES));
+  const unresolved: PatternMatch[] = [],
+    resolved: PatternMatch[] = [];
+  let total = 0;
+  const report = await applyPatterns(fragment, repoRoot, opts, workspace, {
+    ...run,
+    onMatch: (match) => {
+      total++;
+      const bucket = match.unresolved.length ? unresolved : resolved;
+      if (bucket.length < limit) bucket.push(match);
+      run.onMatch?.(match);
+    },
+  });
+  const matches = [...unresolved, ...resolved].slice(0, limit);
+  matches.sort(
+    (a, b) =>
+      Number(!!b.unresolved.length) - Number(!!a.unresolved.length) || a.path.localeCompare(b.path) || a.line - b.line,
+  );
+  return {
+    repo,
+    report,
+    counts: patternCounts(report, repo),
+    matches,
+    matchCounts: patternMatchCounts(total, matches.length, repo),
+  };
+}
+
 /**
  * The one ingest entry point every consumer (CLI, server /api/sync, MCP
  * refresh_graph) uses: runs each registered adapter over the repo, merges
@@ -166,39 +263,17 @@ const codeParser = createParser({ adapters });
 export async function ingestRepo(repoPath: string, options: IngestOptions = {}): Promise<GraphFragment> {
   const repoRoot = resolvePath(repoPath);
   const repo = options.repoName ?? repoRoot.split('/').filter(Boolean).pop()!;
-  // the source's config files are read once here: their `tests` globs must reach the language
-  // adapters (they skip claimed spec files) before any of them runs. `merged` is the root's
-  // config with every nested file's paths rebased and its lists unioned (shared/config-files.ts)
-  const workspace = loadWorkspaceConfig(repoRoot, options);
+  const { workspace, opts, fragments } = await patternInputs(repoRoot, options);
   const config = workspace.merged;
-  // the config's externals/plumbing/setup blocks travel into the adapters the way testGlobs does
-  const merge = <T>(a?: T[], b?: T[]): T[] | undefined =>
-    a?.length || b?.length ? [...(a ?? []), ...(b ?? [])] : undefined;
-  const opts: IngestOptions = {
-    ...options,
-    repoName: repo,
-    occurrences: options.occurrences === true,
-    testFiles: options.testFiles ?? (options.tests === false ? 'include' : 'exclude'),
-    testGlobs: { ...testGlobsOf(config?.tests), ...options.testGlobs },
-    externals: merge(config?.externals, options.externals),
-    frameworks: config?.frameworks ?? options.frameworks,
-    plumbing: merge(config?.plumbing, options.plumbing),
-    setup: merge(config?.setup, options.setup),
-  };
-  const fragments = await codeParser.extractRepository(repoRoot, opts);
   // the SQL drivers the adapters saw — read now, because the spec and design passes rebuild meta
   const drivers = fragments.flatMap((f) => f.meta?.stores?.drivers ?? []);
   // what the import pass set aside (builtins, alias misses) — read now for the same reason
   const packagesMeta = fragments.map((f) => f.meta?.packages).find((p) => p);
   // the route declarations the adapters recognised and did not read (a Nest path from a constant, `@All`…)
   const routeGaps = fragments.flatMap((f) => f.meta?.routes?.gaps ?? []);
-  const merged = mergeFragments(repo, fragments);
-  // each file over its own folder: the root first, then the nested ones by depth, so the nearer word wins
-  if (applyWorkspaceConfig(merged.nodes, merged.edges, workspace)) merged.configApplied = true;
-  // tooling (scripts a person runs) is tagged with or without a config file: the default is `scripts/**` (root-only)
-  applyTooling(merged.nodes, merged.edges, config.tooling ?? DEFAULT_TOOLING);
-  // after the tags exist (config's `setup` block and the adapters' own heuristic), before anything reads the graph
-  applySetupOrigin(merged.nodes, merged.edges);
+  const merged = preparePatternFragment(repo, fragments, workspace);
+  const patterns = await applyPatterns(merged, repoRoot, opts, workspace);
+  if (patterns.rules.length) merged.meta = { files: 0, sourceHash: 'empty', ...merged.meta, patterns };
   if (options.openapi !== false) {
     const { errors, securityByApi } = await applySpecs(merged, repoRoot, opts, workspace);
     routeGaps.push(

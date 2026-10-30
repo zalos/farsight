@@ -1123,3 +1123,36 @@ through `countedHtml`, with its source and scope in the tip.
 
 The source card maps the saved result to a defined status. The workspace graph refresh date appears once,
 formatted for the reader’s locale. These are the last recorded sync’s totals, not fresh live measurements.
+
+### Pattern rules (ADR 49)
+
+`patternCounts(meta.patterns[repo], repo)` supplies one row per configured rule, in report order. Equal ids in different config
+files remain separate rows. The CLI config list and pattern test, MCP config files/overview/test, and Settings config
+report read these same Counteds; `GET /api/config` carries them as `patternCounts` beside `patterns`.
+The closed scope registry adds `count.scope.pattern`: **for this pattern rule**, over its selected files in its source
+and config folder. The count tooltip cites that scope and the report field.
+
+| printed number (code / business) | report field | what counts |
+|---|---|---|
+| matches | `rules[].matched` | one syntax query match or matching text line; repeated sites in different rules belong to each rule |
+| nodes added / parts added | `rules[].nodes` | distinct new graph nodes added by this rule; existing ids and entrypoint tagging add zero |
+| edges added / connections added | `rules[].edges` | distinct new `(kind, from, to)` relationships added by this rule; existing relationships add zero |
+| unresolved references | `rules[].unresolved.length + (rules[].unresolvedOmitted ?? 0)` | unresolved capture or handler references, deduplicated within one match; several can belong to one match |
+| skipped inputs | `rules[].skipped.length + (rules[].skippedOmitted ?? 0)` | files or declarations set aside with a reason; one budget note records the stopping point, not a count of unvisited files |
+
+Each rule retains at most 100 unresolved rows and 100 skipped rows, with capture values capped at 512 characters.
+Optional `unresolvedOmitted` and `skippedOmitted` fields count the remaining rows; absent means zero. The total counts above
+include those rows. CLI, MCP and Settings print each nonzero omitted count after its detail list as **… and N more**,
+using `count.unit.patternUnresolvedOmitted` or `count.unit.patternSkippedOmitted` in both registers, the same
+`count.scope.pattern` scope, and the corresponding named source's `rules[index].unresolvedOmitted` or `skippedOmitted`.
+
+These counts describe parsing and declarations. They confer no test-run, coverage or release-readiness credit.
+
+The pattern report's `Counted.source` names the actual source and the rule's array index. Its Settings section heading
+uses **in this source**; individual number tips retain **for this pattern rule**. `patternMatchCounts(total, returned, repo)`
+also supplies the explicit dry-run detail cap, separate from per-rule matches:
+
+| printed number | unit key | scope and source | what counts |
+|---|---|---|---|
+| matches returned | `count.unit.patternReturned` | `count.scope.source`; named source's `patterns test.matches.returned` | details included in this response, at most 1000, unresolved first |
+| matches omitted | `count.unit.patternOmitted` | `count.scope.source`; named source's `patterns test.matches.omitted` | processed matches minus returned details; not unvisited files or matches beyond a stopped budget |

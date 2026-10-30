@@ -249,3 +249,25 @@ test('refuseWrite: a read-only server refuses the routes that change settings, t
     assert.equal(refuseWrite('flag', m, u), null, `${m} ${u}`);
   }
 });
+
+test('cost-bearing GETs reject foreign origins and sites while ordinary reads keep their existing policy', async () => {
+  const host = 'localhost:4477';
+  for (const url of ['/api/patterns/test', '/api/patterns/test?source=app&rule=one']) {
+    for (const headers of [
+      { origin: 'http://evil.example' },
+      { 'sec-fetch-site': 'cross-site' },
+      { 'sec-fetch-site': 'same-site' },
+      { origin: 'null' },
+    ])
+      assert.ok(refuseRequest({ method: 'GET', url, headers: { host, ...headers } }));
+    for (const headers of [
+      {},
+      { origin: 'http://localhost:4477', 'sec-fetch-site': 'same-origin' },
+      { 'sec-fetch-site': 'none' },
+    ])
+      assert.equal(refuseRequest({ method: 'GET', url, headers: { host, ...headers } }), null);
+  }
+  assert.equal(refuseRequest({ method: 'GET', url: '/graph', headers: { host, origin: 'http://evil.example' } }), null);
+  for (const headers of [{ origin: 'http://evil.example' }, { 'sec-fetch-site': 'cross-site' }])
+    assert.equal((await call('GET', '/api/patterns/test?source=app', headers)).status, 403);
+});

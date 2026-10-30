@@ -156,6 +156,7 @@ export function configFilesText(
   metas: Record<string, ConfigMeta> | undefined,
   repo?: string,
   register: Register = 'professional',
+  patterns?: Record<string, import('./graph.js').PatternsMeta>,
 ): string[] {
   const entries = Object.entries(metas ?? {})
     .filter(([r]) => !repo || r === repo)
@@ -197,5 +198,96 @@ export function configFilesText(
       for (const n of meta.notes) out.push(`  ${n}`);
     }
   }
-  return out;
+  return [...out, ...patternFilesText(patterns, repo)];
+}
+
+/** Each rule's numbers, in report order so equal rule ids in different config files stay distinct. */
+export function patternCounts(meta: import('./graph.js').PatternsMeta, repo: string) {
+  return meta.rules.map((row, index) => {
+    const source = `meta.patterns[${JSON.stringify(repo)}].rules[${index}]`;
+    const count = (key: 'matched' | 'nodes' | 'edges' | 'unresolved' | 'skipped') => {
+      const omitted = key === 'unresolved' ? row.unresolvedOmitted : key === 'skipped' ? row.skippedOmitted : 0;
+      return counted(
+        (Array.isArray(row[key]) ? row[key].length : (row[key] as number)) + (omitted ?? 0),
+        `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}`,
+        'count.scope.pattern',
+        `${source}.${key}${Array.isArray(row[key]) ? '.length' : ''}${omitted ? ` + ${source}.${key}Omitted` : ''}`,
+        { bizUnit: `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}Biz` },
+      );
+    };
+    const omittedCount = (key: 'unresolved' | 'skipped') =>
+      counted(
+        row[`${key}Omitted`] ?? 0,
+        `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}Omitted`,
+        'count.scope.pattern',
+        `${source}.${key}Omitted`,
+        { bizUnit: `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}Omitted` },
+      );
+    return {
+      matched: count('matched'),
+      nodes: count('nodes'),
+      edges: count('edges'),
+      unresolved: count('unresolved'),
+      skipped: count('skipped'),
+      ...(row.unresolvedOmitted ? { unresolvedOmitted: omittedCount('unresolved') } : {}),
+      ...(row.skippedOmitted ? { skippedOmitted: omittedCount('skipped') } : {}),
+    };
+  });
+}
+
+export function patternFilesText(
+  metas: Record<string, import('./graph.js').PatternsMeta> | undefined,
+  repo?: string,
+): string[] {
+  return Object.entries(metas ?? {})
+    .filter(([r]) => !repo || r === repo)
+    .flatMap(([r, meta]) => {
+      const counts = patternCounts(meta, r);
+      return [
+        `${r} — ${t('config.patterns.title', 'professional')}`,
+        ...meta.rules.flatMap((row, i) => [
+          `  ${row.id} · ${row.file} · ${Object.entries(counts[i]!)
+            .filter(([key]) => !key.endsWith('Omitted'))
+            .map(([, value]) => value)
+            .map((c) => countedText(c))
+            .join(' · ')}`,
+          ...row.unresolved.map(
+            (u) =>
+              `    ${u.path}:${u.line} · ${t('config.patterns.unresolved', 'professional')} ${JSON.stringify(u.capture)}`,
+          ),
+          ...(counts[i]!.unresolvedOmitted ? [`    ${countedText(counts[i]!.unresolvedOmitted!)}`] : []),
+          ...row.skipped.map((s) => `    ${s.path} · ${s.reason}`),
+          ...(counts[i]!.skippedOmitted ? [`    ${countedText(counts[i]!.skippedOmitted!)}`] : []),
+        ]),
+      ];
+    });
+}
+
+export function patternOverviewLines(metas: Record<string, import('./graph.js').PatternsMeta> | undefined): string[] {
+  return Object.entries(metas ?? {}).map(([repo, meta]) => {
+    const counts = patternCounts(meta, repo);
+    return `${repo} — ${t('config.patterns.title', 'professional')}: ${meta.rules
+      .map(
+        (r, i) =>
+          `${r.id} (${Object.entries(counts[i]!)
+            .filter(([key]) => !key.endsWith('Omitted'))
+            .map(([, value]) => value)
+            .map((c) => countedText(c))
+            .join(' · ')})`,
+      )
+      .join('; ')}`;
+  });
+}
+
+/** The explicitly bounded dry-run list, kept apart from the rule's total matches. */
+export function patternMatchCounts(total: number, returned: number, repo: string) {
+  const count = (n: number, kind: 'Returned' | 'Omitted') =>
+    counted(
+      n,
+      'count.unit.pattern' + kind,
+      'count.scope.source',
+      `patterns test[${JSON.stringify(repo)}].matches.${kind.toLowerCase()}`,
+      { bizUnit: 'count.unit.pattern' + kind },
+    );
+  return { returned: count(returned, 'Returned'), omitted: count(total - returned, 'Omitted') };
 }

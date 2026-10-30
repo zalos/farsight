@@ -217,6 +217,7 @@ test('farsight-diff v1: the technique enumeration carries every ResolutionTechni
     'callback-prop',
     'precondition',
     'flag-gate',
+    'config-pattern',
   ];
   assert.deepEqual([...techniques].sort(), [...expected].sort());
 });

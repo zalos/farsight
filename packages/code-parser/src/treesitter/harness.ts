@@ -33,7 +33,7 @@ let initialized: Promise<void> | undefined;
 const languages = new Map<string, Promise<unknown>>();
 
 /** Load a grammar by @vscode/tree-sitter-wasm basename ('java', 'c-sharp'…), memoized. */
-async function loadLanguage(name: string): Promise<unknown> {
+export async function loadLanguage(name: string): Promise<unknown> {
   let lang = languages.get(name);
   if (!lang) {
     lang = (async () => {

@@ -17,6 +17,36 @@ export type { FrameworksConfig } from './graph.js';
 import { humanizeName } from './query.js';
 import { t } from './strings.js';
 
+/** Declarative source matching. Templates refer to captures with $name; no executable adapters. */
+export interface PatternDecl {
+  id: string;
+  files: string[];
+  match:
+    | { call: string; args?: Record<string, number | `pair:${string}`> }
+    | { decorator: string; args?: Record<string, number | `pair:${string}`> }
+    | { annotation: string; args?: Record<string, number | `pair:${string}`> }
+    | { query: string }
+    | { regex: string };
+  emit: {
+    kind: 'route' | 'guard' | 'external' | 'queue' | 'rule' | 'flag' | 'entrypoint';
+    name?: string;
+    method?: string;
+    path?: string;
+    topic?: string;
+    handler?: string;
+    guards?: string;
+    /** Grant captured at the matched guard site; carried on its guards edge. */
+    requires?: string;
+    publishes?: string;
+    consumes?: string;
+    validates?: string;
+    tier?: 'business' | 'policy' | 'technical';
+    tags?: string[];
+    business?: string;
+  };
+  business?: string;
+}
+
 /**
  * Workspace config (farsight.config.json at the ingest root).
  * Phase 1 supports tag rules, a business glossary, and declared guards /
@@ -63,6 +93,8 @@ export interface FarsightConfig {
   externals?: ExternalDecl[];
   /** Names that the built-in Spring, Nest and Express readers interpret using their existing semantics. */
   frameworks?: FrameworksConfig;
+  /** Each nested file's rules select only files under its own folder. */
+  patterns?: PatternDecl[];
   /** the data stores the repo's tables live in, when the code does not say — fills the gap, never overrides code (`via: 'config'`) */
   stores?: StoreDecl[];
   /** glob(s) whose functions are plumbing regardless of @business: helpers in journeys, out of the coverable set, never entry points */
@@ -118,6 +150,7 @@ export const CONFIG_FIELDS = [
   'storybook',
   'externals',
   'frameworks',
+  'patterns',
   'stores',
   'journeys',
   'projects',

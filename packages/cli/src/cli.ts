@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { resolve, join, basename, relative, isAbsolute } from 'node:path';
+import { resolve, join, basename, relative, isAbsolute, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, statSync, realpathSync } from 'node:fs';
 import {
@@ -50,6 +50,7 @@ import {
   importersOf,
   resolvePackage,
   configFilesText,
+  patternCounts,
   openApiFilesText,
   openApiCounts,
   journeyTree,
@@ -93,6 +94,9 @@ import type {
 } from '@farsight/core';
 import {
   ingestRepo,
+  testPatterns,
+  patternsTestText,
+  sourceIngestOptions,
   ingestSpec,
   isSpecUrl,
   readSpecSource,
@@ -261,6 +265,8 @@ usage:
                                                                verdicts (your policy · the tracker · the credential), the
                                                                tracker's dry run when it has one, and the outcome; exit 0
                                                                written, 1 not written, 2 waiting for --confirm
+  ${word('config.patterns.usage', 'professional')}
+
   farsight config list [--graph graph.json] [--repo name] [--json]
                                                                every farsight.config.json per source: the root file and the ones
                                                                scoped to a folder, the fields each gives and any it ignored, then
@@ -1642,6 +1648,41 @@ switch (command) {
     fail(`unknown deps subcommand: ${sub} (list | where)`);
     break;
   }
+  case 'patterns': {
+    if (positional[0] !== 'test' || positional.length !== 1) fail(word('config.patterns.usage', 'professional'));
+    const graphFile = resolve(flag('graph', 'graph.json')!);
+    const workspace = dirname(graphFile);
+    const store = existsSync(graphFile) ? GraphStore.load(graphFile) : undefined;
+    let sources: Settings['sources'] = [];
+    try {
+      sources = JSON.parse(readFileSync(join(workspace, '.farsight/settings.json'), 'utf8')).sources ?? [];
+    } catch {
+      /* A source directory needs no workspace. */
+    }
+    const repo = flag('repo');
+    const selected = new Map<string, { root: string; options: ReturnType<typeof sourceIngestOptions> }>();
+    for (const source of sources) {
+      if (source.type !== 'local' && source.type !== 'git') continue;
+      const name = source.name || source.id;
+      if (repo && repo !== name && repo !== source.id) continue;
+      const root = source.type === 'local' ? resolve(workspace, source.path) : store?.roots[name];
+      if (root) selected.set(name, { root, options: sourceIngestOptions(source) });
+    }
+    for (const [name, root] of Object.entries(store?.roots ?? {})) {
+      if ((!repo || repo === name) && !selected.has(name)) selected.set(name, { root, options: {} });
+    }
+    if (!sources.length && !Object.keys(store?.roots ?? {}).length && (!repo || repo === basename(workspace)))
+      selected.set(repo ?? basename(workspace), { root: workspace, options: {} });
+    if (!selected.size)
+      fail(word('config.patterns.sourceMissing', 'professional').replace('{source}', () => repo ?? ''));
+    const results = [];
+    for (const [name, { root, options }] of selected)
+      results.push(await testPatterns(root, { ...options, repoName: name }, { rule: flag('rule') }));
+    console.log(
+      rest.includes('--json') ? JSON.stringify(results, null, 2) : results.map(patternsTestText).join('\n\n'),
+    );
+    break;
+  }
   case 'config': {
     // every farsight.config.json per source, as ingest recorded them on meta.config — the same
     // fold the MCP config_files tool and graph_overview print (core config-files.ts)
@@ -1654,11 +1695,27 @@ switch (command) {
     const metas = store.meta.config ?? {};
     if (rest.includes('--json')) {
       console.log(
-        JSON.stringify(Object.fromEntries(Object.entries(metas).filter(([r]) => !repo || r === repo)), null, 2),
+        JSON.stringify(
+          Object.fromEntries(
+            Object.entries(metas)
+              .filter(([r]) => !repo || r === repo)
+              .map(([r, meta]) => [
+                r,
+                {
+                  ...meta,
+                  ...(store.meta.patterns?.[r]
+                    ? { patterns: store.meta.patterns[r], patternCounts: patternCounts(store.meta.patterns[r]!, r) }
+                    : {}),
+                },
+              ]),
+          ),
+          null,
+          2,
+        ),
       );
       break;
     }
-    console.log(configFilesText(metas, repo).join('\n'));
+    console.log(configFilesText(metas, repo, 'professional', store.meta.patterns).join('\n'));
     break;
   }
   case 'digest': {

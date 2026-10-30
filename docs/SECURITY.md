@@ -326,3 +326,27 @@ Fixtures recorded from a live tracker must be rewritten to the example values be
 `00000000-0000-4000-8000-…`. `pnpm audit --prod` should report nothing. Refresh the lockfile when it does.
 
 Workspace OpenAPI registration (`POST /api/sources/:id/openapi`) and dismissal (`DELETE /api/sources/:id/openapi?path=…`) write only `.farsight/settings.json` and pass through the same request and read-only guards. A registered spec URL is fetched when the source syncs; registration itself does not fetch it. `POST /api/settings/check` validates a draft without saving and remains available on read-only and historical servers. File references are confined to their source; workspace overlays cannot add path blocks.
+
+**Pattern rules are bounded data, never executable adapters.** `patterns[]` reads only files selected by its globs
+inside the source, with workspace excludes and ignore rules applied; a nested config scopes its rules to its folder.
+The pass refuses traversal globs, symbolic file replacements and paths resolving outside the source. Files are at most
+1 MiB; regex source is at most 512 characters; a source admits 64 rules across root, workspace overlay and nested files.
+Each rule processes selected files in sorted path order, up to 2048 files or 64 MiB of source text. Each selected file is
+read and parsed once, sharing its syntax tree across applicable rules, then disposing it. These deterministic input caps
+are the normal stopping conditions. A thirty-second per-rule safety budget checks between files and supplies the remaining
+`timeoutMicros` to Tree-sitter traversal. Every budget stop is reported during sync, even if earlier files matched.
+
+Captured values and interpolated names are capped at 512 characters before emission. Each rule retains at most 100 unresolved and 100 skipped detail rows; omitted rows remain in the totals and are printed as typed counts.
+Raw query source is capped at 4096 characters and every query string literal, including regex predicate patterns, at 512
+source characters before compilation. Query `matchLimit` caps in-progress Tree-sitter match states, not total returned
+matches. Neither Tree-sitter's traversal timeout nor the between-file budget preempts a JavaScript regex or query predicate
+already running. Input and expression-length caps limit that exposure; they do not guarantee a regex execution deadline.
+Previews retain at most fourteen source lines (plus the truncation marker) and 4096 characters. Dry-run responses return at
+most 1000 match details, selecting unresolved matches first, with explicit returned and omitted counts. No process is spawned,
+no code or grammar is installed, evaluated or fetched, and no file outside the source is read by the pattern pass.
+
+`patterns test`, `patterns_test` and `GET /api/patterns/test` read today's local source without writing a graph, source file
+or snapshot. A source with no selected rule returns before adapter extraction. The HTTP route admits one dry run per source
+at a time and returns 409 to competing requests. It remains available on read-only and historical servers, but is a named
+cost-bearing GET in the loopback request guard: a foreign `Origin` or `Sec-Fetch-Site` is refused before parsing begins.
+Same-origin browser requests and local CLI clients without those headers retain access.

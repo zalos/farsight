@@ -2262,3 +2262,36 @@ every receipt and admission rule above, and the owner CLI. *Why:* one
 place reads a scan (the view, in the three registers, with every number a `Counted`), and the owner-origin frame keeps
 only what must stay off the application host — the confirmations. A comparison report and a rerun from the browser
 are the owner CLI's until the view has its own (P-4b for the rerun).
+
+49. **Configuration extends the shared graph through data, never loaded adapters (2026-10-30).**
+
+The configuration family is `frameworks` · `patterns` · `nodes`: aliases teach existing framework readers additional
+names; patterns turn matching source syntax or text into the existing graph kinds; manual node declarations are the
+planned next member for facts no reader can reach. All use the canonical config schema and can be supplied through the
+workspace overlay without writing into the source. Framework aliases are root-scoped. Pattern rules in nested config
+files select only files under that folder, with the workspace's excludes and ignore rules still applied.
+
+Patterns run after config, tooling and setup-origin enrichment and before OpenAPI reconciliation. The existing bundled
+Tree-sitter grammars interpret call, decorator, annotation and raw-query matchers; a JavaScript regular expression per
+text line is the cheap tier. There is no dependency download, loaded adapter, shell command or source evaluation.
+Handlers resolve only to unique same-file declarations; enclosing targets use the innermost function, component or class (including guard functions and server actions) with a real declaration span, never point-located route nodes. Self-edges are refused. Missing
+captures and handlers are reported, never replaced by placeholder nodes. Route identity uses the readers' normalized
+method/path key, so patterns, reader routes, specs and client calls meet the same route. A pattern reuses an existing reader route and adds its source note without replacing the reader evidence. Optional guard `requires` captures populate the existing guards-edge grant metadata used by Roles.
+
+`config-pattern` records pattern evidence: the rule author supplied its meaning and matching supplies its source site. Matched nodes carry `pattern:<id>`; they do not carry the `declared` tag reserved for manual declarations, so guard drift counts a matched check as detected in source.
+Syntax matches carry HIGH confidence and regex matches MEDIUM; neither claims runtime verification. This adds one
+member to the frozen, additive-only `farsight-diff v1` technique enum. Unknown technique members remain printable verbatim.
+Per-rule reports are retained once in `meta.patterns`, capped at 100 unresolved and 100 skipped rows with omitted totals. Captured values are capped at 512 characters before naming or reporting; match text and capture details are returned by explicit dry runs,
+not copied into every report. CLI `patterns test`, MCP `patterns_test` (all tier) and `GET /api/patterns/test` share the
+same engine and do not save a graph. GET remains available on read-only and historical servers, reading today's source
+files rather than pretending the historical snapshot contains them.
+
+The pass reads selected regular files of at most 1 MiB, admits at most 64 rules per source, caps regex source and query
+string literals at 512 characters and raw query source at 4096. Each selected file is parsed once for all applicable rules.
+Each rule consumes a deterministic prefix in sorted path order: at most 2048 files and 64 MiB, with a thirty-second safety
+budget and the remaining time passed to query traversal. Every budget stop becomes a sync warning. Running JavaScript
+regexes, including query predicates, cannot be preempted. Dry runs return at most 1000 details with returned and omitted
+Counteds; snippets keep fourteen lines and at most 4096 characters, while capture previews stay within 512 characters. No selected rule means no adapter
+extraction, and HTTP admits one test per source while rejecting cross-site requests to this cost-bearing GET. The report
+names skips and unresolved captures; every displayed count comes from the shared core folds. Authoring forms remain the
+Settings forms lane, with the contract independently usable through config files, CLI and MCP.

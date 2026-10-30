@@ -24,6 +24,7 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 
 export interface GuardRequest {
   method?: string;
+  url?: string;
   headers: Record<string, string | string[] | undefined>;
 }
 
@@ -41,6 +42,8 @@ export function hostnameOf(host: string): string {
 }
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+/** Read-only routes that still perform source parsing; foreign pages must not trigger that work. */
+const COST_BEARING_GETS = new Set(['/api/patterns/test']);
 
 /**
  * Null when the request may proceed; otherwise the reason it is refused (403).
@@ -51,7 +54,9 @@ export function refuseRequest(req: GuardRequest): string | null {
   if (host !== undefined && !LOOPBACK_HOSTS.has(hostnameOf(host))) {
     return `this server answers to localhost only (Host: ${host.slice(0, 80)})`;
   }
-  if (SAFE_METHODS.has((req.method ?? 'GET').toUpperCase())) return null;
+  const method = (req.method ?? 'GET').toUpperCase();
+  const costlyRead = method === 'GET' && COST_BEARING_GETS.has((req.url ?? '/').split('?')[0]!);
+  if (SAFE_METHODS.has(method) && !costlyRead) return null;
   const site = header(req, 'sec-fetch-site');
   if (site !== undefined && site !== 'same-origin' && site !== 'none') {
     return `a ${req.method} from another site is refused (Sec-Fetch-Site: ${site})`;
