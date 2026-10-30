@@ -831,6 +831,9 @@
               "from": {
                 "type": "string",
                 "const": "workspace"
+              },
+              "frameworks": {
+                "$ref": "#/definitions/FrameworkAliasSummary"
               }
             },
             "required": [
@@ -933,6 +936,55 @@
       ],
       "additionalProperties": false,
       "description": "The farsight.config.json files one source holds and what came of them (docs/proposals/journey-organisation-and-config-files.md §5.3). The root file speaks for the whole source; a nested (scoped) file only for the code under its folder, with its paths relative to that folder."
+    },
+    "FrameworkAliasSummary": {
+      "type": "object",
+      "properties": {
+        "spring.mappings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "spring.security": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "spring.listeners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "spring.delegates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "nest.verbs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "nest.guards": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "express.middleware": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "description": "Only configured alias names, retained once per config file for the shared config list."
     },
     "JourneysMeta": {
       "type": "object",
@@ -1389,7 +1441,8 @@
             "global-prefix",
             "router-module",
             "versioning",
-            "entrypoint-mismatch"
+            "entrypoint-mismatch",
+            "delegate-unmatched"
           ]
         },
         "path": {

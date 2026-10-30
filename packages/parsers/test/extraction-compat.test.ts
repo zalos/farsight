@@ -1,4 +1,5 @@
-// Baselines captured before extraction on 4bb662a. Only sourceHash (mtime-based) is volatile.
+// Extraction baselines: workspace from 4bb662a; tsjs/java/mixed refreshed for the framework alias examples.
+// Only sourceHash (mtime-based) is volatile.
 // Intentional additive occurrence evidence is checked separately, never folded into this baseline.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -61,9 +62,9 @@ for (const [name, example] of [
         // Copied nested examples retain their original source-root document paths, and the
         // Java glossary contains three names that applyConfig does not bind to any node.
         const warnings = [
-          'service/farsight.config.json:18 → glossary: "invoices" matches no indexed symbol name.',
-          'service/farsight.config.json:38 → glossary: "invoice.sent" matches no indexed symbol name.',
-          'service/farsight.config.json:39 → glossary: "payment.settled" matches no indexed symbol name.',
+          'service/farsight.config.json:25 → glossary: "invoices" matches no indexed symbol name.',
+          'service/farsight.config.json:45 → glossary: "invoice.sent" matches no indexed symbol name.',
+          'service/farsight.config.json:46 → glossary: "payment.settled" matches no indexed symbol name.',
           'web/docs/design/screens.json:139 → flows.billing-cycle.docs: "docs/design/flows.md" names no readable source document.',
           'web/docs/design/screens.json:139 → flows.draft-and-send.docs: "docs/design/flows.md" names no readable source document.',
           'web/docs/design/screens.json:57 → flows.draft-and-send.docs: "docs/decisions/0001-approval-limits.md" names no readable source document.',

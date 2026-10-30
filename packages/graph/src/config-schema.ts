@@ -125,6 +125,99 @@ export default {
         "the repo's Storybook(s) — where the config lives and where it runs when it runs (ADR 9). Discovery of `.storybook/main.*` still runs; this names the URL and the start command.",
       'anyOf': [{ '$ref': '#/$defs/storybook' }, { 'type': 'array', 'items': { '$ref': '#/$defs/storybook' } }],
     },
+    'frameworks': {
+      'type': 'object',
+      'additionalProperties': false,
+      'properties': {
+        'spring': {
+          'type': 'object',
+          'additionalProperties': false,
+          'properties': {
+            'mappings': {
+              'type': 'object',
+              'additionalProperties': {
+                'type': 'object',
+                'additionalProperties': false,
+                'required': ['method', 'path'],
+                'properties': {
+                  'method': {
+                    'type': 'string',
+                    'pattern':
+                      '^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|CONNECT|arg:[0-9]+|pair:[A-Za-z_][A-Za-z0-9_]*)$',
+                  },
+                  'path': { 'type': 'string', 'pattern': '^(arg:[0-9]+|pair:[A-Za-z_][A-Za-z0-9_]*)$' },
+                },
+              },
+            },
+            'security': {
+              'type': 'object',
+              'additionalProperties': {
+                'type': 'object',
+                'additionalProperties': false,
+                'required': ['label'],
+                'properties': {
+                  'label': { 'type': 'string' },
+                  'tier': { 'type': 'string', 'enum': ['business', 'policy', 'technical'] },
+                  'requires': { 'type': 'string' },
+                },
+              },
+            },
+            'delegates': { 'type': 'array', 'items': { 'type': 'string' } },
+            'listeners': {
+              'type': 'object',
+              'additionalProperties': { 'type': 'string', 'pattern': '^(arg:[0-9]+|pair:[A-Za-z_][A-Za-z0-9_]*)$' },
+            },
+          },
+        },
+        'nest': {
+          'type': 'object',
+          'additionalProperties': false,
+          'properties': {
+            'verbs': {
+              'type': 'object',
+              'additionalProperties': {
+                'type': 'string',
+                'enum': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
+              },
+            },
+            'guards': {
+              'type': 'object',
+              'additionalProperties': {
+                'type': 'object',
+                'additionalProperties': false,
+                'required': ['label'],
+                'properties': {
+                  'label': { 'type': 'string' },
+                  'tier': { 'type': 'string', 'enum': ['business', 'policy', 'technical'] },
+                  'requires': { 'type': 'string' },
+                },
+              },
+            },
+          },
+        },
+        'express': {
+          'type': 'object',
+          'additionalProperties': false,
+          'properties': {
+            'middleware': {
+              'type': 'object',
+              'additionalProperties': {
+                'type': 'object',
+                'additionalProperties': false,
+                'required': ['label'],
+                'properties': {
+                  'label': { 'type': 'string' },
+                  'tier': { 'type': 'string', 'enum': ['business', 'policy', 'technical'] },
+                  'requires': { 'type': 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+      'description':
+        'Additional names read using the built-in Spring, Nest and Express semantics. Java selectors normally use pair:name; arg:0 is equivalent to pair:value, while arg:1 is reachable only through syntax recovery. Template holes $0 and $1 read positional arguments; $name reads a named argument. Unfilled labels use the annotation name.',
+    },
     'externals': {
       'type': 'array',
       'description': 'third-party systems the parser cannot see by itself, or renames/kinds for ones it can.',

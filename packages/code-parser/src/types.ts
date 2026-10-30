@@ -1,4 +1,4 @@
-import type { ExternalDecl, GraphFragment, GraphDocument, PortableGraph } from '@farsight/graph';
+import type { ExternalDecl, FrameworksConfig, GraphFragment, GraphDocument, PortableGraph } from '@farsight/graph';
 
 /** Options for syntax extraction. Farsight's enrichment switches are deliberately separate. */
 export interface AdapterOptions {
@@ -12,6 +12,7 @@ export interface AdapterOptions {
   testFiles?: 'include' | 'exclude';
   testGlobs?: { include?: string[]; exclude?: string[] };
   externals?: ExternalDecl[];
+  frameworks?: FrameworksConfig;
   plumbing?: string[];
   setup?: string[];
 }

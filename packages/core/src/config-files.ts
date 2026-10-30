@@ -6,7 +6,7 @@
  */
 import type { ConfigMeta, OpenApiMeta } from './graph.js';
 import { counted, countedText, breakdownText, type Counted } from './counts.js';
-import { t } from './strings.js';
+import { t, type Register } from './strings.js';
 
 const SOURCE = 'parsers shared/config-files.ts loadWorkspaceConfig → meta.config[repo]';
 
@@ -152,7 +152,11 @@ export function configOverviewLines(metas: Record<string, ConfigMeta> | undefine
  * The config files as text, per source: one line per file (path, root or the folder it is scoped
  * to, the fields it gives, what was ignored), then the conflicts and the notes.
  */
-export function configFilesText(metas: Record<string, ConfigMeta> | undefined, repo?: string): string[] {
+export function configFilesText(
+  metas: Record<string, ConfigMeta> | undefined,
+  repo?: string,
+  register: Register = 'professional',
+): string[] {
   const entries = Object.entries(metas ?? {})
     .filter(([r]) => !repo || r === repo)
     .sort((a, b) => a[0].localeCompare(b[0]));
@@ -177,6 +181,9 @@ export function configFilesText(metas: Record<string, ConfigMeta> | undefined, r
       out.push(
         `${f.path} — ${where} · ${f.fields.length ? f.fields.join(', ') : 'no fields'}${f.ignored.length ? ` · ignored: ${f.ignored.join(', ')}` : ''}`,
       );
+      for (const [group, names] of Object.entries(f.frameworks ?? {})) {
+        out.push(`  ${t(`config.alias.${group}`, register)}: ${names.map((name) => JSON.stringify(name)).join(', ')}`);
+      }
     }
     if (meta.conflicts.length) {
       out.push('conflicts:');

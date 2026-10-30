@@ -1,4 +1,5 @@
 {
+  "frameworks": { "nest": { "verbs": { "JsonGet": "GET" } } },
   "tests": {
     "unit": {
       "runner": "vitest",

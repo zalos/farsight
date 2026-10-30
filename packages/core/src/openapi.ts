@@ -424,7 +424,7 @@ function multipartReaderReached(op: SpecOperation, routeId: string, index: Graph
 }
 
 /** Drift between one declared operation and its implemented route. */
-function operationDrift(
+export function operationDrift(
   op: SpecOperation,
   route: GraphNode,
   index: GraphIndex,

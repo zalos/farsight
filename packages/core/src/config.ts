@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { configSchemaProblem } from '@farsight/graph/config';
 import type {
   GraphNode,
   GraphEdge,
@@ -9,8 +10,12 @@ import type {
   JourneyStorylineLaneDecl,
   JourneyStorylineHandoffDecl,
   DecisionDecl,
+  FrameworksConfig,
+  FrameworkAliasSummary,
 } from './graph.js';
+export type { FrameworksConfig } from './graph.js';
 import { humanizeName } from './query.js';
+import { t } from './strings.js';
 
 /**
  * Workspace config (farsight.config.json at the ingest root).
@@ -56,6 +61,8 @@ export interface FarsightConfig {
   tests?: TestsConfigBlock;
   /** third-party systems the parser cannot see by itself, or renames/kinds for ones it can */
   externals?: ExternalDecl[];
+  /** Names that the built-in Spring, Nest and Express readers interpret using their existing semantics. */
+  frameworks?: FrameworksConfig;
   /** the data stores the repo's tables live in, when the code does not say — fills the gap, never overrides code (`via: 'config'`) */
   stores?: StoreDecl[];
   /** glob(s) whose functions are plumbing regardless of @business: helpers in journeys, out of the coverable set, never entry points */
@@ -110,6 +117,7 @@ export const CONFIG_FIELDS = [
   'tests',
   'storybook',
   'externals',
+  'frameworks',
   'stores',
   'journeys',
   'projects',
@@ -122,6 +130,7 @@ export const CONFIG_FIELDS = [
 
 /** Fields only the source's root farsight.config.json may give; a nested file's value is ignored with a note. */
 export const ROOT_ONLY_CONFIG_FIELDS = [
+  'frameworks',
   'projects',
   'tooling',
   'internalRoutes',
@@ -276,7 +285,9 @@ export function stringList(v: string | string[] | undefined): string[] {
  * One farsight.config.json read and soft-validated: the config, or why it could not be read
  * (`missing` when there is no file). Never throws — `loadWorkspaceConfig` turns `error` into a note.
  */
-export function readConfigFile(path: string): { config: FarsightConfig } | { error: string } | { missing: true } {
+export function readConfigFile(
+  path: string,
+): { config: FarsightConfig; notes?: string[]; ignored?: string[] } | { error: string } | { missing: true } {
   let text: string;
   try {
     text = readFileSync(path, 'utf8');
@@ -293,10 +304,30 @@ export function readConfigFile(path: string): { config: FarsightConfig } | { err
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: 'is not a JSON object' };
   const config = raw as FarsightConfig;
+  const notes: string[] = [];
+  if (config.frameworks !== undefined) {
+    const error = configSchemaProblem({ frameworks: config.frameworks }, 'config');
+    if (error) {
+      delete config.frameworks;
+      notes.push(t('config.alias.invalid', 'professional').replace('{error}', error));
+    }
+  }
   sanitizeStores(config);
   sanitizeProjects(config);
   sanitizeJourneys(config);
-  return { config };
+  return { config, ...(notes.length ? { notes, ignored: ['frameworks'] } : {}) };
+}
+
+/** Names only, once per configured file; values and match counts stay out of this summary. */
+export function frameworkAliasNames(frameworks: FrameworksConfig | undefined): FrameworkAliasSummary | undefined {
+  const out: FrameworkAliasSummary = {};
+  for (const framework of ['spring', 'nest', 'express'] as const) {
+    for (const [group, values] of Object.entries(frameworks?.[framework] ?? {})) {
+      const names = Array.isArray(values) ? [...values] : Object.keys(values ?? {});
+      if (names.length) out[`${framework}.${group}` as keyof FrameworkAliasSummary] = names.sort();
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** The config at `path`, or null when there is none or it cannot be read (`readConfigFile` says why). */

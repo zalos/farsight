@@ -1,0 +1,87 @@
+openapi: 3.0.3
+info:
+  title: Invoice API
+  version: 1.0.0
+paths:
+  /api/invoices:
+    get:
+      operationId: list
+      responses:
+        '200':
+          description: Invoices for the billing dashboard
+    post:
+      operationId: create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Draft invoice created
+  /api/invoices/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: get
+      responses:
+        '200':
+          description: The invoice
+    put:
+      operationId: update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Draft invoice updated
+    delete:
+      operationId: delete
+      responses:
+        '204':
+          description: Invoice cancelled
+  /api/invoices/{id}/send:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      operationId: send
+      responses:
+        '200':
+          description: Invoice sent
+  /api/invoices/{id}/approval:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      operationId: approval
+      responses:
+        '200':
+          description: Invoice details for the approval decision
+  /api/invoices/{id}/approval-details:
+    get:
+      operationId: getInvoiceForApproval
+      summary: Read an invoice for approval
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: The invoice under review

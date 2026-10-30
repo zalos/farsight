@@ -12,7 +12,7 @@ import { PARSER_VERSION } from '../version.js';
  */
 import { readFileSync, checkpoint, fileStatus, fileReadError, parseError, currentRead } from '../repository.js';
 import { relative as platformRelative, resolve as resolvePath } from 'node:path';
-import type { GraphFragment, GraphNode, GraphEdge } from '@farsight/graph';
+import type { GraphFragment, GraphNode, GraphEdge, RouteGap } from '@farsight/graph';
 import type { LanguageAdapter, IngestOptions } from '../types.js';
 import { collectFiles, freshnessMeta } from '../shared/files.js';
 import { parseDoc, docCommentAbove, docLinkFields, type ParsedDoc } from '../shared/docs.js';
@@ -29,7 +29,7 @@ import {
   listenerTopics,
   repositoryEntity,
   declaredRepoOp,
-  SECURITY_ANNS,
+  securityGuards,
   STEREOTYPE_TAGS,
   VALIDATION_ANNS,
   INHERITED_REPO_OPS,
@@ -78,10 +78,12 @@ interface PendingCall {
 export async function ingestJava(repoPath: string, options: IngestOptions = {}): Promise<GraphFragment> {
   const repoRoot = resolvePath(repoPath);
   const repo = options.repoName ?? repoRoot.split('/').filter(Boolean).pop()!;
+  const aliases = options.frameworks?.spring ?? {};
   const files = collectFiles(repoRoot, EXTS, options).sort();
   const meta = freshnessMeta(repoRoot, files);
   const nodes = new Map<string, GraphNode>();
   const edges: GraphEdge[] = [];
+  const routeGaps: RouteGap[] = [];
   if (!files.length) return { repo, nodes: [], edges, meta };
 
   const parse = await grammarParser('java');
@@ -276,7 +278,12 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
   }
 
   occurrences.attach(edges);
-  return { repo, nodes: [...nodes.values()], edges, meta };
+  return {
+    repo,
+    nodes: [...nodes.values()],
+    edges,
+    meta: { ...meta, ...(routeGaps.length ? { routes: { gaps: routeGaps } } : {}) },
+  };
 
   // ── extraction ───────────────────────────────────────────────────
 
@@ -388,6 +395,12 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       '';
     const entityName = kind === 'interface' ? repositoryEntity(extendsText) : null;
 
+    const implementsNode = aliases.delegates?.length ? childrenOfType(decl, 'super_interfaces')[0] : undefined;
+    const implemented = (
+      implementsNode?.namedChildren.flatMap((n) => (n?.type === 'type_list' ? n.namedChildren : [n])) ?? []
+    )
+      .filter((n): n is TSNode => !!n)
+      .map((n) => n.text.replace(/<.*>/s, '').trim());
     const stereotypes = anns.map((a) => STEREOTYPE_TAGS[a.name]).filter((t): t is string => !!t);
     addNode({
       id: jt.nodeId,
@@ -403,10 +416,13 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
         ...stereotypes,
         ...(kind !== 'class' ? [kind] : []),
         ...(entityName ? ['repository'] : []),
+        ...implemented.map((name) => `implements:${name}`),
       ],
       ...(doc.business ? { facets: { business: { description: doc.business } } } : {}),
       ...docLinkFields(doc),
     });
+
+    if (implemented.length) nodes.get(jt.nodeId)!.signature = `implements ${implemented.join(', ')}`;
 
     if (entityName) {
       jt.entityName = entityName;
@@ -466,7 +482,6 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
   ) {
     if (!body) return;
     const classBase = annString(getAnn(classAnns, 'RequestMapping'), 'value', 'path') ?? '';
-    const classGuards = classAnns.filter((a) => SECURITY_ANNS.has(a.name));
 
     for (const m of childrenOfType(body, 'method_declaration')) {
       const mName = m.childForFieldName('name')?.text;
@@ -479,7 +494,7 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       const isGuard = doc.guard !== undefined;
       const isStaticMain = mName === 'main' && childrenOfType(m, 'modifiers')[0]?.text.includes('static') === true;
       const scheduled = getAnn(anns, 'Scheduled');
-      const topics = listenerTopics(anns);
+      const topics = listenerTopics(anns, aliases);
       const branches = isGuard ? [] : extractJavaBranches(mBody, source);
 
       addNode({
@@ -490,6 +505,17 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
         loc: { repo, path: jt.file, line: m.startPosition.row + 1, endLine: m.endPosition.row + 1 },
         docs: doc.docs,
         snippet: snippetRange(source, m.startIndex, m.endIndex),
+        ...(aliases.delegates?.length &&
+        hasAnn(anns, 'Override') &&
+        /\bpublic\b/.test(childrenOfType(m, 'modifiers')[0]?.text ?? '') &&
+        /\bResponseEntity\s*</.test(m.childForFieldName('type')?.text ?? '')
+          ? {
+              signature: m.text
+                .slice(0, mBody.startIndex - m.startIndex)
+                .replace(/\s+/g, ' ')
+                .trim(),
+            }
+          : {}),
         ...(branches.length ? { branches } : {}),
         group: doc.group ?? classDoc.group ?? jt.name,
         tags: [
@@ -507,9 +533,17 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       jt.methodIds.set(mName, fnId);
 
       // route: mapping annotation + class-level base path
-      const mapping = routeMapping(anns);
+      const mapping = routeMapping(anns, aliases);
       let routeId: string | undefined;
-      if (mapping) {
+      if (mapping && 'unreadable' in mapping) {
+        routeGaps.push({
+          kind: 'non-literal-path',
+          path: jt.file,
+          line: mapping.node.startPosition.row + 1,
+          name: `${jt.name}.${mName}`,
+          text: `@${mapping.alias} on ${mName} has a non-literal path or unreadable HTTP verb; its route is not recorded`,
+        });
+      } else if (mapping) {
         const path = normalizePath(joinPaths(classBase, mapping.path));
         routeId = `${repo}::route::${mapping.method} ${path}`;
         addNode({
@@ -520,22 +554,43 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
           loc: { repo, path: jt.file, line: m.startPosition.row + 1 },
           tags: autoTags(jt.file, path, 'route'),
         });
-        addEdge('calls', routeId, fnId, undefined, byAnnotation(`the mapping annotation on ${mName}`));
+        addEdge(
+          'calls',
+          routeId,
+          fnId,
+          undefined,
+          byAnnotation(
+            mapping.alias
+              ? `@${mapping.alias} read as a route by farsight.config.json → frameworks.spring.mappings`
+              : `the mapping annotation on ${mName}`,
+          ),
+        );
       }
 
       // guards: method security (+ class-level, which covers every route in the class)
-      for (const g of [...anns.filter((a) => SECURITY_ANNS.has(a.name)), ...classGuards]) {
-        const label = g.strings[0] ?? g.pairs.get('value') ?? '';
+      for (const guard of securityGuards([...anns, ...classAnns], aliases)) {
+        const { ann: g, label } = guard;
         const guardId = `${repo}::guard::${g.name}(${label})`;
         addNode({
           id: guardId,
           kind: 'guard',
-          name: label ? `${g.name}: ${label}` : g.name,
+          name: guard.alias ? label : label ? `${g.name}: ${label}` : g.name,
+          ...(guard.tier ? { gateTier: { tier: guard.tier, from: 'config' as const } } : {}),
           lang: 'java',
           tags: ['auth'],
           loc: { repo, path: jt.file, line: g.node.startPosition.row + 1 },
         });
-        addEdge('guards', guardId, routeId ?? fnId, undefined, byAnnotation(`@${g.name} on ${mName}`));
+        addEdge(
+          'guards',
+          guardId,
+          routeId ?? fnId,
+          guard.requires ? { requires: guard.requires } : undefined,
+          byAnnotation(
+            guard.alias
+              ? `@${g.name} read as a gate by farsight.config.json → frameworks.spring.security`
+              : `@${g.name} on ${mName}`,
+          ),
+        );
       }
 
       // @Valid parameters validate the route/handler through their DTO's rule node
@@ -550,7 +605,20 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       for (const topic of topics) {
         const qId = `${repo}::queue::${topic}`;
         addNode({ id: qId, kind: 'queue', name: topic, lang: 'java', tags: autoTags('', topic, 'queue') });
-        addEdge('consumes', qId, fnId, undefined, byAnnotation(`a listener annotation naming ${topic}`));
+        const alias = anns.find(
+          (a) => Object.hasOwn(aliases.listeners ?? {}, a.name) && listenerTopics([a], aliases).includes(topic),
+        );
+        addEdge(
+          'consumes',
+          qId,
+          fnId,
+          undefined,
+          byAnnotation(
+            alias
+              ? `@${alias.name} read as a listener by farsight.config.json → frameworks.spring.listeners`
+              : `a listener annotation naming ${topic}`,
+          ),
+        );
       }
 
       extractBody(mBody, fnId, jt, source);

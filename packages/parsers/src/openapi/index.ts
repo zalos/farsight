@@ -8,7 +8,13 @@
  */
 import { createHash } from 'node:crypto';
 import type { GraphFragment, OpenApiMeta, OpenApiDocument } from '@farsight/core';
-import { applySpecToFragment, specOperations, specToFragment, type ReconcileResult } from '@farsight/core';
+import {
+  applySpecToFragment,
+  specDeclaresSecurity,
+  specOperations,
+  specToFragment,
+  type ReconcileResult,
+} from '@farsight/core';
 import { loadWorkspaceConfig, type WorkspaceConfig } from '../shared/config-files.js';
 import type { IngestOptions } from '../types.js';
 import { discoverSpecs } from './discover.js';
@@ -29,10 +35,11 @@ export async function applySpecs(
   repoRoot: string,
   options: IngestOptions,
   workspace?: WorkspaceConfig,
-): Promise<{ applied: SpecApplication[]; errors: string[] }> {
+): Promise<{ applied: SpecApplication[]; errors: string[]; securityByApi: Map<string, boolean> }> {
   const config = (workspace ?? loadWorkspaceConfig(repoRoot, options)).merged;
   const { specs, errors } = await discoverSpecs(repoRoot, options, config.openapi ?? []);
   const applied: SpecApplication[] = [];
+  const securityByApi = new Map<string, boolean>();
   const openapi: OpenApiMeta = { applied: [], candidates: [] };
   const hash = createHash('sha1').update(fragment.meta?.sourceHash ?? '');
   for (const spec of specs) {
@@ -57,6 +64,10 @@ export async function applySpecs(
       },
     );
     applied.push({ path: spec.path, origin: spec.origin, result });
+    securityByApi.set(
+      result.api.id,
+      specDeclaresSecurity(spec.doc, specOperations(spec.doc, { repo: fragment.repo, path: spec.path })),
+    );
     hash.update(`\n${spec.path}:`).update(spec.text);
   }
   fragment.meta = {
@@ -65,7 +76,7 @@ export async function applySpecs(
     sourceHash: applied.length ? hash.digest('hex').slice(0, 12) : (fragment.meta?.sourceHash ?? ''),
     openapi,
   };
-  return { applied, errors };
+  return { applied, errors, securityByApi };
 }
 
 /**

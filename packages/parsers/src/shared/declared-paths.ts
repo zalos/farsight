@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parseSync } from 'oxc-parser';
-import { glossaryEntryFor } from '@farsight/core';
+import { glossaryEntryFor, frameworkAliasNames, t } from '@farsight/core';
 import { readDocQuote } from '../cited-docs.js';
 import type { ParsedManifest } from '../design/index.js';
 import type { GraphFragment } from '@farsight/core';
@@ -34,7 +34,8 @@ export function declaredPathWarnings(
         strings(f.config.plumbing).length ||
         strings(f.config.setup).length ||
         Object.keys(f.config.glossary ?? {}).length ||
-        Object.keys(f.config.gateTiers ?? {}).length,
+        Object.keys(f.config.gateTiers ?? {}).length ||
+        Object.keys(f.config.frameworks ?? {}).length,
     ) &&
     !manifests.length
   )
@@ -84,6 +85,26 @@ export function declaredPathWarnings(
     const scoped = fragment.nodes.filter(
       (n) => file.root || file.dir === '.' || n.loc?.path.startsWith(`${file.dir}/`),
     );
+    for (const [group, names] of Object.entries(frameworkAliasNames(file.config.frameworks) ?? {})) {
+      for (const name of names) {
+        const matched =
+          group === 'spring.delegates'
+            ? fragment.nodes.some(
+                (n) =>
+                  n.kind === 'class' &&
+                  n.tags.some((tag) => tag.startsWith('implements:') && globToRegExp(name).test(tag.slice(11))),
+              )
+            : fragment.edges.some(
+                (e) =>
+                  e.resolution?.note?.includes(`frameworks.${group}`) &&
+                  e.resolution.note.startsWith(`${group.startsWith('express.') ? '' : '@'}${name} read as`),
+              ) ||
+              (group === 'spring.mappings' &&
+                fragment.meta?.routes?.gaps.some((g) => g.text.startsWith(`@${name} on `)));
+        if (!matched)
+          warn(`${location(name)} → frameworks.${group}`, name, t('config.alias.unmatched', 'professional'));
+      }
+    }
     for (const [key, entry] of Object.entries(file.config.glossary ?? {})) {
       const found = scoped.some((n) => {
         const colon = n.kind === 'guard' ? n.name.indexOf(': ') : -1;

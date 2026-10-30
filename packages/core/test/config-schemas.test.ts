@@ -141,3 +141,64 @@ test('multipart reader schema accepts exact reader names and ids and rejects non
     );
   }
 });
+
+test('framework alias schema accepts every reader and rejects misspelled or malformed declarations', () => {
+  const s = schema('farsight-config.schema.json');
+  assert.deepEqual(
+    validate(
+      {
+        frameworks: {
+          spring: {
+            mappings: {
+              ApiRoute: { method: 'pair:method', path: 'arg:0' },
+              JsonGet: { method: 'GET', path: 'pair:path' },
+            },
+            security: { Policy: { label: '$action on $resource', requires: '$action', tier: 'policy' } },
+            delegates: ['*ApiDelegate'],
+            listeners: { OnEvent: 'pair:topic' },
+          },
+          nest: { verbs: { JsonGet: 'GET' }, guards: { UseTenant: { label: 'tenant', tier: 'technical' } } },
+          express: { middleware: { requireRole: { label: 'role: $0', requires: '$0' } } },
+        },
+      },
+      s,
+    ),
+    [],
+  );
+  for (const frameworks of [
+    { sprng: {} },
+    { spring: { mappings: { ApiRoute: { method: 'BAD', path: 'arg:0' } } } },
+    { spring: { security: { Policy: { label: 'policy', tier: 'urgent' } } } },
+    { spring: { delegates: '*ApiDelegate' } },
+    { spring: { listeners: { OnEvent: 'arg:x' } } },
+    { nest: { verbs: { JsonGet: 'BAD' } } },
+    { nest: { guards: { UseTenant: {} } } },
+    { express: { middleware: { withTenant: { label: 'tenant', requires: 1 } } } },
+  ])
+    assert.ok(validate({ frameworks }, s).length, JSON.stringify(frameworks));
+});
+
+test('malformed framework declarations in source config are reported before reaching a reader', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { readConfigFile } = await import('../dist/index.js');
+  const root = mkdtempSync(join(tmpdir(), 'alias-config-'));
+  try {
+    const path = join(root, 'farsight.config.json');
+    writeFileSync(
+      path,
+      JSON.stringify({
+        tags: { billing: ['Invoice'] },
+        frameworks: { spring: { security: { Policy: { label: 42 } } } },
+      }),
+    );
+    const result = readConfigFile(path);
+    assert.ok('config' in result);
+    assert.equal(result.config.frameworks, undefined);
+    assert.deepEqual(result.config.tags, { billing: ['Invoice'] });
+    assert.deepEqual(result.ignored, ['frameworks']);
+    assert.match(result.notes!.join('\n'), /frameworks.spring.security.Policy.label/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

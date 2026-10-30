@@ -35,6 +35,7 @@ import { leadingBranchLabel, trailingBranchLabel, NEGATE_FLIP } from './shared/l
 import { autoTags, joinPaths, normalizePath, snippetRange } from './shared/tags.js';
 import {
   readNestFile,
+  fillAlias,
   controllerOf,
   methodRoutes,
   useGuardsOf,
@@ -943,7 +944,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       const full = `${cls}.${mname}`;
       const fnId = symbolId(file, full);
       const at = line(m.start ?? 0);
-      const { routes, gaps } = methodRoutes(m, nestFile);
+      const { routes, gaps } = methodRoutes(m, nestFile, options.frameworks?.nest);
       for (const g of gaps) {
         routeGap(
           {
@@ -971,7 +972,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         candidate && importMap.has(candidate) && !params.flatMap(bindingNames).includes(candidate)
           ? candidate
           : undefined;
-      const guards = [...useGuardsOf(m.decorators, nestFile).map((g) => ({ ...g, on: full })), ...classGuards];
+      const guards = [
+        ...useGuardsOf(m.decorators, nestFile, options.frameworks?.nest).map((g) => ({ ...g, on: full })),
+        ...classGuards,
+      ];
       const made: string[] = [];
       for (const prefix of controller.prefixes) {
         for (const r of routes) {
@@ -991,27 +995,32 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
             status: 'resolved',
             technique: 'annotation-scan',
             confidence: 'HIGH',
-            note: `the @${r.decorator} decorator on ${full}`,
+            note: r.alias
+              ? `@${r.alias} read as a route by farsight.config.json → frameworks.nest.verbs`
+              : `the @${r.decorator} decorator on ${full}`,
           });
           routeHandlers.push({ routeId, file, handler: full });
           if (delegate) routeHandlers.push({ routeId, file, handler: delegate });
           for (const g of guards) {
             // The decorator's declaration owns the gate. Equal labels in other modules (or factory
             // calls with different arguments) must not combine unrelated canActivate bodies.
-            const guardId = `${repo}::${file}::guard::UseGuards(${g.label})@${g.on}:${g.at.start}:${g.argument}`;
+            const guardId = `${repo}::${file}::guard::${g.alias ?? 'UseGuards'}(${g.label})@${g.on}:${g.at.start}:${g.argument}`;
             addNode({
               id: guardId,
               kind: 'guard',
-              name: `UseGuards: ${g.label}`,
+              name: g.alias ? g.label : `UseGuards: ${g.label}`,
+              ...(g.tier ? { gateTier: { tier: g.tier, from: 'config' as const } } : {}),
               lang: langOf(file),
               tags: ['auth'],
               loc: { repo, path: file, line: line(g.at.start ?? 0) },
             });
-            addEdge('guards', guardId, routeId, undefined, {
+            addEdge('guards', guardId, routeId, g.requires ? { requires: g.requires } : undefined, {
               status: 'resolved',
               technique: 'annotation-scan',
               confidence: 'HIGH',
-              note: `@UseGuards(${g.label}) on ${g.on}`,
+              note: g.alias
+                ? `@${g.alias} read as a gate by farsight.config.json → frameworks.nest.guards`
+                : `@UseGuards(${g.label}) on ${g.on}`,
             });
             if (g.className) nestGuards.push({ guardId, routeId, file, className: g.className });
           }
@@ -1065,7 +1074,9 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         // a class decorated with `@nestjs/common`'s `@Controller` is a controller: each `@Get`/`@Post`…
         // method is a route per prefix × path (nest.ts; readNestMethod below)
         const controller = nestFile.bindings.size ? controllerOf(n, nestFile) : undefined;
-        const classGuards = controller ? useGuardsOf(n.decorators, nestFile).map((g) => ({ ...g, on: cls })) : [];
+        const classGuards = controller
+          ? useGuardsOf(n.decorators, nestFile, options.frameworks?.nest).map((g) => ({ ...g, on: cls }))
+          : [];
         if (controller?.versioned) {
           routeGap({
             kind: 'versioning',
@@ -2071,26 +2082,47 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       });
 
       for (const arg of args.slice(1)) {
-        // middleware: requireScope('billing:write') → guard node + edge
-        if (arg.type === 'CallExpression') {
-          const mwChain = memberChain(arg.callee);
-          const mwArg = stringValue(((arg.arguments as AstNode[]) ?? [])[0]);
-          if (mwChain.length === 1 && /^(require|ensure|check|assert)/i.test(mwChain[0]!)) {
-            const guardId = `${repo}::guard::${mwChain[0]}(${mwArg ?? ''})`;
-            addNode({
-              id: guardId,
-              kind: 'guard',
-              name: mwArg ? `${mwChain[0]}: ${mwArg}` : mwChain[0]!,
-              tags: ['auth'],
-              loc: { repo, path: file, line: line(arg.start ?? 0) },
-            });
-            addEdge('guards', guardId, routeId, undefined, {
-              status: 'heuristic',
-              technique: 'detected',
-              confidence: 'MEDIUM',
-              note: `a route argument named ${mwChain[0]} — nobody declared it a guard`,
-            });
-          }
+        // Explicit middleware aliases carry annotation evidence; the historical name heuristic stays unchanged.
+        const mwChain = memberChain(arg.type === 'CallExpression' ? arg.callee : arg);
+        const mwName = mwChain.join('.');
+        const aliases = options.frameworks?.express?.middleware;
+        const alias = Object.hasOwn(aliases ?? {}, mwName) ? aliases?.[mwName] : undefined;
+        const mwArgs = arg.type === 'CallExpression' ? ((arg.arguments as AstNode[]) ?? []) : [];
+        const mwArg = stringValue(mwArgs[0]);
+        if (
+          alias ||
+          (arg.type === 'CallExpression' && mwChain.length === 1 && /^(require|ensure|check|assert)/i.test(mwName))
+        ) {
+          const label = alias ? (fillAlias(alias.label, mwArgs) ?? mwName) : mwArg;
+          const requires = alias?.requires ? fillAlias(alias.requires, mwArgs) : undefined;
+          const guardId = `${repo}::guard::${mwName}(${mwArg ?? ''})`;
+          addNode({
+            id: guardId,
+            kind: 'guard',
+            name: alias ? label! : label ? `${mwName}: ${label}` : mwName,
+            tags: ['auth'],
+            loc: { repo, path: file, line: line(arg.start ?? 0) },
+            ...(alias?.tier ? { gateTier: { tier: alias.tier, from: 'config' as const } } : {}),
+          });
+          addEdge(
+            'guards',
+            guardId,
+            routeId,
+            requires ? { requires } : undefined,
+            alias
+              ? {
+                  status: 'resolved',
+                  technique: 'annotation-scan',
+                  confidence: 'HIGH',
+                  note: `${mwName} read as a gate by farsight.config.json → frameworks.express.middleware`,
+                }
+              : {
+                  status: 'heuristic',
+                  technique: 'detected',
+                  confidence: 'MEDIUM',
+                  note: `a route argument named ${mwName} — nobody declared it a guard`,
+                },
+          );
         }
         // handler body: calls + schema validates from inside the route handler
         if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {

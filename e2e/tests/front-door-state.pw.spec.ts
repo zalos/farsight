@@ -21,7 +21,8 @@ test.describe('the state of play', () => {
     // the fixture's own numbers, as the design and API surfaces count them
     await expect(card).toContainText('2 of 4 journeys built');
     await expect(card).toContainText('3 of 4 screens built');
-    await expect(card).toContainText('8 of 9 operations implemented');
+    // The aliased GET /api/invoice-summary/ready adds one implemented operation.
+    await expect(card).toContainText('9 of 10 operations implemented');
     await expect(card).toContainText('1 screen designed, not built');
     await expect(card.locator('.sop-names')).toHaveText('(Discard draft)');
     // every number carries its tip — what it counts, over what, from where

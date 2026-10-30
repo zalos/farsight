@@ -98,4 +98,11 @@ public class InvoiceController {
     invoices.delete(id, caller.getName());
     return ResponseEntity.noContent().build();
   }
+  /** Requests the invoice details needed to make an approval decision. */
+  @ApiRoute(value = "/{id}/approval", method = "POST")
+  @SomeAnnotationPolicy(resource = "invoice", action = "approve")
+  public Invoice approval(@PathVariable Long id) {
+    return invoices.get(id);
+  }
+
 }

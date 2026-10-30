@@ -8,6 +8,7 @@ import { collectFiles, contentDigest } from './shared/files.js';
 import { tsJsAdapter } from './tsjs.js';
 import { javaAdapter } from './java/index.js';
 import { applySpecs } from './openapi/index.js';
+import { joinDelegates } from './openapi/delegates.js';
 import { applyDesigns } from './design/index.js';
 import { applyTests, testGlobsOf } from './tests/index.js';
 import { applyStories } from './stories/index.js';
@@ -180,6 +181,7 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
     testFiles: options.testFiles ?? (options.tests === false ? 'include' : 'exclude'),
     testGlobs: { ...testGlobsOf(config?.tests), ...options.testGlobs },
     externals: merge(config?.externals, options.externals),
+    frameworks: config?.frameworks ?? options.frameworks,
     plumbing: merge(config?.plumbing, options.plumbing),
     setup: merge(config?.setup, options.setup),
   };
@@ -198,7 +200,15 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   // after the tags exist (config's `setup` block and the adapters' own heuristic), before anything reads the graph
   applySetupOrigin(merged.nodes, merged.edges);
   if (options.openapi !== false) {
-    const { errors } = await applySpecs(merged, repoRoot, opts, workspace);
+    const { errors, securityByApi } = await applySpecs(merged, repoRoot, opts, workspace);
+    routeGaps.push(
+      ...joinDelegates(
+        merged,
+        opts.frameworks?.spring?.delegates ?? [],
+        { guardNames: config.guards, validators: config.validators, securityByApi },
+        workspace,
+      ),
+    );
     if (errors.length) merged.specErrors = errors;
     applyWorkspaceRouteGuards(merged.nodes, merged.edges, workspace);
   }

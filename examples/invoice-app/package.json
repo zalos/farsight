@@ -4,6 +4,7 @@
   "description": "The Farsight example application: never installed or run, only read. The ranges are what its imports declare.",
   "dependencies": {
     "@azure-rest/ai-document-intelligence": "^1.0.0",
+    "@nestjs/common": "^10.4.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "express": "^4.21.2",
