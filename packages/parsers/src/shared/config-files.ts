@@ -309,7 +309,9 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
       ]);
       const fields = merged as Record<string, unknown>;
       for (const [key, value] of Object.entries(c)) {
-        if (!Object.hasOwn(merged, key)) fields[key] = value;
+        if (!Object.hasOwn(merged, key))
+          fields[key] =
+            !handledFields.has(key) && Array.isArray(value) ? dedupeBy(value, (item) => JSON.stringify(item)) : value;
         else if (!handledFields.has(key)) {
           const first = fields[key];
           const conflict = (name: string) => addConflict(meta, 'field', name, [rootFile!.path, f.path], rootFile!.path);

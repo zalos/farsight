@@ -168,10 +168,10 @@ test('future overlay maps, lists and scalars merge without a field-specific case
     frameworks: { nest: { verbs: { JsonGet: 'GET' } } },
     futureScalar: 'workspace',
     futureMap: { shared: 'workspace', workspaceOnly: true, identical: 'same' },
-    futureList: ['workspace', { name: 'shared' }],
+    futureList: ['workspace', { name: 'shared' }, 'workspace', { name: 'shared' }],
   } as FarsightConfig;
   const overlayOnly = loadWorkspaceConfig(dir, { configOverlay: { from, config } });
-  assert.deepEqual(overlayOnly.merged, config);
+  assert.deepEqual(overlayOnly.merged, { ...config, futureList: ['workspace', { name: 'shared' }] });
   assert.deepEqual(overlayOnly.meta.conflicts, []);
 
   const root = {
