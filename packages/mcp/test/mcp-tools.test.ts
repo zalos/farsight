@@ -59,6 +59,7 @@ const TOOLS = [
   'ask',
   'tour',
   'config_files',
+  'patterns_test',
   // what the team decided or left open (the 2026-10-13 outsider round, F8)
   'decisions',
   'describe_node',

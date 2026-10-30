@@ -133,5 +133,6 @@ test('a pattern-only route reaches the Map and APIs, with declared match evidenc
   await page.locator('#gearbtn').click();
   await expect(page.locator('.cfg-pattern-row')).toContainText('1 part added');
   await expect(page.locator('.cfg-pattern-row')).toContainText('1 connection added');
+  await page.locator('.cfg-pattern-row').scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('pattern-report-business.png') });
 });
