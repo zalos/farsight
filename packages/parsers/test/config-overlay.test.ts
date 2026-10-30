@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
+import type { FarsightConfig } from '@farsight/core';
 import { ingestRepo, loadWorkspaceConfig } from '../dist/index.js';
 
 const from = '.farsight/settings.json → sources[app].config';
@@ -108,6 +109,80 @@ test('overlay lists union and duplicate externals/stores keep the root declarati
       ['store', 'workspace', 'farsight.config.json'],
     ],
   );
+});
+
+test('overlay blocks without a field-specific merger reach merged; repository blocks keep precedence', (t) => {
+  const dir = fixture(t, {});
+  const config: FarsightConfig = {
+    gateTiers: { check: 'policy' },
+    lifecycle: { orders: { views: { operator: { Draft: ['draft'] } } } },
+    decisions: [{ id: 'review-policy', title: 'Review policy' }],
+    validators: ['readMultipart'],
+    internalRoutes: ['GET /health'],
+  };
+  const overlayOnly = loadWorkspaceConfig(dir, { configOverlay: { from, config } });
+  assert.deepEqual(overlayOnly.merged, config);
+  assert.deepEqual(overlayOnly.meta.conflicts, []);
+
+  const root: FarsightConfig = { gateTiers: { approve: 'business' } };
+  writeFileSync(join(dir, 'farsight.config.json'), JSON.stringify(root));
+  const withRoot = loadWorkspaceConfig(dir, { configOverlay: { from, config } });
+  assert.deepEqual(withRoot.merged, { ...config, ...root });
+  assert.deepEqual(withRoot.meta.conflicts, [
+    {
+      kind: 'overlay',
+      key: 'gateTiers',
+      files: ['farsight.config.json', from],
+      kept: 'farsight.config.json',
+      from: 'workspace',
+    },
+  ]);
+  assert.deepEqual(config.gateTiers, { check: 'policy' }, 'the supplied overlay stays intact');
+});
+
+test('root-scoped overlay validators apply while a nested file reports them as ignored', async (t) => {
+  const nested = 'app/farsight.config.json';
+  const dir = fixture(t, {
+    [nested]: { validators: ['readMultipart'] },
+    'lib/readers.ts': 'export function readMultipart(req: Request) { return req.formData(); }',
+    'app/api/upload/route.ts':
+      'import { readMultipart } from "../../../lib/readers";\nexport async function POST(req: Request) { return readMultipart(req); }',
+    'openapi.json': {
+      openapi: '3.1.0',
+      paths: {
+        '/api/upload': {
+          post: { requestBody: { required: true, content: { 'multipart/form-data': {} } } },
+        },
+      },
+    },
+  });
+  const withoutOverlay = await ingestRepo(dir, { repoName: 'app' });
+  const routeBefore = withoutOverlay.nodes.find((n) => n.id === 'app::route::POST /api/upload');
+  assert.ok(routeBefore?.contract?.drift?.some((d) => d.kind === 'body-unvalidated'));
+
+  const graph = await ingestRepo(dir, {
+    repoName: 'app',
+    configOverlay: { from, config: { validators: ['readMultipart'] } },
+  });
+  const route = graph.nodes.find((n) => n.id === 'app::route::POST /api/upload');
+  assert.equal(route?.contract?.status, 'both');
+  assert.deepEqual(route?.contract?.drift ?? [], []);
+  assert.ok(graph.edges.some((e) => e.kind === 'calls' && e.to.endsWith('::readMultipart')));
+  const meta = graph.meta!.config!;
+  assert.deepEqual(
+    meta.files.find((f) => f.path === from),
+    {
+      path: from,
+      dir: '.',
+      root: false,
+      from: 'workspace',
+      fields: ['validators'],
+      ignored: [],
+    },
+  );
+  assert.deepEqual(meta.files.find((f) => f.path === nested)?.ignored, ['validators']);
+  assert.ok(meta.notes.includes(`validators is root-only; ${nested}'s was ignored.`));
+  assert.ok(!meta.notes.some((note) => note.includes(from) && note.includes('root-only')));
 });
 
 test('overlay works without a root file and config:false disables it', async (t) => {

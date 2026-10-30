@@ -132,6 +132,8 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
         meta.notes.push(`${JSON.stringify(key)} is not a farsight.config.json field; ${path}'s was ignored.`);
         continue;
       }
+      // This loop reads repository files only. The overlay inserted below has root scope (dir '.')
+      // even though root is false, so its root-only fields must not pass through this rejection.
       if (!root && (ROOT_ONLY_CONFIG_FIELDS as readonly string[]).includes(key)) {
         ignored.push(key);
         meta.notes.push(`${key} is root-only; ${path}'s was ignored.`);
@@ -271,6 +273,25 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
     const c = f.config;
     const where = (field: string) => `${f.path} → ${field}`;
     if (f.from === 'workspace') {
+      // Fields with list/rebase rules are merged below. Every other root-scoped overlay block
+      // reaches merged without needing a new field-specific case here when the config grows.
+      const listFields = new Set([
+        'setup',
+        'validators',
+        'internalRoutes',
+        'plumbing',
+        'design',
+        'openapi',
+        'tests',
+        'storybook',
+        'externals',
+        'stores',
+      ]);
+      for (const [key, value] of Object.entries(c)) {
+        if (listFields.has(key)) continue;
+        if (!Object.hasOwn(merged, key)) (merged as Record<string, unknown>)[key] = value;
+        else addConflict(meta, 'overlay', key, [rootFile!.path, f.path], rootFile!.path);
+      }
       for (const field of ['setup', 'validators', 'internalRoutes'] as const)
         if (c[field]) merged[field] = union(merged[field], c[field]);
     }
