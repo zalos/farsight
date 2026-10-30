@@ -8,7 +8,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -67,6 +67,25 @@ before(async () => {
   const fragment = await ingestRepo(fixture, { repoName: 'invoice-app' });
   store.roots[fragment.repo] = fixture;
   store.addFragment(fragment);
+  const declarations = join(work, 'declarations');
+  mkdirSync(join(declarations, 'vendor'), { recursive: true });
+  writeFileSync(join(declarations, '.gitignore'), '.env\n');
+  writeFileSync(join(declarations, '.env'), 'FAKE_PRIVATE_VALUE=never-expose');
+  writeFileSync(join(declarations, 'vendor', 'settings.txt'), 'excluded-private-fixture');
+  writeFileSync(join(declarations, 'legacy.pl'), 'allowed fixture');
+  writeFileSync(
+    join(declarations, 'farsight.config.json'),
+    JSON.stringify({
+      nodes: [
+        { kind: 'external', name: 'Vault', loc: '.env:1' },
+        { kind: 'external', name: 'Vendor', loc: 'vendor/settings.txt:1' },
+        { kind: 'external', name: 'Legacy', loc: 'legacy.pl:1' },
+      ],
+    }),
+  );
+  const declared = await ingestRepo(declarations, { repoName: 'declarations', exclude: ['vendor/**'] });
+  store.roots[declared.repo] = declarations;
+  store.addFragment(declared);
   stitchHttp(store);
   store.save(graphPath);
   port = await freePort();
@@ -134,4 +153,17 @@ test('no node, an unknown node: a 400 and a 404 with a sentence', async () => {
   const miss = await get('/api/source?node=nope::x');
   assert.equal(miss.status, 404);
   assert.match(miss.body.error, /no node/);
+});
+
+test('declared locations cannot expose ignored or excluded files through the source API', async () => {
+  for (const name of ['Vault', 'Vendor']) {
+    const { status, body } = await get('/api/source?node=' + encodeURIComponent(`declarations::external::${name}`));
+    assert.equal(status, 200);
+    assert.equal(body.code, null);
+    assert.equal(body.path, undefined);
+    assert.doesNotMatch(JSON.stringify(body), /never-expose|excluded-private-fixture/);
+  }
+  const allowed = await get('/api/source?node=' + encodeURIComponent('declarations::external::Legacy'));
+  assert.equal(allowed.status, 200);
+  assert.match(allowed.body.code, /allowed fixture/);
 });

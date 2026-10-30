@@ -403,13 +403,13 @@ export function roleTableLines(t: RoleTable, opts: { business?: boolean; cap?: n
   const cap = opts.cap ?? 60;
   const out: string[] = [];
   if (!t.rows.length) {
-    out.push('who may do what: no role check found — no check in the code is handed a named list of roles');
+    out.push(tr('roles.emptyLine', 'professional'));
     return out;
   }
   out.push(
     `who may do what: ${[t.counted.actions, t.counted.roles, t.counted.passed].map((c) => countedText(c, { lens, scope: false })).join(' · ')} ${tr(t.counted.actions.scope, 'professional')}`,
   );
-  out.push(`roles the code names: ${t.roles.map((r) => (business ? roleWord(r) : r)).join(' · ')}`);
+  out.push(`${tr('roles.listed', 'professional')}: ${t.roles.map((r) => (business ? roleWord(r) : r)).join(' · ')}`);
   for (const r of t.rows.slice(0, cap)) {
     const head = business
       ? r.words

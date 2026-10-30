@@ -1,7 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parseSync } from 'oxc-parser';
-import { glossaryEntryFor, frameworkAliasNames, t } from '@farsight/core';
+import {
+  glossaryEntryFor,
+  frameworkAliasNames,
+  declaredNodePath,
+  DeclaredNodeIndex,
+  declaredNodeTarget,
+  declaredNodeHandler,
+  declaredNodeGuards,
+  scopeOfDir,
+  t,
+} from '@farsight/core';
 import { readDocQuote } from '../cited-docs.js';
 import type { ParsedManifest } from '../design/index.js';
 import type { GraphFragment } from '@farsight/core';
@@ -36,7 +46,8 @@ export function declaredPathWarnings(
         Object.keys(f.config.glossary ?? {}).length ||
         Object.keys(f.config.gateTiers ?? {}).length ||
         Object.keys(f.config.frameworks ?? {}).length ||
-        list(f.config.patterns).length,
+        list(f.config.patterns).length ||
+        list(f.config.nodes).length,
     ) &&
     !manifests.length
   )
@@ -73,6 +84,7 @@ export function declaredPathWarnings(
     const at = text.indexOf(JSON.stringify(value));
     return at < 0 ? 1 : text.slice(0, at).split('\n').length;
   };
+  const declaredIndex = new DeclaredNodeIndex(fragment.nodes, fragment.edges, ws.declaredIndex);
   for (const file of ws.files) {
     let text = '';
     if (file.from !== 'workspace') {
@@ -86,6 +98,43 @@ export function declaredPathWarnings(
     const scoped = fragment.nodes.filter(
       (n) => file.root || file.dir === '.' || n.loc?.path.startsWith(`${file.dir}/`),
     );
+    const entries = declarationLocations(text);
+    const summaries = new Map(
+      (ws.meta.files.find((f) => f.path === file.path)?.nodes ?? []).map((n) => [`${n.kind}:${n.name}`, n]),
+    );
+    for (const [entry, declaration] of (file.config.nodes ?? []).entries()) {
+      const notes: string[] = [];
+      const note = (field: string, value: string, reason: string) => {
+        const range = entries[entry]?.[field];
+        const offset = range
+          ? range.start + Math.max(0, text.slice(range.start, range.end).indexOf(JSON.stringify(value)))
+          : 0;
+        const where =
+          file.from === 'workspace' ? file.path : `${file.path}:${text.slice(0, offset).split('\n').length}`;
+        const message = `${where} → nodes.${field}: ${JSON.stringify(value)} ${reason}`;
+        notes.push(message);
+        warnings.push(message);
+      };
+      if (declaration.loc) {
+        const loc = declaration.loc.match(/^(.*):([1-9]\d*)$/);
+        const path = loc && declaredNodePath(loc[1]!, file.dir);
+        if (!path || !files.has(path) || !ws.hasFile?.(path))
+          note('loc', declaration.loc, t(path ? 'config.nodes.missingLoc' : 'config.nodes.outsideLoc', 'professional'));
+      }
+      const scope = scopeOfDir(file.dir);
+      const target = declaredNodeTarget(declaredIndex, declaration, fragment.repo);
+      if (target && !declaredIndex.inScope(target, file.dir, scope))
+        note('name', declaration.name, t('config.nodes.outsideTarget', 'professional'));
+      if (declaration.kind === 'route') {
+        if (declaration.handler && !declaredNodeHandler(declaredIndex, declaration.handler, fragment.repo, file.dir))
+          note('handler', declaration.handler, t('config.nodes.missingHandler', 'professional'));
+        for (const label of declaration.guards ?? [])
+          if (!declaredNodeGuards(declaredIndex, label, file.config, fragment.repo, scope).length)
+            note('guards', label, t('config.nodes.missingGuard', 'professional'));
+      }
+      const summary = summaries.get(`${declaration.kind}:${declaration.name}`);
+      if (summary && notes.length) summary.notes = [...(summary.notes ?? []), ...notes];
+    }
     for (const row of fragment.meta?.patterns?.rules ?? []) {
       if (row.file !== file.path) continue;
       const budgetReasons = ['budget', 'fileBudget', 'byteBudget', 'queryLimit'].map((key) =>
@@ -190,4 +239,29 @@ export function declaredPathWarnings(
   // leaving them behind the decisions tool.
   warnings.push(...affectsWarnings);
   return warnings;
+}
+
+/** Source spans for each field of each top-level nodes entry; repeated labels elsewhere cannot steal its line. */
+function declarationLocations(text: string): Record<string, { start: number; end: number }>[] {
+  if (!text) return [];
+  try {
+    const parsed = parseSync('config.ts', `(${text})`);
+    const program = typeof parsed.program === 'string' ? JSON.parse(parsed.program) : parsed.program;
+    const expression = program.body[0]?.expression;
+    const object = expression?.expression ?? expression;
+    const nodes = object?.properties?.find(
+      (p: { key: { name?: string; value?: string } }) => (p.key?.name ?? p.key?.value) === 'nodes',
+    );
+    return (nodes?.value?.elements ?? []).map(
+      (entry: { properties?: { key: { name?: string; value?: string }; value: { start: number; end: number } }[] }) =>
+        Object.fromEntries(
+          (entry.properties ?? []).map((p) => [
+            p.key.name ?? p.key.value,
+            { start: p.value.start - 1, end: p.value.end - 1 },
+          ]),
+        ),
+    );
+  } catch {
+    return [];
+  }
 }

@@ -17,7 +17,7 @@ import type { GraphNode, GraphFragment, OperationContract, ContractParam, DriftK
 import type { GraphIndex } from './query.js';
 import { buildIndex, businessSummary } from './query.js';
 import { t } from './strings.js';
-import { counted, type Counted } from './counts.js';
+import { counted, countedText, breakdownText, type Counted, type CountPart } from './counts.js';
 import type { GraphMeta } from './store.js';
 
 // ── the slice of an OpenAPI/Swagger document this module reads ────────────
@@ -331,6 +331,8 @@ export interface ReconcileResult {
   counts: {
     declared: number;
     implemented: number;
+    /** When hand-made routes contribute, these disjoint parts sum to implemented. */
+    implementedBreakdown?: CountPart[];
     matched: number;
     specOnly: number;
     codeOnly: number;
@@ -546,14 +548,20 @@ export function reconcile(
   const apiId = opts.apiId ?? apiNodeId(source.repo, source.path);
   const specUsesSecurity = specDeclaresSecurity(doc, ops);
 
-  // implemented routes: kind route with a source location (spec-only nodes have none)
+  // Source locations and hand-made declarations are code-side; spec-only routes are neither.
   const codeRoutes: { node: GraphNode; key: string; repo: string }[] = [];
   for (const n of index.byId.values()) {
-    if (n.kind !== 'route' || !n.loc) continue;
-    if (opts.repo && n.loc.repo !== opts.repo) continue;
+    if (
+      n.kind !== 'route' ||
+      (!n.loc &&
+        (!n.tags.includes('declared') || n.contract?.status === 'declared' || n.contract?.status === 'spec-only'))
+    )
+      continue;
+    const repo = n.loc?.repo ?? n.id.split('::')[0]!;
+    if (opts.repo && repo !== opts.repo) continue;
     const mp = routeMethodPath(n);
     if (!mp) continue;
-    codeRoutes.push({ node: n, key: `${mp.method} ${normalizeRoutePath(mp.path)}`, repo: n.loc.repo });
+    codeRoutes.push({ node: n, key: `${mp.method} ${normalizeRoutePath(mp.path)}`, repo });
   }
   const byKey = new Map<string, GraphNode[]>();
   for (const r of codeRoutes) byKey.set(r.key, [...(byKey.get(r.key) ?? []), r.node]);
@@ -587,7 +595,7 @@ export function reconcile(
     }
     if (hit) {
       claimed.add(hit.id);
-      reposHit.add(hit.loc!.repo);
+      reposHit.add(hit.loc?.repo ?? hit.id.split('::')[0]!);
       const drift = operationDrift(op, hit, index, specUsesSecurity, opts);
       if (drift.length) mismatched++;
       driftTotal += drift.length;
@@ -636,7 +644,14 @@ export function reconcile(
   const codeOnly: ReconcileResult['codeOnly'] = [];
   for (const r of codeRoutes) {
     if (claimed.has(r.node.id) || !repos.includes(r.repo)) continue;
-    const drift: DriftEntry[] = [{ kind: 'code-only', message: 'implemented in the code; not declared in the spec' }];
+    const drift: DriftEntry[] = [
+      {
+        kind: 'code-only',
+        message: r.node.tags.includes('declared')
+          ? t('api.declared.codeOnly', 'professional')
+          : 'implemented in the code; not declared in the spec',
+      },
+    ];
     driftTotal++;
     codeOnly.push({
       routeId: r.node.id,
@@ -720,6 +735,9 @@ export function reconcile(
     counts: {
       declared: ops.length,
       implemented: codeRoutes.filter((r) => repos.includes(r.repo)).length,
+      ...implementedBreakdown(
+        codeRoutes.filter((r) => repos.includes(r.repo)).map((r) => r.node.tags.includes('declared')),
+      ),
       matched: matched.length,
       specOnly: specOnly.length,
       codeOnly: codeOnly.length,
@@ -1157,6 +1175,8 @@ function screensUpstream(index: GraphIndex, fromId: string, cap = 6): GraphNode[
 
 export interface OperationRow {
   routeId: string;
+  /** True only when configuration created this route; attachment to a reader route keeps reader evidence. */
+  declaredByPerson?: true;
   name: string;
   method: string;
   path: string;
@@ -1188,12 +1208,14 @@ export interface ApiSurface {
   /**
    * One vocabulary, three consumers (APIs tab, CLI `api list`, MCP):
    * declared = every operation the spec names (whatever its status) ·
-   * implemented = with a source location · notImplemented = declared, no code ·
+   * implemented = found in code or declared by a person (see the breakdown) · notImplemented = spec only ·
    * undocumented = code, not in the spec.
    */
   counts: {
     operations: number;
     implemented: number;
+    /** When hand-made routes contribute, these disjoint parts sum to implemented. */
+    implementedBreakdown?: CountPart[];
     declared: number;
     notImplemented: number;
     undocumented: number;
@@ -1214,7 +1236,8 @@ function operationRow(index: GraphIndex, n: GraphNode): OperationRow | null {
     name: n.name,
     method: mp.method,
     path: mp.path,
-    status: c?.status ?? (n.loc ? 'implemented' : 'declared'),
+    status: c?.status ?? (n.loc || n.tags.includes('declared') ? 'implemented' : 'declared'),
+    ...(n.tags.includes('declared') ? { declaredByPerson: true as const } : {}),
     ...(businessSummary(n) ? { summary: businessSummary(n) } : {}),
     ...(c?.deprecated || n.tags.includes('deprecated') ? { deprecated: true } : {}),
     tags: c?.tags ?? [],
@@ -1226,11 +1249,24 @@ function operationRow(index: GraphIndex, n: GraphNode): OperationRow | null {
   };
 }
 
+function implementedBreakdown(declared: boolean[]): { implementedBreakdown?: CountPart[] } {
+  const people = declared.filter(Boolean).length;
+  return people
+    ? {
+        implementedBreakdown: [
+          { n: declared.length - people, key: 'count.part.apiFoundInCode' },
+          { n: people, key: 'count.part.apiDeclaredByPerson' },
+        ],
+      }
+    : {};
+}
+
 function surfaceCounts(ops: OperationRow[]): ApiSurface['counts'] {
+  const supplied = ops.filter((o) => o.status === 'both' || o.status === 'code-only' || o.status === 'implemented');
   return {
     operations: ops.length,
-    implemented: ops.filter((o) => o.status === 'both' || o.status === 'code-only' || o.status === 'implemented')
-      .length,
+    implemented: supplied.length,
+    ...implementedBreakdown(supplied.map((o) => !!o.declaredByPerson)),
     declared: ops.filter((o) => o.status === 'both' || o.status === 'spec-only' || o.status === 'declared').length,
     notImplemented: ops.filter((o) => o.status === 'spec-only' || o.status === 'declared').length,
     undocumented: ops.filter((o) => o.status === 'code-only').length,
@@ -1279,10 +1315,11 @@ export function apiSurface(index: GraphIndex, scope?: Set<string> | null): ApiSu
   }
   const byRepo = new Map<string, OperationRow[]>();
   for (const n of index.byId.values()) {
-    if (n.kind !== 'route' || claimed.has(n.id) || !n.loc) continue;
-    if (!inScope(n.loc.repo)) continue;
+    if (n.kind !== 'route' || claimed.has(n.id) || (!n.loc && !n.tags.includes('declared'))) continue;
+    const repo = n.loc?.repo ?? n.id.split('::')[0]!;
+    if (!inScope(repo)) continue;
     const row = operationRow(index, n);
-    if (row) byRepo.set(n.loc.repo, [...(byRepo.get(n.loc.repo) ?? []), row]);
+    if (row) byRepo.set(repo, [...(byRepo.get(repo) ?? []), row]);
   }
   for (const [repo, ops] of byRepo) {
     ops.sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method));
@@ -1298,11 +1335,26 @@ export function apiSurface(index: GraphIndex, scope?: Set<string> | null): ApiSu
   return out.sort((a, b) => a.repo.localeCompare(b.repo) || a.name.localeCompare(b.name));
 }
 
+/** The supplied-operation count, with code and person evidence kept separate. */
+export function apiImplementedCount(counts: ApiSurface['counts']): Counted {
+  return counted(
+    counts.implemented,
+    counts.implementedBreakdown ? 'state.unit.operationsSupplied' : 'state.unit.operations',
+    'surf.scope.api',
+    'apiSurface().counts.implemented / .operations',
+    {
+      of: counts.operations,
+      breakdown: counts.implementedBreakdown,
+      recheck: { cli: 'farsight api list', mcp: 'api_surface' },
+    },
+  );
+}
+
 /** Markdown rendering of a reconcile report (CLI `api diff --format md`, MCP). */
 export function driftMarkdown(r: ReconcileResult): string {
   const lines = [
     `# API drift — ${r.api.name}${r.api.version ? ` v${r.api.version}` : ''} (${r.api.path})`,
-    `declared ${r.counts.declared} · implemented ${r.counts.implemented} · matched ${r.counts.matched} · not implemented ${r.policy.counts.missing} · ${t('api.policy.planned', 'professional')} ${r.policy.counts.planned} · undocumented ${r.policy.counts.undocumented} · ${t('api.policy.internal', 'professional')} ${r.policy.counts.internal} · mismatched ${r.counts.mismatched}`,
+    `declared ${r.counts.declared} · ${r.counts.implementedBreakdown ? t('api.supplied', 'professional') : 'implemented'} ${r.counts.implemented} · matched ${r.counts.matched} · not implemented ${r.policy.counts.missing} · ${t('api.policy.planned', 'professional')} ${r.policy.counts.planned} · undocumented ${r.policy.counts.undocumented} · ${t('api.policy.internal', 'professional')} ${r.policy.counts.internal} · mismatched ${r.counts.mismatched}`,
     t('api.policy.raw', 'professional')
       .replace('{missing}', String(r.counts.specOnly))
       .replace('{undocumented}', String(r.counts.codeOnly))
@@ -1310,6 +1362,17 @@ export function driftMarkdown(r: ReconcileResult): string {
     r.repos.length ? `repos: ${r.repos.join(', ')}` : 'repos: (no route in the graph matched this spec)',
     '',
   ];
+  if (r.counts.implementedBreakdown) {
+    const supplied = apiImplementedCount({
+      ...r.counts,
+      operations: r.counts.implemented + r.counts.specOnly,
+      notImplemented: r.counts.specOnly,
+      undocumented: r.counts.codeOnly,
+      consumers: 0,
+      gated: 0,
+    });
+    lines.push(`${countedText(supplied, { scope: false })}: ${breakdownText(supplied)}`, '');
+  }
   const missing = r.specOnly.filter((op) => !r.policy.planned.includes(op.routeId));
   if (r.policy.planned.length) {
     lines.push(`## ${t('api.policy.plannedHeading', 'professional')}`);
@@ -1322,7 +1385,11 @@ export function driftMarkdown(r: ReconcileResult): string {
     lines.push('');
   }
   if (r.codeOnly.length) {
-    lines.push('## implemented, not declared');
+    lines.push(
+      r.counts.implementedBreakdown
+        ? `## ${t('api.declared.absentSpec', 'professional')}`
+        : '## implemented, not declared',
+    );
     for (const c of r.codeOnly)
       lines.push(
         `- ${c.name}${r.policy.internal.includes(c.routeId) ? ` (${t('api.policy.internalDeclaration', 'professional')})` : ''}${c.loc ? ` — ${c.loc.path}:${c.loc.line}` : ''}`,

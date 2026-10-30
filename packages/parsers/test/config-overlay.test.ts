@@ -216,7 +216,7 @@ test('future overlay maps, lists and scalars merge without a field-specific case
   });
   assert.deepEqual(
     withRoot.meta.conflicts,
-    ['frameworks.nest', 'futureScalar', 'futureMap.shared'].map((key) => ({
+    ['frameworks.nest.verbs.JsonGet', 'futureScalar', 'futureMap.shared'].map((key) => ({
       kind: 'field',
       key,
       files: ['farsight.config.json', from],
@@ -349,4 +349,66 @@ test('a nested glossary word marks the losing workspace declaration', (t) => {
   assert.deepEqual(ws.meta.conflicts, [
     { kind: 'glossary', key: 'submit', files: [from, nested], kept: nested, from: 'workspace' },
   ]);
+});
+
+test('root and workspace framework aliases merge by alias, with root wins only at the same alias', async (t) => {
+  const root: FarsightConfig = {
+    frameworks: {
+      spring: {
+        security: { RootPolicy: { label: 'Root access', tier: 'policy', requires: 'admin' } },
+        delegates: ['RootApi'],
+      },
+    },
+  };
+  const config: FarsightConfig = {
+    frameworks: {
+      spring: {
+        security: {
+          RootPolicy: { label: 'Workspace replacement', requires: 'staff' },
+          WorkspacePolicy: { label: 'Workspace access', tier: 'policy', requires: 'operator' },
+        },
+        delegates: ['WorkspaceApi', 'RootApi'],
+      },
+    },
+  };
+  const dir = fixture(t, {
+    'farsight.config.json': root,
+    'OrdersController.java': `@RestController
+class OrdersController {
+  @GetMapping("/root") @RootPolicy public String root() { return "ok"; }
+  @GetMapping("/workspace") @WorkspacePolicy public String workspace() { return "ok"; }
+}`,
+  });
+  const ws = loadWorkspaceConfig(dir, { configOverlay: { from, config } });
+  assert.deepEqual(ws.merged.frameworks?.spring?.security, {
+    RootPolicy: root.frameworks!.spring!.security!.RootPolicy,
+    WorkspacePolicy: config.frameworks!.spring!.security!.WorkspacePolicy,
+  });
+  assert.deepEqual(ws.merged.frameworks?.spring?.delegates, ['RootApi', 'WorkspaceApi']);
+  assert.deepEqual(ws.meta.conflicts, [
+    {
+      kind: 'field',
+      key: 'frameworks.spring.security.RootPolicy',
+      files: ['farsight.config.json', from],
+      kept: 'farsight.config.json',
+      from: 'workspace',
+    },
+  ]);
+  assert.equal(config.frameworks!.spring!.security!.RootPolicy!.label, 'Workspace replacement');
+  const graph = await ingestRepo(dir, {
+    repoName: 'app',
+    tests: false,
+    design: false,
+    configOverlay: { from, config },
+  });
+  const guards = graph.nodes.filter((n) => n.kind === 'guard');
+  assert.ok(
+    guards.some((n) => n.name.includes('Root access')),
+    guards.map((n) => n.name).join(', '),
+  );
+  assert.ok(
+    guards.some((n) => n.name.includes('Workspace access')),
+    guards.map((n) => n.name).join(', '),
+  );
+  assert.ok(!guards.some((n) => n.name.includes('Workspace replacement')));
 });

@@ -837,6 +837,41 @@
               },
               "frameworks": {
                 "$ref": "#/definitions/FrameworkAliasSummary"
+              },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "route",
+                        "guard",
+                        "external",
+                        "queue"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "business": {
+                      "type": "string"
+                    },
+                    "notes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Declarations supplied by this file, absent when none; no copied source text."
               }
             },
             "required": [
