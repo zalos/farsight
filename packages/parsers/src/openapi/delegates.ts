@@ -1,12 +1,25 @@
 /** Join generated Spring delegate implementations to the operations already read by the spec pass. */
-import { buildIndex, operationDrift, t, type GraphFragment, type GraphNode, type RouteGap } from '@farsight/core';
+import {
+  buildIndex,
+  operationDrift,
+  t,
+  type GraphFragment,
+  type GraphNode,
+  type ReconcileOptions,
+  type RouteGap,
+} from '@farsight/core';
 import { globToRegExp } from '../shared/files.js';
 
 const RESPONSE_ENTITY = /\bResponseEntity\s*</;
 const classKey = (node: GraphNode, name = node.name) => `${node.loc?.repo}\0${node.loc?.path}\0${name}`;
 
+export interface DelegateDriftContext extends Pick<ReconcileOptions, 'guardNames' | 'validators'> {
+  /** Kept by the spec pass, including documents that only declare security schemes. */
+  securityByApi?: ReadonlyMap<string, boolean>;
+}
+
 /** In place; unmatched overrides are gaps, never invented routes. Without a spec there is nothing to join. */
-export function joinDelegates(fragment: GraphFragment, globs: string[]): RouteGap[] {
+export function joinDelegates(fragment: GraphFragment, globs: string[], drift: DelegateDriftContext = {}): RouteGap[] {
   if (!globs.length) return [];
   const patterns = globs.map(globToRegExp);
   const classes = new Map<string, GraphNode>();
@@ -122,15 +135,15 @@ export function joinDelegates(fragment: GraphFragment, globs: string[]): RouteGa
     const contract = route.contract!;
     const match = /^([A-Z]+) (.+)$/.exec(route.name);
     if (!match) continue;
-    const specUsesSecurity = fragment.nodes.some(
-      (n) => n.contract?.apiId === contract.apiId && !!n.contract.security?.length,
-    );
+    const specUsesSecurity =
+      drift.securityByApi?.get(contract.apiId) ??
+      fragment.nodes.some((n) => n.contract?.apiId === contract.apiId && !!n.contract.security?.length);
     contract.drift = operationDrift(
       { method: match[1]!, path: match[2]!, normPath: match[2]!, routeId: route.id, contract },
       route,
       index,
       specUsesSecurity,
-      {},
+      drift,
     );
   }
   return gaps;

@@ -131,6 +131,56 @@ test('a spec without operationIds still names the unmatched delegate override', 
   assert.ok(!f.edges.some((e) => e.kind === 'calls'));
 });
 
+test('delegate drift retains configured guard matchers and multipart readers', () => {
+  const f = fixture();
+  const contract = f.nodes[2]!.contract!;
+  contract.extensions = { 'x-guards': ['approval'] };
+  contract.requestBody = { required: true, contentType: 'multipart/form-data' };
+  f.nodes.push({ id: 'reader', kind: 'function', name: 'readMultipart', tags: [], loc: { ...f.nodes[1]!.loc! } });
+  f.edges.push({ id: 'read', kind: 'calls', from: 'fn', to: 'reader' });
+  joinDelegates(f, ['*ApiDelegate'], {
+    guardNames: { approval: ['approve on invoice'] },
+    validators: ['readMultipart'],
+  });
+  assert.deepEqual(contract.drift, []);
+});
+
+test('the spec pass preserves security-scheme declarations for delegate drift', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { applySpecs } = await import('../dist/openapi/index.js');
+  const root = mkdtempSync(join(tmpdir(), 'delegate-security-'));
+  try {
+    writeFileSync(
+      join(root, 'openapi.json'),
+      JSON.stringify({
+        openapi: '3.0.3',
+        info: { title: 'Approval', version: '1' },
+        components: { securitySchemes: { bearer: { type: 'http', scheme: 'bearer' } } },
+        paths: {
+          '/invoices/{id}/approve': {
+            post: { operationId: 'approveInvoice', responses: { 204: { description: 'Approved' } } },
+          },
+        },
+      }),
+    );
+    const f = fixture();
+    f.nodes = f.nodes.filter((n) => n.kind !== 'route');
+    const { securityByApi } = await applySpecs(f, root, {});
+    const route = f.nodes.find((n) => n.kind === 'route')!;
+    assert.equal(securityByApi.get(route.contract!.apiId), true);
+    assert.ok(!route.contract!.security?.length);
+    joinDelegates(f, ['*ApiDelegate'], { securityByApi });
+    assert.deepEqual(
+      route.contract!.drift?.map((d) => d.kind),
+      ['security-missing-in-spec'],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('an empty spec records the unmatched override without inventing a route', () => {
   const f = fixture();
   f.nodes = f.nodes.filter((n) => n.kind !== 'route');

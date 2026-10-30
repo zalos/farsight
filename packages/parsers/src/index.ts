@@ -202,8 +202,14 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   // after the tags exist (config's `setup` block and the adapters' own heuristic), before anything reads the graph
   applySetupOrigin(merged.nodes, merged.edges);
   if (options.openapi !== false) {
-    const { errors } = await applySpecs(merged, repoRoot, opts, workspace);
-    routeGaps.push(...joinDelegates(merged, config.frameworks?.spring?.delegates ?? []));
+    const { errors, securityByApi } = await applySpecs(merged, repoRoot, opts, workspace);
+    routeGaps.push(
+      ...joinDelegates(merged, config.frameworks?.spring?.delegates ?? [], {
+        guardNames: config.guards,
+        validators: config.validators,
+        securityByApi,
+      }),
+    );
     if (errors.length) merged.specErrors = errors;
     applyWorkspaceRouteGuards(merged.nodes, merged.edges, workspace);
   }
