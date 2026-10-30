@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
-import { GraphStore, CONFIG_FIELDS, CONFIG_OVERLAY_FIELDS, configSchema } from '@farsight/core';
+import { GraphStore, CONFIG_FIELDS, CONFIG_OVERLAY_FIELDS } from '@farsight/core';
 import { settingsProblem, syncSources, type Settings } from '../dist/index.js';
 import { isWriteRoute } from '../dist/guard.js';
 
@@ -15,13 +15,6 @@ const settings = (extra: Record<string, unknown> = {}) => ({
   defaultLens: 'code',
   collections: [],
   sources: [{ ...source, ...extra }],
-});
-
-test('embedded config schema is the canonical schema, including fields added by later lanes', () => {
-  assert.deepEqual(
-    configSchema,
-    JSON.parse(readFileSync(new URL('../../../schemas/farsight-config.schema.json', import.meta.url), 'utf8')),
-  );
 });
 
 test('settings overlay validation reports field paths in rule order without echoing secret values', () => {
@@ -47,7 +40,7 @@ test('settings overlay validation reports field paths in rule order without echo
   );
   assert.match(
     settingsProblem(settings({ config: { glossary: { submit: {} } } }))!,
-    /sources\[0\].config.glossary.submit.label must have required property 'label'/,
+    /sources\[0\].config.glossary.submit.label is required/,
   );
   assert.equal(
     settingsProblem(settings({ config: { glossary: { submit: { label: 'Submit' } }, tags: { work: ['submit'] } } })),
@@ -61,7 +54,7 @@ test('settings overlay validation reports field paths in rule order without echo
 
 test('OpenAPI registration shapes validate in the same settings validator', () => {
   for (const openapi of [null, {}, 'bad'])
-    assert.match(settingsProblem(settings({ openapi }))!, /sources\[0\].openapi must be an array/);
+    assert.match(settingsProblem(settings({ openapi }))!, /sources\[0\].openapi must be array/);
   for (const entry of [
     null,
     [],
@@ -69,6 +62,9 @@ test('OpenAPI registration shapes validate in the same settings validator', () =
     { path: 'x', url: 'https://example.com/x' },
     { path: '/etc/spec' },
     { path: '../spec' },
+    { path: 'https://example.com/spec' },
+    { path: 'docs/../../spec' },
+    { path: 'docs/spec', phaseOrder: [1] },
     { path: 'C:\\spec' },
     { url: 'file:///etc/spec' },
     { url: 'https://' },
@@ -80,7 +76,10 @@ test('OpenAPI registration shapes validate in the same settings validator', () =
   assert.equal(
     settingsProblem(
       settings({
-        openapi: [{ path: 'docs/spec.json', name: 'API', phase: 'draft' }, { url: 'https://example.com/spec' }],
+        openapi: [
+          { path: 'docs/v1..2.json', name: 'API', phase: 'draft', phaseOrder: ['draft', 'live'] },
+          { url: 'https://example.com/spec' },
+        ],
         openapiIgnore: ['old/spec.json'],
       }),
     ),
@@ -195,16 +194,22 @@ test('registration replaces, dismisses and restores references in workspace sett
   for (const path of ['docs/spec.json', 'https://example.com/spec.json']) {
     const url = '/api/sources/app/openapi';
     for (const name of ['First', 'Updated']) {
-      const res = await s.call('POST', url, { path, name, phase: 'draft' });
+      const res = await s.call('POST', url, {
+        ...(path.startsWith('https:') ? { url: path } : { path }),
+        name,
+        phase: 'draft',
+        phaseOrder: ['draft', 'live'],
+      });
       assert.equal(res.status, 200);
       assert.equal(res.body.next, 'POST /api/sync');
       assert.equal(s.saved().sources[0]?.openapi?.length, 1);
       assert.equal(s.saved().sources[0]?.openapi?.[0]?.name, name);
+      assert.deepEqual(s.saved().sources[0]?.openapi?.[0]?.phaseOrder, ['draft', 'live']);
     }
     assert.equal((await s.call('DELETE', `${url}?path=${encodeURIComponent(path)}`)).status, 200);
     assert.deepEqual(s.saved().sources[0]?.openapi, []);
     assert.ok(s.saved().sources[0]?.openapiIgnore?.includes(path));
-    await s.call('POST', url, { path });
+    await s.call('POST', url, path.startsWith('https:') ? { url: path } : { path });
     assert.ok(!s.saved().sources[0]?.openapiIgnore?.includes(path));
     await s.call('DELETE', `${url}?path=${encodeURIComponent(path)}`);
   }
@@ -290,4 +295,30 @@ test('sync forwards all three options for local and git sources', async (t) => {
     assert.deepEqual(calls[i].openapiRegistered, registered);
     assert.deepEqual(calls[i].openapiIgnored, ignored);
   }
+});
+
+test('settings ignores editor keys, confines ignored references and restricts overlays to code sources', () => {
+  assert.equal(settingsProblem(settings({ config: { $schema: 'editor', '//note': 'example', tags: {} } })), null);
+  for (const type of ['openapi', 'design', 'work'])
+    for (const key of ['config', 'openapi', 'openapiIgnore'])
+      assert.match(
+        settingsProblem(settings({ type, [key]: key === 'config' ? {} : [] }))!,
+        new RegExp(`sources\\[0\\].${key} is only supported`),
+      );
+  for (const ref of ['/absolute', '../escape', 'docs/../../escape', 'C:\\spec', 'file:///spec', 'bad\0path'])
+    assert.match(settingsProblem(settings({ openapiIgnore: [ref] }))!, /sources\[0\].openapiIgnore\[0\]/);
+  assert.equal(
+    settingsProblem(settings({ openapiIgnore: ['docs/v1..2.json', 'docs/../spec.json', 'https://example.com/spec'] })),
+    null,
+  );
+});
+
+test('the scrubbed settings example validates', () => {
+  const example = JSON.parse(
+    readFileSync(new URL('../../../.farsight/settings.example.json', import.meta.url), 'utf8'),
+  );
+  assert.equal(settingsProblem(example), null);
+  const source = example.sources.find((s: { id: string }) => s.id === 'invoice-app');
+  assert.equal(source.openapi[0].name, 'Vendor API (example)');
+  assert.ok(existsSync(new URL(`../../../${source.path}/${source.openapi[0].path}`, import.meta.url)));
 });

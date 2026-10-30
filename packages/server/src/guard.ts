@@ -79,7 +79,7 @@ export function refuseRequest(req: GuardRequest): string | null {
 // sync) and the work-item cache and trackers — and `/api/version` says so, so the
 // viewer disables the same controls it would otherwise refuse. The two diff routes
 // (`POST /api/design/diff`, `POST /api/apis/diff`) compare a proposal and persist
-// nothing, so they stay open.
+// nothing, so they stay open, as does `POST /api/settings/check`, which validates a draft without saving.
 
 /** Why a server is read-only: started with `--read-only`, or serving an `--as-of` snapshot. */
 export type ReadOnlyWhy = 'flag' | 'as-of';

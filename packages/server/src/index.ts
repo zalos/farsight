@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'no
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve, basename, sep } from 'node:path';
+import { dirname, join, resolve, basename, sep, posix } from 'node:path';
 import {
   GraphStore,
   readModelHubState,
@@ -99,6 +99,7 @@ import {
   ask,
   askExample,
   type FarsightConfig,
+  type ConfigOverlay,
   CONFIG_FIELDS,
   CONFIG_OVERLAY_FIELDS,
   configSchemaProblem,
@@ -126,6 +127,7 @@ import { writeSpine, fillHistorySlot, syncWork, workSourcesOf, keyOptionsOf, han
 import type { SourceConfig as WorkSourceConfig, WorkSettingsSource } from './work.js';
 import {
   ingestRepo,
+  sourceIngestOptions,
   ingestSpec,
   parseSpecText,
   readSpecSource,
@@ -179,8 +181,8 @@ export interface Source {
   /** where this source's Storybook runs, when the repo's own config or scripts do not say (ADR 9) — overrides the graph's recorded URL */
   storybook?: { url?: string; command?: string };
   /** Data declarations over the code, restricted to CONFIG_OVERLAY_FIELDS by the server. */
-  config?: FarsightConfig;
-  openapi?: { path?: string; url?: string; name?: string; phase?: string }[];
+  config?: ConfigOverlay;
+  openapi?: FarsightConfig['openapi'];
   openapiIgnore?: string[];
   // ── type 'work' only (§10). Secrets are never here: `auth.secret` is a `keychain:` reference,
   // because GET /api/settings serves this file back and the viewer rewrites it wholesale ──
@@ -252,38 +254,52 @@ function loadSettings(ws: string): Settings {
 const SOURCE_TYPES = new Set(['local', 'git', 'openapi', 'design', 'work']);
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
-/** HTTP(S) URLs use the spec reader; file references never leave the source. */
-function openapiRefProblem(ref: unknown, path: string, urlOnly = false): string | null {
+/** Registered URLs are fetched at sync; file references stay within their source. */
+function openapiRefProblem(
+  ref: unknown,
+  path: string,
+  kind: 'path' | 'url' | 'reference' = 'reference',
+): string | null {
   if (typeof ref === 'string' && ref.trim() && !ref.includes('\0')) {
-    try {
-      const u = new URL(ref);
-      if ((u.protocol === 'http:' || u.protocol === 'https:') && u.hostname) return null;
-    } catch {
-      /* a source-relative file is not a URL */
+    if (kind !== 'path') {
+      try {
+        const u = new URL(ref);
+        if ((u.protocol === 'http:' || u.protocol === 'https:') && u.hostname) return null;
+      } catch {
+        /* a source-relative file is not a URL */
+      }
     }
+    const raw = ref.trim().replace(/\\/g, '/');
+    const normalized = posix.normalize(raw);
     if (
-      !urlOnly &&
-      !ref.startsWith('/') &&
-      !ref.includes('..') &&
-      !ref.includes('\\') &&
-      !/^[a-z][a-z\d+.-]*:/i.test(ref)
+      kind !== 'url' &&
+      !raw.startsWith('/') &&
+      !/^[a-z][a-z\d+.-]*:/i.test(raw) &&
+      normalized !== '..' &&
+      !normalized.startsWith('../')
     )
       return null;
   }
-  return `${path} must be ${urlOnly ? 'an HTTP(S) URL' : 'source-relative, or an HTTP(S) URL'}`;
+  const expected =
+    kind === 'url' ? 'an HTTP(S) URL' : kind === 'path' ? 'source-relative' : 'source-relative, or an HTTP(S) URL';
+  return `${path} must be ${expected}`;
+}
+
+function openapiEntriesProblem(entries: unknown, path: string): string | null {
+  const schemaProblem = configSchemaProblem({ openapi: entries }, 'config');
+  if (schemaProblem) return schemaProblem.replace('config.openapi', path);
+  for (const [i, entry] of (entries as NonNullable<FarsightConfig['openapi']>).entries()) {
+    const at = `${path}[${i}]`;
+    if ((entry.path === undefined) === (entry.url === undefined)) return `${at} must name exactly one of path or url`;
+    const field = entry.url === undefined ? 'path' : 'url';
+    const problem = openapiRefProblem(entry[field], `${at}.${field}`, field);
+    if (problem) return problem;
+  }
+  return null;
 }
 
 function openapiEntryProblem(entry: unknown, path: string): string | null {
-  if (!object(entry)) return `${path} must be an object`;
-  for (const key of Object.keys(entry))
-    if (!['path', 'url', 'name', 'phase'].includes(key)) return `${path}.${key} is not an OpenAPI registration field`;
-  if ((entry.path === undefined) === (entry.url === undefined)) return `${path} must name exactly one of path or url`;
-  const field = entry.url === undefined ? 'path' : 'url';
-  const problem = openapiRefProblem(entry[field], `${path}.${field}`, field === 'url');
-  if (problem) return problem;
-  for (const key of ['name', 'phase'])
-    if (entry[key] !== undefined && typeof entry[key] !== 'string') return `${path}.${key} must be a string`;
-  return null;
+  return openapiEntriesProblem([entry], path)?.replace(`${path}[0]`, path) ?? null;
 }
 
 /**
@@ -333,31 +349,37 @@ export function settingsProblem(body: unknown): string | null {
       // never echo it: it may be a pasted token
       return `sources[${i}].auth.secret must be a keychain: or env: reference — secrets never go in settings`;
     }
+    if (x.type !== 'local' && x.type !== 'git') {
+      for (const key of ['config', 'openapi', 'openapiIgnore'] as const)
+        if (x[key] !== undefined) return `sources[${i}].${key} is only supported on local or git sources`;
+    }
     if (x.config !== undefined) {
       const path = `sources[${i}].config`;
       if (!object(x.config)) return `${path} must be an object`;
-      for (const key of Object.keys(x.config)) {
+      const config = Object.fromEntries(
+        Object.entries(x.config).filter(([key]) => !key.startsWith('$') && !key.startsWith('//')),
+      );
+      for (const key of Object.keys(config)) {
         if (!(CONFIG_OVERLAY_FIELDS as readonly string[]).includes(key))
           return (CONFIG_FIELDS as readonly string[]).includes(key)
             ? `${path}.${key} is not a workspace overlay field — a path block stays in the repository's farsight.config.json`
             : `${path}.${key} is not a farsight.config.json field`;
       }
-      for (const key of Object.keys(x.config))
+      for (const key of Object.keys(config))
         if (!(CONFIG_FIELDS as readonly string[]).includes(key)) return `${path}.${key} is not in this build`;
-      const problem = configSchemaProblem(x.config, path);
+      const problem = configSchemaProblem(config, path);
       if (problem) return problem;
     }
     if (x.openapi !== undefined) {
-      if (!Array.isArray(x.openapi)) return `sources[${i}].openapi must be an array`;
-      for (const [j, entry] of x.openapi.entries()) {
-        const problem = openapiEntryProblem(entry, `sources[${i}].openapi[${j}]`);
-        if (problem) return problem;
-      }
+      const problem = openapiEntriesProblem(x.openapi, `sources[${i}].openapi`);
+      if (problem) return problem;
     }
     if (x.openapiIgnore !== undefined) {
       if (!Array.isArray(x.openapiIgnore)) return `sources[${i}].openapiIgnore must be a string array`;
-      for (const [j, value] of x.openapiIgnore.entries())
-        if (typeof value !== 'string') return `sources[${i}].openapiIgnore[${j}] must be a string`;
+      for (const [j, value] of x.openapiIgnore.entries()) {
+        const problem = openapiRefProblem(value, `sources[${i}].openapiIgnore[${j}]`);
+        if (problem) return problem;
+      }
     }
   }
   return null;
@@ -437,12 +459,7 @@ export async function syncSources(ws: string, settings: Settings, graphPath: str
       // ingestRepo applies the repo's farsight.config.json itself (before + after the spec pass)
       const fragment = await ingestRepo(dir, {
         repoName: source.name,
-        exclude: source.exclude,
-        ...(source.config
-          ? { configOverlay: { config: source.config, from: `.farsight/settings.json → sources[${source.id}].config` } }
-          : {}),
-        openapiRegistered: source.openapi,
-        openapiIgnored: source.openapiIgnore,
+        ...sourceIngestOptions(source),
       });
       store.roots[fragment.repo] = dir;
       store.addFragment(fragment);
@@ -3072,12 +3089,7 @@ export function serveGraph(
         src.openapi = (src.openapi ?? []).filter((e) => (e.url ?? e.path) !== ref);
         src.openapiIgnore = (src.openapiIgnore ?? []).filter((p) => p !== ref);
         if (deleting) src.openapiIgnore.push(ref);
-        else
-          src.openapi.push({
-            ...(isSpecUrl(ref) ? { url: ref } : { path: ref }),
-            ...(item.name !== undefined ? { name: item.name } : {}),
-            ...(item.phase !== undefined ? { phase: item.phase } : {}),
-          });
+        else src.openapi.push(item);
         const invalid = settingsProblem(settings);
         if (invalid) return send(400, JSON.stringify({ error: invalid }));
         try {

@@ -45,6 +45,7 @@ import {
   scopeOfDir,
   stringList,
   CONFIG_FIELDS,
+  CONFIG_OVERLAY_FIELDS,
   ROOT_ONLY_CONFIG_FIELDS,
 } from '@farsight/core';
 import { collectFiles } from './files.js';
@@ -132,6 +133,8 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
         meta.notes.push(`${JSON.stringify(key)} is not a farsight.config.json field; ${path}'s was ignored.`);
         continue;
       }
+      // This loop reads repository files only. The overlay inserted below has root scope (dir '.')
+      // even though root is false, so its root-only fields must not pass through this rejection.
       if (!root && (ROOT_ONLY_CONFIG_FIELDS as readonly string[]).includes(key)) {
         ignored.push(key);
         meta.notes.push(`${key} is root-only; ${path}'s was ignored.`);
@@ -149,6 +152,22 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
   if (options.configOverlay) {
     const { from: path, config: given } = options.configOverlay;
     const config = structuredClone(given);
+    const fields: string[] = [];
+    const ignored: string[] = [];
+    for (const key of Object.keys(config)) {
+      if (key.startsWith('$') || key.startsWith('//')) {
+        delete (config as Record<string, unknown>)[key];
+        continue;
+      }
+      if (
+        !(CONFIG_OVERLAY_FIELDS as readonly string[]).includes(key) ||
+        !(CONFIG_FIELDS as readonly string[]).includes(key)
+      ) {
+        ignored.push(key);
+        meta.notes.push(`${JSON.stringify(key)} is not a supported workspace overlay field; ${path}'s was ignored.`);
+        delete (config as Record<string, unknown>)[key];
+      } else fields.push(key);
+    }
     // Root repository declarations keep their word. Matcher lists still union when applied.
     for (const field of ['glossary', 'gateTiers', 'lifecycle'] as const) {
       const block = config[field];
@@ -157,7 +176,7 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
       for (const key of Object.keys(block)) {
         if (!Object.hasOwn(root, key)) continue;
         if (JSON.stringify(block[key]) !== JSON.stringify(root[key]))
-          addConflict(meta, field === 'gateTiers' ? 'overlay' : field, key, [CONFIG_FILE, path], CONFIG_FILE);
+          addConflict(meta, field === 'gateTiers' ? 'gateTier' : field, key, [CONFIG_FILE, path], CONFIG_FILE);
         delete block[key];
       }
     }
@@ -167,7 +186,7 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
         const first = root.get(d.id);
         if (!first) return true;
         if (JSON.stringify(first) !== JSON.stringify(d))
-          addConflict(meta, 'overlay', `decisions.${d.id}`, [CONFIG_FILE, path], CONFIG_FILE);
+          addConflict(meta, 'decision', d.id, [CONFIG_FILE, path], CONFIG_FILE);
         return false;
       });
     }
@@ -178,13 +197,13 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
       dir: '.',
       root: false,
       from: 'workspace',
-      fields: Object.keys(given),
-      ignored: [],
+      fields,
+      ignored,
     });
   }
   ws.merged = mergeConfigs(ws.files, meta, ws.stores);
-  markWorkspaceConflicts(meta);
   meta.conflicts.push(...glossaryConflicts(ws.files));
+  markWorkspaceConflicts(meta);
   // the words the files give, for the front door's glossary strip: one per key, the widest file's word (a nested
   // file's word holds only under its folder, so the source-wide one speaks for the application)
   const words = new Map<string, NonNullable<ConfigMeta['glossary']>[number]>();
@@ -271,6 +290,50 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
     const c = f.config;
     const where = (field: string) => `${f.path} → ${field}`;
     if (f.from === 'workspace') {
+      // List/rebase rules below and matchers applied per file keep their own merge rules.
+      // Every other root-scoped overlay block reaches merged without a new field-specific case.
+      const handledFields = new Set([
+        ...Object.keys(matcherFields(c)),
+        'setup',
+        'validators',
+        'internalRoutes',
+        'plumbing',
+        'design',
+        'openapi',
+        'tests',
+        'storybook',
+        'externals',
+        'stores',
+        'lifecycle',
+        'decisions',
+      ]);
+      const fields = merged as Record<string, unknown>;
+      for (const [key, value] of Object.entries(c)) {
+        if (!Object.hasOwn(merged, key))
+          fields[key] =
+            !handledFields.has(key) && Array.isArray(value) ? dedupeBy(value, (item) => JSON.stringify(item)) : value;
+        else if (!handledFields.has(key)) {
+          const first = fields[key];
+          const conflict = (name: string) => addConflict(meta, 'field', name, [rootFile!.path, f.path], rootFile!.path);
+          if (Array.isArray(first) && Array.isArray(value)) {
+            fields[key] = dedupeBy([...first, ...value], (item) => JSON.stringify(item));
+          } else if (
+            first &&
+            value &&
+            typeof first === 'object' &&
+            typeof value === 'object' &&
+            !Array.isArray(first) &&
+            !Array.isArray(value)
+          ) {
+            const rootBlock = first as Record<string, unknown>;
+            fields[key] = { ...value, ...rootBlock };
+            for (const [entry, given] of Object.entries(value)) {
+              if (Object.hasOwn(rootBlock, entry) && JSON.stringify(rootBlock[entry]) !== JSON.stringify(given))
+                conflict(`${key}.${entry}`);
+            }
+          } else if (JSON.stringify(first) !== JSON.stringify(value)) conflict(key);
+        }
+      }
       for (const field of ['setup', 'validators', 'internalRoutes'] as const)
         if (c[field]) merged[field] = union(merged[field], c[field]);
     }

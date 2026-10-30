@@ -165,6 +165,8 @@ jobs:
       - run: pnpm build
       - name: Verify the generated graph contract
         run: node scripts/graph-schema.mjs --check
+      - name: Verify the embedded config schema
+        run: node scripts/config-schema.mjs --check
       # The changed packages, their dependents and the packages whose tests read them, as the selector worked them
       # out: one `pnpm --filter <name>` each, every name checked against the workspace first. A missing scope or a
       # missing or empty list under `packages` tests every package.

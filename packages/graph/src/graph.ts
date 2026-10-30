@@ -1196,7 +1196,7 @@ export interface ConfigMeta {
   files: { path: string; dir: string; root: boolean; fields: string[]; ignored: string[]; from?: 'workspace' }[];
   /** two files said different things about one key; `kept` is the file whose word stands */
   conflicts: {
-    kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag' | 'lifecycle' | 'overlay';
+    kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag' | 'lifecycle' | 'gateTier' | 'decision' | 'field';
     key: string;
     files: string[];
     kept: string;

@@ -100,13 +100,15 @@ export function openApiFilesText(
 /** How many config files one source holds (the root's and the scoped ones), and how many conflicts they have. */
 export function configCounts(meta: ConfigMeta): { files: Counted; conflicts: Counted } {
   const root = meta.files.filter((f) => f.root).length;
+  const workspace = meta.files.filter((f) => f.from === 'workspace').length;
   return {
     // the same words in the business lens: a config file is a file a person edits, whoever reads the count
     files: counted(meta.files.length, 'count.unit.configFiles', 'count.scope.source', `${SOURCE}.files`, {
       bizUnit: 'count.unit.configFiles',
       breakdown: [
         { key: 'count.part.configRoot', n: root },
-        { key: 'count.part.configScoped', n: meta.files.length - root },
+        { key: 'count.part.configScoped', n: meta.files.length - root - workspace },
+        ...(workspace ? [{ key: 'count.part.configWorkspace', n: workspace }] : []),
       ],
     }),
     conflicts: counted(
@@ -166,7 +168,12 @@ export function configFilesText(metas: Record<string, ConfigMeta> | undefined, r
     if (out.length) out.push('');
     out.push(`## ${r} — ${configSummary(meta)}`);
     for (const f of meta.files) {
-      const where = f.root ? 'root — the whole source' : `scoped to ${f.dir}/`;
+      const where =
+        f.from === 'workspace'
+          ? t('config.scope.workspace', 'hud')
+          : f.root
+            ? 'root — the whole source'
+            : `scoped to ${f.dir}/`;
       out.push(
         `${f.path} — ${where} · ${f.fields.length ? f.fields.join(', ') : 'no fields'}${f.ignored.length ? ` · ignored: ${f.ignored.join(', ')}` : ''}`,
       );

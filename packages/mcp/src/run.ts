@@ -126,7 +126,13 @@ const changedWords = (changedBy?: 'commit' | 'working-tree'): string =>
   changedBy === 'working-tree'
     ? '⚠ the files changed after this run without a new commit — the working tree differs from HEAD'
     : '⚠ the source changed after this run';
-import { ingestRepo, readSpecSource, readManifestSource, repoContentDigest } from '@farsight/parsers';
+import {
+  ingestRepo,
+  sourceIngestOptions,
+  readSpecSource,
+  readManifestSource,
+  repoContentDigest,
+} from '@farsight/parsers';
 import { registerWorkTools } from './work.js';
 import { registerConfigTools } from './config-tools.js';
 import { registerJourneysTools } from './journeys-tools.js';
@@ -2402,7 +2408,7 @@ export function createMcpServer(
    */
   function digestCheck(): (repo: string) => boolean | undefined {
     const seen = new Map<string, boolean | undefined>();
-    const excludes = workspaceExcludes();
+    const options = workspaceOptions();
     return (repo: string) => {
       if (seen.has(repo)) return seen.get(repo);
       let v: boolean | undefined;
@@ -2410,9 +2416,7 @@ export function createMcpServer(
         const recorded = store.repoMeta(repo)?.sourceDigest;
         const root = store.roots[repo];
         v =
-          recorded && root && existsSync(root)
-            ? repoContentDigest(root, excludes[root] ? { exclude: excludes[root] } : {}) === recorded
-            : undefined;
+          recorded && root && existsSync(root) ? repoContentDigest(root, options[root] ?? {}) === recorded : undefined;
       } catch {
         v = undefined;
       }
@@ -2580,20 +2584,25 @@ export function createMcpServer(
     return lines;
   }
 
-  /** Exclude globs per absolute source root, from the workspace settings next to the graph — what refresh_graph and the digest check both honour. */
-  function workspaceExcludes(): Record<string, string[]> {
-    const excludeByPath: Record<string, string[]> = {};
+  /** Workspace declarations per recorded source root, shared by refresh and digest checks. */
+  function workspaceOptions(): Record<string, ReturnType<typeof sourceIngestOptions>> {
+    const options: Record<string, ReturnType<typeof sourceIngestOptions>> = {};
     try {
       const settings = JSON.parse(readFileSync(join(dirname(graphPath), '.farsight', 'settings.json'), 'utf8'));
       for (const src of settings.sources ?? []) {
-        if (typeof src.path === 'string' && Array.isArray(src.exclude)) {
-          excludeByPath[resolve(dirname(graphPath), src.path)] = src.exclude;
-        }
+        if (typeof src.id !== 'string' || (src.type !== 'local' && src.type !== 'git')) continue;
+        const root =
+          src.type === 'git'
+            ? store.roots[src.name]
+            : typeof src.path === 'string'
+              ? resolve(dirname(graphPath), src.path)
+              : undefined;
+        if (root) options[root] = sourceIngestOptions(src);
       }
     } catch {
-      /* no workspace settings — no excludes */
+      /* no workspace settings — no workspace declarations */
     }
-    return excludeByPath;
+    return options;
   }
 
   server.registerTool(
@@ -2611,8 +2620,8 @@ export function createMcpServer(
           'graph records no source roots to re-ingest — run `farsight ingest <dir>` and restart the MCP server.',
         );
       }
-      // exclude globs live in workspace settings next to the graph, when present
-      const excludeByPath = workspaceExcludes();
+      // Read declarations once for every code source before refreshing.
+      const options = workspaceOptions();
 
       const prev = { nodes: nodes.length, edges: edges.length };
       const fresh = new GraphStore();
@@ -2623,7 +2632,7 @@ export function createMcpServer(
           continue;
         }
         // ingestRepo applies the repo's farsight.config.json itself
-        const fragment = await ingestRepo(root, { repoName: repo, exclude: excludeByPath[root] });
+        const fragment = await ingestRepo(root, { repoName: repo, ...options[root] });
         fresh.roots[repo] = root;
         fresh.addFragment(fragment);
       }

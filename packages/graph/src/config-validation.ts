@@ -16,5 +16,5 @@ export function configSchemaProblem(value: unknown, path: string): string | null
   if (e.keyword === 'required') parts.push(String(e.params.missingProperty));
   if (e.keyword === 'additionalProperties') parts.push(String(e.params.additionalProperty));
   const suffix = parts.map((p) => (/^\d+$/.test(p) ? `[${p}]` : `.${p}`)).join('');
-  return `${path}${suffix} ${e.message}`;
+  return `${path}${suffix} ${e.keyword === 'required' ? 'is required' : e.message}`;
 }
