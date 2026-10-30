@@ -49,8 +49,10 @@ test('api candidates and list use recorded metadata, filter by source and expose
       const missing = run(command, '--repo', 'missing');
       assert.notEqual(missing.status, 0);
       assert.match(missing.stderr, /No such source: missing/);
+      const missingJson = run(command, '--repo', 'missing', '--json');
+      assert.equal(missingJson.status, 1);
+      assert.deepEqual(JSON.parse(missingJson.stdout), { error: 'No such source: missing.', source: 'missing' });
     }
-    assert.notEqual(run('candidates', '--repo', 'missing', '--json').status, 0);
     writeFileSync(join(cwd, 'graph.json'), JSON.stringify({ version: 1, nodes: [], edges: [] }));
     assert.match(run('candidates').stdout, /Sync the sources to discover them/);
     assert.deepEqual(JSON.parse(run('candidates', '--json').stdout), {
@@ -98,7 +100,7 @@ test('api register/dismiss round-trip workspace settings without requiring a gra
     assert.equal(run('dismiss', 'app', 'docs/vendor-api.json').status, 0);
     assert.deepEqual(settings().sources[0].openapiIgnore, ['docs/vendor-api.json']);
     assert.equal(run('register', 'app', 'docs/vendor-api.json').status, 0);
-    assert.deepEqual(settings().sources[0].openapiIgnore, []);
+    assert.equal(Object.hasOwn(settings().sources[0], 'openapiIgnore'), false);
     assert.equal(run('register', 'app', 'https://example.com/openapi.json', '--name', 'Remote').status, 0);
     assert.equal(settings().sources[0].openapi[1].url, 'https://example.com/openapi.json');
     const before = readFileSync(file, 'utf8');

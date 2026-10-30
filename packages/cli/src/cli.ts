@@ -1354,6 +1354,7 @@ switch (command) {
       );
       if (problem) fail(problem);
       if (!source.openapi.length) delete source.openapi;
+      if (!source.openapiIgnore.length) delete source.openapiIgnore;
       if (hasFlag('into-source')) {
         if (source.type !== 'local') fail(word('config.openapi.localOnly', 'professional'));
         const root = realpathSync(resolve(source.path));
@@ -1399,8 +1400,14 @@ switch (command) {
     ]);
     if (repo && !knownRepos.has(repo) && store.allNodes().some((n) => (n.loc?.repo ?? n.id.split('::')[0]) === repo))
       knownRepos.add(repo);
-    if ((sub === 'candidates' || sub === 'list' || !sub) && repo && !knownRepos.has(repo))
-      fail(word('config.openapi.noSource', 'professional').replace('{source}', repo));
+    if ((sub === 'candidates' || sub === 'list' || !sub) && repo && !knownRepos.has(repo)) {
+      const error = word('config.openapi.noSource', 'professional').replace('{source}', repo);
+      if (hasFlag('json')) {
+        console.log(JSON.stringify({ error, source: repo }, null, 2));
+        process.exit(1);
+      }
+      fail(error);
+    }
     const candidateLines = () => openApiFilesText(store.meta.openapi, repo, true, [...knownRepos]);
     if (sub === 'candidates') {
       const entries = Object.entries(store.meta.openapi ?? {}).filter(
