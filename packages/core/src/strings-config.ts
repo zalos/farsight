@@ -31,7 +31,7 @@ export const CONFIG_STRINGS: Record<string, StringEntry> = {
   'config.nodes.missingLoc': same('names no indexed source file in this config folder (missing, ignored, excluded or unsupported).', 'The location could not be matched to a selected source file inside the folder this configuration describes.'),
   'config.nodes.missingHandler': same('names no unique indexed handler in this config folder.', 'The named target could not be resolved to exactly one known part. No placeholder or connection was added.'),
   'config.nodes.outsideLoc': same('is outside this config folder.', 'A declaration may name only a file inside the folder this configuration describes.'),
-  'config.nodes.outsideTarget': same('matches a route outside this config folder; this declaration was not applied.', 'The existing route belongs to another folder, so this scoped declaration cannot change it.'),
+  'config.nodes.outsideTarget': same('matches a part owned outside this config folder; this declaration was not applied.', 'The existing part was declared by a config outside this folder, or found in code outside it, so this scoped declaration cannot change it.'),
   'config.nodes.guardDescription': same('Gate declared in farsight.config.json: {label}.', 'A person named this check in configuration; a reader did not find its implementation.'),
   'config.nodes.missingGuard': same('matches no declared or indexed check.', 'The check label names neither a hand-made check nor a check found by the configuration rules.'),
   'count.unit.patternMatchedOne': one('1 match', 'count.unit.patternMatched'),

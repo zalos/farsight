@@ -84,7 +84,7 @@ export function declaredPathWarnings(
     const at = text.indexOf(JSON.stringify(value));
     return at < 0 ? 1 : text.slice(0, at).split('\n').length;
   };
-  const declaredIndex = new DeclaredNodeIndex(fragment.nodes, fragment.edges);
+  const declaredIndex = new DeclaredNodeIndex(fragment.nodes, fragment.edges, ws.declaredIndex);
   for (const file of ws.files) {
     let text = '';
     if (file.from !== 'workspace') {
@@ -118,12 +118,12 @@ export function declaredPathWarnings(
       if (declaration.loc) {
         const loc = declaration.loc.match(/^(.*):([1-9]\d*)$/);
         const path = loc && declaredNodePath(loc[1]!, file.dir);
-        if (!path || !files.has(path))
+        if (!path || !files.has(path) || !ws.hasFile?.(path))
           note('loc', declaration.loc, t(path ? 'config.nodes.missingLoc' : 'config.nodes.outsideLoc', 'professional'));
       }
       const scope = scopeOfDir(file.dir);
       const target = declaredNodeTarget(declaredIndex, declaration, fragment.repo);
-      if (target?.loc && scope && !scope(target))
+      if (target && !declaredIndex.inScope(target, file.dir, scope))
         note('name', declaration.name, t('config.nodes.outsideTarget', 'professional'));
       if (declaration.kind === 'route') {
         if (declaration.handler && !declaredNodeHandler(declaredIndex, declaration.handler, fragment.repo, file.dir))

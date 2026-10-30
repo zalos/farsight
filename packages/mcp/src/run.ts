@@ -38,6 +38,7 @@ import {
   resolveModelHubDir,
   stitchHttp,
   apiSurface,
+  apiImplementedCount,
   consumersOf,
   graphToSpec,
   reconcile,
@@ -2947,11 +2948,9 @@ export function createMcpServer(
           lines.push(
             `${a.kind === 'spec' ? '▣' : '▢'} ${a.name}${a.version ? ` v${a.version}` : ''} — repo ${a.repo} — \`${a.id}\``,
           );
+          lines.push(`   ${a.kind === 'spec' ? `spec: ${a.specPath}` : t('api.list.noSpec', 'professional')}`);
           lines.push(
-            `   ${a.kind === 'spec' ? `spec: ${a.specPath}` : 'implied from code — no spec on file (api_spec generates one)'}`,
-          );
-          lines.push(
-            `   operations ${c.operations} · declared ${c.declared} · implemented ${c.implemented} · not implemented ${c.notImplemented}${a.specSource ? ' (spec-only source — not a gap)' : ''} · undocumented ${c.undocumented} · consumers ${c.consumers} · gated ${c.gated} · drift ${c.drift}`,
+            `   operations ${c.operations} · declared ${c.declared} · ${c.implementedBreakdown ? t('api.supplied', 'professional') : 'implemented'} ${c.implemented}${c.implementedBreakdown ? ` (${breakdownText(apiImplementedCount(c))})` : ''} · not implemented ${c.notImplemented}${a.specSource ? ' (spec-only source — not a gap)' : ''} · undocumented ${c.undocumented} · consumers ${c.consumers} · gated ${c.gated} · drift ${c.drift}`,
           );
         }
         return text(lines.join('\n'));
@@ -2959,7 +2958,7 @@ export function createMcpServer(
       const a = apis.find((x) => x.id === api);
       if (!a) return text(`no API surface with id ${api}. Known: ${apis.map((x) => x.id).join(', ')}`);
       const lines = [
-        `${a.name}${a.version ? ` v${a.version}` : ''} — ${a.kind === 'spec' ? a.specPath : 'implied from code'} — repo ${a.repo}`,
+        `${a.name}${a.version ? ` v${a.version}` : ''} — ${a.kind === 'spec' ? a.specPath : t('api.list.noSpec', 'professional')} — repo ${a.repo}`,
         '',
       ];
       for (const op of a.operations.slice(0, 80)) {

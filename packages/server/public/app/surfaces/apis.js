@@ -10,7 +10,7 @@ import { t, proseHtml } from '../strings.js';
 import { sym } from '../sym.js';
 import { vsl, scopeLabel } from '../lib/graph-render.js';
 import { tipAttrs, registerTip, numberTip, tipSource } from '../lib/tooltip.js';
-import { unCode } from '../lib/counted.js';
+import { unCode, countWords, partRows } from '../lib/counted.js';
 import { emptyHtml } from '../lib/empty-state.js';
 
 /** True in the business lens: no methods, paths, identifiers or spec lines. @group APIs */
@@ -29,10 +29,11 @@ registerTip(
     a &&
     numberTip({
       count: a.n,
-      of: 'apis.count.' + a.k,
+      of: a.breakdown ? 'api.supplied' : 'apis.count.' + a.k,
       scope: 'surf.scope.api',
       source: tipSource('/api/apis'),
       grammarKey: 'apis.def.' + a.k,
+      breakdown: a.breakdown ? { rows: partRows(a.breakdown) } : undefined,
     }) +
       '<p class="tip-p">' +
       esc(a.spec ? t('apis.specSource') : t('apis.def.' + a.k)) +
@@ -137,7 +138,7 @@ function cardHtml(a) {
     (a.version ? '<span class="api-ver">v' + esc(a.version) + '</span>' : '') +
     '</h2>' +
     '<span class="api-kind">' +
-    esc(a.kind === 'spec' ? t('apis.kindSpec') : t('apis.kindImplied')) +
+    esc(a.kind === 'spec' ? t('apis.kindSpec') : t('api.list.noSpec')) +
     ' · ' +
     esc(a.repo) +
     '</span>' +
@@ -157,9 +158,8 @@ function cardHtml(a) {
 
 /** The counts row — each number carries its definition as a tooltip (numbers name their definition; P3's metric objects take over).
  * @group APIs */
-function countsHtml(c, specSource, api) {
-  // one vocabulary with the CLI and MCP: declared = named in the spec · implemented = with source ·
-  // not implemented = declared, no code (never a warning on a spec-only source — there is no code to be missing)
+export function countsHtml(c, specSource, api) {
+  // The shared count distinguishes code evidence from a person's declaration when both are supplied.
   const keys = [
     'operations',
     'declared',
@@ -175,7 +175,11 @@ function countsHtml(c, specSource, api) {
     keys
       .map((k) => {
         const warn = (k === 'drift' || (k === 'notImplemented' && !specSource) || k === 'undocumented') && c[k] > 0;
-        const tip = tipAttrs({ id: 'apiCount', args: { k, n: c[k], spec: !!(k === 'notImplemented' && specSource) } });
+        const breakdown = k === 'implemented' ? c.implementedBreakdown : undefined;
+        const tip = tipAttrs({
+          id: 'apiCount',
+          args: { k, n: c[k], breakdown, spec: !!(k === 'notImplemented' && specSource) },
+        });
         // drift is never a bare number: it opens one sentence per kind of difference
         if (k === 'drift' && c[k] > 0 && api) {
           return (
@@ -194,8 +198,12 @@ function countsHtml(c, specSource, api) {
           '><b>' +
           c[k] +
           '</b><span>' +
-          esc(t('apis.count.' + k)) +
-          '</span></span>'
+          esc(t(breakdown ? 'api.supplied' : 'apis.count.' + k)) +
+          '</span>' +
+          (breakdown
+            ? '<small>' + breakdown.map((part) => esc(countWords(part.key, part.n))).join(' · ') + '</small>'
+            : '') +
+          '</span>'
         );
       })
       .join('') +
@@ -281,7 +289,7 @@ async function loadDetail(el, apiId, route) {
     '</h1>' +
     (a.version ? '<span class="api-ver">v' + esc(a.version) + '</span>' : '') +
     '<span class="api-kind">' +
-    esc(a.kind === 'spec' ? t('apis.kindSpec') : t('apis.kindImplied')) +
+    esc(a.kind === 'spec' ? t('apis.kindSpec') : t('api.list.noSpec')) +
     ' · ' +
     esc(a.repo) +
     '</span>' +

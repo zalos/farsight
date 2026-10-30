@@ -301,3 +301,112 @@ test('nested route collisions outside the folder are audited without attaching a
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('declared locations follow gitignore and workspace selection for every file extension', async () => {
+  const dir = fixture({
+    '.gitignore': '.env\nprivate/\n',
+    '.env': 'FAKE_PRIVATE_VALUE=never-expose',
+    'private/settings.txt': 'ignored fixture',
+    'vendor/settings.txt': 'excluded fixture',
+    'legacy.pl': 'allowed unsupported file',
+    'farsight.config.json': {
+      nodes: [
+        { kind: 'external', name: 'Vault', loc: '.env:1' },
+        { kind: 'external', name: 'Private', loc: 'private/settings.txt:1' },
+        { kind: 'external', name: 'Vendor', loc: 'vendor/settings.txt:1' },
+        { kind: 'external', name: 'Legacy', loc: 'legacy.pl:1' },
+      ],
+    },
+  });
+  try {
+    const f = await ingestRepo(dir, { ...opts, exclude: ['vendor/**'] });
+    for (const name of ['Vault', 'Private', 'Vendor']) {
+      assert.equal(f.nodes.find((n) => n.name === name)!.loc, undefined, name);
+      const summary = f.meta!.config!.files[0]!.nodes!.find((n) => n.name === name)!;
+      assert.match(summary.notes!.join('\n'), /nodes.loc.*names no indexed source file/);
+    }
+    assert.equal(f.nodes.find((n) => n.name === 'Legacy')!.loc?.path, 'legacy.pl');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a nested declaration cannot change root-owned nodes, including nodes with no location', async () => {
+  const dir = fixture({
+    'sub/handler.ts': 'export function run() { return true; }',
+    'farsight.config.json': {
+      nodes: [
+        { kind: 'guard', name: 'shared' },
+        { kind: 'guard', name: 'located', loc: 'sub/handler.ts:1' },
+        { kind: 'route', name: 'GET /root', guards: ['shared', 'located'] },
+      ],
+    },
+    'sub/farsight.config.json': {
+      nodes: [
+        { kind: 'guard', name: 'shared', tier: 'policy', requires: 'sub.only', business: 'Nested override.' },
+        { kind: 'guard', name: 'located', tier: 'business', requires: 'sub.only' },
+        { kind: 'route', name: 'GET /root', handler: 'handler.ts::run', guards: ['local'], business: 'Nested route.' },
+        { kind: 'guard', name: 'local', requires: 'local.only' },
+        { kind: 'route', name: 'GET /nested', guards: ['shared', 'local'] },
+      ],
+    },
+    'openapi.json': {
+      openapi: '3.0.0',
+      info: { title: 'Ownership', version: '1' },
+      paths: { '/root': { get: { responses: { '200': { description: 'OK' } } } } },
+    },
+  });
+  try {
+    const f = await ingestRepo(dir, opts);
+    for (const name of ['shared', 'located']) {
+      const guard = f.nodes.find((n) => n.id === `app::guard::${name}`)!;
+      assert.equal(guard.gateTier, undefined);
+      assert.equal(guard.facets?.business?.description, undefined);
+      assert.ok(f.edges.filter((e) => e.kind === 'guards' && e.from === guard.id).every((e) => !e.meta?.requires));
+    }
+    const root = f.nodes.find((n) => n.name === 'GET /root')!;
+    assert.equal(root.contract?.status, 'both');
+    assert.equal(root.facets?.business?.description, undefined);
+    assert.ok(!f.edges.some((e) => e.kind === 'calls' && e.from === root.id));
+    assert.ok(!f.edges.some((e) => e.kind === 'guards' && e.to === root.id && e.from === 'app::guard::local'));
+    assert.ok(f.edges.some((e) => e.from === 'app::guard::shared' && e.to === 'app::route::GET /nested'));
+    assert.ok(f.edges.some((e) => e.from === 'app::guard::local' && e.meta?.requires === 'local.only'));
+    const summaries = f.meta!.config!.files.find((c) => c.path === 'sub/farsight.config.json')!.nodes!;
+    for (const name of ['shared', 'located', 'GET /root']) {
+      assert.match(
+        summaries.find((n) => n.name === name)!.notes!.join('\n'),
+        /sub\/farsight.config.json:\d+ → nodes.name.*owned outside this config folder/,
+      );
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('only config-renamed guards acquire a label alias, retained through the spec pass and audit', async () => {
+  const dir = fixture({
+    'auth.ts': 'export function checkToken() { return true; }',
+    'farsight.config.json': {
+      guards: { sessionFn: ['requireSession'], token: ['checkToken'] },
+      nodes: [
+        { kind: 'guard', name: 'requireSession: sessionFn' },
+        { kind: 'route', name: 'GET /aliases', guards: ['sessionFn', 'token'] },
+        { kind: 'route', name: 'GET /literal', guards: ['requireSession: sessionFn'] },
+      ],
+    },
+  });
+  try {
+    const f = await ingestRepo(dir, opts);
+    const aliases = f.edges.filter((e) => e.kind === 'guards' && e.to === 'app::route::GET /aliases');
+    assert.deepEqual(
+      new Set(aliases.map((e) => e.from)),
+      new Set(['app::guard::config:sessionFn', 'app::auth.ts::checkToken']),
+    );
+    assert.ok(
+      f.edges.some((e) => e.from === 'app::guard::requireSession: sessionFn' && e.to === 'app::route::GET /literal'),
+    );
+    assert.ok(!f.meta!.config!.notes.length, f.meta!.config!.notes.join('\n'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
