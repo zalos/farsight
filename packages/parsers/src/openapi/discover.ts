@@ -7,6 +7,7 @@
  */
 import { closeSync, openSync, readSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { relative, basename, resolve, isAbsolute } from 'node:path';
+import { t } from '@farsight/core';
 import { collectFiles } from '../shared/files.js';
 import type { IngestOptions } from '../types.js';
 import { parseSpecText, readSpecSource, isSpecUrl, type ParsedSpec } from './read.js';
@@ -98,8 +99,8 @@ export async function discoverSpecs(
     try {
       if (!isSpecUrl(ref)) {
         const path = resolve(repoRoot, ref);
-        if (!insideSource(repoRoot, path)) throw new Error('path leaves the source');
-        if (statSync(path).size > MAX_BYTES) throw new Error('document is larger than 8 MiB');
+        if (!insideSource(repoRoot, path)) throw new Error(t('config.openapi.outsideSource', 'professional'));
+        if (statSync(path).size > MAX_BYTES) throw new Error(t('config.openapi.tooLarge', 'professional'));
       }
       const parsed = await readSpecSource(ref, repoRoot);
       specs.push({
@@ -115,7 +116,7 @@ export async function discoverSpecs(
       // a declaration that names no file says so in words, without the absolute path the error carries
       const missing = (err as NodeJS.ErrnoException).code === 'ENOENT';
       errors.push(
-        `openapi ${ref}: ${missing ? `declared in ${d.origin === 'settings' ? '.farsight/settings.json' : 'farsight.config.json'}, but there is no file at that path` : (err as Error).message.split('\n')[0]}`,
+        `openapi ${ref}: ${missing ? t(d.origin === 'settings' ? 'config.openapi.missingSettings' : 'config.openapi.missingConfig', 'professional') : (err as Error).message.split('\n')[0]}`,
       );
     }
   }
