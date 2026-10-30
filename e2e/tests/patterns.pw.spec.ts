@@ -123,7 +123,8 @@ test('a pattern-only route reaches the Map and APIs, with declared match evidenc
   await page.locator('#gearbtn').click();
   await expect(page.locator('.cfg-pattern-row')).toContainText('custom-route');
   await expect(page.locator('.cfg-pattern-row')).toContainText('1 match');
-  await page.locator('.cfg-pattern-row .cnt-n').first().click();
+  // Hover opens after scrolling settles; a scroll closes an already pinned tip.
+  await page.locator('.cfg-pattern-row .cnt-n').first().hover();
   await expect(page.locator('#fs-tip')).toContainText('for this pattern rule');
   await page.screenshot({ path: testInfo.outputPath('pattern-report.png') });
   await page.goto(base + '#/map/' + encodeURIComponent(flowId) + '?lens=business');
