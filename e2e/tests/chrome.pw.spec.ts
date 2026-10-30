@@ -123,12 +123,18 @@ test.describe('a read-only session', () => {
       await expect(page.locator(id)).toHaveAttribute('aria-disabled', 'true');
       await expect(page.locator(id)).toHaveAttribute('data-tip-text', /read-only/);
     }
-    await expect(page.locator('#src-name')).toBeDisabled();
-    await expect(page.locator('#srcrows button.x').first()).toHaveAttribute('aria-disabled', 'true');
-    // pressed anyway, nothing is sent
-    await page.locator('#savebtn').click({ force: true });
-    await page.locator('#syncbtn').click({ force: true });
-    await page.waitForTimeout(300);
+    await expect(page.locator('#set-theme')).toBeDisabled();
+    await expect(page.locator('#settings-savebar')).toBeHidden();
+    await page.locator('.settings-rail a[href="#/settings/sources"]').click();
+    await expect(page.locator('[data-field="sources[0].name"]')).toBeDisabled();
+    const remove = page.locator('[data-source-remove]').first();
+    await expect(remove).toHaveAttribute('aria-disabled', 'true');
+    // Keyboard presses are spent by the shared read-only guard.
+    await remove.focus();
+    await remove.press('Enter');
+    const sync = page.locator('[data-sync]').first();
+    await sync.focus();
+    await sync.press('Enter');
     expect(writes).toEqual([]);
   });
 
@@ -230,7 +236,7 @@ test.describe('a read-only session, on every surface', () => {
     const walk: [string, string, string][] = [
       ['work', '#/work', '.wk-syncbtn'],
       ['an item', '#/work/' + encodeURIComponent('work::invoice-jira::INV-3'), '.wk-head'],
-      ['settings', '#/settings', '#savebtn'],
+      ['settings', '#/settings/workspace', '#set-theme'],
       [
         'the journey',
         '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?layout=table',
@@ -259,10 +265,9 @@ test.describe('a read-only session, on every surface', () => {
     await page.goto(url + '#/work');
     await expect(page.locator('.wk-ro')).toBeVisible();
     await page.locator('.wk-syncbtn').click({ force: true });
-    // the theme hint changes with the mode: a read-only server keeps no settings
-    await page.goto(url + '#/settings');
-    await page.locator('#set-theme').selectOption('light');
-    await expect(page.locator('#set-theme-note')).toHaveText(/read-only server keeps no settings/);
+    // The Settings plan treats theme as a workspace write too.
+    await page.goto(url + '#/settings/workspace');
+    await expect(page.locator('#set-theme')).toBeDisabled();
     await page.waitForTimeout(300);
     expect(writes).toEqual([]);
   });

@@ -77,11 +77,11 @@ async function openSettings(page: Page): Promise<void> {
   if (!(await page.locator('#gearbtn').isVisible())) await page.locator('#morebtn').click();
   await page.locator('#gearbtn').click();
   await expect(page.locator('#settings')).toHaveClass(/open/);
+  await page.locator('.settings-rail a[href="#/settings/agents"]').click();
 }
 
 /**
- * @covers packages/server/public/app/surfaces/settings-lessons.js::renderLessons
- * @covers packages/server/public/app/surfaces/settings-lessons.js::lessonsHtml
+ * @covers packages/server/public/app/surfaces/settings-agents.js::renderAgents
  * @covers packages/server/src/index.ts::lessonsProblem
  */
 test('Settings: lessons for agents — the empty state, a lesson added and pinned, a credential refused (here and by the server)', async ({
@@ -92,19 +92,19 @@ test('Settings: lessons for agents — the empty state, a lesson added and pinne
   await openSettings(page);
   const sec = page.locator('#set-lessons');
   await expect(sec.locator('#set-lessons-title')).toHaveText('Lessons for agents');
-  await expect(sec.locator('[data-empty="lessons"]')).toBeVisible();
-  await sec.locator('#lesson-text').fill('use keychain:farsight/jira-example for the tracker');
-  await sec.locator('#lesson-add').click();
-  await expect(sec.locator('#lesson-note')).toContainText('may not carry a token');
-  await expect(sec.locator('.les-row')).toHaveCount(0);
-  await sec.locator('#lesson-text').fill('The e2e card is Playwright; the unit card is node:test.');
-  await sec.locator('#lesson-add').click();
-  await expect(sec.locator('.les-row')).toHaveCount(1);
-  await expect(sec.locator('.les-row .les-text')).toHaveText('The e2e card is Playwright; the unit card is node:test.');
-  await expect(sec.locator('.les-row input[type=checkbox]')).toBeChecked();
-  await expect(sec.locator('.les-count')).toHaveText('1 lesson · 1 pinned');
-  await sec.locator('.les-row button.x').click();
-  await expect(sec.locator('.les-row')).toHaveCount(0);
+  await expect(sec).toContainText('No lessons yet.');
+  await sec.locator('[data-row-action="add"]').click();
+  const text = sec.locator('[data-field="lessons[0].text"]');
+  await text.fill('use keychain:farsight/jira-example for the tracker');
+  await expect(sec.locator('[data-problem-for="lessons[0].text"]')).toContainText('looks like a credential');
+  await expect(page.locator('#savebtn')).toBeDisabled();
+  await text.fill('The e2e card is Playwright; the unit card is node:test.');
+  await expect(page.locator('#savebtn')).toBeEnabled();
+  await expect(sec.locator('[data-row]')).toHaveCount(1);
+  await expect(text).toHaveValue('The e2e card is Playwright; the unit card is node:test.');
+  await expect(sec.locator('[data-field="lessons[0].pinned"]')).toBeChecked();
+  await sec.locator('[data-row-action="remove"]').click();
+  await expect(sec.locator('[data-row]')).toHaveCount(0);
   // the server refuses the same shape without echoing it — nothing is written
   const current = await (await request.get('/api/settings')).json();
   const bad = await request.put('/api/settings', {

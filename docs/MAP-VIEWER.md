@@ -684,6 +684,35 @@ front door, the header, the Portfolio and the Map; and the front door drawn iden
   `closeSettings()`, *Back* and Esc go there); the gear reads `.on` while it is open. An address no surface owns mounts
   `nowhere`: one line, *There is nothing at this address* `#/x` · *go to the front door ›*, and the address stays.
 
+## Settings — `surfaces/settings.js`
+
+Settings keeps the top bar and mounts into the surface frame. Its rail remembers the last section in this browser:
+`#/settings/workspace`, `#/settings/sources`, `#/settings/collections`, `#/settings/configuration`, and
+`#/settings/agents`. Bare `#/settings` opens the remembered section, or Workspace. Business words are Workspace,
+Systems, Collections, What the code means, and Agents. `g s` opens Settings; Back and Escape return to the previous
+surface. The content column is at most 880 px; the rail and cards use the shared theme variables.
+
+- `settings.js` owns the draft, routing inside Settings, debounced `POST /api/settings/check`, server sentences
+  beside their fields, the unsaved Save/Discard bar, and the saved Sync to apply door. `S.SETTINGS` is the loaded
+  settings; every section edits the one separate draft in place. Before PUT, a fresh GET is merged with the draft:
+  untouched fields take the server value, edited fields win, and sources are matched by id. Concurrent OpenAPI
+  registration, ignore lists, overlays and lessons survive unrelated saves. The config report's optional saved
+  callback reconciles its immediate Register/Dismiss writes into the same draft.
+- `settings-workspace.js`: theme preview, default register, landing surface and experiments.
+- `settings-sources.js`: typed source cards, Storybook settings, work credentials as references only and permission
+  grants. A prefix-only transport guard discards literal secrets before any request; the server remains the settings
+  validator. Sync now refreshes every enabled source, as its tip says. The server has no per-code-source sync route.
+- `settings-collections.js`: ordered collections with searchable member pickers from `lib/multi-pick.js`.
+- `settings-config.js`: the existing config report and OpenAPI doors, mounted only in Source configuration. Its
+  element ids remain stable. Fields absent from the server's `configFields`/`overlayFields` are disabled.
+- `settings-agents.js`: tool tier, answer budget, lessons and a summary of agent grants from the source permissions.
+- `lib/settings-model.js`: DOM-free section/type definitions, equality, merge, sync-impact and row operations;
+  tests import the shipped module. It is a function namespace for later overlay form folds.
+- `lib/row-editor.js`: the single table/grid primitive for collections, grants and lessons. Add, edit, remove and
+  move edit the same rows; arrow keys move among grid cells, Enter/F2 enters a cell and Escape returns to it.
+  `strings-settings.ts` supplies both registers and definitions; write controls carry `data-write`, and every draw
+  applies the shared read-only guard. Read-only also disables theme changes.
+
 ## MAP — `surfaces/map.js`, `lib/map-canvas.js`, `lib/map-model.js` (2026-10-03)
 
 Every journey on one zoomable board, the way Miro or Figma draw one (brief: `docs/proposals/map-view.md`; the agreed

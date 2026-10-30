@@ -25,6 +25,7 @@ import { CONFIG_STRINGS } from './strings-config.js';
 import { JOURNEYS_STRINGS } from './strings-journeys.js';
 import { API_POLICY_STRINGS } from './strings-api-policy.js';
 import { DESIGN_STRINGS } from './strings-design.js';
+import { SETTINGS_STRINGS } from './strings-settings.js';
 import { DOOR_STRINGS } from './strings-doors.js';
 import { LANES_STRINGS } from './strings-lanes.js';
 import { DECISION_STRINGS } from './strings-decisions.js';
@@ -170,6 +171,7 @@ export const STRINGS: Record<string, StringEntry> = {
   ...JOURNEYS_STRINGS,
   // the doors' words live in strings-doors.ts (door.*, the Map's stale and not-built marks, the board's reading floor)
   ...DOOR_STRINGS,
+  ...SETTINGS_STRINGS,
   ...API_POLICY_STRINGS,
   ...DESIGN_STRINGS,
   ...VERDICT_STRINGS,
