@@ -29,12 +29,12 @@ test.describe('Settings is named', () => {
     await expect(page.locator('#settings')).toHaveClass(/\bopen\b/);
   });
 
-  /** @covers packages/server/public/app/shell.js::renderSettings */
+  /** @covers packages/server/public/app/surfaces/settings-workspace.js::renderWorkspace */
   test('the Experiments read one flag per line, their sentence under them, never one word wide', async ({ page }) => {
     await gotoReady(page, '#/portfolio');
     await page.evaluate(() => (window as any).openSettings());
     // the Map and the action drill are no experiments since the journey page retired into the Map: one flag is left
-    const notes = page.locator('.set-flagitem .set-note');
+    const notes = page.locator('[data-field-wrap="flags.designShots"] .set-note');
     await expect(notes).toHaveCount(1);
     for (const w of await notes.evaluateAll((ns) => ns.map((n) => n.getBoundingClientRect().width)))
       expect(w).toBeGreaterThan(300);
@@ -123,12 +123,21 @@ test.describe('a read-only session', () => {
       await expect(page.locator(id)).toHaveAttribute('aria-disabled', 'true');
       await expect(page.locator(id)).toHaveAttribute('data-tip-text', /read-only/);
     }
-    await expect(page.locator('#src-name')).toBeDisabled();
-    await expect(page.locator('#srcrows button.x').first()).toHaveAttribute('aria-disabled', 'true');
-    // pressed anyway, nothing is sent
-    await page.locator('#savebtn').click({ force: true });
-    await page.locator('#syncbtn').click({ force: true });
-    await page.waitForTimeout(300);
+    await expect(page.locator('#set-theme')).toBeEnabled();
+    await page.locator('#set-theme').selectOption('light');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator('#set-theme-note')).toContainText('preview');
+    await expect(page.locator('#settings-savebar')).toBeHidden();
+    await page.locator('.settings-rail a[href="#/settings/sources"]').click();
+    await expect(page.locator('[data-field="sources[0].name"]')).toBeDisabled();
+    const remove = page.locator('[data-source-remove]').first();
+    await expect(remove).toHaveAttribute('aria-disabled', 'true');
+    // Keyboard presses are spent by the shared read-only guard.
+    await remove.focus();
+    await remove.press('Enter');
+    const sync = page.locator('[data-sync]').first();
+    await sync.focus();
+    await sync.press('Enter');
     expect(writes).toEqual([]);
   });
 
@@ -230,7 +239,7 @@ test.describe('a read-only session, on every surface', () => {
     const walk: [string, string, string][] = [
       ['work', '#/work', '.wk-syncbtn'],
       ['an item', '#/work/' + encodeURIComponent('work::invoice-jira::INV-3'), '.wk-head'],
-      ['settings', '#/settings', '#savebtn'],
+      ['settings', '#/settings/workspace', '#set-theme'],
       [
         'the journey',
         '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?layout=table',
@@ -259,10 +268,12 @@ test.describe('a read-only session, on every surface', () => {
     await page.goto(url + '#/work');
     await expect(page.locator('.wk-ro')).toBeVisible();
     await page.locator('.wk-syncbtn').click({ force: true });
-    // the theme hint changes with the mode: a read-only server keeps no settings
-    await page.goto(url + '#/settings');
+    // Theme remains a per-window preview on read-only servers.
+    await page.goto(url + '#/settings/workspace');
+    await expect(page.locator('#set-theme')).toBeEnabled();
     await page.locator('#set-theme').selectOption('light');
-    await expect(page.locator('#set-theme-note')).toHaveText(/read-only server keeps no settings/);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator('#set-theme-note')).toContainText('preview');
     await page.waitForTimeout(300);
     expect(writes).toEqual([]);
   });

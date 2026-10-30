@@ -57,10 +57,12 @@ test.describe('addresses', () => {
    * @covers packages/server/public/app/shell.js::openSettings
    * @covers packages/server/public/app/shell.js::closeSettings
    */
-  test('Settings is #/settings, under the top bar, and Back returns to where it was opened', async ({ page }) => {
+  test('Settings resolves its section address, under the top bar, and Back returns to where it was opened', async ({
+    page,
+  }) => {
     await gotoReady(page, '#/portfolio');
     await page.evaluate(() => (window as any).openSettings());
-    await expect(page).toHaveURL(/#\/settings$/);
+    await expect(page).toHaveURL(/#\/settings\/workspace$/);
     await expect(page.locator('#settings')).toBeVisible();
     await expect(page.locator('#nav')).toBeVisible();
     await expect(page.locator('#gearbtn')).toHaveClass(/\bon\b/);

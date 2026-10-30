@@ -25,6 +25,7 @@ import { CONFIG_STRINGS } from './strings-config.js';
 import { JOURNEYS_STRINGS } from './strings-journeys.js';
 import { API_POLICY_STRINGS } from './strings-api-policy.js';
 import { DESIGN_STRINGS } from './strings-design.js';
+import { SETTINGS_STRINGS } from './strings-settings.js';
 import { DOOR_STRINGS } from './strings-doors.js';
 import { LANES_STRINGS } from './strings-lanes.js';
 import { DECISION_STRINGS } from './strings-decisions.js';
@@ -170,6 +171,7 @@ export const STRINGS: Record<string, StringEntry> = {
   ...JOURNEYS_STRINGS,
   // the doors' words live in strings-doors.ts (door.*, the Map's stale and not-built marks, the board's reading floor)
   ...DOOR_STRINGS,
+  ...SETTINGS_STRINGS,
   ...API_POLICY_STRINGS,
   ...DESIGN_STRINGS,
   ...VERDICT_STRINGS,
@@ -298,7 +300,6 @@ export const STRINGS: Record<string, StringEntry> = {
   'chrome.exitFocus': same('exit focus'),
   'chrome.focusPrefix': same('focus:'),
   'chrome.scopePrefix': same('scope:'),
-  'set.surfaceByRegister': same('by register — this one opens on {s}'),
 
   // ── the flow status table (the front door, 01 §5.2) ────────────────────
   'portfolio.sub': same('Every flow the design manifest names, what is built of it, what the contract says, and what proves it runs.'),
@@ -1386,17 +1387,10 @@ export const STRINGS: Record<string, StringEntry> = {
   'sys.compareFailed': sys('Could not compare the document.'),
 
   // ── settings page ───────────────────────────────────────────────────────
-  'set.saved': same('saved ✓'),
-  'set.saveFailed': sys('save failed'),
   'set.syncing': same('syncing…'),
-  'set.syncFailedPrefix': sys('sync failed:'),
-  'set.syncedStats': same('synced: {n} nodes, {e} edges'),
   'set.noSources': same('no sources yet'),
   'set.noCollections': same('no collections yet'),
   'set.groupPrompt': same('Group name (saved as a collection):'),
-  'set.landing': same('Landing surface'),
-  'set.flags': same('Experiments'),
-  'set.flagShots': same('Keep a design shot per sync'),
   'set.flagShotsSub': same('copies each screen\u2019s design image into .farsight/cache/shots at every sync, so a past sync can be looked at rather than described \u2014 one file per distinct image, whatever the number of syncs. It keeps designs, never a picture of the running app. Off by default, per workspace, because it writes files.'),
   'set.landingSub': same('where this browser lands on open — a default, never a cage: deep links always win'),
   'set.syncConsequence': same('re-parses sources on disk · rewrites graph.json · never modifies your code'),

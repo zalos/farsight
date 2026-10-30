@@ -322,3 +322,21 @@ test('the scrubbed settings example validates', () => {
   assert.equal(source.openapi[0].name, 'Billing API (example)');
   assert.ok(existsSync(new URL(`../../../${source.path}/${source.openapi[0].path}`, import.meta.url)));
 });
+
+test('source names and ingest locations must be non-empty, through the single server check', async (t) => {
+  for (const name of ['', '  ', undefined])
+    assert.equal(settingsProblem(settings({ name })), 'sources[0].name must be a non-empty string');
+  for (const type of ['local', 'git', 'openapi', 'design'])
+    for (const path of ['', '  ', undefined])
+      assert.equal(settingsProblem(settings({ type, path })), 'sources[0].path must be a non-empty string');
+  assert.equal(settingsProblem(settings({ type: 'work', path: undefined })), null);
+  const s = await server(t);
+  const before = readFileSync(s.file, 'utf8');
+  const invalid = settings({ name: '', path: '' });
+  assert.deepEqual((await s.call('POST', '/api/settings/check', invalid)).body, {
+    ok: false,
+    problem: settingsProblem(invalid),
+  });
+  assert.equal((await s.call('PUT', '/api/settings', invalid)).status, 400);
+  assert.equal(readFileSync(s.file, 'utf8'), before);
+});

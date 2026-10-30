@@ -307,7 +307,7 @@ test.describe('chrome', () => {
   test('the light theme can be previewed without writing the shared settings', async ({ page }) => {
     const writes: string[] = [];
     await page.route('**/*', (r) => {
-      if (r.request().method() !== 'GET') {
+      if (r.request().method() !== 'GET' && !r.request().url().endsWith('/api/settings/check')) {
         writes.push(r.request().method() + ' ' + r.request().url());
         return r.abort();
       }

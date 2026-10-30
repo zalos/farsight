@@ -577,6 +577,68 @@
   .nowhere{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:13px;padding:14px 0}
   .nowhere code{font-family:var(--mono);font-size:12px;color:var(--ink)}
   .nowhere .sym{width:15px;height:15px}
+  /* Sectioned Settings: the rail stays beside one bounded content column. */
+  .settings-page{max-width:1160px;margin:0 auto;padding:28px 28px max(100px,calc(var(--settings-bar-height,0px) + 48px));font-size:13px}
+  .settings-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:28px}
+  .settings-heading h1{font-family:var(--hud);text-transform:uppercase;letter-spacing:.16em;font-size:21px;color:var(--accent);margin:0 0 8px}
+  .settings-heading p{color:var(--muted);margin:0;line-height:1.6}
+  .settings-layout{display:grid;grid-template-columns:184px minmax(0,880px);gap:28px;align-items:start}
+  .settings-rail{position:sticky;top:20px;display:flex;flex-direction:column;gap:6px}
+  .settings-rail a{display:block;padding:12px 14px;border:1px solid transparent;border-radius:5px;color:var(--muted);text-decoration:none;line-height:1.4}
+  .settings-rail a:hover{background:var(--panel);color:var(--ink)}
+  .settings-rail a[aria-current]{color:var(--accent);border-color:var(--line);background:var(--panel);box-shadow:inset 3px 0 var(--accent)}
+  .settings-content{min-width:0;max-width:880px}
+  .settings-content>h2{margin:0 0 18px;font-family:var(--hud);font-size:18px;letter-spacing:.06em;color:var(--ink)}
+  .settings-content a{color:var(--accent)}
+  .settings-content h3{margin:0;font-size:14px;font-weight:600;color:var(--ink)}
+  .settings-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}
+  .settings-field{display:flex;flex-direction:column;gap:7px;min-width:0;margin:0}
+  .settings-field label{color:var(--muted);font-size:12px;line-height:1.4}
+  .settings-field input:not([type=checkbox]),.settings-field select{width:100%;box-sizing:border-box;min-width:0;padding:8px 10px;font-size:13px}
+  .settings-field input[type=checkbox]{align-self:flex-start;width:18px;height:18px}
+  .settings-field .set-note{margin:0;line-height:1.5}
+  .settings-problem{margin:0;color:var(--err);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+  .settings-field [aria-invalid=true]{border-color:var(--err)}
+  .settings-source header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:8px}
+  .settings-type{color:var(--muted);font-size:12px}
+  .settings-source-status{color:var(--muted);overflow-wrap:anywhere;line-height:1.5;margin:6px 0}
+  .settings-source>.set-note{margin:0 0 22px}
+  .settings-source footer{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:22px;border-top:1px solid var(--line);padding-top:16px}
+  .settings-source footer [data-source-remove]{margin-left:auto}
+  .settings-permissions{margin-top:24px;border-top:1px solid var(--line);padding-top:18px}
+  .settings-permissions h3{margin-bottom:14px}
+  .settings-permissions>.settings-fields{margin-top:18px}
+  .settings-grid-scroll{overflow:auto;margin-bottom:14px}
+  .settings-grid{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+  .settings-grid th{text-align:left;color:var(--muted);font-size:11px;font-weight:500;padding:8px;border-bottom:1px solid var(--line)}
+  .settings-grid td{padding:12px 8px;vertical-align:top;border-bottom:1px solid var(--line-soft);overflow-wrap:anywhere}
+  .settings-grid td:focus{outline:2px solid var(--accent);outline-offset:-2px}
+  .settings-grid td>.settings-field>label{position:absolute;clip-path:inset(50%);width:1px;height:1px;overflow:hidden}
+  .settings-grid th:first-child{width:30%}
+  .settings-row-actions{display:flex;flex-direction:column;gap:8px}
+  .settings-row-actions .btn{font-size:11px;white-space:normal;min-width:0}
+  .settings-secret-prefix{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .settings-secret-prefix .btn{font-size:11px;white-space:normal}
+  .settings-grant-actions{display:flex;flex-direction:column;gap:8px}
+  .settings-grant-actions label{display:flex;align-items:center;gap:6px}
+  .settings-grid .mpk{min-width:0;width:100%}
+  .settings-grid .mpk-list{max-height:190px}
+  .settings-access{border-top:1px solid var(--line);padding:16px 0}
+  .settings-access p{color:var(--muted);line-height:1.6}
+  #settings-check{color:var(--err)}
+  #settings-check:empty,#savenote:empty{display:none}
+  .settings-savebar{position:fixed;bottom:27px;left:50%;transform:translateX(-50%);width:min(1104px,calc(100% - 56px));box-sizing:border-box;z-index:30;display:flex;align-items:center;gap:14px;padding:16px 20px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 -8px 32px #0002}
+  .settings-savebar>div:first-child{flex:1}
+  .settings-savebar #settings-draft-actions{display:flex;gap:14px}
+  .settings-savebar p:empty{display:none}
+  .settings-savebar #savebtn{border-color:var(--accent);color:var(--accent)}
+  .settings-savebar strong{color:var(--accent);font-weight:500}
+  .settings-savebar .consequence{display:block;margin:5px 0 0;color:var(--muted);line-height:1.5}
+  .settings-page [hidden]{display:none!important}
+  #source-add-form{margin-top:16px;padding:20px;border:1px solid var(--line);background:var(--panel)}
+  #source-add-form .settings-field{margin-bottom:14px}
+  .settings-unavailable{opacity:.6;border:1px dashed var(--line);padding:12px;margin:12px 0}
+  @media(max-width:800px){.settings-page{padding:20px 16px max(140px,calc(var(--settings-bar-height,0px) + 48px))}.settings-layout{grid-template-columns:1fr;gap:20px}.settings-rail{position:static;flex-direction:row;flex-wrap:wrap;gap:2px}.settings-rail a{padding:8px 10px}.settings-fields{grid-template-columns:1fr}.settings-savebar{width:calc(100% - 24px);flex-wrap:wrap}.settings-savebar>div{flex-basis:100%}}
   .set-wrap{max-width:860px;margin:0 auto;padding:28px 24px 80px}
   .set-wrap h1{font-family:var(--hud);text-transform:uppercase;letter-spacing:.18em;font-size:17px;color:var(--accent);margin:0 0 4px}
   .set-wrap .sub{color:var(--muted);font-size:12.5px;margin:0 0 24px}
@@ -588,19 +650,7 @@
   .src-table .mono{font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all}
   .src-table .st{font-family:var(--mono);font-size:10px}
   .st.ok{color:var(--ok)} .st.err{color:var(--err)}
-  .addrow{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-  .addrow input{flex:1;min-width:140px}
-  .coll{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line-soft);font-size:12.5px;flex-wrap:wrap}
-  .coll .mono{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
-  .set-row{display:flex;align-items:center;gap:14px;padding:6px 0;font-size:13px}
-  .set-row label{min-width:120px;color:var(--muted)}
-  .set-foot{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
   .set-note{color:var(--dim);font-size:11.5px}
-  /* the Experiments: one flag per line, its sentence under its name (it wrapped one word per line beside it) */
-  .set-flags-row{align-items:flex-start}
-  .set-flags{display:flex;flex-direction:column;gap:12px;flex:1;min-width:0}
-  .set-flagitem .set-note{display:block;margin:3px 0 0 24px;max-width:72ch;line-height:1.45}
-  .set-row .set-flag{min-width:0}
   /* a read-only session: every write control stays on screen, greyed, with its reason as the tip */
   .set-ro{margin:-12px 0 20px;padding:8px 12px;border:1px dashed var(--line);border-radius:4px;color:var(--muted);font-size:12px}
   .btn.ro-off,.x.ro-off,.sc-save.ro-off{opacity:.45;cursor:not-allowed}
@@ -1418,7 +1468,6 @@
   .jrn-cut-where{display:block;font-family:var(--mono);font-size:9.5px;color:var(--dim);margin-top:3px;word-break:break-word}
   .jrn-cut-foot{margin-top:16px;padding-top:10px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;color:var(--dim)}
   @media (prefers-reduced-motion:reduce){.jrn-cutlist{transition:none!important}}
-  .set-flag{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink);cursor:pointer}
 
   /* ── the action drill (the journey-timeline design reference 02-action-drill · the Map's action stop):
      the rail of actions, one action's beats as lanes × columns with elbow wires, the inspector on the right ── */
@@ -3294,7 +3343,6 @@
     body.rd-on .rd-table th{font-size:8.5px;padding:4px 5px}
     body.rd-on .rd-table td{padding:6px 5px}
   }
-.les-list{list-style:none;margin:6px 0;padding:0}.les-row{display:flex;gap:10px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--line)}.les-text{flex:1}
 .dd-copy{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}.dd-copy .dd-door.copy{cursor:pointer;font:inherit}.dd-copy.compact .dd-door.copy{font-size:10px;padding:0 4px}.dd-copy-l{font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.7}.dd-copied{font-family:var(--mono);font-size:11px;color:var(--ok, #6FCF8E);border:1px solid currentColor;border-radius:3px;padding:0 5px;max-width:100%;overflow-wrap:anywhere}
 .ch-agent{font-size:11px;opacity:.85;border:1px solid var(--line);border-radius:3px;padding:0 4px;margin-left:4px}
   /* ── the Map's chrome holds still (cleanup pass 2026-10-11, lane P1) ─────────────────────────────────────────
@@ -3571,82 +3619,7 @@
   <div class="presults" id="presults"></div>
 </div>
 
-<div class="settings" id="settings" role="dialog" aria-label="Settings">
-  <div class="set-wrap">
-    <h1>Settings</h1>
-    <p class="sub">Sources, collections, and appearance. Settings persist to <span style="font-family:var(--mono)">.farsight/settings.json</span> in the workspace.</p>
-    <p class="set-ro" id="set-ro" role="status" hidden></p>
-
-    <div class="set-sec">
-      <h2>Sources</h2>
-      <table class="src-table"><thead><tr><th></th><th>Name</th><th>Type</th><th>Location</th><th>Exclude (globs)</th><th>Last sync</th><th></th></tr></thead>
-      <tbody id="srcrows"></tbody></table>
-      <div class="addrow">
-        <input id="src-name" data-write placeholder="name (e.g. billing-api)"/>
-        <select id="src-type" data-write><option value="local">local folder</option><option value="git">git URL</option><option value="openapi">OpenAPI spec (file or URL)</option><option value="design">Design manifest (screens.json, file or URL)</option></select>
-        <input id="src-path" data-write placeholder="path or clone URL" style="flex:2"/>
-        <input id="src-exclude" data-write placeholder="exclude globs, e.g. examples/**, test globs" style="flex:1.5"/>
-        <button class="btn" data-write onclick="addSource()">+ Add source</button>
-      </div>
-      <div style="margin-top:14px" class="set-foot">
-        <span><button class="btn primary" id="syncbtn" data-write onclick="syncNow()"><svg class="sym"><use href="#sym-sync"/></svg> Sync &amp; re-ingest</button>
-        <span class="consequence" id="sync-consequence"></span></span>
-        <span class="set-note" id="syncnote">git sources clone/pull into .farsight/cache; local folders re-parse in place.</span>
-      </div>
-    </div>
-
-    <div class="set-sec">
-      <h2>Collections — source groups</h2>
-      <div id="collrows"></div>
-      <div class="addrow">
-        <input id="coll-name" data-write placeholder="group name (e.g. Invoice systems)"/>
-        <button class="btn" data-write onclick="addCollection()">+ New group from current scope</button>
-      </div>
-      <p class="set-note" style="margin:8px 0 0">A collection is a named group of sources — it appears as a checkable group in the source picker, so you can view several systems together (e.g. all invoice apps/APIs) or each on its own.</p>
-    </div>
-
-    <div class="set-sec" id="set-config">
-      <h2 id="set-config-title" tabindex="0">Config files</h2>
-      <p class="set-note" id="set-config-sub" style="margin:0 0 10px"></p>
-      <div id="cfgrows"></div>
-    </div>
-
-    <div class="set-sec" id="set-lessons">
-      <h2 id="set-lessons-title" tabindex="0"></h2>
-      <p class="set-note" id="set-lessons-sub" style="margin:0 0 10px"></p>
-      <div id="lessonrows"></div>
-      <div class="addrow">
-        <input id="lesson-text" data-write style="flex:3"/>
-        <button class="btn" id="lesson-add" data-write onclick="lessonAdd()"></button>
-      </div>
-      <p class="set-note warn" id="lesson-note" role="status" hidden></p>
-    </div>
-
-    <div class="set-sec">
-      <h2>Appearance & behavior</h2>
-      <div class="set-row"><label>Theme</label>
-        <select id="set-theme" onchange="previewTheme(this.value)" aria-describedby="set-theme-note"><option value="system">Follow the system</option><option value="dark">Dark (HUD)</option><option value="light">Light</option></select>
-        <span class="set-preview" id="set-theme-note" aria-live="polite"></span></div>
-      <div class="set-row"><label>Default lens</label>
-        <select id="set-lens" data-write><option value="business">Business</option><option value="hybrid">Hybrid</option><option value="code">Code</option></select></div>
-      <div class="set-row"><label id="set-landing-label"></label>
-        <select id="set-surface" data-write><option value="">(by register)</option><option value="portfolio">Portfolio</option><option value="journeys">Journeys</option><option value="codemap">Code map</option><option value="apis">APIs</option><option value="changes">Changes</option></select><span class="set-note" id="set-surface-eff"></span>
-        <span class="set-note" id="set-landing-sub"></span></div>
-      <div class="set-row set-flags-row"><label id="set-flags-label"></label>
-        <div class="set-flags">
-          <div class="set-flagitem"><label class="set-flag"><input type="checkbox" id="set-flag-shots" data-write/><span id="set-flag-shots-name"></span></label>
-            <span class="set-note" id="set-flag-shots-sub"></span></div>
-        </div></div>
-    </div>
-
-    <div class="set-foot">
-      <span><button class="btn primary" id="savebtn" data-write onclick="saveSettings()">Save settings</button>
-      <span class="consequence" id="save-consequence"></span></span>
-      <button class="btn" onclick="closeSettings()">Back</button>
-      <span class="set-note" id="savenote"></span>
-    </div>
-  </div>
-</div>
+<div class="settings" id="settings"></div>
 
 <div class="modelhub" id="modelhub" role="dialog" aria-label="Model Hub">
   <div class="mh-wrap">

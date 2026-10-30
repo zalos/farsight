@@ -338,10 +338,12 @@ export function settingsProblem(body: unknown): string | null {
       openapiIgnore?: unknown;
     };
     if (typeof x.id !== 'string' || !x.id) return `sources[${i}].id must be a non-empty string`;
-    if (typeof x.name !== 'string') return `sources[${i}].name must be a string`;
+    if (typeof x.name !== 'string' || !x.name.trim()) return `sources[${i}].name must be a non-empty string`;
     if (typeof x.type !== 'string' || !SOURCE_TYPES.has(x.type))
       return `sources[${i}].type must be one of ${[...SOURCE_TYPES].join(', ')}`;
     if (x.path !== undefined && typeof x.path !== 'string') return `sources[${i}].path must be a string`;
+    if (['local', 'git', 'openapi', 'design'].includes(x.type) && !(typeof x.path === 'string' && x.path.trim()))
+      return `sources[${i}].path must be a non-empty string`;
     if (x.type === 'git' && typeof x.path === 'string' && x.path.startsWith('-'))
       return `sources[${i}].path is not a clone URL`;
     const secret = x.auth?.secret;
