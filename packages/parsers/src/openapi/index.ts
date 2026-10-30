@@ -7,7 +7,7 @@
  * the `api` node. Freshness meta folds the spec files in.
  */
 import { createHash } from 'node:crypto';
-import type { GraphFragment, OpenApiMeta } from '@farsight/core';
+import type { GraphFragment, OpenApiMeta, OpenApiDocument } from '@farsight/core';
 import { applySpecToFragment, specOperations, specToFragment, type ReconcileResult } from '@farsight/core';
 import { loadWorkspaceConfig, type WorkspaceConfig } from '../shared/config-files.js';
 import type { IngestOptions } from '../types.js';
@@ -19,7 +19,7 @@ export { discoverSpecs } from './discover.js';
 
 export interface SpecApplication {
   path: string;
-  origin: 'file' | 'config' | 'settings';
+  origin: OpenApiDocument['origin'];
   result: ReconcileResult;
 }
 

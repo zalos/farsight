@@ -57,7 +57,12 @@ export function registerConfigTools(ctx: ConfigToolsContext): ConfigTools {
         }
         return text(JSON.stringify(picked, null, 2));
       }
-      return text([...configFilesText(metas, repo), ...openApiFilesText(graphMeta.openapi, repo)].join('\n'));
+      return text(
+        [
+          ...configFilesText(metas, repo),
+          ...openApiFilesText(graphMeta.openapi, repo, false, Object.keys(graphMeta.repos ?? {})),
+        ].join('\n'),
+      );
     },
   );
   return {

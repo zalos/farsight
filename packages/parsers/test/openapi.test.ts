@@ -6,7 +6,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, relative } from 'node:path';
-import { ingestRepo, parseSpecText, discoverSpecs, ingestSpec, specToYaml, readSpecSource } from '../dist/index.js';
+import {
+  ingestRepo,
+  parseSpecText,
+  discoverSpecs,
+  applySpecs,
+  ingestSpec,
+  specToYaml,
+  readSpecSource,
+} from '../dist/index.js';
 import { graphToSpec, buildIndex } from '@farsight/core';
 
 const invoiceApp = resolve(import.meta.dirname, '../../../examples/invoice-app');
@@ -592,6 +600,46 @@ test('discovery refuses local declarations and candidate symlinks outside the so
   const large = await discoverSpecs(dir, {}, [{ path: 'large.json' }]);
   assert.deepEqual(large.specs, []);
   assert.deepEqual(large.errors, ['openapi large.json: document is larger than 8 MiB']);
+});
+
+test('discovery reports named symlinks and linked openapi folders that leave the source', async () => {
+  const outside = tempRepo({
+    'billing.yaml': 'openapi: 3.0.0\npaths: {}',
+    'openapi/billing.yaml': 'openapi: 3.0.0\npaths: {}',
+  });
+  const dir = tempRepo({});
+  symlinkSync(join(outside, 'billing.yaml'), join(dir, 'openapi.yaml'));
+  symlinkSync(join(outside, 'openapi'), join(dir, 'openapi'), 'dir');
+  const { specs, errors } = await discoverSpecs(dir, {});
+  assert.deepEqual(specs, []);
+  assert.deepEqual(errors, [
+    'openapi openapi.yaml: path leaves the source',
+    'openapi openapi/billing.yaml: path leaves the source',
+  ]);
+});
+
+test('normalized declarations keep their phase and apply each path once', async () => {
+  const dir = tempRepo({ 'openapi.yaml': 'openapi: 3.0.0\npaths: {}' });
+  const { specs, errors } = await discoverSpecs(dir, {}, [
+    { path: './openapi.yaml', phase: 'preview' },
+    { path: 'openapi.yaml', phase: 'release' },
+  ]);
+  assert.deepEqual(errors, []);
+  assert.equal(specs.length, 1);
+  assert.equal(specs[0]!.path, 'openapi.yaml');
+  assert.equal(specs[0]!.phase, 'preview');
+  writeFileSync(
+    join(dir, 'farsight.config.json'),
+    JSON.stringify({
+      openapi: [
+        { path: './openapi.yaml', phase: 'preview' },
+        { path: 'openapi.yaml', phase: 'release' },
+      ],
+    }),
+  );
+  const applied = await applySpecs({ repo: 'app', nodes: [], edges: [] }, dir, {});
+  assert.equal(applied.applied.length, 1);
+  assert.equal(applied.applied[0]!.result.policy.phase, 'preview');
 });
 
 test('URL reads enforce the 8 MiB cap from headers and streamed bytes, including dishonest lengths', async (t) => {

@@ -53,6 +53,10 @@ test('api candidates and list use recorded metadata, filter by source and expose
     assert.notEqual(run('candidates', '--repo', 'missing', '--json').status, 0);
     writeFileSync(join(cwd, 'graph.json'), JSON.stringify({ version: 1, nodes: [], edges: [] }));
     assert.match(run('candidates').stdout, /Sync the sources to discover them/);
+    assert.deepEqual(JSON.parse(run('candidates', '--json').stdout), {
+      message: run('candidates').stdout.trim(),
+      next: 'POST /api/sync',
+    });
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
@@ -89,7 +93,7 @@ test('api register/dismiss round-trip workspace settings without requiring a gra
     assert.deepEqual(settings().sources[0].exclude, ['generated/**']);
     r = run('dismiss', 'app-id', 'docs/vendor-api.json');
     assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(settings().sources[0].openapi, []);
+    assert.equal(Object.hasOwn(settings().sources[0], 'openapi'), false);
     assert.deepEqual(settings().sources[0].openapiIgnore, ['docs/vendor-api.json']);
     assert.equal(run('dismiss', 'app', 'docs/vendor-api.json').status, 0);
     assert.deepEqual(settings().sources[0].openapiIgnore, ['docs/vendor-api.json']);
@@ -119,6 +123,44 @@ test('api register/dismiss round-trip workspace settings without requiring a gra
     writeFileSync(configFile, '{broken');
     assert.notEqual(run('register', 'app', 'docs/shared.json', '--into-source').status, 0);
     assert.equal(readFileSync(configFile, 'utf8'), '{broken');
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('api candidates distinguishes a known source without inventory from an unknown source', async () => {
+  const { ingestRepo } = await import('@farsight/parsers');
+  const { GraphStore } = await import('@farsight/core');
+  const cwd = mkdtempSync(join(tmpdir(), 'api-no-inventory-'));
+  try {
+    const root = join(cwd, 'source');
+    mkdirSync(root);
+    writeFileSync(join(root, 'app.ts'), 'export function hello() { return true; }');
+    const store = new GraphStore();
+    store.addFragment(await ingestRepo(root, { repoName: 'without-specs', openapi: false }));
+    store.addFragment({
+      repo: 'with-specs',
+      nodes: [],
+      edges: [],
+      meta: {
+        files: 0,
+        sourceHash: '',
+        openapi: { applied: [], candidates: [] },
+      },
+    });
+    store.save(join(cwd, 'graph.json'));
+    const run = (...args: string[]) => spawnSync(process.execPath, [cli, 'api', ...args], { cwd, encoding: 'utf8' });
+    for (const command of ['candidates', 'list']) {
+      const result = run(command, '--repo', 'without-specs');
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /No OpenAPI inventory recorded for without-specs/);
+      assert.doesNotMatch(result.stdout, /No such source|0 candidate documents/);
+    }
+    assert.deepEqual(JSON.parse(run('candidates', '--repo', 'without-specs', '--json').stdout), {
+      source: 'without-specs',
+      message: run('candidates', '--repo', 'without-specs').stdout.trim(),
+      next: 'POST /api/sync',
+    });
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

@@ -63,7 +63,10 @@ export function openApiFilesText(
   metas: Record<string, OpenApiMeta> | undefined,
   repo?: string,
   candidatesOnly = false,
+  knownRepos: readonly string[] = [],
 ): string[] {
+  if (repo && !metas?.[repo] && knownRepos.includes(repo))
+    return [t('config.openapi.noInventory', 'professional').replace('{source}', repo)];
   if (!metas) return [t('config.openapi.none', 'professional')];
   if (repo && !Object.hasOwn(metas, repo))
     return [t('config.openapi.noSource', 'professional').replace('{source}', repo)];

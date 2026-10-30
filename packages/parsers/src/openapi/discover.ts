@@ -7,7 +7,7 @@
  */
 import { closeSync, openSync, readSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { relative, basename, resolve, isAbsolute } from 'node:path';
-import { t } from '@farsight/core';
+import { t, type OpenApiDocument } from '@farsight/core';
 import { collectFiles } from '../shared/files.js';
 import type { IngestOptions } from '../types.js';
 import { parseSpecText, readSpecSource, isSpecUrl, OPENAPI_MAX_BYTES, type ParsedSpec } from './read.js';
@@ -20,7 +20,7 @@ export interface DiscoveredSpec extends ParsedSpec {
   path: string;
   text: string;
   name?: string;
-  origin: 'file' | 'config' | 'settings';
+  origin: OpenApiDocument['origin'];
   status: 'applied' | 'candidate';
   phase?: string;
   phaseOrder?: string[];
@@ -131,7 +131,11 @@ export async function discoverSpecs(
     const named = NAME_RE.test(basename(abs));
     const underOpenapi = /(^|\/)openapi\//.test(rel);
     try {
-      if (!insideSource(repoRoot, abs) || statSync(abs).size > OPENAPI_MAX_BYTES) continue;
+      if (!insideSource(repoRoot, abs)) {
+        if (named || underOpenapi) errors.push(`openapi ${rel}: ${t('config.openapi.outsideSource', 'professional')}`);
+        continue;
+      }
+      if (statSync(abs).size > OPENAPI_MAX_BYTES) continue;
       // The historical directory sniff decides the applied set, including a key
       // after a long header. The prefix scanner only widens candidate discovery.
       let text = underOpenapi && !named ? readFileSync(abs, 'utf8') : undefined;

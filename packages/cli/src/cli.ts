@@ -1353,6 +1353,7 @@ switch (command) {
           : settings,
       );
       if (problem) fail(problem);
+      if (!source.openapi.length) delete source.openapi;
       if (hasFlag('into-source')) {
         if (source.type !== 'local') fail(word('config.openapi.localOnly', 'professional'));
         const root = realpathSync(resolve(source.path));
@@ -1390,13 +1391,17 @@ switch (command) {
     const graphFile = resolve(flag('graph', 'graph.json')!);
     if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
     const store = GraphStore.load(graphFile);
-    if (
-      (sub === 'candidates' || sub === 'list' || !sub) &&
-      flag('repo') &&
-      store.meta.openapi &&
-      !Object.hasOwn(store.meta.openapi, flag('repo')!)
-    )
-      fail(word('config.openapi.noSource', 'professional').replace('{source}', flag('repo')!));
+    const repo = flag('repo');
+    const knownRepos = new Set([
+      ...Object.keys(store.meta.repos ?? {}),
+      ...Object.keys(store.roots),
+      ...Object.keys(store.meta.openapi ?? {}),
+    ]);
+    if (repo && !knownRepos.has(repo) && store.allNodes().some((n) => (n.loc?.repo ?? n.id.split('::')[0]) === repo))
+      knownRepos.add(repo);
+    if ((sub === 'candidates' || sub === 'list' || !sub) && repo && !knownRepos.has(repo))
+      fail(word('config.openapi.noSource', 'professional').replace('{source}', repo));
+    const candidateLines = () => openApiFilesText(store.meta.openapi, repo, true, [...knownRepos]);
     if (sub === 'candidates') {
       const entries = Object.entries(store.meta.openapi ?? {}).filter(
         ([repo]) => !flag('repo') || repo === flag('repo'),
@@ -1404,14 +1409,16 @@ switch (command) {
       if (hasFlag('json'))
         console.log(
           JSON.stringify(
-            Object.fromEntries(
-              entries.map(([repo, meta]) => [repo, { candidates: meta.candidates, counts: openApiCounts(meta) }]),
-            ),
+            !store.meta.openapi || (repo && !store.meta.openapi[repo])
+              ? { ...(repo ? { source: repo } : {}), message: candidateLines().join('\n'), next: 'POST /api/sync' }
+              : Object.fromEntries(
+                  entries.map(([repo, meta]) => [repo, { candidates: meta.candidates, counts: openApiCounts(meta) }]),
+                ),
             null,
             2,
           ),
         );
-      else console.log(openApiFilesText(store.meta.openapi, flag('repo'), true).join('\n'));
+      else console.log(candidateLines().join('\n'));
       break;
     }
     const { nodes, edges } = store.toJSON();
@@ -1421,7 +1428,7 @@ switch (command) {
       const apis = apiSurface(index);
       if (!apis.length) {
         console.log('no HTTP routes in the graph — nothing to list');
-        console.log(openApiFilesText(store.meta.openapi, flag('repo'), true).join('\n'));
+        console.log(candidateLines().join('\n'));
         break;
       }
       console.log(
@@ -1436,7 +1443,7 @@ switch (command) {
       console.log(
         '\n  ops = routes on this surface · decl = named in the spec · impl = with source · not-impl = in the spec, not the code (not a gap for a spec-only source) · undoc = in the code, not the spec',
       );
-      console.log('\n' + openApiFilesText(store.meta.openapi, flag('repo'), true).join('\n'));
+      console.log('\n' + candidateLines().join('\n'));
       break;
     }
     if (sub === 'spec') {
