@@ -178,6 +178,15 @@ test('declared audit uses the parser’s structured kind/name association, inclu
   assert.deepEqual(M.declaredAuditNotes(report, 'app', { kind: 'route', name: 'GET /new' }), []);
 });
 
+test('clean or empty node summaries do not inherit flat file warnings, while older reports retain fallback', () => {
+  const file = { path: '.farsight/settings.json → sources[app].config', from: 'workspace' };
+  const node = { kind: 'guard', name: 'Session' };
+  const notes = ['An unrelated source note.'];
+  assert.deepEqual(M.declaredAuditNotes({ files: [{ ...file, nodes: [node] }], notes }, 'app', node), []);
+  assert.deepEqual(M.declaredAuditNotes({ files: [{ ...file, nodes: [] }], notes }, 'app', node), []);
+  assert.deepEqual(M.declaredAuditNotes({ files: [file], notes }, 'app', node), notes);
+});
+
 test('unchanged saved rules are not gated by source edits or object-key order', () => {
   const rule = { id: 'one', files: ['*.ts'], match: { call: 'portal.get' }, emit: { kind: 'flag', name: 'Portal' } };
   const source = { id: 'app', type: 'local', path: 'source', config: { patterns: [rule] } };

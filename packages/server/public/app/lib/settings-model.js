@@ -449,11 +449,10 @@ export function sourceStatus(source) {
 /** The parser owns row attribution; a viewer never decodes prose to recover identity. */
 export function declaredAuditNotes(report, sourceId, node) {
   const path = `.farsight/settings.json → sources[${sourceId}].config`;
-  const declarations = (report?.files || [])
-    .filter((file) => file.from === 'workspace' && file.path === path)
-    .flatMap((file) => file.nodes || []);
+  const files = (report?.files || []).filter((file) => file.from === 'workspace' && file.path === path);
+  const declarations = files.flatMap((file) => file.nodes || []);
   const matches = declarations.filter((entry) => entry.kind === node.kind && entry.name === node.name);
-  if (declarations.some((entry) => Array.isArray(entry.notes)))
+  if (files.some((file) => Array.isArray(file.nodes)))
     return [...new Set(matches.flatMap((entry) => entry.notes || []))];
   // Older reports have only source-level notes; the form labels them as the last sync's audit.
   return report?.notes || [];
