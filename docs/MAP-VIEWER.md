@@ -707,8 +707,9 @@ surface. The content column is at most 880 px; the rail and cards use the shared
 - `settings-config.js`: one pair of repository/workspace tabs per local or git source. The repository tab retains
   the config report, pattern report and OpenAPI Register/Dismiss doors and their element ids. The workspace tab
   edits the shared draft through `settings-forms.js`: Gates, Endpoints, Patterns, Declared nodes, OpenAPI, Words,
-  and Externals and stores. Each JSON toggle shows only its form's slice. Export shows the current overlay plus
-  registered documents to merge into the repository; JSON and Export are hidden in the business lens. The browser
+  and Externals and stores. Each JSON toggle shows only its form's slice. Export uses the dry-read
+  `POST /api/config/export` to show the repository root merged with the current draft and registered documents;
+  the server and CLI share the parser's merge helper. JSON and Export are hidden in the business lens. The browser
   never writes a source file. The CLI `config export <source>` prints the root merged with workspace declarations,
   preserving repository entries on collisions; only `--into-source` writes the local repository's root file.
 - `settings-forms.js`: every form uses `rowEditor`; a row is one JSON map entry or array item. The DOM-free

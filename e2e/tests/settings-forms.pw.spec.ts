@@ -61,7 +61,7 @@ test.describe('workspace overlay forms', () => {
       externals: [{ name: 'Document service', import: '@example/documents', kind: 'files', store: true }],
       stores: [{ name: 'Portal records', kind: 'sql', engine: 'postgres', tables: ['Request'] }],
     };
-    saved.sources[0].openapi = [{ path: 'docs/openapi.yaml', name: 'Invoice API', phase: 'live' }];
+    saved.sources[0].openapi = [{ path: 'openapi.yaml', name: 'Invoice API', phase: 'live' }];
     writeFileSync(file(), JSON.stringify(saved));
     for (const ro of [false, true]) {
       const port = await freePort();
@@ -143,6 +143,17 @@ test.describe('workspace overlay forms', () => {
           }
           await pane(page, form).scrollIntoViewIfNeeded();
           await page.screenshot({ path: info.outputPath(`${form}-${register}-${theme}.png`), fullPage: true });
+          if (form === 'patterns') {
+            await pane(page, form).locator('[data-pattern-test]').first().click();
+            await expect(pane(page, form).locator('[data-pattern-state]').first()).toHaveText(
+              'This version was tested.',
+            );
+            await pane(page, form).locator('[data-pattern-result]').first().scrollIntoViewIfNeeded();
+            await page.screenshot({
+              path: info.outputPath(`patterns-result-${register}-${theme}.png`),
+              fullPage: true,
+            });
+          }
           expect(pageErrors).toEqual([]);
         });
       }
@@ -194,7 +205,7 @@ test.describe('workspace overlay forms', () => {
         encoding: 'utf8',
       }),
     );
-    expect(cliExport.patterns.at(-1).id).toBe('draft-route');
+    expect(cliExport).toEqual(exported);
     await page.locator('#syncbtn').click();
     await expect(page.locator('#savenote')).toHaveText('Sync complete.');
     await expect(pane(page, 'patterns').locator('[data-form-field="id"]').last()).toHaveValue('draft-route');
@@ -205,6 +216,59 @@ test.describe('workspace overlay forms', () => {
     await expect(card(page).locator('.cfg-pattern-row').last()).toContainText('draft-route');
     await card(page).locator('[data-config-tab="workspace"]').click();
     await expect(pane(page, 'patterns').locator('[data-form-field="id"]').last()).toHaveValue('draft-route');
+  });
+
+  test('export follows the unsaved draft and a late response cannot replace the newer JSON', async ({ page }) => {
+    const before = readFileSync(file(), 'utf8');
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let requests = 0;
+    await page.route('**/api/config/export', async (route) => {
+      const first = ++requests === 1;
+      const response = await route.fetch();
+      if (first) await held;
+      await route.fulfill({ response });
+    });
+    await open(page);
+    await card(page).locator('.settings-export summary').click();
+    await expect.poll(() => requests).toBe(1);
+    await pane(page, 'gates').locator('[data-form-field="label"]').fill('Changed in this draft');
+    await expect(card(page).locator('.settings-export-json')).toContainText('Changed in this draft');
+    const delayed = page.waitForResponse('**/api/config/export');
+    release();
+    await delayed;
+    await expect(card(page).locator('.settings-export-json')).toContainText('Changed in this draft');
+    expect(readFileSync(file(), 'utf8')).toBe(before);
+  });
+
+  test('a completed test of an earlier draft cannot acknowledge an edit made while it ran', async ({ page }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/api/patterns/test', async (route) => {
+      const response = await route.fetch();
+      await held;
+      await route.fulfill({ response });
+    });
+    await open(page, 'patterns');
+    const rule = pane(page, 'patterns').locator('[data-row]').first();
+    await rule.locator('[data-form-field="emit.path"]').fill('/first');
+    await rule.locator('[data-pattern-test]').click();
+    await expect(rule.locator('[data-pattern-state]')).toHaveText('Testing…');
+    await rule.locator('[data-form-field="emit.path"]').fill('/second');
+    const delayed = page.waitForResponse('**/api/patterns/test');
+    release();
+    await delayed;
+    await expect(rule.locator('[data-pattern-state]')).toHaveText(
+      'Test each changed pattern or choose Save untested in Source configuration.',
+    );
+    await expect(page.locator('#savebtn')).toBeDisabled();
+    await rule.locator('[data-pattern-test]').click();
+    await expect(rule.locator('[data-pattern-state]')).toHaveText('This version was tested.');
+    await expect(page.locator('#savebtn')).toBeEnabled();
   });
 
   test('the server sentence is printed beside the invalid field and save stays disabled', async ({ page }) => {

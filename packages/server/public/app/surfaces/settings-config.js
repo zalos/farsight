@@ -13,7 +13,7 @@ import { vsl } from '../lib/graph-render.js';
 import { countedHtml, defAttrs } from '../lib/counted.js';
 import { applyReadOnly, readOnlyWhy } from '../lib/read-only.js';
 import { renderOverlayForm, formTitleKey } from './settings-forms.js';
-import { formPaths, exportOverlay } from '../lib/settings-model.js';
+import { formPaths } from '../lib/settings-model.js';
 
 const API = '/api/config';
 let onSaved;
@@ -364,6 +364,33 @@ export function renderConfigFiles(saved, context) {
         const workspace = document.createElement('div');
         workspace.className = 'settings-overlay';
         card.appendChild(workspace);
+        let exportRequest = 0;
+        const drawExport = async () => {
+          const request = ++exportRequest;
+          const details = workspace.querySelector('.settings-export');
+          if (!details?.open) return;
+          const output = details.querySelector('pre');
+          const saved = S.SETTINGS?.sources?.find((item) => item.id === source.id);
+          if (!saved || saved.type !== source.type || saved.path !== source.path) {
+            output.textContent = t('settings.forms.exportSourceChanged');
+            return;
+          }
+          output.textContent = t('settings.forms.exportLoading');
+          try {
+            const response = await fetch('/api/config/export', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ source: source.id, config: source.config || {}, openapi: source.openapi || [] }),
+            });
+            const result = await response.json();
+            if (request !== exportRequest || !output.isConnected) return;
+            output.textContent = response.ok
+              ? JSON.stringify(result.config, null, 2)
+              : result.error || t('settings.forms.exportFailed');
+          } catch {
+            if (request === exportRequest && output.isConnected) output.textContent = t('settings.forms.exportFailed');
+          }
+        };
         for (const [name, panel] of [
           ['repository', repository],
           ['workspace', workspace],
@@ -393,8 +420,7 @@ export function renderConfigFiles(saved, context) {
             report: data.config?.[source.name],
             changed: () => {
               context.changed();
-              const exported = workspace.querySelector('.settings-export-json');
-              if (exported) exported.textContent = JSON.stringify(exportOverlay(source), null, 2);
+              void drawExport();
             },
           });
           applyReadOnly(workspace);
@@ -418,10 +444,7 @@ export function renderConfigFiles(saved, context) {
               }),
           );
           const details = workspace.querySelector('.settings-export');
-          if (details)
-            details.ontoggle = () => {
-              details.querySelector('pre').textContent = JSON.stringify(exportOverlay(source), null, 2);
-            };
+          if (details) details.ontoggle = drawExport;
           drawForm();
         };
         const select = (name, focus = false) => {

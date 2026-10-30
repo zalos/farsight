@@ -264,11 +264,6 @@ export function patternTestCounted(result) {
   };
 }
 
-/** Exportable workspace declarations; ignored candidates remain local preferences. */
-export function exportOverlay(source) {
-  return { ...clone(source.config || {}), ...(source.openapi?.length ? { openapi: clone(source.openapi) } : {}) };
-}
-
 export function sourceId(name, sources) {
   const base =
     name
@@ -379,4 +374,17 @@ export function sourceStatus(source) {
     notices,
     reason: key === 'error' ? text.slice(7).replace(/ — showing the cache \(\d+ items?\)/, '') : '',
   };
+}
+
+/** The parser owns row attribution; a viewer never decodes prose to recover identity. */
+export function declaredAuditNotes(report, sourceId, node) {
+  const path = `.farsight/settings.json → sources[${sourceId}].config`;
+  const declarations = (report?.files || [])
+    .filter((file) => file.from === 'workspace' && file.path === path)
+    .flatMap((file) => file.nodes || []);
+  const matches = declarations.filter((entry) => entry.kind === node.kind && entry.name === node.name);
+  if (declarations.some((entry) => Array.isArray(entry.notes)))
+    return [...new Set(matches.flatMap((entry) => entry.notes || []))];
+  // Older reports have only source-level notes; the form labels them as the last sync's audit.
+  return report?.notes || [];
 }

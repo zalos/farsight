@@ -68,7 +68,7 @@ function field(name, label, path, value, config = {}) {
   }).replace('data-field=', `data-form-field="${esc(name)}" data-field=`);
 }
 function rowHtml(row, index, ctx) {
-  const { sourceIndex, form, report } = ctx;
+  const { sourceIndex, sourceId, form, report } = ctx;
   const path = rowPath(row, sourceIndex, form);
   const v = row.value;
   const f = (name, label = name, config = {}) => field(name, label, path, model.readAt(v, name), config);
@@ -90,14 +90,11 @@ function rowHtml(row, index, ctx) {
   else if (row.path.endsWith('.delegates')) html += value('delegate');
   else if (row.path === 'nodes') {
     if (form !== 'endpoints') html += f('kind', 'kind', { options: options(['route', 'guard', 'external', 'queue']) });
-    html +=
-      f('name') +
-      f('loc') +
-      f('handler') +
-      list('guards') +
-      f('tier', 'tier', { options: options(tiers, true) }) +
-      text('business');
-    const notes = (report?.notes || []).filter((note) => v.name && note.includes(v.name));
+    html += f('name') + f('loc');
+    if (v.kind === 'route') html += f('handler') + list('guards');
+    if (v.kind === 'guard') html += f('tier', 'tier', { options: options(tiers, true) }) + f('requires', 'grant');
+    html += text('business');
+    const notes = model.declaredAuditNotes(report, sourceId, v);
     html += `<aside class="settings-form-audit"${defAttrs(key('audit'))}><b>${esc(t(key('audit')))}</b><ul>${(notes.length ? notes : [t(key('noAudit'))]).map((note) => `<li>${esc(note)}</li>`).join('')}</ul></aside>`;
   } else if (row.path === 'patterns') {
     const matcher = matchers.find((name) => Object.hasOwn(v.match || {}, name)) || 'call';
@@ -106,7 +103,6 @@ function rowHtml(row, index, ctx) {
     html += field('match.' + matcher, 'expression', path, v.match?.[matcher], { type: 'textarea' });
     if (['call', 'decorator', 'annotation'].includes(matcher))
       html += field(
-        row,
         'match.args',
         'args',
         path,
@@ -129,7 +125,7 @@ function rowHtml(row, index, ctx) {
         f('emit.tier', 'tier', { options: options(tiers, true) });
     if (emitted === 'rule')
       html += f('emit.validates', 'emitValidates') + f('emit.tier', 'tier', { options: options(tiers, true) });
-    html += list('emit.tags', 'emitTags') + text('business') + text('emit.business', 'business');
+    html += list('emit.tags', 'emitTags') + text('business') + text('emit.business', 'emitBusiness');
     html += `<div class="settings-pattern-actions">${buttonHtml(key('test'), `data-pattern-test="${index}"`)}${buttonHtml(key('untested'), `data-pattern-untested="${index}"`)}<p data-pattern-state="${index}" role="status"></p></div><div data-pattern-result="${index}" class="settings-pattern-result"></div>`;
   } else if (row.path === 'openapi') {
     html += field('$document', 'documentRef', path, v.url || v.path) + f('name', 'documentName') + f('phase');
@@ -157,7 +153,17 @@ function rowHtml(row, index, ctx) {
 function updateValue(row, name, value) {
   if (name === '$key') row.key = value;
   else if (name === '$value') row.value = Array.isArray(row.value) ? lines(value) : value;
-  else if (name === '$document') {
+  else if (name === 'kind' && row.path === 'nodes') {
+    row.value.kind = value;
+    if (value !== 'route') {
+      delete row.value.handler;
+      delete row.value.guards;
+    }
+    if (value !== 'guard') {
+      delete row.value.tier;
+      delete row.value.requires;
+    }
+  } else if (name === '$document') {
     delete row.value.path;
     delete row.value.url;
     row.value[/^https?:/i.test(value) ? 'url' : 'path'] = value;
@@ -276,7 +282,9 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
     label: formTitleKey(form),
     rows,
     add: () => newRow(addPath, rows, form),
-    columns: [{ key: key('entry'), html: (row, i) => rowHtml(row, i, { sourceIndex, form, report }) }],
+    columns: [
+      { key: key('entry'), html: (row, i) => rowHtml(row, i, { sourceIndex, sourceId: source.id, form, report }) },
+    ],
     onChange: commit,
     input: (event, row, index) => {
       const name = event.target.dataset.formField;

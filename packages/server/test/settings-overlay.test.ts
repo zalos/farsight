@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { GraphStore, CONFIG_FIELDS, CONFIG_OVERLAY_FIELDS } from '@farsight/core';
 import { settingsProblem, syncSources, type Settings } from '../dist/index.js';
 import { isWriteRoute, refuseRequest } from '../dist/guard.js';
@@ -463,5 +464,56 @@ test('draft pattern tests are isolated, read-only and never persist their rule',
       413,
     );
     assert.equal((await s.call('GET', '/api/patterns/test?source=app&rule=unknown')).status, 200);
+  }
+});
+
+test('configuration export merges the draft with the root without writing, including read-only servers', async (t) => {
+  for (const readOnly of ['flag', 'as-of'] as const) {
+    const s = await server(t, readOnly);
+    const configFile = join(s.ws, 'source/farsight.config.json');
+    const repository = {
+      glossary: { submit: { label: 'Repository word' } },
+      tags: { billing: ['submit'] },
+      openapi: [{ path: 'api.yaml', name: 'Repository API' }],
+    };
+    writeFileSync(configFile, JSON.stringify(repository));
+    const config = {
+      glossary: { submit: { label: 'Workspace word' }, approve: { label: 'Approve invoice' } },
+      tags: { billing: ['approve'] },
+    };
+    const openapi = [{ path: 'api.yaml', name: 'Duplicate' }, { path: 'next.yaml' }];
+    const input = { source: 'app', config, openapi };
+    const before = readFileSync(s.file, 'utf8');
+    const response = await s.call('POST', '/api/config/export', input);
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.config, {
+      glossary: { submit: { label: 'Repository word' }, approve: { label: 'Approve invoice' } },
+      tags: { billing: ['submit', 'approve'] },
+      openapi: [{ path: 'api.yaml', name: 'Repository API' }, { path: 'next.yaml' }],
+    });
+    assert.equal(readFileSync(s.file, 'utf8'), before);
+    assert.deepEqual(JSON.parse(readFileSync(configFile, 'utf8')), repository);
+    assert.equal((await s.call('POST', '/api/config/export', { ...input, source: 'missing' })).status, 404);
+    const invalid = { ...input, config: { tags: { billing: 42 } } };
+    assert.deepEqual(await s.call('POST', '/api/config/export', invalid), {
+      status: 400,
+      body: { error: settingsProblem(settings({ config: invalid.config, openapi })) },
+    });
+    assert.equal((await s.call('POST', '/api/config/export', input, { origin: 'https://evil.example' })).status, 403);
+    assert.equal(
+      (await s.call('POST', '/api/config/export', { ...input, padding: 'x'.repeat(1024 * 1024) })).status,
+      413,
+    );
+    assert.equal(isWriteRoute('POST', '/api/config/export'), false);
+    writeFileSync(s.file, JSON.stringify(settings({ config, openapi })));
+    const cli = fileURLToPath(new URL('../../cli/dist/cli.js', import.meta.url));
+    const cliResult = JSON.parse(
+      execFileSync(process.execPath, [cli, 'config', 'export', 'app'], { cwd: s.ws, encoding: 'utf8' }),
+    );
+    assert.deepEqual(response.body.config, cliResult);
+    assert.deepEqual(JSON.parse(readFileSync(configFile, 'utf8')), repository);
+    writeFileSync(configFile, '{invalid');
+    assert.equal((await s.call('POST', '/api/config/export', input)).status, 400);
+    assert.equal(readFileSync(configFile, 'utf8'), '{invalid');
   }
 });

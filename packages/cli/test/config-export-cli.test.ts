@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { loadWorkspaceConfig, exportWorkspaceConfig } from '@farsight/parsers';
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 
 test('config export prints a merged root without writing, and writes only with --into-source', (t) => {
@@ -80,7 +81,15 @@ test('config export prints a merged root without writing, and writes only with -
     { path: 'docs/new.yaml', phase: 'draft' },
   ]);
   assert.deepEqual(exported.tests, repository.tests);
-  assert.deepEqual(Object.keys(exported.frameworks.spring.security), ['RootPolicy', 'WorkspacePolicy']);
+  assert.deepEqual(
+    exported,
+    exportWorkspaceConfig(
+      loadWorkspaceConfig(join(cwd, 'source'), {
+        configOverlay: { from: '.farsight/settings.json → sources[source-id].config', config: overlay },
+      }),
+      settings.sources[0]!.openapi,
+    ),
+  );
   assert.equal(exported.openapiIgnore, undefined);
   assert.deepEqual(JSON.parse(readFileSync(configFile, 'utf8')), repository);
   assert.equal(readFileSync(file, 'utf8'), before);

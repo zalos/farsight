@@ -49,6 +49,7 @@ export { applyCitedDocs, readDocQuote, headingSlug, docNodeId } from './cited-do
 export {
   loadWorkspaceConfig,
   emptyWorkspaceConfig,
+  exportWorkspaceConfig,
   applyWorkspaceConfig,
   applyWorkspaceRouteGuards,
   journeysConfigFor,

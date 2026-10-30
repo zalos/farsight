@@ -138,11 +138,7 @@ test('the label preview follows capture substitution and falls back on any missi
   );
   assert.equal(M.labelPreview('$action on $missing', { action: 'approve' }, 'Policy'), 'Policy');
 });
-test('export includes declarations and registrations; local ignores stay in the workspace', () => {
-  assert.deepEqual(
-    M.exportOverlay({ config: forms.words, openapi: forms.openapi.openapi, openapiIgnore: ['old.json'] }),
-    { ...forms.words, openapi: forms.openapi.openapi },
-  );
+test('pattern result counts retain their source and a breakdown that sums', () => {
   const counts = M.patternTestCounted({
     report: {
       rules: [
@@ -157,4 +153,27 @@ test('export includes declarations and registrations; local ignores stay in the 
     counts.matches.breakdown.reduce((sum: number, p: any) => sum + p.n, 0),
     3,
   );
+});
+
+test('declared audit uses the parser’s structured kind/name association, including after reorder', () => {
+  const path = '.farsight/settings.json → sources[app].config';
+  const report = {
+    files: [
+      {
+        path,
+        from: 'workspace',
+        nodes: [
+          { kind: 'route', name: 'GET /missing', notes: ['A handler is missing.'] },
+          { kind: 'guard', name: 'Session', notes: [] },
+        ],
+      },
+      { path: 'farsight.config.json', nodes: [{ kind: 'route', name: 'GET /missing', notes: ['A repository note.'] }] },
+    ],
+    notes: ['An unrelated source note.'],
+  };
+  assert.deepEqual(M.declaredAuditNotes(report, 'app', { kind: 'route', name: 'GET /missing' }), [
+    'A handler is missing.',
+  ]);
+  assert.deepEqual(M.declaredAuditNotes(report, 'app', { kind: 'guard', name: 'Session' }), []);
+  assert.deepEqual(M.declaredAuditNotes(report, 'app', { kind: 'route', name: 'GET /new' }), []);
 });

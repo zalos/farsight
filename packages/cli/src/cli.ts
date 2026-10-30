@@ -103,6 +103,8 @@ import {
   readSpecSource,
   specToYaml,
   ingestDesign,
+  loadWorkspaceConfig,
+  exportWorkspaceConfig,
   readManifestSource,
   importReports,
   repoContentDigest,
@@ -1731,53 +1733,16 @@ switch (command) {
       } catch {
         fail(word('config.openapi.sourceConfigInvalid', 'professional'));
       }
-      const overlay = { ...source.config, ...(source.openapi?.length ? { openapi: source.openapi } : {}) };
-      // Export only the root and workspace declarations. Nested configurations keep
-      // their folder scope, and existing root entries keep their word on a collision.
-      const merge = (first: any, second: any, path: string): any => {
-        if (first === undefined) return second;
-        if (second === undefined) return first;
-        if (Array.isArray(first) && Array.isArray(second)) {
-          const identity = (value: any) =>
-            path === 'openapi'
-              ? (value.url ?? value.path)
-              : path === 'patterns' || path === 'decisions'
-                ? value.id
-                : path === 'nodes'
-                  ? `${value.kind}:${value.name}`
-                  : path === 'externals'
-                    ? (value.import ?? `party:${value.name?.toLowerCase()}`)
-                    : path === 'stores'
-                      ? value.name
-                      : JSON.stringify(value);
-          const seen = new Set();
-          return [...first, ...second].filter((value) => {
-            const id = identity(value);
-            if (seen.has(id)) return false;
-            seen.add(id);
-            return true;
-          });
-        }
-        if (
-          first &&
-          second &&
-          typeof first === 'object' &&
-          typeof second === 'object' &&
-          !Array.isArray(first) &&
-          !Array.isArray(second)
-        ) {
-          if (/^(glossary|gateTiers|lifecycle)\.[^.]+$/.test(path) || /^frameworks\.[^.]+\.[^.]+\.[^.]+$/.test(path))
-            return first;
-          return Object.fromEntries(
-            [...new Set([...Object.keys(first), ...Object.keys(second)])].map((key) => [
-              key,
-              merge(first[key], second[key], path ? path + '.' + key : key),
-            ]),
-          );
-        }
-        return first;
-      };
-      const exported = merge(repository, overlay, '');
+      const exported = exportWorkspaceConfig(
+        loadWorkspaceConfig(root, {
+          exclude: ['**'],
+          configOverlay: {
+            from: `.farsight/settings.json → sources[${source.id}].config`,
+            config: source.config ?? {},
+          },
+        }),
+        source.openapi,
+      );
       const invalid = configSchemaProblem(exported, 'config');
       if (invalid) fail(invalid);
       const json = JSON.stringify(exported, null, 2) + '\n';
