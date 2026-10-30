@@ -62,7 +62,7 @@ class InvoiceApiDelegateImpl implements InvoiceApiDelegate, java.io.Serializable
   @ApiRoute("/unknown") public void missingVerb() {}
   @RequiresRole() public void missingRole() {}
   @RequiresRole("billing") public void billing() {}
-  @OnEvent(topic = "invoice.approved") public void consume() {}
+  @OnEvent(topic = "invoice.approved") @KafkaListener("invoice.legacy") public void consume() {}
   @Override public ResponseEntity<Invoice> getInvoice() { return null; }
   @PreAuthorize("hasAuthority('billing')") public void builtIn() {}
 }`,
@@ -94,6 +94,10 @@ class InvoiceApiDelegateImpl implements InvoiceApiDelegate, java.io.Serializable
         f.edges
           .find((e) => e.kind === 'consumes' && e.from === 'sample::queue::invoice.approved')
           ?.resolution?.note?.includes('@OnEvent'),
+      );
+      assert.equal(
+        f.edges.find((e) => e.kind === 'consumes' && e.from === 'sample::queue::invoice.legacy')?.resolution?.note,
+        'a listener annotation naming invoice.legacy',
       );
       const cls = f.nodes.find((n) => n.name === 'InvoiceApiDelegateImpl')!;
       assert.ok(cls.tags.includes('implements:InvoiceApiDelegate'));

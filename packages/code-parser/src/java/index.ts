@@ -591,14 +591,17 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       for (const topic of topics) {
         const qId = `${repo}::queue::${topic}`;
         addNode({ id: qId, kind: 'queue', name: topic, lang: 'java', tags: autoTags('', topic, 'queue') });
+        const alias = anns.find(
+          (a) => Object.hasOwn(aliases.listeners ?? {}, a.name) && listenerTopics([a], aliases).includes(topic),
+        );
         addEdge(
           'consumes',
           qId,
           fnId,
           undefined,
           byAnnotation(
-            anns.some((a) => Object.hasOwn(aliases.listeners ?? {}, a.name))
-              ? `@${anns.find((a) => Object.hasOwn(aliases.listeners ?? {}, a.name))!.name} read as a listener by farsight.config.json → frameworks.spring.listeners`
+            alias
+              ? `@${alias.name} read as a listener by farsight.config.json → frameworks.spring.listeners`
               : `a listener annotation naming ${topic}`,
           ),
         );

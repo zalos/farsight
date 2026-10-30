@@ -26,7 +26,7 @@ export function joinDelegates(fragment: GraphFragment, globs: string[]): RouteGa
     list.push(node);
     operations.set(operation, list);
   }
-  if (!fragment.nodes.some((n) => n.kind === 'route' && n.contract?.spec)) return [];
+  if (!fragment.nodes.some((n) => n.kind === 'api' || (n.kind === 'route' && n.contract?.spec))) return [];
 
   const candidates = new Map<string, GraphNode[]>();
   for (const fn of fragment.nodes) {

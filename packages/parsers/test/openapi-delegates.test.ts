@@ -131,6 +131,15 @@ test('a spec without operationIds still names the unmatched delegate override', 
   assert.ok(!f.edges.some((e) => e.kind === 'calls'));
 });
 
+test('an empty spec records the unmatched override without inventing a route', () => {
+  const f = fixture();
+  f.nodes = f.nodes.filter((n) => n.kind !== 'route');
+  f.nodes.push({ id: 'sample::api::openapi.yaml', kind: 'api', name: 'Empty API', tags: ['api'] });
+  assert.equal(joinDelegates(f, ['*ApiDelegate'])[0]?.kind, 'delegate-unmatched');
+  assert.ok(!f.nodes.some((n) => n.kind === 'route'));
+  assert.ok(!f.edges.some((e) => e.kind === 'calls'));
+});
+
 test('ingest passes configured aliases into readers, joins spec delegates, and respects disabling specs', async () => {
   const { ingestRepo } = await import('../dist/index.js');
   const { fileURLToPath } = await import('node:url');
