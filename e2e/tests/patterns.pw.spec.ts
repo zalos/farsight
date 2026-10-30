@@ -33,7 +33,7 @@ test.beforeAll(async () => {
   writeFileSync(configPath, JSON.stringify(config));
   writeFileSync(
     join(join(workspace.dir, 'invoice-app'), 'src/patterns.tsx'),
-    `export function patternHandler() { return { ok: true }; }\nportal.post('/pattern-preview', patternHandler);\n/** @business Preview an invoice. */\nexport function PatternPreview() {\n async function preview() { return fetch('/pattern-preview', { method: 'POST' }); }\n return <button onClick={preview}>Preview invoice</button>;\n}\n`,
+    `export function patternHandler() { return { ok: true }; }\nportal.post('/pattern-preview', patternHandler);\n${"portal.post('/pattern-preview', missingHandler);\n".repeat(120)}/** @business Preview an invoice. */\nexport function PatternPreview() {\n async function preview() { return fetch('/pattern-preview', { method: 'POST' }); }\n return <button onClick={preview}>Preview invoice</button>;\n}\n`,
   );
   const designPath = join(join(workspace.dir, 'invoice-app'), 'docs/design/screens.json');
   const design = JSON.parse(readFileSync(designPath, 'utf8'));
@@ -122,17 +122,26 @@ test('a pattern-only route reaches the Map and APIs, with pattern match evidence
   if (!(await page.locator('#gearbtn').isVisible())) await page.locator('#morebtn').click();
   await page.locator('#gearbtn').click();
   await expect(page.locator('.cfg-pattern-row')).toContainText('custom-route');
-  await expect(page.locator('.cfg-pattern-row')).toContainText('1 match');
+  await expect(page.locator('.cfg-pattern-row')).toContainText('121 matches');
+  await expect(page.locator('.cfg-patterns')).toContainText('… and 20 more unresolved references');
+  await expect(page.locator('.cfg-patterns li')).toHaveCount(101);
   // Hover opens after scrolling settles; a scroll closes an already pinned tip.
   await page.locator('.cfg-pattern-row .cnt-n').first().hover();
   await expect(page.locator('#fs-tip')).toContainText('for this pattern rule');
   await page.screenshot({ path: testInfo.outputPath('pattern-report.png') });
+  await page.locator('.cfg-patterns li .cnt-n').hover();
+  await expect(page.locator('#fs-tip')).toContainText('unresolvedOmitted');
+  await page.screenshot({ path: testInfo.outputPath('pattern-report-omitted.png') });
   await page.goto(base + '#/map/' + encodeURIComponent(flowId) + '?lens=business');
   await expect(page.locator('#stats')).not.toHaveText('loading…');
   if (!(await page.locator('#gearbtn').isVisible())) await page.locator('#morebtn').click();
   await page.locator('#gearbtn').click();
   await expect(page.locator('.cfg-pattern-row')).toContainText('1 part added');
   await expect(page.locator('.cfg-pattern-row')).toContainText('1 connection added');
+  await expect(page.locator('.cfg-patterns')).toContainText('… and 20 more unresolved references');
+  const omitted = page.locator('.cfg-patterns li .cnt-n');
+  await omitted.hover();
+  await expect(page.locator('#fs-tip')).toContainText('for this pattern rule');
   await page.locator('.cfg-pattern-row').scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('pattern-report-business.png') });
 });

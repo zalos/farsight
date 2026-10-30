@@ -27,6 +27,18 @@ export const PATTERN_BUDGET_MS = 30_000;
 export const PATTERN_MAX_FILES = 2048;
 export const PATTERN_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 export const PATTERN_MAX_DRY_MATCHES = 1000;
+export const PATTERN_MAX_CAPTURE = 512;
+export const PATTERN_MAX_REPORT_ROWS = 100;
+const HTTP_METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
+const capped = (value: string) => value.slice(0, PATTERN_MAX_CAPTURE);
+const skipRow = (row: PatternRuleReport, path: string, reason: string, important = false) => {
+  if (row.skipped.length < PATTERN_MAX_REPORT_ROWS) row.skipped.push({ path, reason });
+  else {
+    row.skippedOmitted = (row.skippedOmitted ?? 0) + 1;
+    // Keep the stopping point visible to the declaration audit even after many skipped files.
+    if (important) row.skipped[row.skipped.length - 1] = { path, reason };
+  }
+};
 const DECLARATIONS = new Set<GraphNode['kind']>(['function', 'class', 'component', 'guard']);
 const preview = (text: string) => snippetRange(text, 0, text.length).slice(0, 4096);
 const words = (key: string, values: Record<string, string>) =>
@@ -276,7 +288,9 @@ export async function applyPatterns(
 ): Promise<PatternsMeta> {
   const report: PatternsMeta = { rules: [] };
   const declarations = ws.files.flatMap((file) =>
-    Array.isArray(file.config.patterns) ? file.config.patterns.map((rule) => ({ file, rule })) : [],
+    Array.isArray(file.config.patterns)
+      ? file.config.patterns.map((rule, ruleIndex) => ({ file, rule, ruleIndex }))
+      : [],
   );
   if (!declarations.length) return report;
   const root = realpathSync(repoRoot);
@@ -316,10 +330,10 @@ export async function applyPatterns(
     stopped: boolean;
   }[] = [];
   const span = (node: GraphNode) => (node.loc!.endLine ?? node.loc!.line) - node.loc!.line;
-  for (const [index, { file, rule }] of declarations.entries()) {
+  for (const [index, { file, rule, ruleIndex }] of declarations.entries()) {
     if (run.rule && rule?.id !== run.rule) continue;
     const row: PatternRuleReport = {
-      id: typeof rule?.id === 'string' ? rule.id : '',
+      id: typeof rule?.id === 'string' ? capped(rule.id) : '',
       file: file.path,
       matched: 0,
       nodes: 0,
@@ -328,12 +342,24 @@ export async function applyPatterns(
       skipped: [],
     };
     report.rules.push(row);
-    const skip = (path: string, reason: string) => row.skipped.push({ path, reason });
+    const skip = (path: string, reason: string) => skipRow(row, path, reason);
     if (index >= PATTERN_MAX_RULES) {
       skip(file.path, word('ruleLimit'));
       continue;
     }
-    const invalid = configSchemaProblem({ patterns: [rule] }, 'config');
+    const matcher = rule?.match;
+    if (
+      matcher &&
+      typeof matcher === 'object' &&
+      ['call', 'decorator', 'annotation', 'query', 'regex'].filter((key) => Object.hasOwn(matcher, key)).length !== 1
+    ) {
+      skip(file.path, words('matcherCount', { index: String(ruleIndex) }));
+      continue;
+    }
+    const invalid = configSchemaProblem({ patterns: [rule] }, 'config')?.replace(
+      'config.patterns[0]',
+      () => `config.patterns[${ruleIndex}]`,
+    );
     if (invalid) {
       skip(file.path, words('invalid', { error: invalid }));
       continue;
@@ -373,7 +399,7 @@ export async function applyPatterns(
       for (const state of selected) {
         const { rule, row, regex } = state;
         const skip = (reason: string, stop = false) => {
-          row.skipped.push({ path, reason });
+          skipRow(row, path, reason, stop);
           state.stopped = stop;
         };
         if (state.files >= maxFiles) {
@@ -437,20 +463,28 @@ export async function applyPatterns(
         const here = byPath.get(path) ?? [];
         for (const match of matches) {
           row.matched++;
+          match.captures = Object.fromEntries(
+            Object.entries(match.captures)
+              .filter(([, value]) => value !== undefined)
+              .map(([key, value]) => [key, capped(value)]),
+          );
           const holding = here
             .filter((n) => n.loc!.endLine !== undefined && n.loc!.line <= match.line && n.loc!.endLine >= match.endLine)
             .sort((a, b) => span(a) - span(b) || Number(a.kind === 'class') - Number(b.kind === 'class'));
           const host = holding[0];
           const unresolved: string[] = [];
           let resolvedTarget: GraphNode | undefined;
-          const missing = (capture: string) => {
+          const missing = (value: string) => {
+            const capture = capped(value);
             if (!unresolved.includes(capture)) {
               unresolved.push(capture);
-              row.unresolved.push({ path, line: match.line, capture });
+              if (row.unresolved.length < PATTERN_MAX_REPORT_ROWS)
+                row.unresolved.push({ path, line: match.line, capture });
+              else row.unresolvedOmitted = (row.unresolvedOmitted ?? 0) + 1;
             }
           };
           const interpolate = (template: string) => {
-            return fill(template, match.captures, missing);
+            return fill(template, match.captures, missing)?.slice(0, PATTERN_MAX_CAPTURE);
           };
           const targetOf = (template: string | undefined): GraphNode | undefined => {
             if (!template) return undefined;
@@ -478,19 +512,23 @@ export async function applyPatterns(
           const handler = targetOf(emit.handler);
           const nameTemplate =
             emit.kind === 'route' ? `${emit.method ?? 'GET'} ${emit.path ?? ''}` : (emit.topic ?? emit.name ?? rule.id);
-          let name = interpolate(nameTemplate);
-          if (name && emit.kind === 'route') {
-            const space = name.indexOf(' ');
-            const method = name
-              .slice(0, space)
-              .replace(/^RequestMethod\./, '')
+          let name: string | undefined;
+          if (emit.kind === 'route') {
+            const methodTemplate = emit.method ?? 'GET';
+            const pathTemplate = emit.path ?? '';
+            const method = interpolate(methodTemplate)
+              ?.replace(/^RequestMethod\./, '')
               .toUpperCase();
-            const pathValue = name.slice(space + 1);
-            if (!/^[A-Z]+$/.test(method) || !pathValue.startsWith('/')) {
-              missing(nameTemplate);
-              name = undefined;
-            } else name = `${method} ${normalizeRoutePath(pathValue)}`;
-          }
+            const pathValue = interpolate(pathTemplate);
+            const invalidValue = (template: string) => {
+              const captures = template.match(/\$([A-Za-z_][A-Za-z0-9_]*|\d+)/g);
+              for (const capture of captures ?? [template]) missing(capture);
+            };
+            if (method !== undefined && !HTTP_METHODS.has(method)) invalidValue(methodTemplate);
+            if (pathValue !== undefined && !pathValue.startsWith('/')) invalidValue(pathTemplate);
+            if (method && HTTP_METHODS.has(method) && pathValue?.startsWith('/'))
+              name = `${method} ${normalizeRoutePath(pathValue)}`;
+          } else name = interpolate(nameTemplate);
           const resolution: GraphEdge['resolution'] = {
             status: 'resolved',
             technique: 'config-pattern',
@@ -509,10 +547,18 @@ export async function applyPatterns(
                 ...prior.resolution,
                 note: note?.includes(resolution.note!) ? note : [note, resolution.note].filter(Boolean).join('; '),
               };
-              if (requires) prior.meta = { requires, ...prior.meta };
+              if (requires && !prior.meta?.requires)
+                prior.meta = { ...prior.meta, requires, requiresFrom: `${row.file} → patterns[${row.id}]` };
               return;
             }
-            const edge: GraphEdge = { id, kind, from, to, resolution, ...(requires ? { meta: { requires } } : {}) };
+            const edge: GraphEdge = {
+              id,
+              kind,
+              from,
+              to,
+              resolution,
+              ...(requires ? { meta: { requires, requiresFrom: `${row.file} → patterns[${row.id}]` } } : {}),
+            };
             edges.set(id, edge);
             fragment.edges.push(edge);
             row.edges++;
@@ -532,8 +578,10 @@ export async function applyPatterns(
               (emit.kind === 'route' ? routes.get(routeKey(name)) : undefined) ??
               nodes.get(`${fragment.repo}::${emit.kind}::${name}`);
             const id = prior?.id ?? `${fragment.repo}::${emit.kind}::${name}`;
-            if (prior) prior.tags = [...new Set([...prior.tags, ...tags])];
-            else {
+            if (prior) {
+              prior.tags = [...new Set([...prior.tags, ...tags])];
+              name = prior.name;
+            } else {
               const node: GraphNode = {
                 id,
                 kind: emit.kind as Exclude<PatternDecl['emit']['kind'], 'entrypoint'>,
@@ -575,7 +623,7 @@ export async function applyPatterns(
             ...match,
             captures: Object.fromEntries(Object.entries(match.captures).map(([key, value]) => [key, preview(value)])),
             kind: emit.kind,
-            name: name ?? nameTemplate,
+            name: name ?? capped(nameTemplate),
             ...(resolvedTarget ? { handler: resolvedTarget.id } : {}),
             unresolved,
           });

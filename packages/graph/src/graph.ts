@@ -670,6 +670,10 @@ export interface PatternRuleReport {
   edges: number;
   unresolved: { path: string; line: number; capture: string }[];
   skipped: { path: string; reason: string }[];
+  /** Unresolved references beyond the retained detail cap; absent means zero. */
+  unresolvedOmitted?: number;
+  /** Skipped inputs beyond the retained detail cap; absent means zero. */
+  skippedOmitted?: number;
 }
 
 /** Pattern evidence retained once per source, without every match's captures or text. */

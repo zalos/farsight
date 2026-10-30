@@ -140,6 +140,8 @@ test('pattern metadata survives source merging, save/load and portable export as
         edges: 1,
         unresolved: [{ path: 'app.ts', line: 3, capture: 'missing' }],
         skipped: [{ path: 'large.ts', reason: 'larger than 1 MiB' }],
+        unresolvedOmitted: 20,
+        skippedOmitted: 30,
       },
     ],
   };

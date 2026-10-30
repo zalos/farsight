@@ -1606,6 +1606,14 @@
             ],
             "additionalProperties": false
           }
+        },
+        "unresolvedOmitted": {
+          "type": "number",
+          "description": "Unresolved references beyond the retained detail cap; absent means zero."
+        },
+        "skippedOmitted": {
+          "type": "number",
+          "description": "Skipped inputs beyond the retained detail cap; absent means zero."
         }
       },
       "required": [

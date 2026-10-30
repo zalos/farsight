@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { grammarQuery } from '@farsight/code-parser';
-import { buildIndex, rolesFor, patternCounts, type PatternDecl, type GraphFragment } from '@farsight/core';
+import { buildIndex, rolesFor, patternCounts, countedText, type PatternDecl, type GraphFragment } from '@farsight/core';
 import { applyPatterns, ingestRepo, testPatterns, patternsTestText, loadWorkspaceConfig } from '../dist/index.js';
 import { declaredPathWarnings } from '../dist/shared/declared-paths.js';
 
@@ -60,6 +60,7 @@ test('a pattern reuses a parameterized Express route beside its spec and adds ev
       assert.ok(!routes[0]?.contract?.drift?.some((d) => d.kind === 'code-only'));
       const edge = graph.edges.find((e) => e.from === routes[0]!.id && e.kind === 'calls');
       assert.match(edge?.resolution?.note ?? '', /patterns\[route\]/);
+      assert.equal((await testPatterns(root, opts)).matches[0]?.name, 'POST /users/:id');
     },
   );
 });
@@ -187,6 +188,7 @@ test('matched guards are enforced for drift and their requires capture reaches r
       );
       const roles = rolesFor(buildIndex(graph.nodes, graph.edges), { guard: gate.id });
       assert.deepEqual(roles[0]?.roles, ['ops.editor']);
+      assert.equal(roles[0]?.requiresFrom, 'farsight.config.json → patterns[guard]');
     },
   );
 });
@@ -392,6 +394,120 @@ test('source previews and dry-run details are capped, with named counts and unre
       const r = await testPatterns(root, opts, { maxMatches: 1 });
       assert.equal(r.matches[0]!.unresolved[0], 'absent');
       assert.equal(r.matchCounts.omitted.n, 2);
+    },
+  );
+});
+
+test('only HTTP verbs emit routes, and invalid present captures name the affected variable', async () => {
+  const verbs = ['get', 'head', 'post', 'put', 'patch', 'delete', 'options'];
+  await fixture(
+    {
+      'farsight.config.json': config([route]),
+      'app.ts': `function save() {}\n${[...verbs, 'use', 'on', 'all'].map((verb) => `router.${verb}('/users/:id', save);`).join('\n')}\nrouter.get(somePath, save);`,
+    },
+    async (root) => {
+      const graph = fragment();
+      const report = await applyPatterns(graph, root, opts, loadWorkspaceConfig(root));
+      assert.deepEqual(
+        graph.nodes.map((n) => n.name),
+        verbs.map((verb) => `${verb.toUpperCase()} /users/:param`),
+      );
+      assert.equal(report.rules[0]!.unresolved.filter((u) => u.capture === '$verb').length, 3);
+      assert.equal(report.rules[0]!.unresolved.filter((u) => u.capture === '$path').length, 1);
+      assert.ok(!report.rules[0]!.unresolved.some((u) => u.capture === '$verb $path'));
+    },
+  );
+});
+
+test('invalid rule diagnostics retain the config array index and reject multiple matchers explicitly', async () => {
+  await fixture(
+    {
+      'farsight.config.json': config([
+        textRule,
+        { ...textRule, id: 'long', match: { regex: 'a'.repeat(513) } },
+        { ...textRule, id: 'two', match: { call: 'hello', regex: 'a' } } as PatternDecl,
+      ]),
+      'a.txt': 'a',
+    },
+    async (root) => {
+      const report = await applyPatterns(fragment(), root, opts, loadWorkspaceConfig(root));
+      assert.match(report.rules[1]!.skipped[0]!.reason, /config\.patterns\[1\]\.match\.regex.*512/);
+      assert.match(report.rules[2]!.skipped[0]!.reason, /config\.patterns\[2\]\.match requires exactly one matcher/);
+    },
+  );
+});
+
+test('captured names and unresolved values are capped before graph emission and dry-run reporting', async () => {
+  await fixture(
+    {
+      'farsight.config.json': config([textRule]),
+      'a.txt': 'a'.repeat(200_000),
+    },
+    async (root) => {
+      const graph = fragment();
+      await applyPatterns(graph, root, opts, loadWorkspaceConfig(root));
+      assert.equal(graph.nodes[0]!.name.length, 512);
+      assert.equal(graph.nodes[0]!.id.length, 'app::external::'.length + 512);
+      const dry = await testPatterns(root, opts);
+      assert.equal(dry.matches[0]!.captures.name.length, 512);
+      assert.equal(dry.matches[0]!.name.length, 512);
+      writeFileSync(
+        join(root, 'farsight.config.json'),
+        config([{ ...textRule, emit: { kind: 'guard', name: 'long-handler', handler: '$name' } }]),
+      );
+      writeFileSync(join(root, 'a.txt'), 'h'.repeat(50_000));
+      const unresolved = await testPatterns(root, opts);
+      assert.equal(unresolved.report.rules[0]!.unresolved[0]!.capture.length, 512);
+      assert.equal(unresolved.matches[0]!.unresolved[0]!.length, 512);
+      assert.ok(!patternsTestText(unresolved).includes('h'.repeat(513)));
+    },
+  );
+});
+
+test('per-rule detail rows are bounded with accurate omitted Counteds, and budget warnings survive the cap', async () => {
+  const files = Object.fromEntries(
+    Array.from({ length: 120 }, (_, i) => [`${String(i).padStart(3, '0')}.txt`, 'unknown']),
+  );
+  await fixture(
+    {
+      ...files,
+      'farsight.config.json': config([
+        { ...textRule, files: ['000.txt'], emit: { kind: 'guard', name: 'gate', handler: '$name' } },
+        { ...route, id: 'unsupported', files: ['*.txt'] },
+      ]),
+    },
+    async (root) => {
+      writeFileSync(join(root, '000.txt'), 'missing\n'.repeat(120));
+      const ws = loadWorkspaceConfig(root);
+      const graph = fragment();
+      const report = await applyPatterns(graph, root, opts, ws);
+      assert.equal(report.rules[0]!.unresolved.length, 100);
+      assert.equal(report.rules[0]!.unresolvedOmitted, 20);
+      assert.equal(report.rules[1]!.skipped.length, 100);
+      assert.equal(report.rules[1]!.skippedOmitted, 20);
+      const counts = patternCounts(report, 'app');
+      assert.equal(counts[0]!.unresolved.n, 120);
+      assert.equal(counts[1]!.skipped.n, 120);
+      for (const register of ['professional', 'hud'] as const) {
+        assert.match(
+          countedText(counts[0]!.unresolvedOmitted!, { register, lens: 'business' }),
+          /… and 20 more unresolved references/,
+        );
+        assert.match(
+          countedText(counts[1]!.skippedOmitted!, { register, lens: 'code' }),
+          /… and 20 more skipped inputs/,
+        );
+      }
+      assert.match(counts[0]!.unresolvedOmitted!.source, /meta.patterns\["app"\].rules\[0\].unresolvedOmitted/);
+      assert.match(patternsTestText({ repo: 'app', report, matches: [] }), /… and 20 more unresolved references/);
+      graph.meta = {
+        files: 0,
+        sourceHash: '',
+        patterns: await applyPatterns(fragment(), root, opts, ws, { maxFiles: 105 }),
+      };
+      assert.equal(graph.meta.patterns!.rules[1]!.skipped.length, 100);
+      assert.equal(graph.meta.patterns!.rules[1]!.skippedOmitted, 6);
+      assert.match(declaredPathWarnings(graph, root, opts, ws, []).join('\n'), /file budget exhausted/);
     },
   );
 });

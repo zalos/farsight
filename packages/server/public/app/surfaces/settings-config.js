@@ -112,10 +112,12 @@ function patternsHtml(meta, counts) {
   const rows = meta.rules
     .map((rule, i) => {
       const details = [
-        ...rule.unresolved.map(
-          (u) => u.path + ':' + u.line + ' · ' + t('config.patterns.unresolved') + ' ' + u.capture,
+        ...rule.unresolved.map((u) =>
+          esc(u.path + ':' + u.line + ' · ' + t('config.patterns.unresolved') + ' ' + u.capture),
         ),
-        ...rule.skipped.map((s) => s.path + ' · ' + s.reason),
+        ...(counts?.[i]?.unresolvedOmitted ? [countedHtml(counts[i].unresolvedOmitted, API)] : []),
+        ...rule.skipped.map((s) => esc(s.path + ' · ' + s.reason)),
+        ...(counts?.[i]?.skippedOmitted ? [countedHtml(counts[i].skippedOmitted, API)] : []),
       ];
       return (
         '<tr class="cfg-pattern-row"><td' +
@@ -128,9 +130,7 @@ function patternsHtml(meta, counts) {
         columns.map((key) => '<td>' + countedHtml(counts && counts[i] && counts[i][key], API) + '</td>').join('') +
         '</tr>' +
         (details.length
-          ? '<tr><td colspan="6"><ul>' +
-            details.map((note) => '<li>' + esc(note) + '</li>').join('') +
-            '</ul></td></tr>'
+          ? '<tr><td colspan="6"><ul>' + details.map((note) => '<li>' + note + '</li>').join('') + '</ul></td></tr>'
           : '')
       );
     })

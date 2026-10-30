@@ -2281,7 +2281,7 @@ method/path key, so patterns, reader routes, specs and client calls meet the sam
 `config-pattern` records pattern evidence: the rule author supplied its meaning and matching supplies its source site. Matched nodes carry `pattern:<id>`; they do not carry the `declared` tag reserved for manual declarations, so guard drift counts a matched check as detected in source.
 Syntax matches carry HIGH confidence and regex matches MEDIUM; neither claims runtime verification. This adds one
 member to the frozen, additive-only `farsight-diff v1` technique enum. Unknown technique members remain printable verbatim.
-Per-rule reports are retained once in `meta.patterns`; match text and capture details are returned by explicit dry runs,
+Per-rule reports are retained once in `meta.patterns`, capped at 100 unresolved and 100 skipped rows with omitted totals. Captured values are capped at 512 characters before naming or reporting; match text and capture details are returned by explicit dry runs,
 not copied into every report. CLI `patterns test`, MCP `patterns_test` (all tier) and `GET /api/patterns/test` share the
 same engine and do not save a graph. GET remains available on read-only and historical servers, reading today's source
 files rather than pretending the historical snapshot contains them.
@@ -2291,7 +2291,7 @@ string literals at 512 characters and raw query source at 4096. Each selected fi
 Each rule consumes a deterministic prefix in sorted path order: at most 2048 files and 64 MiB, with a thirty-second safety
 budget and the remaining time passed to query traversal. Every budget stop becomes a sync warning. Running JavaScript
 regexes, including query predicates, cannot be preempted. Dry runs return at most 1000 details with returned and omitted
-Counteds; snippet and capture previews keep fourteen lines and at most 4096 characters. No selected rule means no adapter
+Counteds; snippets keep fourteen lines and at most 4096 characters, while capture previews stay within 512 characters. No selected rule means no adapter
 extraction, and HTTP admits one test per source while rejecting cross-site requests to this cost-bearing GET. The report
 names skips and unresolved captures; every displayed count comes from the shared core folds. Authoring forms remain the
 Settings forms lane, with the contract independently usable through config files, CLI and MCP.

@@ -204,13 +204,24 @@ export function configFilesText(
 /** Each rule's numbers, in report order so equal rule ids in different config files stay distinct. */
 export function patternCounts(meta: import('./graph.js').PatternsMeta, repo: string) {
   return meta.rules.map((row, index) => {
-    const count = (key: 'matched' | 'nodes' | 'edges' | 'unresolved' | 'skipped') =>
-      counted(
-        Array.isArray(row[key]) ? row[key].length : (row[key] as number),
+    const source = `meta.patterns[${JSON.stringify(repo)}].rules[${index}]`;
+    const count = (key: 'matched' | 'nodes' | 'edges' | 'unresolved' | 'skipped') => {
+      const omitted = key === 'unresolved' ? row.unresolvedOmitted : key === 'skipped' ? row.skippedOmitted : 0;
+      return counted(
+        (Array.isArray(row[key]) ? row[key].length : (row[key] as number)) + (omitted ?? 0),
         `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}`,
         'count.scope.pattern',
-        `meta.patterns[${JSON.stringify(repo)}].rules[${index}].${key}${Array.isArray(row[key]) ? '.length' : ''}`,
+        `${source}.${key}${Array.isArray(row[key]) ? '.length' : ''}${omitted ? ` + ${source}.${key}Omitted` : ''}`,
         { bizUnit: `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}Biz` },
+      );
+    };
+    const omittedCount = (key: 'unresolved' | 'skipped') =>
+      counted(
+        row[`${key}Omitted`] ?? 0,
+        `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}Omitted`,
+        'count.scope.pattern',
+        `${source}.${key}Omitted`,
+        { bizUnit: `count.unit.pattern${key[0]!.toUpperCase()}${key.slice(1)}Omitted` },
       );
     return {
       matched: count('matched'),
@@ -218,6 +229,8 @@ export function patternCounts(meta: import('./graph.js').PatternsMeta, repo: str
       edges: count('edges'),
       unresolved: count('unresolved'),
       skipped: count('skipped'),
+      ...(row.unresolvedOmitted ? { unresolvedOmitted: omittedCount('unresolved') } : {}),
+      ...(row.skippedOmitted ? { skippedOmitted: omittedCount('skipped') } : {}),
     };
   });
 }
@@ -233,14 +246,18 @@ export function patternFilesText(
       return [
         `${r} — ${t('config.patterns.title', 'professional')}`,
         ...meta.rules.flatMap((row, i) => [
-          `  ${row.id} · ${row.file} · ${Object.values(counts[i]!)
+          `  ${row.id} · ${row.file} · ${Object.entries(counts[i]!)
+            .filter(([key]) => !key.endsWith('Omitted'))
+            .map(([, value]) => value)
             .map((c) => countedText(c))
             .join(' · ')}`,
           ...row.unresolved.map(
             (u) =>
               `    ${u.path}:${u.line} · ${t('config.patterns.unresolved', 'professional')} ${JSON.stringify(u.capture)}`,
           ),
+          ...(counts[i]!.unresolvedOmitted ? [`    ${countedText(counts[i]!.unresolvedOmitted!)}`] : []),
           ...row.skipped.map((s) => `    ${s.path} · ${s.reason}`),
+          ...(counts[i]!.skippedOmitted ? [`    ${countedText(counts[i]!.skippedOmitted!)}`] : []),
         ]),
       ];
     });
@@ -252,7 +269,9 @@ export function patternOverviewLines(metas: Record<string, import('./graph.js').
     return `${repo} — ${t('config.patterns.title', 'professional')}: ${meta.rules
       .map(
         (r, i) =>
-          `${r.id} (${Object.values(counts[i]!)
+          `${r.id} (${Object.entries(counts[i]!)
+            .filter(([key]) => !key.endsWith('Omitted'))
+            .map(([, value]) => value)
             .map((c) => countedText(c))
             .join(' · ')})`,
       )

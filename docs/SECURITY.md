@@ -336,6 +336,7 @@ read and parsed once, sharing its syntax tree across applicable rules, then disp
 are the normal stopping conditions. A thirty-second per-rule safety budget checks between files and supplies the remaining
 `timeoutMicros` to Tree-sitter traversal. Every budget stop is reported during sync, even if earlier files matched.
 
+Captured values and interpolated names are capped at 512 characters before emission. Each rule retains at most 100 unresolved and 100 skipped detail rows; omitted rows remain in the totals and are printed as typed counts.
 Raw query source is capped at 4096 characters and every query string literal, including regex predicate patterns, at 512
 source characters before compilation. Query `matchLimit` caps in-progress Tree-sitter match states, not total returned
 matches. Neither Tree-sitter's traversal timeout nor the between-file budget preempts a JavaScript regex or query predicate
