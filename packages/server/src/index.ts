@@ -97,6 +97,7 @@ import {
   tourOf,
   ask,
   askExample,
+  type FarsightConfig,
 } from '@farsight/core';
 import type {
   CoverageTestRef,
@@ -158,6 +159,7 @@ export {
 } from './work.js';
 export type { WorkSettingsSource, WorkSyncOutcome, UnmatchedKey } from './work.js';
 
+/** The server writes workspace settings only, never into a source; MCP never writes into a source. */
 export interface Source {
   id: string;
   name: string;
@@ -172,6 +174,10 @@ export interface Source {
   status?: string;
   /** where this source's Storybook runs, when the repo's own config or scripts do not say (ADR 9) — overrides the graph's recorded URL */
   storybook?: { url?: string; command?: string };
+  /** Data declarations over the code, restricted to CONFIG_OVERLAY_FIELDS by the server. */
+  config?: FarsightConfig;
+  openapi?: { path?: string; url?: string; name?: string; phase?: string }[];
+  openapiIgnore?: string[];
   // ── type 'work' only (§10). Secrets are never here: `auth.secret` is a `keychain:` reference,
   // because GET /api/settings serves this file back and the viewer rewrites it wholesale ──
   /** registry id: 'jira' | 'azure-devops' | 'fixture' */
