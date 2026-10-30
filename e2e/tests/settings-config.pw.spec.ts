@@ -211,6 +211,8 @@ test.describe('OpenAPI registration from Settings', () => {
     await open(page, writable);
     const row = page.locator('.cfg-openapi-row[data-path="docs/vendor-api.json"]');
     await expect(row).toContainText('not registered');
+    await page.locator('.cfg-n-candidates').scrollIntoViewIfNeeded();
+    await expect(page.locator('.cfg-n-candidates')).toBeInViewport();
     await page.locator('.cfg-n-candidates').click();
     await expect(page.locator('#fs-tip')).toContainText('in this source');
     await page.keyboard.press('Escape');
