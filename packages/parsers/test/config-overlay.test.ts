@@ -147,7 +147,7 @@ test('overlay blocks without a field-specific merger reach merged; repository bl
   );
 });
 
-test('future object and scalar overlay fields merge without a field-specific case', (t) => {
+test('future overlay maps, lists and scalars merge without a field-specific case', (t) => {
   const dir = fixture(t, {});
   // Lane A adds frameworks to the config contract. Extend only discovery's field catalog here
   // so the current build can read the future root declaration; the merger receives no new case.
@@ -156,16 +156,19 @@ test('future object and scalar overlay fields merge without a field-specific cas
   t.after(() => {
     fields.length = length;
   });
-  fields.push(...['frameworks', 'futureScalar'].filter((key) => !fields.includes(key)));
+  const futureFields = ['futureScalar', 'futureMap', 'futureList'];
+  fields.push(...['frameworks', ...futureFields].filter((key) => !fields.includes(key)));
   const overlayFields = CONFIG_OVERLAY_FIELDS as readonly string[] as string[];
   const overlayLength = overlayFields.length;
   t.after(() => {
     overlayFields.length = overlayLength;
   });
-  overlayFields.push('futureScalar');
+  overlayFields.push(...futureFields);
   const config = {
     frameworks: { nest: { verbs: { JsonGet: 'GET' } } },
     futureScalar: 'workspace',
+    futureMap: { shared: 'workspace', workspaceOnly: true, identical: 'same' },
+    futureList: ['workspace', { name: 'shared' }],
   } as FarsightConfig;
   const overlayOnly = loadWorkspaceConfig(dir, { configOverlay: { from, config } });
   assert.deepEqual(overlayOnly.merged, config);
@@ -174,13 +177,19 @@ test('future object and scalar overlay fields merge without a field-specific cas
   const root = {
     frameworks: { nest: { verbs: { JsonGet: 'POST' } } },
     futureScalar: 'repository',
+    futureMap: { shared: 'repository', repositoryOnly: true, identical: 'same' },
+    futureList: ['repository', { name: 'shared' }],
   } as FarsightConfig;
   writeFileSync(join(dir, 'farsight.config.json'), JSON.stringify(root));
   const withRoot = loadWorkspaceConfig(dir, { configOverlay: { from, config } });
-  assert.deepEqual(withRoot.merged, root);
+  assert.deepEqual(withRoot.merged, {
+    ...root,
+    futureMap: { shared: 'repository', repositoryOnly: true, workspaceOnly: true, identical: 'same' },
+    futureList: ['repository', { name: 'shared' }, 'workspace'],
+  });
   assert.deepEqual(
     withRoot.meta.conflicts,
-    ['frameworks', 'futureScalar'].map((key) => ({
+    ['frameworks.nest', 'futureScalar', 'futureMap.shared'].map((key) => ({
       kind: 'field',
       key,
       files: ['farsight.config.json', from],

@@ -307,9 +307,30 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
         'lifecycle',
         'decisions',
       ]);
+      const fields = merged as Record<string, unknown>;
       for (const [key, value] of Object.entries(c)) {
-        if (!Object.hasOwn(merged, key)) (merged as Record<string, unknown>)[key] = value;
-        else if (!handledFields.has(key)) addConflict(meta, 'field', key, [rootFile!.path, f.path], rootFile!.path);
+        if (!Object.hasOwn(merged, key)) fields[key] = value;
+        else if (!handledFields.has(key)) {
+          const first = fields[key];
+          const conflict = (name: string) => addConflict(meta, 'field', name, [rootFile!.path, f.path], rootFile!.path);
+          if (Array.isArray(first) && Array.isArray(value)) {
+            fields[key] = dedupeBy([...first, ...value], (item) => JSON.stringify(item));
+          } else if (
+            first &&
+            value &&
+            typeof first === 'object' &&
+            typeof value === 'object' &&
+            !Array.isArray(first) &&
+            !Array.isArray(value)
+          ) {
+            const rootBlock = first as Record<string, unknown>;
+            fields[key] = { ...value, ...rootBlock };
+            for (const [entry, given] of Object.entries(value)) {
+              if (Object.hasOwn(rootBlock, entry) && JSON.stringify(rootBlock[entry]) !== JSON.stringify(given))
+                conflict(`${key}.${entry}`);
+            }
+          } else if (JSON.stringify(first) !== JSON.stringify(value)) conflict(key);
+        }
       }
       for (const field of ['setup', 'validators', 'internalRoutes'] as const)
         if (c[field]) merged[field] = union(merged[field], c[field]);
