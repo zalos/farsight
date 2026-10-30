@@ -3,7 +3,7 @@
 // Runs against the built packages: `pnpm build` first.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ingestRepo, parseSpecText, discoverSpecs, ingestSpec, specToYaml } from '../dist/index.js';
@@ -534,4 +534,14 @@ test('candidate metadata survives design and store persistence without moving no
     openapiIgnored: ['docs/vendor-api.json'],
   });
   assert.equal(ignored.meta!.openapi, undefined);
+});
+
+test('discovery refuses local declarations and candidate symlinks outside the source', async () => {
+  const outside = tempRepo({ 'vendor.json': JSON.stringify({ openapi: '3.0.0', paths: {} }) });
+  const dir = tempRepo({ 'src/app.ts': 'export const app = true;' });
+  symlinkSync(join(outside, 'vendor.json'), join(dir, 'candidate.json'));
+  assert.deepEqual((await discoverSpecs(dir, {})).specs, []);
+  const declared = await discoverSpecs(dir, {}, [{ path: 'candidate.json' }]);
+  assert.deepEqual(declared.specs, []);
+  assert.deepEqual(declared.errors, ['openapi candidate.json: path leaves the source']);
 });

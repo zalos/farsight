@@ -6,12 +6,12 @@
 //    the ignored root-only setting, the glossary conflict and the note, in words.
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
-import { cpSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test, expect, gotoReady } from './support';
-import { CLI, REPO_ROOT } from '../fixture/workspace.mjs';
+import { CLI, REPO_ROOT, makeWorkspace, ingest } from '../fixture/workspace.mjs';
 
 async function openSettings(page: Page): Promise<void> {
   if (!(await page.locator('#gearbtn').isVisible())) await page.locator('#morebtn').click();
@@ -125,5 +125,125 @@ test.describe('on the NX example', () => {
     const tip = page.locator('#fs-tip');
     await expect(tip).toContainText('for the whole source');
     await expect(tip).toContainText('for one folder');
+  });
+});
+
+// A private copy of the invoice fixture: no shared suite or dogfood source is changed.
+test.describe('OpenAPI registration from Settings', () => {
+  test.describe.configure({ mode: 'serial' });
+  let workspace: ReturnType<typeof makeWorkspace>;
+  const servers: ChildProcess[] = [];
+  let writable = '';
+  let readonly = '';
+  test.beforeAll(async () => {
+    workspace = makeWorkspace('openapi-config');
+    for (const name of ['vendor-api', 'old-vendor'])
+      writeFileSync(
+        join(workspace.repoDir, 'docs', name + '.json'),
+        JSON.stringify({
+          openapi: '3.1.0',
+          info: { title: name, version: '1.0' },
+          paths: { ['/vendor/' + name]: { get: {} } },
+        }),
+      );
+    ingest(workspace.dir, workspace.graph);
+    for (const ro of [false, true]) {
+      const port = await freePort();
+      const child = spawn(
+        process.execPath,
+        [CLI, 'serve', workspace.graph, '--port', String(port), ...(ro ? ['--read-only'] : [])],
+        { cwd: workspace.dir, stdio: 'ignore' },
+      );
+      servers.push(child);
+      const base = `http://localhost:${port}/`;
+      if (ro) readonly = base;
+      else writable = base;
+      let ready = false;
+      for (let i = 0; i < 100; i++) {
+        try {
+          if ((await fetch(base + 'api/version')).ok) {
+            ready = true;
+            break;
+          }
+        } catch {
+          /* startup */
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!ready) throw new Error('OpenAPI fixture server never answered');
+    }
+  });
+  test.afterAll(() => {
+    for (const child of servers) child.kill('SIGTERM');
+    workspace?.cleanup();
+  });
+  async function open(page: Page, base: string) {
+    await page.goto(base + '#/settings?lens=code');
+    await expect(page.locator('#stats')).not.toHaveText('loading…');
+    await expect(page.locator('.cfg-n-candidates')).toHaveText('2 candidate documents');
+  }
+
+  /**
+   * @covers packages/server/public/app/surfaces/settings-config.js::renderConfigFiles
+   * @covers packages/server/public/app/lib/read-only.js::applyReadOnly
+   */
+  test('read-only greys both candidate doors and prevents keyboard writes', async ({ page }) => {
+    await open(page, readonly);
+    const before = readFileSync(join(workspace.dir, '.farsight/settings.json'), 'utf8');
+    const register = page.locator('[data-openapi-action="register"]').first();
+    const dismiss = page.locator('[data-openapi-action="dismiss"]').first();
+    for (const button of [register, dismiss]) {
+      await expect(button).toHaveAttribute('data-write', '');
+      await expect(button).toHaveAttribute('aria-disabled', 'true');
+      await expect(button).toHaveClass(/ro-off/);
+      await button.focus();
+      await button.press('Enter');
+    }
+    expect(readFileSync(join(workspace.dir, '.farsight/settings.json'), 'utf8')).toBe(before);
+  });
+
+  /**
+   * @covers packages/server/public/app/surfaces/settings-config.js::renderConfigFiles
+   * @covers GET /api/config
+   * @covers POST /api/sync
+   */
+  test('Register saves the workspace declaration; Settings sync applies its routes and origin', async ({ page }) => {
+    await open(page, writable);
+    const row = page.locator('.cfg-openapi-row[data-path="docs/vendor-api.json"]');
+    await expect(row).toContainText('not registered');
+    await page.locator('.cfg-n-candidates').click();
+    await expect(page.locator('#fs-tip')).toContainText('in this source');
+    await page.keyboard.press('Escape');
+    await page.screenshot({ path: join(test.info().outputDir, 'openapi-candidates.png'), fullPage: true });
+    await row.locator('[data-openapi-action="register"]').click();
+    await expect(page.locator('.cfg-openapi-note')).toContainText('Saved.');
+    const settings = JSON.parse(readFileSync(join(workspace.dir, '.farsight/settings.json'), 'utf8'));
+    expect(settings.sources[0].openapi).toEqual([{ path: 'docs/vendor-api.json' }]);
+    expect(
+      JSON.parse(readFileSync(workspace.graph, 'utf8')).nodes.some(
+        (n: { name: string }) => n.name === 'GET /vendor/vendor-api',
+      ),
+    ).toBe(false);
+    await page.locator('#syncbtn').click();
+    await expect(page.locator('.cfg-n-candidates')).toHaveText('1 candidate document');
+    await expect(row).toContainText('registered in workspace');
+    expect(
+      JSON.parse(readFileSync(workspace.graph, 'utf8')).nodes.some(
+        (n: { name: string }) => n.name === 'GET /vendor/vendor-api',
+      ),
+    ).toBe(true);
+  });
+
+  test('Dismiss persists the ignored path and removes it after sync', async ({ page }) => {
+    await page.goto(writable + '#/settings?lens=code');
+    const row = page.locator('.cfg-openapi-row[data-path="docs/old-vendor.json"]');
+    await row.locator('[data-openapi-action="dismiss"]').click();
+    await expect(page.locator('.cfg-openapi-note')).toContainText('Saved.');
+    expect(
+      JSON.parse(readFileSync(join(workspace.dir, '.farsight/settings.json'), 'utf8')).sources[0].openapiIgnore,
+    ).toEqual(['docs/old-vendor.json']);
+    await page.locator('#syncbtn').click();
+    await expect(page.locator('.cfg-n-candidates')).toHaveText('0 candidate documents');
+    await expect(row).toHaveCount(0);
   });
 });

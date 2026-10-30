@@ -50,6 +50,9 @@ export const CONFIG_STRINGS: Record<string, StringEntry> = {
   "config.openapi.localOnly": same("Writing into a source requires a local source.", "A git source is a managed checkout. Use workspace registration for it or edit its repository separately."),
   "config.openapi.pathInvalid": same("Use a source-relative path that stays inside the source, or an HTTP or HTTPS URL.", "An OpenAPI declaration must name a file inside its source or a document served at a web address."),
   "config.openapi.intoSourceSaved": same("Registered in farsight.config.json. Sync the sources to update the graph.", "The explicit source declaration was saved in the repository’s config. It takes effect at the next sync."),
+  'config.openapi.candidatesHelp': same('candidate documents from the last sync', 'Read the documents that looked like API descriptions at the last sync without applying them.'),
+  'config.openapi.dismissHelp': same('ignore a candidate in workspace settings', 'Dismiss the document in this workspace without changing the source repository.'),
+  'config.openapi.ignoredInWorkspace': same('This path is dismissed in the workspace. Register it without --into-source first, then export its declaration.', 'An explicit source declaration cannot override the workspace ignore list. Clear the dismissal through workspace registration first.'),
   'count.unit.openapiAppliedOne': one('1 applied document', 'count.unit.openapiApplied'),
   'count.unit.openapiCandidatesOne': one('1 candidate document', 'count.unit.openapiCandidates'),
   'count.unit.openapiOperationsOne': one('1 operation', 'count.unit.openapiOperations'),
@@ -57,7 +60,7 @@ export const CONFIG_STRINGS: Record<string, StringEntry> = {
   // ── the Config files list on the Settings page (docs/proposals/round-2026-10-05.md §6) ──
   'config.title': same('Config files',
     'The Farsight config files each source holds, read when the source was last synced. Read only: edit the files themselves, then sync again.'),
-  'config.sub': same('What each farsight.config.json gives, where it applies, and where two files disagree. Read only — edit the files, then sync.',
+  'config.sub': same('What each farsight.config.json gives and where two files disagree. Register or dismiss OpenAPI candidates in this workspace, then sync.',
     'A list of the config files Farsight read for each source: the one in the top folder speaks for the whole source, any other only for the code in its own folder.'),
   'config.scope.root': same('the whole source',
     'This file sits in the top folder of the source, so its words apply to all of the code there.'),

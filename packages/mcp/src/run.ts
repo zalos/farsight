@@ -870,6 +870,7 @@ export function createMcpServer(
         return text(
           [
             '⚠ The graph is empty: 0 nodes, 0 edges.',
+            ...configTools.overviewLines(),
             'Has the repo been ingested since code landed? A repo with no parseable source also produces this.',
             'Fix: call the refresh_graph tool (re-ingests recorded sources), or run `farsight ingest <dir>` and restart.',
           ].join('\n'),

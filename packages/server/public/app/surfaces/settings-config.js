@@ -11,6 +11,7 @@ import { S, esc, currentLens } from '../store.js';
 import { t } from '../strings.js';
 import { vsl } from '../lib/graph-render.js';
 import { countedHtml, defAttrs } from '../lib/counted.js';
+import { applyReadOnly, readOnlyWhy } from '../lib/read-only.js';
 
 const API = '/api/config';
 const cache = { key: null, data: null, error: false, pending: null };
@@ -30,15 +31,129 @@ function fieldHtml(name, lens) {
   return '<code class="cfg-field"' + (known ? defAttrs(key) : '') + '>' + esc(name) + '</code>';
 }
 
+function openApiHtml(repo, meta, counts) {
+  if (!meta) return '';
+  const source = ((S.SETTINGS && S.SETTINGS.sources) || []).find(
+    (s) => s.name === repo && (s.type === 'local' || s.type === 'git'),
+  );
+  const rows = (documents, candidate) =>
+    documents
+      .map((d) => {
+        const origin = 'config.openapi.origin.' + (candidate ? 'candidate' : d.origin);
+        const controls =
+          candidate && source
+            ? ['register', 'dismiss']
+                .map(
+                  (action) =>
+                    '<button type="button" class="btn" data-write data-openapi-action="' +
+                    action +
+                    '" data-source="' +
+                    esc(source.id) +
+                    '" data-path="' +
+                    esc(d.path) +
+                    '"' +
+                    defAttrs('config.openapi.' + action) +
+                    '>' +
+                    esc(t('config.openapi.' + action)) +
+                    '</button>',
+                )
+                .join(' ')
+            : '';
+        return (
+          '<tr class="cfg-openapi-row" data-path="' +
+          esc(d.path) +
+          '"><td><code' +
+          defAttrs('config.openapi.title') +
+          '>' +
+          esc(d.path) +
+          '</code><div>' +
+          esc(d.title) +
+          (d.version ? ' · ' + esc(d.version) : '') +
+          '</div></td><td>' +
+          countedHtml(counts && counts.operations && counts.operations[d.path], API) +
+          '</td><td' +
+          defAttrs(origin) +
+          '>' +
+          esc(t(origin)) +
+          '</td><td class="cfg-openapi-actions">' +
+          controls +
+          '</td></tr>'
+        );
+      })
+      .join('');
+  return (
+    '<section class="cfg-openapi"><div class="cfg-sub"' +
+    defAttrs('config.openapi.title') +
+    '>' +
+    esc(t('config.openapi.title')) +
+    '</div>' +
+    countedHtml(counts && counts.applied, API, { cls: 'cnt-n cfg-n-applied' }) +
+    ' · ' +
+    esc(t('count.scope.source')) +
+    '<table class="src-table cfg-table"><tbody>' +
+    rows(meta.applied || [], false) +
+    '</tbody></table><div class="cfg-sub"' +
+    defAttrs('config.openapi.candidates') +
+    '>' +
+    esc(t('config.openapi.candidates')) +
+    ' · ' +
+    countedHtml(counts && counts.candidates, API, { cls: 'cnt-n cfg-n-candidates' }) +
+    ' · ' +
+    esc(t('count.scope.source')) +
+    '</div><table class="src-table cfg-table"><tbody>' +
+    rows(meta.candidates || [], true) +
+    '</tbody></table><div class="set-note cfg-openapi-note" role="status"></div></section>'
+  );
+}
+
+async function changeOpenApi(event) {
+  const button = event.target.closest('[data-openapi-action]');
+  if (!button || readOnlyWhy() || button.disabled) return;
+  const { source: id, path, openapiAction: action } = button.dataset;
+  const row = button.closest('.cfg-openapi-row');
+  const note = button.closest('.cfg-openapi').querySelector('.cfg-openapi-note');
+  const controls = row.querySelectorAll('button');
+  controls.forEach((el) => {
+    el.disabled = true;
+  });
+  try {
+    const url = '/api/sources/' + encodeURIComponent(id) + '/openapi';
+    const response = await fetch(action === 'dismiss' ? url + '?path=' + encodeURIComponent(path) : url, {
+      method: action === 'dismiss' ? 'DELETE' : 'POST',
+      ...(action === 'register'
+        ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) }
+        : {}),
+    });
+    if (!response.ok) throw new Error(String(response.status));
+    // The Settings save/sync sends its draft wholesale. Keep just these saved fields
+    // current so that pressing Sync cannot silently undo the registration.
+    const source = S.SETTINGS.sources.find((s) => s.id === id);
+    if (source) {
+      source.openapi = (source.openapi || []).filter((d) => (d.url || d.path) !== path);
+      source.openapiIgnore = (source.openapiIgnore || []).filter((p) => p !== path);
+      if (action === 'register') source.openapi.push({ path });
+      else source.openapiIgnore.push(path);
+    }
+    row.querySelector('.cfg-openapi-actions').textContent = t('config.openapi.saved');
+    note.textContent = t('config.openapi.saved');
+  } catch {
+    note.textContent = t('config.openapi.failed');
+    controls.forEach((el) => {
+      el.disabled = false;
+    });
+  }
+}
+
 /** The list for every source the graph recorded config files for, as HTML. Pure over its input. */
 export function configFilesHtml(data, lens) {
   lens = lens || currentLens();
   const metas = (data && data.config) || {};
-  const repos = Object.keys(metas).sort();
+  const openapi = (data && data.openapi) || {};
+  const repos = [...new Set([...Object.keys(metas), ...Object.keys(openapi)])].sort();
   if (!repos.length) return '<div class="set-note cfg-none">' + esc(t('config.none')) + '</div>';
   return repos
     .map((repo) => {
-      const meta = metas[repo];
+      const meta = metas[repo] || {};
       const counts = (data.counts && data.counts[repo]) || {};
       const rows = (meta.files || [])
         .map((f) => {
@@ -141,6 +256,7 @@ export function configFilesHtml(data, lens) {
             notes +
             '</ul>'
           : '') +
+        openApiHtml(repo, openapi[repo], data.openapiCounts && data.openapiCounts[repo]) +
         '</div>'
       );
     })
@@ -163,6 +279,8 @@ export function renderConfigFiles() {
     host.innerHTML = cache.error
       ? '<div class="set-note">' + esc(t('config.failed')) + '</div>'
       : configFilesHtml(cache.data);
+    host.onclick = changeOpenApi;
+    applyReadOnly(host);
   };
   if (cache.key === key && (cache.data || cache.error)) {
     draw();

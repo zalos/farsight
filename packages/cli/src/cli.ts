@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { resolve, join, basename } from 'node:path';
+import { resolve, join, basename, relative, isAbsolute } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, statSync, realpathSync } from 'node:fs';
 import {
@@ -50,6 +50,8 @@ import {
   importersOf,
   resolvePackage,
   configFilesText,
+  openApiFilesText,
+  openApiCounts,
   journeyTree,
   pickJourneys,
   journeyTreeLines,
@@ -120,6 +122,7 @@ import {
   workSourcesOf,
   keyOptionsOf,
   keyDetector,
+  settingsProblem,
 } from '@farsight/server';
 import type { WorkSettingsSource } from '@farsight/server';
 import type { Settings } from '@farsight/server';
@@ -134,7 +137,7 @@ function flag(name: string, fallback?: string): string | undefined {
   return i >= 0 ? rest[i + 1] : fallback;
 }
 /** A flag that takes no value, so the word after it is a positional (`serve --read-only graph.json`). */
-const BOOL_FLAGS = new Set(['--read-only', '--json', '--post', '--confirm', '--csv', '--business']);
+const BOOL_FLAGS = new Set(['--read-only', '--json', '--post', '--confirm', '--csv', '--business', '--into-source']);
 function hasFlag(name: string): boolean {
   return rest.includes(`--${name}`);
 }
@@ -174,6 +177,9 @@ usage:
   farsight gate --policy compliance.yml [--from sync:N] [--to sync:M]
                                                                apply a repo-owned policy to the diff; exit 1 on fail
   farsight api list [--graph graph.json]                       every API surface in the graph (spec-backed or implied)
+  farsight api candidates [--repo r] [--json]                  ${word('config.openapi.candidatesHelp', 'professional')}
+  farsight api register <source> <path|url> [--name name] [--phase phase] [--into-source]
+  farsight api dismiss <source> <path>                        ${word('config.openapi.dismissHelp', 'professional')}
   farsight api spec --repo <name> [--out openapi.yaml] [--format yaml|json]
                                                                generate an OpenAPI 3.1 document from the code (inferences marked)
   farsight api diff --spec <path|url> [--repo <name>] [--format json|md] [--phase <name>] [--strict[=missing,undocumented,notes]]
@@ -1291,9 +1297,111 @@ switch (command) {
   }
   case 'api': {
     const sub = positional[0];
+    if (sub === 'register' || sub === 'dismiss') {
+      const sourceRef = positional[1];
+      const ref = positional[2];
+      if (
+        !sourceRef ||
+        !ref ||
+        positional.length !== 3 ||
+        (sub === 'dismiss' && (isSpecUrl(ref) || hasFlag('into-source')))
+      )
+        fail(word('config.openapi.usage', 'professional'));
+      const file = resolve('.farsight/settings.json');
+      let settings: Settings;
+      try {
+        settings = JSON.parse(readFileSync(file, 'utf8')) as Settings;
+        if (!settings || !Array.isArray(settings.sources)) throw new Error();
+      } catch {
+        fail(word('config.openapi.settingsMissing', 'professional'));
+      }
+      const existingProblem = settingsProblem(settings);
+      if (existingProblem) fail(existingProblem);
+      const matches = settings.sources.filter((s) => s.id === sourceRef);
+      const sources = matches.length ? matches : settings.sources.filter((s) => s.name === sourceRef);
+      const source = sources[0];
+      if (sources.length !== 1 || !source || (source.type !== 'local' && source.type !== 'git'))
+        fail(word('config.openapi.sourceMissing', 'professional').replace('{source}', sourceRef));
+      if (['name', 'phase'].some((name) => hasFlag(name) && (!flag(name) || flag(name)!.startsWith('--'))))
+        fail(word('config.openapi.usage', 'professional'));
+      const wasIgnored = source.openapiIgnore?.includes(ref);
+      const entry = {
+        ...(isSpecUrl(ref) ? { url: ref } : { path: ref }),
+        ...(flag('name') ? { name: flag('name') } : {}),
+        ...(flag('phase') ? { phase: flag('phase') } : {}),
+      };
+      source.openapi = (source.openapi ?? []).filter((d) => (d.url ?? d.path) !== ref);
+      source.openapiIgnore = (source.openapiIgnore ?? []).filter((p) => p !== ref);
+      if (sub === 'register') source.openapi.push(entry);
+      else source.openapiIgnore.push(ref);
+      // A dismissal still names a source-relative document. Validate that reference
+      // with the server's declaration rule before leaving only its ignore entry.
+      const problem = settingsProblem(
+        sub === 'dismiss'
+          ? {
+              ...settings,
+              sources: settings.sources.map((s) =>
+                s === source ? { ...s, openapi: [...s.openapi!, { path: ref }] } : s,
+              ),
+            }
+          : settings,
+      );
+      if (problem) fail(problem);
+      if (hasFlag('into-source')) {
+        if (wasIgnored) fail(word('config.openapi.ignoredInWorkspace', 'professional'));
+        if (source.type !== 'local') fail(word('config.openapi.localOnly', 'professional'));
+        const root = realpathSync(resolve(source.path));
+        const configPath = join(root, 'farsight.config.json');
+        if (existsSync(configPath)) {
+          const rel = relative(root, realpathSync(configPath));
+          if (rel === '..' || rel.startsWith('../') || isAbsolute(rel))
+            fail(word('config.openapi.pathInvalid', 'professional'));
+        }
+        let config: Record<string, unknown>;
+        try {
+          config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {};
+          if (
+            !config ||
+            typeof config !== 'object' ||
+            Array.isArray(config) ||
+            (config.openapi !== undefined && !Array.isArray(config.openapi))
+          )
+            throw new Error();
+        } catch {
+          fail(word('config.openapi.sourceConfigInvalid', 'professional'));
+        }
+        const declarations = (config.openapi ?? []) as { path?: string; url?: string }[];
+        if (declarations.some((d) => !d || typeof d !== 'object'))
+          fail(word('config.openapi.sourceConfigInvalid', 'professional'));
+        config.openapi = [...declarations.filter((d) => (d.url ?? d.path) !== ref), entry];
+        writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+        console.log(word('config.openapi.intoSourceSaved', 'professional'));
+      } else {
+        writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
+        console.log(word('config.openapi.saved', 'professional'));
+      }
+      break;
+    }
     const graphFile = resolve(flag('graph', 'graph.json')!);
     if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
     const store = GraphStore.load(graphFile);
+    if (sub === 'candidates') {
+      const entries = Object.entries(store.meta.openapi ?? {}).filter(
+        ([repo]) => !flag('repo') || repo === flag('repo'),
+      );
+      if (hasFlag('json'))
+        console.log(
+          JSON.stringify(
+            Object.fromEntries(
+              entries.map(([repo, meta]) => [repo, { candidates: meta.candidates, counts: openApiCounts(meta) }]),
+            ),
+            null,
+            2,
+          ),
+        );
+      else console.log(openApiFilesText(store.meta.openapi, flag('repo'), true).join('\n'));
+      break;
+    }
     const { nodes, edges } = store.toJSON();
     const index = buildIndex(nodes, edges);
     setFreshnessMeta(index, store.meta);
@@ -1301,6 +1409,7 @@ switch (command) {
       const apis = apiSurface(index);
       if (!apis.length) {
         console.log('no HTTP routes in the graph — nothing to list');
+        console.log(openApiFilesText(store.meta.openapi, flag('repo'), true).join('\n'));
         break;
       }
       console.log(
@@ -1315,6 +1424,7 @@ switch (command) {
       console.log(
         '\n  ops = routes on this surface · decl = named in the spec · impl = with source · not-impl = in the spec, not the code (not a gap for a spec-only source) · undoc = in the code, not the spec',
       );
+      console.log('\n' + openApiFilesText(store.meta.openapi, flag('repo'), true).join('\n'));
       break;
     }
     if (sub === 'spec') {
@@ -1381,7 +1491,7 @@ switch (command) {
         process.exit(1);
       break;
     }
-    fail(`unknown api subcommand: ${sub} (list | spec | diff)`);
+    fail(`unknown api subcommand: ${sub} (list | candidates | register | dismiss | spec | diff)`);
     break;
   }
   case 'deps': {
