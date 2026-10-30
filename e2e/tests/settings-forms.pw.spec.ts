@@ -184,6 +184,7 @@ test.describe('workspace overlay forms', () => {
     expect(settings().sources[0].config.patterns.at(-1).id).toBe('draft-route');
     expect(settings().sources[1]).toEqual(other);
     await card(page).locator('.settings-export summary').click();
+    await expect(card(page).locator('.settings-export-json')).toContainText('draft-route');
     const exported = JSON.parse(await card(page).locator('.settings-export-json').innerText());
     expect(exported.patterns.at(-1).id).toBe('draft-route');
     expect(exported.openapi[0].name).toBe('Invoice API');

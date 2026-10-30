@@ -385,7 +385,18 @@ export function renderConfigFiles(saved, context) {
           const editor = document.createElement('div');
           editor.dataset.form = form;
           pane.appendChild(editor);
-          renderOverlayForm(editor, { ...context, source, sourceIndex, form, report: data.config?.[source.name] });
+          renderOverlayForm(editor, {
+            ...context,
+            source,
+            sourceIndex,
+            form,
+            report: data.config?.[source.name],
+            changed: () => {
+              context.changed();
+              const exported = workspace.querySelector('.settings-export-json');
+              if (exported) exported.textContent = JSON.stringify(exportOverlay(source), null, 2);
+            },
+          });
           applyReadOnly(workspace);
         };
         const drawWorkspace = () => {

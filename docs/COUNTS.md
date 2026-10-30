@@ -1156,3 +1156,21 @@ also supplies the explicit dry-run detail cap, separate from per-rule matches:
 |---|---|---|---|
 | matches returned | `count.unit.patternReturned` | `count.scope.source`; named source's `patterns test.matches.returned` | details included in this response, at most 1000, unresolved first |
 | matches omitted | `count.unit.patternOmitted` | `count.scope.source`; named source's `patterns test.matches.omitted` | processed matches minus returned details; not unvisited files or matches beyond a stopped budget |
+
+
+### Settings overlay forms
+
+The Patterns form's dry-run summary uses `settings-model.patternTestCounted()` over the response from
+`POST /api/patterns/test`. The GET and POST return the same report/count shapes. A draft POST tests exactly one
+rule; a match count is a processed match, not evidence that a handler resolved or a rule is correct.
+
+| on screen | unit (both registers) | scope | source | what it counts |
+|---|---|---|---|---|
+| rules tested | `count.unit.rules` | `count.scope.source` | `patterns test.report.rules.length` | rule report rows returned in this dry run |
+| matches | `count.unit.matches` | `count.scope.source` | `patterns test.report.rules[].matched` | processed matches across the returned rules; breakdown by rule id sums to the total |
+
+Returned and omitted match details retain `patternMatchCounts()` and their existing units above. Skipped diagnostic
+omissions use the rule's existing `count.scope.pattern` Counted. The OpenAPI form reuses `openApiCounts()` from
+`GET /api/config` for applied/candidate documents and operations, with the source/document scopes registered above.
+No form derives a graph total from the number of editable draft rows. All these counts print through `countedHtml`
+with their endpoint, unit, scope and source-field tooltip.

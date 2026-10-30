@@ -59,7 +59,7 @@ function rowPath(row, sourceIndex, form) {
   const prefix = `sources[${sourceIndex}]${form === 'openapi' ? '' : '.config'}.${row.path}`;
   return row.key !== undefined ? prefix + '.' + row.key : prefix + '[' + row.index + ']';
 }
-function field(row, name, label, path, value, config = {}) {
+function field(name, label, path, value, config = {}) {
   return fieldHtml({
     key: key(label),
     path: path + (name === '$value' || name === '$key' ? '' : '.' + name),
@@ -71,14 +71,14 @@ function rowHtml(row, index, ctx) {
   const { sourceIndex, form, report } = ctx;
   const path = rowPath(row, sourceIndex, form);
   const v = row.value;
-  const f = (name, label = name, config = {}) => field(row, name, label, path, model.readAt(v, name), config);
+  const f = (name, label = name, config = {}) => field(name, label, path, model.readAt(v, name), config);
   const text = (name, label = name) => f(name, label, { type: 'textarea' });
   const list = (name, label = name) =>
-    field(row, name, label, path, (model.readAt(v, name) || []).join('\n'), { type: 'textarea' });
-  const value = (label, config = {}) => field(row, '$value', label, path, Array.isArray(v) ? v.join('\n') : v, config);
+    field(name, label, path, (model.readAt(v, name) || []).join('\n'), { type: 'textarea' });
+  const value = (label, config = {}) => field('$value', label, path, Array.isArray(v) ? v.join('\n') : v, config);
   let html =
     row.key !== undefined
-      ? field(row, '$key', 'key', path, row.key, { id: `form-${sourceIndex}-${form}-${index}-key` })
+      ? field('$key', 'key', path, row.key, { id: `form-${sourceIndex}-${form}-${index}-key` })
       : '';
   if (/\.(security|guards|middleware)$/.test(row.path)) {
     html += f('label') + f('tier', 'tier', { options: options(tiers, true) }) + f('requires', 'grant');
@@ -101,9 +101,9 @@ function rowHtml(row, index, ctx) {
     html += `<aside class="settings-form-audit"${defAttrs(key('audit'))}><b>${esc(t(key('audit')))}</b><ul>${(notes.length ? notes : [t(key('noAudit'))]).map((note) => `<li>${esc(note)}</li>`).join('')}</ul></aside>`;
   } else if (row.path === 'patterns') {
     const matcher = matchers.find((name) => Object.hasOwn(v.match || {}, name)) || 'call';
-    html += f('id') + field(row, 'files', 'files', path, (v.files || []).join('\n'), { type: 'textarea' });
-    html += field(row, '$matcher', 'matcher', path + '.match', matcher, { options: options(matchers) });
-    html += field(row, 'match.' + matcher, 'expression', path, v.match?.[matcher], { type: 'textarea' });
+    html += f('id') + field('files', 'files', path, (v.files || []).join('\n'), { type: 'textarea' });
+    html += field('$matcher', 'matcher', path + '.match', matcher, { options: options(matchers) });
+    html += field('match.' + matcher, 'expression', path, v.match?.[matcher], { type: 'textarea' });
     if (['call', 'decorator', 'annotation'].includes(matcher))
       html += field(
         row,
@@ -132,7 +132,7 @@ function rowHtml(row, index, ctx) {
     html += list('emit.tags', 'emitTags') + text('business') + text('emit.business', 'business');
     html += `<div class="settings-pattern-actions">${buttonHtml(key('test'), `data-pattern-test="${index}"`)}${buttonHtml(key('untested'), `data-pattern-untested="${index}"`)}<p data-pattern-state="${index}" role="status"></p></div><div data-pattern-result="${index}" class="settings-pattern-result"></div>`;
   } else if (row.path === 'openapi') {
-    html += field(row, '$document', 'documentRef', path, v.url || v.path) + f('name', 'documentName') + f('phase');
+    html += field('$document', 'documentRef', path, v.url || v.path) + f('name', 'documentName') + f('phase');
   } else if (row.path === 'openapiIgnore') html += value('ignored');
   else if (row.path === 'glossary') html += f('label', 'wordLabel') + text('description');
   else if (row.path === 'tags' || row.path === 'entrypoints') html += value('matchers', { type: 'textarea' });
@@ -275,7 +275,6 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
   const editor = rowEditor(grid, {
     label: formTitleKey(form),
     rows,
-    empty: key('empty.' + form),
     add: () => newRow(addPath, rows, form),
     columns: [{ key: key('entry'), html: (row, i) => rowHtml(row, i, { sourceIndex, form, report }) }],
     onChange: commit,

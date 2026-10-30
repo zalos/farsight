@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { resolve, join, basename, relative, isAbsolute, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, statSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, statSync, lstatSync, realpathSync } from 'node:fs';
 import {
   GraphStore,
   buildIndex,
@@ -1712,7 +1712,8 @@ switch (command) {
       const store = source.type === 'git' && existsSync(graphFile) ? GraphStore.load(graphFile) : undefined;
       const root = realpathSync(source.type === 'local' ? resolve(source.path) : repoCheckout(store, source.name).root);
       const configFile = join(root, 'farsight.config.json');
-      if (existsSync(configFile)) {
+      if (lstatSync(configFile, { throwIfNoEntry: false })) {
+        if (!existsSync(configFile)) fail(word('config.openapi.pathInvalid', 'professional'));
         const rel = relative(root, realpathSync(configFile));
         if (rel === '..' || rel.startsWith('../') || isAbsolute(rel))
           fail(word('config.openapi.pathInvalid', 'professional'));

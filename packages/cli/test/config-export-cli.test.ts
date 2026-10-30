@@ -101,4 +101,7 @@ test('config export prints a merged root without writing, and writes only with -
   symlinkSync(outside, configFile);
   assert.equal(run('source-id', '--into-source').status, 1);
   assert.equal(readFileSync(outside, 'utf8'), '{}');
+  rmSync(outside);
+  assert.equal(run('source-id', '--into-source').status, 1);
+  assert.equal(run('source-id').status, 1);
 });
