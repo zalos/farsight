@@ -209,6 +209,7 @@ export async function applyDesigns(
   }
   titleDocLinks(fragment, repoRoot);
   fragment.meta = {
+    ...fragment.meta,
     files: (fragment.meta?.files ?? 0) + manifests.length,
     sourceHash: hash.digest('hex').slice(0, 12),
   };

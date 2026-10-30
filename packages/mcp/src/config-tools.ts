@@ -6,7 +6,14 @@
  */
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { configFilesText, configOverviewLines, type GraphMeta } from '@farsight/core';
+import {
+  configFilesText,
+  configOverviewLines,
+  openApiFilesText,
+  openApiOverviewLines,
+  openApiCounts,
+  type GraphMeta,
+} from '@farsight/core';
 
 export interface ConfigToolsContext {
   server: McpServer;
@@ -34,13 +41,31 @@ export function registerConfigTools(ctx: ConfigToolsContext): ConfigTools {
       },
     },
     async ({ repo, json }) => {
-      const metas = ctx.meta().config ?? {};
+      const graphMeta = ctx.meta();
+      const metas = graphMeta.config ?? {};
       if (json) {
         const picked = Object.fromEntries(Object.entries(metas).filter(([r]) => !repo || r === repo));
+        for (const [r, openapi] of Object.entries(graphMeta.openapi ?? {})) {
+          if (repo && repo !== r) continue;
+          Object.assign(picked, {
+            [r]: {
+              ...(picked[r] ?? { files: [], conflicts: [], notes: [] }),
+              openapi,
+              openapiCounts: openApiCounts(openapi),
+            },
+          });
+        }
         return text(JSON.stringify(picked, null, 2));
       }
-      return text(configFilesText(metas, repo).join('\n'));
+      return text(
+        [
+          ...configFilesText(metas, repo),
+          ...openApiFilesText(graphMeta.openapi, repo, false, Object.keys(graphMeta.repos ?? {})),
+        ].join('\n'),
+      );
     },
   );
-  return { overviewLines: () => configOverviewLines(ctx.meta().config) };
+  return {
+    overviewLines: () => [...configOverviewLines(ctx.meta().config), ...openApiOverviewLines(ctx.meta().openapi)],
+  };
 }

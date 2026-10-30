@@ -646,6 +646,21 @@ export interface RoutesMeta {
   gaps: RouteGap[];
 }
 
+/** One OpenAPI document, whether applied or awaiting registration. */
+export interface OpenApiDocument {
+  path: string;
+  title: string;
+  version: string;
+  operations: number;
+  origin: 'file' | 'config' | 'settings';
+}
+
+/** OpenAPI documents read for one source. Candidates never add routes or contracts. */
+export interface OpenApiMeta {
+  applied: OpenApiDocument[];
+  candidates: OpenApiDocument[];
+}
+
 // ── dependencies: packages as nodes (docs/proposals/dependencies-and-nx.md §2.1) ──
 // A `package` node is one dependency of one source: a third-party package (`zod`, `@scope/pkg`)
 // or a workspace library a path alias / workspace package name resolves to. The edges into it are
@@ -1236,6 +1251,7 @@ export interface GraphFragment {
     journeys?: JourneysMeta;
     decisions?: DecisionsMeta;
     routes?: RoutesMeta;
+    openapi?: OpenApiMeta;
   };
   /** OpenAPI documents that were found but could not be read — reported, never fatal. */
   specErrors?: string[];

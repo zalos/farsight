@@ -62,6 +62,7 @@ export interface Counted {
  */
 export const COUNT_SCOPES = [
   'surf.scope.api', // declared and implemented operations on one reconciled API surface
+  'count.scope.document', // operations declared by one document, including an unapplied candidate
   'echo.portal.scope', // only the bounded page of scoped memory records returned by Echo
   'sentinel.scope.inspection', // one immutable sanitized service inspection view
   'sentinel.evidence.countScope', // one accepted imported report, no scanner or coverage credit

@@ -7,12 +7,12 @@
  * the `api` node. Freshness meta folds the spec files in.
  */
 import { createHash } from 'node:crypto';
-import type { GraphFragment } from '@farsight/core';
+import type { GraphFragment, OpenApiMeta, OpenApiDocument } from '@farsight/core';
 import {
   applySpecToFragment,
-  specToFragment,
   specDeclaresSecurity,
   specOperations,
+  specToFragment,
   type ReconcileResult,
 } from '@farsight/core';
 import { loadWorkspaceConfig, type WorkspaceConfig } from '../shared/config-files.js';
@@ -25,7 +25,7 @@ export { discoverSpecs } from './discover.js';
 
 export interface SpecApplication {
   path: string;
-  origin: 'file' | 'config';
+  origin: OpenApiDocument['origin'];
   result: ReconcileResult;
 }
 
@@ -40,17 +40,24 @@ export async function applySpecs(
   const { specs, errors } = await discoverSpecs(repoRoot, options, config.openapi ?? []);
   const applied: SpecApplication[] = [];
   const securityByApi = new Map<string, boolean>();
-  if (!specs.length) return { applied, errors, securityByApi };
+  const openapi: OpenApiMeta = { applied: [], candidates: [] };
   const hash = createHash('sha1').update(fragment.meta?.sourceHash ?? '');
   for (const spec of specs) {
-    const policy = config.openapi?.find((entry) => entry.path === spec.path || entry.url === spec.path);
+    openapi[spec.status === 'applied' ? 'applied' : 'candidates'].push({
+      path: spec.path,
+      title: String(spec.doc.info?.title ?? ''),
+      version: String(spec.doc.info?.version ?? ''),
+      operations: specOperations(spec.doc, { repo: fragment.repo, path: spec.path }).length,
+      origin: spec.origin,
+    });
+    if (spec.status === 'candidate') continue;
     const result = applySpecToFragment(
       fragment,
       spec.doc,
       { repo: fragment.repo, path: spec.path, lineOf: spec.lineOf, ...(spec.name ? { name: spec.name } : {}) },
       {
-        phase: policy?.phase,
-        phaseOrder: policy?.phaseOrder,
+        phase: spec.phase,
+        phaseOrder: spec.phaseOrder,
         internalRoutes: config.internalRoutes,
         guardNames: config.guards,
         validators: config.validators,
@@ -63,7 +70,12 @@ export async function applySpecs(
     );
     hash.update(`\n${spec.path}:`).update(spec.text);
   }
-  fragment.meta = { files: (fragment.meta?.files ?? 0) + specs.length, sourceHash: hash.digest('hex').slice(0, 12) };
+  fragment.meta = {
+    ...fragment.meta,
+    files: (fragment.meta?.files ?? 0) + applied.length,
+    sourceHash: applied.length ? hash.digest('hex').slice(0, 12) : (fragment.meta?.sourceHash ?? ''),
+    openapi,
+  };
   return { applied, errors, securityByApi };
 }
 
