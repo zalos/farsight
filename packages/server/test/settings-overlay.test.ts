@@ -8,7 +8,7 @@ import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
 import { GraphStore, CONFIG_FIELDS, CONFIG_OVERLAY_FIELDS } from '@farsight/core';
 import { settingsProblem, syncSources, type Settings } from '../dist/index.js';
-import { isWriteRoute } from '../dist/guard.js';
+import { isWriteRoute, refuseRequest } from '../dist/guard.js';
 
 const source = { id: 'app', name: 'app', type: 'local' as const, path: 'source', enabled: true };
 const settings = (extra: Record<string, unknown> = {}) => ({
