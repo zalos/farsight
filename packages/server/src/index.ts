@@ -2430,14 +2430,6 @@ export function serveGraph(
           {
             ...sourceIngestOptions(source),
             repoName: repo,
-            ...(rule
-              ? {
-                  configOverlay: {
-                    from: `.farsight/settings.json → sources[${source.id}].config`,
-                    config: { patterns: [rule] },
-                  },
-                }
-              : {}),
           },
           { rule: rule?.id || u.searchParams.get('rule') || undefined },
           rule,

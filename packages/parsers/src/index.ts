@@ -2,7 +2,7 @@ import { createParser } from '@farsight/code-parser';
 import { createHash } from 'node:crypto';
 import { resolve as resolvePath } from 'node:path';
 import type { GraphFragment, GraphEdge } from '@farsight/core';
-import { applySetupOrigin, applyTooling, DEFAULT_TOOLING } from '@farsight/core';
+import { applySetupOrigin, applyTooling, DEFAULT_TOOLING, t } from '@farsight/core';
 import type { LanguageAdapter, IngestOptions } from './types.js';
 import { collectFiles, contentDigest } from './shared/files.js';
 import { tsJsAdapter } from './tsjs.js';
@@ -207,7 +207,7 @@ export async function testPatterns(
     // guides adapter extraction, but saved rules cannot shadow or consume the draft's budget.
     for (const file of workspace.files) delete file.config.patterns;
     workspace.files.push({
-      path: options.configOverlay?.from ?? 'workspace draft',
+      path: options.configOverlay?.from ?? t('settings.forms.draftOrigin', 'professional'),
       dir: '.',
       root: false,
       from: 'workspace',

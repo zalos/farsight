@@ -4,7 +4,13 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FarsightConfig, GraphNode } from '@farsight/core';
-import { loadWorkspaceConfig, exportWorkspaceConfig, applyWorkspaceConfig, applyStores } from '../dist/index.js';
+import {
+  loadWorkspaceConfig,
+  exportWorkspaceConfig,
+  applyWorkspaceConfig,
+  applyStores,
+  ingestRepo,
+} from '../dist/index.js';
 
 test('export retains the effective words, matchers and store assignments while nested files stay scoped', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'farsight-export-'));
@@ -54,4 +60,28 @@ test('export retains the effective words, matchers and store assignments while n
   assert.equal(beforeNodes.find((node) => node.name === 'Beta')?.store?.name, 'Ledger');
   assert.deepEqual(afterNodes, beforeNodes);
   assert.equal(afterNodes.find((node) => node.id === 'app::nested')?.facets.business?.label, 'Nested submission');
+});
+
+test('ingest produces the same nodes and edges after moving the overlay into the root export', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'farsight-export-ingest-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, 'app.ts'), 'export function submit() {}\nexport function approve() { submit(); }');
+  writeFileSync(
+    join(root, 'farsight.config.json'),
+    JSON.stringify({ glossary: { submit: { label: 'Root submission' } }, tags: { billing: ['submit'] } }),
+  );
+  const configOverlay = {
+    from: 'workspace',
+    config: {
+      glossary: { submit: { label: 'Workspace submission' }, approve: { label: 'Approve payment' } },
+      tags: { billing: ['approve'] },
+      entrypoints: { Billing: ['approve'] },
+    },
+  };
+  const before = await ingestRepo(root, { repoName: 'app', configOverlay });
+  const exported = exportWorkspaceConfig(loadWorkspaceConfig(root, { configOverlay }));
+  writeFileSync(join(root, 'farsight.config.json'), JSON.stringify(exported));
+  const after = await ingestRepo(root, { repoName: 'app' });
+  assert.deepEqual(after.nodes, before.nodes);
+  assert.deepEqual(after.edges, before.edges);
 });

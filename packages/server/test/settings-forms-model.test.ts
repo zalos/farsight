@@ -177,3 +177,57 @@ test('declared audit uses the parser’s structured kind/name association, inclu
   assert.deepEqual(M.declaredAuditNotes(report, 'app', { kind: 'guard', name: 'Session' }), []);
   assert.deepEqual(M.declaredAuditNotes(report, 'app', { kind: 'route', name: 'GET /new' }), []);
 });
+
+test('unchanged saved rules are not gated by source edits or object-key order', () => {
+  const rule = { id: 'one', files: ['*.ts'], match: { call: 'portal.get' }, emit: { kind: 'flag', name: 'Portal' } };
+  const source = { id: 'app', type: 'local', path: 'source', config: { patterns: [rule] } };
+  const loaded = { sources: [source] };
+  const draft = M.clone(loaded);
+  draft.sources[0].exclude = ['generated/**'];
+  draft.sources[0].config.patterns[0] = { emit: rule.emit, match: rule.match, files: rule.files, id: rule.id };
+  assert.deepEqual(M.untestedPatterns(loaded, draft, new Set()), []);
+  assert.equal(M.patternStamp(source, rule), M.patternStamp(source, draft.sources[0].config.patterns[0]));
+});
+
+test('form value folds preserve typed captures, replace matchers and remove fields hidden by emit-kind changes', () => {
+  const row = {
+    path: 'patterns',
+    value: {
+      files: [],
+      match: { call: 'old' },
+      emit: { kind: 'route', method: 'GET', path: '', handler: 'enclosing', name: '' },
+    },
+  };
+  M.updateFormValue(row, 'match.args', 'path=0\nhandler=-1\nmethod=pair:method');
+  assert.deepEqual(row.value.match.args, { path: 0, handler: -1, method: 'pair:method' });
+  M.updateFormValue(row, 'files', 'src/*.ts\n  lib/*.ts');
+  assert.deepEqual(row.value.files, ['src/*.ts', 'lib/*.ts']);
+  M.updateFormValue(row, '$matcher', 'regex');
+  assert.deepEqual(row.value.match, { regex: '' });
+  M.updateFormValue(row, 'emit.kind', 'guard');
+  assert.deepEqual(row.value.emit, { kind: 'guard', handler: 'enclosing' });
+  M.updateFormValue(row, 'emit.requires', '$role');
+  M.updateFormValue(row, 'emit.kind', 'queue');
+  assert.deepEqual(row.value.emit, { kind: 'queue', handler: 'enclosing' });
+  const doc = { path: 'openapi', value: { path: 'api.yaml', name: 'API' } };
+  M.updateFormValue(doc, '$document', 'https://example.com/api.yaml');
+  assert.deepEqual(doc.value, { url: 'https://example.com/api.yaml', name: 'API' });
+  const external = { path: 'externals', value: {} };
+  M.updateFormValue(external, 'store', 'false');
+  assert.equal(external.value.store, false);
+  M.updateFormValue(external, 'store', '');
+  assert.equal(Object.hasOwn(external.value, 'store'), false);
+});
+
+test('registration merge retains an edited document and newly registered or dismissed candidates', () => {
+  const before = { openapi: [{ path: 'a.yaml', name: 'A' }], openapiIgnore: ['old.yaml'] };
+  const draft = { openapi: [{ path: 'a.yaml', name: 'Renamed' }], openapiIgnore: ['draft.yaml'] };
+  const current = {
+    openapi: [{ path: 'a.yaml', name: 'A' }, { path: 'registered.yaml' }],
+    openapiIgnore: ['old.yaml', 'dismissed.yaml'],
+  };
+  assert.deepEqual(M.mergeSettings(before, draft, current), {
+    openapi: [{ path: 'a.yaml', name: 'Renamed' }, { path: 'registered.yaml' }],
+    openapiIgnore: ['draft.yaml', 'dismissed.yaml'],
+  });
+});

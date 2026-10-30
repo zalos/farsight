@@ -95,6 +95,7 @@ test('config export prints a merged root without writing, and writes only with -
   assert.equal(readFileSync(file, 'utf8'), before);
   const written = run('App', '--into-source');
   assert.equal(written.status, 0, written.stderr);
+  assert.match(written.stderr, /workspace overlay still contains these declarations/);
   assert.equal(readFileSync(configFile, 'utf8'), written.stdout);
   assert.deepEqual(JSON.parse(written.stdout), exported);
   assert.equal(readFileSync(file, 'utf8'), before);

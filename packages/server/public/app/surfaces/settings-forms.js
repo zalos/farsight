@@ -16,11 +16,6 @@ const options = (values, optional = false) => [
 const tiers = ['business', 'policy', 'technical'];
 const matchers = ['call', 'decorator', 'annotation', 'query', 'regex'];
 const kinds = ['route', 'guard', 'external', 'queue', 'rule', 'flag', 'entrypoint'];
-const lines = (value) =>
-  String(value)
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
 const fill = (name, vars) =>
   Object.entries(vars).reduce((text, [k, v]) => text.split('{' + k + '}').join(v), t(key(name)));
 const sample = { action: 'approve', resource: 'invoice', 0: 'approve', 1: 'invoice' };
@@ -33,10 +28,9 @@ function newRow(path, rows, form) {
     return {
       ...base,
       value: {
-        id: '',
         files: [],
-        match: { call: '' },
-        emit: { kind: 'route', method: 'GET', path: '', handler: 'enclosing' },
+        match: {},
+        emit: { kind: 'route', method: 'GET', handler: 'enclosing' },
       },
     };
   if (path === 'nodes') return { ...base, value: { kind: form === 'endpoints' ? 'route' : 'guard', name: '' } };
@@ -62,7 +56,7 @@ function rowPath(row, sourceIndex, form) {
 function field(name, label, path, value, config = {}) {
   return fieldHtml({
     key: key(label),
-    path: path + (name === '$value' || name === '$key' ? '' : '.' + name),
+    path: path + (name.startsWith('$') ? '' : '.' + name),
     value,
     ...config,
   }).replace('data-field=', `data-form-field="${esc(name)}" data-field=`);
@@ -99,7 +93,10 @@ function rowHtml(row, index, ctx) {
   } else if (row.path === 'patterns') {
     const matcher = matchers.find((name) => Object.hasOwn(v.match || {}, name)) || 'call';
     html += f('id') + field('files', 'files', path, (v.files || []).join('\n'), { type: 'textarea' });
-    html += field('$matcher', 'matcher', path + '.match', matcher, { options: options(matchers) });
+    html += field('$matcher', 'matcher', path + '.match.' + matcher, matcher, {
+      options: options(matchers),
+      id: `form-${sourceIndex}-${form}-${index}-matcher`,
+    });
     html += field('match.' + matcher, 'expression', path, v.match?.[matcher], { type: 'textarea' });
     if (['call', 'decorator', 'annotation'].includes(matcher))
       html += field(
@@ -128,7 +125,10 @@ function rowHtml(row, index, ctx) {
     html += list('emit.tags', 'emitTags') + text('business') + text('emit.business', 'emitBusiness');
     html += `<div class="settings-pattern-actions">${buttonHtml(key('test'), `data-pattern-test="${index}"`)}${buttonHtml(key('untested'), `data-pattern-untested="${index}"`)}<p data-pattern-state="${index}" role="status"></p></div><div data-pattern-result="${index}" class="settings-pattern-result"></div>`;
   } else if (row.path === 'openapi') {
-    html += field('$document', 'documentRef', path, v.url || v.path) + f('name', 'documentName') + f('phase');
+    html +=
+      field('$document', 'documentRef', path + (v.url ? '.url' : '.path'), v.url || v.path) +
+      f('name', 'documentName') +
+      f('phase');
   } else if (row.path === 'openapiIgnore') html += value('ignored');
   else if (row.path === 'glossary') html += f('label', 'wordLabel') + text('description');
   else if (row.path === 'tags' || row.path === 'entrypoints') html += value('matchers', { type: 'textarea' });
@@ -148,47 +148,6 @@ function rowHtml(row, index, ctx) {
       list('tables');
   const available = form === 'openapi' || model.supportsField(S.VERSION, row.path.split('.')[0]);
   return `<fieldset class="settings-form-fields${available ? '' : ' settings-unavailable'}"${available ? '' : ' disabled'}><legend${defAttrs(key('row.' + row.path))}>${esc(t(key('row.' + row.path)))}</legend>${!available ? `<p>${esc(t('settings.notInBuild'))}</p>` : ''}${html}</fieldset><p class="settings-problem" data-problem-for="${esc(path)}" hidden></p>`;
-}
-
-function updateValue(row, name, value) {
-  if (name === '$key') row.key = value;
-  else if (name === '$value') row.value = Array.isArray(row.value) ? lines(value) : value;
-  else if (name === 'kind' && row.path === 'nodes') {
-    row.value.kind = value;
-    if (value !== 'route') {
-      delete row.value.handler;
-      delete row.value.guards;
-    }
-    if (value !== 'guard') {
-      delete row.value.tier;
-      delete row.value.requires;
-    }
-  } else if (name === '$document') {
-    delete row.value.path;
-    delete row.value.url;
-    row.value[/^https?:/i.test(value) ? 'url' : 'path'] = value;
-  } else if (name === '$matcher')
-    row.value.match = {
-      [value]: '',
-      ...(['call', 'decorator', 'annotation'].includes(value) && row.value.match?.args
-        ? { args: row.value.match.args }
-        : {}),
-    };
-  else if (name === 'match.args') {
-    const args = Object.fromEntries(
-      lines(value).map((line) => {
-        const at = line.indexOf('=');
-        const capture = at < 0 ? line : line.slice(0, at).trim();
-        const selector = at < 0 ? '' : line.slice(at + 1).trim();
-        return [capture, /^-?\d+$/.test(selector) ? Number(selector) : selector];
-      }),
-    );
-    model.writeAt(row.value, name, Object.keys(args).length ? args : undefined);
-  } else if (name === 'files') row.value.files = value.trim().split(/\s+/).filter(Boolean);
-  else if (name === 'guards' || name === 'tables' || name === 'emit.tags')
-    model.writeAt(row.value, name, value ? lines(value) : undefined);
-  else if (name === 'store') model.writeAt(row.value, name, value === '' ? undefined : value === 'true');
-  else model.writeAt(row.value, name, value === '' && !['id', 'name', 'label'].includes(name) ? undefined : value);
 }
 
 export function patternResultHtml(result) {
@@ -235,7 +194,7 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
   const supported = (path) => form === 'openapi' || model.supportsField(S.VERSION, path.split('.')[0]);
   const available = model.formPaths[form].filter(supported);
   addPath = available[0] || addPath;
-  root.innerHTML = `<header class="settings-form-heading"><h3${defAttrs(formTitleKey(form))}>${esc(t(formTitleKey(form)))}</h3>${code ? `<button type="button" class="btn" data-form-json aria-expanded="false"${defAttrs(key('json'))}>${esc(t(key('json')))}</button>` : ''}</header><p class="set-note">${esc(t(key('empty.' + form)))}</p>${code ? `<p class="set-note settings-form-paths"><code>${esc(model.formPaths[form].join(' · '))}</code></p><pre class="settings-form-json" hidden></pre>` : ''}<div class="settings-form-add">${fieldHtml({ key: key('rowType'), path: `form-${sourceIndex}-${form}-type`, value: addPath, options: model.formPaths[form].map((p) => [p, key('row.' + p)]) })}</div><div class="settings-form-rows"></div><p class="settings-problem" data-problem-for="sources[${sourceIndex}]${form === 'openapi' ? '.openapi' : '.config'}" hidden></p>`;
+  root.innerHTML = `<header class="settings-form-heading"><h3${defAttrs(formTitleKey(form))}>${esc(t(formTitleKey(form)))}</h3>${code ? `<button type="button" class="btn" data-form-json aria-expanded="false"${defAttrs(key('json'))}>${esc(t(key('json')))}</button>` : ''}</header>${code ? `<p class="set-note settings-form-paths"><code>${esc(model.formPaths[form].join(' · '))}</code></p><pre class="settings-form-json" hidden></pre>` : ''}<div class="settings-form-add">${fieldHtml({ key: key('rowType'), path: `form-${sourceIndex}-${form}-type`, value: addPath, options: model.formPaths[form].map((p) => [p, key('row.' + p)]) })}</div><div class="settings-form-rows"></div><p class="settings-problem" data-problem-for="sources[${sourceIndex}]${form === 'openapi' ? '.openapi' : '.config'}" hidden></p>`;
   const type = root.querySelector('.settings-form-add select');
   for (const option of type.options)
     if (!supported(option.value)) {
@@ -281,6 +240,7 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
   const editor = rowEditor(grid, {
     label: formTitleKey(form),
     rows,
+    empty: key('empty.' + form),
     add: () => newRow(addPath, rows, form),
     columns: [
       { key: key('entry'), html: (row, i) => rowHtml(row, i, { sourceIndex, sourceId: source.id, form, report }) },
@@ -289,18 +249,16 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
     input: (event, row, index) => {
       const name = event.target.dataset.formField;
       if (!name || !supported(row.path)) return;
-      if (
-        name === '$key' &&
-        rows.some((other) => other !== row && other.path === row.path && other.key === event.target.value)
-      ) {
-        event.target.value = row.key;
-        const note = event.target.closest('.settings-field').querySelector('.settings-problem');
-        note.hidden = false;
-        note.textContent = t(key('duplicate'));
-        return;
-      }
-      updateValue(row, name, event.target.value);
+      if (name === '$key') return;
+      model.updateFormValue(row, name, event.target.value);
       commit();
+      if (name === '$document') {
+        const path = rowPath(row, sourceIndex, form) + (row.value.url ? '.url' : '.path');
+        event.target.dataset.field = path;
+        const wrap = event.target.closest('.settings-field');
+        wrap.dataset.fieldWrap = path;
+        wrap.querySelector('[data-problem-for]').dataset.problemFor = path;
+      }
       if (name === '$matcher' || name === 'emit.kind' || name === 'kind') editor.draw(index);
       else {
         const preview = event.target.closest('tr').querySelector('.settings-label-preview output');
@@ -324,7 +282,19 @@ export function renderOverlayForm(root, { source, sourceIndex, form, report, cha
     },
   });
   grid.onchange = (event) => {
-    if (event.target.dataset.formField === '$key') editor.draw();
+    if (event.target.dataset.formField !== '$key') return;
+    const index = Number(event.target.closest('[data-row]').dataset.row);
+    const row = rows[index];
+    if (rows.some((other) => other !== row && other.path === row.path && other.key === event.target.value)) {
+      event.target.value = row.key;
+      const note = event.target.closest('.settings-field').querySelector('.settings-problem');
+      note.hidden = false;
+      note.textContent = t(key('duplicate'));
+      return;
+    }
+    model.updateFormValue(row, '$key', event.target.value);
+    commit();
+    editor.draw();
   };
   grid.addEventListener('click', async (event) => {
     const button = event.target.closest('[data-pattern-test],[data-pattern-untested]');

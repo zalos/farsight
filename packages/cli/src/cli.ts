@@ -1746,7 +1746,10 @@ switch (command) {
       const invalid = configSchemaProblem(exported, 'config');
       if (invalid) fail(invalid);
       const json = JSON.stringify(exported, null, 2) + '\n';
-      if (hasFlag('into-source')) writeFileSync(configFile, json);
+      if (hasFlag('into-source')) {
+        writeFileSync(configFile, json);
+        process.stderr.write(word('settings.forms.exportRetained', 'professional') + '\n');
+      }
       process.stdout.write(json);
       break;
     }

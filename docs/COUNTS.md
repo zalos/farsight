@@ -1167,7 +1167,7 @@ rule; a match count is a processed match, not evidence that a handler resolved o
 | on screen | unit (both registers) | scope | source | what it counts |
 |---|---|---|---|---|
 | rules tested | `count.unit.rules` | `count.scope.source` | `patterns test.report.rules.length` | rule report rows returned in this dry run |
-| matches | `count.unit.matches` | `count.scope.source` | `patterns test.report.rules[].matched` | processed matches across the returned rules; breakdown by rule id sums to the total |
+| matches | `count.unit.matches` | `count.scope.pattern` | `patterns test.report.rules[].matched` | processed matches across the returned rules; breakdown by rule id sums to the total |
 
 Returned and omitted match details retain `patternMatchCounts()` and their existing units above. Skipped diagnostic
 omissions use the rule's existing `count.scope.pattern` Counted. The OpenAPI form reuses `openApiCounts()` from

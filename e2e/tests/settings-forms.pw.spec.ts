@@ -33,6 +33,15 @@ test.describe('workspace overlay forms', () => {
   const pane = (page: Page, form: string) => card(page).locator(`[data-form="${form}"]`);
   test.beforeAll(async () => {
     workspace = makeProjectsWorkspace('settings-forms');
+    for (const name of ['vendor-api', 'old-vendor'])
+      writeFileSync(
+        join(workspace.dir, 'invoice-app/docs', name + '.json'),
+        JSON.stringify({
+          openapi: '3.1.0',
+          info: { title: name, version: '1' },
+          paths: { ['/vendor/' + name]: { get: {} } },
+        }),
+      );
     writeFileSync(
       join(workspace.dir, 'invoice-app/src/forms.ts'),
       `export function submitForm() {}\nportal.get('/forms', submitForm);\nportal.get('/unresolved', missingHandler);`,
@@ -216,6 +225,50 @@ test.describe('workspace overlay forms', () => {
     await expect(card(page).locator('.cfg-pattern-row').last()).toContainText('draft-route');
     await card(page).locator('[data-config-tab="workspace"]').click();
     await expect(pane(page, 'patterns').locator('[data-form-field="id"]').last()).toHaveValue('draft-route');
+  });
+
+  test('Register and Dismiss refresh form rows and survive editing then Save', async ({ page }) => {
+    await open(page, 'openapi');
+    await pane(page, 'openapi').locator('[data-form-field="name"]').first().fill('Draft API name');
+    const candidate = card(page).locator('.settings-overlay .cfg-openapi-row[data-path="docs/vendor-api.json"]');
+    await candidate.locator('[data-openapi-action="register"]').click();
+    await expect(candidate.locator('.cfg-openapi-actions')).toContainText('Saved');
+    await expect(pane(page, 'openapi').locator('[data-form-field="$document"]')).toHaveCount(2);
+    const dismissed = card(page).locator('.settings-overlay .cfg-openapi-row[data-path="docs/old-vendor.json"]');
+    await dismissed.locator('[data-openapi-action="dismiss"]').click();
+    await expect(dismissed.locator('.cfg-openapi-actions')).toContainText('Saved');
+    await expect(pane(page, 'openapi').locator('[data-form-field="$value"]')).toHaveValue('docs/old-vendor.json');
+    await pane(page, 'openapi').locator('[data-form-field="phase"]').first().fill('draft');
+    await expect(page.locator('#savebtn')).toBeEnabled();
+    await page.locator('#savebtn').click();
+    await expect(page.locator('#savenote')).toHaveText('Saved.');
+    expect(settings().sources[0].openapi).toEqual([
+      { path: 'openapi.yaml', name: 'Draft API name', phase: 'draft' },
+      { path: 'docs/vendor-api.json' },
+    ]);
+    expect(settings().sources[0].openapiIgnore).toEqual(['docs/old-vendor.json']);
+  });
+
+  test('all seven pattern output kinds can be created and saved without hidden invalid fields', async ({ page }) => {
+    await open(page, 'patterns');
+    const patterns = pane(page, 'patterns');
+    for (const kind of ['route', 'guard', 'external', 'queue', 'rule', 'flag', 'entrypoint']) {
+      await patterns.locator('[data-row-action="add"]').click();
+      const row = patterns.locator('[data-row]').last();
+      await row.locator('[data-form-field="id"]').fill('new-' + kind);
+      await row.locator('[data-form-field="files"]').fill('src/forms.ts');
+      await row.locator('[data-form-field="match.call"]').fill('portal.get');
+      await row.locator('[data-form-field="emit.kind"]').selectOption(kind);
+      await row.locator('[data-form-field="emit.name"]').fill('New part');
+      if (kind === 'route') await row.locator('[data-form-field="emit.path"]').fill('/new');
+      else await expect(row.locator('[data-form-field="emit.path"]')).toHaveCount(0);
+      await row.locator('[data-pattern-untested]').click();
+    }
+    await expect(page.locator('#savebtn')).toBeEnabled();
+    await page.locator('#savebtn').click();
+    await expect(page.locator('#savenote')).toHaveText('Saved.');
+    for (const rule of settings().sources[0].config.patterns.slice(1))
+      expect(Object.values(rule.emit)).not.toContain('');
   });
 
   test('export follows the unsaved draft and a late response cannot replace the newer JSON', async ({ page }) => {

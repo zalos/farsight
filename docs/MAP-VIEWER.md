@@ -719,13 +719,14 @@ surface. The content column is at most 880 px; the rail and cards use the shared
   Pattern Test posts the exact draft rule to `POST /api/patterns/test`, which shares the saved-rule GET's admission
   and parser bounds and returns the same shape, unresolved matches first. The disposable pattern inventory contains
   only that draft rule, even when a repository rule has the same id. Tests and explicit Save untested choices are
-  attached to the complete rule and source inputs in browser memory, never persisted in settings. The shell checks
+  attached to a canonical rule/source fingerprint in browser memory, never persisted in settings. Only rules changed
+  from the loaded version require acknowledgement; changing source connection fields does not untest saved rules. The shell checks
   that gate on every Save, including after changing sections. Server validation sentences still come only from
   `POST /api/settings/check` and are displayed beside the named field. Declared rows show the last sync's audit.
   The OpenAPI form reuses the existing candidate doors and edits registered document names/phases in the draft.
 - `settings-agents.js`: tool tier, answer budget, lessons and a summary of agent grants from the source permissions.
 - `lib/settings-model.js`: DOM-free section/type definitions, equality, merge, sync-impact and row operations;
-  tests import the shipped module. It is a function namespace for later overlay form folds.
+  tests import the shipped module. It owns form row/value folds, pattern acknowledgements and registration merging.
 - `lib/row-editor.js`: the single table/grid primitive for collections, grants and lessons. Add, edit, remove and
   move edit the same rows; labelled multiline fields and a returned redraw handle support the overlay forms. Arrow keys move among grid cells, Enter/F2 enters a cell and Escape returns to it.
   `strings-settings.ts` supplies both registers and definitions; write controls carry `data-write`, and every draw

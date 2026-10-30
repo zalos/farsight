@@ -69,17 +69,18 @@ export const dirty = (loaded, draft) => !equal(normalized(loaded), normalized(dr
 export function mergeSettings(loaded, draft, current) {
   function merge(before, after, now, path) {
     if (equal(before, after)) return clone(now);
-    if (path === 'sources' && Array.isArray(before) && Array.isArray(after) && Array.isArray(now)) {
-      const old = new Map(before.map((s) => [s.id, s]));
-      const fresh = new Map(now.map((s) => [s.id, s]));
-      const edited = new Set(after.map((s) => s.id));
+    if (['sources', 'openapi', 'openapiIgnore'].includes(path) && Array.isArray(after) && Array.isArray(now)) {
+      const id = (row) => (path === 'sources' ? row.id : path === 'openapi' ? row.url || row.path : row);
+      const old = new Map((before || []).map((s) => [id(s), s]));
+      const fresh = new Map(now.map((s) => [id(s), s]));
+      const edited = new Set(after.map(id));
       const rows = after.flatMap((s) => {
         // A concurrent deletion survives unless this draft edited that source.
-        if (old.has(s.id) && !fresh.has(s.id) && equal(old.get(s.id), s)) return [];
-        return [merge(old.get(s.id), s, fresh.get(s.id), '')];
+        if (old.has(id(s)) && !fresh.has(id(s)) && equal(old.get(id(s)), s)) return [];
+        return [merge(old.get(id(s)), s, fresh.get(id(s)), '')];
       });
       // New sources on the server were never removed by this draft.
-      return rows.concat(now.filter((s) => !old.has(s.id) && !edited.has(s.id)).map(clone));
+      return rows.concat(now.filter((s) => !old.has(id(s)) && !edited.has(id(s))).map(clone));
     }
     if (object(after) && (before === undefined || object(before))) {
       const result = {};
@@ -167,6 +168,65 @@ const arrayBlocks = new Set([
 ]);
 const inForm = (value, path, form) => form !== 'endpoints' || path !== 'nodes' || value?.kind === 'route';
 
+const lines = (value) =>
+  String(value)
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+export function updateFormValue(row, name, value) {
+  if (name === '$key') row.key = value;
+  else if (name === '$value') row.value = Array.isArray(row.value) ? lines(value) : value;
+  else if (name === 'emit.kind') {
+    const fields = {
+      route: ['method', 'path'],
+      queue: ['topic', 'publishes', 'consumes'],
+      guard: ['guards', 'requires', 'tier'],
+      rule: ['validates', 'tier'],
+    };
+    const keep = new Set(['name', 'handler', 'tags', 'business', ...(fields[value] || [])]);
+    row.value.emit = {
+      kind: value,
+      ...Object.fromEntries(Object.entries(row.value.emit || {}).filter(([key, item]) => keep.has(key) && item !== '')),
+    };
+  } else if (name === 'kind' && row.path === 'nodes') {
+    row.value.kind = value;
+    if (value !== 'route') {
+      delete row.value.handler;
+      delete row.value.guards;
+    }
+    if (value !== 'guard') {
+      delete row.value.tier;
+      delete row.value.requires;
+    }
+  } else if (name === '$document') {
+    delete row.value.path;
+    delete row.value.url;
+    row.value[/^https?:/i.test(value) ? 'url' : 'path'] = value;
+  } else if (name === '$matcher')
+    row.value.match = {
+      [value]: '',
+      ...(['call', 'decorator', 'annotation'].includes(value) && row.value.match?.args
+        ? { args: row.value.match.args }
+        : {}),
+    };
+  else if (name === 'match.args') {
+    const args = Object.fromEntries(
+      lines(value).map((line) => {
+        const at = line.indexOf('=');
+        const capture = at < 0 ? line : line.slice(0, at).trim();
+        const selector = at < 0 ? '' : line.slice(at + 1).trim();
+        return [capture, /^-?\d+$/.test(selector) ? Number(selector) : selector];
+      }),
+    );
+    writeAt(row.value, name, Object.keys(args).length ? args : undefined);
+  } else if (name === 'files') row.value.files = value.trim().split(/\s+/).filter(Boolean);
+  else if (name === 'guards' || name === 'tables' || name === 'emit.tags')
+    writeAt(row.value, name, value ? lines(value) : undefined);
+  else if (name === 'store') writeAt(row.value, name, value === '' ? undefined : value === 'true');
+  else writeAt(row.value, name, value === '' && !['id', 'name', 'label'].includes(name) ? undefined : value);
+}
+
 export function supportsField(version, field) {
   return (
     !Array.isArray(version?.configFields) ||
@@ -227,7 +287,17 @@ export function labelPreview(template, sample, fallback) {
 // Acknowledgements live only in this browser draft, never in settings JSON.
 // Bind them to the full rule and source inputs so editing either invalidates a test.
 export function patternStamp(source, rule) {
-  return JSON.stringify([source.id, source.type, source.path, source.exclude || [], rule]);
+  const canonical = (value) =>
+    Array.isArray(value)
+      ? value.map(canonical)
+      : object(value)
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, canonical(value[key])]),
+          )
+        : value;
+  return JSON.stringify(canonical([source.id, source.type, source.path, source.exclude || [], rule]));
 }
 export function untestedPatterns(loaded, draft, acknowledgements) {
   return (draft.sources || []).flatMap((source) => {
@@ -235,7 +305,7 @@ export function untestedPatterns(loaded, draft, acknowledgements) {
     return (source.config?.patterns || [])
       .filter(
         (rule) =>
-          !before?.config?.patterns?.some((old) => patternStamp(before, old) === patternStamp(source, rule)) &&
+          !before?.config?.patterns?.some((old) => equal(old, rule)) &&
           !acknowledgements.has(patternStamp(source, rule)),
       )
       .map((rule) => ({ source: source.id, rule: rule.id }));
@@ -257,7 +327,7 @@ export function patternTestCounted(result) {
     matches: count(
       rules.reduce((sum, rule) => sum + rule.matched, 0),
       'count.unit.matches',
-      'count.scope.source',
+      'count.scope.pattern',
       'patterns test.report.rules[].matched',
       rules.map((rule) => ({ n: rule.matched, key: 'count.unit.matches', label: rule.id })),
     ),

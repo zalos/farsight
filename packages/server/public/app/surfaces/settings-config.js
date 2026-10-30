@@ -90,7 +90,7 @@ function openApiHtml(repo, meta, counts) {
     '<section class="cfg-openapi"><div class="cfg-sub"' +
     defAttrs('config.openapi.title') +
     '>' +
-    esc(t('config.openapi.title')) +
+    esc(t(currentLens() === 'business' ? 'settings.forms.openapiBusiness' : 'config.openapi.title')) +
     '</div>' +
     countedHtml(counts && counts.applied, API, { cls: 'cnt-n cfg-n-applied' }) +
     ' · ' +
@@ -318,7 +318,11 @@ export function configFilesHtml(data, lens) {
 
 /** Draw the list into the Settings page, asking the server again when the graph changed since the last answer. */
 export function renderConfigFiles(saved, context) {
-  onSaved = saved;
+  const refreshRegistrations = new Map();
+  onSaved = (id, fields, previous) => {
+    saved?.(id, fields, previous);
+    refreshRegistrations.get(id)?.();
+  };
   const host = document.getElementById('cfgrows');
   if (!host) return;
   const title = document.getElementById('set-config-title');
@@ -401,6 +405,7 @@ export function renderConfigFiles(saved, context) {
         }
         const drawForm = () => {
           const form = forms.get(source.id) || 'gates';
+          refreshRegistrations.delete(source.id);
           workspace
             .querySelectorAll('[data-overlay-form]')
             .forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.overlayForm === form)));
@@ -412,17 +417,25 @@ export function renderConfigFiles(saved, context) {
           const editor = document.createElement('div');
           editor.dataset.form = form;
           pane.appendChild(editor);
-          renderOverlayForm(editor, {
-            ...context,
-            source,
-            sourceIndex,
-            form,
-            report: data.config?.[source.name],
-            changed: () => {
-              context.changed();
+          const renderEditor = () =>
+            renderOverlayForm(editor, {
+              ...context,
+              source,
+              sourceIndex,
+              form,
+              report: data.config?.[source.name],
+              changed: () => {
+                context.changed();
+                void drawExport();
+              },
+            });
+          renderEditor();
+          if (form === 'openapi')
+            refreshRegistrations.set(source.id, () => {
+              if (!editor.isConnected) return;
+              renderEditor();
               void drawExport();
-            },
-          });
+            });
           applyReadOnly(workspace);
         };
         const drawWorkspace = () => {
@@ -435,7 +448,7 @@ export function renderConfigFiles(saved, context) {
             )
             .join(
               '',
-            )}</nav><div class="settings-overlay-form"></div>${currentLens() !== 'business' ? `<details class="settings-export"><summary${defAttrs('settings.forms.export')}>${esc(t('settings.forms.export'))}</summary><p class="set-note">${esc(t('settings.forms.exportHelp'))}</p><pre class="settings-export-json"></pre></details>` : ''}`;
+            )}</nav><div class="settings-overlay-form"></div>${currentLens() !== 'business' ? `<details class="settings-export"><summary${defAttrs('settings.forms.export')}>${esc(t('settings.forms.export'))}</summary><p class="set-note">${esc(t('settings.forms.exportHelp'))}</p><p class="set-note"${defAttrs('settings.forms.exportCommand')}>${esc(fill('settings.forms.exportCommand', { source: source.id }))}</p><pre class="settings-export-json"></pre></details>` : ''}`;
           workspace.querySelectorAll('[data-overlay-form]').forEach(
             (button) =>
               (button.onclick = () => {
