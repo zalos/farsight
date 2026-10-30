@@ -1185,13 +1185,15 @@ export interface Flow {
  */
 export interface ConfigMeta {
   /** root first, then by folder depth, then by path; `fields` = the keys the file gave, `ignored` = the ones not applied */
-  files: { path: string; dir: string; root: boolean; fields: string[]; ignored: string[] }[];
+  files: { path: string; dir: string; root: boolean; fields: string[]; ignored: string[]; from?: 'workspace' }[];
   /** two files said different things about one key; `kept` is the file whose word stands */
   conflicts: {
-    kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag' | 'lifecycle';
+    kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag' | 'lifecycle' | 'overlay';
     key: string;
     files: string[];
     kept: string;
+    /** The losing declaration came from workspace settings. */
+    from?: 'workspace';
   }[];
   /** unreadable files, ignored root-only fields, paths that left the source */
   notes: string[];

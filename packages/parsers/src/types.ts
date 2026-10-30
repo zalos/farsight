@@ -1,4 +1,5 @@
 import type { AdapterOptions } from '@farsight/code-parser';
+import type { FarsightConfig } from '@farsight/core';
 export type { LanguageAdapter } from '@farsight/code-parser';
 
 export interface IngestOptions extends AdapterOptions {
@@ -8,6 +9,12 @@ export interface IngestOptions extends AdapterOptions {
   openapi?: boolean;
   /** false = do not apply the repo's farsight.config.json (tags, glossary, guards, entrypoints); default on */
   config?: boolean;
+  /** Root-scoped workspace declarations, after the repository's root config. */
+  configOverlay?: { config: FarsightConfig; from: string };
+  /** OpenAPI documents registered for this code source in workspace settings. */
+  openapiRegistered?: { path?: string; url?: string; name?: string; phase?: string }[];
+  /** Candidate paths dismissed in this workspace. */
+  openapiIgnored?: string[];
   /** false = skip the design post-pass (screens manifests + Figma freshness); default on */
   design?: boolean;
   /** false = skip test enrichment; historically also includes test source unless testFiles explicitly overrides it */

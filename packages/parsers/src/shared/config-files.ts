@@ -59,6 +59,7 @@ export interface ConfigFile {
   dir: string;
   config: FarsightConfig;
   root: boolean;
+  from?: 'workspace';
 }
 
 /**
@@ -145,7 +146,44 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
     if (root) ws.root = config;
   }
 
+  if (options.configOverlay) {
+    const { from: path, config: given } = options.configOverlay;
+    const config = structuredClone(given);
+    // Root repository declarations keep their word. Matcher lists still union when applied.
+    for (const field of ['glossary', 'gateTiers', 'lifecycle'] as const) {
+      const block = config[field];
+      const root = ws.root?.[field];
+      if (!block || !root) continue;
+      for (const key of Object.keys(block)) {
+        if (!Object.hasOwn(root, key)) continue;
+        if (JSON.stringify(block[key]) !== JSON.stringify(root[key]))
+          addConflict(meta, field === 'gateTiers' ? 'overlay' : field, key, [CONFIG_FILE, path], CONFIG_FILE);
+        delete block[key];
+      }
+    }
+    if (config.decisions && ws.root?.decisions) {
+      const root = new Map(ws.root.decisions.map((d) => [d.id, d]));
+      config.decisions = config.decisions.filter((d) => {
+        const first = root.get(d.id);
+        if (!first) return true;
+        if (JSON.stringify(first) !== JSON.stringify(d))
+          addConflict(meta, 'overlay', `decisions.${d.id}`, [CONFIG_FILE, path], CONFIG_FILE);
+        return false;
+      });
+    }
+    const at = ws.files[0]?.root ? 1 : 0;
+    ws.files.splice(at, 0, { path, dir: '.', root: false, from: 'workspace', config });
+    meta.files.splice(at, 0, {
+      path,
+      dir: '.',
+      root: false,
+      from: 'workspace',
+      fields: Object.keys(given),
+      ignored: [],
+    });
+  }
   ws.merged = mergeConfigs(ws.files, meta, ws.stores);
+  markWorkspaceConflicts(meta);
   meta.conflicts.push(...glossaryConflicts(ws.files));
   // the words the files give, for the front door's glossary strip: one per key, the widest file's word (a nested
   // file's word holds only under its folder, so the source-wide one speaks for the application)
@@ -232,6 +270,10 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
   for (const f of nested) {
     const c = f.config;
     const where = (field: string) => `${f.path} → ${field}`;
+    if (f.from === 'workspace') {
+      for (const field of ['setup', 'validators', 'internalRoutes'] as const)
+        if (c[field]) merged[field] = union(merged[field], c[field]);
+    }
     if (c.plumbing !== undefined) merged.plumbing = union(merged.plumbing, list(f.dir, c.plumbing, where('plumbing')));
     if (Array.isArray(c.design)) {
       const add = c.design.flatMap((d) => {
@@ -390,9 +432,16 @@ function addConflict(
   const had = meta.conflicts.find((c) => c.kind === kind && c.key === key);
   if (had) {
     for (const f of files) if (!had.files.includes(f)) had.files.push(f);
+    markWorkspaceConflicts(meta);
     return;
   }
   meta.conflicts.push({ kind, key, files: [...new Set(files)], kept });
+  markWorkspaceConflicts(meta);
+}
+
+function markWorkspaceConflicts(meta: ConfigMeta): void {
+  const paths = new Set(meta.files.filter((f) => f.from === 'workspace').map((f) => f.path));
+  for (const c of meta.conflicts) if (c.files.some((p) => paths.has(p) && p !== c.kept)) c.from = 'workspace';
 }
 
 /** Does folder `inner` sit inside folder `outer` (the root holds every folder)? */
