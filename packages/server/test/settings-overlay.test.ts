@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { GraphStore, CONFIG_FIELDS, CONFIG_OVERLAY_FIELDS } from '@farsight/core';
 import { settingsProblem, syncSources, type Settings } from '../dist/index.js';
 import { isWriteRoute, refuseRequest } from '../dist/guard.js';
@@ -89,7 +90,11 @@ test('OpenAPI registration shapes validate in the same settings validator', () =
   assert.match(settingsProblem(settings({ openapiIgnore: [1] }))!, /sources\[0\].openapiIgnore\[0\]/);
 });
 
-async function server(t: { after: (fn: () => Promise<void>) => void }, readOnly?: 'flag' | 'as-of') {
+async function server(
+  t: { after: (fn: () => Promise<void>) => void },
+  readOnly?: 'flag' | 'as-of',
+  holdPatterns = false,
+) {
   const ws = mkdtempSync(join(tmpdir(), 'farsight-settings-'));
   const graph = join(ws, 'graph.json');
   new GraphStore().save(graph);
@@ -105,17 +110,30 @@ async function server(t: { after: (fn: () => Promise<void>) => void }, readOnly?
   assert.ok(address && typeof address === 'object');
   await new Promise<void>((resolve) => probe.close(() => resolve()));
   const module = new URL('../dist/index.js', import.meta.url).href;
+  const parsers = new URL('../../parsers/dist/index.js', import.meta.url).href;
+  const hold = holdPatterns
+    ? `
+    const { mock } = await import('node:test');
+    const actual = await import(${JSON.stringify(parsers)});
+    mock.module(${JSON.stringify(parsers)}, { namedExports: { ...actual, testPatterns: async (...args) => {
+      process.send({ started: true, options: args[1] });
+      await new Promise(resolve => process.once('message', resolve));
+      return actual.testPatterns(...args);
+    } } });
+  `
+    : '';
   const app = spawn(
     process.execPath,
     [
+      ...(holdPatterns ? ['--experimental-test-module-mocks'] : []),
       '--input-type=module',
       '-e',
-      `const { serveGraph } = await import(${JSON.stringify(module)}); serveGraph(${JSON.stringify(graph)}, ${address.port}, ${JSON.stringify(ws)}, ${JSON.stringify({ readOnly })});`,
+      `${hold} const { serveGraph } = await import(${JSON.stringify(module)}); serveGraph(${JSON.stringify(graph)}, ${address.port}, ${JSON.stringify(ws)}, ${JSON.stringify({ readOnly })});`,
     ],
     {
       cwd: ws,
       env: { ...process.env, MODELHUB_DIR: join(ws, 'modelhub'), FIGMA_TOKEN: '' },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     },
   );
   let logs = '';
@@ -150,7 +168,7 @@ async function server(t: { after: (fn: () => Promise<void>) => void }, readOnly?
     if (i === 99 || app.exitCode !== null) throw new Error(`server did not start: ${logs}`);
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  return { ws, file, graph, call, saved: () => JSON.parse(readFileSync(file, 'utf8')) as Settings };
+  return { ws, file, graph, call, app, saved: () => JSON.parse(readFileSync(file, 'utf8')) as Settings };
 }
 
 test('settings check is read-only, has the validator sentence, and obeys the request guard', async (t) => {
@@ -406,4 +424,137 @@ test('pattern dry runs admit one request per source, refuse competing work and r
     (await s.call('GET', '/api/patterns/test?source=app', undefined, { 'sec-fetch-site': 'same-origin' })).status,
     200,
   );
+});
+
+test('draft pattern tests are isolated, read-only and never persist their rule', async (t) => {
+  for (const readOnly of ['flag', 'as-of'] as const) {
+    const s = await server(t, readOnly);
+    writeFileSync(
+      join(s.ws, 'source', 'app.ts'),
+      `export function submit() {}\nportal.get('/draft', submit);\nportal.get('/missing', unknownHandler);`,
+    );
+    const savedRules = Array.from({ length: 64 }, (_, i) => ({
+      id: i === 0 ? 'draft' : `saved-${i}`,
+      files: ['*.ts'],
+      match: { call: 'portal.get', args: { path: 0 } },
+      emit: { kind: 'route', method: 'GET', path: '/saved' },
+    }));
+    writeFileSync(join(s.ws, 'source', 'farsight.config.json'), JSON.stringify({ patterns: savedRules }));
+    const rule = {
+      id: 'draft',
+      files: ['*.ts'],
+      match: { call: 'portal.get', args: { path: 0, handler: -1 } },
+      emit: { kind: 'route', method: 'GET', path: '$path', handler: '$handler' },
+    };
+    const before = [s.file, s.graph, join(s.ws, 'source', 'farsight.config.json')].map((file) =>
+      readFileSync(file, 'utf8'),
+    );
+    assert.equal(isWriteRoute('POST', '/api/patterns/test'), false);
+    const response = await s.call('POST', '/api/patterns/test', { source: 'app', rule });
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    const report = response.body.report as any;
+    const matches = response.body.matches as any[];
+    assert.equal(report.rules.length, 1);
+    assert.equal(report.rules[0].id, 'draft');
+    assert.equal(report.rules[0].matched, 2);
+    assert.deepEqual(report.rules[0].skipped, []);
+    assert.equal(matches[0].name, 'GET /missing');
+    assert.ok(matches[0].unresolved.length);
+    assert.equal(matches[1].name, 'GET /draft');
+    assert.deepEqual(
+      [s.file, s.graph, join(s.ws, 'source', 'farsight.config.json')].map((file) => readFileSync(file, 'utf8')),
+      before,
+    );
+    assert.equal((await s.call('POST', '/api/patterns/test', { source: 'app', rule: {} })).status, 400);
+    assert.equal((await s.call('POST', '/api/patterns/test', { source: 'app' })).status, 400);
+    assert.equal((await s.call('POST', '/api/patterns/test', { source: 'missing', rule })).status, 404);
+    assert.equal(
+      (await s.call('POST', '/api/patterns/test', { source: 'app', rule }, { origin: 'http://evil.example' })).status,
+      403,
+    );
+    assert.equal(
+      (await s.call('POST', '/api/patterns/test', { source: 'app', rule }, { 'sec-fetch-site': 'cross-site' })).status,
+      403,
+    );
+    assert.equal(
+      (await s.call('POST', '/api/patterns/test', { source: 'app', rule, padding: 'x'.repeat(1024 * 1024) })).status,
+      413,
+    );
+    assert.equal((await s.call('GET', '/api/patterns/test?source=app&rule=unknown')).status, 200);
+  }
+});
+
+test('configuration export merges the draft with the root without writing, including read-only servers', async (t) => {
+  for (const readOnly of ['flag', 'as-of'] as const) {
+    const s = await server(t, readOnly);
+    const configFile = join(s.ws, 'source/farsight.config.json');
+    const repository = {
+      glossary: { submit: { label: 'Repository word' } },
+      tags: { billing: ['submit'] },
+      openapi: [{ path: 'api.yaml', name: 'Repository API' }],
+    };
+    writeFileSync(configFile, JSON.stringify(repository));
+    const config = {
+      glossary: { submit: { label: 'Workspace word' }, approve: { label: 'Approve invoice' } },
+      tags: { billing: ['approve'] },
+    };
+    const openapi = [{ path: 'api.yaml', name: 'Duplicate' }, { path: 'next.yaml' }];
+    const input = { source: 'app', config, openapi };
+    const before = readFileSync(s.file, 'utf8');
+    const response = await s.call('POST', '/api/config/export', input);
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.config, {
+      glossary: { submit: { label: 'Repository word' }, approve: { label: 'Approve invoice' } },
+      tags: { billing: ['submit', 'approve'] },
+      openapi: [{ path: 'api.yaml', name: 'Repository API' }, { path: 'next.yaml' }],
+    });
+    assert.equal(readFileSync(s.file, 'utf8'), before);
+    assert.deepEqual(JSON.parse(readFileSync(configFile, 'utf8')), repository);
+    assert.equal((await s.call('POST', '/api/config/export', { ...input, source: 'missing' })).status, 404);
+    const invalid = { ...input, config: { tags: { billing: 42 } } };
+    assert.deepEqual(await s.call('POST', '/api/config/export', invalid), {
+      status: 400,
+      body: { error: settingsProblem(settings({ config: invalid.config, openapi })) },
+    });
+    assert.equal((await s.call('POST', '/api/config/export', input, { origin: 'https://evil.example' })).status, 403);
+    assert.equal(
+      (await s.call('POST', '/api/config/export', { ...input, padding: 'x'.repeat(1024 * 1024) })).status,
+      413,
+    );
+    assert.equal(isWriteRoute('POST', '/api/config/export'), false);
+    writeFileSync(s.file, JSON.stringify(settings({ config, openapi })));
+    const cli = fileURLToPath(new URL('../../cli/dist/cli.js', import.meta.url));
+    const cliResult = JSON.parse(
+      execFileSync(process.execPath, [cli, 'config', 'export', 'app'], { cwd: s.ws, encoding: 'utf8' }),
+    );
+    assert.deepEqual(response.body.config, cliResult);
+    assert.deepEqual(JSON.parse(readFileSync(configFile, 'utf8')), repository);
+    writeFileSync(configFile, '{invalid');
+    assert.equal((await s.call('POST', '/api/config/export', input)).status, 400);
+    assert.equal(readFileSync(configFile, 'utf8'), '{invalid');
+  }
+});
+
+test('a held POST dry run retains source options and excludes GET and POST until it finishes', async (t) => {
+  const s = await server(t, 'flag', true);
+  const config = {
+    frameworks: { spring: { security: { Policy: { label: 'Policy' } } } },
+    setup: ['submit'],
+    externals: [{ import: 'vendor', name: 'Vendor', kind: 'http' }],
+  };
+  writeFileSync(s.file, JSON.stringify(settings({ config })));
+  const rule = { id: 'draft', files: ['*.ts'], match: { call: 'portal.get' }, emit: { kind: 'flag', name: 'Portal' } };
+  const started = once(s.app, 'message');
+  const pending = s.call('POST', '/api/patterns/test', { source: 'app', rule });
+  const [message] = await started;
+  assert.deepEqual(message.options.configOverlay.config, config);
+  assert.equal((await s.call('GET', '/api/patterns/test?source=app')).status, 409);
+  assert.equal((await s.call('POST', '/api/patterns/test', { source: 'app', rule })).status, 409);
+  s.app.send({ release: true });
+  assert.equal((await pending).status, 200);
+  const again = once(s.app, 'message');
+  const next = s.call('POST', '/api/patterns/test', { source: 'app', rule });
+  await again;
+  s.app.send({ release: true });
+  assert.equal((await next).status, 200);
 });

@@ -575,6 +575,51 @@ function dedupeBy<T>(items: T[], key: (t: T) => string): T[] {
   });
 }
 
+/**
+ * Flatten the root file and its workspace overlay for export. Nested files keep
+ * their folder scope and are never copied into the root. The normal merge owns
+ * adapter/list fields; matcher fields that ingest applies per file are folded
+ * in that same order here. The caller's workspace and repository are untouched.
+ */
+export function exportWorkspaceConfig(
+  workspace: WorkspaceConfig,
+  registered: NonNullable<FarsightConfig['openapi']> = [],
+): FarsightConfig {
+  const files = structuredClone(workspace.files.filter((file) => file.root || file.from === 'workspace'));
+  if (registered.length)
+    files.push({ path: 'workspace.openapi', dir: '.', root: false, config: { openapi: registered } });
+  const stores: ScopedStoreDecl[] = [];
+  const merged = mergeConfigs(files, { files: [], conflicts: [], notes: [] }, stores);
+  // Compatible repeated stores can name different tables. Ingest applies every
+  // scoped declaration, so keep those entries rather than only the summary list.
+  if (stores.length)
+    merged.stores = dedupeBy(
+      stores.map(({ dir: _dir, from: _from, ...store }) => store),
+      (store) => JSON.stringify(store),
+    );
+  for (const field of ['tags', 'guards', 'entrypoints'] as const) {
+    const entries = new Map<string, string[]>();
+    for (const file of files)
+      for (const [key, values] of Object.entries(file.config[field] ?? {}))
+        entries.set(key, [...new Set([...(entries.get(key) ?? []), ...values])]);
+    if (entries.size) merged[field] = Object.fromEntries(entries);
+  }
+  for (const field of ['glossary', 'gateTiers', 'lifecycle'] as const) {
+    const entries = Object.fromEntries(
+      files
+        .slice()
+        .reverse()
+        .flatMap((file) => Object.entries(file.config[field] ?? {})),
+    );
+    if (Object.keys(entries).length) (merged as Record<string, unknown>)[field] = entries;
+  }
+  const decisions = files.flatMap((file) => file.config.decisions ?? []);
+  if (decisions.length) merged.decisions = dedupeBy(decisions, (decision) => decision.id);
+  const nodes = files.flatMap((file) => file.config.nodes ?? []);
+  if (nodes.length) merged.nodes = dedupeBy(nodes, (node) => JSON.stringify(node));
+  return merged;
+}
+
 /** Record that two files disagree about `key` (for the store pass, which runs after the files are read). */
 export function recordConflict(
   ws: WorkspaceConfig,

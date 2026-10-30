@@ -12,9 +12,13 @@ import { t } from '../strings.js';
 import { vsl } from '../lib/graph-render.js';
 import { countedHtml, defAttrs } from '../lib/counted.js';
 import { applyReadOnly, readOnlyWhy } from '../lib/read-only.js';
+import { renderOverlayForm, formTitleKey } from './settings-forms.js';
+import { formPaths } from '../lib/settings-model.js';
 
 const API = '/api/config';
 let onSaved;
+const tabs = new Map();
+const forms = new Map();
 const cache = { key: null, data: null, error: false, pending: null };
 
 /** A catalog word with `{name}` placeholders filled. */
@@ -34,6 +38,7 @@ function fieldHtml(name, lens) {
 
 function openApiHtml(repo, meta, counts) {
   if (!meta) return '';
+  const titleKey = currentLens() === 'business' ? 'settings.forms.openapiBusiness' : 'config.openapi.title';
   const source = ((S.SETTINGS && S.SETTINGS.sources) || []).find(
     (s) => s.name === repo && (s.type === 'local' || s.type === 'git'),
   );
@@ -84,9 +89,9 @@ function openApiHtml(repo, meta, counts) {
       .join('');
   return (
     '<section class="cfg-openapi"><div class="cfg-sub"' +
-    defAttrs('config.openapi.title') +
+    defAttrs(titleKey) +
     '>' +
-    esc(t('config.openapi.title')) +
+    esc(t(titleKey)) +
     '</div>' +
     countedHtml(counts && counts.applied, API, { cls: 'cnt-n cfg-n-applied' }) +
     ' · ' +
@@ -313,8 +318,12 @@ export function configFilesHtml(data, lens) {
 }
 
 /** Draw the list into the Settings page, asking the server again when the graph changed since the last answer. */
-export function renderConfigFiles(saved) {
-  onSaved = saved;
+export function renderConfigFiles(saved, context) {
+  const refreshRegistrations = new Map();
+  onSaved = (id, fields, previous) => {
+    saved?.(id, fields, previous);
+    refreshRegistrations.get(id)?.();
+  };
   const host = document.getElementById('cfgrows');
   if (!host) return;
   const title = document.getElementById('set-config-title');
@@ -326,17 +335,178 @@ export function renderConfigFiles(saved) {
   if (sub) sub.textContent = t('config.sub');
   const key = (S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.generatedAt) || '';
   const draw = () => {
-    host.innerHTML = cache.error
-      ? '<div class="set-note">' + esc(t('config.failed')) + '</div>'
-      : configFilesHtml(cache.data);
+    if (!host.isConnected) return;
+    const data = cache.data || {};
+    const config = { ...data.config };
+    for (const source of context?.draft.sources || [])
+      if (source.type === 'local' || source.type === 'git') config[source.name] ||= {};
+    host.innerHTML =
+      (cache.error ? '<p class="set-note">' + esc(t('config.failed')) + '</p>' : '') +
+      configFilesHtml({ ...data, config });
     host.onclick = changeOpenApi;
+    if (context)
+      host.querySelectorAll('.cfg-src').forEach((card) => {
+        const sourceIndex = context.draft.sources.findIndex(
+          (s) => s.name === card.dataset.repo && (s.type === 'local' || s.type === 'git'),
+        );
+        const source = context.draft.sources[sourceIndex];
+        if (!source) return;
+        const repository = document.createElement('div');
+        repository.className = 'settings-repository';
+        repository.append(...card.childNodes);
+        card.appendChild(repository);
+        const nav = document.createElement('div');
+        nav.className = 'settings-config-tabs';
+        nav.setAttribute('role', 'tablist');
+        nav.setAttribute('aria-label', source.name);
+        nav.innerHTML = ['repository', 'workspace']
+          .map(
+            (tab) =>
+              `<button type="button" class="btn" role="tab" data-config-tab="${tab}" id="cfg-${esc(source.id)}-${tab}-tab" aria-controls="cfg-${esc(source.id)}-${tab}"${defAttrs('settings.forms.' + tab)}>${esc(t('settings.forms.' + tab))}</button>`,
+          )
+          .join('');
+        card.prepend(nav);
+        const workspace = document.createElement('div');
+        workspace.className = 'settings-overlay';
+        card.appendChild(workspace);
+        let exportRequest = 0;
+        const drawExport = async () => {
+          const request = ++exportRequest;
+          const details = workspace.querySelector('.settings-export');
+          if (!details?.open) return;
+          const output = details.querySelector('pre');
+          const saved = S.SETTINGS?.sources?.find((item) => item.id === source.id);
+          if (!saved || saved.type !== source.type || saved.path !== source.path) {
+            output.textContent = t('settings.forms.exportSourceChanged');
+            return;
+          }
+          output.textContent = t('settings.forms.exportLoading');
+          try {
+            const response = await fetch('/api/config/export', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ source: source.id, config: source.config || {}, openapi: source.openapi || [] }),
+            });
+            const result = await response.json();
+            if (request !== exportRequest || !output.isConnected) return;
+            output.textContent = response.ok
+              ? JSON.stringify(result.config, null, 2)
+              : result.error || t('settings.forms.exportFailed');
+          } catch {
+            if (request === exportRequest && output.isConnected) output.textContent = t('settings.forms.exportFailed');
+          }
+        };
+        for (const [name, panel] of [
+          ['repository', repository],
+          ['workspace', workspace],
+        ]) {
+          panel.id = 'cfg-' + source.id + '-' + name;
+          panel.setAttribute('role', 'tabpanel');
+          panel.setAttribute('aria-labelledby', panel.id + '-tab');
+        }
+        const drawForm = () => {
+          const form = forms.get(source.id) || 'gates';
+          refreshRegistrations.delete(source.id);
+          workspace
+            .querySelectorAll('[data-overlay-form]')
+            .forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.overlayForm === form)));
+          const pane = workspace.querySelector('.settings-overlay-form');
+          pane.innerHTML =
+            form === 'openapi'
+              ? openApiHtml(source.name, data.openapi?.[source.name], data.openapiCounts?.[source.name])
+              : '';
+          const editor = document.createElement('div');
+          editor.dataset.form = form;
+          pane.appendChild(editor);
+          const renderEditor = () =>
+            renderOverlayForm(editor, {
+              ...context,
+              source,
+              sourceIndex,
+              form,
+              report: data.config?.[source.name],
+              changed: () => {
+                context.changed();
+                void drawExport();
+              },
+            });
+          renderEditor();
+          if (form === 'openapi')
+            refreshRegistrations.set(source.id, () => {
+              if (!editor.isConnected) return;
+              renderEditor();
+              void drawExport();
+            });
+          applyReadOnly(workspace);
+        };
+        const drawWorkspace = () => {
+          workspace.innerHTML = `<h3>${esc(source.name)}</h3><p class="set-note">${esc(t('settings.forms.overlayHelp'))}</p><nav class="settings-form-tabs" aria-label="${esc(t('settings.forms.workspace'))}">${Object.keys(
+            formPaths,
+          )
+            .map(
+              (form) =>
+                `<button type="button" class="btn" data-overlay-form="${form}"${defAttrs(formTitleKey(form))}>${esc(t(formTitleKey(form)))}</button>`,
+            )
+            .join(
+              '',
+            )}</nav><div class="settings-overlay-form"></div>${currentLens() !== 'business' ? `<details class="settings-export"><summary${defAttrs('settings.forms.export')}>${esc(t('settings.forms.export'))}</summary><p class="set-note">${esc(t('settings.forms.exportHelp'))}</p><p class="set-note"${defAttrs('settings.forms.exportCommand')}>${esc(fill('settings.forms.exportCommand', { source: source.id }))}</p><pre class="settings-export-json"></pre></details>` : ''}`;
+          workspace.querySelectorAll('[data-overlay-form]').forEach(
+            (button) =>
+              (button.onclick = () => {
+                forms.set(source.id, button.dataset.overlayForm);
+                drawForm();
+              }),
+          );
+          const details = workspace.querySelector('.settings-export');
+          if (details) details.ontoggle = drawExport;
+          drawForm();
+        };
+        const select = (name, focus = false) => {
+          tabs.set(source.id, name);
+          nav.querySelectorAll('[data-config-tab]').forEach((button) => {
+            const selected = button.dataset.configTab === name;
+            button.setAttribute('aria-selected', String(selected));
+            button.tabIndex = selected ? 0 : -1;
+            if (selected && focus) button.focus();
+          });
+          repository.hidden = name !== 'repository';
+          workspace.hidden = name !== 'workspace';
+          if (name === 'workspace') drawWorkspace();
+        };
+        nav.onclick = (event) => {
+          const button = event.target.closest('[data-config-tab]');
+          if (button) select(button.dataset.configTab);
+        };
+        nav.onkeydown = (event) => {
+          if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault();
+            select(
+              event.key === 'Home'
+                ? 'repository'
+                : event.key === 'End'
+                  ? 'workspace'
+                  : tabs.get(source.id) === 'workspace'
+                    ? 'repository'
+                    : 'workspace',
+              true,
+            );
+          }
+        };
+        select(tabs.get(source.id) || 'repository');
+      });
     applyReadOnly(host);
+    host.querySelectorAll('[data-unsupported]').forEach((el) => {
+      el.disabled = true;
+    });
   };
   if (cache.key === key && (cache.data || cache.error)) {
     draw();
     return;
   }
-  if (cache.pending) return;
+  if (cache.pending) {
+    cache.pending.then(draw);
+    return;
+  }
   cache.pending = fetch(API)
     .then((r) => (r.ok ? r.json() : r.status === 404 ? { config: {} } : Promise.reject(new Error(String(r.status)))))
     .then((d) => {

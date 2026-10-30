@@ -25,6 +25,7 @@ let syncing = false;
 let syncRequired = false;
 let message = '';
 let savebarObserver;
+const patternChecks = new Map();
 
 function blockDuringWrite(event) {
   if (!(saving || syncing) || !root?.contains(event.target) || !event.target.closest('[data-write]')) return;
@@ -95,6 +96,7 @@ export function settingsRefresh() {
 function paintStatus() {
   if (!root) return;
   const dirty = isDirty();
+  const needsTest = model.untestedPatterns(S.SETTINGS, draft, patternChecks).length > 0;
   const bar = root.querySelector('#settings-savebar');
   bar.hidden = !(dirty || message || syncRequired || problem);
   root.querySelector('#settings-draft-actions').hidden = !dirty;
@@ -107,7 +109,8 @@ function paintStatus() {
   root.querySelectorAll('[data-unsupported]').forEach((input) => {
     input.disabled = true;
   });
-  save.disabled = saving || checking || !!problem;
+  save.disabled = saving || checking || !!problem || needsTest;
+  root.querySelector('#settings-pattern-warning').hidden = !needsTest;
   discard.disabled = saving;
   root.querySelector('#savenote').textContent = message;
   root.querySelector('#settings-check').textContent = checking ? t('settings.checking') : '';
@@ -181,7 +184,8 @@ async function checkDraft() {
 }
 
 export async function saveSettings() {
-  if (readOnlyWhy() || saving || !isDirty()) return false;
+  if (readOnlyWhy() || saving || !isDirty() || model.untestedPatterns(S.SETTINGS, draft, patternChecks).length)
+    return false;
   clearTimeout(checkTimer);
   checkSequence++;
   saving = true;
@@ -278,9 +282,9 @@ export function renderSettings() {
   if (!root || !draft) return;
   savebarObserver?.disconnect();
   const selected = model.sections.find((s) => s.id === section);
-  root.innerHTML = `<div class="settings-page"><header class="settings-heading"><div><h1>${esc(t('surf.chrome.settings'))}</h1><p>${esc(t('settings.intro'))}</p></div><button type="button" class="btn" id="settings-back"${defAttrs('settings.back')}>${esc(t('settings.back'))}</button></header><p id="set-ro" class="set-ro" role="status" hidden></p><div class="settings-layout"><nav class="settings-rail" aria-label="${esc(t('surf.chrome.settings'))}">${model.sections.map((item) => `<a href="#/settings/${item.id}"${item.id === section ? ' aria-current="page"' : ''}${defAttrs(sectionKey(item))}>${esc(t(sectionKey(item)))}</a>`).join('')}</nav><section class="settings-content" aria-labelledby="settings-section-title"><h2 id="settings-section-title"${defAttrs(sectionKey(selected))}>${esc(t(sectionKey(selected)))}</h2><div id="settings-section"></div></section></div><footer id="settings-savebar" class="settings-savebar" hidden><div><strong id="settings-unsaved"></strong><p id="save-consequence" class="consequence">${esc(t('set.saveConsequence'))}</p><p id="settings-check" role="status"></p><p id="savenote" role="status"></p><div id="settings-sync-needed" hidden>${buttonHtml('settings.syncApply', 'id="syncbtn"')}<p class="consequence">${esc(t('set.syncConsequence'))}</p></div></div><div id="settings-draft-actions">${buttonHtml('settings.save', 'id="savebtn"')}${buttonHtml('settings.discard', 'id="discardbtn"')}</div></footer></div>`;
+  root.innerHTML = `<div class="settings-page"><header class="settings-heading"><div><h1>${esc(t('surf.chrome.settings'))}</h1><p>${esc(t('settings.intro'))}</p></div><button type="button" class="btn" id="settings-back"${defAttrs('settings.back')}>${esc(t('settings.back'))}</button></header><p id="set-ro" class="set-ro" role="status" hidden></p><div class="settings-layout"><nav class="settings-rail" aria-label="${esc(t('surf.chrome.settings'))}">${model.sections.map((item) => `<a href="#/settings/${item.id}"${item.id === section ? ' aria-current="page"' : ''}${defAttrs(sectionKey(item))}>${esc(t(sectionKey(item)))}</a>`).join('')}</nav><section class="settings-content" aria-labelledby="settings-section-title"><h2 id="settings-section-title"${defAttrs(sectionKey(selected))}>${esc(t(sectionKey(selected)))}</h2><div id="settings-section"></div></section></div><footer id="settings-savebar" class="settings-savebar" hidden><div><strong id="settings-unsaved"></strong><p id="save-consequence" class="consequence">${esc(t('set.saveConsequence'))}</p><p id="settings-pattern-warning" hidden><a href="#/settings/configuration"${defAttrs('settings.forms.needsTest')}>${esc(t('settings.forms.needsTest'))}</a></p><p id="settings-check" role="status"></p><p id="savenote" role="status"></p><div id="settings-sync-needed" hidden>${buttonHtml('settings.syncApply', 'id="syncbtn"')}<p class="consequence">${esc(t('set.syncConsequence'))}</p></div></div><div id="settings-draft-actions">${buttonHtml('settings.save', 'id="savebtn"')}${buttonHtml('settings.discard', 'id="discardbtn"')}</div></footer></div>`;
   const content = root.querySelector('#settings-section');
-  const context = { draft, changed: settingsChanged, sync: syncNow, preview: hooks.preview };
+  const context = { draft, changed: settingsChanged, sync: syncNow, preview: hooks.preview, patternChecks };
   if (section === 'workspace') renderWorkspace(content, context);
   else if (section === 'sources') renderSources(content, context);
   else if (section === 'collections') renderCollections(content, context);
@@ -295,7 +299,7 @@ export function renderSettings() {
       .join(
         '',
       )}<section id="set-config" class="set-sec"><h3 id="set-config-title"></h3><p id="set-config-sub" class="set-note"></p><div id="cfgrows"></div></section>`;
-    renderConfigFiles(registered);
+    renderConfigFiles(registered, context);
   }
   root.querySelector('#settings-back').onclick = () => hooks.close?.();
   root.querySelector('#savebtn').onclick = saveSettings;

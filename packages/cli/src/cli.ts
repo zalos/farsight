@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { resolve, join, basename, relative, isAbsolute, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, statSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, statSync, lstatSync, realpathSync } from 'node:fs';
 import {
   GraphStore,
   buildIndex,
@@ -20,6 +20,7 @@ import {
   reconcile,
   driftMarkdown,
   loadConfig,
+  configSchemaProblem,
   storybookLive,
   designSurface,
   reconcileDesign,
@@ -103,6 +104,8 @@ import {
   readSpecSource,
   specToYaml,
   ingestDesign,
+  loadWorkspaceConfig,
+  exportWorkspaceConfig,
   readManifestSource,
   importReports,
   repoContentDigest,
@@ -268,6 +271,7 @@ usage:
                                                                written, 1 not written, 2 waiting for --confirm
   ${word('config.patterns.usage', 'professional')}
 
+  farsight config export <source> [--into-source]
   farsight config list [--graph graph.json] [--repo name] [--json]
                                                                every farsight.config.json per source: the root file and the ones
                                                                scoped to a folder, the fields each gives and any it ignored, then
@@ -1687,7 +1691,69 @@ switch (command) {
     // every farsight.config.json per source, as ingest recorded them on meta.config — the same
     // fold the MCP config_files tool and graph_overview print (core config-files.ts)
     const sub = positional[0] ?? 'list';
-    if (sub !== 'list') fail(`unknown config subcommand: ${sub} (list)`);
+    if (sub === 'export') {
+      if (positional.length !== 2) fail(word('settings.forms.exportUsage', 'professional'));
+      const settingsFile = resolve('.farsight/settings.json');
+      let settings: Settings;
+      try {
+        settings = JSON.parse(readFileSync(settingsFile, 'utf8')) as Settings;
+        if (!settings || !Array.isArray(settings.sources)) throw new Error();
+      } catch {
+        fail(word('config.openapi.settingsMissing', 'professional'));
+      }
+      const problem = settingsProblem(settings);
+      if (problem) fail(problem);
+      const id = positional[1]!;
+      const byId = settings.sources.filter((source) => source.id === id);
+      const found = byId.length ? byId : settings.sources.filter((source) => source.name === id);
+      const source = found[0];
+      if (found.length !== 1 || !source || !['local', 'git'].includes(source.type))
+        fail(word('config.openapi.sourceMissing', 'professional').replace('{source}', id));
+      if (hasFlag('into-source') && source.type !== 'local') fail(word('config.openapi.localOnly', 'professional'));
+      const graphFile = resolve(flag('graph', 'graph.json')!);
+      const store = source.type === 'git' && existsSync(graphFile) ? GraphStore.load(graphFile) : undefined;
+      const root = realpathSync(source.type === 'local' ? resolve(source.path) : repoCheckout(store, source.name).root);
+      const configFile = join(root, 'farsight.config.json');
+      if (lstatSync(configFile, { throwIfNoEntry: false })) {
+        if (!existsSync(configFile)) fail(word('config.openapi.pathInvalid', 'professional'));
+        const rel = relative(root, realpathSync(configFile));
+        if (rel === '..' || rel.startsWith('../') || isAbsolute(rel))
+          fail(word('config.openapi.pathInvalid', 'professional'));
+      }
+      let repository: Record<string, unknown>;
+      try {
+        repository = existsSync(configFile) ? JSON.parse(readFileSync(configFile, 'utf8')) : {};
+        if (
+          !repository ||
+          typeof repository !== 'object' ||
+          Array.isArray(repository) ||
+          configSchemaProblem(repository, 'config')
+        )
+          throw new Error();
+      } catch {
+        fail(word('config.openapi.sourceConfigInvalid', 'professional'));
+      }
+      const exported = exportWorkspaceConfig(
+        loadWorkspaceConfig(root, {
+          exclude: ['**'],
+          configOverlay: {
+            from: `.farsight/settings.json → sources[${source.id}].config`,
+            config: source.config ?? {},
+          },
+        }),
+        source.openapi,
+      );
+      const invalid = configSchemaProblem(exported, 'config');
+      if (invalid) fail(invalid);
+      const json = JSON.stringify(exported, null, 2) + '\n';
+      if (hasFlag('into-source')) {
+        writeFileSync(configFile, json);
+        process.stderr.write(word('settings.forms.exportRetained', 'professional') + '\n');
+      }
+      process.stdout.write(json);
+      break;
+    }
+    if (sub !== 'list') fail(`unknown config subcommand: ${sub} (list, export)`);
     const graphFile = resolve(flag('graph', 'graph.json')!);
     if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
     const store = GraphStore.load(graphFile);

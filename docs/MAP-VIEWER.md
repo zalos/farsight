@@ -704,13 +704,31 @@ surface. The content column is at most 880 px; the rail and cards use the shared
   grants. A prefix-only transport guard discards literal secrets before any request; the server remains the settings
   validator. Sync now refreshes every enabled source, as its tip says. The server has no per-code-source sync route.
 - `settings-collections.js`: ordered collections with searchable member pickers from `lib/multi-pick.js`.
-- `settings-config.js`: the existing config report and OpenAPI doors, mounted only in Source configuration. Its
-  element ids remain stable. Fields absent from the server's `configFields`/`overlayFields` are disabled; missing capability lists are unknown and do not disable fields.
+- `settings-config.js`: one pair of repository/workspace tabs per local or git source. The repository tab retains
+  the config report, pattern report and OpenAPI Register/Dismiss doors and their element ids. The workspace tab
+  edits the shared draft through `settings-forms.js`: Gates, Endpoints, Patterns, Declared nodes, OpenAPI, Words,
+  and Externals and stores. Each JSON toggle shows only its form's slice. Export uses the dry-read
+  `POST /api/config/export` to show the repository root merged with the current draft and registered documents;
+  the server and CLI share the parser's merge helper. JSON and Export are hidden in the business lens. The browser
+  never writes a source file. The CLI `config export <source>` prints the root merged with workspace declarations,
+  preserving repository entries on collisions; only `--into-source` writes the local repository's root file.
+- `settings-forms.js`: every form uses `rowEditor`; a row is one JSON map entry or array item. The DOM-free
+  `rowsOf`/`blockOf` folds preserve optional fields and unrelated blocks. Endpoints shares route declarations with
+  Declared nodes without dropping non-route siblings. The label preview fills a sample action/resource pair.
+  Fields absent from the server's `configFields`/`overlayFields` are disabled; missing capability lists are unknown.
+  Pattern Test posts the exact draft rule to `POST /api/patterns/test`, which shares the saved-rule GET's admission
+  and parser bounds and returns the same shape, unresolved matches first. The disposable pattern inventory contains
+  only that draft rule, even when a repository rule has the same id. Tests and explicit Save untested choices are
+  attached to a canonical rule/source fingerprint in browser memory, never persisted in settings. Only rules changed
+  from the loaded version require acknowledgement; changing source connection fields does not untest saved rules. The shell checks
+  that gate on every Save, including after changing sections. Server validation sentences still come only from
+  `POST /api/settings/check` and are displayed beside the named field. Declared rows show the last sync's audit.
+  The OpenAPI form reuses the existing candidate doors and edits registered document names/phases in the draft.
 - `settings-agents.js`: tool tier, answer budget, lessons and a summary of agent grants from the source permissions.
 - `lib/settings-model.js`: DOM-free section/type definitions, equality, merge, sync-impact and row operations;
-  tests import the shipped module. It is a function namespace for later overlay form folds.
+  tests import the shipped module. It owns form row/value folds, pattern acknowledgements and registration merging.
 - `lib/row-editor.js`: the single table/grid primitive for collections, grants and lessons. Add, edit, remove and
-  move edit the same rows; arrow keys move among grid cells, Enter/F2 enters a cell and Escape returns to it.
+  move edit the same rows; labelled multiline fields and a returned redraw handle support the overlay forms. Arrow keys move among grid cells, Enter/F2 enters a cell and Escape returns to it.
   `strings-settings.ts` supplies both registers and definitions; write controls carry `data-write`, and every draw
   applies the shared read-only guard. Read-only keeps theme as a per-window preview, labelled with the read-only hint; every server write remains disabled.
 

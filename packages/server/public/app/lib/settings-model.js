@@ -69,17 +69,18 @@ export const dirty = (loaded, draft) => !equal(normalized(loaded), normalized(dr
 export function mergeSettings(loaded, draft, current) {
   function merge(before, after, now, path) {
     if (equal(before, after)) return clone(now);
-    if (path === 'sources' && Array.isArray(before) && Array.isArray(after) && Array.isArray(now)) {
-      const old = new Map(before.map((s) => [s.id, s]));
-      const fresh = new Map(now.map((s) => [s.id, s]));
-      const edited = new Set(after.map((s) => s.id));
+    if (['sources', 'openapi', 'openapiIgnore'].includes(path) && Array.isArray(after) && Array.isArray(now)) {
+      const id = (row) => (path === 'sources' ? row.id : path === 'openapi' ? row.url || row.path : row);
+      const old = new Map((before || []).map((s) => [id(s), s]));
+      const fresh = new Map(now.map((s) => [id(s), s]));
+      const edited = new Set(after.map(id));
       const rows = after.flatMap((s) => {
         // A concurrent deletion survives unless this draft edited that source.
-        if (old.has(s.id) && !fresh.has(s.id) && equal(old.get(s.id), s)) return [];
-        return [merge(old.get(s.id), s, fresh.get(s.id), '')];
+        if (old.has(id(s)) && !fresh.has(id(s)) && equal(old.get(id(s)), s)) return [];
+        return [merge(old.get(id(s)), s, fresh.get(id(s)), '')];
       });
       // New sources on the server were never removed by this draft.
-      return rows.concat(now.filter((s) => !old.has(s.id) && !edited.has(s.id)).map(clone));
+      return rows.concat(now.filter((s) => !old.has(id(s)) && !edited.has(id(s))).map(clone));
     }
     if (object(after) && (before === undefined || object(before))) {
       const result = {};
@@ -137,6 +138,199 @@ export function unavailableFields(settings, version) {
       )
       .map((field) => ({ source: source.name, field, path: `sources[${index}].config.${field}` })),
   );
+}
+
+// A row is exactly one map entry or one array item. Keep values intact, including
+// optional fields the current form does not draw. Paths describe containers, not keys.
+export const formPaths = {
+  gates: [
+    'frameworks.spring.security',
+    'frameworks.nest.guards',
+    'frameworks.express.middleware',
+    'guards',
+    'gateTiers',
+  ],
+  endpoints: ['frameworks.spring.mappings', 'frameworks.nest.verbs', 'frameworks.spring.delegates', 'nodes'],
+  patterns: ['patterns'],
+  nodes: ['nodes'],
+  openapi: ['openapi', 'openapiIgnore'],
+  words: ['glossary', 'tags', 'entrypoints'],
+  externals: ['externals', 'stores'],
+};
+const arrayBlocks = new Set([
+  'frameworks.spring.delegates',
+  'nodes',
+  'patterns',
+  'openapi',
+  'openapiIgnore',
+  'externals',
+  'stores',
+]);
+const inForm = (value, path, form) => form !== 'endpoints' || path !== 'nodes' || value?.kind === 'route';
+
+const lines = (value) =>
+  String(value)
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+export function updateFormValue(row, name, value) {
+  if (name === '$key') row.key = value;
+  else if (name === '$value') row.value = Array.isArray(row.value) ? lines(value) : value;
+  else if (name === 'emit.kind') {
+    const fields = {
+      route: ['method', 'path'],
+      queue: ['topic', 'publishes', 'consumes'],
+      guard: ['guards', 'requires', 'tier'],
+      rule: ['validates', 'tier'],
+    };
+    const keep = new Set(['name', 'handler', 'tags', 'business', ...(fields[value] || [])]);
+    row.value.emit = {
+      kind: value,
+      ...Object.fromEntries(Object.entries(row.value.emit || {}).filter(([key, item]) => keep.has(key) && item !== '')),
+    };
+  } else if (name === 'kind' && row.path === 'nodes') {
+    row.value.kind = value;
+    if (value !== 'route') {
+      delete row.value.handler;
+      delete row.value.guards;
+    }
+    if (value !== 'guard') {
+      delete row.value.tier;
+      delete row.value.requires;
+    }
+  } else if (name === '$document') {
+    delete row.value.path;
+    delete row.value.url;
+    row.value[/^https?:/i.test(value) ? 'url' : 'path'] = value;
+  } else if (name === '$matcher')
+    row.value.match = {
+      [value]: '',
+      ...(['call', 'decorator', 'annotation'].includes(value) && row.value.match?.args
+        ? { args: row.value.match.args }
+        : {}),
+    };
+  else if (name === 'match.args') {
+    const args = Object.fromEntries(
+      lines(value).map((line) => {
+        const at = line.indexOf('=');
+        const capture = at < 0 ? line : line.slice(0, at).trim();
+        const selector = at < 0 ? '' : line.slice(at + 1).trim();
+        return [capture, /^-?\d+$/.test(selector) ? Number(selector) : selector];
+      }),
+    );
+    writeAt(row.value, name, Object.keys(args).length ? args : undefined);
+  } else if (name === 'files') row.value.files = value.trim().split(/\s+/).filter(Boolean);
+  else if (name === 'guards' || name === 'tables' || name === 'emit.tags')
+    writeAt(row.value, name, value ? lines(value) : undefined);
+  else if (name === 'store') writeAt(row.value, name, value === '' ? undefined : value === 'true');
+  else writeAt(row.value, name, value === '' && !['id', 'name', 'label'].includes(name) ? undefined : value);
+}
+
+export function supportsField(version, field) {
+  return (
+    !Array.isArray(version?.configFields) ||
+    !Array.isArray(version?.overlayFields) ||
+    (version.configFields.includes(field) && version.overlayFields.includes(field))
+  );
+}
+
+export function rowsOf(block = {}, form) {
+  return formPaths[form].flatMap((path) => {
+    const value = readAt(block, path);
+    if (arrayBlocks.has(path))
+      return (Array.isArray(value) ? value : []).flatMap((value, index) =>
+        inForm(value, path, form) ? [{ path, index, value: clone(value) }] : [],
+      );
+    return Object.entries(value || {}).map(([key, value]) => ({ path, key, value: clone(value) }));
+  });
+}
+
+/** Replace only this form's containers, preserving sibling fields and non-route nodes. */
+export function blockOf(rows, block = {}, form) {
+  const result = clone(block);
+  for (const path of formPaths[form]) {
+    const selected = rows.filter((row) => row.path === path);
+    const previous = readAt(block, path);
+    if (previous === undefined && !selected.length) continue;
+    let value;
+    if (arrayBlocks.has(path)) {
+      const next = selected.map((row) => clone(row.value));
+      if (form === 'endpoints' && path === 'nodes') {
+        value = (previous || []).flatMap((node) =>
+          node.kind !== 'route' ? [clone(node)] : next.length ? [next.shift()] : [],
+        );
+        value.push(...next);
+      } else value = next;
+    } else value = Object.fromEntries(selected.map((row) => [row.key, clone(row.value)]));
+    writeAt(result, path, value);
+  }
+  return result;
+}
+
+export function formBlock(block, form) {
+  return blockOf(rowsOf(block, form), {}, form);
+}
+
+export function labelPreview(template, sample, fallback) {
+  let missing = false;
+  const result = String(template || '').replace(/\$([A-Za-z_][A-Za-z0-9_]*|\d+)/g, (token, key) => {
+    if (!Object.hasOwn(sample, key)) {
+      missing = true;
+      return token;
+    }
+    return sample[key];
+  });
+  return missing ? fallback : result;
+}
+
+// Acknowledgements live only in this browser draft, never in settings JSON.
+// Bind them to the full rule and source inputs so editing either invalidates a test.
+export function patternStamp(source, rule) {
+  const canonical = (value) =>
+    Array.isArray(value)
+      ? value.map(canonical)
+      : object(value)
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, canonical(value[key])]),
+          )
+        : value;
+  return JSON.stringify(canonical([source.id, source.type, source.path, source.exclude || [], rule]));
+}
+export function patternChanged(loaded, source, rule) {
+  const before = loaded.sources?.find((old) => old.id === source.id);
+  return !before?.config?.patterns?.some((old) => equal(old, rule));
+}
+export function untestedPatterns(loaded, draft, acknowledgements) {
+  return (draft.sources || []).flatMap((source) => {
+    return (source.config?.patterns || [])
+      .filter((rule) => patternChanged(loaded, source, rule) && !acknowledgements.has(patternStamp(source, rule)))
+      .map((rule) => ({ source: source.id, rule: rule.id }));
+  });
+}
+
+export function patternTestCounted(result) {
+  const rules = result.report.rules;
+  const count = (n, unit, scope, source, breakdown) => ({
+    n,
+    unit,
+    bizUnit: unit,
+    scope,
+    source,
+    ...(breakdown ? { breakdown } : {}),
+  });
+  return {
+    rules: count(rules.length, 'count.unit.rules', 'count.scope.source', 'patterns test.report.rules.length'),
+    matches: count(
+      rules.reduce((sum, rule) => sum + rule.matched, 0),
+      'count.unit.matches',
+      'count.scope.pattern',
+      'patterns test.report.rules[].matched',
+      rules.map((rule) => ({ n: rule.matched, key: 'count.unit.matches', label: rule.id })),
+    ),
+  };
 }
 
 export function sourceId(name, sources) {
@@ -249,4 +443,16 @@ export function sourceStatus(source) {
     notices,
     reason: key === 'error' ? text.slice(7).replace(/ — showing the cache \(\d+ items?\)/, '') : '',
   };
+}
+
+/** The parser owns row attribution; a viewer never decodes prose to recover identity. */
+export function declaredAuditNotes(report, sourceId, node) {
+  const path = `.farsight/settings.json → sources[${sourceId}].config`;
+  const files = (report?.files || []).filter((file) => file.from === 'workspace' && file.path === path);
+  const declarations = files.flatMap((file) => file.nodes || []);
+  const matches = declarations.filter((entry) => entry.kind === node.kind && entry.name === node.name);
+  if (files.some((file) => Array.isArray(file.nodes)))
+    return [...new Set(matches.flatMap((entry) => entry.notes || []))];
+  // Older reports have only source-level notes; the form labels them as the last sync's audit.
+  return report?.notes || [];
 }

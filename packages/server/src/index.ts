@@ -8,11 +8,11 @@ import { containsCredentialShape } from '@farsight/core/dist/credential-shapes.j
 import { readinessOf } from './readiness.js';
 import { syncGraph, syncGraphJson, syncParam, compareAnswer, type SyncGraph } from './compare.js';
 import { createServer } from 'node:http';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, realpathSync, lstatSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve, basename, sep, posix } from 'node:path';
+import { dirname, join, resolve, basename, sep, posix, relative, isAbsolute } from 'node:path';
 import {
   GraphStore,
   readModelHubState,
@@ -130,6 +130,8 @@ import type { SourceConfig as WorkSourceConfig, WorkSettingsSource } from './wor
 import {
   ingestRepo,
   testPatterns,
+  loadWorkspaceConfig,
+  exportWorkspaceConfig,
   sourceIngestOptions,
   ingestSpec,
   parseSpecText,
@@ -2395,32 +2397,130 @@ export function serveGraph(
         }),
       );
     }
-    // A dry run reads the configured checkout and never saves, syncs or fetches a source.
-    if ((url === '/api/patterns/test' || url.startsWith('/api/patterns/test?')) && req.method === 'GET') {
+    // Both dry-run doors share admission and parser bounds; neither saves nor syncs.
+    if (
+      (url === '/api/patterns/test' || url.startsWith('/api/patterns/test?')) &&
+      (req.method === 'GET' || req.method === 'POST')
+    ) {
       const u = new URL(url, 'http://localhost');
-      const id = u.searchParams.get('source');
-      const source = loadSettings(ws).sources.find((s) => s.id === id && (s.type === 'local' || s.type === 'git'));
-      const repo = source?.name || source?.id;
-      const root =
-        source?.type === 'local' ? resolve(ws, source.path) : repo ? checkoutRoot(ws, graphPath, repo) : undefined;
-      if (!source || !repo || !root)
-        return send(
-          404,
-          JSON.stringify({
-            error: t('config.patterns.sourceMissing', 'professional').replace('{source}', () => id ?? ''),
-          }),
-        );
-      if (patternTestsInFlight.has(source.id))
-        return send(409, JSON.stringify({ error: t('config.patterns.inFlight', 'professional') }));
-      patternTestsInFlight.add(source.id);
-      void testPatterns(
-        root,
-        { ...sourceIngestOptions(source), repoName: repo },
-        { rule: u.searchParams.get('rule') || undefined },
-      )
-        .then((result) => send(200, JSON.stringify(result)))
-        .catch(() => send(400, JSON.stringify({ error: t('config.patterns.failed', 'professional') })))
-        .finally(() => patternTestsInFlight.delete(source.id));
+      const run = (id: unknown, draftRule?: unknown) => {
+        const source = loadSettings(ws).sources.find((s) => s.id === id && (s.type === 'local' || s.type === 'git'));
+        const repo = source?.name || source?.id;
+        const root =
+          source?.type === 'local' ? resolve(ws, source.path) : repo ? checkoutRoot(ws, graphPath, repo) : undefined;
+        if (!source || !repo || !root)
+          return send(
+            404,
+            JSON.stringify({
+              error: t('config.patterns.sourceMissing', 'professional').replace('{source}', () =>
+                typeof id === 'string' ? id : '',
+              ),
+            }),
+          );
+        if (req.method === 'POST') {
+          const problem = configSchemaProblem({ patterns: [draftRule] }, 'rule');
+          if (problem) return send(400, JSON.stringify({ error: problem }));
+        }
+        if (patternTestsInFlight.has(source.id))
+          return send(409, JSON.stringify({ error: t('config.patterns.inFlight', 'professional') }));
+        patternTestsInFlight.add(source.id);
+        const rule = draftRule as import('@farsight/core').PatternDecl | undefined;
+        void testPatterns(
+          root,
+          {
+            ...sourceIngestOptions(source),
+            repoName: repo,
+          },
+          { rule: rule?.id || u.searchParams.get('rule') || undefined },
+          rule,
+        )
+          .then((result) => send(200, JSON.stringify(result)))
+          .catch(() => send(400, JSON.stringify({ error: t('config.patterns.failed', 'professional') })))
+          .finally(() => patternTestsInFlight.delete(source.id));
+      };
+      if (req.method === 'GET') run(u.searchParams.get('source'));
+      else {
+        let body = '';
+        let bytes = 0;
+        req.on('data', (chunk: Buffer) => {
+          bytes += chunk.length;
+          if (bytes <= 1024 * 1024) body += chunk;
+        });
+        req.on('end', () => {
+          if (bytes > 1024 * 1024)
+            return send(413, JSON.stringify({ error: t('settings.forms.testTooLarge', 'professional') }));
+          try {
+            const value = JSON.parse(body);
+            run(value?.source, value?.rule);
+          } catch {
+            send(400, JSON.stringify({ error: t('settings.forms.testInvalid', 'professional') }));
+          }
+        });
+      }
+      return;
+    }
+    // Export is a dry read of the root plus a validated draft, including on read-only servers.
+    if (url === '/api/config/export' && req.method === 'POST') {
+      let body = '';
+      let bytes = 0;
+      req.on('data', (chunk: Buffer) => {
+        bytes += chunk.length;
+        if (bytes <= 1024 * 1024) body += chunk;
+      });
+      req.on('end', () => {
+        if (bytes > 1024 * 1024)
+          return send(413, JSON.stringify({ error: t('settings.forms.exportTooLarge', 'professional') }));
+        try {
+          const input = JSON.parse(body);
+          const settings = loadSettings(ws);
+          const index = settings.sources.findIndex(
+            (source) => source.id === input?.source && (source.type === 'local' || source.type === 'git'),
+          );
+          const source = settings.sources[index];
+          const root =
+            source?.type === 'local'
+              ? resolve(ws, source.path)
+              : source
+                ? checkoutRoot(ws, graphPath, source.name || source.id)
+                : undefined;
+          if (!source || !root)
+            return send(
+              404,
+              JSON.stringify({
+                error: t('config.openapi.sourceMissing', 'professional').replace('{source}', () =>
+                  typeof input?.source === 'string' ? input.source : '',
+                ),
+              }),
+            );
+          settings.sources[index] = { ...source, config: input.config, openapi: input.openapi };
+          const problem = settingsProblem(settings);
+          if (problem) return send(400, JSON.stringify({ error: problem }));
+          const canonicalRoot = realpathSync(root);
+          const file = join(canonicalRoot, 'farsight.config.json');
+          if (lstatSync(file, { throwIfNoEntry: false })) {
+            if (!existsSync(file))
+              return send(400, JSON.stringify({ error: t('config.openapi.pathInvalid', 'professional') }));
+            const rel = relative(canonicalRoot, realpathSync(file));
+            if (rel === '..' || rel.startsWith('../') || isAbsolute(rel))
+              return send(400, JSON.stringify({ error: t('config.openapi.pathInvalid', 'professional') }));
+            const problem = configSchemaProblem(JSON.parse(readFileSync(file, 'utf8')), 'config');
+            if (problem) return send(400, JSON.stringify({ error: problem }));
+          }
+          const config = exportWorkspaceConfig(
+            loadWorkspaceConfig(canonicalRoot, {
+              exclude: ['**'],
+              configOverlay: {
+                from: `.farsight/settings.json → sources[${source.id}].config`,
+                config: input.config ?? {},
+              },
+            }),
+            input.openapi,
+          );
+          return send(200, JSON.stringify({ config }));
+        } catch {
+          return send(400, JSON.stringify({ error: t('settings.forms.exportInvalid', 'professional') }));
+        }
+      });
       return;
     }
     // ── config files (docs/proposals/journey-organisation-and-config-files.md §5.4) — meta.config as ingest recorded it ──
