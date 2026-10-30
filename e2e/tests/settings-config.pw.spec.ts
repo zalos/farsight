@@ -139,7 +139,7 @@ test.describe('OpenAPI registration from Settings', () => {
     workspace = makeWorkspace('openapi-config');
     for (const name of ['vendor-api', 'old-vendor'])
       writeFileSync(
-        join(workspace.repoDir, 'docs', name + '.json'),
+        join(workspace.dir, 'invoice-app', 'docs', name + '.json'),
         JSON.stringify({
           openapi: '3.1.0',
           info: { title: name, version: '1.0' },
